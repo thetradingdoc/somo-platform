@@ -14,9 +14,11 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'", "https://js.stripe.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com"], // unsafe-inline needed for signup page inline scripts
+      scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com"],
+      frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"], // Allow Stripe iframes for card input
     },
   },
   crossOriginEmbedderPolicy: false, // Allow Stripe iframes
@@ -85,7 +87,8 @@ function validatePhone(phone) {
 }
 
 /**
- * Request logging middleware
+ * Request logging middleware (basic console logging)
+ * For database logging, use usageLogger from usage-logger.js
  */
 function requestLogger(req, res, next) {
   const start = Date.now();

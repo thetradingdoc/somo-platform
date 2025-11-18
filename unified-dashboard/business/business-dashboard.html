@@ -105,6 +105,13 @@
             padding: 12px;
             border-radius: 8px;
             background: var(--gray-50);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+            transform: translateY(-1px);
         }
 
         .user-avatar {
@@ -258,9 +265,12 @@
         }
 
         @keyframes pulseHighlight {
-            0%, 100% {
+
+            0%,
+            100% {
                 box-shadow: 0 8px 32px rgba(8, 145, 178, 0.3), 0 0 0 3px rgba(8, 145, 178, 0.1);
             }
+
             50% {
                 box-shadow: 0 8px 40px rgba(8, 145, 178, 0.5), 0 0 0 4px rgba(8, 145, 178, 0.2);
             }
@@ -268,10 +278,11 @@
 
         @keyframes shimmer {
             0% {
-        transform: translateX(-100%) translateY(-100%) rotate(0deg);
+                transform: translateX(-100%) translateY(-100%) rotate(0deg);
             }
+
             100% {
-        transform: translateX(100%) translateY(100%) rotate(360deg);
+                transform: translateX(100%) translateY(100%) rotate(360deg);
             }
         }
 
@@ -292,10 +303,13 @@
         }
 
         @keyframes badgePulse {
-            0%, 100% {
+
+            0%,
+            100% {
                 transform: scale(1);
                 opacity: 1;
             }
+
             50% {
                 transform: scale(1.05);
                 opacity: 0.9;
@@ -556,7 +570,8 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span>
+                    <span class="doc">Doc</span><span class="little">Little</span><span
+                        style="font-weight:700;">.</span>
                 </div>
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
@@ -589,13 +604,13 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info">
+                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
                         <div class="user-role" id="userRole">Provider</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">
+                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
                         🚪
                     </button>
                 </div>
@@ -687,9 +702,12 @@
                         <div style="font-size:12px;color:var(--gray-500);">Live data from the voice agent</div>
                     </div>
                     <div style="margin-left:auto; display:flex; gap:8px;">
-                        <button id="tabLive" class="btn btn-secondary btn-sm" onclick="switchCallsTab('live')">Live</button>
-                        <button id="tabUpcoming" class="btn btn-secondary btn-sm" onclick="switchCallsTab('upcoming')">Upcoming</button>
-                        <button id="tabRecent" class="btn btn-secondary btn-sm" onclick="switchCallsTab('recent')">Past</button>
+                        <button id="tabLive" class="btn btn-secondary btn-sm"
+                            onclick="switchCallsTab('live')">Live</button>
+                        <button id="tabUpcoming" class="btn btn-secondary btn-sm"
+                            onclick="switchCallsTab('upcoming')">Upcoming</button>
+                        <button id="tabRecent" class="btn btn-secondary btn-sm"
+                            onclick="switchCallsTab('recent')">Past</button>
                     </div>
                 </div>
                 <div id="callsTabs">
@@ -727,7 +745,7 @@
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
         }
-        
+
         // Check if user is an insurer and redirect to insurer dashboard
         try {
             const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
@@ -793,7 +811,7 @@
                         // Populate live panel from today's calls (approximate live view)
                         populateLiveCalls(agentData.recent_calls || []);
                     }
-                } catch(e) {}
+                } catch (e) { }
 
                 // Load FHIR patients data
                 const patientsResponse = await fetch(`${API_BASE}/fhir/Patient`);
@@ -854,7 +872,7 @@
                     // Also populate tabbed recent panel
                     const container = document.getElementById('recentCallsList');
                     container.innerHTML = data.transactions.slice(0, 10).map(call => {
-                        const time = new Date(call.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+                        const time = new Date(call.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                         const statusText = call.status.charAt(0).toUpperCase() + call.status.slice(1);
                         return `
                             <div class="patient-item">
@@ -903,7 +921,7 @@
                         </div>
                         <div class="patient-details">
                             <div class="call-duration">${new Date(a.start_time || `${a.date}T${a.time}:00`).toLocaleString()}</div>
-                            ${a.calendar_link ? '<a class="fhir-badge" href="'+a.calendar_link+'" target="_blank">Calendar</a>': ''}
+                            ${a.calendar_link ? '<a class="fhir-badge" href="' + a.calendar_link + '" target="_blank">Calendar</a>' : ''}
                         </div>
                     </div>
                 `).join('');
@@ -942,7 +960,7 @@
 
             // Update badge to show it's active
             if (badge) badge.textContent = '⭐ UPCOMING';
-            
+
             const when = new Date(appt.start_time || `${appt.date}T${appt.time}:00`).toLocaleString();
             whenEl.textContent = when;
             patientEl.textContent = `${appt.patient_name || 'Unknown'}${appt.patient_phone ? ' · ' + appt.patient_phone : ''}`;
@@ -964,12 +982,12 @@
             const up = document.getElementById('upcomingCallsList');
             const re = document.getElementById('recentCallsList');
             const lv = document.getElementById('liveCallsList');
-            document.getElementById('tabUpcoming').classList.toggle('btn-primary', which==='upcoming');
-            document.getElementById('tabRecent').classList.toggle('btn-primary', which==='recent');
-            document.getElementById('tabLive').classList.toggle('btn-primary', which==='live');
-            up.style.display = which==='upcoming' ? 'block' : 'none';
-            re.style.display = which==='recent' ? 'block' : 'none';
-            lv.style.display = which==='live' ? 'block' : 'none';
+            document.getElementById('tabUpcoming').classList.toggle('btn-primary', which === 'upcoming');
+            document.getElementById('tabRecent').classList.toggle('btn-primary', which === 'recent');
+            document.getElementById('tabLive').classList.toggle('btn-primary', which === 'live');
+            up.style.display = which === 'upcoming' ? 'block' : 'none';
+            re.style.display = which === 'recent' ? 'block' : 'none';
+            lv.style.display = which === 'live' ? 'block' : 'none';
         }
 
         function populateLiveCalls(calls) {
@@ -985,8 +1003,8 @@
                 return;
             }
             container.innerHTML = calls.slice(0, 10).map(call => {
-                const time = new Date(call.created_at).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
-                const statusText = call.status ? (call.status.charAt(0).toUpperCase()+call.status.slice(1)) : 'In Progress';
+                const time = new Date(call.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                const statusText = call.status ? (call.status.charAt(0).toUpperCase() + call.status.slice(1)) : 'In Progress';
                 return `
                     <div class="patient-item">
                         <div class="patient-info">
@@ -1010,7 +1028,7 @@
 
         /* Referral list removed per new tabbed Calls design */
 
-        
+
 
         function viewAllReferrals() {
             window.location.href = 'patients.html?filter=high-risk';

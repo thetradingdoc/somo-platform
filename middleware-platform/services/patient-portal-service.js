@@ -2,77 +2,79 @@
  * Patient Portal Service
  * 
  * Handles patient self-service functionality:
- * - Phone verification for login
+ * - Email verification for login
  * - Session management
  * - Patient appointment management
  */
 
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
-const SMSService = require('./sms-service');
+const EmailService = require('./email-service');
 
 class PatientPortalService {
   /**
-   * Send verification code to patient phone
-   * @param {string} phone - Patient phone number
+   * Send verification code to patient email
+   * @param {string} email - Patient email address
    * @returns {Object} Session ID and success status
    */
-  sendVerificationCode(phone) {
-    if (!phone) {
-      return { success: false, error: 'Phone number required' };
+  async sendVerificationCode(email) {
+    if (!email) {
+      return { success: false, error: 'Email address required' };
     }
 
-    // Normalize phone number
-    const normalizedPhone = SMSService.formatPhoneNumber(phone);
-    if (!normalizedPhone) {
-      return { success: false, error: 'Invalid phone number format' };
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return { success: false, error: 'Invalid email format' };
     }
+
+    const normalizedEmail = email.toLowerCase().trim();
 
     // Generate 6-digit verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     // Create or update session
     const sessionId = uuidv4();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     try {
-      // Check if session exists for this phone
-      const existing = db.prepare(`
+      // Check if session exists for this email
+      const existing = db.db.prepare(`
         SELECT id FROM patient_portal_sessions 
-        WHERE phone = ? AND verified = 0 AND datetime(expires_at) > datetime('now')
-      `).get(normalizedPhone);
+        WHERE email = ? AND verified = 0 AND datetime(expires_at) > datetime('now')
+      `).get(normalizedEmail);
 
       if (existing) {
         // Update existing session
-        db.prepare(`
+        db.db.prepare(`
           UPDATE patient_portal_sessions 
           SET verification_code = ?, expires_at = ?, created_at = datetime('now')
           WHERE id = ?
         `).run(verificationCode, expiresAt.toISOString(), existing.id);
-        
-        // Send SMS
-        this._sendSMS(normalizedPhone, verificationCode);
-        
+
+        // Send email
+        await this._sendEmail(normalizedEmail, verificationCode);
+
         return {
           success: true,
           session_id: existing.id,
-          message: 'Verification code sent'
+          message: 'Verification code sent to your email'
         };
       } else {
         // Create new session
-        db.prepare(`
+        db.db.prepare(`
           INSERT INTO patient_portal_sessions 
-          (id, phone, verification_code, expires_at, verified)
+          (id, email, verification_code, expires_at, verified)
           VALUES (?, ?, ?, ?, 0)
-        `).run(sessionId, normalizedPhone, verificationCode, expiresAt.toISOString());
-        
-        // Send SMS
-        this._sendSMS(normalizedPhone, verificationCode);
-        
+        `).run(sessionId, normalizedEmail, verificationCode, expiresAt.toISOString());
+
+        // Send email
+        await this._sendEmail(normalizedEmail, verificationCode);
+
         return {
           success: true,
           session_id: sessionId,
-          message: 'Verification code sent'
+          message: 'Verification code sent to your email'
         };
       }
     } catch (error) {
@@ -83,49 +85,52 @@ class PatientPortalService {
 
   /**
    * Verify code and create authenticated session
-   * @param {string} phone - Patient phone number
+   * @param {string} email - Patient email address
    * @param {string} code - Verification code
    * @returns {Object} Session info and patient data
    */
-  verifyCode(phone, code) {
-    if (!phone || !code) {
-      return { success: false, error: 'Phone and code required' };
+  verifyCode(email, code) {
+    if (!email || !code) {
+      return { success: false, error: 'Email and code required' };
     }
 
-    const normalizedPhone = SMSService.formatPhoneNumber(phone);
-    if (!normalizedPhone) {
-      return { success: false, error: 'Invalid phone number format' };
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return { success: false, error: 'Invalid email format' };
     }
 
     try {
       // Find valid session
-      const session = db.prepare(`
+      const session = db.db.prepare(`
         SELECT * FROM patient_portal_sessions 
-        WHERE phone = ? 
+        WHERE email = ? 
           AND verification_code = ? 
           AND verified = 0 
           AND datetime(expires_at) > datetime('now')
-      `).get(normalizedPhone, code);
+      `).get(normalizedEmail, code);
 
       if (!session) {
         return { success: false, error: 'Invalid or expired verification code' };
       }
 
       // Mark session as verified
-      db.prepare(`
+      db.db.prepare(`
         UPDATE patient_portal_sessions 
         SET verified = 1, verified_at = datetime('now')
         WHERE id = ?
       `).run(session.id);
 
-      // Find patient by phone
-      const patient = db.getFHIRPatientByPhone(normalizedPhone);
-      
+      // Find patient by email
+      const patient = db.getFHIRPatientByEmail(normalizedEmail);
+
       return {
         success: true,
         session_id: session.id,
         patient_id: patient ? patient.resource_id : null,
-        phone: normalizedPhone
+        email: normalizedEmail
       };
     } catch (error) {
       console.error('Error verifying code:', error);
@@ -140,7 +145,7 @@ class PatientPortalService {
    */
   getPatientAppointments(sessionId) {
     try {
-      const session = db.prepare(`
+      const session = db.db.prepare(`
         SELECT * FROM patient_portal_sessions 
         WHERE id = ? AND verified = 1
       `).get(sessionId);
@@ -149,13 +154,31 @@ class PatientPortalService {
         return { success: false, error: 'Invalid or expired session' };
       }
 
-      // Get appointments by phone
-      const appointments = db.prepare(`
-        SELECT * FROM appointments 
-        WHERE patient_phone = ? 
-        ORDER BY date DESC, time DESC
-        LIMIT 50
-      `).all(session.phone);
+      // Get appointments by email or phone
+      let appointments = [];
+      if (session.email) {
+        // Try to find patient by email first
+        const patient = db.getFHIRPatientByEmail(session.email);
+        if (patient) {
+          const patientId = patient.resource_id;
+          appointments = db.db.prepare(`
+            SELECT * FROM appointments 
+            WHERE patient_id = ? 
+            ORDER BY date DESC, time DESC
+            LIMIT 50
+          `).all(patientId);
+        }
+      }
+
+      // Fallback to phone if no appointments found
+      if (appointments.length === 0 && session.phone) {
+        appointments = db.db.prepare(`
+          SELECT * FROM appointments 
+          WHERE patient_phone = ? 
+          ORDER BY date DESC, time DESC
+          LIMIT 50
+        `).all(session.phone);
+      }
 
       return {
         success: true,
@@ -184,7 +207,7 @@ class PatientPortalService {
    */
   validateSession(sessionId) {
     try {
-      const session = db.prepare(`
+      const session = db.db.prepare(`
         SELECT * FROM patient_portal_sessions 
         WHERE id = ? AND verified = 1
       `).get(sessionId);
@@ -202,6 +225,7 @@ class PatientPortalService {
       return {
         success: true,
         valid: true,
+        email: session.email,
         phone: session.phone,
         patient_id: session.patient_id
       };
@@ -222,8 +246,14 @@ class PatientPortalService {
         return { success: false, error: 'Invalid session' };
       }
 
-      // Get patient from FHIR
-      const patient = db.getFHIRPatientByPhone(session.phone);
+      // Get patient from FHIR (by email or phone)
+      let patient = null;
+      if (session.email) {
+        patient = db.getFHIRPatientByEmail(session.email);
+      }
+      if (!patient && session.phone) {
+        patient = db.getFHIRPatientByPhone(session.phone);
+      }
       if (!patient) {
         return { success: false, error: 'Patient not found' };
       }
@@ -257,16 +287,16 @@ class PatientPortalService {
   }
 
   /**
-   * Send SMS with verification code
+   * Send email with verification code
    * @private
    */
-  _sendSMS(phone, code) {
+  async _sendEmail(email, code) {
     try {
-      const message = `Your DocLittle verification code is: ${code}. Valid for 10 minutes.`;
-      SMSService.sendSMS(phone, message);
-      console.log(`📱 Verification code sent to ${phone}: ${code}`);
+      await EmailService.sendPatientVerificationCode(email, code);
+      console.log(`📧 Verification code sent to ${email}: ${code}`);
     } catch (error) {
-      console.warn('⚠️  Could not send SMS, code is:', code);
+      console.warn('⚠️  Could not send email, code is:', code);
+      // Still return success - code is logged in console for development
     }
   }
 

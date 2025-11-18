@@ -48,7 +48,7 @@ class ProviderService {
     
     query += ` ORDER BY time ASC`;
     
-    const appointments = db.prepare(query).all(...params);
+    const appointments = db.db.prepare(query).all(...params);
     
     // Enrich with time calculations
     const now = new Date();
@@ -108,7 +108,7 @@ class ProviderService {
     
     query += ` ORDER BY time ASC LIMIT 1`;
     
-    const appointment = db.prepare(query).get(...params);
+    const appointment = db.db.prepare(query).get(...params);
     
     if (!appointment) return null;
     
@@ -146,22 +146,22 @@ class ProviderService {
     }
     
     // Total scheduled today
-    const totalScheduled = db.prepare(`
+    const totalScheduled = db.db.prepare(`
       SELECT COUNT(*) as count ${baseQuery} AND status IN ('scheduled', 'confirmed')
     `).get(...params).count;
     
     // Completed today
-    const completed = db.prepare(`
+    const completed = db.db.prepare(`
       SELECT COUNT(*) as count ${baseQuery} AND status = 'completed'
     `).get(...params).count;
     
     // Cancelled today
-    const cancelled = db.prepare(`
+    const cancelled = db.db.prepare(`
       SELECT COUNT(*) as count ${baseQuery} AND status = 'cancelled'
     `).get(...params).count;
     
     // No-shows (past appointments that weren't completed or cancelled)
-    const noShows = db.prepare(`
+    const noShows = db.db.prepare(`
       SELECT COUNT(*) as count 
       ${baseQuery} 
       AND status IN ('scheduled', 'confirmed')
@@ -170,7 +170,7 @@ class ProviderService {
     
     // Upcoming (next 2 hours)
     const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-    const upcoming = db.prepare(`
+    const upcoming = db.db.prepare(`
       SELECT COUNT(*) as count 
       ${baseQuery} 
       AND status IN ('scheduled', 'confirmed')
@@ -178,7 +178,7 @@ class ProviderService {
     `).get(...params, now.toISOString(), twoHoursFromNow.toISOString()).count;
     
     // Currently in session (started but not ended)
-    const inSession = db.prepare(`
+    const inSession = db.db.prepare(`
       SELECT COUNT(*) as count 
       ${baseQuery} 
       AND status IN ('scheduled', 'confirmed')
@@ -187,7 +187,7 @@ class ProviderService {
     `).get(...params, now.toISOString(), now.toISOString()).count;
     
     // Average wait time (for appointments that started late)
-    const lateAppointments = db.prepare(`
+    const lateAppointments = db.db.prepare(`
       SELECT start_time, time
       ${baseQuery} 
       AND status IN ('scheduled', 'confirmed', 'completed')
@@ -222,7 +222,7 @@ class ProviderService {
    * @returns {Array} List of providers
    */
   getProviders() {
-    const providers = db.prepare(`
+    const providers = db.db.prepare(`
       SELECT DISTINCT provider as name, COUNT(*) as appointment_count
       FROM appointments
       WHERE provider IS NOT NULL AND provider != ''

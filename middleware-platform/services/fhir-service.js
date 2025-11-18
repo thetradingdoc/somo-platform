@@ -9,27 +9,139 @@ const db = require('../database');
 const FHIRResources = require('../models/fhir-resources');
 const { v4: uuidv4 } = require('uuid');
 
+// Import Stripe Issuing Service (optional - won't fail if not configured)
+let StripeIssuingService;
+try {
+  StripeIssuingService = require('./stripe-issuing-service');
+} catch (e) {
+  console.warn('⚠️  Stripe Issuing Service not available:', e.message);
+  StripeIssuingService = null;
+}
+
 class FHIRService {
   /**
-   * Create or get existing patient from phone number
-   * @param {Object} patientData - Patient information
-   * @returns {Object} FHIR Patient resource
+   * Normalize name for comparison (remove extra spaces, convert to lowercase, remove punctuation)
    */
-  static async getOrCreatePatient(patientData) {
+  static normalizeName(name) {
+    if (!name) return '';
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s]/g, '') // Remove punctuation
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+  }
+
+  /**
+   * Check if two names match (allowing for minor variations)
+   */
+  static namesMatch(name1, name2) {
+    if (!name1 || !name2) return false;
+
+    const normalized1 = this.normalizeName(name1);
+    const normalized2 = this.normalizeName(name2);
+
+    // Exact match
+    if (normalized1 === normalized2) return true;
+
+    // Split into parts for comparison
+    const parts1 = normalized1.split(' ').filter(p => p.length > 0);
+    const parts2 = normalized2.split(' ').filter(p => p.length > 0);
+
+    // If both have at least 2 parts, compare first and last names
+    if (parts1.length >= 2 && parts2.length >= 2) {
+      const first1 = parts1[0];
+      const last1 = parts1[parts1.length - 1];
+      const first2 = parts2[0];
+      const last2 = parts2[parts2.length - 1];
+
+      // First and last names must match
+      return first1 === first2 && last1 === last2;
+    }
+
+    // If only one part, compare directly
+    if (parts1.length === 1 && parts2.length === 1) {
+      return parts1[0] === parts2[0];
+    }
+
+    return false;
+  }
+
+  /**
+   * Find duplicate patients by name (similar names)
+   * @param {string} name - Patient name to search for
+   * @param {string} excludePatientId - Patient ID to exclude from results
+   * @returns {Array} Array of duplicate patient records
+   */
+  static findDuplicatePatientsByName(name, excludePatientId = null) {
     try {
-      // Check if patient already exists by phone
-      if (patientData.phone) {
-        const existingPatient = db.getFHIRPatientByPhone(patientData.phone);
-        if (existingPatient) {
-          console.log(`[FHIR] Found existing patient: ${existingPatient.resource_id}`);
-          return existingPatient.resource_data;
+      if (!name) return [];
+
+      // Get all patients
+      const allPatients = db.db.prepare('SELECT * FROM fhir_patients WHERE is_deleted = 0').all();
+
+      // Parse the provided name
+      const nameParts = this.normalizeName(name).split(' ').filter(p => p.length > 0);
+      if (nameParts.length === 0) return [];
+
+      const duplicates = [];
+
+      for (const patient of allPatients) {
+        // Skip if this is the patient we're excluding
+        if (excludePatientId && patient.resource_id === excludePatientId) continue;
+
+        // Get patient name from resource_data
+        let patientName = '';
+        try {
+          const patientData = typeof patient.resource_data === 'string'
+            ? JSON.parse(patient.resource_data)
+            : patient.resource_data;
+
+          if (patientData.name && patientData.name[0]) {
+            const nameObj = patientData.name[0];
+            const given = (nameObj.given || []).join(' ');
+            const family = nameObj.family || '';
+            patientName = `${given} ${family}`.trim();
+          } else if (patient.name) {
+            patientName = patient.name;
+          }
+        } catch (e) {
+          // Skip if we can't parse
+          continue;
+        }
+
+        // Check if names match
+        if (patientName && this.namesMatch(name, patientName)) {
+          duplicates.push({
+            resource_id: patient.resource_id,
+            name: patientName,
+            phone: patient.phone,
+            email: patient.email,
+            created_at: patient.created_at
+          });
         }
       }
 
-      // Create new patient
-      // Parse name if provided as string
+      return duplicates;
+    } catch (error) {
+      console.error('[FHIR] Error finding duplicate patients:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Create or get existing patient from phone number
+   * RULE: Each person has a unique identity. If similar names exist, phone number must be confirmed.
+   * @param {Object} patientData - Patient information
+   * @param {boolean} requirePhoneConfirmation - If true, return duplicates instead of creating when similar names found
+   * @returns {Object} FHIR Patient resource or duplicate detection result
+   */
+  static async getOrCreatePatient(patientData, requirePhoneConfirmation = true) {
+    try {
+      // Parse name
       let firstName = patientData.firstName;
       let lastName = patientData.lastName;
+      let fullName = '';
 
       if (!firstName && patientData.name) {
         const nameParts = patientData.name.split(' ');
@@ -37,9 +149,117 @@ class FHIRService {
         lastName = nameParts.slice(1).join(' ') || '';
       }
 
-      // Ensure we have at least a first name
       if (!firstName) {
         firstName = 'Unknown';
+      }
+
+      fullName = `${firstName} ${lastName}`.trim();
+
+      // STEP 1: Check if patient exists by phone (MOST RELIABLE - phone is unique identifier)
+      if (patientData.phone) {
+        const existingPatientByPhone = db.getFHIRPatientByPhone(patientData.phone);
+        if (existingPatientByPhone) {
+          console.log(`[FHIR] ✅ Found existing patient by phone: ${existingPatientByPhone.resource_id}`);
+
+          // Verify name matches (if name provided)
+          if (fullName && fullName !== 'Unknown') {
+            const existingName = existingPatientByPhone.name || '';
+            if (!this.namesMatch(fullName, existingName)) {
+              console.warn(`[FHIR] ⚠️  Name mismatch: Provided "${fullName}" but patient record has "${existingName}"`);
+              // Still return the patient found by phone (phone is more reliable than name)
+            }
+          }
+
+          return {
+            patient: existingPatientByPhone.resource_data,
+            duplicate: false,
+            foundBy: 'phone'
+          };
+        }
+      }
+
+      // STEP 2: Check if patient exists by email (SECONDARY - email can be unique)
+      if (patientData.email) {
+        const existingPatientByEmail = db.getFHIRPatientByEmail(patientData.email);
+        if (existingPatientByEmail) {
+          console.log(`[FHIR] ✅ Found existing patient by email: ${existingPatientByEmail.resource_id}`);
+
+          // Verify name matches
+          if (fullName && fullName !== 'Unknown') {
+            const existingName = existingPatientByEmail.name || '';
+            if (!this.namesMatch(fullName, existingName)) {
+              console.warn(`[FHIR] ⚠️  Name mismatch: Provided "${fullName}" but patient record has "${existingName}"`);
+            }
+          }
+
+          return {
+            patient: existingPatientByEmail.resource_data,
+            duplicate: false,
+            foundBy: 'email'
+          };
+        }
+      }
+
+      // STEP 3: Check for duplicate patients by name (REQUIRES PHONE CONFIRMATION)
+      if (requirePhoneConfirmation && fullName && fullName !== 'Unknown') {
+        const duplicates = this.findDuplicatePatientsByName(fullName);
+
+        if (duplicates.length > 0) {
+          console.log(`[FHIR] ⚠️  Found ${duplicates.length} patient(s) with similar name: "${fullName}"`);
+
+          // If phone was provided, check if it matches any duplicate
+          if (patientData.phone) {
+            const matchingDuplicate = duplicates.find(d => d.phone === patientData.phone);
+            if (matchingDuplicate) {
+              console.log(`[FHIR] ✅ Phone number matches existing patient: ${matchingDuplicate.resource_id}`);
+              const existingPatient = db.getFHIRPatient(matchingDuplicate.resource_id);
+              if (existingPatient) {
+                return {
+                  patient: existingPatient.resource_data,
+                  duplicate: false,
+                  foundBy: 'name_and_phone'
+                };
+              }
+            }
+          }
+
+          // Phone doesn't match or wasn't provided - require confirmation
+          console.log(`[FHIR] 🚨 DUPLICATE DETECTED: Similar name found but phone number ${patientData.phone ? 'does not match' : 'not provided'}`);
+          return {
+            duplicate: true,
+            requiresPhoneConfirmation: true,
+            duplicates: duplicates.map(d => ({
+              patient_id: d.resource_id,
+              name: d.name,
+              phone: d.phone ? this.maskPhone(d.phone) : null, // Mask phone for privacy
+              email: d.email ? this.maskEmail(d.email) : null, // Mask email for privacy
+              has_phone: !!d.phone,
+              has_email: !!d.email
+            })),
+            message: `Found ${duplicates.length} patient(s) with similar name "${fullName}". Please confirm your phone number to verify your identity.`,
+            provided_name: fullName,
+            provided_phone: patientData.phone || null
+          };
+        }
+      }
+
+      // STEP 4: No duplicates found - create new patient
+      // RULE: Require phone number for new patients (phone is unique identifier)
+      if (!patientData.phone && requirePhoneConfirmation) {
+        throw new Error('Phone number is required to create a new patient record. Each patient must have a unique phone number. Please provide your phone number to continue.');
+      }
+
+      // Double-check: Verify phone number doesn't already exist (defensive check)
+      if (patientData.phone) {
+        const existingByPhone = db.getFHIRPatientByPhone(patientData.phone);
+        if (existingByPhone) {
+          console.log(`[FHIR] ⚠️  Phone number ${patientData.phone} already exists - returning existing patient`);
+          return {
+            patient: existingByPhone.resource_data,
+            duplicate: false,
+            foundBy: 'phone'
+          };
+        }
       }
 
       const patientResource = FHIRResources.createPatient({
@@ -62,20 +282,61 @@ class FHIRService {
         throw new Error(`Patient validation failed: ${validation.errors.join(', ')}`);
       }
 
-      // Save to database
-      db.createFHIRPatient(patientResource);
+        // Save to database (will throw error if phone number already exists)
+        try {
+          db.createFHIRPatient(patientResource);
+          console.log(`[FHIR] ✅ Created new patient: ${patientResource.id}`);
+        } catch (createError) {
+          // If error is due to duplicate phone, try to find existing patient
+          if (createError.message && createError.message.includes('phone') && createError.message.includes('already exists')) {
+            console.warn(`[FHIR] ⚠️  Duplicate phone detected during creation: ${createError.message}`);
+            if (patientData.phone) {
+              const existingByPhone = db.getFHIRPatientByPhone(patientData.phone);
+              if (existingByPhone) {
+                return {
+                  patient: existingByPhone.resource_data,
+                  duplicate: false,
+                  foundBy: 'phone'
+                };
+              }
+            }
+          }
+          throw createError;
+        }
 
-      console.log(`[FHIR] Created new patient: ${patientResource.id}`);
-      
-      // Optionally create Circle wallet for patient (can be done on-demand later)
-      // Wallet will be created when needed via /api/circle/wallets endpoint
-      // with entityType='patient' and entityId=patientResource.id
-      
-      return patientResource;
+        // NOTE: Cards are NOT auto-created at patient signup
+        // Cards are created on-demand when:
+        // 1. Patient has insurance AND a bill/copay is created
+        // 2. Patient requests a payment card
+        // See: createCardForBill() or createCardForCopay() methods
+        
+        return {
+          patient: patientResource,
+          duplicate: false,
+          foundBy: 'created'
+        };
     } catch (error) {
       console.error('[FHIR] Error in getOrCreatePatient:', error);
       throw error;
     }
+  }
+
+  /**
+   * Mask phone number for privacy (show last 4 digits)
+   */
+  static maskPhone(phone) {
+    if (!phone || phone.length < 4) return '***-****';
+    return `***-***-${phone.slice(-4)}`;
+  }
+
+  /**
+   * Mask email for privacy (show first letter and domain)
+   */
+  static maskEmail(email) {
+    if (!email || !email.includes('@')) return '***@***';
+    const [local, domain] = email.split('@');
+    if (local.length === 0) return `***@${domain}`;
+    return `${local[0]}***@${domain}`;
   }
 
   /**
@@ -531,6 +792,280 @@ class FHIRService {
     } catch (error) {
       console.error('[FHIR] Error in completeVoiceCall:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Check if patient has insurance
+   * @param {string} patientId - Patient ID
+   * @returns {boolean} True if patient has insurance
+   */
+  static patientHasInsurance(patientId) {
+    try {
+      const insurance = db.getPatientInsurance(patientId);
+      return !!(insurance && insurance.member_id && insurance.payer_id);
+    } catch (error) {
+      console.warn(`[FHIR] Error checking insurance for patient ${patientId}:`, error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Create Stripe card for a patient (on-demand)
+   * Only creates card if patient has insurance
+   * @param {Object} patientResource - FHIR Patient resource
+   * @param {Object} options - Card options (clinic_id, spending_limit, etc.)
+   * @returns {Object} Card creation result
+   */
+  static async createPatientCard(patientResource, options = {}) {
+    // Check if patient has insurance before creating card
+    const patientId = patientResource.id || patientResource.resource_id;
+    if (!this.patientHasInsurance(patientId)) {
+      console.log(`[FHIR] Patient ${patientId} does not have insurance - skipping card creation`);
+      return {
+        success: false,
+        error: 'Patient does not have insurance. Cards are only created for insured patients.',
+        requiresInsurance: true
+      };
+    }
+    if (!StripeIssuingService) {
+      console.warn('[FHIR] ⚠️  Stripe Issuing Service not available');
+      return {
+        success: false,
+        error: 'Stripe Issuing Service not available'
+      };
+    }
+
+    try {
+      const patientId = patientResource.id || patientResource.resource_id;
+      
+      // Check if cardholder already exists for this patient
+      const existingCardholder = db.getCardholderByPatientId(patientId);
+      if (existingCardholder) {
+        console.log(`[FHIR] Cardholder already exists for patient ${patientId}`);
+        // Check if card exists
+        const existingCards = db.getCardsByPatientId(patientId);
+        if (existingCards && existingCards.length > 0) {
+          console.log(`[FHIR] Card already exists for patient ${patientId}`);
+          return {
+            success: true,
+            cardholder_id: existingCardholder.stripe_cardholder_id,
+            card_id: existingCards[0].stripe_card_id,
+            existing: true
+          };
+        }
+      }
+
+      // Prepare patient data for Stripe
+      const patientData = {
+        id: patientId,
+        resource_id: patientId,
+        name: patientResource.name?.[0] 
+          ? `${(patientResource.name[0].given || []).join(' ')} ${patientResource.name[0].family || ''}`.trim()
+          : 'Unknown Patient',
+        firstName: patientResource.name?.[0]?.given?.[0] || '',
+        lastName: patientResource.name?.[0]?.family || '',
+        email: patientResource.telecom?.find(t => t.system === 'email')?.value || null,
+        phone: patientResource.telecom?.find(t => t.system === 'phone')?.value || null,
+        address: patientResource.address || [],
+        resource_data: patientResource
+      };
+
+      // Create Stripe Issuing service instance
+      const stripeIssuing = new StripeIssuingService();
+
+      // Create cardholder and card
+      const result = await stripeIssuing.createCardholderAndCard(patientData, {
+        clinic_id: options.clinic_id || null,
+        spending_limit: options.spending_limit || 100000, // $1,000 in cents
+        spending_interval: options.spending_interval || 'all_time',
+        currency: options.currency || 'usd'
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to create card');
+      }
+
+      // Save cardholder to database
+      const cardholderId = `cardholder-${uuidv4()}`;
+      db.createStripeCardholder({
+        id: cardholderId,
+        patient_id: patientId,
+        clinic_id: options.clinic_id || null,
+        stripe_cardholder_id: result.cardholder_id,
+        type: 'individual',
+        name: patientData.name,
+        email: patientData.email,
+        phone: patientData.phone,
+        billing_address: stripeIssuing._extractBillingAddress(patientData),
+        status: 'active',
+        metadata: {
+          created_by: 'fhir-service',
+          patient_id: patientId
+        }
+      });
+
+      // Save card to database
+      const cardId = `card-${uuidv4()}`;
+      db.createStripeCard({
+        id: cardId,
+        patient_id: patientId,
+        clinic_id: options.clinic_id || null,
+        cardholder_id: cardholderId,
+        stripe_card_id: result.card_id,
+        type: 'virtual',
+        currency: options.currency || 'usd',
+        status: 'active',
+        last4: result.last4,
+        brand: result.brand,
+        expiry_month: result.expiry_month,
+        expiry_year: result.expiry_year,
+        spending_controls: {
+          spending_limits: [
+            {
+              amount: options.spending_limit || 100000,
+              interval: options.spending_interval || 'all_time'
+            }
+          ]
+        },
+        metadata: {
+          created_by: 'fhir-service',
+          patient_id: patientId
+        }
+      });
+
+      console.log(`[FHIR] ✅ Created Stripe card for patient ${patientId}: ${result.card_id} (****${result.last4})`);
+
+      return {
+        success: true,
+        cardholder_id: result.cardholder_id,
+        card_id: result.card_id,
+        last4: result.last4,
+        brand: result.brand
+      };
+    } catch (error) {
+      console.error('[FHIR] Error creating patient card:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create card for a specific bill/claim (on-demand)
+   * Only creates if patient has insurance and owes money
+   * @param {string} patientId - Patient ID
+   * @param {number} billAmount - Bill amount in dollars
+   * @param {Object} options - Additional options (claim_id, appointment_id, etc.)
+   * @returns {Object} Card creation result
+   */
+  static async createCardForBill(patientId, billAmount, options = {}) {
+    try {
+      // Check if patient has insurance
+      if (!this.patientHasInsurance(patientId)) {
+        console.log(`[FHIR] Patient ${patientId} does not have insurance - skipping card creation for bill`);
+        return {
+          success: false,
+          error: 'Patient does not have insurance. Cards are only created for insured patients.',
+          requiresInsurance: true
+        };
+      }
+
+      // Get patient resource
+      const patient = db.getFHIRPatient(patientId);
+      if (!patient) {
+        return {
+          success: false,
+          error: 'Patient not found'
+        };
+      }
+
+      const patientResource = typeof patient.resource_data === 'string' 
+        ? JSON.parse(patient.resource_data)
+        : patient.resource_data;
+
+      // Calculate spending limit (bill amount + 10% buffer, in cents)
+      const spendingLimit = Math.ceil(billAmount * 110); // Add 10% buffer
+
+      // Create card with bill-specific limit
+      const result = await this.createPatientCard(patientResource, {
+        clinic_id: options.clinic_id || null,
+        spending_limit: spendingLimit,
+        spending_interval: 'all_time', // One-time use for this bill
+        currency: 'usd',
+        bill_id: options.claim_id || options.bill_id || null,
+        appointment_id: options.appointment_id || null
+      });
+
+      if (result.success) {
+        console.log(`[FHIR] ✅ Created card for bill: $${billAmount} (limit: $${(spendingLimit/100).toFixed(2)})`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[FHIR] Error creating card for bill:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Create card for copay payment (on-demand)
+   * Only creates if patient has insurance
+   * @param {string} patientId - Patient ID
+   * @param {number} copayAmount - Copay amount in dollars
+   * @param {Object} options - Additional options (appointment_id, etc.)
+   * @returns {Object} Card creation result
+   */
+  static async createCardForCopay(patientId, copayAmount, options = {}) {
+    try {
+      // Check if patient has insurance
+      if (!this.patientHasInsurance(patientId)) {
+        console.log(`[FHIR] Patient ${patientId} does not have insurance - skipping card creation for copay`);
+        return {
+          success: false,
+          error: 'Patient does not have insurance. Cards are only created for insured patients.',
+          requiresInsurance: true
+        };
+      }
+
+      // Get patient resource
+      const patient = db.getFHIRPatient(patientId);
+      if (!patient) {
+        return {
+          success: false,
+          error: 'Patient not found'
+        };
+      }
+
+      const patientResource = typeof patient.resource_data === 'string' 
+        ? JSON.parse(patient.resource_data)
+        : patient.resource_data;
+
+      // Calculate spending limit (copay amount + small buffer, in cents)
+      const spendingLimit = Math.ceil(copayAmount * 110); // Add 10% buffer
+
+      // Create card with copay-specific limit
+      const result = await this.createPatientCard(patientResource, {
+        clinic_id: options.clinic_id || null,
+        spending_limit: spendingLimit,
+        spending_interval: 'all_time', // One-time use for this copay
+        currency: 'usd',
+        appointment_id: options.appointment_id || null,
+        copay_amount: copayAmount
+      });
+
+      if (result.success) {
+        console.log(`[FHIR] ✅ Created card for copay: $${copayAmount} (limit: $${(spendingLimit/100).toFixed(2)})`);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[FHIR] Error creating card for copay:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 }

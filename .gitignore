@@ -27,6 +27,8 @@ middleware-platform/backups/
 *recovery*.dat
 circle-entity-secret*.json
 recovery_file*.dat
+SECRETS_BACKUP.md
+docs/SECRETS_BACKUP.md
 
 # Logs
 logs/

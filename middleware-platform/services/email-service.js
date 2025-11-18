@@ -41,9 +41,20 @@ class EmailService {
     }
 
     try {
-      return azureEmailClient.fromConnectionString(
-        process.env.AZURE_COMMUNICATION_CONNECTION_STRING
-      );
+      // Parse connection string: endpoint=https://...;accesskey=...
+      const connString = process.env.AZURE_COMMUNICATION_CONNECTION_STRING;
+      const endpointMatch = connString.match(/endpoint=https?:\/\/([^;]+)/);
+      const accessKeyMatch = connString.match(/accesskey=([^;]+)/);
+      
+      if (!endpointMatch || !accessKeyMatch) {
+        throw new Error('Invalid connection string format');
+      }
+      
+      const endpoint = `https://${endpointMatch[1]}`;
+      const accessKey = accessKeyMatch[1];
+      
+      // Create client with endpoint and access key
+      return new azureEmailClient(endpoint, { key: accessKey });
     } catch (error) {
       console.error('❌ Error initializing Azure Email Client:', error.message);
       return null;
@@ -93,7 +104,7 @@ class EmailService {
       }
 
       const senderAddress = process.env.AZURE_EMAIL_SENDER || process.env.SMTP_FROM || 'DoNotReply@azurecomm.net';
-      
+
       const message = {
         content: {
           subject: subject,
@@ -176,6 +187,11 @@ class EmailService {
    * Send appointment confirmation email
    */
   static async sendAppointmentConfirmation(appointment) {
+    // Format confirmation number (matches booking service format)
+    const confirmationNumber = appointment.id && appointment.id.length > 13
+      ? appointment.id.substring(5, 13).toUpperCase()
+      : (appointment.id || 'N/A');
+
     const dateTime = new Date(appointment.start_time).toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -232,7 +248,7 @@ class EmailService {
               ` : ''}
             </div>
 
-            <p><strong>Confirmation Number:</strong> ${appointment.id}</p>
+            <p><strong>Confirmation Number:</strong> ${confirmationNumber}</p>
             
             <p>You will receive a reminder email 1 hour before your appointment.</p>
             
@@ -396,6 +412,64 @@ class EmailService {
   }
 
   /**
+   * Send patient portal verification code
+   */
+  static async sendPatientVerificationCode(email, code) {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 700; }
+          .content { background: #f9f9f9; padding: 30px 20px; border-radius: 0 0 8px 8px; }
+          .code-box { background: white; padding: 30px; margin: 20px 0; text-align: center; border-radius: 8px; border: 2px solid #1e40af; }
+          .code { font-size: 36px; font-weight: 700; color: #1e40af; letter-spacing: 12px; font-family: 'Courier New', monospace; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+          .brand { font-size: 28px; font-weight: 300; letter-spacing: -2px; }
+          .brand .doc { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: 400; }
+          .brand .little { font-family: 'Verdana', Geneva, sans-serif; font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="brand" style="margin-bottom: 10px;">
+              <span class="doc">Doc</span><span class="little">Little</span>
+            </div>
+            <h1>🔐 Patient Portal Verification</h1>
+          </div>
+          <div class="content">
+            <p>Hello,</p>
+            <p>You requested to sign in to your DocLittle Patient Portal. Please use the verification code below:</p>
+            
+            <div class="code-box">
+              <div class="code">${code}</div>
+            </div>
+            
+            <p><strong>This code will expire in 10 minutes.</strong></p>
+            <p>If you didn't request this code, please ignore this email or contact support if you have concerns.</p>
+            
+            <p>Best regards,<br>DocLittle Patient Portal Team</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated email. Please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: email,
+      subject: 'DocLittle Patient Portal - Verification Code',
+      html: html
+    });
+  }
+
+  /**
    * Send payment link email after verification
    */
   static async sendPaymentLinkEmail(email, paymentLink, order) {
@@ -449,6 +523,162 @@ class EmailService {
   }
 
   /**
+   * Send insurance billing email
+   */
+  static async sendInsuranceBillingEmail(insurerEmail, claimData) {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #1e40af; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+          .claim-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #1e40af; }
+          .detail-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #666; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>📋 Insurance Claim Submitted</h1>
+          </div>
+          <div class="content">
+            <p>Dear Insurance Provider,</p>
+            <p>A new insurance claim has been submitted for processing:</p>
+            
+            <div class="claim-details">
+              <div class="detail-row">
+                <span class="label">Claim ID:</span> ${claimData.claimId || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">X12 Claim ID:</span> ${claimData.x12ClaimId || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Member ID:</span> ${claimData.memberId || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Patient Name:</span> ${claimData.patientName || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Service Code:</span> ${claimData.serviceCode || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Total Amount:</span> $${(claimData.totalAmount || 0).toFixed(2)}
+              </div>
+              <div class="detail-row">
+                <span class="label">Copay Paid:</span> $${(claimData.copayPaid || 0).toFixed(2)}
+              </div>
+              <div class="detail-row">
+                <span class="label">Insurance Amount:</span> $${((claimData.totalAmount || 0) - (claimData.copayPaid || 0)).toFixed(2)}
+              </div>
+              <div class="detail-row">
+                <span class="label">Date of Service:</span> ${claimData.dateOfService || 'N/A'}
+              </div>
+            </div>
+
+            <p>Please process this claim according to your standard procedures.</p>
+            
+            <p>Best regards,<br>DocLittle Healthcare Platform</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated billing notification. Please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: insurerEmail,
+      subject: `Insurance Claim Submitted - ${claimData.claimId || 'New Claim'}`,
+      html: html
+    });
+  }
+
+  /**
+   * Send patient billing email
+   */
+  static async sendPatientBillingEmail(patientEmail, billingData) {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #dc2626; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+          .billing-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #dc2626; }
+          .detail-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #666; }
+          .amount { font-size: 24px; font-weight: bold; color: #dc2626; }
+          .button { display: inline-block; padding: 12px 24px; background: #dc2626; color: white; text-decoration: none; border-radius: 6px; margin: 10px 0; }
+          .button:hover { background: #b91c1c; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>💳 Billing Statement</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${billingData.patientName || 'Patient'},</p>
+            <p>You have a balance due for your recent appointment:</p>
+            
+            <div class="billing-details">
+              <div class="detail-row">
+                <span class="label">Appointment Date:</span> ${billingData.appointmentDate || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Service:</span> ${billingData.serviceName || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Total Amount:</span> $${(billingData.totalAmount || 0).toFixed(2)}
+              </div>
+              <div class="detail-row">
+                <span class="label">Insurance Coverage:</span> $${(billingData.insuranceAmount || 0).toFixed(2)}
+              </div>
+              <div class="detail-row">
+                <span class="label">Copay:</span> $${(billingData.copayAmount || 0).toFixed(2)}
+              </div>
+              <div class="detail-row">
+                <span class="amount">Amount Due: $${(billingData.amountDue || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <p>Please pay your balance at your earliest convenience.</p>
+            
+            ${billingData.paymentLink ? `
+            <p>
+              <a class="button" href="${billingData.paymentLink}">Pay Now</a>
+            </p>
+            ` : ''}
+            
+            <p>If you have any questions about this bill, please contact us.</p>
+            
+            <p>Best regards,<br>DocLittle Billing Department</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated billing statement. Please do not reply to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: patientEmail,
+      subject: `Billing Statement - $${(billingData.amountDue || 0).toFixed(2)} Due`,
+      html: html
+    });
+  }
+
+  /**
    * Generate cancel/reschedule token
    */
   static _generateCancelToken(appointmentId) {
@@ -464,6 +694,597 @@ class EmailService {
     const crypto = require('crypto');
     const expectedToken = this._generateCancelToken(appointmentId);
     return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expectedToken));
+  }
+
+  /**
+   * Send email verification code
+   */
+  static async sendVerificationCode(email, code, name) {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
+            line-height: 1.6; 
+            color: #1e293b; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f8fafc;
+          }
+          .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+          }
+          .email-wrapper {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center; 
+          }
+          .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            line-height: 1;
+            margin-bottom: 15px;
+            letter-spacing: -2px;
+          }
+          .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+          }
+          .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+          }
+          .logo-brand .dot {
+            font-weight: 700;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 10px;
+          }
+          .header p {
+            margin: 5px 0 0 0;
+            font-size: 16px;
+            opacity: 0.95;
+          }
+          .content { 
+            background: white; 
+            padding: 40px 30px; 
+          }
+          .content h2 {
+            color: #1e293b;
+            font-size: 20px;
+            margin: 0 0 15px 0;
+            font-weight: 600;
+          }
+          .content p {
+            color: #64748b;
+            font-size: 16px;
+            margin: 15px 0;
+            line-height: 1.6;
+          }
+          .code-box {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+          }
+          .code { 
+            color: #1e40af; 
+            font-size: 36px; 
+            font-weight: 700; 
+            letter-spacing: 12px; 
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            display: inline-block;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b; 
+            font-size: 14px; 
+          }
+          .footer a {
+            color: #1e40af;
+            text-decoration: none;
+          }
+          .footer a:hover {
+            text-decoration: underline;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="email-wrapper">
+            <div class="header">
+              <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+              </div>
+              <p>Verify Your Email</p>
+            </div>
+            <div class="content">
+              <h2>Hi ${name || 'there'},</h2>
+              <p>Thank you for signing up for DocLittle API! Please use the verification code below to verify your email address:</p>
+              
+              <div class="code-box">
+                <div class="code">${code}</div>
+              </div>
+              
+              <p><strong>This code will expire in 15 minutes.</strong></p>
+              
+              <p>If you didn't request this code, please ignore this email or contact support if you have concerns.</p>
+              
+              <div class="footer">
+                <p>This is an automated message from DocLittle API.</p>
+                <p>Visit us at <a href="https://api.doclittle.site">api.doclittle.site</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: email,
+      subject: 'DocLittle API - Verify Your Email',
+      html: html
+    });
+  }
+
+  /**
+   * Send monthly invoice email to customer
+   */
+  static async sendInvoiceEmail(email, name, invoice) {
+    const dueDate = new Date(invoice.due_date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const billingMonth = new Date(invoice.billing_month + '-01').toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long'
+    });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 0;
+          }
+          .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .email-wrapper {
+            padding: 0;
+          }
+          .header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+          }
+          .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            line-height: 1;
+            margin-bottom: 15px;
+            letter-spacing: -2px;
+          }
+          .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+          }
+          .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+          }
+          .logo-brand .dot {
+            font-weight: 700;
+          }
+          .header h1 {
+            margin: 15px 0 5px 0;
+            font-size: 24px;
+            font-weight: 600;
+          }
+          .header p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 14px;
+          }
+          .content {
+            padding: 30px;
+          }
+          .content h2 {
+            color: #1e293b;
+            margin: 0 0 15px 0;
+            font-size: 20px;
+          }
+          .content p {
+            color: #64748b;
+            margin: 0 0 20px 0;
+            line-height: 1.6;
+          }
+          .invoice-summary {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+          }
+          .invoice-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          .invoice-row:last-child {
+            border-bottom: none;
+          }
+          .invoice-label {
+            color: #64748b;
+            font-weight: 500;
+          }
+          .invoice-value {
+            color: #1e293b;
+            font-weight: 600;
+          }
+          .invoice-total {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #1e40af;
+          }
+          .invoice-total .invoice-label {
+            font-size: 18px;
+            color: #1e293b;
+          }
+          .invoice-total .invoice-value {
+            font-size: 24px;
+            color: #1e40af;
+          }
+          .invoice-details {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+          }
+          .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 14px;
+          }
+          .button {
+            display: inline-block;
+            background: #1e40af;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-weight: 600;
+          }
+          .button:hover {
+            background: #1d4ed8;
+          }
+          .footer {
+            background: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+            font-size: 14px;
+          }
+          .footer a {
+            color: #1e40af;
+            text-decoration: none;
+          }
+          .footer a:hover {
+            text-decoration: underline;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="email-wrapper">
+            <div class="header">
+              <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+              </div>
+              <h1>Monthly Invoice</h1>
+              <p>Invoice #${invoice.invoice_number}</p>
+            </div>
+            <div class="content">
+              <h2>Hi ${name || 'there'},</h2>
+              <p>Your monthly invoice for <strong>${billingMonth}</strong> is ready for review.</p>
+              
+              <div class="invoice-summary">
+                <div class="invoice-row">
+                  <span class="invoice-label">Billing Period:</span>
+                  <span class="invoice-value">${billingMonth}</span>
+                </div>
+                <div class="invoice-row">
+                  <span class="invoice-label">Invoice Number:</span>
+                  <span class="invoice-value">${invoice.invoice_number}</span>
+                </div>
+                <div class="invoice-row">
+                  <span class="invoice-label">Due Date:</span>
+                  <span class="invoice-value">${dueDate}</span>
+                </div>
+                ${invoice.voice_minutes > 0 ? `
+                <div class="invoice-row">
+                  <span class="invoice-label">Voice Minutes:</span>
+                  <span class="invoice-value">${invoice.voice_minutes.toLocaleString()} min</span>
+                </div>
+                <div class="invoice-row">
+                  <span class="invoice-label">Voice Minutes Cost:</span>
+                  <span class="invoice-value">$${invoice.voice_minutes_cost.toFixed(2)}</span>
+                </div>
+                ` : ''}
+                ${invoice.api_requests > 0 ? `
+                <div class="invoice-row">
+                  <span class="invoice-label">API Requests:</span>
+                  <span class="invoice-value">${invoice.api_requests.toLocaleString()}</span>
+                </div>
+                <div class="invoice-row">
+                  <span class="invoice-label">API Requests Cost:</span>
+                  <span class="invoice-value">$${invoice.api_requests_cost.toFixed(2)}</span>
+                </div>
+                ` : ''}
+                <div class="invoice-row invoice-total">
+                  <span class="invoice-label">Total Amount Due:</span>
+                  <span class="invoice-value">$${invoice.total.toFixed(2)}</span>
+                </div>
+              </div>
+              
+              <p>Payment is due within 15 days of the invoice date. Your stored payment method will be automatically charged on the due date.</p>
+              
+              <p>You can view your invoices and credits at any time in your account dashboard.</p>
+              
+              <div style="text-align: center;">
+                <a href="https://api.doclittle.site/docs" class="button">View Dashboard</a>
+              </div>
+              
+              <p>If you have any questions about this invoice, please contact our support team at support@doclittle.site.</p>
+              
+              <div class="footer">
+                <p>This is an automated invoice from DocLittle API.</p>
+                <p>Visit us at <a href="https://api.doclittle.site">api.doclittle.site</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email. For support, contact support@doclittle.site</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: email,
+      subject: `DocLittle API Invoice - $${invoice.total.toFixed(2)} Due (${invoice.invoice_number})`,
+      html: html
+    });
+  }
+
+  /**
+   * Send feature request notification to admin
+   */
+  static async sendFeatureRequestNotification(customerEmail, customerName, requestedFeatures, companyName) {
+    const featureNames = {
+      'voice_agent': 'Voice AI Agent',
+      'healthcare_commerce': 'Healthcare Commerce',
+      'fhir_integration': 'FHIR Integration',
+      'payment_processing': 'Payment Processing',
+      'appointment_management': 'Appointment Management',
+      'ehr_integration': 'EHR Integration'
+    };
+
+    const featuresList = requestedFeatures.map(f => `• ${featureNames[f] || f}`).join('<br>');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
+            line-height: 1.6; 
+            color: #1e293b;
+            background: #f8fafc;
+            margin: 0;
+            padding: 20px;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+          }
+          .header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+          }
+          .logo {
+            font-size: 28px;
+            font-weight: 300;
+            margin-bottom: 10px;
+          }
+          .logo .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+          }
+          .logo .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+          }
+          .content {
+            padding: 30px;
+          }
+          .alert-box {
+            background: #eff6ff;
+            border-left: 4px solid #2563eb;
+            padding: 16px;
+            border-radius: 6px;
+            margin: 20px 0;
+          }
+          .features-list {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            font-size: 15px;
+            line-height: 1.8;
+          }
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #f1f5f9;
+          }
+          .info-row:last-child {
+            border-bottom: none;
+          }
+          .info-label {
+            color: #64748b;
+            font-weight: 500;
+          }
+          .info-value {
+            color: #1e293b;
+            font-weight: 600;
+          }
+          .button {
+            display: inline-block;
+            background: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 20px;
+          }
+          .footer {
+            background: #f8fafc;
+            padding: 20px;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.9rem;
+            border-top: 1px solid #e2e8f0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">
+              <span class="doc">Doc</span><span class="little">Little</span>.
+            </div>
+            <h2 style="margin: 0; font-size: 20px; font-weight: 400;">New Feature Request</h2>
+          </div>
+          
+          <div class="content">
+            <div class="alert-box">
+              <strong>📋 New Feature Request Received</strong>
+            </div>
+            
+            <p>A customer has requested access to new API features:</p>
+            
+            <div class="features-list">
+              ${featuresList}
+            </div>
+            
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <h3 style="margin: 0 0 16px 0; font-size: 16px; color: #1e293b;">Customer Information</h3>
+              <div class="info-row">
+                <span class="info-label">Customer Name:</span>
+                <span class="info-value">${customerName}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Email:</span>
+                <span class="info-value">${customerEmail}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Company:</span>
+                <span class="info-value">${companyName}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">Requested Features:</span>
+                <span class="info-value">${requestedFeatures.length}</span>
+              </div>
+            </div>
+            
+            <p style="margin-top: 24px;">
+              <a href="https://doclittle.site/admin" class="button">View in Admin Portal</a>
+            </p>
+            
+            <p style="color: #64748b; font-size: 0.9rem; margin-top: 24px;">
+              Please review and approve or reject these feature requests in the admin portal.
+            </p>
+          </div>
+          
+          <div class="footer">
+            <p style="margin: 0;">This is an automated notification from DocLittle API</p>
+            <p style="margin: 8px 0 0 0; font-size: 0.85rem;">
+              <a href="https://api.doclittle.site" style="color: #2563eb;">API Documentation</a> | 
+              <a href="https://doclittle.site" style="color: #2563eb;">Website</a>
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const adminEmail = process.env.ADMIN_EMAIL || 'richard@doclittle.site';
+    
+    return await this.sendEmail({
+      to: adminEmail,
+      subject: `New Feature Request from ${customerName} - ${requestedFeatures.length} feature(s)`,
+      html: html
+    });
   }
 }
 

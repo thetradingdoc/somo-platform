@@ -33,8 +33,8 @@
 
   // Check for production domain (doclittle.site)
   if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname.includes('doclittle.site')) {
-    // For production, use Railway backend
-    window.API_BASE = 'https://web-production-a783d.up.railway.app';
+    // For production, use api.doclittle.site subdomain
+    window.API_BASE = 'https://api.doclittle.site';
     console.log('🌐 API Base URL (production - doclittle.site):', window.API_BASE);
     return;
   }
@@ -44,17 +44,19 @@
     // If accessing via ngrok (legacy - should not be used in production)
     if (hostname.includes('ngrok') || hostname.includes('ngrok-free') || hostname.includes('ngrok.io')) {
       console.warn('⚠️  Detected ngrok access. Please use production domain instead.');
-      window.API_BASE = 'https://web-production-a783d.up.railway.app'; // Use Railway backend
+      window.API_BASE = 'https://api.doclittle.site';
     } else if (hostname.includes('netlify.app')) {
-      // Netlify - use Railway backend URL
-      window.API_BASE = 'https://web-production-a783d.up.railway.app';
+      // Netlify - use api.doclittle.site
+      window.API_BASE = 'https://api.doclittle.site';
     } else if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site') {
-      // Production domain - use Railway backend
-      // Note: Backend is on Railway, not on doclittle.site
-      window.API_BASE = 'https://web-production-a783d.up.railway.app';
+      // Production domain - use api.doclittle.site subdomain
+      window.API_BASE = 'https://api.doclittle.site';
+    } else if (hostname.includes('azurewebsites.net')) {
+      // Azure App Service - use api subdomain
+      window.API_BASE = 'https://api.doclittle.site';
     } else {
-      // Other custom domain - use Railway backend (or configure as needed)
-      window.API_BASE = 'https://web-production-a783d.up.railway.app';
+      // Other custom domain - use api.doclittle.site (or configure as needed)
+      window.API_BASE = 'https://api.doclittle.site';
     }
   } else {
     // Local access

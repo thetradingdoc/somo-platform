@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,12 +9,13 @@
     <script src="../assets/js/config.js"></script>
     <style>
         :root {
-            --primary: #0891b2;
-            --primary-dark: #0e7490;
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
         }
 
         body {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -36,16 +38,30 @@
             margin-bottom: 32px;
         }
 
-        .logo-text {
-            font-size: 36px;
-            font-weight: 700;
+        .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
             color: var(--primary);
             margin-bottom: 8px;
+            letter-spacing: -3px;
+            line-height: 1;
+        }
+
+        .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
         }
 
         .logo-subtitle {
             color: var(--gray-600);
             font-size: 14px;
+            margin-top: 8px;
         }
 
         .step {
@@ -204,35 +220,83 @@
         .resend-link a:hover {
             text-decoration: underline;
         }
+
+        /* Mobile-First Responsive Design */
+        @media (max-width: 768px) {
+            body {
+                padding: 16px;
+            }
+
+            .login-container {
+                padding: 24px 20px;
+                border-radius: 12px;
+            }
+
+            .logo-brand {
+                font-size: 36px;
+                letter-spacing: -2px;
+            }
+
+            .step-title {
+                font-size: 20px;
+            }
+
+            .code-digit {
+                width: 44px;
+                height: 56px;
+                font-size: 20px;
+            }
+
+            .code-input {
+                gap: 6px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 20px 16px;
+            }
+
+            .logo-brand {
+                font-size: 32px;
+            }
+
+            .step-title {
+                font-size: 18px;
+            }
+
+            .code-digit {
+                width: 40px;
+                height: 52px;
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
+
 <body>
     <div class="login-container">
         <div class="logo">
-            <div class="logo-text">DocLittle</div>
+            <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span>
+            </div>
             <div class="logo-subtitle">Patient Portal</div>
         </div>
 
-        <!-- Step 1: Enter Phone -->
-        <div class="step active" id="stepPhone">
+        <!-- Step 1: Enter Email -->
+        <div class="step active" id="stepEmail">
             <h2 class="step-title">Sign In</h2>
-            <p class="step-description">Enter your phone number to receive a verification code</p>
-            
-            <div id="phoneMessage"></div>
-            
-            <form id="phoneForm" onsubmit="handlePhoneSubmit(event)">
+            <p class="step-description">Enter your email address to receive a verification code</p>
+
+            <div id="emailMessage"></div>
+
+            <form id="emailForm" onsubmit="handleEmailSubmit(event)">
                 <div class="form-group">
-                    <label class="form-label" for="phoneInput">Phone Number</label>
-                    <input 
-                        type="tel" 
-                        id="phoneInput" 
-                        class="form-input" 
-                        placeholder="+1234567890"
-                        required
-                        autocomplete="tel"
-                    >
+                    <label class="form-label" for="emailInput">Email Address</label>
+                    <input type="email" id="emailInput" class="form-input" placeholder="your.email@example.com" required
+                        autocomplete="email">
                 </div>
-                <button type="submit" class="btn-primary" id="phoneSubmitBtn">
+                <button type="submit" class="btn-primary" id="emailSubmitBtn">
                     Send Verification Code
                 </button>
             </form>
@@ -241,10 +305,10 @@
         <!-- Step 2: Enter Code -->
         <div class="step" id="stepCode">
             <h2 class="step-title">Enter Verification Code</h2>
-            <p class="step-description">We sent a 6-digit code to <strong id="phoneDisplay"></strong></p>
-            
+            <p class="step-description">We sent a 6-digit code to <strong id="emailDisplay"></strong></p>
+
             <div id="codeMessage"></div>
-            
+
             <form id="codeForm" onsubmit="handleCodeSubmit(event)">
                 <div class="form-group">
                     <label class="form-label">Verification Code</label>
@@ -277,7 +341,7 @@
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
-        let currentPhone = '';
+        let currentEmail = '';
         let sessionId = '';
 
         // Auto-advance code inputs
@@ -309,17 +373,24 @@
             }, 5000);
         }
 
-        async function handlePhoneSubmit(e) {
+        async function handleEmailSubmit(e) {
             e.preventDefault();
-            const phone = document.getElementById('phoneInput').value.trim();
-            
-            if (!phone) {
-                showMessage('phoneMessage', 'Please enter your phone number', 'error');
+            const email = document.getElementById('emailInput').value.trim();
+
+            if (!email) {
+                showMessage('emailMessage', 'Please enter your email address', 'error');
                 return;
             }
 
-            currentPhone = phone;
-            const btn = document.getElementById('phoneSubmitBtn');
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showMessage('emailMessage', 'Please enter a valid email address', 'error');
+                return;
+            }
+
+            currentEmail = email;
+            const btn = document.getElementById('emailSubmitBtn');
             btn.disabled = true;
             btn.textContent = 'Sending...';
 
@@ -327,24 +398,24 @@
                 const response = await fetch(`${API_BASE}/api/patient/verify/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone })
+                    body: JSON.stringify({ email })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
                     sessionId = data.session_id;
-                    document.getElementById('phoneDisplay').textContent = phone;
+                    document.getElementById('emailDisplay').textContent = email;
                     showStep('stepCode');
                     // Focus first code input
                     document.getElementById('code1').focus();
                 } else {
-                    showMessage('phoneMessage', data.error || 'Failed to send code', 'error');
+                    showMessage('emailMessage', data.error || 'Failed to send code', 'error');
                     btn.disabled = false;
                     btn.textContent = 'Send Verification Code';
                 }
             } catch (error) {
-                showMessage('phoneMessage', 'Network error. Please try again.', 'error');
+                showMessage('emailMessage', 'Network error. Please try again.', 'error');
                 btn.disabled = false;
                 btn.textContent = 'Send Verification Code';
             }
@@ -352,9 +423,9 @@
 
         async function handleCodeSubmit(e) {
             e.preventDefault();
-            
+
             const code = codeInputs.map(id => document.getElementById(id).value).join('');
-            
+
             if (code.length !== 6) {
                 showMessage('codeMessage', 'Please enter the full 6-digit code', 'error');
                 return;
@@ -368,7 +439,7 @@
                 const response = await fetch(`${API_BASE}/api/patient/verify/confirm`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: currentPhone, code })
+                    body: JSON.stringify({ email: currentEmail, code })
                 });
 
                 const data = await response.json();
@@ -377,8 +448,8 @@
                     sessionId = data.session_id;
                     // Store session in localStorage
                     localStorage.setItem('patient_session_id', sessionId);
-                    localStorage.setItem('patient_phone', currentPhone);
-                    
+                    localStorage.setItem('patient_email', currentEmail);
+
                     showStep('stepLoading');
                     // Redirect to appointments page
                     setTimeout(() => {
@@ -400,18 +471,18 @@
         }
 
         async function resendCode() {
-            if (!currentPhone) return;
-            
+            if (!currentEmail) return;
+
             try {
                 const response = await fetch(`${API_BASE}/api/patient/verify/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: currentPhone })
+                    body: JSON.stringify({ email: currentEmail })
                 });
 
                 const data = await response.json();
                 if (data.success) {
-                    showMessage('codeMessage', 'New verification code sent!', 'success');
+                    showMessage('codeMessage', 'New verification code sent to your email!', 'success');
                 } else {
                     showMessage('codeMessage', data.error || 'Failed to resend code', 'error');
                 }
@@ -442,5 +513,5 @@
         });
     </script>
 </body>
-</html>
 
+</html>

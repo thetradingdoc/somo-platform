@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - DocLittle API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            color: #1e40af;
+            line-height: 1;
+            margin-bottom: 10px;
+            letter-spacing: -2px;
+        }
+
+        .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+            color: #1e40af;
+        }
+
+        .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+            color: #1e40af;
+        }
+
+        .logo-brand .dot {
+            color: #1e40af;
+            font-weight: 700;
+        }
+
+        .logo p {
+            color: #64748b;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+        }
+
+        .step h2 {
+            color: #1e293b;
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        .step p {
+            color: #64748b;
+            margin-bottom: 25px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #1e293b;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #1e40af;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-group small {
+            display: block;
+            color: #64748b;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #1e40af;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            background: #1e3a8a;
+        }
+
+        .btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #1e40af;
+            color: white;
+            border: none;
+        }
+
+        .btn-secondary:hover {
+            background: #1e3a8a;
+        }
+
+        .code-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .code-input input {
+            flex: 1;
+            text-align: center;
+            font-size: 1.5rem;
+            letter-spacing: 5px;
+            font-weight: bold;
+        }
+
+        .resend-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .resend-link a {
+            color: #1e40af;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .resend-link a:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #64748b;
+            margin-top: 15px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0;
+            margin-bottom: 40px;
+            position: relative;
+            padding: 0;
+        }
+
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 40px);
+            max-width: 400px;
+            height: 2px;
+            background: #e2e8f0;
+            z-index: 0;
+        }
+
+        .step-indicator::after {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #1e40af 0%, #3b82f6 100%);
+            z-index: 1;
+            transition: width 0.5s ease;
+        }
+
+        .step-dot {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #94a3b8;
+            position: relative;
+            z-index: 2;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .step-dot.active {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            border-color: #1e40af;
+            color: white;
+            box-shadow: 0 4px 8px rgba(30, 64, 175, 0.3);
+            transform: scale(1.1);
+        }
+
+        .step-dot.completed {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            border-color: #1e40af;
+            color: white;
+            box-shadow: 0 2px 6px rgba(30, 64, 175, 0.2);
+        }
+
+        .step-dot.completed::after {
+            content: '✓';
+            position: absolute;
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        /* Progress line connection between dots */
+        .step-dot:not(:first-child)::before {
+            content: '';
+            position: absolute;
+            left: -60px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 60px;
+            height: 2px;
+            background: #e2e8f0;
+            z-index: 0;
+            transition: background 0.3s ease;
+        }
+
+        /* Fill progress line when previous step is completed */
+        .step-dot.completed ~ .step-dot::before,
+        .step-dot.completed + .step-dot.active::before {
+            background: linear-gradient(90deg, #1e40af 0%, #3b82f6 100%);
+        }
+
+        /* Remove the background line behind active/completed dots */
+        .step-dot.active::before,
+        .step-dot.completed::before {
+            background: transparent;
+        }
+
+        .feature-checkbox-label {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .feature-checkbox-label:hover {
+            border-color: #1e40af;
+            background: #f8fafc;
+        }
+
+        .features-dropdown {
+            position: relative;
+        }
+
+        .features-dropdown-button {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .features-dropdown-button:hover {
+            border-color: #1e40af;
+            background: #f8fafc;
+        }
+
+        .features-dropdown-button.open {
+            border-color: #1e40af;
+            background: #f8fafc;
+        }
+
+        .features-dropdown-arrow {
+            transition: transform 0.2s;
+            color: #64748b;
+            font-size: 1.2rem;
+        }
+
+        .features-dropdown-button.open .features-dropdown-arrow {
+            transform: rotate(180deg);
+        }
+
+        .features-dropdown-content {
+            display: none;
+            margin-top: 12px;
+            padding: 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .features-dropdown-content.open {
+            display: grid;
+            gap: 12px;
+        }
+
+        .features-selected-count {
+            color: #64748b;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .features-selected-count.has-selection {
+            color: #1e40af;
+            font-weight: 600;
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            .step h2 {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+            </div>
+            <p id="page-subtitle">Sign in to your account</p>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 20px; border: 2px solid #e2e8f0; border-radius: 8px; padding: 4px; background: #f8fafc;">
+            <button id="tab-signup" class="tab-btn" style="flex: 1; padding: 10px; border: none; background: transparent; color: #64748b; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Sign Up</button>
+            <button id="tab-signin" class="tab-btn active" style="flex: 1; padding: 10px; border: none; background: #1e40af; color: white; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s;">Sign In</button>
+        </div>
+
+        <div class="step-indicator" id="signup-indicator" style="display: none; margin-bottom: 30px;">
+            <div class="step-dot active" id="step1-dot" style="margin-right: 60px;">1</div>
+            <div class="step-dot" id="step2-dot" style="margin-right: 60px;">2</div>
+            <div class="step-dot" id="step3-dot" style="margin-right: 60px;">3</div>
+            <div class="step-dot" id="step4-dot">4</div>
+        </div>
+
+        <div class="step-indicator" id="signin-indicator" style="display: flex; margin-bottom: 30px;">
+            <div class="step-dot active" id="signin-step1-dot" style="margin-right: 60px;">1</div>
+            <div class="step-dot" id="signin-step2-dot">2</div>
+        </div>
+
+        <!-- Sign In Step 1: Email -->
+        <div class="step active" id="signin-step1" style="display: block;">
+            <h2>Sign In to Your Account</h2>
+            <p>Enter your email to receive a sign-in code</p>
+
+            <div id="signin-alert1"></div>
+
+            <form id="signinForm">
+                <div class="form-group">
+                    <label for="signin-email">Business Email *</label>
+                    <input type="email" id="signin-email" name="email" required autocomplete="email">
+                    <small>We'll send a verification code to this email</small>
+                </div>
+
+                <button type="submit" class="btn" id="signin-submit-btn">Send Sign-In Code</button>
+            </form>
+
+            <div class="resend-link" style="margin-top: 20px; text-align: center; display: flex; flex-direction: column; gap: 8px;">
+                <a href="#" id="forgot-password-link" style="color: #2563eb; text-decoration: none; font-weight: 500;">Forgot Password?</a>
+                <a href="#" id="switch-to-signup" style="color: #64748b; text-decoration: none;">Don't have an account? Sign up</a>
+            </div>
+        </div>
+
+        <!-- Sign In Step 2: Code Verification -->
+        <div class="step" id="signin-step2" style="display: none;">
+            <h2>Enter Verification Code</h2>
+            <p>We've sent a 6-digit code to <strong id="signin-email-display"></strong></p>
+
+            <div id="signin-alert2"></div>
+
+            <form id="signinVerifyForm">
+                <div class="code-input">
+                    <input type="text" id="signin-code" name="code" maxlength="6" pattern="[0-9]{6}" required autocomplete="one-time-code" placeholder="000000">
+                </div>
+
+                <button type="submit" class="btn" id="signin-verify-btn">Verify & Sign In</button>
+            </form>
+
+            <div class="resend-link" style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
+                <a href="#" id="signin-resend-link" style="color: #2563eb; text-decoration: none; font-weight: 500;">Resend code</a>
+                <a href="#" id="forgot-password-link-step2" style="color: #64748b; text-decoration: none; font-size: 0.9rem;">Need help? Contact support</a>
+            </div>
+        </div>
+
+        <!-- Step 1: Signup Form -->
+        <div class="step" id="step1" style="display: none;">
+            <h2>Create Your Account</h2>
+            <p>Fill in your information to get started with DocLittle API</p>
+
+            <div id="alert1"></div>
+
+            <form id="signupForm">
+                <div class="form-group">
+                    <label for="name">Full Name *</label>
+                    <input type="text" id="name" name="name" required autocomplete="name">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Business Email *</label>
+                    <input type="email" id="email" name="email" required autocomplete="email">
+                    <small>We'll send a verification code to this email</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="phone">Phone Number</label>
+                    <input type="tel" id="phone" name="phone_number" placeholder="+15551234567" autocomplete="tel">
+                    <small>Optional - for account recovery</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Select API Features *</label>
+                    <small style="display: block; margin-bottom: 12px;">Choose which features you'd like access to. You can request more features later.</small>
+                    <div class="features-dropdown">
+                        <button type="button" id="features-dropdown-button" class="features-dropdown-button">
+                            <div>
+                                <span id="features-button-text">Select features...</span>
+                                <span id="features-selected-count" class="features-selected-count"></span>
+                            </div>
+                            <span class="features-dropdown-arrow">▼</span>
+                        </button>
+                        <div id="features-dropdown-content" class="features-dropdown-content">
+                            <div id="features-container" style="display: grid; gap: 12px;">
+                                <label class="feature-checkbox-label">
+                                    <input type="checkbox" name="api_features" value="voice_agent" style="width: auto; margin-right: 12px; cursor: pointer;">
+                                    <div>
+                                        <strong style="color: #1e293b;">Voice AI Agent</strong>
+                                        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">Natural language conversations via phone calls</div>
+                                    </div>
+                                </label>
+                                <label class="feature-checkbox-label">
+                                    <input type="checkbox" name="api_features" value="healthcare_commerce" style="width: auto; margin-right: 12px; cursor: pointer;">
+                                    <div>
+                                        <strong style="color: #1e293b;">Healthcare Commerce</strong>
+                                        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">Patients can order products/services via voice</div>
+                                    </div>
+                                </label>
+                                <label class="feature-checkbox-label">
+                                    <input type="checkbox" name="api_features" value="fhir_integration" style="width: auto; margin-right: 12px; cursor: pointer;">
+                                    <div>
+                                        <strong style="color: #1e293b;">FHIR Integration</strong>
+                                        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">Healthcare data standards (patient records, encounters)</div>
+                                    </div>
+                                </label>
+                                <label class="feature-checkbox-label">
+                                    <input type="checkbox" name="api_features" value="payment_processing" style="width: auto; margin-right: 12px; cursor: pointer;">
+                                    <div>
+                                        <strong style="color: #1e293b;">Payment Processing</strong>
+                                        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">Stripe, Circle wallets, insurance billing</div>
+                                    </div>
+                                </label>
+                                <label class="feature-checkbox-label">
+                                    <input type="checkbox" name="api_features" value="appointment_management" style="width: auto; margin-right: 12px; cursor: pointer;">
+                                    <div>
+                                        <strong style="color: #1e293b;">Appointment Management</strong>
+                                        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">Schedule, confirm, and manage appointments</div>
+                                    </div>
+                                </label>
+                                <label class="feature-checkbox-label">
+                                    <input type="checkbox" name="api_features" value="ehr_integration" style="width: auto; margin-right: 12px; cursor: pointer;">
+                                    <div>
+                                        <strong style="color: #1e293b;">EHR Integration</strong>
+                                        <div style="font-size: 0.85rem; color: #64748b; margin-top: 2px;">Connect to Epic, 1upHealth, and other EHR systems</div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <small id="features-error" style="color: #ef4444; display: none; margin-top: 8px;">Please select at least one feature</small>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <div style="flex: 1;"></div>
+                    <button type="submit" class="btn" id="signupBtn" style="flex: 1;">Next →</button>
+                </div>
+                <div class="loading" id="loading1">Creating account...</div>
+            </form>
+        </div>
+
+        <!-- Step 2: Company Information -->
+        <div class="step" id="step2" style="display: none;">
+            <h2>Company Information</h2>
+            <p>Tell us about your business</p>
+
+            <div id="alert2"></div>
+
+            <form id="companyForm">
+                <div class="form-group">
+                    <label for="company">Company Name</label>
+                    <input type="text" id="company" name="company_name" autocomplete="organization">
+                </div>
+
+                <div class="form-group">
+                    <label for="business_size">Business Size</label>
+                    <select id="business_size" name="business_size">
+                        <option value="">Select...</option>
+                        <option value="1-10">1-10 employees</option>
+                        <option value="11-50">11-50 employees</option>
+                        <option value="51-200">51-200 employees</option>
+                        <option value="201-500">201-500 employees</option>
+                        <option value="501+">501+ employees</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button type="button" id="back-to-step1-btn" class="btn-secondary" style="flex: 1;">← Back</button>
+                    <button type="submit" class="btn" id="companyBtn" style="flex: 1;">Next →</button>
+                </div>
+                <div class="loading" id="loading2">Saving...</div>
+            </form>
+        </div>
+
+        <!-- Step 3: Email Verification -->
+        <div class="step" id="step3" style="display: none;">
+            <h2>Verify Your Email</h2>
+            <p>We've sent a verification code to <strong id="verify-email"></strong></p>
+
+            <div id="alert3"></div>
+
+            <form id="verifyForm">
+                <div class="form-group">
+                    <label for="code">Verification Code</label>
+                    <div class="code-input">
+                        <input type="text" id="code" name="code" maxlength="6" pattern="[0-9]{6}" required autocomplete="off" placeholder="000000">
+                    </div>
+                    <small>Enter the 6-digit code from your email</small>
+                </div>
+
+                <div class="resend-link" style="display: flex; flex-direction: column; gap: 8px; align-items: center; margin-bottom: 20px;">
+                    <a href="#" id="resendLink">Didn't receive the code? Resend</a>
+                    <a href="#" id="change-email-link" style="color: #64748b; text-decoration: none; font-size: 0.9rem;">Change email address</a>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
+                    <button type="button" id="back-to-step2-btn" class="btn-secondary" style="flex: 1;">← Back</button>
+                    <button type="submit" class="btn" id="verifyBtn" style="flex: 1;">Next →</button>
+                </div>
+                <div class="loading" id="loading3">Verifying...</div>
+            </form>
+        </div>
+
+        <!-- Step 4: Success -->
+        <div class="step" id="step4" style="display: none;">
+            <h2>Account Created!</h2>
+            <p>Your account has been created successfully. Redirecting to terms...</p>
+
+            <div class="alert alert-success">
+                Email verified! Please accept our terms of service to continue.
+            </div>
+
+            <button class="btn" id="continueBtn" style="display: none;">Continue to Terms</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let customerEmail = '';
+        let customerId = '';
+        let step1Data = {}; // Store Step 1 form data temporarily
+
+        // Features dropdown toggle
+        const featuresDropdownButton = document.getElementById('features-dropdown-button');
+        const featuresDropdownContent = document.getElementById('features-dropdown-content');
+        const featuresButtonText = document.getElementById('features-button-text');
+        const featuresSelectedCount = document.getElementById('features-selected-count');
+
+        function updateFeaturesDisplay() {
+            const selected = document.querySelectorAll('input[name="api_features"]:checked');
+            const count = selected.length;
+            
+            if (count === 0) {
+                featuresButtonText.textContent = 'Select features...';
+                featuresSelectedCount.textContent = '';
+                featuresSelectedCount.classList.remove('has-selection');
+            } else {
+                featuresButtonText.textContent = count === 1 ? '1 feature selected' : `${count} features selected`;
+                featuresSelectedCount.textContent = '';
+                featuresSelectedCount.classList.add('has-selection');
+            }
+        }
+
+        featuresDropdownButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = featuresDropdownContent.classList.contains('open');
+            
+            if (isOpen) {
+                featuresDropdownContent.classList.remove('open');
+                featuresDropdownButton.classList.remove('open');
+            } else {
+                featuresDropdownContent.classList.add('open');
+                featuresDropdownButton.classList.add('open');
+            }
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!featuresDropdownButton.contains(e.target) && !featuresDropdownContent.contains(e.target)) {
+                featuresDropdownContent.classList.remove('open');
+                featuresDropdownButton.classList.remove('open');
+            }
+        });
+
+        // Update display when features are selected/deselected
+        document.querySelectorAll('input[name="api_features"]').forEach(checkbox => {
+            checkbox.addEventListener('change', updateFeaturesDisplay);
+        });
+
+        // Track current step for browser back/forward navigation
+        let currentStep = 1;
+        let isNavigatingBack = false;
+
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (e) => {
+            if (e.state && e.state.step) {
+                isNavigatingBack = true;
+                currentStep = e.state.step;
+                showStep(currentStep);
+                // Restore form data if going back to previous steps
+                if (currentStep === 1 && step1Data.name) {
+                    document.getElementById('name').value = step1Data.name;
+                    document.getElementById('email').value = step1Data.email || customerEmail || '';
+                    if (step1Data.phone_number) document.getElementById('phone').value = step1Data.phone_number;
+                    if (step1Data.api_features && Array.isArray(step1Data.api_features)) {
+                        step1Data.api_features.forEach(feature => {
+                            const checkbox = document.querySelector(`input[name="api_features"][value="${feature}"]`);
+                            if (checkbox) checkbox.checked = true;
+                        });
+                        updateFeaturesDisplay();
+                    }
+                } else if (currentStep === 2 && step1Data.name) {
+                    // Restore company form data if it exists
+                    if (step1Data.company_name) document.getElementById('company').value = step1Data.company_name;
+                    if (step1Data.business_size) document.getElementById('business_size').value = step1Data.business_size;
+                }
+                isNavigatingBack = false;
+            }
+        });
+
+        // Step 1: Signup
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signupBtn');
+            const loading = document.getElementById('loading1');
+            const alert = document.getElementById('alert1');
+            const featuresError = document.getElementById('features-error');
+
+            btn.disabled = true;
+            loading.classList.add('active');
+            alert.innerHTML = '';
+            featuresError.style.display = 'none';
+
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Collect selected API features
+            const apiFeatures = [];
+            document.querySelectorAll('input[name="api_features"]:checked').forEach(checkbox => {
+                apiFeatures.push(checkbox.value);
+            });
+            data.api_features = apiFeatures;
+
+            // Validate at least one feature is selected
+            if (apiFeatures.length === 0) {
+                featuresError.style.display = 'block';
+                featuresDropdownButton.classList.add('open');
+                featuresDropdownContent.classList.add('open');
+                btn.disabled = false;
+                loading.classList.remove('active');
+                return;
+            }
+
+            // Store Step 1 data temporarily and proceed to Step 2
+            step1Data = data;
+            customerEmail = data.email;
+            currentStep = 2;
+            // Update browser history
+            window.history.pushState({ step: 2 }, '', window.location.pathname);
+            showStep(2);
+            btn.disabled = false;
+            loading.classList.remove('active');
+        });
+
+        // Back button handlers
+        document.getElementById('back-to-step1-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            // Go back to Step 1 and restore form data
+            currentStep = 1;
+            window.history.pushState({ step: 1 }, '', window.location.pathname);
+            showStep(1);
+            // Restore form data if available
+            if (step1Data.name) document.getElementById('name').value = step1Data.name;
+            if (step1Data.email) document.getElementById('email').value = step1Data.email;
+            if (step1Data.phone_number) document.getElementById('phone').value = step1Data.phone_number;
+            // Restore selected features
+            if (step1Data.api_features && Array.isArray(step1Data.api_features)) {
+                step1Data.api_features.forEach(feature => {
+                    const checkbox = document.querySelector(`input[name="api_features"][value="${feature}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+                updateFeaturesDisplay();
+            }
+        });
+
+        // Back to Step 2 button handler
+        document.getElementById('back-to-step2-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            // Go back to Step 2 and restore form data
+            currentStep = 2;
+            window.history.pushState({ step: 2 }, '', window.location.pathname);
+            showStep(2);
+            // Restore company form data if it exists
+            if (step1Data.company_name) document.getElementById('company').value = step1Data.company_name;
+            if (step1Data.business_size) document.getElementById('business_size').value = step1Data.business_size;
+        });
+
+        // Change email link handler (in Step 3)
+        document.getElementById('change-email-link').addEventListener('click', (e) => {
+            e.preventDefault();
+            goBackToEditEmail();
+        });
+
+        function goBackToEditEmail() {
+            // Go back to Step 1 to edit email
+            currentStep = 1;
+            window.history.pushState({ step: 1 }, '', window.location.pathname);
+            showStep(1);
+            // Restore form data except email (user can change it)
+            if (step1Data.name) document.getElementById('name').value = step1Data.name;
+            // Keep email field empty or show current email (user can edit)
+            document.getElementById('email').value = customerEmail || '';
+            document.getElementById('email').focus();
+            document.getElementById('email').select(); // Select email text for easy editing
+            if (step1Data.phone_number) document.getElementById('phone').value = step1Data.phone_number;
+            // Restore selected features
+            if (step1Data.api_features && Array.isArray(step1Data.api_features)) {
+                step1Data.api_features.forEach(feature => {
+                    const checkbox = document.querySelector(`input[name="api_features"][value="${feature}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+                updateFeaturesDisplay();
+            }
+            // Show message that they can edit email
+            document.getElementById('alert1').innerHTML = '<div class="alert alert-info">You can edit your email address below. A new verification code will be sent to the updated email.</div>';
+        }
+
+        // Step 2: Company Information
+        document.getElementById('companyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('companyBtn');
+            const loading = document.getElementById('loading2');
+            const alert = document.getElementById('alert2');
+
+            btn.disabled = true;
+            loading.classList.add('active');
+            alert.innerHTML = '';
+
+            const formData = new FormData(e.target);
+            const companyData = Object.fromEntries(formData.entries());
+            
+            // Merge Step 1 and Step 2 data
+            const signupData = {
+                ...step1Data,
+                ...companyData
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(signupData)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    customerId = result.customer_id;
+                    document.getElementById('verify-email').textContent = customerEmail;
+                    currentStep = 3;
+                    window.history.pushState({ step: 3 }, '', window.location.pathname);
+                    showStep(3);
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Failed to create account: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                loading.classList.remove('active');
+            }
+        });
+
+        // Step 3: Verify Email
+        document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('verifyBtn');
+            const loading = document.getElementById('loading3');
+            const alert = document.getElementById('alert3');
+
+            btn.disabled = true;
+            loading.classList.add('active');
+            alert.innerHTML = '';
+
+            const code = document.getElementById('code').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signup/verify-email`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: customerEmail, code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentStep = 4;
+                    window.history.pushState({ step: 4 }, '', window.location.pathname);
+                    showStep(4);
+                    setTimeout(() => {
+                        const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/terms';
+                        window.location.href = redirectUrl;
+                    }, 2000);
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Verification failed: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                loading.classList.remove('active');
+            }
+        });
+
+        // Resend code
+        document.getElementById('resendLink').addEventListener('click', async (e) => {
+            e.preventDefault();
+            const alert = document.getElementById('alert3');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signup/resend-code`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: customerEmail })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert.innerHTML = `<div class="alert alert-success">Verification code resent to your email!</div>`;
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Failed to resend code: ${error.message}</div>`;
+            }
+        });
+
+        // Code input formatting
+        document.getElementById('code').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        });
+
+        // Tab switching
+        let isSigninMode = true; // Default to sign-in mode
+        let signinEmail = '';
+
+        document.getElementById('tab-signup').addEventListener('click', () => {
+            isSigninMode = false;
+            document.getElementById('tab-signup').style.background = '#1e40af';
+            document.getElementById('tab-signup').style.color = 'white';
+            document.getElementById('tab-signin').style.background = 'transparent';
+            document.getElementById('tab-signin').style.color = '#64748b';
+            document.getElementById('page-subtitle').textContent = 'Sign up to get started';
+            document.getElementById('signup-indicator').style.display = 'flex';
+            document.getElementById('signin-indicator').style.display = 'none';
+            document.querySelectorAll('.step').forEach(s => s.style.display = 'none');
+            document.getElementById('step1').classList.add('active');
+            document.getElementById('step1').style.display = 'block';
+            showStep(1);
+        });
+
+        document.getElementById('tab-signin').addEventListener('click', () => {
+            isSigninMode = true;
+            document.getElementById('tab-signin').style.background = '#1e40af';
+            document.getElementById('tab-signin').style.color = 'white';
+            document.getElementById('tab-signup').style.background = 'transparent';
+            document.getElementById('tab-signup').style.color = '#64748b';
+            document.getElementById('page-subtitle').textContent = 'Sign in to your account';
+            document.getElementById('signup-indicator').style.display = 'none';
+            document.getElementById('signin-indicator').style.display = 'flex';
+            document.querySelectorAll('.step').forEach(s => {
+                s.classList.remove('active');
+                s.style.display = 'none';
+            });
+            document.getElementById('signin-step1').classList.add('active');
+            document.getElementById('signin-step1').style.display = 'block';
+            showSigninStep(1);
+        });
+
+        document.getElementById('switch-to-signup').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('tab-signup').click();
+        });
+
+        // Sign In Step 1: Request code
+        document.getElementById('signinForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signin-submit-btn');
+            const alert = document.getElementById('signin-alert1');
+            const email = document.getElementById('signin-email').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            alert.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    signinEmail = email;
+                    document.getElementById('signin-email-display').textContent = email;
+                    showSigninStep(2);
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Failed to send sign-in code: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Sign-In Code';
+            }
+        });
+
+        // Sign In Step 2: Verify code
+        document.getElementById('signinVerifyForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signin-verify-btn');
+            const alert = document.getElementById('signin-alert2');
+            const code = document.getElementById('signin-code').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            alert.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signin/verify`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email: signinEmail, code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert.innerHTML = '<div class="alert alert-success">Signed in successfully! Redirecting...</div>';
+                    setTimeout(() => {
+                        const redirectUrl = result.redirect || '/docs';
+                        window.location.href = redirectUrl;
+                    }, 1000);
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Verification failed: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Verify & Sign In';
+            }
+        });
+
+        // Sign-in code input formatting
+        document.getElementById('signin-code').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        });
+
+        // Sign-in resend code
+        document.getElementById('signin-resend-link').addEventListener('click', async (e) => {
+            e.preventDefault();
+            const alert = document.getElementById('signin-alert2');
+
+            if (!signinEmail) {
+                showSigninStep(1);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: signinEmail })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert.innerHTML = `<div class="alert alert-success">Sign-in code resent to your email!</div>`;
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Failed to resend code: ${error.message}</div>`;
+            }
+        });
+
+        // Forgot Password / Recovery
+        document.getElementById('forgot-password-link').addEventListener('click', async (e) => {
+            e.preventDefault();
+            const alert = document.getElementById('signin-alert1');
+            const emailInput = document.getElementById('signin-email');
+            const email = emailInput.value.trim();
+
+            if (!email) {
+                alert.innerHTML = `<div class="alert alert-info">
+                    <strong>Need Help Signing In?</strong><br>
+                    Enter your email address above and click "Send Sign-In Code" to receive a verification code.<br><br>
+                    If you can't access your email or need additional help, please contact support at <a href="mailto:support@doclittle.site" style="color: #2563eb;">support@doclittle.site</a>
+                </div>`;
+                emailInput.focus();
+                return;
+            }
+
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                alert.innerHTML = `<div class="alert alert-error">Please enter a valid email address</div>`;
+                return;
+            }
+
+            // Request new sign-in code
+            const btn = document.getElementById('signin-submit-btn');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            alert.innerHTML = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/signin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    signinEmail = email;
+                    document.getElementById('signin-email-display').textContent = email;
+                    alert.innerHTML = `<div class="alert alert-success">
+                        <strong>✓ Sign-in code sent!</strong><br>
+                        We've sent a new verification code to <strong>${email}</strong>. Please check your inbox.
+                    </div>`;
+                    showSigninStep(2);
+                } else {
+                    if (result.error === 'Account not found') {
+                        alert.innerHTML = `<div class="alert alert-error">
+                            <strong>Account not found</strong><br>
+                            No account found with this email address. <a href="#" id="switch-to-signup-recovery" style="color: #2563eb; text-decoration: underline;">Sign up for a new account</a> or contact support at <a href="mailto:support@doclittle.site" style="color: #2563eb;">support@doclittle.site</a>
+                        </div>`;
+                        document.getElementById('switch-to-signup-recovery').addEventListener('click', (e) => {
+                            e.preventDefault();
+                            document.getElementById('tab-signup').click();
+                        });
+                    } else {
+                        alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}<br><br>If you continue to have issues, please contact support at <a href="mailto:support@doclittle.site" style="color: #2563eb;">support@doclittle.site</a></div>`;
+                    }
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">
+                    Failed to send sign-in code: ${error.message}<br><br>
+                    If you need help, please contact support at <a href="mailto:support@doclittle.site" style="color: #2563eb;">support@doclittle.site</a>
+                </div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Send Sign-In Code';
+            }
+        });
+
+        // Forgot Password link in Step 2 (Code Verification)
+        document.getElementById('forgot-password-link-step2').addEventListener('click', (e) => {
+            e.preventDefault();
+            const alert = document.getElementById('signin-alert2');
+            alert.innerHTML = `<div class="alert alert-info">
+                <strong>Need Help?</strong><br>
+                If you didn't receive the code, try:<br>
+                • Check your spam/junk folder<br>
+                • Click "Resend code" above<br>
+                • Contact support at <a href="mailto:support@doclittle.site" style="color: #2563eb;">support@doclittle.site</a><br>
+                • Go back and request a new code
+            </div>`;
+        });
+
+        function showSigninStep(stepNum) {
+            if (stepNum === 1) {
+                document.getElementById('signin-step1').classList.add('active');
+                document.getElementById('signin-step1').style.display = 'block';
+                document.getElementById('signin-step2').classList.remove('active');
+                document.getElementById('signin-step2').style.display = 'none';
+                document.getElementById('signin-step1-dot').classList.add('active');
+                document.getElementById('signin-step2-dot').classList.remove('active');
+            } else if (stepNum === 2) {
+                document.getElementById('signin-step1').classList.remove('active');
+                document.getElementById('signin-step1').style.display = 'none';
+                document.getElementById('signin-step2').classList.add('active');
+                document.getElementById('signin-step2').style.display = 'block';
+                document.getElementById('signin-step1-dot').classList.remove('active');
+                document.getElementById('signin-step1-dot').classList.add('completed');
+                document.getElementById('signin-step1-dot').innerHTML = ''; // Checkmark via CSS
+                document.getElementById('signin-step2-dot').classList.add('active');
+                document.getElementById('signin-step2-dot').innerHTML = '2';
+            }
+        }
+
+        function showStep(stepNum) {
+            // Hide all signup steps
+            document.querySelectorAll('.step').forEach(s => {
+                if (!s.id.startsWith('signin-')) {
+                    s.classList.remove('active');
+                    s.style.display = 'none';
+                }
+            });
+            // Show the active step
+            const activeStep = document.getElementById(`step${stepNum}`);
+            if (activeStep) {
+                activeStep.classList.add('active');
+                activeStep.style.display = 'block';
+            }
+
+            // Update current step tracking
+            if (!isNavigatingBack) {
+                currentStep = stepNum;
+            }
+
+            // Update step indicators (now 4 steps)
+            for (let i = 1; i <= 4; i++) {
+                const dot = document.getElementById(`step${i}-dot`);
+                if (dot) {
+                    if (i < stepNum) {
+                        dot.classList.remove('active');
+                        dot.classList.add('completed');
+                        dot.innerHTML = ''; // Checkmark will be added via CSS ::after
+                    } else if (i === stepNum) {
+                        dot.classList.add('active');
+                        dot.classList.remove('completed');
+                        dot.innerHTML = i;
+                    } else {
+                        dot.classList.remove('active', 'completed');
+                        dot.innerHTML = i;
+                    }
+                }
+            }
+        }
+
+        // Check for redirect parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('redirect')) {
+            // User was redirected here from /docs or /terms
+        }
+    </script>
+</body>
+</html>
+

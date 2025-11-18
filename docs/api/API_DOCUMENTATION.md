@@ -252,6 +252,30 @@ GET /api/admin/patients/:patientId/insurance
 GET /api/admin/patients/:patientId/eligibility
 ```
 
+### API Key Management
+
+#### List Client API Keys
+```http
+GET /api/admin/clients/:clinicId/api-keys
+```
+
+#### Create / Rotate Client API Key
+```http
+POST /api/admin/clients/:clinicId/api-keys
+Content-Type: application/json
+
+{
+  "label": "Voice Agent 1",
+  "rotate_existing": true
+}
+```
+> Returns `api_key` once. Copy immediately; the raw key is never persisted.
+
+#### Revoke Client API Key
+```http
+POST /api/admin/clients/:clinicId/api-keys/:keyId/revoke
+```
+
 ---
 
 ## Patient Portal Endpoints

@@ -55,7 +55,7 @@ class EHRSyncService {
    */
   async syncAllConnections() {
     try {
-      const connections = db.prepare(`
+      const connections = db.db.prepare(`
         SELECT * FROM ehr_connections 
         WHERE access_token IS NOT NULL 
           AND (expires_at IS NULL OR expires_at > datetime('now'))
@@ -92,7 +92,7 @@ class EHRSyncService {
    */
   async syncConnection(connectionId, date = null) {
     try {
-      const connection = db.prepare(`
+      const connection = db.db.prepare(`
         SELECT * FROM ehr_connections WHERE id = ?
       `).get(connectionId);
 
@@ -117,7 +117,7 @@ class EHRSyncService {
         }
 
         // Check if already synced
-        const existing = db.prepare(`
+        const existing = db.db.prepare(`
           SELECT id FROM ehr_encounters WHERE fhir_encounter_id = ?
         `).get(encounter.id);
 
@@ -135,7 +135,7 @@ class EHRSyncService {
         }
 
         // Get patient phone from FHIR patient
-        const fhirPatient = db.prepare(`
+        const fhirPatient = db.db.prepare(`
           SELECT phone FROM fhir_patients WHERE resource_id = ?
         `).get(patientId);
 
@@ -185,7 +185,7 @@ class EHRSyncService {
 
     // Store encounter
     const ehrEncounterId = uuidv4();
-    db.prepare(`
+    db.db.prepare(`
       INSERT INTO ehr_encounters 
       (id, fhir_encounter_id, patient_id, appointment_id, provider_id, 
        start_time, end_time, status, raw_json, created_at)
@@ -208,7 +208,7 @@ class EHRSyncService {
       const icdCodes = ehrAggregator.extractICDCodes(conditionEntries);
       
       for (const code of icdCodes) {
-        db.prepare(`
+        db.db.prepare(`
           INSERT INTO ehr_conditions 
           (id, ehr_encounter_id, icd10_code, description, is_primary, raw_json, created_at)
           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -225,7 +225,7 @@ class EHRSyncService {
       // Update appointment with primary ICD-10 if found
       if (appointmentId && icdCodes.length > 0) {
         const primaryCode = icdCodes.find(c => c.primary) || icdCodes[0];
-        db.prepare(`
+        db.db.prepare(`
           UPDATE appointments 
           SET primary_icd10 = ?, ehr_synced = 1
           WHERE id = ?
@@ -241,7 +241,7 @@ class EHRSyncService {
       const cptCodes = ehrAggregator.extractCPTCodes(procedureEntries);
       
       for (const code of cptCodes) {
-        db.prepare(`
+        db.db.prepare(`
           INSERT INTO ehr_procedures 
           (id, ehr_encounter_id, cpt_code, modifier, description, raw_json, created_at)
           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -258,7 +258,7 @@ class EHRSyncService {
       // Update appointment with primary CPT if found
       if (appointmentId && cptCodes.length > 0) {
         const primaryCPT = cptCodes[0];
-        db.prepare(`
+        db.db.prepare(`
           UPDATE appointments 
           SET primary_cpt = ?, ehr_synced = 1
           WHERE id = ?
@@ -281,7 +281,7 @@ class EHRSyncService {
                      null;
         const unit = observation.valueQuantity?.unit || null;
 
-        db.prepare(`
+        db.db.prepare(`
           INSERT INTO ehr_observations 
           (id, ehr_encounter_id, type, value, unit, raw_json, created_at)
           VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -307,7 +307,7 @@ class EHRSyncService {
    */
   async syncAppointment(appointmentId) {
     try {
-      const appointment = db.prepare(`
+      const appointment = db.db.prepare(`
         SELECT * FROM appointments WHERE id = ?
       `).get(appointmentId);
 
@@ -316,7 +316,7 @@ class EHRSyncService {
       }
 
       // Find active EHR connection for this provider/patient
-      const connection = db.prepare(`
+      const connection = db.db.prepare(`
         SELECT * FROM ehr_connections 
         WHERE provider_id = ? 
           AND access_token IS NOT NULL

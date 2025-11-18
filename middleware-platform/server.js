@@ -3,10 +3,41 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const path = require('path');
+// Initialize Stripe with proper configuration and validation
+const stripeConfig = require('./utils/stripe-config');
+let stripe = null;
+try {
+  stripe = stripeConfig.initializeStripe();
+} catch (error) {
+  // If it's a validation error, it's a security issue - log it but continue
+  if (error.message.includes('SECURITY ERROR')) {
+    console.error('❌', error.message);
+    // Don't exit in server.js - let the specific route handlers deal with it
+  } else {
+    console.warn('⚠️  Stripe not configured - Payment features will be limited');
+  }
+}
 const axios = require('axios');
+// Google APIs (optional - for Calendar integration)
+let google;
+try {
+  google = require('googleapis').google;
+} catch (error) {
+  console.warn('⚠️  googleapis not available - Calendar features will be disabled');
+  google = null;
+}
 const { v4: uuidv4 } = require('uuid');
+const {
+  requireAdminAuth,
+  handleAdminLogin,
+  handleAdminLogout,
+  adminSessionStatus,
+  hasValidSession
+} = require('./middleware/admin-auth');
+const { generateApiKey, hashApiKey } = require('./utils/api-keys');
 
 // Try to load bcryptjs, but make it optional for now
 let bcrypt;
@@ -35,6 +66,16 @@ const PatientPortalService = require('./services/patient-portal-service');
 const EHRAggregatorService = require('./services/ehr-aggregator-service');
 const EHRSyncService = require('./services/ehr-sync-service');
 const EpicAdapter = require('./services/epic-adapter');
+const RetellService = require('./services/retell-service');
+
+// Import Stripe Issuing Service (optional)
+let StripeIssuingService;
+try {
+  StripeIssuingService = require('./services/stripe-issuing-service');
+} catch (e) {
+  console.warn('⚠️  Stripe Issuing Service not available:', e.message);
+  StripeIssuingService = null;
+}
 
 // CircleService - make it optional (don't crash if CIRCLE_API_KEY is not set)
 // CircleService exports a singleton instance, so we can use it directly
@@ -66,6 +107,39 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
   console.log('⚠️  Twilio not configured - SMS will be skipped');
 }
 
+function getGoogleOAuthClient() {
+  if (!google || !google.auth) {
+    return null;
+  }
+
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return null;
+  }
+
+  const redirectUri =
+    process.env.GOOGLE_REDIRECT_URI ||
+    `${process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000'}/auth/google/calendar/callback`;
+
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri
+  );
+}
+
+function encodeState(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+}
+
+function decodeState(state) {
+  try {
+    return JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+  } catch (error) {
+    console.warn('⚠️  Failed to decode Google OAuth state:', error.message);
+    return {};
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -76,6 +150,7 @@ const RetellWebSocketHandler = require('./webhooks/retell-websocket');
 // Import middleware
 const { securityHeaders, sanitizeInput, requestLogger } = require('./middleware/security');
 const { apiLimiter, authLimiter, paymentLimiter, voiceLimiter } = require('./middleware/rate-limiter');
+const { usageLogger, logVoiceCall, logFunctionCall, logError } = require('./middleware/usage-logger');
 const logger = require('./services/logger');
 
 // Security middleware (must be first)
@@ -84,18 +159,353 @@ app.use(securityHeaders);
 // CORS
 app.use(cors());
 
+// Cookie parser
+app.use(cookieParser());
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request logging
+// Request logging (console)
 app.use(requestLogger);
+
+// Enhanced usage logging (database) - for API endpoints
+app.use('/api/', usageLogger);
 
 // Input sanitization
 app.use(sanitizeInput);
 
 // Global rate limiting
 app.use('/api/', apiLimiter);
+
+// API Documentation routes (protected - requires signup + terms acceptance)
+app.get('/docs', (req, res, next) => {
+  // Check for customer session cookie
+  const sessionId = req.cookies?.customer_session;
+  if (!sessionId) {
+    // Redirect to signup
+    return res.redirect('/?redirect=/docs');
+  }
+
+  // Verify session exists in database
+  const session = db.getCustomerSession(sessionId);
+  if (!session) {
+    return res.redirect('/?redirect=/docs');
+  }
+
+  // Update last accessed
+  db.updateCustomerSessionAccess(sessionId);
+
+  // Check customer exists and has accepted terms
+  const customer = db.getCustomer(session.customer_id);
+  if (!customer || !customer.email_verified) {
+    return res.redirect('/?redirect=/docs');
+  }
+
+  const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+  if (!termsAccepted) {
+    return res.redirect('/terms?redirect=/docs');
+  }
+
+  // REQUIRED: Check if payment method is verified (MANDATORY)
+  const hasVerifiedPayment = customer.stripe_payment_method_id && customer.card_verified === 1;
+  if (!hasVerifiedPayment) {
+    // Payment verification is MANDATORY - redirect to verify-card
+    return res.redirect('/verify-card?redirect=/docs');
+  }
+
+  // Customer is authenticated, has accepted terms, and has verified payment method - serve docs
+  res.sendFile(path.join(__dirname, 'public', 'docs', 'index.html'));
+});
+
+app.get('/docs/*', (req, res, next) => {
+  const relativePath = req.path.replace('/docs/', '');
+  const filePath = path.join(__dirname, 'public', 'docs', relativePath);
+  const fs = require('fs');
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    next();
+  }
+});
+
+// Admin Portal - REMOVED: Admin portal should be on doclittle.site/admin, not api.doclittle.site/admin
+
+// ============================================
+// Domain-based Routing
+// Serve frontend for doclittle.site, API for api.doclittle.site
+// ============================================
+
+// Helper function to get hostname
+function getHostname(req) {
+  return req.headers.host?.split(':')[0] || req.headers.host;
+}
+
+// Helper function to get unified-dashboard path (works both locally and in Azure)
+function getUnifiedDashboardPath(...subPaths) {
+  const fs = require('fs');
+  // Try Azure/production path first (unified-dashboard in same directory)
+  let azurePath = path.join(__dirname, 'unified-dashboard', ...subPaths);
+  if (fs.existsSync(azurePath)) {
+    return azurePath;
+  }
+  // Fallback to local dev path (unified-dashboard in parent directory)
+  return path.join(__dirname, '..', 'unified-dashboard', ...subPaths);
+}
+
+// Root endpoint - route based on domain
+app.get('/', (req, res) => {
+  const hostname = getHostname(req);
+
+  // API subdomain - check if user is already logged in
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    // Check if user has valid session
+    const sessionId = req.cookies?.customer_session;
+    if (sessionId) {
+      const session = db.getCustomerSession(sessionId);
+      if (session) {
+        // Check customer exists and has accepted terms BEFORE redirecting to docs
+        const customer = db.getCustomer(session.customer_id);
+        if (customer && customer.email_verified) {
+          const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+          if (termsAccepted) {
+            // Check payment method verification (required before accessing docs)
+            const hasVerifiedPayment = customer.stripe_payment_method_id && customer.card_verified === 1;
+            if (hasVerifiedPayment) {
+              // User is fully authenticated - redirect to docs
+              return res.redirect('/docs');
+            } else {
+              // Payment verification required - redirect to verify-card
+              return res.redirect('/verify-card?redirect=/docs');
+            }
+          } else {
+            // Terms not accepted - redirect to terms page (MANDATORY)
+            return res.redirect('/terms?redirect=/docs');
+          }
+        }
+      }
+    }
+    // No valid session or not fully authenticated - show signup page
+    return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
+  }
+
+  // Root domain - serve unified dashboard landing page
+  if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname === 'doclittle.azurewebsites.net') {
+    const landingPath = getUnifiedDashboardPath('landing.html');
+    if (require('fs').existsSync(landingPath)) {
+      return res.sendFile(landingPath);
+    }
+  }
+
+  // Default fallback to signup (for API subdomain or unknown domains)
+  // Check for session first
+  const sessionId = req.cookies?.customer_session;
+  if (sessionId) {
+    const session = db.getCustomerSession(sessionId);
+    if (session) {
+      // Check customer exists and has accepted terms BEFORE redirecting to docs
+      const customer = db.getCustomer(session.customer_id);
+      if (customer && customer.email_verified) {
+        const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+        if (termsAccepted) {
+          // Check payment method verification (required before accessing docs)
+          const hasVerifiedPayment = customer.stripe_payment_method_id && customer.card_verified === 1;
+          if (hasVerifiedPayment) {
+            // User is fully authenticated - redirect to docs
+            return res.redirect('/docs');
+          } else {
+            // Payment verification required - redirect to verify-card
+            return res.redirect('/verify-card?redirect=/docs');
+          }
+        } else {
+          // Terms not accepted - redirect to terms page (MANDATORY)
+          return res.redirect('/terms?redirect=/docs');
+        }
+      }
+    }
+  }
+  res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
+});
+
+// ============================================
+// Unified Dashboard Routes (doclittle.site frontend)
+// ============================================
+
+// Serve unified-dashboard static assets
+app.use('/assets', express.static(getUnifiedDashboardPath('assets'), {
+  maxAge: '1d' // Cache static assets for 1 day
+}));
+
+// Serve unified-dashboard HTML pages
+app.get('/landing', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.redirect('/');
+  }
+  res.sendFile(getUnifiedDashboardPath('landing.html'));
+});
+
+app.get('/login', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  res.sendFile(getUnifiedDashboardPath('login.html'));
+});
+
+app.get('/index.html', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  res.sendFile(getUnifiedDashboardPath('index.html'));
+});
+
+// Serve unified-dashboard subdirectories
+app.use('/business', express.static(getUnifiedDashboardPath('business'), {
+  index: false,
+  extensions: ['html']
+}));
+
+app.use('/patients', express.static(getUnifiedDashboardPath('patients'), {
+  index: false,
+  extensions: ['html']
+}));
+
+app.use('/insurer', express.static(getUnifiedDashboardPath('insurer'), {
+  index: false,
+  extensions: ['html']
+}));
+
+app.use('/admin', (req, res, next) => {
+  const hostname = getHostname(req);
+  // Admin portal should be on root domain, not API subdomain
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({
+      error: 'Admin portal not available on API subdomain',
+      message: 'Please access admin portal at https://doclittle.site/admin'
+    });
+  }
+
+  // Serve admin portal from unified-dashboard/admin
+  const adminFile = req.path === '/admin' ? 'index.html' : req.path.replace('/admin/', '');
+  const adminPath = getUnifiedDashboardPath('admin', adminFile);
+
+  if (require('fs').existsSync(adminPath) && adminPath.includes('unified-dashboard')) {
+    return res.sendFile(adminPath);
+  }
+
+  // Fallback to middleware-platform admin if exists
+  next();
+});
+
+// ============================================
+// Signup Routes (Customer Registration)
+// API routes for signup (POST /api/signup, etc.)
+// ============================================
+const signupRoutes = require('./routes/signup');
+// Only register API routes, not root (root is handled above)
+app.use('/api', signupRoutes);
+
+// ============================================
+// Credits Routes (Credits Purchase & Balance)
+// ============================================
+const creditsRoutes = require('./routes/credits');
+app.use('/api/credits', creditsRoutes);
+
+// ============================================
+// Invoice Routes (Admin & Customer)
+// ============================================
+const invoiceRoutes = require('./routes/invoices');
+app.use('/api', invoiceRoutes);
+// Register /terms route (MANDATORY - requires session and email verification)
+app.get('/terms', (req, res) => {
+  const sessionId = req.cookies?.customer_session;
+  
+  // Check for session (user must be signed up first)
+  if (!sessionId) {
+    return res.redirect('/?redirect=/terms');
+  }
+
+  const session = db.getCustomerSession(sessionId);
+  if (!session) {
+    return res.redirect('/?redirect=/terms');
+  }
+
+  // Check customer exists and email is verified (must complete signup first)
+  const customer = db.getCustomer(session.customer_id);
+  if (!customer || !customer.email_verified) {
+    return res.redirect('/?redirect=/terms');
+  }
+
+  // User is signed up and email verified - show terms page
+  // They must accept terms to proceed (handled in terms.html)
+  res.sendFile(path.join(__dirname, 'public', 'signup', 'terms.html'));
+});
+
+// Register /profile route (Customer Profile)
+app.get('/profile', (req, res) => {
+  const sessionId = req.cookies?.customer_session;
+  if (!sessionId) {
+    return res.redirect('/?redirect=/profile');
+  }
+
+  const session = db.getCustomerSession(sessionId);
+  if (!session) {
+    return res.redirect('/?redirect=/profile');
+  }
+
+  const customer = db.getCustomer(session.customer_id);
+  if (!customer || !customer.email_verified) {
+    return res.redirect('/?redirect=/profile');
+  }
+
+  // Check if terms accepted
+  const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+  if (!termsAccepted) {
+    return res.redirect('/terms?redirect=/profile');
+  }
+
+  res.sendFile(path.join(__dirname, 'public', 'profile', 'index.html'));
+});
+
+// Register /verify-card route
+app.get('/verify-card', (req, res) => {
+  const sessionId = req.cookies?.customer_session;
+  if (!sessionId) {
+    return res.redirect('/?redirect=/verify-card');
+  }
+
+  const session = db.getCustomerSession(sessionId);
+  if (!session) {
+    return res.redirect('/?redirect=/verify-card');
+  }
+
+  const customer = db.getCustomer(session.customer_id);
+  if (!customer || !customer.email_verified) {
+    return res.redirect('/?redirect=/verify-card');
+  }
+
+  // Check if terms accepted
+  const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+  if (!termsAccepted) {
+    return res.redirect('/terms?redirect=/verify-card');
+  }
+
+  res.sendFile(path.join(__dirname, 'public', 'signup', 'verify-card.html'));
+});
+
+// Favicon route (prevent 404 errors)
+app.get('/favicon.ico', (req, res) => {
+  // Return a simple SVG favicon as data URI
+  const svgFavicon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚕️</text></svg>';
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  res.send(svgFavicon);
+});
+
+// Serve static files from public directory (after security middleware and routes)
+app.use(express.static(path.join(__dirname, 'public')));
 
 console.log('✅ Database initialized');
 console.log('✅ FHIR integration enabled');
@@ -132,6 +542,12 @@ app.use('/fhir', fhirRoutes);
 // ============================================
 const pdfCodingRoutes = require('./routes/pdf-coding');
 app.use('/api/pdf-coding', pdfCodingRoutes);
+
+// ============================================
+// Usage Tracking Routes
+// ============================================
+const usageRoutes = require('./routes/usage');
+app.use('/api/usage', usageRoutes);
 
 // ============================================
 // Utility & Helpers
@@ -236,19 +652,65 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
+    // Look up clinic by phone number
+    const toNumber = req.body.To;
+    const clinicPhone = db.getClinicPhoneNumber(toNumber);
+    let clinicId = null;
+    let customerId = null;
+    let retellAgentId = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
+
+    if (clinicPhone && clinicPhone.clinic_id) {
+      clinicId = clinicPhone.clinic_id;
+      customerId = clinicId; // Legacy: clinic_id used as customer_id
+      const clinic = db.getClinicById(clinicId);
+      if (clinic && clinic.retell_agent_id) {
+        retellAgentId = clinic.retell_agent_id;
+        console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
+        console.log(`   Using Retell agent: ${retellAgentId}`);
+      }
+    } else {
+      // Try to find customer by agent_id if provided in query params or headers
+      const agentIdFromRequest = req.query.agent_id || req.headers['x-retell-agent-id'];
+      if (agentIdFromRequest) {
+        const customer = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(agentIdFromRequest);
+        if (customer) {
+          customerId = customer.id;
+          retellAgentId = agentIdFromRequest;
+          console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
+          console.log(`   Using Retell agent: ${retellAgentId}`);
+          
+          // Check credits before allowing call
+          const credits = db.getCustomerCredits(customerId);
+          if (!credits || credits.credits_balance_minutes <= 0) {
+            console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+          }
+        } else {
+          console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
+          console.warn(`   Using default Retell agent: ${retellAgentId}`);
+      }
+    } else {
+      console.warn(`⚠️  No clinic found for phone number: ${toNumber}`);
+      console.warn(`   Using default Retell agent: ${retellAgentId}`);
+      }
+    }
+
     // CRITICAL: Register call with Retell FIRST (before responding)
     // But use a shorter timeout and handle errors gracefully
     const registerPayload = {
-      agent_id: process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a',
+      agent_id: retellAgentId,
       audio_websocket_protocol: 'twilio',
       audio_encoding: 'mulaw',
       sample_rate: 8000,
       from_number: req.body.From,
       to_number: req.body.To,
       metadata: {
-        twilio_call_sid: req.body.CallSid
+        twilio_call_sid: req.body.CallSid,
+        clinic_id: clinicId || null,
+        customer_id: customerId || null
       },
       retell_llm_dynamic_variables: {
+        clinic_id: clinicId || null,
+        customer_id: customerId || null,
         merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
       }
     };
@@ -275,6 +737,27 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
 
       callId = retellRegisterResp.data.call_id;
       console.log('✅ Call registered! Call ID:', callId);
+
+      // Log call to database (async, don't block response)
+      if (customerId || clinicId) {
+        setImmediate(() => {
+          try {
+            db.logVoiceCall({
+              id: `call-${callId}`,
+              customer_id: customerId || clinicId, // Use customer_id if available, fallback to clinic_id
+              call_id: callId,
+              twilio_call_sid: req.body.CallSid, // Store Twilio CallSid for cost tracking
+              call_duration_seconds: null, // Will update when call ends
+              function_calls_count: 0,
+              status: 'active'
+            });
+            console.log(`📝 Logged call to database for ${customerId ? 'customer' : 'clinic'}: ${customerId || clinicId}`);
+            console.log(`   Twilio CallSid: ${req.body.CallSid}`);
+          } catch (logError) {
+            console.error('⚠️  Failed to log call:', logError.message);
+          }
+        });
+      }
 
       // Build SIP URI using the call_id (as per Retell docs)
       sipUri = `sip:${callId}@5t4n6j0wnrl.sip.livekit.cloud`;
@@ -341,6 +824,27 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       console.error('   Response:', JSON.stringify(error.response.data, null, 2));
     } else {
       console.error('   Error:', error.message);
+    }
+
+    // Log error to database
+    try {
+      const toNumber = req.body.To;
+      const clinicPhone = db.getClinicPhoneNumber(toNumber);
+      const clinicId = clinicPhone ? clinicPhone.clinic_id : null;
+
+      db.logError({
+        id: `error-${require('crypto').randomBytes(16).toString('hex')}`,
+        customer_id: clinicId,
+        error_type: 'VoiceCallError',
+        error_message: error.message,
+        stack_trace: error.stack,
+        request_id: req.body.CallSid,
+        endpoint: '/voice/incoming',
+        context: JSON.stringify({ from: req.body.From, to: req.body.To }),
+        severity: 'high'
+      });
+    } catch (logError) {
+      console.error('⚠️  Failed to log error:', logError.message);
     }
 
     // Return error TwiML
@@ -462,6 +966,37 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
     // Store checkout
     db.createVoiceCheckout(checkout);
 
+    // Create Stripe card on-demand if patient has insurance and copay is due
+    if (amount > 0 && appointmentId) {
+      try {
+        const appointment = db.getAppointment(appointmentId);
+        if (appointment && appointment.patient_id) {
+          const FHIRService = require('./services/fhir-service');
+          // Check if this is a copay (amount matches copay from eligibility)
+          const isCopay = eligibilityChecks && eligibilityChecks.length > 0 &&
+            eligibilityChecks[0].copay_amount === amount;
+
+          if (isCopay) {
+            console.log(`💳 Creating payment card for appointment copay: $${amount.toFixed(2)}`);
+            await FHIRService.createCardForCopay(appointment.patient_id, amount, {
+              appointment_id: appointmentId,
+              checkout_id: checkoutId
+            });
+          } else {
+            // Patient responsibility (bill)
+            console.log(`💳 Creating payment card for appointment payment: $${amount.toFixed(2)}`);
+            await FHIRService.createCardForBill(appointment.patient_id, amount, {
+              appointment_id: appointmentId,
+              checkout_id: checkoutId
+            });
+          }
+        }
+      } catch (cardError) {
+        // Don't fail checkout if card creation fails
+        console.warn('⚠️  Failed to create payment card for appointment checkout:', cardError.message);
+      }
+    }
+
     // Generate token + code
     const crypto = require('crypto');
     const paymentToken = crypto.randomBytes(32).toString('hex');
@@ -477,10 +1012,36 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
 
     // Email the code
     let emailResult = { success: false };
+    let billingEmailResult = { success: false };
+
     if (checkout.customer_email) {
       try {
         const EmailService = require('./services/email-service');
+
+        // Send checkout verification code email
         emailResult = await EmailService.sendCheckoutVerificationCode(checkout.customer_email, verificationCode);
+
+        // Send patient billing email
+        if (appointmentId) {
+          const appointment = db.getAppointment(appointmentId);
+          if (appointment) {
+            const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+            const paymentLink = `${baseUrl}/payment/${paymentToken}`;
+
+            billingEmailResult = await EmailService.sendPatientBillingEmail(checkout.customer_email, {
+              patientName: checkout.customer_name || appointment.patient_name,
+              appointmentDate: appointment.date,
+              serviceName: appointment.appointment_type || 'Therapy Session',
+              totalAmount: amount + (amount * 0.1), // Total including insurance portion
+              insuranceAmount: amount * 0.1, // Estimated insurance coverage
+              copayAmount: amount,
+              amountDue: amount,
+              paymentLink: paymentLink
+            });
+
+            console.log(`📧 Patient billing email sent to: ${checkout.customer_email}`);
+          }
+        }
       } catch (emailError) {
         console.error('⚠️  Email service error:', emailError.message);
         emailResult = { success: false, error: emailError.message };
@@ -495,6 +1056,7 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
       payment_token: paymentToken,
       requires_verification: true,
       email_sent: !!emailResult.success,
+      billing_email_sent: !!billingEmailResult.success,
       message: emailResult.success ? 'Verification code emailed' : 'Verification code generated (email not sent)'
     });
   } catch (error) {
@@ -1322,6 +1884,13 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     }
 
     // Create Stripe payment intent
+    if (!stripe) {
+      return res.status(503).json({
+        success: false,
+        error: 'Payment processing is not configured. Please contact support.'
+      });
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency: 'usd',
@@ -1381,9 +1950,32 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
 // ============================================
 
 // Signup
+// Helper function to generate clinic slug from name
+function generateClinicSlug(clinicName) {
+  return clinicName
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
+    .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+    .substring(0, 50); // Limit length
+}
+
+// Helper function to ensure unique clinic slug
+function ensureUniqueClinicSlug(baseSlug) {
+  let slug = baseSlug;
+  let counter = 1;
+
+  while (db.getClinicBySlug(slug)) {
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+
+  return slug;
+}
+
 app.post('/api/auth/signup', authLimiter, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, clinic_name, clinic_phone } = req.body;
 
     // Validation
     if (!name || !email || !password) {
@@ -1393,10 +1985,27 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       });
     }
 
+    if (!clinic_name || !clinic_phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Clinic name and phone number are required'
+      });
+    }
+
     if (password.length < 8) {
       return res.status(400).json({
         success: false,
         error: 'Password must be at least 8 characters'
+      });
+    }
+
+    // Validate phone number format (E.164)
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    const normalizedPhone = clinic_phone.replace(/\s+/g, '');
+    if (!phoneRegex.test(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please enter a valid phone number in E.164 format (e.g., +15555551234)'
       });
     }
 
@@ -1409,7 +2018,102 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       });
     }
 
-    // Hash password
+    // Check if clinic name/slug already exists
+    const baseSlug = generateClinicSlug(clinic_name);
+    if (baseSlug.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid clinic name. Please use alphanumeric characters.'
+      });
+    }
+
+    // Check if phone number is already in use
+    const existingClinicByPhone = db.getClinicByPhoneNumber(normalizedPhone);
+    if (existingClinicByPhone) {
+      return res.status(400).json({
+        success: false,
+        error: 'This phone number is already registered to another clinic'
+      });
+    }
+
+    // Generate unique clinic slug
+    const clinicSlug = ensureUniqueClinicSlug(baseSlug);
+
+    console.log(`\n🏥 Creating new clinic: ${clinic_name}`);
+    console.log(`   Slug: ${clinicSlug}`);
+    console.log(`   Phone: ${normalizedPhone}`);
+    console.log(`   Owner: ${name} (${email})`);
+
+    // Step 1: Create clinic record
+    const clinicId = `clinic-${uuidv4()}`;
+    const merchantId = `merchant-${uuidv4()}`;
+
+    try {
+      db.createClinic({
+        id: clinicId,
+        clinic_slug: clinicSlug,
+        name: clinic_name,
+        phone_number: normalizedPhone,
+        merchant_id: merchantId,
+        status: 'active'
+      });
+      console.log(`✅ Clinic created: ${clinicId}`);
+    } catch (clinicError) {
+      console.error('❌ Failed to create clinic:', clinicError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create clinic. Please try again.'
+      });
+    }
+
+    // Step 2: Create Retell agent
+    let retellAgentId = null;
+    let retellAgentStatus = 'pending';
+
+    try {
+      const retellService = new RetellService();
+      const agentResult = await retellService.createAgent({
+        name: clinic_name,
+        phone_number: normalizedPhone
+      });
+
+      if (agentResult.success) {
+        retellAgentId = agentResult.agent_id;
+        retellAgentStatus = 'active';
+        console.log(`✅ Retell agent created: ${retellAgentId}`);
+      } else {
+        console.warn(`⚠️  Retell agent creation failed: ${agentResult.error}`);
+        console.warn(`   Clinic will be created without agent. Admin can add agent later.`);
+        // Continue with clinic creation even if agent fails
+      }
+    } catch (retellError) {
+      console.error('❌ Retell agent creation error:', retellError);
+      // Continue with clinic creation even if agent fails
+    }
+
+    // Update clinic with Retell agent ID
+    if (retellAgentId) {
+      db.updateClinic(clinicId, {
+        retell_agent_id: retellAgentId,
+        retell_agent_status: retellAgentStatus
+      });
+    }
+
+    // Step 3: Link phone number to clinic
+    try {
+      db.createClinicPhoneNumber({
+        id: `phone-${uuidv4()}`,
+        clinic_id: clinicId,
+        phone_number: normalizedPhone,
+        status: 'active'
+      });
+      console.log(`✅ Phone number linked to clinic`);
+    } catch (phoneError) {
+      console.error('❌ Failed to link phone number:', phoneError);
+      // Continue even if phone linking fails
+    }
+
+    // Step 4: Hash password
     let password_hash;
     if (bcrypt) {
       password_hash = await bcrypt.hash(password, 10);
@@ -1419,17 +2123,29 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       console.log('⚠️  Using SHA256 instead of BCrypt (install bcryptjs for secure hashing)');
     }
 
-    // Create user
+    // Step 5: Create user with clinic_id
     const userId = `user-${uuidv4()}`;
-    db.createUser({
-      id: userId,
-      email,
-      password_hash,
-      name,
-      role: 'healthcare_provider',
-      merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884',
-      auth_method: 'email'
-    });
+    try {
+      db.createUser({
+        id: userId,
+        email,
+        password_hash,
+        name,
+        role: 'healthcare_provider',
+        merchant_id: merchantId,
+        clinic_id: clinicId,
+        auth_method: 'email'
+      });
+      console.log(`✅ User created: ${userId}`);
+    } catch (userError) {
+      console.error('❌ Failed to create user:', userError);
+      // Cleanup: delete clinic if user creation fails
+      // (In production, you might want to use transactions)
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create user account. Please try again.'
+      });
+    }
 
     // Update last login
     db.updateUserLastLogin(userId);
@@ -1439,21 +2155,32 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       email,
       name,
       role: 'healthcare_provider',
-      merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884',
+      merchant_id: merchantId,
+      clinic_id: clinicId,
+      clinic_slug: clinicSlug,
       token: Buffer.from(email).toString('base64')
     };
 
-    console.log(`✅ New user registered: ${email}`);
+    console.log(`✅ Clinic signup completed: ${clinic_name} (${clinicSlug})`);
 
     res.json({
       success: true,
-      user: session
+      user: session,
+      clinic: {
+        id: clinicId,
+        name: clinic_name,
+        slug: clinicSlug,
+        phone: normalizedPhone,
+        retell_agent_id: retellAgentId,
+        retell_agent_status: retellAgentStatus
+      },
+      clinic_slug: clinicSlug // For redirect
     });
   } catch (error) {
     console.error('❌ Signup error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to create account'
+      error: error.message || 'Failed to create account'
     });
   }
 });
@@ -1648,30 +2375,687 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// Get dashboard stats
+// Google Calendar OAuth connect
+app.get('/auth/google/calendar/connect', (req, res) => {
+  try {
+    const { email, returnUrl } = req.query;
+
+    if (!email) {
+      return res.status(400).send('Missing email parameter');
+    }
+
+    const oauthClient = getGoogleOAuthClient();
+    if (!oauthClient) {
+      return res.status(400).send('Google OAuth is not configured on the server');
+    }
+
+    const state = encodeState({
+      email,
+      returnUrl: returnUrl || req.headers.referer || null
+    });
+
+    const scope = [
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ];
+
+    const authUrl = oauthClient.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: true,
+      scope,
+      state
+    });
+
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('❌ Google Calendar connect error:', error);
+    res.status(500).send('Failed to initiate Google Calendar connection');
+  }
+});
+
+app.get('/auth/google/calendar/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+
+  const decodedState = decodeState(state || '');
+  const email = decodedState.email;
+  const returnUrl =
+    decodedState.returnUrl ||
+    process.env.CALENDAR_RETURN_URL ||
+    (req.headers.origin
+      ? `${req.headers.origin.replace(/\/$/, '')}/business/settings.html`
+      : 'https://doclittle.site/unified-dashboard/business/settings.html');
+
+  if (error) {
+    console.error('❌ Google Calendar OAuth error:', error);
+    return res.redirect(`${returnUrl}?calendarError=${encodeURIComponent(error)}`);
+  }
+
+  if (!code || !email) {
+    return res.redirect(`${returnUrl}?calendarError=${encodeURIComponent('Missing authorization code or email')}`);
+  }
+
+  try {
+    const user = db.getUserCalendarSettingsByEmail(email);
+    if (!user) {
+      return res.redirect(`${returnUrl}?calendarError=${encodeURIComponent('User not found')}`);
+    }
+
+    const oauthClient = getGoogleOAuthClient();
+    if (!oauthClient) {
+      return res.redirect(`${returnUrl}?calendarError=${encodeURIComponent('Google OAuth is not configured')}`);
+    }
+
+    const { tokens } = await oauthClient.getToken(code);
+    oauthClient.setCredentials(tokens);
+
+    if (!google) {
+      return res.redirect(`${returnUrl}?calendarError=${encodeURIComponent('Google APIs not available')}`);
+    }
+
+    const calendar = google.calendar({ version: 'v3', auth: oauthClient });
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauthClient });
+
+    let calendarEmail = user.google_calendar_email || email;
+    try {
+      const profile = await oauth2.userinfo.get();
+      if (profile?.data?.email) {
+        calendarEmail = profile.data.email;
+      }
+    } catch (profileError) {
+      console.warn('⚠️  Unable to load Google user info:', profileError.message);
+    }
+
+    const calendarList = await calendar.calendarList.list({ minAccessRole: 'writer' });
+    const calendars = calendarList.data.items || [];
+    const primaryCalendar = calendars.find(c => c.primary) || calendars[0] || null;
+
+    const accessToken = oauthClient.credentials.access_token || tokens.access_token || null;
+    const refreshToken = tokens.refresh_token !== undefined
+      ? tokens.refresh_token
+      : user.google_refresh_token;
+    const expiryDate = oauthClient.credentials.expiry_date || tokens.expiry_date || null;
+
+    db.setUserCalendarConnection(user.id, {
+      connected: true,
+      calendar_email: calendarEmail,
+      calendar_id: primaryCalendar?.id || user.google_calendar_id || 'primary',
+      calendar_name: primaryCalendar?.summary || primaryCalendar?.description || 'Primary Calendar',
+      calendar_timezone: primaryCalendar?.timeZone || user.google_calendar_timezone || null,
+      access_token: accessToken,
+      refresh_token: refreshToken !== undefined ? refreshToken : undefined,
+      token_expiry: expiryDate,
+      scopes: tokens.scope || oauthClient.credentials.scope || null
+    });
+
+    res.redirect(`${returnUrl}?calendar=connected`);
+  } catch (oauthError) {
+    console.error('❌ Google Calendar callback error:', oauthError);
+    res.redirect(`${returnUrl}?calendarError=${encodeURIComponent(oauthError.message || 'Failed to connect Google Calendar')}`);
+  }
+});
+
+app.get('/api/calendar/status', async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing email parameter'
+      });
+    }
+
+    const user = db.getUserCalendarSettingsByEmail(email);
+    if (!user) {
+      // User doesn't exist yet - return success with not connected status
+      return res.json({
+        success: true,
+        connected: false,
+        calendar_email: email,
+        calendar_id: 'primary',
+        calendar_name: 'Primary Calendar',
+        calendar_timezone: null,
+        last_sync_at: null,
+        scopes: null,
+        needsReconnect: false,
+        calendars: [],
+        message: null
+      });
+    }
+
+    const connected = !!user.google_calendar_connected && !!user.google_refresh_token;
+
+    const response = {
+      success: true,
+      connected,
+      calendar_email: user.google_calendar_email || user.email,
+      calendar_id: user.google_calendar_id || 'primary',
+      calendar_name: user.google_calendar_name || 'Primary Calendar',
+      calendar_timezone: user.google_calendar_timezone || null,
+      last_sync_at: user.google_calendar_sync_at,
+      scopes: user.google_calendar_scopes,
+      needsReconnect: !user.google_refresh_token,
+      calendars: [],
+      message: null
+    };
+
+    if (connected && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      const oauthClient = getGoogleOAuthClient();
+      if (oauthClient) {
+        oauthClient.setCredentials({
+          refresh_token: user.google_refresh_token,
+          access_token: user.google_access_token || undefined,
+          expiry_date: user.google_token_expiry || undefined
+        });
+
+        try {
+          if (!google) {
+            throw new Error('Google APIs not available');
+          }
+
+          const calendar = google.calendar({ version: 'v3', auth: oauthClient });
+          const list = await calendar.calendarList.list({ minAccessRole: 'writer' });
+          const calendars = (list.data.items || []).map(item => ({
+            id: item.id,
+            name: item.summary,
+            description: item.description,
+            primary: !!item.primary,
+            role: item.accessRole,
+            timeZone: item.timeZone,
+            selected: item.id === user.google_calendar_id
+          }));
+
+          response.calendars = calendars;
+          response.needsReconnect = false;
+          response.message = null;
+
+          db.updateUserCalendarTokens(user.id, {
+            access_token: oauthClient.credentials.access_token,
+            token_expiry: oauthClient.credentials.expiry_date,
+            refresh_token: oauthClient.credentials.refresh_token !== undefined
+              ? oauthClient.credentials.refresh_token
+              : undefined,
+            error_message: null
+          });
+        } catch (calendarError) {
+          console.warn('⚠️  Failed to list Google Calendars:', calendarError.message);
+          response.needsReconnect = true;
+          response.message = calendarError.message || 'Failed to access Google Calendar. Please reconnect.';
+
+          db.updateUserCalendarTokens(user.id, {
+            error_message: response.message
+          });
+        }
+      }
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('❌ Calendar status error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load calendar status'
+    });
+  }
+});
+
+app.get('/api/calendar/calendars', async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing email parameter'
+      });
+    }
+
+    const user = db.getUserCalendarSettingsByEmail(email);
+    if (!user || !user.google_refresh_token) {
+      return res.json({
+        success: true,
+        connected: false,
+        calendars: []
+      });
+    }
+
+    const oauthClient = getGoogleOAuthClient();
+    if (!oauthClient) {
+      return res.status(400).json({
+        success: false,
+        error: 'Google OAuth is not configured on the server'
+      });
+    }
+
+    oauthClient.setCredentials({
+      refresh_token: user.google_refresh_token,
+      access_token: user.google_access_token || undefined,
+      expiry_date: user.google_token_expiry || undefined
+    });
+
+    try {
+      if (!google) {
+        return res.status(500).json({
+          success: false,
+          error: 'Google APIs not available'
+        });
+      }
+
+      const calendar = google.calendar({ version: 'v3', auth: oauthClient });
+      const list = await calendar.calendarList.list({ minAccessRole: 'writer' });
+      const calendars = (list.data.items || []).map(item => ({
+        id: item.id,
+        name: item.summary,
+        description: item.description,
+        primary: !!item.primary,
+        role: item.accessRole,
+        timeZone: item.timeZone,
+        selected: item.id === user.google_calendar_id
+      }));
+
+      db.updateUserCalendarTokens(user.id, {
+        access_token: oauthClient.credentials.access_token,
+        token_expiry: oauthClient.credentials.expiry_date,
+        refresh_token: oauthClient.credentials.refresh_token !== undefined
+          ? oauthClient.credentials.refresh_token
+          : undefined,
+        error_message: null
+      });
+
+      res.json({
+        success: true,
+        connected: true,
+        calendars
+      });
+    } catch (calendarError) {
+      console.error('❌ Google calendar list error:', calendarError);
+      res.status(500).json({
+        success: false,
+        error: calendarError.message || 'Failed to load calendars'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Calendar list error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load calendar list'
+    });
+  }
+});
+
+app.post('/api/calendar/select', async (req, res) => {
+  try {
+    const { email, calendar_id, calendar_name, calendar_timezone } = req.body || {};
+
+    if (!email || !calendar_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing email or calendar_id'
+      });
+    }
+
+    const user = db.getUserCalendarSettingsByEmail(email);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    db.updateUserCalendarSelection(user.id, {
+      calendar_id,
+      calendar_name,
+      calendar_timezone
+    });
+
+    res.json({
+      success: true,
+      calendar_id,
+      calendar_name,
+      calendar_timezone
+    });
+  } catch (error) {
+    console.error('❌ Calendar selection error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update calendar selection'
+    });
+  }
+});
+
+app.post('/api/calendar/disconnect', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing email'
+      });
+    }
+
+    const user = db.getUserCalendarSettingsByEmail(email);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    db.clearUserCalendarConnection(user.id);
+
+    res.json({
+      success: true,
+      message: 'Google Calendar disconnected'
+    });
+  } catch (error) {
+    console.error('❌ Calendar disconnect error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to disconnect Google Calendar'
+    });
+  }
+});
+
+// ============================================
+// CLIENT MANAGEMENT API (Admin Portal)
+// ============================================
+
+app.post('/api/admin/session', handleAdminLogin);
+app.delete('/api/admin/session', handleAdminLogout);
+app.get('/api/admin/session', adminSessionStatus);
+
+app.use('/api/admin', requireAdminAuth);
+
+function createMerchantForClinic(name) {
+  const merchantId = `merchant-${uuidv4()}`;
+  const placeholderKey = generateApiKey('managed');
+  db.createMerchant({
+    id: merchantId,
+    name: name || merchantId,
+    api_key: placeholderKey,
+    api_url: process.env.API_BASE_URL || 'https://api.doclittle.site',
+    webhook_url: null,
+    enabled_platforms: JSON.stringify(['voice']),
+    status: 'active'
+  });
+  return merchantId;
+}
+
+function ensureMerchantForClinic(clinic) {
+  if (clinic.merchant_id) {
+    return clinic.merchant_id;
+  }
+
+  const merchantId = createMerchantForClinic(clinic.name || clinic.clinic_id);
+  db.updateClinic(clinic.clinic_id, { merchant_id: merchantId });
+  clinic.merchant_id = merchantId;
+  return merchantId;
+}
+
+function issueMerchantApiKey(merchantId, options = {}) {
+  const apiKeyValue = generateApiKey('mk');
+  const record = {
+    id: `mkey_${uuidv4()}`,
+    merchant_id: merchantId,
+    key_hash: hashApiKey(apiKeyValue),
+    key_prefix: apiKeyValue.slice(0, 8),
+    key_suffix: apiKeyValue.slice(-4),
+    label: options.label || 'Voice Agent',
+    created_by: options.createdBy || 'system',
+    status: 'active'
+  };
+
+  db.createMerchantApiKey(record);
+  const stored = db.getMerchantApiKey(record.id);
+  return {
+    apiKey: apiKeyValue,
+    record: stored
+  };
+}
+
+function serializeApiKey(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    label: record.label,
+    status: record.status,
+    created_at: record.created_at,
+    last_used_at: record.last_used_at,
+    revoked_at: record.revoked_at,
+    key_preview: `${record.key_prefix}...${record.key_suffix}`
+  };
+}
+
+// Get all clients/clinics
+app.get('/api/admin/clients', async (req, res) => {
+  try {
+    const clinics = db.prepare('SELECT * FROM clinics ORDER BY created_at DESC').all();
+    const enriched = clinics.map((clinic) => {
+      const result = { ...clinic };
+      if (clinic.merchant_id) {
+        const keys = db.getMerchantApiKeys(clinic.merchant_id);
+        const activeKeys = keys.filter(k => k.status === 'active');
+        const latest = activeKeys[0] || keys[0];
+        result.api_key_summary = {
+          total: keys.length,
+          active: activeKeys.length,
+          latest_preview: latest ? `${latest.key_prefix}...${latest.key_suffix}` : null
+        };
+      } else {
+        result.api_key_summary = null;
+      }
+      return result;
+    });
+    res.json({
+      success: true,
+      clinics: enriched || []
+    });
+  } catch (error) {
+    console.error('❌ Error fetching clients:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get single client/clinic
+app.get('/api/admin/clients/:clinicId', async (req, res) => {
+  try {
+    const clinic = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?').get(req.params.clinicId);
+    if (!clinic) {
+      return res.status(404).json({
+        success: false,
+        error: 'Clinic not found'
+      });
+    }
+    const merchantId = ensureMerchantForClinic(clinic);
+    const keys = merchantId ? db.getMerchantApiKeys(merchantId).map(serializeApiKey) : [];
+
+    res.json({
+      success: true,
+      clinic: {
+        ...clinic,
+        merchant_id: merchantId
+      },
+      api_keys: keys
+    });
+  } catch (error) {
+    console.error('❌ Error fetching client:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Create new client/clinic
+app.post('/api/admin/clients', async (req, res) => {
+  try {
+    const { name, phone_number, retell_agent_id, email } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Clinic name is required'
+      });
+    }
+
+    // Generate slug from name
+    const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const clinicId = `clinic-${uuidv4()}`;
+    const merchantId = createMerchantForClinic(name);
+    const keyLabel = `${name} Voice Agent`;
+    const issuedKey = issueMerchantApiKey(merchantId, {
+      label: keyLabel,
+      createdBy: req.adminSession?.id || 'admin'
+    });
+
+    // Insert clinic directly (matching database schema)
+    db.prepare(`
+      INSERT INTO clinics (
+        clinic_id, name, slug, phone_number, email, 
+        retell_agent_id, retell_agent_status, merchant_id, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      clinicId,
+      name,
+      slug,
+      phone_number || null,
+      email || null,
+      retell_agent_id || null,
+      retell_agent_id ? 'active' : 'pending',
+      merchantId,
+      1
+    );
+
+    const clinic = {
+      clinic_id: clinicId,
+      name: name,
+      slug: slug,
+      phone_number: phone_number || null,
+      email: email || null,
+      retell_agent_id: retell_agent_id || null,
+      retell_agent_status: retell_agent_id ? 'active' : 'pending',
+      merchant_id: merchantId,
+      is_active: true
+    };
+
+    // If phone number provided, link it
+    if (phone_number) {
+      try {
+        db.prepare(`
+          INSERT OR REPLACE INTO clinic_phone_numbers (phone_number, clinic_id, is_primary)
+          VALUES (?, ?, ?)
+        `).run(phone_number, clinicId, 1);
+      } catch (phoneError) {
+        console.warn('⚠️  Could not link phone number:', phoneError.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      clinic: clinic,
+      api_key: issuedKey.apiKey,
+      key: serializeApiKey(issuedKey.record),
+      message: 'Client created successfully. Copy the API key now – it will not be shown again.'
+    });
+  } catch (error) {
+    console.error('❌ Error creating client:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update client/clinic
+app.put('/api/admin/clients/:clinicId', async (req, res) => {
+  try {
+    const { name, phone_number, retell_agent_id, retell_agent_status, email } = req.body;
+    const clinicId = req.params.clinicId;
+
+    const existingClinic = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?').get(clinicId);
+    if (!existingClinic) {
+      return res.status(404).json({
+        success: false,
+        error: 'Clinic not found'
+      });
+    }
+
+    // Update clinic
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (phone_number !== undefined) updates.phone_number = phone_number;
+    if (retell_agent_id !== undefined) updates.retell_agent_id = retell_agent_id;
+    if (retell_agent_status !== undefined) updates.retell_agent_status = retell_agent_status;
+    if (email !== undefined) updates.email = email;
+
+    // Build update query
+    const fields = [];
+    const values = [];
+    Object.keys(updates).forEach(key => {
+      fields.push(`${key} = ?`);
+      values.push(updates[key]);
+    });
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(clinicId);
+
+    db.prepare(`UPDATE clinics SET ${fields.join(', ')} WHERE clinic_id = ?`).run(...values);
+
+    // Update phone number link if changed
+    if (phone_number && phone_number !== existingClinic.phone_number) {
+      try {
+        // Remove old phone link if exists
+        db.prepare('DELETE FROM clinic_phone_numbers WHERE clinic_id = ?').run(clinicId);
+
+        // Add new phone link
+        db.prepare(`
+          INSERT OR REPLACE INTO clinic_phone_numbers (phone_number, clinic_id, is_primary)
+          VALUES (?, ?, ?)
+        `).run(phone_number, clinicId, 1);
+      } catch (phoneError) {
+        console.warn('⚠️  Could not update phone number link:', phoneError.message);
+      }
+    }
+
+    const updatedClinic = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?').get(clinicId);
+    res.json({
+      success: true,
+      clinic: updatedClinic,
+      message: 'Client updated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error updating client:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get comprehensive dashboard stats
 app.get('/api/admin/stats', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const clinics = db.prepare('SELECT * FROM clinics').all();
     const allCheckouts = db.getAllVoiceCheckouts();
 
-    const todayCheckouts = allCheckouts.filter(c =>
-      c.created_at.startsWith(today)
-    );
+    // Get real call data
+    const allCalls = db.prepare('SELECT * FROM voice_call_log ORDER BY created_at DESC').all();
+    const allFunctionCalls = db.prepare('SELECT * FROM function_call_log ORDER BY created_at DESC').all();
+    const allErrors = db.prepare('SELECT * FROM error_log WHERE resolved = 0 ORDER BY created_at DESC').all();
+
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    const todayCheckouts = allCheckouts.filter(c => c.created_at?.startsWith(today));
+    const yesterdayCheckouts = allCheckouts.filter(c => c.created_at?.startsWith(yesterday));
+    const todayCalls = allCalls.filter(c => c.created_at?.startsWith(today));
+    const yesterdayCalls = allCalls.filter(c => c.created_at?.startsWith(yesterday));
 
     const todayRevenue = todayCheckouts
       .filter(c => c.status === 'completed')
       .reduce((sum, c) => sum + (c.amount || 0), 0);
-
-    const todayOrders = todayCheckouts.filter(c => c.status === 'completed').length;
-    const todayCalls = todayCheckouts.length;
-    const completedOrders = todayCheckouts.filter(c => c.status === 'completed').length;
-    const totalCalls = todayCalls;
-    const conversionRate = totalCalls > 0 ? (completedOrders / totalCalls) * 100 : 0;
-
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const yesterdayCheckouts = allCheckouts.filter(c =>
-      c.created_at.startsWith(yesterday)
-    );
 
     const yesterdayRevenue = yesterdayCheckouts
       .filter(c => c.status === 'completed')
@@ -1681,41 +3065,44 @@ app.get('/api/admin/stats', async (req, res) => {
       ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue * 100).toFixed(1)
       : 100;
 
+    const completedOrders = todayCheckouts.filter(c => c.status === 'completed').length;
+    const conversionRate = todayCalls.length > 0 ? (completedOrders / todayCalls.length) * 100 : 0;
+
+    // Calculate real minutes from call logs
+    const totalMinutes = allCalls.reduce((sum, c) => sum + (c.call_duration_seconds || 0), 0) / 60;
+    const todayMinutes = todayCalls.reduce((sum, c) => sum + (c.call_duration_seconds || 0), 0) / 60;
+
+    // Calculate real response times from function calls
+    const successfulFunctionCalls = allFunctionCalls.filter(f => f.success === 1);
+    const avgResponseTime = successfulFunctionCalls.length > 0
+      ? successfulFunctionCalls.reduce((sum, f) => sum + (f.response_time_ms || 0), 0) / successfulFunctionCalls.length
+      : 0;
+
+    // Calculate real error rate
+    const totalRequests = allCalls.length + allFunctionCalls.length;
+    const errorRate = totalRequests > 0 ? (allErrors.length / totalRequests * 100) : 0;
+
     const totalRevenue = allCheckouts
       .filter(c => c.status === 'completed')
       .reduce((sum, c) => sum + (c.amount || 0), 0);
 
-    const totalOrders = allCheckouts.filter(c => c.status === 'completed').length;
-    const totalCallsAllTime = allCheckouts.length;
-
-    // Calculate priority cases (high-risk patients: fraud_score > 70 or flagged)
-    const transactions = db.getAllTransactions();
-    const priorityCases = transactions.filter(t =>
-      t.fraud_score > 70 || t.status === 'flagged'
-    ).length;
-
     res.json({
       success: true,
-      stats: {
-        today: {
-          revenue: todayRevenue,
-          orders: todayOrders,
-          calls: todayCalls,
-          conversionRate: conversionRate.toFixed(1),
-          revenueChange: revenueChange
-        },
-        total: {
-          revenue: totalRevenue,
-          orders: totalOrders,
-          calls: totalCallsAllTime,
-          avgFraudScore: 0
-        },
-        priority: {
-          cases: priorityCases
-        }
-      }
+      totalClients: clinics.length,
+      todayRevenue: todayRevenue,
+      yesterdayRevenue: yesterdayRevenue,
+      revenueChange: revenueChange,
+      todayCalls: todayCalls.length,
+      totalCalls: allCalls.length,
+      totalMinutes: Math.round(totalMinutes),
+      todayMinutes: Math.round(todayMinutes),
+      avgResponseTime: Math.round(avgResponseTime),
+      errorRate: errorRate.toFixed(2),
+      conversionRate: conversionRate.toFixed(1),
+      totalRevenue: totalRevenue,
+      totalOrders: allCheckouts.filter(c => c.status === 'completed').length,
+      totalErrors: allErrors.length
     });
-
   } catch (error) {
     console.error('❌ Error fetching stats:', error);
     res.status(500).json({
@@ -1724,6 +3111,310 @@ app.get('/api/admin/stats', async (req, res) => {
     });
   }
 });
+
+// Get performance metrics
+app.get('/api/admin/performance', async (req, res) => {
+  try {
+    // Placeholder performance data - implement real metrics
+    res.json({
+      success: true,
+      responseTime: {
+        p50: 120,
+        p95: 350,
+        p99: 680
+      },
+      errorRate: 0.8,
+      successRate: 99.2,
+      slowEndpoints: [
+        { endpoint: '/api/pdf-coding/process', avg: 450, p95: 890, p99: 1200, requests: 1200 },
+        { endpoint: '/voice/checkout/create', avg: 320, p95: 650, p99: 980, requests: 3500 }
+      ]
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get cost analytics
+app.get('/api/admin/costs', async (req, res) => {
+  try {
+    const clinics = db.prepare('SELECT * FROM clinics').all();
+    const allCalls = db.prepare('SELECT * FROM voice_call_log').all();
+
+    // Calculate real costs from actual call data
+    const totalMinutes = allCalls.reduce((sum, c) => sum + ((c.call_duration_seconds || 0) / 60), 0);
+    const twilioCost = totalMinutes * 0.013; // $0.013 per minute (Twilio pricing)
+    const retellCost = totalMinutes * 0.02; // $0.02 per minute (Retell pricing)
+    const infraCost = 4200; // Monthly infrastructure estimate (Azure App Service)
+
+    // Calculate costs per client
+    const byClient = clinics.map(clinic => {
+      const clinicCalls = allCalls.filter(c => c.customer_id === clinic.clinic_id);
+      const clinicMinutes = clinicCalls.reduce((sum, c) => sum + ((c.call_duration_seconds || 0) / 60), 0);
+      const clinicTwilioCost = clinicMinutes * 0.013;
+      const clinicRetellCost = clinicMinutes * 0.02;
+      const clinicInfraCost = infraCost / clinics.length; // Shared infrastructure
+
+      // Get revenue for this client
+      const clinicCheckouts = db.getAllVoiceCheckouts().filter(c => {
+        // Try to match by phone number or clinic_id if stored
+        return c.customer_phone && db.getClinicPhoneNumber(c.customer_phone)?.clinic_id === clinic.clinic_id;
+      });
+      const clinicRevenue = clinicCheckouts
+        .filter(c => c.status === 'completed')
+        .reduce((sum, c) => sum + (c.amount || 0), 0);
+
+      return {
+        clinic_id: clinic.clinic_id,
+        name: clinic.name,
+        phone_number: clinic.phone_number,
+        retell_agent_id: clinic.retell_agent_id,
+        infrastructure: clinicInfraCost,
+        twilio: clinicTwilioCost,
+        retell: clinicRetellCost,
+        total: clinicInfraCost + clinicTwilioCost + clinicRetellCost,
+        revenue: clinicRevenue,
+        margin: clinicRevenue > 0 ? ((clinicRevenue - (clinicInfraCost + clinicTwilioCost + clinicRetellCost)) / clinicRevenue * 100) : 0,
+        call_count: clinicCalls.length,
+        total_minutes: Math.round(clinicMinutes)
+      };
+    });
+
+    res.json({
+      success: true,
+      infrastructure: infraCost,
+      twilio: twilioCost,
+      retell: retellCost,
+      total: infraCost + twilioCost + retellCost,
+      total_minutes: Math.round(totalMinutes),
+      byClient: byClient
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get usage metrics
+app.get('/api/admin/usage', async (req, res) => {
+  try {
+    const allCheckouts = db.getAllVoiceCheckouts();
+    const totalMinutes = allCheckouts.length * 2;
+
+    res.json({
+      success: true,
+      apiRequests: allCheckouts.length * 10, // Estimate
+      voiceMinutes: totalMinutes,
+      webhookEvents: allCheckouts.length * 2 // Estimate
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get error logs
+app.get('/api/admin/logs', async (req, res) => {
+  try {
+    const level = req.query.level || 'all';
+    const clinicId = req.query.clinic_id;
+    const limit = parseInt(req.query.limit) || 100;
+
+    let query = 'SELECT * FROM error_log WHERE 1=1';
+    const params = [];
+
+    if (clinicId) {
+      query += ' AND customer_id = ?';
+      params.push(clinicId);
+    }
+
+    if (level !== 'all') {
+      query += ' AND severity = ?';
+      params.push(level);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(limit);
+
+    const errors = db.prepare(query).all(...params);
+
+    // Get clinic names for errors
+    const logs = errors.map(error => {
+      let clinicName = 'Unknown';
+      if (error.customer_id) {
+        const clinic = db.getClinicById(error.customer_id);
+        if (clinic) clinicName = clinic.name;
+      }
+
+      return {
+        id: error.id,
+        level: error.severity,
+        message: error.error_message,
+        type: error.error_type,
+        clinic_id: error.customer_id,
+        clinic_name: clinicName,
+        endpoint: error.endpoint,
+        timestamp: error.created_at,
+        resolved: error.resolved === 1,
+        context: error.context ? JSON.parse(error.context) : null
+      };
+    });
+
+    res.json({
+      success: true,
+      logs: logs,
+      total: errors.length
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get per-client analytics
+app.get('/api/admin/clients/:clinicId/analytics', async (req, res) => {
+  try {
+    const clinicId = req.params.clinicId;
+    const clinic = db.getClinicById(clinicId);
+
+    if (!clinic) {
+      return res.status(404).json({ success: false, error: 'Clinic not found' });
+    }
+
+    // Get calls for this client
+    const calls = db.prepare('SELECT * FROM voice_call_log WHERE customer_id = ? ORDER BY created_at DESC').all(clinicId);
+    const functionCalls = db.prepare('SELECT * FROM function_call_log WHERE customer_id = ? ORDER BY created_at DESC').all(clinicId);
+    const errors = db.prepare('SELECT * FROM error_log WHERE customer_id = ? AND resolved = 0 ORDER BY created_at DESC').all(clinicId);
+
+    // Calculate metrics
+    const totalMinutes = calls.reduce((sum, c) => sum + ((c.call_duration_seconds || 0) / 60), 0);
+    const twilioCost = totalMinutes * 0.013;
+    const retellCost = totalMinutes * 0.02;
+
+    // Get revenue
+    const checkouts = db.getAllVoiceCheckouts().filter(c => {
+      if (!c.customer_phone) return false;
+      const phone = db.getClinicPhoneNumber(c.customer_phone);
+      return phone && phone.clinic_id === clinicId;
+    });
+    const revenue = checkouts
+      .filter(c => c.status === 'completed')
+      .reduce((sum, c) => sum + (c.amount || 0), 0);
+
+    // Calculate response times
+    const successfulCalls = functionCalls.filter(f => f.success === 1);
+    const avgResponseTime = successfulCalls.length > 0
+      ? successfulCalls.reduce((sum, f) => sum + (f.response_time_ms || 0), 0) / successfulCalls.length
+      : 0;
+
+    res.json({
+      success: true,
+      clinic: {
+        clinic_id: clinic.clinic_id,
+        name: clinic.name,
+        phone_number: clinic.phone_number,
+        retell_agent_id: clinic.retell_agent_id
+      },
+      metrics: {
+        total_calls: calls.length,
+        total_minutes: Math.round(totalMinutes),
+        total_function_calls: functionCalls.length,
+        successful_function_calls: successfulCalls.length,
+        failed_function_calls: functionCalls.filter(f => f.success === 0).length,
+        total_errors: errors.length,
+        avg_response_time_ms: Math.round(avgResponseTime),
+        revenue: revenue,
+        twilio_cost: twilioCost,
+        retell_cost: retellCost,
+        total_cost: twilioCost + retellCost,
+        margin: revenue > 0 ? ((revenue - (twilioCost + retellCost)) / revenue * 100) : 0
+      },
+      recent_calls: calls.slice(0, 10),
+      recent_errors: errors.slice(0, 10)
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/admin/clients/:clinicId/api-keys', (req, res) => {
+  try {
+    const clinic = db.getClinicById(req.params.clinicId);
+    if (!clinic) {
+      return res.status(404).json({ success: false, error: 'Clinic not found' });
+    }
+
+    const merchantId = ensureMerchantForClinic(clinic);
+    const keys = merchantId ? db.getMerchantApiKeys(merchantId).map(serializeApiKey) : [];
+
+    res.json({
+      success: true,
+      merchant_id: merchantId,
+      keys
+    });
+  } catch (error) {
+    console.error('❌ Error fetching API keys:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/clients/:clinicId/api-keys', (req, res) => {
+  try {
+    const clinic = db.getClinicById(req.params.clinicId);
+    if (!clinic) {
+      return res.status(404).json({ success: false, error: 'Clinic not found' });
+    }
+
+    const merchantId = ensureMerchantForClinic(clinic);
+    if (!merchantId) {
+      return res.status(500).json({ success: false, error: 'Unable to provision merchant for clinic' });
+    }
+
+    if (req.body?.rotate_existing) {
+      db.revokeAllMerchantApiKeys(merchantId, req.adminSession?.id || 'admin');
+    }
+
+    const issued = issueMerchantApiKey(merchantId, {
+      label: req.body?.label || `${clinic.name || 'Client'} Voice Agent`,
+      createdBy: req.adminSession?.id || 'admin'
+    });
+
+    res.json({
+      success: true,
+      merchant_id: merchantId,
+      api_key: issued.apiKey,
+      key: serializeApiKey(issued.record),
+      message: 'New API key generated. Copy it now – it will not be shown again.'
+    });
+  } catch (error) {
+    console.error('❌ Error creating API key:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/clients/:clinicId/api-keys/:keyId/revoke', (req, res) => {
+  try {
+    const clinic = db.getClinicById(req.params.clinicId);
+    if (!clinic) {
+      return res.status(404).json({ success: false, error: 'Clinic not found' });
+    }
+
+    const merchantId = ensureMerchantForClinic(clinic);
+    const key = db.getMerchantApiKey(req.params.keyId);
+    if (!key || key.merchant_id !== merchantId) {
+      return res.status(404).json({ success: false, error: 'API key not found for this clinic' });
+    }
+
+    db.revokeMerchantApiKey(key.id, req.adminSession?.id || 'admin');
+    const refreshed = db.getMerchantApiKey(key.id);
+
+    res.json({
+      success: true,
+      key: serializeApiKey(refreshed)
+    });
+  } catch (error) {
+    console.error('❌ Error revoking API key:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 
 // Get all transactions
 app.get('/api/admin/transactions', async (req, res) => {
@@ -1922,6 +3613,215 @@ app.get('/api/admin/agent/stats', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/api-keys
+ * List all API keys (admin only)
+ */
+app.get('/api/admin/api-keys', async (req, res) => {
+  try {
+    const { customer_id, limit } = req.query;
+    
+    const filters = {};
+    if (customer_id) filters.customer_id = customer_id;
+    if (limit) filters.limit = parseInt(limit) || 100;
+    
+    const keys = db.getAllAPIKeys(filters);
+    
+    // Get customer info for each key
+    const keysWithCustomer = keys.map(key => {
+      const customer = db.getCustomer(key.customer_id);
+      return {
+        ...key,
+        customer: customer ? {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          company_name: customer.company_name
+        } : null
+      };
+    });
+    
+    res.json({
+      success: true,
+      api_keys: keysWithCustomer,
+      count: keysWithCustomer.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching API keys:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/admin/api-keys/:keyId/recover
+ * Recover (decrypt) an API key (admin only)
+ */
+app.get('/api/admin/api-keys/:keyId/recover', async (req, res) => {
+  try {
+    const { keyId } = req.params;
+    
+    const keyRecord = db.getAPIKeyById(keyId);
+    if (!keyRecord) {
+      return res.status(404).json({
+        success: false,
+        error: 'API key not found'
+      });
+    }
+    
+    if (!keyRecord.key_secret) {
+      return res.status(404).json({
+        success: false,
+        error: 'API key secret not stored (cannot recover)'
+      });
+    }
+    
+    // Decrypt the API key
+    const { decryptApiKey } = require('./utils/api-keys');
+    const decryptedKey = decryptApiKey(keyRecord.key_secret);
+    
+    // Get customer info
+    const customer = db.getCustomer(keyRecord.customer_id);
+    
+    res.json({
+      success: true,
+      api_key: decryptedKey,
+      key_id: keyRecord.id,
+      key_prefix: keyRecord.key_prefix,
+      customer: customer ? {
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        company_name: customer.company_name
+      } : null,
+      created_at: keyRecord.created_at,
+      last_used_at: keyRecord.last_used_at,
+      warning: 'This is a sensitive operation. The API key is only shown once here.'
+    });
+  } catch (error) {
+    console.error('❌ Error recovering API key:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to recover API key'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/feature-requests
+ * List all feature requests (admin only)
+ */
+app.get('/api/admin/feature-requests', async (req, res) => {
+  try {
+    const { status, customer_id, limit } = req.query;
+    
+    const filters = {};
+    if (status) filters.status = status;
+    if (customer_id) filters.customer_id = customer_id;
+    if (limit) filters.limit = parseInt(limit) || 100;
+    
+    const requests = db.getAllFeatureRequests(filters);
+    
+    // Get customer info for each request
+    const requestsWithCustomer = requests.map(request => {
+      const customer = db.getCustomer(request.customer_id);
+      return {
+        ...request,
+        customer: customer ? {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+          company_name: customer.company_name
+        } : null
+      };
+    });
+    
+    res.json({
+      success: true,
+      feature_requests: requestsWithCustomer,
+      count: requestsWithCustomer.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching feature requests:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/admin/feature-requests/:requestId/update
+ * Update feature request status (approve/reject)
+ */
+app.post('/api/admin/feature-requests/:requestId/update', async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { status, notes } = req.body;
+    
+    if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status. Must be: pending, approved, or rejected'
+      });
+    }
+    
+    // Get the request to check if it exists
+    const allRequests = db.getAllFeatureRequests({});
+    const request = allRequests.find(r => r.id === requestId);
+    
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        error: 'Feature request not found'
+      });
+    }
+    
+    // Update status
+    db.updateFeatureRequestStatus(requestId, status, notes || null);
+    
+    // If approved, add feature to customer's api_features
+    if (status === 'approved') {
+      const customer = db.getCustomer(request.customer_id);
+      if (customer) {
+        let apiFeatures = customer.api_features;
+        if (typeof apiFeatures === 'string' && apiFeatures) {
+          try {
+            apiFeatures = JSON.parse(apiFeatures);
+          } catch (e) {
+            apiFeatures = [];
+          }
+        } else if (!apiFeatures) {
+          apiFeatures = [];
+        }
+        
+        if (!apiFeatures.includes(request.feature_name)) {
+          apiFeatures.push(request.feature_name);
+          db.db.prepare(`
+            UPDATE customers 
+            SET api_features = ?, updated_at = datetime('now')
+            WHERE id = ?
+          `).run(JSON.stringify(apiFeatures), customer.id);
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Feature request ${status} successfully`,
+      request_id: requestId
+    });
+  } catch (error) {
+    console.error('❌ Error updating feature request:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update feature request'
+    });
+  }
+});
+
 // ============================================
 // BOOKING/APPOINTMENT ENDPOINTS
 // ============================================
@@ -2095,6 +3995,59 @@ app.post('/voice/appointments/search', async (req, res) => {
  * POST /voice/insurance/collect
  * Used by voice agent during call to collect insurance info
  */
+/**
+ * Normalize name for comparison (remove extra spaces, convert to lowercase, remove punctuation)
+ */
+function normalizeName(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s]/g, '') // Remove punctuation
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+}
+
+/**
+ * Compare two names for fraud detection
+ * Returns true if names match (allowing for minor variations)
+ */
+function namesMatch(name1, name2) {
+  if (!name1 || !name2) return false;
+
+  const normalized1 = normalizeName(name1);
+  const normalized2 = normalizeName(name2);
+
+  // Exact match
+  if (normalized1 === normalized2) return true;
+
+  // Split into parts for comparison
+  const parts1 = normalized1.split(' ').filter(p => p.length > 0);
+  const parts2 = normalized2.split(' ').filter(p => p.length > 0);
+
+  // If both have at least 2 parts, compare first and last names
+  if (parts1.length >= 2 && parts2.length >= 2) {
+    const first1 = parts1[0];
+    const last1 = parts1[parts1.length - 1];
+    const first2 = parts2[0];
+    const last2 = parts2[parts2.length - 1];
+
+    // First and last names must match
+    return first1 === first2 && last1 === last2;
+  }
+
+  // If only one part, compare directly
+  if (parts1.length === 1 && parts2.length === 1) {
+    return parts1[0] === parts2[0];
+  }
+
+  // Partial match: check if all parts of shorter name are in longer name
+  const shorter = parts1.length <= parts2.length ? parts1 : parts2;
+  const longer = parts1.length > parts2.length ? parts1 : parts2;
+
+  return shorter.every(part => longer.some(longPart => longPart === part || longPart.startsWith(part) || part.startsWith(longPart)));
+}
+
 app.post('/voice/insurance/collect', async (req, res) => {
   try {
     console.log('\n🏥 VOICE: Collect Insurance Information');
@@ -2116,17 +4069,118 @@ app.post('/voice/insurance/collect', async (req, res) => {
     const patientName = args.patient_name || args.customer_name || null;
     const patientEmail = args.patient_email || args.customer_email || null;
 
+    // ==========================================
+    // FRAUD DETECTION: Name Validation
+    // ==========================================
+    const callId = args.call_id || null;
+    const initialName = args.initial_name || null;
+
+    // Get initial name from retellHandler if call_id is provided but initial_name is not
+    let storedInitialName = initialName;
+    if (callId && !storedInitialName && retellHandler) {
+      try {
+        storedInitialName = retellHandler.getInitialName(callId);
+      } catch (error) {
+        console.warn('⚠️  Could not get initial name from call:', error.message);
+      }
+    }
+
+    // Validate name match if we have both initial name and provided name
+    if (storedInitialName && patientName) {
+      const namesMatchResult = namesMatch(storedInitialName, patientName);
+
+      if (!namesMatchResult) {
+        // FRAUD DETECTED: Names don't match
+        console.error('\n🚨 FRAUD DETECTION ALERT: Name Mismatch');
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.error(`   Initial Name: "${storedInitialName}"`);
+        console.error(`   Provided Name: "${patientName}"`);
+        console.error(`   Call ID: ${callId || 'N/A'}`);
+        console.error(`   Member ID: ${args.member_id}`);
+        console.error(`   Phone: ${patientPhone || 'N/A'}`);
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+        // Log fraud attempt to database
+        try {
+          const fraudLogId = require('uuid').v4();
+          db.db.prepare(`
+            INSERT INTO fraud_attempts (
+              id, call_id, patient_phone, initial_name, provided_name,
+              member_id, fraud_type, risk_score, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            fraudLogId,
+            callId,
+            patientPhone,
+            storedInitialName,
+            patientName,
+            args.member_id,
+            'name_mismatch',
+            90, // High risk score for name mismatch
+            new Date().toISOString()
+          );
+          console.log(`✅ Fraud attempt logged: ${fraudLogId}`);
+        } catch (logError) {
+          console.error('❌ Could not log fraud attempt:', logError.message);
+        }
+
+        // Return error - DO NOT process insurance with mismatched name
+        return res.status(403).json({
+          success: false,
+          error: 'Name verification failed. The name provided does not match the name you provided at the start of the call.',
+          fraud_detected: true,
+          fraud_type: 'name_mismatch',
+          initial_name: storedInitialName,
+          provided_name: patientName,
+          message: 'For security reasons, we cannot process insurance information when the name does not match. Please verify your information and try again, or speak with a representative.',
+          requires_verification: true
+        });
+      } else {
+        console.log(`✅ Name validation passed: "${storedInitialName}" matches "${patientName}"`);
+      }
+    } else if (storedInitialName && !patientName) {
+      // Initial name exists but no name provided in insurance collection
+      // This might be okay if name is optional, but log it
+      console.warn(`⚠️  Initial name stored (${storedInitialName}) but no name provided in insurance collection`);
+    } else if (!storedInitialName && patientName && callId) {
+      // No initial name stored yet - store it now (first time name is provided)
+      if (retellHandler) {
+        try {
+          retellHandler.storeCustomerName(callId, patientName);
+          console.log(`✅ Stored initial name from insurance collection: ${patientName}`);
+        } catch (error) {
+          console.warn('⚠️  Could not store initial name:', error.message);
+        }
+      }
+    }
+
     // Try to find patient by phone if patient_id not provided
+    // RULE: Phone number is the primary unique identifier for patients
     let foundPatient = null;
     if (!patientId && patientPhone) {
       try {
         foundPatient = db.getFHIRPatientByPhone(patientPhone);
         if (foundPatient) {
           console.log(`✅ Found patient by phone: ${foundPatient.resource_id}`);
+          patientId = foundPatient.resource_id;
+
+          // Verify name matches if provided (for fraud detection)
+          if (patientName && foundPatient.name) {
+            const FHIRService = require('./services/fhir-service');
+            if (!FHIRService.namesMatch(patientName, foundPatient.name)) {
+              console.warn(`⚠️  Name mismatch: Provided "${patientName}" but patient record has "${foundPatient.name}"`);
+              // Still use the patient found by phone (phone is more reliable)
+            }
+          }
         }
       } catch (error) {
         console.warn('⚠️  Could not find patient by phone:', error.message);
       }
+    }
+
+    // If patient not found by phone, try to find by name (but require phone confirmation if duplicates exist)
+    if (!foundPatient && patientName && !patientPhone) {
+      console.warn('⚠️  Patient name provided but no phone number - phone number is required for duplicate detection');
     }
 
     // If patient found, try to get their insurance from database
@@ -2248,14 +4302,103 @@ app.post('/voice/insurance/collect', async (req, res) => {
       }
     }
 
-    // Step 2: Check eligibility to get coverage details (if payer_id is available)
+    // Step 2: Ensure we have a patient before checking eligibility
+    // CRITICAL: Eligibility must be linked to a patient_id for proper retrieval
+    let finalPatientId = patientId || (foundPatient ? foundPatient.resource_id : null);
+
+    // If no patient found yet, try to create or find by member_id in claims
+    if (!finalPatientId && args.member_id) {
+      // Try to find patient via claims (most reliable source)
+      try {
+        const claimRecord = db.db.prepare(`
+          SELECT patient_id FROM insurance_claims 
+          WHERE member_id = ? 
+          ORDER BY submitted_at DESC 
+          LIMIT 1
+        `).get(args.member_id);
+
+        if (claimRecord && claimRecord.patient_id) {
+          finalPatientId = claimRecord.patient_id;
+          foundPatient = db.getFHIRPatient(finalPatientId);
+          console.log(`   ✅ Found patient via claims for member_id ${args.member_id}: ${finalPatientId}`);
+        }
+      } catch (error) {
+        console.warn('⚠️  Could not find patient via claims:', error.message);
+      }
+    }
+
+    // If still no patient and we have patient info, create patient
+    if (!finalPatientId && (patientName || patientPhone || patientEmail)) {
+      try {
+        const FHIRService = require('./services/fhir-service');
+        console.log('   📝 Creating/finding patient record for insurance collection...');
+
+        const patientResult = await FHIRService.getOrCreatePatient({
+          name: patientName || 'Unknown',
+          phone: patientPhone,
+          email: patientEmail
+        }, true); // requirePhoneConfirmation = true
+
+        // Check if duplicate was detected
+        if (patientResult.duplicate && patientResult.requiresPhoneConfirmation) {
+          console.log('   🚨 DUPLICATE DETECTED: Similar name found, phone confirmation required');
+
+          // Return error response indicating phone confirmation is needed
+          return res.status(409).json({
+            success: false,
+            duplicate: true,
+            requiresPhoneConfirmation: true,
+            error: patientResult.message || 'Duplicate patient found. Phone number confirmation required.',
+            duplicates: patientResult.duplicates || [],
+            provided_name: patientResult.provided_name,
+            provided_phone: patientResult.provided_phone,
+            message: 'I found a patient with a similar name in our system. To verify your identity, please confirm your phone number. This helps ensure we have the correct patient record.',
+            voice_agent_instruction: 'Ask the caller to confirm their phone number. If the phone number matches an existing patient, use that patient. If not, ask the caller to verify their information.'
+          });
+        }
+
+        // Patient was found or created successfully
+        if (patientResult.patient && patientResult.patient.id) {
+          // Find the patient record in database
+          const createdPatient = db.getFHIRPatient(patientResult.patient.id);
+          if (createdPatient) {
+            finalPatientId = createdPatient.resource_id;
+            foundPatient = createdPatient;
+            console.log(`   ✅ Patient record ${patientResult.foundBy}: ${finalPatientId}`);
+          }
+        } else if (patientResult.patient) {
+          // Patient object might be the resource_data directly
+          const createdPatient = db.getFHIRPatient(patientResult.patient.id || patientResult.patient.resource_id);
+          if (createdPatient) {
+            finalPatientId = createdPatient.resource_id;
+            foundPatient = createdPatient;
+            console.log(`   ✅ Patient record ${patientResult.foundBy}: ${finalPatientId}`);
+          }
+        }
+      } catch (createError) {
+        console.warn('⚠️  Could not create/find patient record:', createError.message);
+
+        // If error is about phone number required, return helpful error
+        if (createError.message && createError.message.includes('Phone number is required')) {
+          return res.status(400).json({
+            success: false,
+            error: createError.message,
+            requiresPhone: true,
+            message: 'Phone number is required to create a new patient record. Please provide your phone number.'
+          });
+        }
+
+        // For other errors, continue (don't block insurance collection)
+      }
+    }
+
+    // Step 3: Check eligibility to get coverage details (if payer_id is available)
     let eligibilityResult = null;
     if (payerId && args.member_id) {
       try {
         const InsuranceService = require('./services/insurance-service');
 
         // Get patient info for eligibility check
-        let finalPatientId = patientId || (foundPatient ? foundPatient.resource_id : null);
         let finalPatientName = patientName || 'Patient';
         let dateOfBirth = '1990-01-01';
 
@@ -2277,7 +4420,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
         }
 
         const eligibilityData = {
-          patientId: finalPatientId,
+          patientId: finalPatientId, // Always include patient_id (may be null if no patient found)
           patientName: finalPatientName,
           dateOfBirth: dateOfBirth,
           memberId: args.member_id,
@@ -2288,15 +4431,30 @@ app.post('/voice/insurance/collect', async (req, res) => {
 
         eligibilityResult = await InsuranceService.checkEligibility(eligibilityData);
         console.log('✅ Eligibility checked:', eligibilityResult.success ? 'Covered' : 'Not covered');
+
+        // IMPORTANT: Update eligibility record with patient_id if it was missing
+        if (finalPatientId && eligibilityResult.id) {
+          try {
+            // Update the eligibility record to link it to the patient
+            db.db.prepare(`
+              UPDATE eligibility_checks 
+              SET patient_id = ?
+              WHERE id = ?
+            `).run(finalPatientId, eligibilityResult.id);
+            console.log(`   ✅ Linked eligibility record ${eligibilityResult.id} to patient ${finalPatientId}`);
+          } catch (updateError) {
+            console.warn('⚠️  Could not update eligibility record with patient_id:', updateError.message);
+          }
+        }
       } catch (eligError) {
         console.warn('⚠️  Could not check eligibility:', eligError.message);
         // Continue without eligibility data
       }
     }
 
-    // Step 3: Store insurance info (if we have a patient)
+    // Step 4: Store insurance info (if we have a patient)
+    // Note: finalPatientId was already determined in Step 2
     let storedInsurance = null;
-    const finalPatientId = patientId || (foundPatient ? foundPatient.resource_id : null);
 
     if (finalPatientId && payerId && payerName) {
       // Store in patient_insurance table
@@ -2353,6 +4511,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
       message: `Insurance confirmed: ${payerName}`,
       stored: !!storedInsurance,
       insurance_id: storedInsurance?.id || null,
+      patient_id: finalPatientId || (storedInsurance ? storedInsurance.patient_id : null), // Include patient_id in response
       apiCallSaved: validationResult?.apiCallSaved !== false
     };
 
@@ -2360,13 +4519,13 @@ app.post('/voice/insurance/collect', async (req, res) => {
     if (eligibilityResult && eligibilityResult.success) {
       response.coverage = {
         eligible: eligibilityResult.eligible || false,
-        copay_amount: eligibilityResult.copay_amount || 0,
-        allowed_amount: eligibilityResult.allowed_amount || 0,
-        insurance_pays: eligibilityResult.insurance_pays || 0,
-        deductible_total: eligibilityResult.deductible_total || 0,
-        deductible_remaining: eligibilityResult.deductible_remaining || 0,
-        coinsurance_percent: eligibilityResult.coinsurance_percent || 0,
-        plan_summary: eligibilityResult.plan_summary || 'Plan details available'
+        copay_amount: eligibilityResult.copay || eligibilityResult.copay_amount || 0,
+        allowed_amount: eligibilityResult.allowedAmount || eligibilityResult.allowed_amount || 0,
+        insurance_pays: eligibilityResult.insurancePays || eligibilityResult.insurance_pays || 0,
+        deductible_total: eligibilityResult.deductibleTotal !== undefined ? eligibilityResult.deductibleTotal : (eligibilityResult.deductible_total || null),
+        deductible_remaining: eligibilityResult.deductibleRemaining !== undefined ? eligibilityResult.deductibleRemaining : (eligibilityResult.deductible_remaining || null),
+        coinsurance_percent: eligibilityResult.coinsurancePercent !== undefined ? eligibilityResult.coinsurancePercent : (eligibilityResult.coinsurance_percent || 0),
+        plan_summary: eligibilityResult.planSummary || eligibilityResult.plan_summary || 'Plan details available'
       };
 
       // Calculate patient responsibility
@@ -2529,6 +4688,30 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
     };
 
     const result = await InsuranceService.submitClaim(claimData);
+
+    // Send insurance billing email if claim was submitted successfully
+    if (result.success && result.claimId) {
+      try {
+        const EmailService = require('./services/email-service');
+        const insurerEmail = args.insurer_email || process.env.INSURER_BILLING_EMAIL || 'gigtogigdev@gmail.com';
+
+        await EmailService.sendInsuranceBillingEmail(insurerEmail, {
+          claimId: result.claimId,
+          x12ClaimId: result.x12ClaimId,
+          memberId: args.member_id,
+          patientName: patientName || appointment.patient_name,
+          serviceCode: args.service_code,
+          totalAmount: parseFloat(args.total_amount),
+          copayPaid: parseFloat(args.copay_paid || 0),
+          dateOfService: args.date_of_service || appointment.date
+        });
+
+        console.log(`📧 Insurance billing email sent to: ${insurerEmail}`);
+      } catch (emailError) {
+        console.warn('⚠️  Failed to send insurance billing email:', emailError.message);
+        // Don't fail the claim submission if email fails
+      }
+    }
 
     res.json(result);
   } catch (error) {
@@ -3362,6 +5545,13 @@ app.post('/api/patient/wallet/deposit', async (req, res) => {
 
         if (!payment_method_id) {
           // If no payment method ID, create a Payment Intent that requires client-side confirmation
+          if (!stripe) {
+            return res.status(503).json({
+              success: false,
+              error: 'Payment processing is not configured. Please contact support.'
+            });
+          }
+
           const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(amount * 100), // Convert to cents
             currency: 'usd',
@@ -3410,6 +5600,13 @@ app.post('/api/patient/wallet/deposit', async (req, res) => {
           });
         } else {
           // Payment method provided - create and confirm payment intent
+          if (!stripe) {
+            return res.status(503).json({
+              success: false,
+              error: 'Payment processing is not configured. Please contact support.'
+            });
+          }
+
           const paymentIntent = await stripe.paymentIntents.create({
             amount: Math.round(amount * 100), // Convert to cents
             currency: 'usd',
@@ -4325,6 +6522,29 @@ app.get('/api/admin/patients/:id/eligibility', async (req, res) => {
   }
 });
 
+// Patient-facing: Get all insurance cards for a patient
+app.get('/api/patient/insurance', async (req, res) => {
+  try {
+    const { patientId } = req.query;
+
+    if (!patientId) {
+      return res.status(400).json({ success: false, error: 'Patient ID required' });
+    }
+
+    const insurance = db.getAllPatientInsurance(patientId) || [];
+
+    return res.json({
+      success: true,
+      patientId,
+      insurance,
+      count: insurance.length
+    });
+  } catch (error) {
+    console.error('Error fetching patient insurance:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get EOB (Explanation of Benefits) data for a patient
 app.get('/api/admin/patients/:id/eob', async (req, res) => {
   try {
@@ -4341,12 +6561,112 @@ app.get('/api/admin/patients/:id/eob', async (req, res) => {
     const name = patientData.name?.[0];
     const patientName = name ? `${(name.given || []).join(' ')} ${name.family || ''}`.trim() : 'Unknown';
 
-    // Get eligibility data
-    const eligibility = db.getEligibilityChecksByPatient(patientId) || [];
-    const latestEligibility = eligibility[0] || null;
-
-    // Get claims for this patient
+    // Get claims for this patient FIRST (needed for member_id lookup)
     const claims = db.getClaimsByPatient(patientId) || [];
+
+    // Get eligibility data
+    // PRIORITY: Get eligibility with deductible information (same logic as /api/patient/benefits)
+    let eligibility = db.getEligibilityChecksByPatient(patientId) || [];
+
+    // If no eligibility found by patient_id, try to find by member_id from claims
+    if (eligibility.length === 0 && claims.length > 0 && claims[0].member_id) {
+      const memberId = claims[0].member_id;
+      console.log(`   ℹ️  No eligibility found by patient_id, searching by member_id: ${memberId}`);
+      const eligibilityByMember = db.db.prepare(`
+        SELECT * FROM eligibility_checks
+        WHERE member_id = ?
+        ORDER BY deductible_total DESC NULLS LAST, created_at DESC
+      `).all(memberId);
+
+      if (eligibilityByMember && eligibilityByMember.length > 0) {
+        eligibility = eligibilityByMember;
+        console.log(`   ✅ Found ${eligibility.length} eligibility record(s) by member_id`);
+      }
+    }
+
+    // Find the best eligibility record (one with deductible info, or most recent)
+    let latestEligibility = null;
+
+    // First, try to find one with complete deductible information
+    const eligibilityWithDeductible = eligibility.find(e =>
+      e.deductible_total !== null && e.deductible_total !== undefined
+    );
+
+    if (eligibilityWithDeductible) {
+      latestEligibility = eligibilityWithDeductible;
+      console.log(`   ✅ Using eligibility record with deductible: $${latestEligibility.deductible_total} total, $${latestEligibility.deductible_remaining !== null && latestEligibility.deductible_remaining !== undefined ? latestEligibility.deductible_remaining : 0} remaining`);
+    } else if (eligibility.length > 0) {
+      // Fallback to most recent eligibility check
+      latestEligibility = eligibility[0];
+      console.log(`   ⚠️  Using most recent eligibility record (no deductible info): ${latestEligibility.id}`);
+
+      // Try to find eligibility by member_id from claims if no deductible info
+      if (claims.length > 0 && claims[0].member_id) {
+        const memberId = claims[0].member_id;
+        console.log(`   ℹ️  Searching for eligibility with deductible by member_id: ${memberId}`);
+        const eligibilityByMemberWithDeductible = db.db.prepare(`
+          SELECT * FROM eligibility_checks
+          WHERE member_id = ? 
+            AND deductible_total IS NOT NULL
+          ORDER BY created_at DESC
+          LIMIT 1
+        `).get(memberId);
+
+        if (eligibilityByMemberWithDeductible) {
+          latestEligibility = eligibilityByMemberWithDeductible;
+          console.log(`   ✅ Found eligibility record with deductible by member_id: $${latestEligibility.deductible_total} total, $${latestEligibility.deductible_remaining || 0} remaining`);
+
+          // Link this eligibility to the current patient if it's not already linked
+          if (!latestEligibility.patient_id || latestEligibility.patient_id !== patientId) {
+            try {
+              db.db.prepare(`
+                UPDATE eligibility_checks 
+                SET patient_id = ?
+                WHERE id = ?
+              `).run(patientId, latestEligibility.id);
+              console.log(`   ✅ Linked eligibility record ${latestEligibility.id} to patient ${patientId}`);
+              latestEligibility.patient_id = patientId;
+            } catch (updateError) {
+              console.warn(`   ⚠️  Could not link eligibility record: ${updateError.message}`);
+            }
+          }
+        }
+      }
+    } else {
+      console.log('   ℹ️  No eligibility data found for patient');
+
+      // Last resort: try to find eligibility by member_id from claims
+      if (claims.length > 0 && claims[0].member_id) {
+        const memberId = claims[0].member_id;
+        console.log(`   ℹ️  Last resort: searching for eligibility by member_id: ${memberId}`);
+        const anyEligibility = db.db.prepare(`
+          SELECT * FROM eligibility_checks
+          WHERE member_id = ?
+          ORDER BY deductible_total DESC NULLS LAST, created_at DESC
+          LIMIT 1
+        `).get(memberId);
+
+        if (anyEligibility) {
+          latestEligibility = anyEligibility;
+          console.log(`   ✅ Found eligibility record by member_id: $${latestEligibility.deductible_total || 'N/A'} total, $${latestEligibility.deductible_remaining !== null && latestEligibility.deductible_remaining !== undefined ? latestEligibility.deductible_remaining : 'N/A'} remaining`);
+
+          // Link this eligibility to the current patient if it's not already linked
+          if (!latestEligibility.patient_id || latestEligibility.patient_id !== patientId) {
+            try {
+              db.db.prepare(`
+                UPDATE eligibility_checks 
+                SET patient_id = ?
+                WHERE id = ?
+              `).run(patientId, latestEligibility.id);
+              console.log(`   ✅ Linked eligibility record ${latestEligibility.id} to patient ${patientId}`);
+              latestEligibility.patient_id = patientId;
+            } catch (updateError) {
+              console.warn(`   ⚠️  Could not link eligibility record: ${updateError.message}`);
+            }
+          }
+        }
+      }
+    }
 
     // Get appointments for this patient
     const appointments = db.getAllAppointments({}).filter(a => a.patient_id === patientId);
@@ -4376,63 +6696,90 @@ app.get('/api/admin/patients/:id/eob', async (req, res) => {
       // Approved claim shows: $1800 billed, $200 allowed, $200 plan paid, $35 copay, $165 deductible, $1600 not covered, $1800 patient owes
       const amountBilled = claim.total_amount || 0;
 
-      // Get allowed amount from claim details or eligibility
-      // For approved claims matching the EOB image: $200 allowed for $1800 billed
+      // Get allowed amount from eligibility data (REAL DATA, NO STATIC VALUES)
+      // Priority: eligibility data > claim data > calculated
       let allowedAmount = 0;
-      if (responseData.pricing && responseData.pricing.breakdown && responseData.pricing.breakdown.length > 0) {
+      if (latestEligibility?.allowed_amount && latestEligibility.allowed_amount > 0) {
+        // Use actual allowed amount from eligibility check
+        allowedAmount = latestEligibility.allowed_amount;
+      } else if (responseData.pricing && responseData.pricing.breakdown && responseData.pricing.breakdown.length > 0) {
         // Sum allowed amounts from pricing breakdown
         allowedAmount = responseData.pricing.breakdown.reduce((sum, item) =>
           sum + (parseFloat(item.allowed_amount) || 0), 0
         );
       } else if (responseData.allowed_amount) {
         allowedAmount = parseFloat(responseData.allowed_amount);
-      } else if (latestEligibility?.allowed_amount) {
-        allowedAmount = latestEligibility.allowed_amount;
-      } else if (claim.status === 'approved' && amountBilled >= 1800) {
-        // For approved claims matching demo: $200 allowed for $1800+ billed
-        allowedAmount = 200;
-      } else {
-        // Default: calculate as percentage of billed
-        allowedAmount = amountBilled * 0.85; // Standard 85% for in-network
+      } else if (claim.insurance_amount && claim.insurance_amount > 0) {
+        // Use insurance amount from claim
+        allowedAmount = claim.insurance_amount;
+      } else if (amountBilled > 0) {
+        // Calculate based on eligibility coinsurance if available
+        // If deductible is met, insurance typically pays 80-90% after deductible
+        if (latestEligibility && latestEligibility.deductible_remaining === 0) {
+          // Deductible met - insurance pays coinsurance percentage
+          const coinsurancePercent = latestEligibility.coinsurance_percent || 80;
+          allowedAmount = amountBilled * (coinsurancePercent / 100);
+        } else {
+          // Deductible not met - use standard in-network rate
+          allowedAmount = amountBilled * 0.85; // Standard 85% for in-network
+        }
       }
 
-      const copay = claim.copay_amount || latestEligibility?.copay_amount || 35; // Default $35 for demo
+      // Get copay from eligibility data (REAL DATA, NO STATIC VALUES)
+      const copay = latestEligibility?.copay_amount || claim.copay_amount || 0;
 
       // Parse response data for detailed breakdown
       const deductibleApplied = responseData.deductible_applied || 0;
       const coinsuranceApplied = responseData.coinsurance_applied || 0;
 
-      // Calculate plan paid (insurance pays)
-      // For approved claims matching EOB image: Plan pays full allowed amount ($200)
-      let planPaid = allowedAmount;
+      // Calculate plan paid, deductible, and coinsurance from REAL eligibility data
+      // NO STATIC VALUES - use actual insurance data
+      let planPaid = 0;
       let deductible = 0;
       let coinsurance = 0;
 
-      if (latestEligibility && latestEligibility.eligible) {
-        // Apply deductible if applicable (from allowed amount)
-        if (latestEligibility.deductible_remaining !== null && latestEligibility.deductible_total > 0) {
-          const deductibleRemaining = latestEligibility.deductible_remaining || latestEligibility.deductible_total;
-          if (deductibleRemaining > 0 && allowedAmount > 0) {
-            // Apply deductible from allowed amount (e.g., $165 from $200 allowed)
-            deductible = Math.min(deductibleRemaining, allowedAmount);
-            // Plan still pays full allowed (as shown in EOB image: $200 plan paid)
-            planPaid = allowedAmount;
-          }
+      if (latestEligibility && latestEligibility.eligible && allowedAmount > 0) {
+        // Get deductible remaining from eligibility (REAL DATA)
+        const deductibleRemaining = latestEligibility.deductible_remaining !== null
+          ? latestEligibility.deductible_remaining
+          : (latestEligibility.deductible_total || 0);
+
+        // Apply deductible if there's remaining deductible
+        if (deductibleRemaining > 0 && allowedAmount > 0) {
+          // Deductible applies to allowed amount
+          deductible = Math.min(deductibleRemaining, allowedAmount);
         }
 
-        // Apply coinsurance if applicable
-        if (latestEligibility.coinsurance_percent && latestEligibility.coinsurance_percent > 0) {
-          const amountAfterDeductible = Math.max(0, allowedAmount - deductible);
-          if (amountAfterDeductible > 0) {
-            coinsurance = (amountAfterDeductible * latestEligibility.coinsurance_percent) / 100;
-          }
+        // Calculate amount after deductible
+        const amountAfterDeductible = Math.max(0, allowedAmount - deductible);
+
+        // Calculate coinsurance from eligibility data (REAL DATA)
+        if (latestEligibility.coinsurance_percent && latestEligibility.coinsurance_percent > 0 && amountAfterDeductible > 0) {
+          // Coinsurance is patient's share after deductible
+          // If coinsurance is 10%, patient pays 10%, insurance pays 90%
+          const patientCoinsuranceShare = (amountAfterDeductible * latestEligibility.coinsurance_percent) / 100;
+          coinsurance = patientCoinsuranceShare;
         }
+
+        // Plan paid = allowed amount - deductible - patient coinsurance share
+        // OR use insurance_pays from eligibility if available
+        if (latestEligibility.insurance_pays && latestEligibility.insurance_pays > 0) {
+          planPaid = latestEligibility.insurance_pays;
+        } else {
+          // Calculate: allowed amount minus deductible minus patient coinsurance
+          planPaid = Math.max(0, allowedAmount - deductible - coinsurance);
+        }
+      } else if (claim.insurance_amount && claim.insurance_amount > 0) {
+        // Fallback to claim insurance_amount if eligibility not available
+        planPaid = claim.insurance_amount;
+      } else if (allowedAmount > 0) {
+        // Last resort: use allowed amount as plan paid
+        planPaid = allowedAmount;
       }
 
-      // Use parsed values if available from claim response_data
+      // Use parsed values from claim response_data if available (from actual claim processing)
       if (deductibleApplied > 0) deductible = deductibleApplied;
       if (coinsuranceApplied > 0) coinsurance = coinsuranceApplied;
-      if (claim.insurance_amount > 0) planPaid = claim.insurance_amount;
 
       const otherInsurancePaid = 0; // Usually 0
 
@@ -4518,10 +6865,14 @@ app.get('/api/admin/patients/:id/eob', async (req, res) => {
         payer: latestEligibility?.payer_id || 'N/A'
       },
       eligibility: latestEligibility ? {
-        plan_summary: latestEligibility.plan_summary,
-        deductible_total: latestEligibility.deductible_total,
-        deductible_remaining: latestEligibility.deductible_remaining,
-        coinsurance_percent: latestEligibility.coinsurance_percent
+        plan_summary: latestEligibility.plan_summary || 'N/A',
+        deductible_total: latestEligibility.deductible_total !== null && latestEligibility.deductible_total !== undefined ? latestEligibility.deductible_total : null,
+        deductible_remaining: latestEligibility.deductible_remaining !== null && latestEligibility.deductible_remaining !== undefined ? latestEligibility.deductible_remaining : null,
+        coinsurance_percent: latestEligibility.coinsurance_percent !== null && latestEligibility.coinsurance_percent !== undefined ? latestEligibility.coinsurance_percent : null,
+        copay_amount: latestEligibility.copay_amount !== null && latestEligibility.copay_amount !== undefined ? latestEligibility.copay_amount : null,
+        allowed_amount: latestEligibility.allowed_amount !== null && latestEligibility.allowed_amount !== undefined ? latestEligibility.allowed_amount : null,
+        insurance_pays: latestEligibility.insurance_pays !== null && latestEligibility.insurance_pays !== undefined ? latestEligibility.insurance_pays : null,
+        eligible: latestEligibility.eligible === 1 || latestEligibility.eligible === true
       } : null,
       services: eobServices,
       totals: totals,
@@ -4757,22 +7108,22 @@ app.get('/api/provider/providers', async (req, res) => {
 // Patient: Send verification code
 app.post('/api/patient/verify/send', authLimiter, async (req, res) => {
   try {
-    const { phone } = req.body;
+    const { email } = req.body;
 
-    if (!phone) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        error: 'Phone number required'
+        error: 'Email address required'
       });
     }
 
-    const result = PatientPortalService.sendVerificationCode(phone);
+    const result = await PatientPortalService.sendVerificationCode(email);
 
     if (result.success) {
       res.json({
         success: true,
         session_id: result.session_id,
-        message: 'Verification code sent to your phone'
+        message: result.message || 'Verification code sent to your email'
       });
     } else {
       res.status(400).json(result);
@@ -4789,23 +7140,23 @@ app.post('/api/patient/verify/send', authLimiter, async (req, res) => {
 // Patient: Verify code and login
 app.post('/api/patient/verify/confirm', async (req, res) => {
   try {
-    const { phone, code } = req.body;
+    const { email, code } = req.body;
 
-    if (!phone || !code) {
+    if (!email || !code) {
       return res.status(400).json({
         success: false,
-        error: 'Phone and verification code required'
+        error: 'Email and verification code required'
       });
     }
 
-    const result = PatientPortalService.verifyCode(phone, code);
+    const result = PatientPortalService.verifyCode(email, code);
 
     if (result.success) {
       res.json({
         success: true,
         session_id: result.session_id,
         patient_id: result.patient_id,
-        phone: result.phone
+        email: result.email
       });
     } else {
       res.status(400).json(result);
@@ -4863,48 +7214,111 @@ app.get('/api/patient/benefits', async (req, res) => {
       patient = db.getFHIRPatient(patientId);
     } else if (memberId) {
       // Search by insurance member_id (for voice agent)
+      // PRIORITY: Find patient that has BOTH claims AND eligibility data (most complete data)
       console.log('   Searching by insurance member ID:', memberId);
       try {
-        // Try to find patient through patient_insurance table
-        const insuranceRecord = db.db.prepare(`
-          SELECT patient_id FROM patient_insurance 
-          WHERE member_id = ? 
-          ORDER BY is_primary DESC, created_at DESC 
+        // STRATEGY 1: Find patient via claims (claims have the most complete data)
+        // This ensures we get the patient that actually has billing history
+        // CRITICAL: Prioritize patients with the MOST claims AND non-zero billing amounts
+        const claimRecord = db.db.prepare(`
+          SELECT patient_id, COUNT(*) as claim_count, SUM(CASE WHEN total_amount > 0 THEN total_amount ELSE 0 END) as total_billed
+          FROM insurance_claims 
+          WHERE member_id = ? AND patient_id IS NOT NULL
+          GROUP BY patient_id
+          ORDER BY claim_count DESC, total_billed DESC, patient_id
           LIMIT 1
         `).get(memberId);
 
-        if (insuranceRecord && insuranceRecord.patient_id) {
-          patient = db.getFHIRPatient(insuranceRecord.patient_id);
-          console.log(`   ✅ Found patient via insurance record: ${patient ? patient.resource_id : 'not found'}`);
+        if (claimRecord && claimRecord.patient_id) {
+          const foundPatient = db.getFHIRPatient(claimRecord.patient_id);
+          if (foundPatient && !foundPatient.is_deleted) {
+            patient = foundPatient;
+            console.log(`   ✅ Found patient via claims (${claimRecord.claim_count} claims, $${claimRecord.total_billed || 0} billed): ${patient.resource_id}`);
+          } else {
+            console.warn(`   ⚠️  Patient ${claimRecord.patient_id} found via claims but is deleted or invalid`);
+          }
+        } else {
+          console.log('   ℹ️  No claims found for member_id, will try other strategies');
         }
 
-        // If not found via insurance table, try eligibility_checks
+        // STRATEGY 2: If no claims found, try eligibility_checks with deductible data
+        // PRIORITIZE: Patients with eligibility that have phone numbers (more reliable identity)
         if (!patient) {
           const eligibilityRecord = db.db.prepare(`
-            SELECT patient_id FROM eligibility_checks 
-            WHERE member_id = ? 
-            ORDER BY created_at DESC 
+            SELECT e.patient_id, p.phone
+            FROM eligibility_checks e
+            LEFT JOIN fhir_patients p ON e.patient_id = p.resource_id AND p.is_deleted = 0
+            WHERE e.member_id = ? 
+              AND e.patient_id IS NOT NULL 
+              AND e.deductible_total IS NOT NULL
+            ORDER BY p.phone DESC, e.created_at DESC 
             LIMIT 1
           `).get(memberId);
 
           if (eligibilityRecord && eligibilityRecord.patient_id) {
-            patient = db.getFHIRPatient(eligibilityRecord.patient_id);
-            console.log(`   ✅ Found patient via eligibility record: ${patient ? patient.resource_id : 'not found'}`);
+            const foundPatient = db.getFHIRPatient(eligibilityRecord.patient_id);
+            if (foundPatient && !foundPatient.is_deleted) {
+              patient = foundPatient;
+              console.log(`   ✅ Found patient via eligibility record (with deductible data, phone: ${eligibilityRecord.phone ? 'yes' : 'no'}): ${patient.resource_id}`);
+            }
           }
         }
 
-        // If still not found and we have patientName, try to match by name + member_id in claims
+        // STRATEGY 3: If still not found, try any eligibility record
+        // PRIORITIZE: Patients with phone numbers (more reliable identity)
+        if (!patient) {
+          const eligibilityRecord = db.db.prepare(`
+            SELECT e.patient_id, p.phone
+            FROM eligibility_checks e
+            LEFT JOIN fhir_patients p ON e.patient_id = p.resource_id AND p.is_deleted = 0
+            WHERE e.member_id = ? 
+              AND e.patient_id IS NOT NULL
+            ORDER BY p.phone DESC, e.created_at DESC 
+            LIMIT 1
+          `).get(memberId);
+
+          if (eligibilityRecord && eligibilityRecord.patient_id) {
+            const foundPatient = db.getFHIRPatient(eligibilityRecord.patient_id);
+            if (foundPatient && !foundPatient.is_deleted) {
+              patient = foundPatient;
+              console.log(`   ✅ Found patient via eligibility record (phone: ${eligibilityRecord.phone ? 'yes' : 'no'}): ${patient.resource_id}`);
+            }
+          }
+        }
+
+        // STRATEGY 4: Try patient_insurance table as fallback
+        // PRIORITIZE: Patients with phone numbers (more reliable identity)
+        if (!patient) {
+          const insuranceRecord = db.db.prepare(`
+            SELECT i.patient_id, p.phone
+            FROM patient_insurance i
+            LEFT JOIN fhir_patients p ON i.patient_id = p.resource_id AND p.is_deleted = 0
+            WHERE i.member_id = ? 
+            ORDER BY p.phone DESC, i.is_primary DESC, i.created_at DESC 
+            LIMIT 1
+          `).get(memberId);
+
+          if (insuranceRecord && insuranceRecord.patient_id) {
+            const foundPatient = db.getFHIRPatient(insuranceRecord.patient_id);
+            if (foundPatient && !foundPatient.is_deleted) {
+              patient = foundPatient;
+              console.log(`   ✅ Found patient via insurance record (phone: ${insuranceRecord.phone ? 'yes' : 'no'}): ${patient.resource_id}`);
+            }
+          }
+        }
+
+        // STRATEGY 5: If we have patientName, try to match by name + member_id in claims
         if (!patient && patientName) {
           console.log('   Trying to find patient by name + member_id in claims...');
-          const claimRecord = db.db.prepare(`
+          const claimRecordByName = db.db.prepare(`
             SELECT patient_id FROM insurance_claims 
             WHERE member_id = ? 
             ORDER BY submitted_at DESC 
             LIMIT 1
           `).get(memberId);
 
-          if (claimRecord && claimRecord.patient_id) {
-            const potentialPatient = db.getFHIRPatient(claimRecord.patient_id);
+          if (claimRecordByName && claimRecordByName.patient_id) {
+            const potentialPatient = db.getFHIRPatient(claimRecordByName.patient_id);
             // Verify name matches
             if (potentialPatient) {
               const patientData = typeof potentialPatient.resource_data === 'string'
@@ -4917,7 +7331,7 @@ app.get('/api/patient/benefits', async (req, res) => {
 
               if (fullName.includes(patientName.toLowerCase()) || patientName.toLowerCase().includes(fullName)) {
                 patient = potentialPatient;
-                console.log(`   ✅ Found patient via claim record: ${patient.resource_id}`);
+                console.log(`   ✅ Found patient via claim record (name verified): ${patient.resource_id}`);
               }
             }
           }
@@ -4975,13 +7389,78 @@ app.get('/api/patient/benefits', async (req, res) => {
     // Get patient insurance
     let insurance = db.getPatientInsurance(patientResourceId);
 
-    // Get latest eligibility check
+    // Get eligibility checks for this patient
+    // PRIORITY: Get the most recent eligibility check that has COMPLETE deductible information
     let eligibilityChecks = db.getEligibilityChecksByPatient(patientResourceId) || [];
-    let latestEligibility = eligibilityChecks.length > 0 ? eligibilityChecks[0] : null;
 
-    // If no eligibility data exists, log and continue
-    if (!latestEligibility) {
+    // Also check eligibility by member_id (in case patient has multiple records)
+    if (memberId && eligibilityChecks.length === 0) {
+      console.log('   ℹ️  No eligibility found by patient_id, searching by member_id...');
+      const eligibilityByMember = db.db.prepare(`
+        SELECT * FROM eligibility_checks
+        WHERE member_id = ? AND (patient_id = ? OR patient_id IS NULL)
+        ORDER BY created_at DESC
+      `).all(memberId, patientResourceId);
+
+      if (eligibilityByMember && eligibilityByMember.length > 0) {
+        eligibilityChecks = eligibilityByMember;
+        console.log(`   ✅ Found ${eligibilityChecks.length} eligibility record(s) by member_id`);
+      }
+    }
+
+    // Filter to get the best eligibility record (one with deductible info, or most recent)
+    let latestEligibility = null;
+
+    // First, try to find one with complete deductible information
+    const eligibilityWithDeductible = eligibilityChecks.find(e =>
+      e.deductible_total !== null && e.deductible_total !== undefined
+    );
+
+    if (eligibilityWithDeductible) {
+      latestEligibility = eligibilityWithDeductible;
+      console.log(`   ✅ Using eligibility record with deductible: $${latestEligibility.deductible_total} total, $${latestEligibility.deductible_remaining || 0} remaining`);
+    } else if (eligibilityChecks.length > 0) {
+      // Fallback to most recent eligibility check
+      latestEligibility = eligibilityChecks[0];
+      console.log(`   ⚠️  Using most recent eligibility record (no deductible info): ${latestEligibility.id}`);
+    } else {
       console.log('   ℹ️  No eligibility data found for patient');
+    }
+
+    // If we still don't have eligibility but have member_id, try to find ANY eligibility for this member_id
+    if (!latestEligibility && memberId) {
+      console.log('   ℹ️  Searching for eligibility by member_id across all patients...');
+      const anyEligibility = db.db.prepare(`
+        SELECT * FROM eligibility_checks
+        WHERE member_id = ?
+        ORDER BY deductible_total DESC NULLS LAST, created_at DESC
+        LIMIT 1
+      `).get(memberId);
+
+      if (anyEligibility) {
+        latestEligibility = anyEligibility;
+        console.log(`   ✅ Found eligibility record by member_id: ${anyEligibility.id}`);
+        console.log(`   Deductible: $${anyEligibility.deductible_total || 0} total, $${anyEligibility.deductible_remaining || 0} remaining`);
+
+        // If this eligibility doesn't have a patient_id or has a different patient_id, update it to match current patient
+        if (!anyEligibility.patient_id || (anyEligibility.patient_id && anyEligibility.patient_id !== patientResourceId)) {
+          try {
+            db.db.prepare(`
+              UPDATE eligibility_checks 
+              SET patient_id = ?
+              WHERE id = ?
+            `).run(patientResourceId, anyEligibility.id);
+            console.log(`   ✅ Linked eligibility record ${anyEligibility.id} to patient ${patientResourceId}`);
+            // Update the latestEligibility object to reflect the change
+            latestEligibility.patient_id = patientResourceId;
+          } catch (updateError) {
+            console.warn(`   ⚠️  Could not update eligibility record with patient_id: ${updateError.message}`);
+            if (anyEligibility.patient_id && anyEligibility.patient_id !== patientResourceId) {
+              console.log(`   ⚠️  Eligibility record has different patient_id (${anyEligibility.patient_id}), but using it for benefits`);
+            }
+          }
+        }
+      }
     }
 
     // If no insurance record exists, create it from eligibility or default data
@@ -5069,16 +7548,22 @@ app.get('/api/patient/benefits', async (req, res) => {
       } : null,
       eligibility: latestEligibility ? {
         eligible: !!latestEligibility.eligible,
-        copay_amount: latestEligibility.copay_amount,
-        allowed_amount: latestEligibility.allowed_amount,
-        insurance_pays: latestEligibility.insurance_pays,
-        deductible_total: latestEligibility.deductible_total,
-        deductible_remaining: latestEligibility.deductible_remaining,
-        deductible_met: latestEligibility.deductible_total
-          ? (latestEligibility.deductible_total - (latestEligibility.deductible_remaining || 0))
+        copay_amount: latestEligibility.copay_amount || 0,
+        allowed_amount: latestEligibility.allowed_amount || 0,
+        insurance_pays: latestEligibility.insurance_pays || 0,
+        deductible_total: latestEligibility.deductible_total !== null && latestEligibility.deductible_total !== undefined
+          ? latestEligibility.deductible_total
+          : null,
+        deductible_remaining: latestEligibility.deductible_remaining !== null && latestEligibility.deductible_remaining !== undefined
+          ? latestEligibility.deductible_remaining
+          : (latestEligibility.deductible_total !== null && latestEligibility.deductible_total !== undefined
+            ? latestEligibility.deductible_total
+            : null),
+        deductible_met: (latestEligibility.deductible_total !== null && latestEligibility.deductible_total !== undefined)
+          ? (latestEligibility.deductible_total - (latestEligibility.deductible_remaining !== null && latestEligibility.deductible_remaining !== undefined ? latestEligibility.deductible_remaining : 0))
           : 0,
-        coinsurance_percent: latestEligibility.coinsurance_percent,
-        plan_summary: latestEligibility.plan_summary,
+        coinsurance_percent: latestEligibility.coinsurance_percent || 0,
+        plan_summary: latestEligibility.plan_summary || 'Plan details available',
         service_code: latestEligibility.service_code,
         date_of_service: latestEligibility.date_of_service,
         created_at: latestEligibility.created_at,
@@ -5456,7 +7941,7 @@ app.get('/api/admin/billing', async (req, res) => {
 // WEBHOOK ENDPOINTS
 // ============================================
 
-// Retell events webhook
+// Retell events webhook (call end, status updates)
 app.post('/webhook/retell/events', express.json(), async (req, res) => {
   try {
     // Log everything for debugging
@@ -5477,14 +7962,50 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
 
     // Process the webhook data
     const body = req.body || {};
+    const callId = body.call_id || body.call?.call_id;
 
     // Check for different event types
     if (body.event) {
       console.log(`📊 Event Type: ${body.event}`);
     }
 
-    if (body.call_id) {
-      console.log(`📞 Call ID: ${body.call_id}`);
+    if (callId) {
+      console.log(`📞 Call ID: ${callId}`);
+
+      // Update call log when call ends
+      if (body.event === 'call_ended' || body.call_status === 'ended' || body.call_status === 'completed') {
+        try {
+          // Get call duration from Retell
+          const durationSeconds = body.duration_seconds || body.call?.duration_seconds || null;
+
+          // Update call log in database
+          const existingCall = db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
+          if (existingCall) {
+            // Get function call count for this call
+            const functionCalls = db.prepare('SELECT COUNT(*) as count FROM function_call_log WHERE call_id = ?').get(callId);
+            const functionCallCount = functionCalls ? functionCalls.count : 0;
+
+            // Update call log
+            db.prepare(`
+              UPDATE voice_call_log 
+              SET call_duration_seconds = ?,
+                  function_calls_count = ?,
+                  status = 'completed'
+              WHERE call_id = ?
+            `).run(
+              durationSeconds,
+              functionCallCount,
+              callId
+            );
+
+            console.log(`✅ Updated call log for ${callId}: ${durationSeconds}s, ${functionCallCount} functions`);
+          } else {
+            console.warn(`⚠️  Call ${callId} not found in database`);
+          }
+        } catch (updateError) {
+          console.error('❌ Failed to update call log:', updateError.message);
+        }
+      }
     }
 
     if (body.call_status) {
@@ -5568,6 +8089,13 @@ app.post('/webhook/stripe', async (req, res) => {
     let event;
 
     try {
+      if (!stripe) {
+        return res.status(503).json({
+          success: false,
+          error: 'Stripe webhook processing is not configured'
+        });
+      }
+
       event = stripe.webhooks.constructEvent(
         req.body,
         sig,
@@ -5973,7 +8501,7 @@ app.get('/api/ehr/epic/connect', async (req, res) => {
     const { provider_id, patient_id } = req.query;
 
     const providerId = provider_id || 'default';
-    const authData = EpicAdapter.generateAuthUrl(providerId, patient_id || null);
+    const authData = await EpicAdapter.generateAuthUrl(providerId, patient_id || null);
 
     res.json({
       success: true,
@@ -5994,31 +8522,152 @@ app.get('/api/ehr/epic/connect', async (req, res) => {
 // Epic OAuth callback
 app.get('/api/ehr/epic/callback', async (req, res) => {
   try {
-    const { code, state } = req.query;
+    console.log('\n🔗 Epic OAuth Callback Received');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('Query params:', JSON.stringify(req.query, null, 2));
+    console.log('Full URL:', req.url);
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
 
-    if (!code || !state) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing code or state parameter'
-      });
+    const { code, state, error, error_description, error_uri } = req.query;
+
+    // Check if Epic returned an error
+    if (error) {
+      console.error('❌ Epic OAuth Error:', error);
+      console.error('   Description:', error_description);
+      console.error('   Error URI:', error_uri);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Epic Authorization Error</title>
+          <style>
+            body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
+            h1 { color: #e53e3e; }
+            .error-box { background: #fed7d7; border: 2px solid #e53e3e; border-radius: 8px; padding: 20px; margin: 20px 0; }
+            code { background: #f7fafc; padding: 2px 6px; border-radius: 4px; }
+          </style>
+        </head>
+        <body>
+          <h1>❌ Epic Authorization Failed</h1>
+          <div class="error-box">
+            <p><strong>Error:</strong> <code>${error}</code></p>
+            ${error_description ? `<p><strong>Description:</strong> ${error_description}</p>` : ''}
+            ${error_uri ? `<p><strong>More info:</strong> <a href="${error_uri}">${error_uri}</a></p>` : ''}
+          </div>
+          <p>Common causes:</p>
+          <ul style="text-align: left; display: inline-block;">
+            <li>User denied authorization</li>
+            <li>Redirect URI mismatch</li>
+            <li>Invalid client ID or scopes</li>
+          </ul>
+          <p><a href="/api/ehr/epic/connect">Try again</a></p>
+        </body>
+        </html>
+      `);
     }
 
+    // Check if code and state are present
+    if (!code || !state) {
+      console.error('❌ Missing code or state parameter');
+      console.error('   Received params:', Object.keys(req.query));
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Epic Callback Error</title>
+          <style>
+            body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
+            h1 { color: #e53e3e; }
+            .info-box { background: #bee3f8; border: 2px solid #3182ce; border-radius: 8px; padding: 20px; margin: 20px 0; }
+            code { background: #f7fafc; padding: 2px 6px; border-radius: 4px; }
+            pre { background: #f7fafc; padding: 10px; border-radius: 4px; text-align: left; overflow-x: auto; }
+          </style>
+        </head>
+        <body>
+          <h1>❌ Missing Authorization Parameters</h1>
+          <div class="info-box">
+            <p>The callback was received but <code>code</code> or <code>state</code> parameters are missing.</p>
+            <p><strong>Received parameters:</strong></p>
+            <pre>${JSON.stringify(req.query, null, 2)}</pre>
+          </div>
+          <p>Possible causes:</p>
+          <ul style="text-align: left; display: inline-block;">
+            <li>Epic redirected without authorization code (user may have cancelled)</li>
+            <li>Redirect URI mismatch - check Epic app settings</li>
+            <li>Query parameters were lost in transit</li>
+          </ul>
+          <p><a href="/api/ehr/epic/connect">Try connecting again</a></p>
+        </body>
+        </html>
+      `);
+    }
+
+    console.log('✅ Code and state received, exchanging for token...');
     const result = await EpicAdapter.exchangeCodeForToken(code, state);
 
-    // Redirect to success page or return JSON
-    res.json({
-      success: true,
-      message: 'Epic EHR connected successfully',
-      connection_id: result.connection_id,
-      patient_id: result.patient_id,
-      scope: result.scope
-    });
+    console.log('✅ Epic connection successful!');
+    console.log('   Connection ID:', result.connection_id);
+    console.log('   Patient ID:', result.patient_id);
+    console.log('   Scope:', result.scope);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    // Return success page
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Epic Connected Successfully</title>
+        <style>
+          body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
+          h1 { color: #48bb78; }
+          .success-box { background: #c6f6d5; border: 2px solid #48bb78; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          code { background: #f7fafc; padding: 2px 6px; border-radius: 4px; }
+        </style>
+      </head>
+      <body>
+        <h1>✅ Epic EHR Connected Successfully!</h1>
+        <div class="success-box">
+          <p><strong>Connection ID:</strong> <code>${result.connection_id}</code></p>
+          ${result.patient_id ? `<p><strong>Patient ID:</strong> <code>${result.patient_id}</code></p>` : ''}
+          <p><strong>Status:</strong> Active</p>
+        </div>
+        <p>The EHR sync service will now automatically sync data from Epic every 2 minutes.</p>
+        <p>You can close this window.</p>
+      </body>
+      </html>
+    `);
   } catch (error) {
-    console.error('Error in Epic OAuth callback:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('❌ Error in Epic OAuth callback:', error);
+    console.error('   Stack:', error.stack);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Epic Connection Error</title>
+        <style>
+          body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
+          h1 { color: #e53e3e; }
+          .error-box { background: #fed7d7; border: 2px solid #e53e3e; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          code { background: #f7fafc; padding: 2px 6px; border-radius: 4px; }
+          pre { background: #f7fafc; padding: 10px; border-radius: 4px; text-align: left; overflow-x: auto; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <h1>❌ Connection Error</h1>
+        <div class="error-box">
+          <p><strong>Error:</strong> ${error.message}</p>
+          ${process.env.NODE_ENV === 'development' ? `<pre>${error.stack}</pre>` : ''}
+        </div>
+        <p><a href="/api/ehr/epic/connect">Try again</a></p>
+      </body>
+      </html>
+    `);
   }
 });
 
@@ -6288,6 +8937,30 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root endpoint - API information (moved to /api for API status)
+app.get('/api', (req, res) => {
+  const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || `http://${req.headers.host}`;
+  res.json({
+    success: true,
+    service: 'DocLittle Middleware Platform',
+    version: '3.0.0',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: `${baseUrl}/health`,
+      fhir: `${baseUrl}/fhir`,
+      docs: `${baseUrl}/docs`,
+      webhooks: {
+        retell_llm: `wss://${req.headers.host.replace('http', 'ws')}/webhook/retell/llm`,
+        retell_events: `${baseUrl}/webhook/retell/events`,
+        stripe: `${baseUrl}/webhook/stripe`
+      }
+    },
+    documentation: `${baseUrl}/docs`,
+    signup: `${baseUrl}/`
+  });
+});
+
 // ============================================
 // ERROR HANDLERS
 // ============================================
@@ -6296,8 +8969,455 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     error: 'Endpoint not found',
-    path: req.path
+    path: req.path,
+    suggestion: 'Try /health for service status, /docs for API documentation, or /api for API endpoints'
   });
+});
+
+// ============================================
+// STRIPE ISSUING: WEBHOOKS
+// ============================================
+
+// Stripe Issuing webhook handler
+app.post('/webhooks/stripe/issuing', express.raw({ type: 'application/json' }), async (req, res) => {
+  try {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_ISSUING_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.warn('⚠️  STRIPE_ISSUING_WEBHOOK_SECRET not configured. Skipping webhook verification.');
+      // Continue without verification in development
+    }
+
+    let event;
+    try {
+      if (!stripe) {
+        return res.status(503).json({
+          success: false,
+          error: 'Stripe Issuing webhook processing is not configured'
+        });
+      }
+
+      if (webhookSecret) {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      } else {
+        // In development, parse without verification
+        event = JSON.parse(req.body.toString());
+      }
+    } catch (err) {
+      console.error('❌ Webhook signature verification failed:', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log(`📥 Stripe Issuing webhook received: ${event.type}`);
+
+    // Handle different event types
+    switch (event.type) {
+      case 'issuing_authorization.created':
+      case 'issuing_authorization.request':
+        await handleAuthorizationEvent(event.data.object);
+        break;
+
+      case 'issuing_transaction.created':
+        await handleTransactionCreated(event.data.object);
+        break;
+
+      case 'issuing_card.created':
+        await handleCardCreated(event.data.object);
+        break;
+
+      case 'issuing_card.updated':
+        await handleCardUpdated(event.data.object);
+        break;
+
+      default:
+        console.log(`ℹ️  Unhandled event type: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('❌ Error handling Stripe Issuing webhook:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Handle authorization events
+async function handleAuthorizationEvent(authorization) {
+  try {
+    console.log(`💳 Authorization: ${authorization.id} for card ${authorization.card}`);
+
+    // Find card in database
+    const card = db.getCardByStripeId(authorization.card);
+    if (!card) {
+      console.warn(`⚠️  Card not found for authorization: ${authorization.card}`);
+      return;
+    }
+
+    // Store authorization (you might want to create an authorizations table)
+    console.log(`✅ Authorization stored for card ${card.id}`);
+  } catch (error) {
+    console.error('❌ Error handling authorization event:', error);
+  }
+}
+
+// Handle transaction created
+async function handleTransactionCreated(transaction) {
+  try {
+    console.log(`💳 Transaction: ${transaction.id} for card ${transaction.card}`);
+
+    // Find card in database
+    const card = db.getCardByStripeId(transaction.card);
+    if (!card) {
+      console.warn(`⚠️  Card not found for transaction: ${transaction.card}`);
+      return;
+    }
+
+    // Create transaction record
+    const transactionId = `transaction-${uuidv4()}`;
+    db.createCardTransaction({
+      id: transactionId,
+      card_id: card.id,
+      patient_id: card.patient_id,
+      clinic_id: card.clinic_id,
+      stripe_transaction_id: transaction.id,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      merchant_name: transaction.merchant_data?.name || null,
+      merchant_category: transaction.merchant_data?.category || null,
+      status: transaction.type, // 'capture' or 'refund'
+      authorization_code: transaction.authorization || null,
+      metadata: {
+        created_at: new Date().toISOString(),
+        stripe_transaction: transaction
+      }
+    });
+
+    console.log(`✅ Transaction stored: ${transactionId}`);
+  } catch (error) {
+    console.error('❌ Error handling transaction event:', error);
+  }
+}
+
+// Handle card created
+async function handleCardCreated(cardData) {
+  try {
+    console.log(`💳 Card created: ${cardData.id}`);
+    // Card should already be in database from API call
+    // This is just for webhook confirmation
+  } catch (error) {
+    console.error('❌ Error handling card created event:', error);
+  }
+}
+
+// Handle card updated
+async function handleCardUpdated(cardData) {
+  try {
+    console.log(`💳 Card updated: ${cardData.id}`);
+
+    // Find card in database
+    const card = db.getCardByStripeId(cardData.id);
+    if (!card) {
+      console.warn(`⚠️  Card not found for update: ${cardData.id}`);
+      return;
+    }
+
+    // Update card status if changed
+    if (cardData.status && cardData.status !== card.status) {
+      db.updateCardStatus(card.id, cardData.status);
+      console.log(`✅ Card status updated: ${card.id} -> ${cardData.status}`);
+    }
+
+    // Update spending controls if changed
+    if (cardData.spending_controls) {
+      db.updateCardSpendingControls(card.id, cardData.spending_controls);
+      console.log(`✅ Card spending controls updated: ${card.id}`);
+    }
+  } catch (error) {
+    console.error('❌ Error handling card updated event:', error);
+  }
+}
+
+// ============================================
+// STRIPE ISSUING: PATIENT CARDS API
+// ============================================
+
+// Get patient cards
+app.get('/api/patient/:patientId/cards', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Get cards (JSON fields are already parsed by database function)
+    const cards = db.getCardsByPatientId(patientId);
+
+    res.json({
+      success: true,
+      cards: cards,
+      count: cards.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching patient cards:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch cards'
+    });
+  }
+});
+
+// Create card for patient
+app.post('/api/patient/:patientId/cards', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { spending_limit, spending_interval, clinic_id } = req.body;
+
+    // Get patient
+    const patient = db.getFHIRPatient(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        error: 'Patient not found'
+      });
+    }
+
+    // Create card using FHIR service
+    const result = await FHIRService.createPatientCard(patient.resource_data, {
+      clinic_id: clinic_id || null,
+      spending_limit: spending_limit || 100000, // $1,000 default
+      spending_interval: spending_interval || 'all_time'
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to create card'
+      });
+    }
+
+    res.json({
+      success: true,
+      card: {
+        card_id: result.card_id,
+        cardholder_id: result.cardholder_id,
+        last4: result.last4,
+        brand: result.brand
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error creating patient card:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to create card'
+    });
+  }
+});
+
+// Get card details (including PAN and CVC for virtual cards)
+app.get('/api/patient/cards/:cardId', async (req, res) => {
+  try {
+    const { cardId } = req.params;
+
+    // Get card from database
+    const card = db.getCardById(cardId);
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        error: 'Card not found'
+      });
+    }
+
+    // Get card details from Stripe (if Stripe Issuing is enabled)
+    let cardDetails = null;
+    if (StripeIssuingService && card.stripe_card_id) {
+      const stripeIssuing = new StripeIssuingService();
+      const detailsResult = await stripeIssuing.getCardDetails(card.stripe_card_id);
+      if (detailsResult.success) {
+        cardDetails = {
+          pan: detailsResult.pan, // Primary Account Number (card number)
+          cvc: detailsResult.cvc, // Card Verification Code
+          last4: detailsResult.last4,
+          brand: detailsResult.brand,
+          expiry_month: detailsResult.expiry_month,
+          expiry_year: detailsResult.expiry_year
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      card: {
+        ...card,
+        // JSON fields are already parsed by database function
+        details: cardDetails // PAN and CVC (only for virtual cards, in live mode)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching card details:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch card details'
+    });
+  }
+});
+
+// Update card spending controls
+app.patch('/api/patient/cards/:cardId/spending-controls', async (req, res) => {
+  try {
+    const { cardId } = req.params;
+    const { spending_limit, spending_interval, allowed_categories, blocked_categories } = req.body;
+
+    // Get card from database
+    const card = db.getCardById(cardId);
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        error: 'Card not found'
+      });
+    }
+
+    if (!StripeIssuingService || !card.stripe_card_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe Issuing not configured'
+      });
+    }
+
+    // Build spending controls
+    const spendingControls = {
+      spending_limits: [
+        {
+          amount: spending_limit || 100000,
+          interval: spending_interval || 'all_time'
+        }
+      ]
+    };
+
+    if (allowed_categories) {
+      spendingControls.allowed_categories = allowed_categories;
+    }
+
+    if (blocked_categories) {
+      spendingControls.blocked_categories = blocked_categories;
+    }
+
+    // Update in Stripe
+    const stripeIssuing = new StripeIssuingService();
+    const result = await stripeIssuing.updateCardSpendingControls(card.stripe_card_id, spendingControls);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to update spending controls'
+      });
+    }
+
+    // Update in database
+    db.updateCardSpendingControls(cardId, spendingControls);
+
+    res.json({
+      success: true,
+      card: {
+        ...card,
+        spending_controls: spendingControls
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error updating card spending controls:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update spending controls'
+    });
+  }
+});
+
+// Cancel card
+app.post('/api/patient/cards/:cardId/cancel', async (req, res) => {
+  try {
+    const { cardId } = req.params;
+
+    // Get card from database
+    const card = db.getCardById(cardId);
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        error: 'Card not found'
+      });
+    }
+
+    if (!StripeIssuingService || !card.stripe_card_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stripe Issuing not configured'
+      });
+    }
+
+    // Cancel in Stripe
+    const stripeIssuing = new StripeIssuingService();
+    const result = await stripeIssuing.cancelCard(card.stripe_card_id);
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error || 'Failed to cancel card'
+      });
+    }
+
+    // Update status in database
+    db.updateCardStatus(cardId, 'canceled');
+
+    res.json({
+      success: true,
+      message: 'Card canceled successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error canceling card:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to cancel card'
+    });
+  }
+});
+
+// Get card transactions
+app.get('/api/patient/cards/:cardId/transactions', async (req, res) => {
+  try {
+    const { cardId } = req.params;
+
+    // Get transactions (JSON fields are already parsed by database function)
+    const transactions = db.getTransactionsByCardId(cardId);
+
+    res.json({
+      success: true,
+      transactions: transactions,
+      count: transactions.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching card transactions:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch transactions'
+    });
+  }
+});
+
+// Get patient transactions (all cards)
+app.get('/api/patient/:patientId/transactions', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Get transactions (JSON fields are already parsed by database function)
+    const transactions = db.getTransactionsByPatientId(patientId);
+
+    res.json({
+      success: true,
+      transactions: transactions,
+      count: transactions.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching patient transactions:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch transactions'
+    });
+  }
 });
 
 app.use((err, req, res, next) => {
@@ -6311,6 +9431,231 @@ app.use((err, req, res, next) => {
 // ============================================
 // START SERVER
 // ============================================
+
+// ============================================
+// TEST ENDPOINTS (for development/testing)
+// ============================================
+
+// Test appointment email booking
+app.post('/api/test/appointment-email', async (req, res) => {
+  try {
+    console.log('\n🧪 TEST: Appointment Email Booking');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+
+    const { patient_name, patient_phone, patient_email, appointment_type, date, time, timezone } = req.body;
+
+    if (!patient_email) {
+      return res.status(400).json({
+        success: false,
+        error: 'patient_email is required for testing'
+      });
+    }
+
+    // Create test appointment
+    const testAppointment = {
+      patient_name: patient_name || 'Test Patient',
+      patient_phone: patient_phone || '+15551234567',
+      patient_email: patient_email,
+      appointment_type: appointment_type || 'Cardiology Consultation',
+      date: date || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      time: time || '2:00 PM',
+      timezone: timezone || 'America/New_York',
+      notes: 'Test appointment for email verification'
+    };
+
+    console.log('📋 Creating test appointment...');
+    const bookingResult = await BookingService.scheduleAppointment(testAppointment);
+
+    if (!bookingResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: bookingResult.error,
+        requiresEmail: bookingResult.requiresEmail,
+        requiresPhone: bookingResult.requiresPhone
+      });
+    }
+
+    // Get appointment from database to check email status
+    const appointment = db.getAppointment(bookingResult.appointment.id);
+
+    // Check if email was sent
+    let emailSent = false;
+    let emailProvider = 'none';
+
+    if (appointment && appointment.patient_email) {
+      // Try to send email again to verify
+      try {
+        const emailResult = await EmailService.sendAppointmentConfirmation(appointment);
+        emailSent = emailResult.success;
+        emailProvider = emailResult.provider || 'unknown';
+        console.log(`📧 Email test result: ${emailSent ? 'SENT' : 'FAILED'} (${emailProvider})`);
+      } catch (emailError) {
+        console.warn('⚠️  Email test failed:', emailError.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Test appointment created successfully',
+      appointment: {
+        id: bookingResult.appointment.id,
+        confirmation_number: bookingResult.appointment.confirmation_number,
+        patient_name: appointment.patient_name,
+        patient_email: appointment.patient_email,
+        date: appointment.date,
+        time: appointment.time,
+        appointment_type: appointment.appointment_type,
+        status: appointment.status
+      },
+      emailSent: emailSent,
+      emailProvider: emailProvider,
+      emailAddress: appointment.patient_email,
+      instructions: emailProvider === 'console'
+        ? 'Email was logged to console (no email service configured). Check server logs for email content.'
+        : `Check your email inbox at ${appointment.patient_email} for the confirmation email.`
+    });
+
+  } catch (error) {
+    console.error('❌ Test error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test UHC FHIR connection
+app.get('/api/test/uhc-fhir/connection', async (req, res) => {
+  try {
+    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const useSandbox = req.query.sandbox !== 'false';
+    const result = await UHCFHIRService.testConnection(useSandbox);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test UHC FHIR provider directory
+app.get('/api/test/uhc-fhir/providers', async (req, res) => {
+  try {
+    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const result = await UHCFHIRService.pullProviderDirectory({
+      useSandbox: req.query.sandbox !== 'false',
+      zipCode: req.query.zip || null,
+      specialty: req.query.specialty || null,
+      limit: parseInt(req.query.limit) || 50
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test UHC FHIR patient clinical data
+app.get('/api/test/uhc-fhir/patient/:patientId/clinical', async (req, res) => {
+  try {
+    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const result = await UHCFHIRService.pullPatientClinicalData(req.params.patientId, {
+      useSandbox: req.query.sandbox !== 'false'
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test UHC FHIR coverage data
+app.get('/api/test/uhc-fhir/patient/:patientId/coverage', async (req, res) => {
+  try {
+    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const result = await UHCFHIRService.pullCoverageData(req.params.patientId, {
+      useSandbox: req.query.sandbox !== 'false'
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test UHC FHIR claims data
+app.get('/api/test/uhc-fhir/patient/:patientId/claims', async (req, res) => {
+  try {
+    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const result = await UHCFHIRService.pullClaimsData(req.params.patientId, {
+      useSandbox: req.query.sandbox !== 'false'
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Test UHC FHIR - pull ALL data
+app.get('/api/test/uhc-fhir/patient/:patientId/all', async (req, res) => {
+  try {
+    const UHCFHIRService = require('./services/uhc-fhir-service');
+    const result = await UHCFHIRService.pullAllPatientData(req.params.patientId, {
+      useSandbox: req.query.sandbox !== 'false'
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// GLOBAL ERROR HANDLER
+// ============================================
+app.use((err, req, res, next) => {
+  // Log error to database
+  const { logError } = require('./middleware/usage-logger');
+
+  logError({
+    customer_id: req.customer_id || null,
+    error_type: err.name || 'Error',
+    error_message: err.message || 'Unknown error',
+    stack_trace: err.stack,
+    request_id: req.requestId || null,
+    endpoint: req.path || req.url,
+    context: {
+      method: req.method,
+      body: req.body,
+      query: req.query,
+      params: req.params
+    },
+    severity: err.status >= 500 ? 'high' : 'medium'
+  });
+
+  // Log to console
+  console.error('❌ Unhandled error:', err);
+
+  // Send error response
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    success: false,
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
 
 const server = app.listen(PORT, () => {
   console.log('\n' + '='.repeat(60));

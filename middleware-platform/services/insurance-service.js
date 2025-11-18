@@ -240,6 +240,34 @@ class InsuranceService {
 
       db.createInsuranceClaim(claimRecord);
 
+      // Create Stripe card on-demand if patient owes money (copay or patient responsibility)
+      if (claimData.copayPaid > 0 || (claimData.totalAmount - claimData.copayPaid) > 0) {
+        try {
+          const FHIRService = require('./fhir-service');
+          const patientOwed = claimData.totalAmount - claimData.copayPaid;
+          
+          // If patient owes money after insurance, create card for the bill
+          if (patientOwed > 0) {
+            console.log(`💳 Creating payment card for patient responsibility: $${patientOwed.toFixed(2)}`);
+            await FHIRService.createCardForBill(claimData.patientId, patientOwed, {
+              claim_id: claimRecord.id,
+              appointment_id: claimData.appointmentId
+            });
+          }
+          // If copay was paid, card might already exist, but create one if needed
+          else if (claimData.copayPaid > 0) {
+            console.log(`💳 Creating payment card for copay: $${claimData.copayPaid.toFixed(2)}`);
+            await FHIRService.createCardForCopay(claimData.patientId, claimData.copayPaid, {
+              appointment_id: claimData.appointmentId,
+              claim_id: claimRecord.id
+            });
+          }
+        } catch (cardError) {
+          // Don't fail claim submission if card creation fails
+          console.warn('⚠️  Failed to create payment card for claim:', cardError.message);
+        }
+      }
+
       console.log('✅ Claim submitted successfully');
       console.log('   Claim ID:', claimRecord.id);
       console.log('   X12 Claim ID:', claimResponse.claimId);

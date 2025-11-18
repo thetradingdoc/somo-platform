@@ -40,7 +40,7 @@ class EHRAggregatorService {
     const authUrl = `${this.baseUrl}/connect/system/clinical?client_id=${this.clientId}&redirect_uri=${encodeURIComponent(this.redirectUri)}&state=${state}`;
 
     // Store state for verification
-    db.prepare(`
+    db.db.prepare(`
       INSERT OR REPLACE INTO ehr_connections 
       (id, provider_id, ehr_name, state_token, auth_url, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))
@@ -61,7 +61,7 @@ class EHRAggregatorService {
   async exchangeCodeForToken(code, state) {
     try {
       // Verify state
-      const connection = db.prepare(`
+      const connection = db.db.prepare(`
         SELECT * FROM ehr_connections WHERE state_token = ?
       `).get(state);
 
@@ -81,7 +81,7 @@ class EHRAggregatorService {
 
       // Store tokens
       const expiresAt = new Date(Date.now() + expires_in * 1000);
-      db.prepare(`
+      db.db.prepare(`
         UPDATE ehr_connections 
         SET access_token = ?,
             refresh_token = ?,
@@ -110,7 +110,7 @@ class EHRAggregatorService {
    */
   async refreshToken(connectionId) {
     try {
-      const connection = db.prepare(`
+      const connection = db.db.prepare(`
         SELECT * FROM ehr_connections WHERE id = ?
       `).get(connectionId);
 
@@ -128,7 +128,7 @@ class EHRAggregatorService {
       const { access_token, expires_in } = tokenResponse.data;
       const expiresAt = new Date(Date.now() + expires_in * 1000);
 
-      db.prepare(`
+      db.db.prepare(`
         UPDATE ehr_connections 
         SET access_token = ?,
             expires_at = ?,
@@ -149,7 +149,7 @@ class EHRAggregatorService {
    * @returns {string} Valid access token
    */
   async getValidToken(connectionId) {
-    const connection = db.prepare(`
+    const connection = db.db.prepare(`
       SELECT * FROM ehr_connections WHERE id = ?
     `).get(connectionId);
 
@@ -373,7 +373,7 @@ class EHRAggregatorService {
       const encounterTime = encounter.period?.start?.split('T')[1]?.substring(0, 5); // HH:MM
       
       // Find appointment by phone and date/time window (±2 hours)
-      const appointments = db.prepare(`
+      const appointments = db.db.prepare(`
         SELECT * FROM appointments 
         WHERE patient_phone = ? 
           AND date = ?

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Payment Method - DocLittle API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            color: #1e40af;
+            line-height: 1;
+            margin-bottom: 10px;
+            letter-spacing: -2px;
+        }
+
+        .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+            color: #1e40af;
+        }
+
+        .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+            color: #1e40af;
+        }
+
+        .logo-brand .dot {
+            color: #1e40af;
+            font-weight: 700;
+        }
+
+        .logo p {
+            color: #64748b;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        h2 {
+            color: #1e293b;
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #64748b;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+
+        .info-box p {
+            color: #1e40af;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        #card-element {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+        }
+
+        #card-element:focus {
+            border-color: #1e40af;
+            outline: none;
+        }
+
+        .card-errors {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 5px;
+            min-height: 20px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #1e40af;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            background: #1e3a8a;
+        }
+
+        .btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            width: auto;
+            padding: 10px 20px;
+            background: transparent;
+            color: #1e40af;
+            border: 2px solid #1e40af;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 0;
+            margin-bottom: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-secondary:hover {
+            background: #eff6ff;
+            border-color: #1e3a8a;
+            color: #1e3a8a;
+        }
+
+        .back-link {
+            margin-bottom: 20px;
+        }
+
+        .back-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: transparent;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 1.25rem;
+            padding: 0;
+            margin: 0;
+        }
+
+        .back-icon:hover {
+            background: #f1f5f9;
+            color: #1e40af;
+            transform: translateX(-2px);
+        }
+
+        .back-icon:active {
+            transform: translateX(-4px);
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        .alert-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #64748b;
+            margin-top: 15px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .stored-card {
+            background: #f0fdf4;
+            border: 2px solid #86efac;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .stored-card h3 {
+            color: #16a34a;
+            margin-bottom: 10px;
+        }
+
+        .stored-card .card-info {
+            font-size: 1.1rem;
+            color: #1e293b;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h2 {
+                font-size: 1.25rem;
+            }
+        }
+    </style>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+            </div>
+            <p>Verify Payment Method</p>
+        </div>
+
+        <div class="back-link">
+            <button class="back-icon" id="back-btn" onclick="window.history.back()" aria-label="Go back" title="Go back">
+                ←
+            </button>
+        </div>
+
+        <h2>Add Payment Method</h2>
+        <p>We'll verify your card with a $1 authorization hold (you won't be charged). This allows us to invoice you monthly for usage beyond your free credits.</p>
+
+        <div class="info-box">
+            <p>🔒 Your card details are securely processed by Stripe. We only store a token for future invoices.</p>
+        </div>
+
+        <div id="alert"></div>
+
+        <div id="stored-card-section" style="display: none;">
+            <div class="stored-card">
+                <h3>✓ Payment Method Verified</h3>
+                <div class="card-info" id="stored-card-info"></div>
+                <button class="btn" id="continue-btn">Continue to Docs</button>
+            </div>
+        </div>
+
+        <div id="card-form">
+            <div id="card-element">
+                <!-- Stripe Elements will create form elements here -->
+            </div>
+            <div id="card-errors" class="card-errors" role="alert"></div>
+
+            <button class="btn" id="verify-btn">Verify Card</button>
+            <div class="loading" id="loading">Verifying card...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let stripe = null;
+        let cardElement = null;
+
+        // Initialize Stripe
+        async function initStripe() {
+            try {
+                // Get Stripe publishable key from server
+                const response = await fetch(`${API_BASE}/api/signup/stripe-config`, {
+                    credentials: 'include'
+                });
+                const config = await response.json();
+
+                if (config.success && config.publishable_key) {
+                    stripe = Stripe(config.publishable_key);
+                    const elements = stripe.elements();
+
+                    cardElement = elements.create('card', {
+                        style: {
+                            base: {
+                                fontSize: '16px',
+                                color: '#1e293b',
+                                '::placeholder': {
+                                    color: '#94a3b8',
+                                },
+                            },
+                            invalid: {
+                                color: '#ef4444',
+                            },
+                        },
+                    });
+
+                    cardElement.mount('#card-element');
+
+                    cardElement.on('change', (event) => {
+                        const displayError = document.getElementById('card-errors');
+                        if (event.error) {
+                            displayError.textContent = event.error.message;
+                        } else {
+                            displayError.textContent = '';
+                        }
+                    });
+                } else {
+                    document.getElementById('alert').innerHTML = 
+                        '<div class="alert alert-error">Stripe not configured. Please contact support.</div>';
+                }
+            } catch (error) {
+                console.error('Failed to initialize Stripe:', error);
+                document.getElementById('alert').innerHTML = 
+                    '<div class="alert alert-error">Failed to load payment form. Please refresh the page.</div>';
+            }
+        }
+
+        // Check if card already verified
+        async function checkCardStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/me/payment-method`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.payment_method && result.payment_method.card_verified) {
+                        // Show stored card
+                        document.getElementById('stored-card-section').style.display = 'block';
+                        document.getElementById('card-form').style.display = 'none';
+                        document.getElementById('stored-card-info').textContent = 
+                            `${result.payment_method.card_brand || 'Card'} ending in ${result.payment_method.card_last4}`;
+                        
+                        // Continue button
+                        document.getElementById('continue-btn').addEventListener('click', () => {
+                            const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/docs';
+                            window.location.href = redirectUrl;
+                        });
+                        return true;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to check card status:', error);
+            }
+            return false;
+        }
+
+        // Verify card
+        document.getElementById('verify-btn').addEventListener('click', async () => {
+            if (!stripe || !cardElement) {
+                document.getElementById('alert').innerHTML = 
+                    '<div class="alert alert-error">Payment form not ready. Please refresh the page.</div>';
+                return;
+            }
+
+            const btn = document.getElementById('verify-btn');
+            const loading = document.getElementById('loading');
+            const alert = document.getElementById('alert');
+
+            btn.disabled = true;
+            loading.classList.add('active');
+            alert.innerHTML = '';
+            document.getElementById('card-errors').textContent = '';
+
+            try {
+                // Create payment method
+                const { paymentMethod, error: pmError } = await stripe.createPaymentMethod({
+                    type: 'card',
+                    card: cardElement,
+                });
+
+                if (pmError) {
+                    document.getElementById('card-errors').textContent = pmError.message;
+                    btn.disabled = false;
+                    loading.classList.remove('active');
+                    return;
+                }
+
+                // Verify with $1 authorization
+                const response = await fetch(`${API_BASE}/api/signup/verify-card`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        payment_method_id: paymentMethod.id
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert.innerHTML = '<div class="alert alert-success">✓ Card verified successfully! Redirecting...</div>';
+                    setTimeout(() => {
+                        const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/docs';
+                        window.location.href = redirectUrl;
+                    }, 1500);
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message || 'Failed to verify card'}</div>`;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Failed to verify card: ${error.message}</div>`;
+                btn.disabled = false;
+            } finally {
+                loading.classList.remove('active');
+            }
+        });
+
+        // Initialize on page load
+        (async () => {
+            const hasCard = await checkCardStatus();
+            if (!hasCard) {
+                await initStripe();
+            }
+        })();
+    </script>
+</body>
+</html>
+

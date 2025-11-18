@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocLittle API Documentation</title>
+    <link rel="stylesheet" href="/docs/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-brand">
+                    <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+                </div>
+                <p class="version" style="text-align: center; color: rgba(255, 255, 255, 0.8);">API v3.0.0</p>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#overview" class="nav-link active">Overview</a></li>
+                <li><a href="#authentication" class="nav-link">Authentication</a></li>
+                <li><a href="#voice-api" class="nav-link">Voice API</a></li>
+                <li><a href="#fhir-api" class="nav-link">FHIR API</a></li>
+                <li><a href="#payment-api" class="nav-link">Payment API</a></li>
+                <li><a href="#admin-api" class="nav-link">Admin API</a></li>
+                <li><a href="#webhooks" class="nav-link">Webhooks</a></li>
+                <li><a href="#mobile-integration" class="nav-link">Mobile Integration</a></li>
+                <li><a href="#code-examples" class="nav-link">Code Examples</a></li>
+            </ul>
+        </nav>
+
+        <!-- Header Bar -->
+        <div class="header-bar">
+            <div></div>
+            <div class="user-actions">
+                <span id="header-user-name" class="user-name"></span>
+                <a href="/profile" class="btn btn-profile">Profile</a>
+                <button id="header-signout-btn" class="btn btn-signout">Sign Out</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="content">
+            <!-- Overview Section -->
+            <section id="overview" class="section">
+                <h1>DocLittle API Documentation</h1>
+                <p class="lead">White-label voice AI agent platform for healthcare commerce and patient services.</p>
+
+                <div class="info-box">
+                    <h3>Base URL</h3>
+                    <code class="base-url">https://api.doclittle.site</code>
+                </div>
+
+                <h2>What is DocLittle?</h2>
+                <p>DocLittle is a comprehensive middleware platform that enables healthcare providers to offer
+                    voice-powered commerce and patient services through phone calls and mobile applications.</p>
+
+                <h3>Key Features</h3>
+                <ul>
+                    <li><strong>Voice AI Agent</strong> - Natural language conversations via phone calls</li>
+                    <li><strong>Healthcare Commerce</strong> - Patients can order products/services via voice</li>
+                    <li><strong>FHIR Integration</strong> - Healthcare data standards (patient records, encounters)</li>
+                    <li><strong>Payment Processing</strong> - Stripe, Circle wallets, insurance billing</li>
+                    <li><strong>Appointment Management</strong> - Schedule, confirm, and manage appointments</li>
+                    <li><strong>EHR Integration</strong> - Connect to Epic, 1upHealth, and other EHR systems</li>
+                </ul>
+
+                <h3>Quick Start</h3>
+                <ol>
+                    <li>Sign up for an account at <code>https://api.doclittle.site</code></li>
+                    <li>Complete email verification and accept terms of service</li>
+                    <li>Get your Retell Agent ID from your Profile (<code>GET /api/customers/me</code>)</li>
+                    <li>Create API keys in your Profile (for REST API calls)</li>
+                    <li>Integrate Retell SDK into your mobile app (Flutter/iOS/Android)</li>
+                    <li>Start voice calls - DocLittle handles everything automatically</li>
+                </ol>
+            </section>
+
+            <!-- Authentication Section -->
+            <section id="authentication" class="section">
+                <h2>Authentication</h2>
+                <p>Most API endpoints require authentication using API keys or Bearer tokens.</p>
+                <p style="margin-top: 12px; color: #64748b;">
+                    <strong>Note:</strong> To create and manage your API keys, visit your <a href="/profile" style="color: #1e40af; font-weight: 600;">Profile</a> page.
+                </p>
+
+                <h3>API Key Authentication</h3>
+                <p>Include your API key in the request headers:</p>
+                <pre><code class="language-http">Authorization: Bearer your-api-key-here
+# OR
+X-API-Key: your-api-key-here</code></pre>
+
+                <h3>Example Request</h3>
+                <pre><code class="language-javascript">fetch('https://api.doclittle.site/voice/products/search', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer your-api-key',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    merchant_id: 'your-clinic-id',
+    query: 'vitamin D'
+  })
+});</code></pre>
+            </section>
+
+            <!-- Voice API Section -->
+            <section id="voice-api" class="section">
+                <h2>Voice API</h2>
+                <p>Endpoints for voice commerce and patient interactions.</p>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/voice/products/search</code>
+                    </div>
+                    <p>Search for products/services available for voice ordering.</p>
+
+                    <h4>Request Body</h4>
+                    <pre><code class="language-json">{
+  "merchant_id": "your-clinic-id",
+  "query": "vitamin supplements"
+}</code></pre>
+
+                    <h4>Response</h4>
+                    <pre><code class="language-json">{
+  "success": true,
+  "products": [
+    {
+      "id": "prod_123",
+      "title": "Vitamin D3 1000IU",
+      "price": 29.99,
+      "description": "High-quality vitamin D supplement",
+      "category": "Supplements",
+      "in_stock": true
+    }
+  ]
+}</code></pre>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/voice/checkout/create</code>
+                    </div>
+                    <p>Create a checkout session for a voice order.</p>
+
+                    <h4>Request Body</h4>
+                    <pre><code class="language-json">{
+  "merchant_id": "your-clinic-id",
+  "product_id": "prod_123",
+  "customer_phone": "+15555551234",
+  "quantity": 1
+}</code></pre>
+
+                    <h4>Response</h4>
+                    <pre><code class="language-json">{
+  "success": true,
+  "checkout_id": "checkout_xxx",
+  "amount": 29.99,
+  "payment_token": "token_xxx"
+}</code></pre>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/voice/incoming</code>
+                    </div>
+                    <p>Twilio webhook endpoint for incoming voice calls. This is automatically handled by Twilio when a
+                        patient calls your number.</p>
+                </div>
+            </section>
+
+            <!-- FHIR API Section -->
+            <section id="fhir-api" class="section">
+                <h2>FHIR API</h2>
+                <p>FHIR-compliant endpoints for healthcare data management.</p>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/fhir/Patient</code>
+                    </div>
+                    <p>Create a new patient record.</p>
+
+                    <h4>Request Body (FHIR Patient Resource)</h4>
+                    <pre><code class="language-json">{
+  "resourceType": "Patient",
+  "identifier": [{
+    "system": "phone",
+    "value": "+15555551234"
+  }],
+  "name": [{
+    "family": "Smith",
+    "given": ["John"]
+  }],
+  "telecom": [{
+    "system": "phone",
+    "value": "+15555551234"
+  }]
+}</code></pre>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/fhir/Patient?phone=+15555551234</code>
+                    </div>
+                    <p>Search for a patient by phone number.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/fhir/Encounter</code>
+                    </div>
+                    <p>Create an encounter (visit/appointment) record.</p>
+                </div>
+            </section>
+
+            <!-- Payment API Section -->
+            <section id="payment-api" class="section">
+                <h2>Payment API</h2>
+                <p>Process payments for voice orders and appointments.</p>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/process-payment</code>
+                    </div>
+                    <p>Process a payment for a checkout session.</p>
+
+                    <h4>Request Body</h4>
+                    <pre><code class="language-json">{
+  "checkout_id": "checkout_xxx",
+  "payment_method": "stripe",
+  "payment_token": "token_xxx"
+}</code></pre>
+
+                    <h4>Response</h4>
+                    <pre><code class="language-json">{
+  "success": true,
+  "payment_intent_id": "pi_xxx",
+  "checkout_id": "checkout_xxx"
+}</code></pre>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/payment/:token</code>
+                    </div>
+                    <p>Get payment page for a checkout token. Returns an HTML page where patients can complete payment.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Admin API Section -->
+            <section id="admin-api" class="section">
+                <h2>Admin API</h2>
+                <p>Endpoints for dashboard and administrative functions.</p>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/api/auth/signup</code>
+                    </div>
+                    <p>Register a new clinic/provider account.</p>
+
+                    <h4>Request Body</h4>
+                    <pre><code class="language-json">{
+  "name": "Dr. Smith",
+  "email": "dr.smith@example.com",
+  "password": "secure123",
+  "clinic_name": "Smith Clinic",
+  "clinic_phone": "+15555551234"
+}</code></pre>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method post">POST</span>
+                        <code class="endpoint-url">/api/auth/login</code>
+                    </div>
+                    <p>Authenticate and get session token.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/admin/stats</code>
+                    </div>
+                    <p>Get dashboard statistics and analytics.</p>
+                </div>
+            </section>
+
+            <!-- Webhooks Section -->
+            <section id="webhooks" class="section">
+                <h2>Webhooks</h2>
+                <p>Receive real-time events from the platform.</p>
+
+                <h3>Setting Up Webhooks</h3>
+                <p>Configure your webhook URL in your clinic settings. We'll send POST requests to your endpoint when
+                    events occur.</p>
+
+                <h3>Webhook Events</h3>
+                <ul>
+                    <li><code>checkout.completed</code> - Payment successfully processed</li>
+                    <li><code>checkout.failed</code> - Payment failed</li>
+                    <li><code>appointment.created</code> - New appointment scheduled</li>
+                    <li><code>appointment.confirmed</code> - Appointment confirmed</li>
+                    <li><code>patient.created</code> - New patient registered</li>
+                </ul>
+
+                <h3>Webhook Payload Example</h3>
+                <pre><code class="language-json">{
+  "event": "checkout.completed",
+  "timestamp": "2025-11-17T02:00:00Z",
+  "data": {
+    "checkout_id": "checkout_xxx",
+    "amount": 29.99,
+    "customer_phone": "+15555551234",
+    "product_id": "prod_123"
+  }
+}</code></pre>
+
+                <h3>WebSocket for Real-Time Voice</h3>
+                <p>For in-app voice calls via Retell SDK, the WebSocket connection is automatically handled by Retell. Your Retell agent is configured to connect to:</p>
+                <pre><code class="language-javascript">wss://api.doclittle.site/retell-llm</code></pre>
+                <p><strong>Note:</strong> You don't need to manually connect to this WebSocket. When you initialize Retell SDK with your <code>retell_agent_id</code>, Retell automatically routes calls to DocLittle's WebSocket handler.</p>
+            </section>
+
+            <!-- Mobile Integration Section -->
+            <section id="mobile-integration" class="section">
+                <h2>Mobile Integration</h2>
+                <p>Integrate DocLittle voice AI agent into your Flutter, iOS, or Android mobile app using Retell SDK.</p>
+
+                <div class="info-box" style="background: #eff6ff; border-left: 4px solid #2563eb; padding: 16px; margin: 20px 0; border-radius: 8px;">
+                    <h3 style="margin-top: 0; color: #1e40af;">Quick Start</h3>
+                    <ol style="margin-bottom: 0;">
+                        <li>Sign up and get your <code>retell_agent_id</code> from your Profile</li>
+                        <li>Install Retell SDK for Flutter/iOS/Android</li>
+                        <li>Initialize SDK with your agent ID and <code>customer_id</code></li>
+                        <li>Start voice calls - DocLittle handles everything automatically</li>
+                    </ol>
+                </div>
+
+                <h3>Step 1: Get Your Integration Credentials</h3>
+                <p>First, retrieve your Retell Agent ID and Customer ID from your profile:</p>
+                
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/customers/me</code>
+                    </div>
+                    <p>Get your customer profile including Retell Agent ID.</p>
+
+                    <h4>Response</h4>
+                    <pre><code class="language-json">{
+  "success": true,
+  "customer": {
+    "id": "customer_abc123",
+    "email": "your@email.com",
+    "company_name": "Your Company",
+    "retell_agent_id": "agent_xyz789",
+    "retell_agent_status": "active"
+    }
+}</code></pre>
+
+                    <p><strong>Critical Fields:</strong></p>
+                    <ul>
+                        <li><code>customer.id</code> - Your Customer ID (pass in <code>dynamic_variables</code>)</li>
+                        <li><code>retell_agent_id</code> - Your Retell Agent ID (use in SDK initialization)</li>
+                    </ul>
+                </div>
+
+                <h3>Step 2: Flutter Integration (Retell SDK)</h3>
+                <p>Integrate voice AI into your Flutter app:</p>
+
+                <h4>1. Install Retell Flutter SDK</h4>
+                <pre><code class="language-yaml"># pubspec.yaml
+dependencies:
+  retell_sdk: ^latest_version</code></pre>
+
+                <h4>2. Initialize Retell SDK</h4>
+                <pre><code class="language-dart">import 'package:retell_sdk/retell_sdk.dart';
+
+// Get credentials from your profile API
+final customerResponse = await http.get(
+  Uri.parse('https://api.doclittle.site/api/customers/me'),
+  headers: {
+    'Cookie': 'customer_session=your_session_cookie',
+  },
+);
+
+final customer = jsonDecode(customerResponse.body)['customer'];
+final retellAgentId = customer['retell_agent_id'];
+final customerId = customer['id'];
+
+// Initialize Retell SDK
+final retellConfig = RetellConfig(
+  agentId: retellAgentId, // From Step 1
+  dynamicVariables: {
+    'customer_id': customerId, // CRITICAL: Must pass customer_id
+    'patient_id': currentPatient.id, // Optional: Current patient context
+    'context': 'appointment_booking', // Optional: Call context
+  },
+  metadata: {
+    'customer_id': customerId, // Backup: Also in metadata
+    'source': 'flutter_app',
+  },
+);
+
+// Start voice call
+Retell.startCall(config: retellConfig);</code></pre>
+
+                <div class="info-box" style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0; border-radius: 8px;">
+                    <h4 style="margin-top: 0; color: #92400e;">⚠️ Important Requirements</h4>
+                    <ul style="margin-bottom: 0;">
+                        <li><strong>MUST</strong> pass <code>customer_id</code> in <code>dynamic_variables</code> for proper tracking</li>
+                        <li>Use <code>retell_agent_id</code> from your customer profile (each customer gets their own agent)</li>
+                        <li>Voice agent automatically connects to DocLittle WebSocket: <code>wss://api.doclittle.site/retell-llm</code></li>
+                    </ul>
+                </div>
+
+                <h3>Step 3: iOS Integration (Swift)</h3>
+                <p>For iOS apps using Retell iOS SDK:</p>
+
+                <pre><code class="language-swift">import RetellSDK
+
+// Get credentials from your profile API
+let url = URL(string: "https://api.doclittle.site/api/customers/me")!
+var request = URLRequest(url: url)
+request.setValue("customer_session=your_session_cookie", forHTTPHeaderField: "Cookie")
+
+URLSession.shared.dataTask(with: request) { data, response, error in
+    guard let data = data,
+          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let customer = json["customer"] as? [String: Any],
+          let retellAgentId = customer["retell_agent_id"] as? String,
+          let customerId = customer["id"] as? String else {
+        return
+    }
+    
+    // Initialize Retell SDK
+    let config = RetellConfig(
+        agentId: retellAgentId,
+        dynamicVariables: [
+            "customer_id": customerId, // CRITICAL
+            "patient_id": currentPatient.id, // Optional
+            "context": "appointment_booking" // Optional
+        ],
+        metadata: [
+            "customer_id": customerId, // Backup
+            "source": "ios_app"
+        ]
+    )
+    
+    // Start voice call
+    Retell.startCall(config: config)
+}.resume()</code></pre>
+
+                <h3>Step 4: Android Integration (Kotlin)</h3>
+                <p>For Android apps using Retell Android SDK:</p>
+
+                <pre><code class="language-kotlin">import com.retellai.retellsdk.RetellSDK
+import com.retellai.retellsdk.models.RetellConfig
+
+// Get credentials from your profile API
+val url = "https://api.doclittle.site/api/customers/me"
+val client = OkHttpClient()
+val request = Request.Builder()
+    .url(url)
+    .addHeader("Cookie", "customer_session=your_session_cookie")
+    .build()
+
+client.newCall(request).enqueue(object : Callback {
+    override fun onResponse(call: Call, response: Response) {
+        val json = JSONObject(response.body?.string() ?: "")
+        val customer = json.getJSONObject("customer")
+        val retellAgentId = customer.getString("retell_agent_id")
+        val customerId = customer.getString("id")
+        
+        // Initialize Retell SDK
+        val config = RetellConfig(
+            agentId = retellAgentId,
+            dynamicVariables = mapOf(
+                "customer_id" to customerId, // CRITICAL
+                "patient_id" to currentPatient.id, // Optional
+                "context" to "appointment_booking" // Optional
+            ),
+            metadata = mapOf(
+                "customer_id" to customerId, // Backup
+                "source" to "android_app"
+            )
+        )
+        
+        // Start voice call
+        RetellSDK.startCall(context, config)
+    }
+    
+    override fun onFailure(call: Call, e: IOException) {
+        // Handle error
+    }
+})</code></pre>
+
+                <h3>How It Works</h3>
+                <p>When your mobile app initiates a voice call:</p>
+                <ol>
+                    <li><strong>Retell SDK</strong> captures audio and processes speech-to-text</li>
+                    <li><strong>Retell AI</strong> routes the call to DocLittle WebSocket: <code>wss://api.doclittle.site/retell-llm</code></li>
+                    <li><strong>DocLittle WebSocket Handler</strong> extracts <code>customer_id</code> from <code>dynamic_variables</code></li>
+                    <li><strong>Function Calls</strong> are executed based on user intent:
+                        <ul>
+                            <li><code>schedule_appointment</code> → EHR integration</li>
+                            <li><code>collect_insurance</code> → Insurance eligibility checks</li>
+                            <li><code>process_payment</code> → Payment processing</li>
+                            <li><code>get_patient_claims</code> → Insurance claims retrieval</li>
+                        </ul>
+                    </li>
+                    <li><strong>Usage Tracking</strong> automatically tracks voice minutes and deducts from your credits</li>
+                </ol>
+
+                <h3>Available Voice Functions</h3>
+                <p>Your voice agent can perform these healthcare functions:</p>
+                <ul>
+                    <li><strong>Appointment Scheduling</strong> - Schedule, confirm, reschedule, or cancel appointments</li>
+                    <li><strong>Insurance Management</strong> - Collect insurance info, check eligibility, submit claims</li>
+                    <li><strong>Payment Processing</strong> - Process payments via Stripe</li>
+                    <li><strong>Patient Data Access</strong> - Retrieve patient records via EHR integration</li>
+                </ul>
+
+                <h3>Usage Tracking & Billing</h3>
+                <p>Track your usage and view billing information:</p>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/credits/balance</code>
+                    </div>
+                    <p>Get your current credit balance.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/credits/usage</code>
+                    </div>
+                    <p>View your usage history.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/customers/me/invoices</code>
+                    </div>
+                    <p>View your invoice history.</p>
+                </div>
+
+                <div class="info-box" style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; margin: 20px 0; border-radius: 8px;">
+                    <h4 style="margin-top: 0; color: #166534;">💡 Pro Tips</h4>
+                    <ul style="margin-bottom: 0;">
+                        <li>Each customer gets their own Retell agent automatically when they accept terms</li>
+                        <li>Pass <code>patient_id</code> in <code>dynamic_variables</code> for personalized conversations</li>
+                        <li>Voice minutes are automatically deducted from your credit balance</li>
+                        <li>View your profile at <a href="/profile">/profile</a> to manage credits, API keys, and billing</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Code Examples Section -->
+            <section id="code-examples" class="section">
+                <h2>Code Examples</h2>
+
+                <h3>JavaScript/Node.js</h3>
+                <pre><code class="language-javascript">// Search products
+const response = await fetch('https://api.doclittle.site/voice/products/search', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer your-api-key',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    merchant_id: 'your-clinic-id',
+    query: 'vitamin D'
+  })
+});
+
+const data = await response.json();
+console.log(data.products);</code></pre>
+
+                <h3>Python</h3>
+                <pre><code class="language-python">import requests
+
+url = "https://api.doclittle.site/voice/products/search"
+headers = {
+    "Authorization": "Bearer your-api-key",
+    "Content-Type": "application/json"
+}
+data = {
+    "merchant_id": "your-clinic-id",
+    "query": "vitamin D"
+}
+
+response = requests.post(url, json=data, headers=headers)
+products = response.json()["products"]</code></pre>
+
+                <h3>cURL</h3>
+                <pre><code class="language-bash">curl -X POST https://api.doclittle.site/voice/products/search \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "merchant_id": "your-clinic-id",
+    "query": "vitamin D"
+  }'</code></pre>
+            </section>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <p>Need help? Contact us at <a href="mailto:support@doclittle.site">support@doclittle.site</a></p>
+                <p>API Status: <a href="/health" target="_blank">Check Health</a></p>
+            </footer>
+        </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="/docs/js/main.js"></script>
+
+    <script>
+        // Basic user info for header
+        const API_BASE = window.location.origin;
+
+        // Load user info on page load
+        async function loadUserInfo() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/me`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.customer) {
+                        const customer = result.customer;
+                        const userName = customer.name || customer.company_name || 'User';
+
+                        // Update header user name
+                        document.getElementById('header-user-name').textContent = userName;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load user info:', error);
+            }
+        }
+
+        // Sign out functionality
+        async function signOut() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/signout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                // Always redirect to signup page after signout attempt
+                window.location.href = '/';
+            } catch (error) {
+                console.error('Sign out error:', error);
+                // Redirect anyway
+                window.location.href = '/';
+            }
+        }
+
+        // Attach signout handler (only header button, sidebar buttons removed)
+        document.getElementById('header-signout-btn').addEventListener('click', signOut);
+
+        // Load user info on page load
+        loadUserInfo();
+    </script>
+</body>
+
+</html>

@@ -3,8 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medical Coding Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>#1 Medical Voice Assistant</title>
     <style>
         * {
             margin: 0;
@@ -41,6 +41,9 @@
             color: #FFFFFF;
             letter-spacing: -0.5px;
             margin: 0;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            hyphens: auto;
         }
 
         /* Main Content - Logo Section */
@@ -221,65 +224,140 @@
         /* Responsive Design */
         @media (max-width: 768px) {
             .header {
-                padding: 30px 30px;
+                padding: 20px 20px;
+                flex-wrap: wrap;
             }
 
             .header h1 {
-                font-size: 20px;
+                font-size: 18px;
+                line-height: 1.3;
+                flex: 1;
+                min-width: 0;
+                word-break: break-word;
             }
 
             .top-call-button {
-                font-size: 20px;
+                font-size: 18px;
+                padding: 8px 0;
+                min-width: 60px;
             }
 
             .top-call-button::after {
-                font-size: 24px;
-            }
-
-            .logo {
-                font-size: 70px;
-            }
-
-            .footer {
-                padding: 30px 30px;
-            }
-
-            .call-button {
                 font-size: 20px;
             }
 
+            .logo {
+                font-size: 60px;
+                letter-spacing: -4px;
+            }
+
+            .main-content {
+                padding: 20px 15px;
+            }
+
+            .footer {
+                padding: 20px 20px;
+            }
+
+            .call-button {
+                font-size: 18px;
+                padding: 8px 0;
+            }
+
             .call-button::after {
-                font-size: 24px;
+                font-size: 20px;
             }
         }
 
         @media (max-width: 480px) {
             .header {
-                padding: 20px 20px;
+                padding: 15px 15px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
             }
 
             .header h1 {
                 font-size: 16px;
+                width: 100%;
             }
 
             .top-call-button {
+                font-size: 16px;
+                align-self: flex-end;
+                padding: 10px 0;
+            }
+
+            .top-call-button::after {
                 font-size: 18px;
             }
 
             .logo {
-                font-size: 50px;
+                font-size: 48px;
+                letter-spacing: -3px;
+            }
+
+            .logo .doc {
+                font-size: 1em;
+            }
+
+            .logo .little {
+                font-size: 1em;
+            }
+
+            .main-content {
+                padding: 15px 10px;
             }
 
             .footer {
-                padding: 20px 20px;
+                padding: 15px 15px;
             }
 
             .call-button {
-                font-size: 18px;
+                font-size: 16px;
+                padding: 10px 0;
+                min-height: 44px; /* Better touch target */
             }
 
             .call-button::after {
-                font-size: 22px;
+                font-size: 18px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .header {
+                padding: 12px 12px;
+            }
+
+            .header h1 {
+                font-size: 14px;
+                line-height: 1.2;
+            }
+
+            .top-call-button {
+                font-size: 14px;
+            }
+
+            .logo {
+                font-size: 40px;
+                letter-spacing: -2px;
+            }
+
+            .footer {
+                padding: 12px 12px;
+            }
+
+            .call-button {
+                font-size: 14px;
+            }
+        }
+
+        /* Ensure buttons are touch-friendly on mobile */
+        @media (hover: none) and (pointer: coarse) {
+            .top-call-button,
+            .call-button {
+                min-height: 44px;
+                min-width: 44px;
             }
         }
 
@@ -312,9 +390,9 @@
 <body>
     <!-- Header -->
     <header class="header">
-        <h1>Medical Coding Assistant</h1>
-        <button class="top-call-button" onclick="window.location.href='business/pdf-coding.html'">
-            Scan
+        <h1>#1 Medical Voice Assistant</h1>
+        <button class="top-call-button" onclick="initiateCall()">
+            Call
         </button>
     </header>
 
@@ -368,48 +446,59 @@
             modal.innerHTML = `
                 <div style="
                     background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-                    padding: 48px;
+                    padding: 32px 24px;
                     border-radius: 20px;
                     text-align: center;
                     max-width: 500px;
                     width: 90%;
+                    max-width: calc(100vw - 40px);
                     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
                     border: 3px solid rgba(255, 255, 255, 0.3);
+                    box-sizing: border-box;
                 ">
                     <h2 style="
-                        font-size: 28px;
-                        margin-bottom: 24px;
+                        font-size: clamp(20px, 5vw, 28px);
+                        margin-bottom: 16px;
                         color: #FFFFFF;
                         font-weight: 700;
+                        line-height: 1.3;
                     ">Call Our Helpline</h2>
                     <p style="
-                        font-size: 18px;
+                        font-size: clamp(14px, 4vw, 18px);
                         color: rgba(255, 255, 255, 0.9);
-                        margin-bottom: 32px;
+                        margin-bottom: 24px;
+                        line-height: 1.5;
                     ">We're here to support you 24/7</p>
                     <a href="tel:${phoneNumber}" style="
                         display: block;
-                        font-size: 36px;
+                        font-size: clamp(24px, 6vw, 36px);
                         font-weight: 700;
                         color: #FFFFFF;
                         text-decoration: none;
-                        margin-bottom: 32px;
-                        letter-spacing: 1px;
+                        margin-bottom: 24px;
+                        letter-spacing: 0.5px;
                         background: rgba(255, 255, 255, 0.1);
-                        padding: 16px 24px;
+                        padding: 16px 20px;
                         border-radius: 12px;
                         border: 2px solid rgba(255, 255, 255, 0.3);
+                        word-break: break-all;
+                        min-height: 44px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
                     ">${formatPhoneNumber(phoneNumber)}</a>
                     <button onclick="this.parentElement.parentElement.remove()" style="
                         padding: 14px 32px;
                         background: rgba(255, 255, 255, 0.2);
                         border: 2px solid rgba(255, 255, 255, 0.4);
                         border-radius: 10px;
-                        font-size: 16px;
+                        font-size: clamp(14px, 4vw, 16px);
                         font-weight: 600;
                         cursor: pointer;
                         transition: all 0.2s;
                         color: #FFFFFF;
+                        min-height: 44px;
+                        min-width: 100px;
                     " onmouseover="this.style.background='rgba(255, 255, 255, 0.3)'" onmouseout="this.style.background='rgba(255, 255, 255, 0.2)'">Close</button>
                 </div>
             `;

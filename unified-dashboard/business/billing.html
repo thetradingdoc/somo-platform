@@ -105,6 +105,13 @@
             padding: 12px;
             border-radius: 8px;
             background: var(--gray-50);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+            transform: translateY(-1px);
         }
 
         .user-avatar {
@@ -494,13 +501,13 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info">
+                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
                         <div class="user-role">Provider</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
+                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">🚪</button>
                 </div>
             </div>
         </aside>
@@ -518,7 +525,8 @@
                     <div class="patient-list-header">
                         <div class="search-input-wrapper">
                             <span class="search-icon">🔍</span>
-                            <input type="text" id="searchInput" class="search-input" placeholder="Search patients by name, phone, or email..." oninput="filterPatients()">
+                            <input type="text" id="searchInput" class="search-input"
+                                placeholder="Search patients by name, phone, or email..." oninput="filterPatients()">
                         </div>
                     </div>
 
@@ -555,7 +563,7 @@
             <!-- EOB Detail View -->
             <div id="eobDetailView" style="display: none;">
                 <button class="back-btn" onclick="showPatientList()">← Back to Patient List</button>
-                
+
                 <div class="eob-container" id="eobContainer">
                     <div class="empty-state">
                         <div class="empty-state-icon">⏳</div>
@@ -597,11 +605,11 @@
             try {
                 console.log(`Fetching billing data from: ${API_BASE}/api/admin/billing/eob`);
                 const response = await fetch(`${API_BASE}/api/admin/billing/eob`);
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-                
+
                 const data = await response.json();
                 console.log('Billing data received:', data);
 
@@ -679,7 +687,7 @@
 
         function filterPatients() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-            
+
             if (!searchTerm) {
                 displayPatientList(allPatients);
                 return;
@@ -787,13 +795,38 @@
                     </div>
 
                     ${eligibility ? `
-                        <div style="margin-top: 16px; padding: 16px; background: #f8fafc; border-radius: 8px;">
-                            <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Plan Information</div>
-                            <div style="font-size: 13px; color: #64748b;">
+                        <div style="margin-top: 24px; padding: 20px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); border-radius: 12px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <div style="font-size: 18px; font-weight: 700; margin-bottom: 16px; color: white;">📋 Plan Information</div>
+                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: white;">
                                 ${eligibility.plan_summary || 'N/A'}
-                                ${eligibility.deductible_total !== null ? ` · Deductible: $${eligibility.deductible_total.toFixed(2)}` : ''}
-                                ${eligibility.deductible_remaining !== null ? ` (Remaining: $${eligibility.deductible_remaining.toFixed(2)})` : ''}
-                                ${eligibility.coinsurance_percent !== null ? ` · Coinsurance: ${eligibility.coinsurance_percent}%` : ''}
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;">
+                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Deductible (Total)</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: white;">
+                                        ${eligibility.deductible_total !== null && eligibility.deductible_total !== undefined ? `$${eligibility.deductible_total.toFixed(2)}` : 'N/A'}
+                                    </div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Deductible (Remaining)</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: ${eligibility.deductible_remaining === 0 ? '#10b981' : '#fbbf24'};">
+                                        ${eligibility.deductible_remaining !== null && eligibility.deductible_remaining !== undefined ? `$${eligibility.deductible_remaining.toFixed(2)}` : 'N/A'}
+                                    </div>
+                                    ${eligibility.deductible_remaining === 0 ? '<div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">✅ Deductible Met</div>' : ''}
+                                </div>
+                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Copay (Per Visit)</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: white;">
+                                        ${eligibility.copay_amount !== null && eligibility.copay_amount !== undefined ? `$${eligibility.copay_amount.toFixed(2)}` : 'N/A'}
+                                    </div>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
+                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Coinsurance</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: white;">
+                                        ${eligibility.coinsurance_percent !== null && eligibility.coinsurance_percent !== undefined ? `${eligibility.coinsurance_percent}%` : 'N/A'}
+                                    </div>
+                                    ${eligibility.coinsurance_percent ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">You pay ${eligibility.coinsurance_percent}% after deductible</div>` : ''}
+                                </div>
                             </div>
                         </div>
                     ` : ''}
@@ -822,18 +855,18 @@
                         <table class="eob-table">
                             <thead>
                                 <tr>
-                                    <th>A. Date of Service</th>
-                                    <th>B. Type of Service</th>
-                                    <th>C. Amount Billed</th>
-                                    <th>D. Allowed Amount</th>
-                                    <th>E. Your Plan Paid</th>
-                                    <th>F. Other Insurance Paid</th>
-                                    <th>G. Copay</th>
-                                    <th>H. Coinsurance</th>
-                                    <th>I. Deductible</th>
-                                    <th>J. Amount Not Covered</th>
-                                    <th>K. What You Owe</th>
-                                    <th>L. Claim Detail</th>
+                                    <th>Date of Service</th>
+                                    <th>Type of Service</th>
+                                    <th>Amount Billed</th>
+                                    <th>Allowed Amount</th>
+                                    <th>Your Plan Paid</th>
+                                    <th>Other Insurance Paid</th>
+                                    <th>Copay</th>
+                                    <th>Coinsurance</th>
+                                    <th>Deductible</th>
+                                    <th>Amount Not Covered</th>
+                                    <th>What You Owe</th>
+                                    <th>Claim Detail</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -898,4 +931,3 @@
 </body>
 
 </html>
-

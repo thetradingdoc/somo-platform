@@ -1,5 +1,45 @@
 const Database = require('better-sqlite3');
-const db = new Database('middleware.db');
+const path = require('path');
+const fs = require('fs');
+const { hashApiKey } = require('./utils/api-keys');
+
+// Use Azure's writable directory (/home) if available, otherwise use current directory
+// Azure App Service uses /home for writable files
+const dbDir = process.env.HOME || '/home' || __dirname;
+
+// Environment-based database naming to separate production and test/dev data
+// Production: middleware-prod.db
+// Development: middleware-dev.db
+// Test: middleware-test.db (if NODE_ENV=test)
+const env = process.env.NODE_ENV || 'development';
+let dbFileName = 'middleware.db'; // Default fallback
+
+if (env === 'production' || env === 'prod') {
+  dbFileName = 'middleware-prod.db';
+} else if (env === 'test') {
+  dbFileName = 'middleware-test.db';
+} else {
+  dbFileName = 'middleware-dev.db';
+}
+
+// Allow override via DB_NAME environment variable
+if (process.env.DB_NAME) {
+  dbFileName = process.env.DB_NAME;
+}
+
+const dbPath = path.join(dbDir, dbFileName);
+console.log(`📁 Database path: ${dbPath} (environment: ${env})`);
+
+// Ensure directory exists
+try {
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+} catch (e) {
+  console.warn('⚠️  Could not create db directory, using current directory');
+}
+
+const db = new Database(dbPath);
 
 // Disable foreign key constraints during migrations (they can cause issues with ALTER TABLE)
 db.pragma('foreign_keys = OFF');
@@ -16,6 +56,25 @@ db.exec(`
     status TEXT DEFAULT 'active',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS merchant_api_keys (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    key_prefix TEXT NOT NULL,
+    key_suffix TEXT NOT NULL,
+    label TEXT,
+    status TEXT DEFAULT 'active',
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_used_at DATETIME,
+    revoked_at DATETIME,
+    revoked_by TEXT,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_merchant_api_keys_merchant ON merchant_api_keys(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_merchant_api_keys_status ON merchant_api_keys(status);
 
   CREATE TABLE IF NOT EXISTS product_sync (
     id TEXT PRIMARY KEY,
@@ -178,6 +237,19 @@ db.exec(`
     UNIQUE(type, value)
   );
 
+  CREATE TABLE IF NOT EXISTS fraud_attempts (
+    id TEXT PRIMARY KEY,
+    call_id TEXT,
+    patient_phone TEXT,
+    initial_name TEXT,
+    provided_name TEXT,
+    member_id TEXT,
+    fraud_type TEXT NOT NULL,
+    risk_score INTEGER NOT NULL,
+    blocked BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS agent_stats (
     platform TEXT PRIMARY KEY,
     total_transactions INTEGER DEFAULT 0,
@@ -212,6 +284,11 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  -- Add unique constraint on phone (when not deleted and phone is not null)
+  -- Note: SQLite doesn't support partial unique indexes directly, so we'll enforce this at application level
+  -- Create index for fast phone lookups
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_fhir_patients_phone_active ON fhir_patients(phone) WHERE phone IS NOT NULL AND is_deleted = 0;
 
   CREATE TABLE IF NOT EXISTS fhir_encounters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -466,6 +543,173 @@ try {
   console.warn('⚠️  Appointments EHR migration failed:', migrationError.message);
 }
 
+// Migration: Add Google calendar fields to users table
+try {
+  const usersInfo = db.prepare(`PRAGMA table_info(users)`).all();
+  const addColumnIfMissing = (columnName, sql) => {
+    if (!usersInfo.some(c => c.name === columnName)) {
+      console.log(`📦 Adding ${columnName} column to users table...`);
+      db.exec(sql);
+    }
+  };
+
+  addColumnIfMissing('google_calendar_connected', `ALTER TABLE users ADD COLUMN google_calendar_connected BOOLEAN DEFAULT 0;`);
+  addColumnIfMissing('google_calendar_email', `ALTER TABLE users ADD COLUMN google_calendar_email TEXT;`);
+  addColumnIfMissing('google_calendar_id', `ALTER TABLE users ADD COLUMN google_calendar_id TEXT;`);
+  addColumnIfMissing('google_calendar_name', `ALTER TABLE users ADD COLUMN google_calendar_name TEXT;`);
+  addColumnIfMissing('google_calendar_timezone', `ALTER TABLE users ADD COLUMN google_calendar_timezone TEXT;`);
+  addColumnIfMissing('google_refresh_token', `ALTER TABLE users ADD COLUMN google_refresh_token TEXT;`);
+  addColumnIfMissing('google_access_token', `ALTER TABLE users ADD COLUMN google_access_token TEXT;`);
+  addColumnIfMissing('google_token_expiry', `ALTER TABLE users ADD COLUMN google_token_expiry INTEGER;`);
+  addColumnIfMissing('google_calendar_scopes', `ALTER TABLE users ADD COLUMN google_calendar_scopes TEXT;`);
+  addColumnIfMissing('google_calendar_sync_at', `ALTER TABLE users ADD COLUMN google_calendar_sync_at DATETIME;`);
+  addColumnIfMissing('google_calendar_last_error', `ALTER TABLE users ADD COLUMN google_calendar_last_error TEXT;`);
+
+  console.log('✅ Migration complete: Google Calendar columns ensured on users');
+} catch (migrationError) {
+  console.warn('⚠️  Users Google Calendar migration failed:', migrationError.message);
+}
+
+// ============================================
+// MULTI-TENANT: CLINICS AND PHONE NUMBERS
+// ============================================
+
+// Create clinics table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS clinics (
+    clinic_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    phone_number TEXT,
+    email TEXT,
+    address TEXT,
+    business_hours TEXT,
+    services TEXT,
+    retell_agent_id TEXT,
+    retell_agent_status TEXT DEFAULT 'pending',
+    merchant_id TEXT,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS clinic_phone_numbers (
+    phone_number TEXT PRIMARY KEY,
+    clinic_id TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_clinics_slug ON clinics(slug);
+  CREATE INDEX IF NOT EXISTS idx_clinics_phone ON clinics(phone_number);
+  CREATE INDEX IF NOT EXISTS idx_clinic_phone_numbers_clinic ON clinic_phone_numbers(clinic_id);
+  CREATE INDEX IF NOT EXISTS idx_clinic_phone_numbers_phone ON clinic_phone_numbers(phone_number);
+
+  -- ============================================
+  -- STRIPE ISSUING: CARDHOLDERS AND CARDS
+  -- ============================================
+
+  CREATE TABLE IF NOT EXISTS stripe_cardholders (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL,
+    clinic_id TEXT,
+    stripe_cardholder_id TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL DEFAULT 'individual',
+    name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    billing_address TEXT,
+    status TEXT DEFAULT 'active',
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS stripe_cards (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL,
+    clinic_id TEXT,
+    cardholder_id TEXT NOT NULL,
+    stripe_card_id TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL DEFAULT 'virtual',
+    currency TEXT DEFAULT 'usd',
+    status TEXT DEFAULT 'active',
+    last4 TEXT,
+    brand TEXT,
+    expiry_month INTEGER,
+    expiry_year INTEGER,
+    spending_controls TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(id),
+    FOREIGN KEY (cardholder_id) REFERENCES stripe_cardholders(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS stripe_card_transactions (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL,
+    patient_id TEXT NOT NULL,
+    clinic_id TEXT,
+    stripe_transaction_id TEXT UNIQUE NOT NULL,
+    amount INTEGER NOT NULL,
+    currency TEXT DEFAULT 'usd',
+    merchant_name TEXT,
+    merchant_category TEXT,
+    status TEXT,
+    authorization_code TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (card_id) REFERENCES stripe_cards(id),
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_stripe_cardholders_patient ON stripe_cardholders(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_cardholders_clinic ON stripe_cardholders(clinic_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_cardholders_stripe_id ON stripe_cardholders(stripe_cardholder_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_cards_patient ON stripe_cards(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_cards_clinic ON stripe_cards(clinic_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_cards_cardholder ON stripe_cards(cardholder_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_cards_stripe_id ON stripe_cards(stripe_card_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_card_transactions_card ON stripe_card_transactions(card_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_card_transactions_patient ON stripe_card_transactions(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_stripe_card_transactions_clinic ON stripe_card_transactions(clinic_id);
+`);
+
+// Add clinic_id to users table (multi-tenant migration)
+try {
+  const usersInfo = db.pragma('table_info(users)');
+  const hasClinicId = usersInfo.some(c => c.name === 'clinic_id');
+  if (!hasClinicId) {
+    console.log('📦 Adding clinic_id column to users table...');
+    db.exec('ALTER TABLE users ADD COLUMN clinic_id TEXT;');
+    console.log('✅ Migration complete: clinic_id added to users');
+  }
+} catch (migrationError) {
+  console.warn('⚠️  Users clinic_id migration failed:', migrationError.message);
+}
+
+// Add clinic_id to existing tables (multi-tenant migration)
+const tablesToMigrate = ['fhir_patients', 'eligibility_checks', 'insurance_claims'];
+tablesToMigrate.forEach(tableName => {
+  try {
+    const tableInfo = db.pragma(`table_info(${tableName})`);
+    const hasClinicId = tableInfo.some(c => c.name === 'clinic_id');
+    if (!hasClinicId) {
+      console.log(`📦 Adding clinic_id column to ${tableName} table...`);
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN clinic_id TEXT;`);
+      console.log(`✅ Migration complete: clinic_id added to ${tableName}`);
+    }
+  } catch (migrationError) {
+    console.warn(`⚠️  ${tableName} clinic_id migration failed:`, migrationError.message);
+  }
+});
+
 // Continue with remaining table creation
 db.exec(`
   -- ============================================
@@ -481,6 +725,17 @@ db.exec(`
     picture TEXT,
     auth_method TEXT DEFAULT 'email',
     google_id TEXT,
+    google_calendar_connected BOOLEAN DEFAULT 0,
+    google_calendar_email TEXT,
+    google_calendar_id TEXT,
+    google_calendar_name TEXT,
+    google_calendar_timezone TEXT,
+    google_refresh_token TEXT,
+    google_access_token TEXT,
+    google_token_expiry INTEGER,
+    google_calendar_scopes TEXT,
+    google_calendar_sync_at DATETIME,
+    google_calendar_last_error TEXT,
     is_active BOOLEAN DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -490,8 +745,42 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
   CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 
+  -- ============================================
+  -- CLINICS TABLE (Multi-Tenant)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS clinics (
+    clinic_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    phone_number TEXT,
+    email TEXT,
+    address TEXT,
+    business_hours TEXT,
+    services TEXT,
+    retell_agent_id TEXT,
+    retell_agent_status TEXT DEFAULT 'pending',
+    merchant_id TEXT,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS clinic_phone_numbers (
+    phone_number TEXT PRIMARY KEY,
+    clinic_id TEXT NOT NULL,
+    is_primary BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_clinics_slug ON clinics(slug);
+  CREATE INDEX IF NOT EXISTS idx_clinics_phone ON clinics(phone_number);
+  CREATE INDEX IF NOT EXISTS idx_clinic_phone_numbers_clinic_id ON clinic_phone_numbers(clinic_id);
+  CREATE INDEX IF NOT EXISTS idx_clinic_phone_numbers_phone ON clinic_phone_numbers(phone_number);
+
   CREATE TABLE IF NOT EXISTS appointments (
     id TEXT PRIMARY KEY,
+    clinic_id TEXT,
     patient_name TEXT NOT NULL,
     patient_phone TEXT,
     patient_email TEXT,
@@ -650,7 +939,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS patient_portal_sessions (
     id TEXT PRIMARY KEY,
     patient_id TEXT,
-    phone TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
     verification_code TEXT,
     verified BOOLEAN DEFAULT 0,
     verified_at DATETIME,
@@ -661,6 +951,7 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_portal_sessions_phone ON patient_portal_sessions(phone);
   CREATE INDEX IF NOT EXISTS idx_portal_sessions_verified ON patient_portal_sessions(verified);
+  -- Note: email index will be created in migration if column is added
 
   CREATE TABLE IF NOT EXISTS cpt_codes (
     code TEXT PRIMARY KEY,
@@ -673,6 +964,281 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_cpt_codes_description ON cpt_codes(description);
+
+  -- ============================================
+  -- USAGE TRACKING & LOGGING TABLES
+  -- ============================================
+
+  CREATE TABLE IF NOT EXISTS api_usage_log (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT,
+    api_key_id TEXT,
+    endpoint TEXT NOT NULL,
+    method TEXT NOT NULL,
+    status_code INTEGER,
+    response_time_ms INTEGER,
+    request_size_bytes INTEGER,
+    response_size_bytes INTEGER,
+    ip_address TEXT,
+    user_agent TEXT,
+    request_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS voice_call_log (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT,
+    call_id TEXT NOT NULL,
+    twilio_call_sid TEXT,
+    call_duration_seconds INTEGER,
+    call_duration_minutes REAL,
+    credits_deducted INTEGER DEFAULT 0,
+    function_calls_count INTEGER,
+    status TEXT,
+    twilio_cost_usd REAL,
+    retell_cost_usd REAL,
+    total_cost_usd REAL,
+    twilio_cost_calculated_usd REAL,
+    retell_cost_calculated_usd REAL,
+    cost_source TEXT,
+    cost_updated_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS function_call_log (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT,
+    call_id TEXT,
+    function_name TEXT NOT NULL,
+    parameters TEXT,
+    response_time_ms INTEGER,
+    success BOOLEAN,
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS usage_aggregates (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    date DATE NOT NULL,
+    metric_type TEXT NOT NULL,
+    metric_value INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(customer_id, date, metric_type)
+  );
+
+  CREATE TABLE IF NOT EXISTS error_log (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT,
+    error_type TEXT NOT NULL,
+    error_message TEXT NOT NULL,
+    stack_trace TEXT,
+    request_id TEXT,
+    endpoint TEXT,
+    context TEXT,
+    severity TEXT DEFAULT 'medium',
+    resolved BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS customers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    phone_number TEXT,
+    company_name TEXT,
+    business_size TEXT,
+    use_case TEXT,
+    api_features TEXT,
+    email_verified BOOLEAN DEFAULT 0,
+    email_verified_at DATETIME,
+    plan_tier TEXT DEFAULT 'starter',
+    status TEXT DEFAULT 'pending',
+    retell_agent_id TEXT,
+    retell_agent_status TEXT DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS customer_feature_requests (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    feature_name TEXT NOT NULL,
+    feature_category TEXT,
+    status TEXT DEFAULT 'pending',
+    requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    approved_at DATETIME,
+    notes TEXT,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_customer_feature_requests_customer ON customer_feature_requests(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_feature_requests_status ON customer_feature_requests(status);
+
+  CREATE TABLE IF NOT EXISTS email_verification_codes (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    code TEXT NOT NULL,
+    customer_id TEXT,
+    verified BOOLEAN DEFAULT 0,
+    verified_at DATETIME,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS terms_acceptance (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    terms_version TEXT NOT NULL DEFAULT '1.0',
+    ip_address TEXT,
+    user_agent TEXT,
+    accepted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS customer_sessions (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_accessed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ip_address TEXT,
+    user_agent TEXT,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    key_prefix TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    key_secret TEXT,
+    scopes TEXT,
+    rate_limit_tier TEXT DEFAULT 'starter',
+    ip_whitelist TEXT,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    last_used_at DATETIME,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_api_usage_log_customer ON api_usage_log(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_api_usage_log_endpoint ON api_usage_log(endpoint);
+  CREATE INDEX IF NOT EXISTS idx_api_usage_log_created_at ON api_usage_log(created_at);
+  CREATE INDEX IF NOT EXISTS idx_voice_call_log_customer ON voice_call_log(customer_id);
+  -- Note: idx_voice_call_log_twilio_sid and idx_voice_call_log_created_at are created in migrateVoiceCallLogCosts()
+  CREATE INDEX IF NOT EXISTS idx_function_call_log_customer ON function_call_log(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_function_call_log_function ON function_call_log(function_name);
+  CREATE INDEX IF NOT EXISTS idx_usage_aggregates_customer ON usage_aggregates(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_usage_aggregates_date ON usage_aggregates(date);
+  CREATE INDEX IF NOT EXISTS idx_error_log_customer ON error_log(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_error_log_severity ON error_log(severity);
+  CREATE INDEX IF NOT EXISTS idx_error_log_resolved ON error_log(resolved);
+  CREATE INDEX IF NOT EXISTS idx_error_log_created_at ON error_log(created_at);
+  CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+  CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
+  CREATE INDEX IF NOT EXISTS idx_email_verification_codes_email ON email_verification_codes(email);
+  CREATE INDEX IF NOT EXISTS idx_email_verification_codes_code ON email_verification_codes(code);
+  CREATE INDEX IF NOT EXISTS idx_email_verification_codes_customer ON email_verification_codes(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_terms_acceptance_customer ON terms_acceptance(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_sessions_customer ON customer_sessions(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_sessions_expires ON customer_sessions(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_api_keys_customer ON api_keys(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
+  
+  -- ============================================
+  -- CUSTOMER CREDITS & BILLING TABLES
+  -- ============================================
+  
+  CREATE TABLE IF NOT EXISTS customer_credits (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL UNIQUE,
+    credits_balance_minutes INTEGER DEFAULT 0,
+    free_credits_allocated INTEGER DEFAULT 0,
+    free_credits_used INTEGER DEFAULT 0,
+    paid_credits_purchased INTEGER DEFAULT 0,
+    paid_credits_used INTEGER DEFAULT 0,
+    last_replenished_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+  
+  CREATE TABLE IF NOT EXISTS credit_purchases (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    package_name TEXT NOT NULL,
+    credits_amount INTEGER NOT NULL,
+    amount_paid REAL NOT NULL,
+    stripe_payment_intent_id TEXT,
+    stripe_checkout_session_id TEXT,
+    stripe_payment_method_id TEXT,
+    status TEXT DEFAULT 'pending',
+    purchased_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS monthly_usage (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    billing_month TEXT NOT NULL,
+    voice_minutes_used INTEGER DEFAULT 0,
+    api_requests_used INTEGER DEFAULT 0,
+    free_credits_used INTEGER DEFAULT 0,
+    overage_voice_minutes INTEGER DEFAULT 0,
+    overage_api_requests INTEGER DEFAULT 0,
+    invoice_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    UNIQUE(customer_id, billing_month)
+  );
+
+  CREATE TABLE IF NOT EXISTS monthly_invoices (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    billing_month TEXT NOT NULL,
+    invoice_number TEXT UNIQUE NOT NULL,
+    voice_minutes INTEGER DEFAULT 0,
+    api_requests INTEGER DEFAULT 0,
+    voice_minutes_cost REAL DEFAULT 0,
+    api_requests_cost REAL DEFAULT 0,
+    base_costs REAL DEFAULT 0,
+    integration_costs REAL DEFAULT 0,
+    markup_percentage REAL DEFAULT 0,
+    markup_amount REAL DEFAULT 0,
+    subtotal REAL DEFAULT 0,
+    total REAL DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+    approved_by TEXT,
+    approved_at DATETIME,
+    sent_at DATETIME,
+    stripe_invoice_id TEXT,
+    stripe_payment_intent_id TEXT,
+    due_date DATETIME NOT NULL,
+    paid_at DATETIME,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_customer_credits_customer ON customer_credits(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_credit_purchases_customer ON credit_purchases(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_credit_purchases_status ON credit_purchases(status);
+  CREATE INDEX IF NOT EXISTS idx_customers_retell_agent ON customers(retell_agent_id);
+  CREATE INDEX IF NOT EXISTS idx_monthly_usage_customer ON monthly_usage(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_monthly_usage_billing_month ON monthly_usage(billing_month);
+  CREATE INDEX IF NOT EXISTS idx_monthly_invoices_customer ON monthly_invoices(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_monthly_invoices_billing_month ON monthly_invoices(billing_month);
+  CREATE INDEX IF NOT EXISTS idx_monthly_invoices_status ON monthly_invoices(status);
 `);
 
 // Re-enable foreign keys after table creation
@@ -686,7 +1252,7 @@ function migrateInsuranceClaimsTable() {
   try {
     // Temporarily disable foreign keys for migration
     db.pragma('foreign_keys = OFF');
-    
+
     // Get table info to check existing columns
     const tableInfo = db.prepare("PRAGMA table_info(insurance_claims)").all();
     const columnNames = tableInfo.map(col => col.name);
@@ -708,19 +1274,126 @@ function migrateInsuranceClaimsTable() {
       console.log('🔄 Migrating: Adding payment_amount column to insurance_claims table');
       db.prepare("ALTER TABLE insurance_claims ADD COLUMN payment_amount REAL").run();
     }
-    
+
     // Re-enable foreign keys after migration
     db.pragma('foreign_keys = ON');
   } catch (error) {
-    console.error('❌ Error during insurance_claims table migration:', error);
+    console.warn('⚠️  Insurance claims migration failed:', error.message);
     // Re-enable foreign keys even if migration fails
     db.pragma('foreign_keys = ON');
-    // Don't throw - allow the app to continue even if migration fails
   }
 }
 
-// Run migration on startup
+// Migration: Add email column to patient_portal_sessions if it doesn't exist
+function migratePatientPortalSessionsEmail() {
+  try {
+    // Temporarily disable foreign keys for migration
+    db.pragma('foreign_keys = OFF');
+
+    const portalSessionsInfo = db.prepare(`PRAGMA table_info(patient_portal_sessions)`).all();
+    const hasEmail = portalSessionsInfo.some(col => col.name === 'email');
+
+    if (!hasEmail) {
+      console.log('📦 Adding email column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN email TEXT;`);
+      // Create index for email column
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_portal_sessions_email ON patient_portal_sessions(email);`);
+      console.log('✅ Migration complete: email column added to patient_portal_sessions');
+    } else {
+      // Ensure index exists even if column already exists
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_portal_sessions_email ON patient_portal_sessions(email);`);
+    }
+
+    // Re-enable foreign keys after migration
+    db.pragma('foreign_keys = ON');
+  } catch (migrationError) {
+    console.warn('⚠️  Patient portal sessions email migration failed:', migrationError.message);
+    // Re-enable foreign keys even if migration fails
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add missing columns to customers table
+function migrateCustomersTable() {
+  try {
+    db.pragma('foreign_keys = OFF');
+    const tableInfo = db.prepare("PRAGMA table_info(customers)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    const newColumns = {
+      phone_number: 'TEXT',
+      business_size: 'TEXT',
+      use_case: 'TEXT',
+      api_features: 'TEXT',
+      email_verified: 'BOOLEAN DEFAULT 0',
+      email_verified_at: 'DATETIME',
+      updated_at: 'DATETIME DEFAULT CURRENT_TIMESTAMP',
+      retell_agent_id: 'TEXT',
+      retell_agent_status: "TEXT DEFAULT 'pending'",
+      stripe_payment_method_id: 'TEXT',
+      card_last4: 'TEXT',
+      card_brand: 'TEXT',
+      card_verified: 'BOOLEAN DEFAULT 0',
+      card_verified_at: 'DATETIME'
+    };
+
+    Object.keys(newColumns).forEach(colName => {
+      if (!columnNames.includes(colName)) {
+        console.log(`📦 Adding ${colName} column to customers table...`);
+        db.prepare(`ALTER TABLE customers ADD COLUMN ${colName} ${newColumns[colName]}`).run();
+      }
+    });
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: customers table updated');
+  } catch (migrationError) {
+    console.warn('⚠️  Customers table migration failed:', migrationError.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// ============================================
+// MIGRATION: Add cost columns to voice_call_log
+// ============================================
+function migrateVoiceCallLogCosts() {
+  try {
+    const voiceCallLogColumns = db.pragma('table_info(voice_call_log)');
+    const columnNames = voiceCallLogColumns.map(col => col.name);
+    
+    const costColumns = {
+      'twilio_call_sid': 'TEXT',
+      'twilio_cost_usd': 'REAL',
+      'retell_cost_usd': 'REAL',
+      'total_cost_usd': 'REAL',
+      'twilio_cost_calculated_usd': 'REAL',
+      'retell_cost_calculated_usd': 'REAL',
+      'cost_source': 'TEXT',
+      'cost_updated_at': 'DATETIME'
+    };
+
+    Object.keys(costColumns).forEach(colName => {
+      if (!columnNames.includes(colName)) {
+        console.log(`📦 Adding ${colName} column to voice_call_log table...`);
+        db.exec(`ALTER TABLE voice_call_log ADD COLUMN ${colName} ${costColumns[colName]};`);
+        console.log(`✅ Migration complete: ${colName} column added`);
+      }
+    });
+
+    // Create indexes for cost tracking
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_call_log_twilio_sid ON voice_call_log(twilio_call_sid);`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_call_log_created_at ON voice_call_log(created_at);`);
+    
+    console.log('✅ Migration complete: voice_call_log cost columns ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  voice_call_log cost columns migration failed:', migrationError.message);
+  }
+}
+
+// Run migrations on startup
 migrateInsuranceClaimsTable();
+migratePatientPortalSessionsEmail();
+migrateCustomersTable();
+migrateVoiceCallLogCosts();
 
 /**
  * Helper to safely stringify data
@@ -733,6 +1406,9 @@ function safeStringify(data) {
 
 
 module.exports = {
+  // Expose the database instance for direct access when needed
+  db: db,
+
   // ============================================
   // MERCHANTS
   // ============================================
@@ -753,10 +1429,100 @@ module.exports = {
   getMerchant: (id) => db.prepare('SELECT * FROM merchants WHERE id = ?').get(id),
 
   getMerchantByApiKey: (apiKey) => {
-    return db.prepare('SELECT * FROM merchants WHERE api_key = ?').get(apiKey);
+    const directMatch = db.prepare('SELECT * FROM merchants WHERE api_key = ?').get(apiKey);
+    if (directMatch) {
+      return directMatch;
+    }
+
+    if (!apiKey) {
+      return null;
+    }
+
+    const keyHash = hashApiKey(apiKey);
+    const merchantApiKey = db.prepare(`
+      SELECT * FROM merchant_api_keys 
+      WHERE key_hash = ? AND status = 'active'
+    `).get(keyHash);
+
+    if (merchantApiKey) {
+      const merchant = db.getMerchant(merchantApiKey.merchant_id);
+      if (merchant) {
+        merchant.api_key_id = merchantApiKey.id;
+        return merchant;
+      }
+    }
+
+    return null;
   },
 
   getAllMerchants: () => db.prepare('SELECT * FROM merchants').all(),
+
+  createMerchantApiKey: (record) => {
+    return db.prepare(`
+      INSERT INTO merchant_api_keys (
+        id, merchant_id, key_hash, key_prefix, key_suffix, label,
+        status, created_by, revoked_at, revoked_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      record.id,
+      record.merchant_id,
+      record.key_hash,
+      record.key_prefix,
+      record.key_suffix,
+      record.label || null,
+      record.status || 'active',
+      record.created_by || 'system',
+      record.revoked_at || null,
+      record.revoked_by || null
+    );
+  },
+
+  getMerchantApiKeys: (merchantId) => {
+    return db.prepare(`
+      SELECT * FROM merchant_api_keys
+      WHERE merchant_id = ?
+      ORDER BY created_at DESC
+    `).all(merchantId);
+  },
+
+  getMerchantApiKey: (id) => {
+    return db.prepare('SELECT * FROM merchant_api_keys WHERE id = ?').get(id);
+  },
+
+  getActiveMerchantApiKeyByHash: (keyHash) => {
+    return db.prepare(`
+      SELECT * FROM merchant_api_keys
+      WHERE key_hash = ? AND status = 'active'
+    `).get(keyHash);
+  },
+
+  markMerchantApiKeyUsed: (id) => {
+    return db.prepare(`
+      UPDATE merchant_api_keys
+      SET last_used_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(id);
+  },
+
+  revokeMerchantApiKey: (id, revokedBy = 'system') => {
+    return db.prepare(`
+      UPDATE merchant_api_keys
+      SET status = 'revoked',
+          revoked_at = CURRENT_TIMESTAMP,
+          revoked_by = ?
+      WHERE id = ? AND status = 'active'
+    `).run(revokedBy, id);
+  },
+
+  revokeAllMerchantApiKeys: (merchantId, revokedBy = 'system') => {
+    return db.prepare(`
+      UPDATE merchant_api_keys
+      SET status = 'revoked',
+          revoked_at = CURRENT_TIMESTAMP,
+          revoked_by = ?
+      WHERE merchant_id = ? AND status = 'active'
+    `).run(revokedBy, merchantId);
+  },
 
   // ============================================
   // PRODUCT SYNC
@@ -1336,26 +2102,76 @@ module.exports = {
   // ==========================================
 
   // Create FHIR Patient
+  // RULE: Each patient must have a unique phone number (when phone is provided and not deleted)
   createFHIRPatient(patientResource) {
-    const stmt = db.prepare(`
-      INSERT INTO fhir_patients (
-        resource_id, resource_data, phone, email, name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `);
-
     const phone = patientResource.telecom?.find(t => t.system === 'phone')?.value;
     const email = patientResource.telecom?.find(t => t.system === 'email')?.value;
     const name = patientResource.name?.[0]
       ? `${patientResource.name[0].given?.join(' ')} ${patientResource.name[0].family}`.trim()
       : null;
 
-    return stmt.run(
-      patientResource.id,
-      JSON.stringify(patientResource),
-      phone,
-      email,
-      name
-    );
+    // RULE ENFORCEMENT: Check for duplicate phone number (phone is unique identifier)
+    if (phone) {
+      const existingPatient = db.prepare(`
+        SELECT resource_id, name, phone FROM fhir_patients 
+        WHERE phone = ? AND is_deleted = 0 
+        LIMIT 1
+      `).get(phone);
+
+      if (existingPatient) {
+        throw new Error(`Patient with phone number ${phone} already exists (Patient ID: ${existingPatient.resource_id}, Name: ${existingPatient.name || 'Unknown'}). Each patient must have a unique phone number.`);
+      }
+    }
+
+    // CRITICAL: Verify patient ID doesn't already exist (defensive check)
+    // Even though UUID v4 is unique, this provides additional safety
+    const existingById = db.prepare(`
+      SELECT resource_id, name, phone FROM fhir_patients 
+      WHERE resource_id = ? AND is_deleted = 0 
+      LIMIT 1
+    `).get(patientResource.id);
+
+    if (existingById) {
+      throw new Error(`Patient with ID ${patientResource.id} already exists (Name: ${existingById.name || 'Unknown'}, Phone: ${existingById.phone || 'N/A'}). Patient IDs must be unique.`);
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO fhir_patients (
+        resource_id, resource_data, phone, email, name, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+
+    try {
+      return stmt.run(
+        patientResource.id,
+        JSON.stringify(patientResource),
+        phone,
+        email,
+        name
+      );
+    } catch (error) {
+      // Check if error is due to unique constraint violation
+      if (error.message && error.message.includes('UNIQUE constraint failed')) {
+        if (phone && error.message.includes('phone')) {
+          throw new Error(`Patient with phone number ${phone} already exists. Each patient must have a unique phone number.`);
+        }
+        if (error.message.includes('resource_id')) {
+          // If we get here, it means the defensive check above didn't catch it (race condition)
+          // Try to get the existing patient
+          const existingPatient = db.prepare(`
+            SELECT resource_id, name, phone FROM fhir_patients 
+            WHERE resource_id = ? 
+            LIMIT 1
+          `).get(patientResource.id);
+
+          if (existingPatient) {
+            throw new Error(`Patient with ID ${patientResource.id} already exists (Name: ${existingPatient.name || 'Unknown'}, Phone: ${existingPatient.phone || 'N/A'}). Patient IDs must be unique.`);
+          }
+          throw new Error(`Patient with ID ${patientResource.id} already exists. Patient IDs must be unique.`);
+        }
+      }
+      throw error;
+    }
   },
 
   // Get FHIR Patient by ID
@@ -1700,8 +2516,8 @@ module.exports = {
   createUser(user) {
     const stmt = db.prepare(`
       INSERT INTO users (
-        id, email, password_hash, name, role, merchant_id, picture, auth_method, google_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, email, password_hash, name, role, merchant_id, picture, auth_method, google_id, clinic_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     return stmt.run(
@@ -1713,7 +2529,8 @@ module.exports = {
       user.merchant_id || null,
       user.picture || null,
       user.auth_method || 'email',
-      user.google_id || null
+      user.google_id || null,
+      user.clinic_id || null
     );
   },
 
@@ -1729,10 +2546,428 @@ module.exports = {
     return stmt.get(id);
   },
 
+  // ============================================
+  // CLINICS (MULTI-TENANT)
+  // ============================================
+
+  // Create clinic
+  createClinic(clinic) {
+    const stmt = db.prepare(`
+      INSERT INTO clinics (
+        clinic_id, name, slug, phone_number, email, retell_agent_id, retell_agent_status,
+        merchant_id, address, business_hours, services, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      clinic.clinic_id,
+      clinic.name,
+      clinic.slug,
+      clinic.phone_number || null,
+      clinic.email || null,
+      clinic.retell_agent_id || null,
+      clinic.retell_agent_status || 'pending',
+      clinic.merchant_id || null,
+      clinic.address || null,
+      clinic.business_hours || null,
+      clinic.services || null,
+      clinic.is_active !== undefined ? clinic.is_active : 1
+    );
+  },
+
+  // Get clinic by ID
+  getClinicById(id) {
+    const stmt = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?');
+    return stmt.get(id);
+  },
+
+  // Get clinic by slug
+  getClinicBySlug(slug) {
+    const stmt = db.prepare('SELECT * FROM clinics WHERE slug = ?');
+    return stmt.get(slug);
+  },
+
+  // Get clinic by phone number
+  getClinicByPhoneNumber(phoneNumber) {
+    const stmt = db.prepare('SELECT * FROM clinics WHERE phone_number = ? AND is_active = 1');
+    return stmt.get(phoneNumber);
+  },
+
+  // Update clinic
+  updateClinic(id, updates) {
+    const fields = [];
+    const values = [];
+
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    });
+
+    if (fields.length === 0) return null;
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const stmt = db.prepare(`UPDATE clinics SET ${fields.join(', ')} WHERE clinic_id = ?`);
+    return stmt.run(...values);
+  },
+
+  // Create clinic phone number
+  createClinicPhoneNumber(phoneData) {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO clinic_phone_numbers (
+        phone_number, clinic_id, is_primary
+      ) VALUES (?, ?, ?)
+    `);
+    return stmt.run(
+      phoneData.phone_number,
+      phoneData.clinic_id,
+      phoneData.is_primary !== undefined ? phoneData.is_primary : 1
+    );
+  },
+
+  // Get clinic phone number by phone
+  getClinicPhoneNumber(phoneNumber) {
+    const stmt = db.prepare(`
+      SELECT cpn.*, c.name as clinic_name, c.slug as clinic_slug
+      FROM clinic_phone_numbers cpn
+      JOIN clinics c ON cpn.clinic_id = c.clinic_id
+      WHERE cpn.phone_number = ? AND c.is_active = 1
+    `);
+    return stmt.get(phoneNumber);
+  },
+
+  // Get all phone numbers for a clinic
+  getClinicPhoneNumbers(clinicId) {
+    const stmt = db.prepare(`
+      SELECT * FROM clinic_phone_numbers
+      WHERE clinic_id = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(clinicId);
+  },
+
+  // ============================================
+  // STRIPE ISSUING: CARDHOLDERS AND CARDS
+  // ============================================
+
+  // Create Stripe cardholder
+  createStripeCardholder(cardholder) {
+    const stmt = db.prepare(`
+      INSERT INTO stripe_cardholders (
+        id, patient_id, clinic_id, stripe_cardholder_id, type, name, email, phone,
+        billing_address, status, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      cardholder.id,
+      cardholder.patient_id,
+      cardholder.clinic_id || null,
+      cardholder.stripe_cardholder_id,
+      cardholder.type || 'individual',
+      cardholder.name,
+      cardholder.email || null,
+      cardholder.phone || null,
+      cardholder.billing_address ? JSON.stringify(cardholder.billing_address) : null,
+      cardholder.status || 'active',
+      cardholder.metadata ? JSON.stringify(cardholder.metadata) : null
+    );
+  },
+
+  // Get cardholder by patient ID
+  getCardholderByPatientId(patientId) {
+    const stmt = db.prepare(`
+      SELECT * FROM stripe_cardholders
+      WHERE patient_id = ? AND status = 'active'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    return stmt.get(patientId);
+  },
+
+  // Get cardholder by Stripe ID
+  getCardholderByStripeId(stripeCardholderId) {
+    const stmt = db.prepare('SELECT * FROM stripe_cardholders WHERE stripe_cardholder_id = ?');
+    return stmt.get(stripeCardholderId);
+  },
+
+  // Create Stripe card
+  createStripeCard(card) {
+    const stmt = db.prepare(`
+      INSERT INTO stripe_cards (
+        id, patient_id, clinic_id, cardholder_id, stripe_card_id, type, currency,
+        status, last4, brand, expiry_month, expiry_year, spending_controls, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      card.id,
+      card.patient_id,
+      card.clinic_id || null,
+      card.cardholder_id,
+      card.stripe_card_id,
+      card.type || 'virtual',
+      card.currency || 'usd',
+      card.status || 'active',
+      card.last4 || null,
+      card.brand || null,
+      card.expiry_month || null,
+      card.expiry_year || null,
+      card.spending_controls ? JSON.stringify(card.spending_controls) : null,
+      card.metadata ? JSON.stringify(card.metadata) : null
+    );
+  },
+
+  // Get cards by patient ID
+  getCardsByPatientId(patientId) {
+    const stmt = db.prepare(`
+      SELECT c.*, ch.name as cardholder_name, ch.email as cardholder_email
+      FROM stripe_cards c
+      JOIN stripe_cardholders ch ON c.cardholder_id = ch.id
+      WHERE c.patient_id = ? AND c.status = 'active'
+      ORDER BY c.created_at DESC
+    `);
+    const cards = stmt.all(patientId);
+    // Parse JSON fields
+    return cards.map(card => ({
+      ...card,
+      spending_controls: card.spending_controls ? JSON.parse(card.spending_controls) : null,
+      metadata: card.metadata ? JSON.parse(card.metadata) : null
+    }));
+  },
+
+  // Get card by Stripe ID
+  getCardByStripeId(stripeCardId) {
+    const stmt = db.prepare('SELECT * FROM stripe_cards WHERE stripe_card_id = ?');
+    const card = stmt.get(stripeCardId);
+    if (!card) return null;
+    // Parse JSON fields
+    return {
+      ...card,
+      spending_controls: card.spending_controls ? JSON.parse(card.spending_controls) : null,
+      metadata: card.metadata ? JSON.parse(card.metadata) : null
+    };
+  },
+
+  // Get card by ID
+  getCardById(cardId) {
+    const stmt = db.prepare('SELECT * FROM stripe_cards WHERE id = ?');
+    const card = stmt.get(cardId);
+    if (!card) return null;
+    // Parse JSON fields
+    return {
+      ...card,
+      spending_controls: card.spending_controls ? JSON.parse(card.spending_controls) : null,
+      metadata: card.metadata ? JSON.parse(card.metadata) : null
+    };
+  },
+
+  // Update card status
+  updateCardStatus(cardId, status) {
+    const stmt = db.prepare(`
+      UPDATE stripe_cards
+      SET status = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(status, cardId);
+  },
+
+  // Update card spending controls
+  updateCardSpendingControls(cardId, spendingControls) {
+    const stmt = db.prepare(`
+      UPDATE stripe_cards
+      SET spending_controls = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(JSON.stringify(spendingControls), cardId);
+  },
+
+  // Create card transaction
+  createCardTransaction(transaction) {
+    const stmt = db.prepare(`
+      INSERT INTO stripe_card_transactions (
+        id, card_id, patient_id, clinic_id, stripe_transaction_id, amount, currency,
+        merchant_name, merchant_category, status, authorization_code, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      transaction.id,
+      transaction.card_id,
+      transaction.patient_id,
+      transaction.clinic_id || null,
+      transaction.stripe_transaction_id,
+      transaction.amount,
+      transaction.currency || 'usd',
+      transaction.merchant_name || null,
+      transaction.merchant_category || null,
+      transaction.status || null,
+      transaction.authorization_code || null,
+      transaction.metadata ? JSON.stringify(transaction.metadata) : null
+    );
+  },
+
+  // Get transactions by card ID
+  getTransactionsByCardId(cardId) {
+    const stmt = db.prepare(`
+      SELECT * FROM stripe_card_transactions
+      WHERE card_id = ?
+      ORDER BY created_at DESC
+    `);
+    const transactions = stmt.all(cardId);
+    // Parse JSON fields
+    return transactions.map(tx => ({
+      ...tx,
+      metadata: tx.metadata ? JSON.parse(tx.metadata) : null
+    }));
+  },
+
+  // Get transactions by patient ID
+  getTransactionsByPatientId(patientId) {
+    const stmt = db.prepare(`
+      SELECT t.*, c.last4, c.brand
+      FROM stripe_card_transactions t
+      JOIN stripe_cards c ON t.card_id = c.id
+      WHERE t.patient_id = ?
+      ORDER BY t.created_at DESC
+    `);
+    const transactions = stmt.all(patientId);
+    // Parse JSON fields
+    return transactions.map(tx => ({
+      ...tx,
+      metadata: tx.metadata ? JSON.parse(tx.metadata) : null
+    }));
+  },
+
   // Get user by Google ID
   getUserByGoogleId(googleId) {
     const stmt = db.prepare('SELECT * FROM users WHERE google_id = ? AND is_active = 1');
     return stmt.get(googleId);
+  },
+
+  getUserCalendarSettingsByEmail(email) {
+    const stmt = db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1');
+    return stmt.get(email);
+  },
+
+  getFirstCalendarConnectedUser() {
+    const stmt = db.prepare(`
+      SELECT *
+      FROM users
+      WHERE google_calendar_connected = 1
+        AND google_refresh_token IS NOT NULL
+        AND is_active = 1
+      ORDER BY google_calendar_sync_at DESC, updated_at DESC
+      LIMIT 1
+    `);
+    return stmt.get();
+  },
+
+  setUserCalendarConnection(userId, settings) {
+    const fields = [
+      'google_calendar_connected = ?',
+      'google_calendar_email = ?',
+      'google_calendar_id = ?',
+      'google_calendar_name = ?',
+      'google_calendar_timezone = ?',
+      'google_calendar_scopes = ?',
+      'google_calendar_sync_at = CURRENT_TIMESTAMP',
+      'google_calendar_last_error = NULL',
+      'updated_at = CURRENT_TIMESTAMP'
+    ];
+
+    const values = [
+      settings.connected ? 1 : 0,
+      settings.calendar_email || null,
+      settings.calendar_id || null,
+      settings.calendar_name || null,
+      settings.calendar_timezone || null,
+      Array.isArray(settings.scopes) ? settings.scopes.join(' ') : settings.scopes || null
+    ];
+
+    if (settings.refresh_token !== undefined) {
+      fields.push('google_refresh_token = ?');
+      values.push(settings.refresh_token || null);
+    }
+
+    if (settings.access_token !== undefined) {
+      fields.push('google_access_token = ?');
+      values.push(settings.access_token || null);
+    }
+
+    if (settings.token_expiry !== undefined) {
+      fields.push('google_token_expiry = ?');
+      values.push(settings.token_expiry || null);
+    }
+
+    const query = `UPDATE users SET ${fields.join(', ')} WHERE id = ?`;
+    values.push(userId);
+    return db.prepare(query).run(...values);
+  },
+
+  updateUserCalendarTokens(userId, tokens) {
+    const fields = [];
+    const values = [];
+
+    if (tokens.access_token !== undefined) {
+      fields.push('google_access_token = ?');
+      values.push(tokens.access_token || null);
+    }
+    if (tokens.refresh_token !== undefined) {
+      fields.push('google_refresh_token = ?');
+      values.push(tokens.refresh_token || null);
+    }
+    if (tokens.token_expiry !== undefined) {
+      fields.push('google_token_expiry = ?');
+      values.push(tokens.token_expiry || null);
+    }
+    if (tokens.error_message !== undefined) {
+      fields.push('google_calendar_last_error = ?');
+      values.push(tokens.error_message || null);
+    }
+
+    if (fields.length === 0) return;
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    const query = `UPDATE users SET ${fields.join(', ')} WHERE id = ?`;
+    values.push(userId);
+    return db.prepare(query).run(...values);
+  },
+
+  updateUserCalendarSelection(userId, selection) {
+    const stmt = db.prepare(`
+      UPDATE users
+      SET google_calendar_id = ?,
+          google_calendar_name = ?,
+          google_calendar_timezone = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(
+      selection.calendar_id || null,
+      selection.calendar_name || null,
+      selection.calendar_timezone || null,
+      userId
+    );
+  },
+
+  clearUserCalendarConnection(userId) {
+    const stmt = db.prepare(`
+      UPDATE users
+      SET google_calendar_connected = 0,
+          google_calendar_email = NULL,
+          google_calendar_id = NULL,
+          google_calendar_name = NULL,
+          google_calendar_timezone = NULL,
+          google_refresh_token = NULL,
+          google_access_token = NULL,
+          google_token_expiry = NULL,
+          google_calendar_scopes = NULL,
+          google_calendar_sync_at = NULL,
+          google_calendar_last_error = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    return stmt.run(userId);
   },
 
   // Update user
@@ -2607,6 +3842,935 @@ module.exports = {
       procedures: this.getEHRProcedures(encounter.id),
       observations: this.getEHRObservations(encounter.id)
     }));
+  },
+
+  // ============================================
+  // USAGE TRACKING & LOGGING
+  // ============================================
+
+  // API Usage Logging
+  logAPIUsage(usage) {
+    return db.prepare(`
+      INSERT INTO api_usage_log 
+      (id, customer_id, api_key_id, endpoint, method, status_code, 
+       response_time_ms, request_size_bytes, response_size_bytes, 
+       ip_address, user_agent, request_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      usage.id || require('crypto').randomBytes(16).toString('hex'),
+      usage.customer_id || null,
+      usage.api_key_id || null,
+      usage.endpoint,
+      usage.method,
+      usage.status_code || null,
+      usage.response_time_ms || null,
+      usage.request_size_bytes || null,
+      usage.response_size_bytes || null,
+      usage.ip_address || null,
+      usage.user_agent || null,
+      usage.request_id || null
+    );
+  },
+
+  getAPIUsageByCustomer(customerId, limit = 100) {
+    return db.prepare(`
+      SELECT * FROM api_usage_log 
+      WHERE customer_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(customerId, limit);
+  },
+
+  getAPIUsageByEndpoint(endpoint, limit = 100) {
+    return db.prepare(`
+      SELECT * FROM api_usage_log 
+      WHERE endpoint = ? 
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(endpoint, limit);
+  },
+
+  // Voice Call Logging
+  logVoiceCall(call) {
+    return db.prepare(`
+      INSERT INTO voice_call_log 
+      (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
+       credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
+       total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      call.id || require('crypto').randomBytes(16).toString('hex'),
+      call.customer_id || null,
+      call.call_id,
+      call.twilio_call_sid || null,
+      call.call_duration_seconds || null,
+      call.call_duration_minutes || null,
+      call.credits_deducted || 0,
+      call.function_calls_count || 0,
+      call.status || 'active',
+      call.twilio_cost_usd || null,
+      call.retell_cost_usd || null,
+      call.total_cost_usd || null,
+      call.twilio_cost_calculated_usd || null,
+      call.retell_cost_calculated_usd || null,
+      call.cost_source || null,
+      call.cost_updated_at || null
+    );
+  },
+
+  // Update voice call costs
+  updateVoiceCallCosts(callId, costData) {
+    return db.prepare(`
+      UPDATE voice_call_log 
+      SET twilio_cost_usd = ?,
+          retell_cost_usd = ?,
+          total_cost_usd = ?,
+          twilio_cost_calculated_usd = ?,
+          retell_cost_calculated_usd = ?,
+          cost_source = ?,
+          cost_updated_at = datetime('now')
+      WHERE call_id = ?
+    `).run(
+      costData.twilio_cost_usd || null,
+      costData.retell_cost_usd || null,
+      costData.total_cost_usd || null,
+      costData.twilio_cost_calculated_usd || null,
+      costData.retell_cost_calculated_usd || null,
+      costData.cost_source || 'calculated',
+      callId
+    );
+  },
+
+  // Get voice call costs by customer
+  getVoiceCallCostsByCustomer(customerId, startDate = null, endDate = null) {
+    let query = `
+      SELECT 
+        call_id,
+        twilio_call_sid,
+        call_duration_minutes,
+        twilio_cost_usd,
+        retell_cost_usd,
+        total_cost_usd,
+        cost_source,
+        cost_updated_at,
+        created_at
+      FROM voice_call_log 
+      WHERE customer_id = ?
+    `;
+    const params = [customerId];
+
+    if (startDate) {
+      query += ' AND DATE(created_at) >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ' AND DATE(created_at) <= ?';
+      params.push(endDate);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    return db.prepare(query).all(...params);
+  },
+
+  // Get total costs for a customer
+  getCustomerTotalCosts(customerId, startDate = null, endDate = null) {
+    let query = `
+      SELECT 
+        COUNT(*) as total_calls,
+        SUM(call_duration_minutes) as total_minutes,
+        SUM(twilio_cost_usd) as total_twilio_cost,
+        SUM(retell_cost_usd) as total_retell_cost,
+        SUM(total_cost_usd) as total_cost
+      FROM voice_call_log 
+      WHERE customer_id = ? AND total_cost_usd IS NOT NULL
+    `;
+    const params = [customerId];
+
+    if (startDate) {
+      query += ' AND DATE(created_at) >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ' AND DATE(created_at) <= ?';
+      params.push(endDate);
+    }
+
+    return db.prepare(query).get(...params);
+  },
+
+  getVoiceCallsByCustomer(customerId, limit = 100) {
+    return db.prepare(`
+      SELECT * FROM voice_call_log 
+      WHERE customer_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(customerId, limit);
+  },
+
+  // Function Call Logging
+  logFunctionCall(functionCall) {
+    return db.prepare(`
+      INSERT INTO function_call_log 
+      (id, customer_id, call_id, function_name, parameters, 
+       response_time_ms, success, error_message)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      functionCall.id || require('crypto').randomBytes(16).toString('hex'),
+      functionCall.customer_id || null,
+      functionCall.call_id || null,
+      functionCall.function_name,
+      functionCall.parameters ? JSON.stringify(functionCall.parameters) : null,
+      functionCall.response_time_ms || null,
+      functionCall.success ? 1 : 0,
+      functionCall.error_message || null
+    );
+  },
+
+  getFunctionCallsByCustomer(customerId, limit = 100) {
+    return db.prepare(`
+      SELECT * FROM function_call_log 
+      WHERE customer_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(customerId, limit);
+  },
+
+  // Usage Aggregation
+  aggregateUsage(customerId, date, metricType, metricValue, costUsd = 0) {
+    const id = `${customerId}_${date}_${metricType}`;
+    return db.prepare(`
+      INSERT INTO usage_aggregates 
+      (id, customer_id, date, metric_type, metric_value, cost_usd)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        metric_value = metric_value + excluded.metric_value,
+        cost_usd = cost_usd + excluded.cost_usd
+    `).run(id, customerId, date, metricType, metricValue, costUsd);
+  },
+
+  getUsageAggregates(customerId, startDate, endDate) {
+    return db.prepare(`
+      SELECT * FROM usage_aggregates 
+      WHERE customer_id = ? 
+        AND date >= ? 
+        AND date <= ?
+      ORDER BY date DESC, metric_type
+    `).all(customerId, startDate, endDate);
+  },
+
+  // Error Logging
+  logError(error) {
+    return db.prepare(`
+      INSERT INTO error_log 
+      (id, customer_id, error_type, error_message, stack_trace, 
+       request_id, endpoint, context, severity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      error.id || require('crypto').randomBytes(16).toString('hex'),
+      error.customer_id || null,
+      error.error_type || 'Error',
+      error.error_message,
+      error.stack_trace || null,
+      error.request_id || null,
+      error.endpoint || null,
+      error.context ? JSON.stringify(error.context) : null,
+      error.severity || 'medium'
+    );
+  },
+
+  getErrorsByCustomer(customerId, limit = 100) {
+    return db.prepare(`
+      SELECT * FROM error_log 
+      WHERE customer_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `).all(customerId, limit);
+  },
+
+  getUnresolvedErrors(severity = null, limit = 100) {
+    let query = `
+      SELECT * FROM error_log 
+      WHERE resolved = 0
+    `;
+    const params = [];
+
+    if (severity) {
+      query += ' AND severity = ?';
+      params.push(severity);
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(limit);
+
+    return db.prepare(query).all(...params);
+  },
+
+  markErrorResolved(errorId) {
+    return db.prepare(`
+      UPDATE error_log 
+      SET resolved = 1 
+      WHERE id = ?
+    `).run(errorId);
+  },
+
+  // Customer Management
+  createCustomer(customer) {
+    // Convert api_features array to JSON string if it's an array
+    let apiFeatures = customer.api_features;
+    if (Array.isArray(apiFeatures)) {
+      apiFeatures = JSON.stringify(apiFeatures);
+    } else if (typeof apiFeatures === 'object' && apiFeatures !== null) {
+      apiFeatures = JSON.stringify(apiFeatures);
+    }
+
+    return db.prepare(`
+      INSERT INTO customers (
+        id, name, email, phone_number, company_name, business_size, 
+        use_case, api_features, plan_tier, status, email_verified, email_verified_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      customer.id || require('crypto').randomBytes(16).toString('hex'),
+      customer.name,
+      customer.email,
+      customer.phone_number || null,
+      customer.company_name || null,
+      customer.business_size || null,
+      customer.use_case || null,
+      apiFeatures || null,
+      customer.plan_tier || 'starter',
+      customer.status || 'pending',
+      customer.email_verified ? 1 : 0,
+      customer.email_verified_at || null
+    );
+  },
+
+  // Customer Feature Requests
+  createFeatureRequest(customerId, featureName, featureCategory = null, notes = null) {
+    const { v4: uuidv4 } = require('uuid');
+    return db.prepare(`
+      INSERT INTO customer_feature_requests (id, customer_id, feature_name, feature_category, notes, status)
+      VALUES (?, ?, ?, ?, ?, 'pending')
+    `).run(uuidv4(), customerId, featureName, featureCategory, notes);
+  },
+
+  getCustomerFeatureRequests(customerId) {
+    return db.prepare(`
+      SELECT * FROM customer_feature_requests 
+      WHERE customer_id = ? 
+      ORDER BY requested_at DESC
+    `).all(customerId);
+  },
+
+  updateFeatureRequestStatus(requestId, status, notes = null) {
+    const updates = ['status = ?'];
+    const params = [status, requestId];
+    
+    if (status === 'approved') {
+      updates.push('approved_at = datetime("now")');
+    }
+    if (notes) {
+      updates.push('notes = ?');
+      params.splice(1, 0, notes);
+    }
+    
+    return db.prepare(`
+      UPDATE customer_feature_requests 
+      SET ${updates.join(', ')} 
+      WHERE id = ?
+    `).run(...params);
+  },
+
+  getAllFeatureRequests(filters = {}) {
+    let query = 'SELECT * FROM customer_feature_requests WHERE 1=1';
+    const params = [];
+    
+    if (filters.status) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
+    
+    if (filters.customer_id) {
+      query += ' AND customer_id = ?';
+      params.push(filters.customer_id);
+    }
+    
+    query += ' ORDER BY requested_at DESC';
+    
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+    
+    return db.prepare(query).all(...params);
+  },
+
+  getCustomer(id) {
+    return db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
+  },
+
+  getCustomerByEmail(email) {
+    return db.prepare('SELECT * FROM customers WHERE email = ?').get(email);
+  },
+
+  updateCustomer(id, updates) {
+    const fields = [];
+    const values = [];
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    });
+    if (fields.length === 0) return null;
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+    return db.prepare(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  },
+
+  // Email Verification
+  createEmailVerificationCode(email, code, customerId = null) {
+    // Invalidate any existing codes for this email
+    db.prepare(`
+      UPDATE email_verification_codes 
+      SET verified = 1 
+      WHERE email = ? AND verified = 0 AND expires_at > datetime('now')
+    `).run(email);
+
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes
+    return db.prepare(`
+      INSERT INTO email_verification_codes (id, email, code, customer_id, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      require('crypto').randomBytes(16).toString('hex'),
+      email,
+      code,
+      customerId || null,
+      expiresAt
+    );
+  },
+
+  verifyEmailCode(email, code) {
+    const record = db.prepare(`
+      SELECT * FROM email_verification_codes 
+      WHERE email = ? AND code = ? AND verified = 0 AND expires_at > datetime('now')
+      ORDER BY created_at DESC LIMIT 1
+    `).get(email, code);
+
+    if (record) {
+      // Mark as verified
+      db.prepare(`
+        UPDATE email_verification_codes 
+        SET verified = 1, verified_at = datetime('now')
+        WHERE id = ?
+      `).run(record.id);
+
+      // Update customer email verification if customer_id exists
+      if (record.customer_id) {
+        db.prepare(`
+          UPDATE customers 
+          SET email_verified = 1, email_verified_at = datetime('now'), status = 'active', updated_at = datetime('now')
+          WHERE id = ?
+        `).run(record.customer_id);
+      }
+
+      return record;
+    }
+    return null;
+  },
+
+  getActiveEmailVerificationCode(email) {
+    return db.prepare(`
+      SELECT * FROM email_verification_codes 
+      WHERE email = ? AND verified = 0 AND expires_at > datetime('now')
+      ORDER BY created_at DESC LIMIT 1
+    `).get(email);
+  },
+
+  // Terms Acceptance
+  acceptTerms(customerId, termsVersion, ipAddress, userAgent) {
+    return db.prepare(`
+      INSERT INTO terms_acceptance (id, customer_id, terms_version, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      require('crypto').randomBytes(16).toString('hex'),
+      customerId,
+      termsVersion || '1.0',
+      ipAddress || null,
+      userAgent || null
+    );
+  },
+
+  hasAcceptedTerms(customerId, termsVersion = '1.0') {
+    return db.prepare(`
+      SELECT * FROM terms_acceptance 
+      WHERE customer_id = ? AND terms_version = ?
+      ORDER BY accepted_at DESC LIMIT 1
+    `).get(customerId, termsVersion);
+  },
+
+  getCustomerAPIKeys(customerId) {
+    return db.prepare(`
+      SELECT id, key_prefix, created_at, last_used_at, is_active
+      FROM api_keys 
+      WHERE customer_id = ?
+      ORDER BY created_at DESC
+    `).all(customerId);
+  },
+
+  // Customer Session Management
+  createCustomerSession(customerId, ipAddress, userAgent) {
+    const sessionId = require('crypto').randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+    db.prepare(`
+      INSERT INTO customer_sessions (id, customer_id, expires_at, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(sessionId, customerId, expiresAt, ipAddress || null, userAgent || null);
+    return sessionId;
+  },
+
+  getCustomerSession(sessionId) {
+    return db.prepare(`
+      SELECT * FROM customer_sessions 
+      WHERE id = ? AND expires_at > datetime('now')
+    `).get(sessionId);
+  },
+
+  updateCustomerSessionAccess(sessionId) {
+    return db.prepare(`
+      UPDATE customer_sessions 
+      SET last_accessed_at = datetime('now')
+      WHERE id = ?
+    `).run(sessionId);
+  },
+
+  deleteCustomerSession(sessionId) {
+    return db.prepare('DELETE FROM customer_sessions WHERE id = ?').run(sessionId);
+  },
+
+  deleteCustomerSessions(customerId) {
+    return db.prepare('DELETE FROM customer_sessions WHERE customer_id = ?').run(customerId);
+  },
+
+  // Customer Retell Agent Management
+  updateCustomerRetellAgent(customerId, retellAgentId, retellAgentStatus) {
+    return db.prepare(`
+      UPDATE customers 
+      SET retell_agent_id = ?, retell_agent_status = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(retellAgentId || null, retellAgentStatus || 'pending', customerId);
+  },
+
+  // Customer Credits Management
+  allocateFreeCredits(customerId, freeMinutes = 100) {
+    // Check if credits record exists
+    const existing = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+    
+    if (existing) {
+      // Update existing record
+      return db.prepare(`
+        UPDATE customer_credits 
+        SET free_credits_allocated = free_credits_allocated + ?,
+            credits_balance_minutes = credits_balance_minutes + ?,
+            last_replenished_at = datetime('now'),
+            updated_at = datetime('now')
+        WHERE customer_id = ?
+      `).run(freeMinutes, freeMinutes, customerId);
+    } else {
+      // Create new credits record
+      const { v4: uuidv4 } = require('uuid');
+      return db.prepare(`
+        INSERT INTO customer_credits (
+          id, customer_id, credits_balance_minutes, free_credits_allocated, last_replenished_at
+        ) VALUES (?, ?, ?, ?, datetime('now'))
+      `).run(uuidv4(), customerId, freeMinutes, freeMinutes);
+    }
+  },
+
+  getCustomerCredits(customerId) {
+    return db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+  },
+
+  deductCredits(customerId, minutesToDeduct) {
+    const credits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+    if (!credits) {
+      throw new Error('Customer credits not found');
+    }
+
+    // Check if customer has payment method stored
+    const customer = db.prepare('SELECT card_verified, stripe_payment_method_id FROM customers WHERE id = ?').get(customerId);
+    const hasPaymentMethod = customer && customer.card_verified === 1 && customer.stripe_payment_method_id;
+
+    // Calculate available free credits
+    const availableFreeCredits = credits.free_credits_allocated - credits.free_credits_used;
+    
+    // If trying to use more than free credits and no payment method, block
+    if (minutesToDeduct > availableFreeCredits && !hasPaymentMethod) {
+      throw new Error('Insufficient credits. Please add a payment method to continue using the service.');
+    }
+
+    if (credits.credits_balance_minutes < minutesToDeduct && !hasPaymentMethod) {
+      throw new Error('Insufficient credits. Please add a payment method to continue using the service.');
+    }
+
+    // Deduct from free credits first, then paid credits
+    let freeToDeduct = Math.min(availableFreeCredits, minutesToDeduct);
+    let paidToDeduct = minutesToDeduct - freeToDeduct;
+
+    // Track monthly usage for invoicing
+    // Only track overage (usage AFTER credits exhausted) for billing
+    const now = new Date();
+    const billingMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    // Calculate available credits before deduction (availableFreeCredits already calculated above)
+    const availablePaidCredits = credits.paid_credits_purchased - credits.paid_credits_used;
+    const totalAvailableCredits = availableFreeCredits + availablePaidCredits;
+    
+    // Calculate overage (usage beyond available credits)
+    // Overage = total usage - total available credits (if usage exceeds available)
+    let overageMinutes = 0;
+    if (minutesToDeduct > totalAvailableCredits) {
+      // This usage exceeds available credits - calculate overage
+      overageMinutes = minutesToDeduct - totalAvailableCredits;
+    }
+    
+    // Track: total usage, free credits used, and overage (for billing)
+    db.trackMonthlyUsage(
+      customerId, 
+      billingMonth, 
+      minutesToDeduct, // Total voice minutes used
+      0, // API requests tracked separately (handled in usage-logger)
+      freeToDeduct, // Free credits used
+      overageMinutes, // Overage minutes (after credits exhausted)
+      0 // API overage tracked separately
+    );
+
+    return db.prepare(`
+      UPDATE customer_credits 
+      SET free_credits_used = free_credits_used + ?,
+          paid_credits_used = paid_credits_used + ?,
+          credits_balance_minutes = credits_balance_minutes - ?,
+          updated_at = datetime('now')
+      WHERE customer_id = ?
+    `).run(freeToDeduct, paidToDeduct, minutesToDeduct, customerId);
+  },
+
+  addPaidCredits(customerId, minutesToAdd) {
+    const credits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+    
+    if (!credits) {
+      // Create credits record if it doesn't exist
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare(`
+        INSERT INTO customer_credits (
+          id, customer_id, credits_balance_minutes, paid_credits_purchased, last_replenished_at
+        ) VALUES (?, ?, ?, ?, datetime('now'))
+      `).run(uuidv4(), customerId, minutesToAdd, minutesToAdd);
+    } else {
+      // Update existing record
+      db.prepare(`
+        UPDATE customer_credits 
+        SET paid_credits_purchased = paid_credits_purchased + ?,
+            credits_balance_minutes = credits_balance_minutes + ?,
+            last_replenished_at = datetime('now'),
+            updated_at = datetime('now')
+        WHERE customer_id = ?
+      `).run(minutesToAdd, minutesToAdd, customerId);
+    }
+  },
+
+  // Credit Purchases
+  createCreditPurchase(customerId, packageName, creditsAmount, amountPaid, stripeCheckoutSessionId, stripePaymentMethodId = null) {
+    const { v4: uuidv4 } = require('uuid');
+    const purchaseId = uuidv4();
+    db.prepare(`
+      INSERT INTO credit_purchases (
+        id, customer_id, package_name, credits_amount, amount_paid, 
+        stripe_checkout_session_id, stripe_payment_method_id, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+    `).run(purchaseId, customerId, packageName, creditsAmount, amountPaid, stripeCheckoutSessionId, stripePaymentMethodId);
+    return { lastInsertRowid: purchaseId };
+  },
+
+  updateCreditPurchaseStatus(purchaseId, status, stripePaymentIntentId = null, purchasedAt = null) {
+    return db.prepare(`
+      UPDATE credit_purchases 
+      SET status = ?, 
+          stripe_payment_intent_id = COALESCE(?, stripe_payment_intent_id),
+          purchased_at = COALESCE(?, purchased_at)
+      WHERE id = ?
+    `).run(status, stripePaymentIntentId, purchasedAt, purchaseId);
+  },
+
+  getCreditPurchaseByCheckoutSession(checkoutSessionId) {
+    return db.prepare('SELECT * FROM credit_purchases WHERE stripe_checkout_session_id = ?').get(checkoutSessionId);
+  },
+
+  getCustomerCreditPurchases(customerId) {
+    return db.prepare(`
+      SELECT * FROM credit_purchases 
+      WHERE customer_id = ? 
+      ORDER BY created_at DESC
+    `).all(customerId);
+  },
+
+  // Customer Payment Method Management
+  updateCustomerPaymentMethod(customerId, paymentMethodId, cardLast4, cardBrand, verified = true) {
+    return db.prepare(`
+      UPDATE customers 
+      SET stripe_payment_method_id = ?,
+          card_last4 = ?,
+          card_brand = ?,
+          card_verified = ?,
+          card_verified_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(paymentMethodId, cardLast4, cardBrand, verified ? 1 : 0, customerId);
+  },
+
+  getCustomerPaymentMethod(customerId) {
+    return db.prepare(`
+      SELECT stripe_payment_method_id, card_last4, card_brand, card_verified, card_verified_at
+      FROM customers 
+      WHERE id = ?
+    `).get(customerId);
+  },
+
+  // Monthly Usage Tracking
+  trackMonthlyUsage(customerId, billingMonth, voiceMinutes = 0, apiRequests = 0, freeCreditsUsed = 0, overageVoiceMinutes = 0, overageApiRequests = 0) {
+    const { v4: uuidv4 } = require('uuid');
+    const existing = db.prepare('SELECT * FROM monthly_usage WHERE customer_id = ? AND billing_month = ?').get(customerId, billingMonth);
+    
+    if (existing) {
+      // Update existing record
+      return db.prepare(`
+        UPDATE monthly_usage 
+        SET voice_minutes_used = voice_minutes_used + ?,
+            api_requests_used = api_requests_used + ?,
+            free_credits_used = free_credits_used + ?,
+            overage_voice_minutes = overage_voice_minutes + ?,
+            overage_api_requests = overage_api_requests + ?,
+            updated_at = datetime('now')
+        WHERE customer_id = ? AND billing_month = ?
+      `).run(voiceMinutes, apiRequests, freeCreditsUsed, overageVoiceMinutes, overageApiRequests, customerId, billingMonth);
+    } else {
+      // Create new record
+      return db.prepare(`
+        INSERT INTO monthly_usage (
+          id, customer_id, billing_month, voice_minutes_used, api_requests_used,
+          free_credits_used, overage_voice_minutes, overage_api_requests
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(uuidv4(), customerId, billingMonth, voiceMinutes, apiRequests, freeCreditsUsed, overageVoiceMinutes, overageApiRequests);
+    }
+  },
+
+  getMonthlyUsage(customerId, billingMonth) {
+    return db.prepare('SELECT * FROM monthly_usage WHERE customer_id = ? AND billing_month = ?').get(customerId, billingMonth);
+  },
+
+  getAllMonthlyUsage(customerId) {
+    return db.prepare(`
+      SELECT * FROM monthly_usage 
+      WHERE customer_id = ? 
+      ORDER BY billing_month DESC
+    `).all(customerId);
+  },
+
+  // Monthly Invoices
+  createMonthlyInvoice(customerId, billingMonth, usage, options = {}) {
+    const { v4: uuidv4 } = require('uuid');
+    
+    // Base costs (Retell + Twilio + infrastructure)
+    // Retell: ~$0.02/min, Twilio: ~$0.013/min, Infrastructure: ~$0.017/min = $0.05/min total
+    const retellCostPerMin = options.retellCostPerMin || 0.02;
+    const twilioCostPerMin = options.twilioCostPerMin || 0.013;
+    const infraCostPerMin = options.infraCostPerMin || 0.017;
+    const baseCostPerMin = retellCostPerMin + twilioCostPerMin + infraCostPerMin;
+    
+    // API request costs (first 1,000 free per month)
+    const apiBaseCostPer1k = options.apiBaseCostPer1k || 0.005; // Base cost for 1,000 requests
+    
+    // Calculate base costs (actual costs we pay)
+    const voiceMinutesBaseCost = (usage.overage_voice_minutes || 0) * baseCostPerMin;
+    const apiRequestsBaseCost = (usage.overage_api_requests || 0) / 1000 * apiBaseCostPer1k;
+    const baseCosts = voiceMinutesBaseCost + apiRequestsBaseCost;
+    
+    // Integration costs (optional, per customer or flat fee)
+    const integrationCosts = options.integrationCosts || 0;
+    
+    // Markup percentage (default 50% markup = 1.5x multiplier)
+    const markupPercentage = options.markupPercentage || 50;
+    const markupMultiplier = 1 + (markupPercentage / 100);
+    
+    // Calculate final prices (base costs + integration + markup)
+    const subtotal = (baseCosts + integrationCosts) * markupMultiplier;
+    const markupAmount = subtotal - (baseCosts + integrationCosts);
+    const total = subtotal;
+    
+    // Customer-facing prices (what we bill them)
+    const voiceMinutesCost = (usage.overage_voice_minutes || 0) * 0.05; // $0.05/min billed to customer
+    const apiRequestsCost = (usage.overage_api_requests || 0) / 1000 * 0.01; // $0.01/1k requests billed
+    
+    // Generate invoice number (e.g., INV-2025-11-001)
+    const invoicePrefix = `INV-${billingMonth.replace('-', '-')}`;
+    const invoiceCount = db.prepare('SELECT COUNT(*) as count FROM monthly_invoices WHERE invoice_number LIKE ?').get(`${invoicePrefix}%`);
+    const invoiceNumber = `${invoicePrefix}-${String((invoiceCount?.count || 0) + 1).padStart(3, '0')}`;
+    
+    // Calculate due date (15 days from now)
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 15);
+    
+    return db.prepare(`
+      INSERT INTO monthly_invoices (
+        id, customer_id, billing_month, invoice_number,
+        voice_minutes, api_requests,
+        voice_minutes_cost, api_requests_cost,
+        base_costs, integration_costs, markup_percentage, markup_amount,
+        subtotal, total, due_date, status, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    `).run(
+      uuidv4(), customerId, billingMonth, invoiceNumber,
+      usage.voice_minutes_used || 0, usage.api_requests_used || 0,
+      voiceMinutesCost, apiRequestsCost,
+      baseCosts, integrationCosts, markupPercentage, markupAmount,
+      subtotal, total, dueDate.toISOString(), options.notes || null
+    );
+  },
+  
+  getAllInvoices(filters = {}) {
+    let query = 'SELECT * FROM monthly_invoices WHERE 1=1';
+    const params = [];
+    
+    if (filters.status) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
+    
+    if (filters.billing_month) {
+      query += ' AND billing_month = ?';
+      params.push(filters.billing_month);
+    }
+    
+    if (filters.customer_id) {
+      query += ' AND customer_id = ?';
+      params.push(filters.customer_id);
+    }
+    
+    query += ' ORDER BY billing_month DESC, created_at DESC';
+    
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+    
+    return db.prepare(query).all(...params);
+  },
+  
+  approveInvoice(invoiceId, approvedBy) {
+    return db.prepare(`
+      UPDATE monthly_invoices 
+      SET status = 'approved',
+          approved_by = ?,
+          approved_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(approvedBy, invoiceId);
+  },
+  
+  sendInvoice(invoiceId) {
+    return db.prepare(`
+      UPDATE monthly_invoices 
+      SET status = 'sent',
+          sent_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(invoiceId);
+  },
+
+  getMonthlyInvoice(invoiceId) {
+    return db.prepare('SELECT * FROM monthly_invoices WHERE id = ?').get(invoiceId);
+  },
+
+  getCustomerInvoices(customerId) {
+    return db.prepare(`
+      SELECT * FROM monthly_invoices 
+      WHERE customer_id = ? 
+      ORDER BY billing_month DESC, created_at DESC
+    `).all(customerId);
+  },
+
+  updateInvoiceStatus(invoiceId, status, stripeInvoiceId = null, stripePaymentIntentId = null, paidAt = null) {
+    return db.prepare(`
+      UPDATE monthly_invoices 
+      SET status = ?,
+          stripe_invoice_id = COALESCE(?, stripe_invoice_id),
+          stripe_payment_intent_id = COALESCE(?, stripe_payment_intent_id),
+          paid_at = COALESCE(?, paid_at),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(status, stripeInvoiceId, stripePaymentIntentId, paidAt, invoiceId);
+  },
+
+  // API Key Management
+  createAPIKey(apiKey) {
+    return db.prepare(`
+      INSERT INTO api_keys 
+      (id, customer_id, key_prefix, key_hash, key_secret, scopes, 
+       rate_limit_tier, ip_whitelist, is_active, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      apiKey.id || require('crypto').randomBytes(16).toString('hex'),
+      apiKey.customer_id,
+      apiKey.key_prefix,
+      apiKey.key_hash,
+      apiKey.key_secret || null,
+      apiKey.scopes ? JSON.stringify(apiKey.scopes) : null,
+      apiKey.rate_limit_tier || 'starter',
+      apiKey.ip_whitelist ? JSON.stringify(apiKey.ip_whitelist) : null,
+      apiKey.is_active !== undefined ? (apiKey.is_active ? 1 : 0) : 1,
+      apiKey.expires_at || null
+    );
+  },
+
+  getAPIKeyByHash(keyHash) {
+    return db.prepare('SELECT * FROM api_keys WHERE key_hash = ? AND is_active = 1').get(keyHash);
+  },
+
+  getAPIKeyById(keyId) {
+    return db.prepare('SELECT * FROM api_keys WHERE id = ?').get(keyId);
+  },
+
+  getAllAPIKeys(filters = {}) {
+    let query = 'SELECT id, customer_id, key_prefix, created_at, last_used_at, is_active FROM api_keys WHERE 1=1';
+    const params = [];
+    
+    if (filters.customer_id) {
+      query += ' AND customer_id = ?';
+      params.push(filters.customer_id);
+    }
+    
+    if (filters.is_active !== undefined) {
+      query += ' AND is_active = ?';
+      params.push(filters.is_active ? 1 : 0);
+    }
+    
+    query += ' ORDER BY created_at DESC';
+    
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+    
+    return db.prepare(query).all(...params);
+  },
+
+  updateAPIKeyLastUsed(keyId) {
+    return db.prepare(`
+      UPDATE api_keys 
+      SET last_used_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `).run(keyId);
   },
 
   // Database reference for direct access

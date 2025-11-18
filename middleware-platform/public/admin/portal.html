@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Admin Portal - DocLittle</title>
+    <link rel="stylesheet" href="/admin/css/admin.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>DocLittle</h1>
+                <p class="subtitle">Enterprise Admin</p>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="nav-item active" data-section="dashboard">
+                    <span class="icon">📊</span> Dashboard
+                </a>
+                <a href="#clients" class="nav-item" data-section="clients">
+                    <span class="icon">🏢</span> Clients
+                </a>
+                <a href="#performance" class="nav-item" data-section="performance">
+                    <span class="icon">⚡</span> Performance
+                </a>
+                <a href="#costs" class="nav-item" data-section="costs">
+                    <span class="icon">💰</span> Cost Analytics
+                </a>
+                <a href="#usage" class="nav-item" data-section="usage">
+                    <span class="icon">📈</span> Usage Metrics
+                </a>
+                <a href="#debug" class="nav-item" data-section="debug">
+                    <span class="icon">🔍</span> Debug & Logs
+                </a>
+                <a href="#settings" class="nav-item" data-section="settings">
+                    <span class="icon">⚙️</span> Settings
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="content-section active">
+                <div class="section-header">
+                    <h2>Dashboard Overview</h2>
+                    <div class="header-actions">
+                        <select id="timeRange" class="time-selector">
+                            <option value="24h">Last 24 Hours</option>
+                            <option value="7d" selected>Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                            <option value="90d">Last 90 Days</option>
+                        </select>
+                        <button class="btn-refresh" onclick="refreshDashboard()">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <!-- Key Metrics Cards -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <span class="metric-label">Total Clients</span>
+                            <span class="metric-trend positive">+12%</span>
+                        </div>
+                        <div class="metric-value" id="total-clients">-</div>
+                        <div class="metric-subtitle">Active companies</div>
+                    </div>
+
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <span class="metric-label">Total Revenue</span>
+                            <span class="metric-trend positive">+8.2%</span>
+                        </div>
+                        <div class="metric-value" id="total-revenue">-</div>
+                        <div class="metric-subtitle">This period</div>
+                    </div>
+
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <span class="metric-label">API Calls</span>
+                            <span class="metric-trend positive">+15%</span>
+                        </div>
+                        <div class="metric-value" id="total-api-calls">-</div>
+                        <div class="metric-subtitle">Requests processed</div>
+                    </div>
+
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <span class="metric-label">Voice Calls</span>
+                            <span class="metric-trend positive">+22%</span>
+                        </div>
+                        <div class="metric-value" id="total-voice-calls">-</div>
+                        <div class="metric-subtitle">Minutes: <span id="total-minutes">-</span></div>
+                    </div>
+
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <span class="metric-label">Avg Response Time</span>
+                            <span class="metric-trend negative">-5ms</span>
+                        </div>
+                        <div class="metric-value" id="avg-response-time">-</div>
+                        <div class="metric-subtitle">API performance</div>
+                    </div>
+
+                    <div class="metric-card">
+                        <div class="metric-header">
+                            <span class="metric-label">Error Rate</span>
+                            <span class="metric-trend positive">-0.2%</span>
+                        </div>
+                        <div class="metric-value" id="error-rate">-</div>
+                        <div class="metric-subtitle">System health</div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>Revenue Trend</h3>
+                        <canvas id="revenue-chart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>API Usage</h3>
+                        <canvas id="usage-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Clients Table -->
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Top Performing Clients</h3>
+                        <button class="btn-export" onclick="exportData('clients')">📥 Export</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="top-clients-table">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Revenue</th>
+                                    <th>API Calls</th>
+                                    <th>Voice Calls</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-clients-body">
+                                <tr><td colspan="6" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Clients Section -->
+            <section id="clients" class="content-section">
+                <div class="section-header">
+                    <h2>Client Management</h2>
+                    <div class="header-actions">
+                        <input type="text" id="client-search" class="search-input" placeholder="Search clients...">
+                        <button class="btn-primary" onclick="showAddClientModal()">+ Add Client</button>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <select id="status-filter" class="filter-select">
+                        <option value="all">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="pending">Pending</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <select id="sort-by" class="filter-select">
+                        <option value="name">Sort by Name</option>
+                        <option value="revenue">Sort by Revenue</option>
+                        <option value="calls">Sort by Calls</option>
+                        <option value="created">Sort by Created</option>
+                    </select>
+                </div>
+
+                <div class="clients-grid" id="clients-grid">
+                    <div class="loading">Loading clients...</div>
+                </div>
+            </section>
+
+            <!-- Performance Section -->
+            <section id="performance" class="content-section">
+                <div class="section-header">
+                    <h2>Performance Analytics</h2>
+                    <div class="header-actions">
+                        <select id="perf-client-filter" class="time-selector">
+                            <option value="all">All Clients</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="performance-grid">
+                    <div class="perf-card">
+                        <h3>Response Time Distribution</h3>
+                        <canvas id="response-time-chart"></canvas>
+                    </div>
+                    <div class="perf-card">
+                        <h3>Error Rate by Endpoint</h3>
+                        <canvas id="error-endpoint-chart"></canvas>
+                    </div>
+                    <div class="perf-card">
+                        <h3>API Latency Trends</h3>
+                        <canvas id="latency-chart"></canvas>
+                    </div>
+                    <div class="perf-card">
+                        <h3>Success Rate</h3>
+                        <div class="success-rate-display">
+                            <div class="big-number" id="success-rate">-</div>
+                            <div class="rate-breakdown" id="rate-breakdown"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <h3>Slowest Endpoints</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Endpoint</th>
+                                    <th>Avg Response (ms)</th>
+                                    <th>P95 (ms)</th>
+                                    <th>P99 (ms)</th>
+                                    <th>Requests</th>
+                                </tr>
+                            </thead>
+                            <tbody id="slow-endpoints-body">
+                                <tr><td colspan="5" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Costs Section -->
+            <section id="costs" class="content-section">
+                <div class="section-header">
+                    <h2>Cost Analytics</h2>
+                    <div class="header-actions">
+                        <button class="btn-export" onclick="exportCosts()">📥 Export Report</button>
+                    </div>
+                </div>
+
+                <div class="cost-summary">
+                    <div class="cost-card">
+                        <h3>Total Infrastructure Cost</h3>
+                        <div class="cost-amount" id="total-infra-cost">-</div>
+                        <div class="cost-breakdown" id="infra-breakdown"></div>
+                    </div>
+                    <div class="cost-card">
+                        <h3>Twilio Costs</h3>
+                        <div class="cost-amount" id="twilio-cost">-</div>
+                        <div class="cost-breakdown" id="twilio-breakdown"></div>
+                    </div>
+                    <div class="cost-card">
+                        <h3>Retell AI Costs</h3>
+                        <div class="cost-amount" id="retell-cost">-</div>
+                        <div class="cost-breakdown" id="retell-breakdown"></div>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Cost Breakdown by Client</h3>
+                    <canvas id="cost-by-client-chart"></canvas>
+                </div>
+
+                <div class="table-card">
+                    <h3>Client Cost Details</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Infrastructure</th>
+                                    <th>Twilio</th>
+                                    <th>Retell</th>
+                                    <th>Total</th>
+                                    <th>Revenue</th>
+                                    <th>Margin</th>
+                                </tr>
+                            </thead>
+                            <tbody id="client-costs-body">
+                                <tr><td colspan="7" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Usage Section -->
+            <section id="usage" class="content-section">
+                <div class="section-header">
+                    <h2>Usage Metrics</h2>
+                </div>
+
+                <div class="usage-stats">
+                    <div class="stat-card">
+                        <h4>API Requests</h4>
+                        <canvas id="api-requests-chart"></canvas>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Voice Call Minutes</h4>
+                        <canvas id="voice-minutes-chart"></canvas>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Webhook Events</h4>
+                        <canvas id="webhook-events-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Debug Section -->
+            <section id="debug" class="content-section">
+                <div class="section-header">
+                    <h2>Debug & Logs</h2>
+                    <div class="header-actions">
+                        <select id="log-level" class="filter-select">
+                            <option value="all">All Levels</option>
+                            <option value="error">Errors Only</option>
+                            <option value="warn">Warnings</option>
+                            <option value="info">Info</option>
+                        </select>
+                        <input type="text" id="log-search" class="search-input" placeholder="Search logs...">
+                    </div>
+                </div>
+
+                <div class="debug-panel">
+                    <div class="log-viewer" id="log-viewer">
+                        <div class="loading">Loading logs...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section id="settings" class="content-section">
+                <div class="section-header">
+                    <h2>Settings</h2>
+                </div>
+                <div class="settings-panel">
+                    <h3>System Configuration</h3>
+                    <p>Settings panel coming soon...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Admin Authentication Overlay -->
+    <div id="admin-auth-overlay" class="auth-overlay hidden">
+        <div class="auth-card">
+            <h2>Secure Admin Access</h2>
+            <p>Enter the admin passphrase to manage clients and API keys.</p>
+            <form id="adminLoginForm">
+                <div class="form-group">
+                    <label>Admin Secret</label>
+                    <input type="password" id="admin-secret" placeholder="••••••••" required>
+                </div>
+                <p class="auth-error hidden" id="admin-auth-error"></p>
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Unlock Portal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- One-time API Key Overlay -->
+    <div id="api-key-overlay" class="api-key-overlay hidden">
+        <div class="api-key-card">
+            <h3>New API Key</h3>
+            <p id="api-key-overlay-message">Copy this key now—this is the only time it will be shown.</p>
+            <div class="api-key-value" id="api-key-overlay-value"></div>
+            <div class="api-key-overlay-actions">
+                <button class="btn-secondary" onclick="copyOverlayApiKey()">Copy</button>
+                <button class="btn-primary" onclick="closeApiKeyOverlay()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="addClientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Client</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="addClientForm" onsubmit="handleAddClient(event)">
+                <div class="form-group">
+                    <label>Company Name *</label>
+                    <input type="text" id="add-name" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Twilio Phone Number</label>
+                        <input type="text" id="add-phone" placeholder="+15555551234">
+                    </div>
+                    <div class="form-group">
+                        <label>Retell Agent ID</label>
+                        <input type="text" id="add-retell-id" placeholder="agent_xxxxx">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="add-email">
+                </div>
+                <div class="form-group">
+                    <label>Webhook URL</label>
+                    <input type="url" id="add-webhook" placeholder="https://client.com/webhook">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Create Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editClientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Client</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="editClientForm" onsubmit="handleEditClient(event)">
+                <input type="hidden" id="edit-clinic-id">
+                <div class="form-group">
+                    <label>Company Name *</label>
+                    <input type="text" id="edit-name" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Twilio Phone Number</label>
+                        <input type="text" id="edit-phone">
+                    </div>
+                    <div class="form-group">
+                        <label>Retell Agent ID</label>
+                        <input type="text" id="edit-retell-id">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Retell Status</label>
+                    <select id="edit-retell-status">
+                        <option value="pending">Pending</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="edit-email">
+                </div>
+                <div class="api-key-panel">
+                    <div class="api-key-panel-header">
+                        <h3>Client API Keys</h3>
+                        <button type="button" class="btn-primary" onclick="generateClientApiKey()">Generate Key</button>
+                    </div>
+                    <p class="api-key-hint">
+                        Each clinic gets unique API keys for their voice agent. Rotate keys when onboarding/offboarding teams.
+                    </p>
+                    <label class="api-key-rotate">
+                        <input type="checkbox" id="rotate-existing-keys">
+                        Revoke existing active keys when creating a new one
+                    </label>
+                    <div id="api-keys-list" class="api-keys-list">
+                        <div class="loading">Loading keys...</div>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/admin/js/admin.js"></script>
+</body>
+</html>

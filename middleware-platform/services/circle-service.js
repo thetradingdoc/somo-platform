@@ -616,7 +616,7 @@ class CircleService {
             console.error('❌ Error verifying webhook signature:', error.message);
             return false;
         }
-    }
+        }
 
     /**
      * Get or create a patient wallet linked to FHIR Patient resource_id

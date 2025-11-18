@@ -5,7 +5,14 @@
  * Integrates with Google Calendar API for calendar management
  */
 
-const { google } = require('googleapis');
+// Google APIs (optional - for Calendar integration)
+let google;
+try {
+  google = require('googleapis').google;
+} catch (error) {
+  console.warn('⚠️  googleapis not available - Calendar features will be disabled');
+  google = null;
+}
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const FHIRService = require('./fhir-service');
@@ -51,6 +58,12 @@ const APPOINTMENT_TYPES = {
     buffer_before_minutes: 5,
     buffer_after_minutes: 5,
     color: 'yellow'
+  },
+  'External Calendar Event': {
+    duration_minutes: 0,
+    buffer_before_minutes: 0,
+    buffer_after_minutes: 0,
+    color: 'gray'
   }
 };
 
@@ -69,31 +82,114 @@ class BookingService {
    * Initialize Google Calendar client
    * Uses service account or OAuth2 credentials
    */
-  static getCalendarClient() {
+  static _createOAuthClient() {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return null;
+    }
+
+    const redirectUri =
+      process.env.GOOGLE_REDIRECT_URI ||
+      `${process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000'}/auth/google/calendar/callback`;
+
+    if (!google || !google.auth) {
+      return null;
+    }
+
+    return new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+  }
+
+  static _captureUpdatedCalendarCredentials(context) {
+    if (!context || !context.user || !context.auth) return;
+
+    const credentials = context.auth.credentials || {};
+    const tokens = {};
+
+    if (credentials.access_token !== undefined) {
+      tokens.access_token = credentials.access_token || null;
+    }
+
+    if (credentials.refresh_token !== undefined) {
+      tokens.refresh_token = credentials.refresh_token || null;
+    }
+
+    if (credentials.expiry_date !== undefined) {
+      tokens.token_expiry = credentials.expiry_date || null;
+    }
+
+    if (Object.keys(tokens).length > 0) {
+      try {
+        db.updateUserCalendarTokens(context.user.id, tokens);
+      } catch (error) {
+        console.warn('⚠️  Failed to update stored calendar credentials:', error.message);
+      }
+    }
+  }
+
+  /**
+   * Get Google Calendar client for a specific user
+   * @param {string} userEmail - Optional: User email to get their specific calendar. If not provided, uses first connected user.
+   * @returns {Object|null} - Calendar client context or null if not configured
+   */
+  static getCalendarClient(userEmail = null) {
     try {
-      // Option 1: Service Account (Recommended for server-to-server)
+      // Option 1: Service Account (Recommended for single calendar/server-to-server)
       if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
         const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+        if (!google || !google.auth) {
+          return null;
+        }
+
         const auth = new google.auth.GoogleAuth({
           credentials,
           scopes: ['https://www.googleapis.com/auth/calendar']
         });
-        return google.calendar({ version: 'v3', auth });
+        return {
+          client: google ? google.calendar({ version: 'v3', auth }) : null,
+          calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+          authType: 'service_account'
+        };
       }
 
       // Option 2: OAuth2 (for user-specific calendars)
-      if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN) {
-        const oauth2Client = new google.auth.OAuth2(
-          process.env.GOOGLE_CLIENT_ID,
-          process.env.GOOGLE_CLIENT_SECRET,
-          process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4000/oauth2callback'
-        );
+      // DocLittle platform uses ONE OAuth app, but stores tokens per user
+      if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+        let user = null;
 
-        oauth2Client.setCredentials({
-          refresh_token: process.env.GOOGLE_REFRESH_TOKEN
-        });
+        // Get specific user's calendar if email provided
+        if (userEmail) {
+          user = db.getUserCalendarSettingsByEmail(userEmail);
+        }
 
-        return google.calendar({ version: 'v3', auth: oauth2Client });
+        // Fallback to first connected user (for backward compatibility)
+        if (!user) {
+          user = db.getFirstCalendarConnectedUser ? db.getFirstCalendarConnectedUser() : null;
+        }
+
+        if (user && user.google_refresh_token) {
+          const oauth2Client = this._createOAuthClient();
+          if (!oauth2Client) {
+            console.warn('⚠️  Google OAuth client not configured properly.');
+            return null;
+          }
+
+          oauth2Client.setCredentials({
+            refresh_token: user.google_refresh_token,
+            access_token: user.google_access_token || undefined,
+            expiry_date: user.google_token_expiry || undefined
+          });
+
+          return {
+            client: google ? google.calendar({ version: 'v3', auth: oauth2Client }) : null,
+            calendarId: user.google_calendar_id || 'primary',
+            auth: oauth2Client,
+            user,
+            authType: 'oauth'
+          };
+        }
       }
 
       console.warn('⚠️  Google Calendar credentials not configured. Running in mock mode.');
@@ -124,7 +220,7 @@ class BookingService {
       // Get appointment type configuration
       const appointmentType = appointmentData.appointment_type || 'Mental Health Consultation';
       const typeConfig = APPOINTMENT_TYPES[appointmentType] || APPOINTMENT_TYPES['Mental Health Consultation'];
-      
+
       // Parse date/time with timezone awareness
       const appointmentDateTime = this._parseDateTime(
         appointmentData.date,
@@ -139,6 +235,7 @@ class BookingService {
         appointmentDateTime.endISO,
         typeConfig,
         appointmentDateTime.date,
+        appointmentDateTime.timezone,
         null // No appointment to exclude for new bookings
       );
 
@@ -150,22 +247,59 @@ class BookingService {
       const appointmentId = `appt-${uuidv4()}`;
 
       // Calculate total time including buffers
-      const totalDurationMinutes = typeConfig.duration_minutes + 
-                                   typeConfig.buffer_before_minutes + 
-                                   typeConfig.buffer_after_minutes;
+      const totalDurationMinutes = typeConfig.duration_minutes +
+        typeConfig.buffer_before_minutes +
+        typeConfig.buffer_after_minutes;
 
       // Upsert FHIR patient record to ensure a longitudinal EHR
+      // RULE: Each person has a unique identity. If similar names exist, phone number must be confirmed.
       let fhirPatientId = null;
       try {
-        const fhirPatient = await FHIRService.getOrCreatePatient({
+        const patientResult = await FHIRService.getOrCreatePatient({
           name: appointmentData.patient_name,
           phone: appointmentData.patient_phone,
           email: appointmentData.patient_email,
           timezone: appointmentData.timezone || BUSINESS_HOURS.timezone
-        });
-        fhirPatientId = fhirPatient && fhirPatient.id;
-      } catch(e) {
+        }, true); // requirePhoneConfirmation = true
+
+        // Check if duplicate was detected
+        if (patientResult.duplicate && patientResult.requiresPhoneConfirmation) {
+          console.warn('🚨 DUPLICATE DETECTED: Similar name found, phone confirmation required');
+
+          // Return error response indicating phone confirmation is needed
+          return {
+            success: false,
+            duplicate: true,
+            requiresPhoneConfirmation: true,
+            error: patientResult.message || 'Duplicate patient found. Phone number confirmation required.',
+            duplicates: patientResult.duplicates || [],
+            provided_name: patientResult.provided_name,
+            provided_phone: patientResult.provided_phone,
+            message: `I found ${patientResult.duplicates.length} patient(s) with a similar name "${patientResult.provided_name}" in our system. To verify your identity and schedule your appointment, please confirm your phone number.`,
+            voice_agent_instruction: 'Ask the caller to confirm their phone number. If the phone number matches an existing patient, use that patient record. If not, ask the caller to verify their information before proceeding.'
+          };
+        }
+
+        // Patient was found or created successfully
+        if (patientResult.patient) {
+          fhirPatientId = patientResult.patient.id || patientResult.patient.resource_id;
+          console.log(`✅ Patient record ${patientResult.foundBy}: ${fhirPatientId}`);
+        }
+      } catch (e) {
         console.warn('⚠️  FHIR patient upsert failed:', e.message);
+
+        // If error is about phone number required, return helpful error
+        if (e.message && e.message.includes('Phone number is required')) {
+          return {
+            success: false,
+            error: e.message,
+            requiresPhone: true,
+            message: 'Phone number is required to create a new patient record. Please provide your phone number to schedule an appointment.'
+          };
+        }
+
+        // For other errors, continue (don't block appointment scheduling, but log warning)
+        console.warn('⚠️  Continuing without patient record - appointment will be scheduled but not linked to patient');
       }
 
       // Prepare appointment record
@@ -200,13 +334,16 @@ class BookingService {
       });
 
       // Try to create Google Calendar event
-      const calendar = this.getCalendarClient();
-      if (calendar) {
+      const calendarContext = this.getCalendarClient();
+      if (calendarContext && calendarContext.client) {
+        const { client: calendar, calendarId } = calendarContext;
         try {
-          const event = await this._createCalendarEvent(calendar, appointment, appointmentData);
+          const event = await this._createCalendarEvent(calendar, calendarId, appointment, appointmentData);
           appointment.calendar_event_id = event.id;
           appointment.calendar_link = event.htmlLink;
           console.log('✅ Google Calendar event created:', event.id);
+
+          this._captureUpdatedCalendarCredentials(calendarContext);
         } catch (calendarError) {
           console.warn('⚠️  Calendar event creation failed:', calendarError.message);
           // Continue without calendar event
@@ -369,6 +506,7 @@ class BookingService {
         appointmentDateTime.endISO,
         typeConfig,
         appointmentDateTime.date,
+        appointmentDateTime.timezone,
         appointment.id // Exclude current appointment from conflict check
       );
 
@@ -378,8 +516,9 @@ class BookingService {
 
       // Update Google Calendar event if it exists
       if (appointment.calendar_event_id) {
-        const calendar = this.getCalendarClient();
-        if (calendar) {
+        const calendarContext = this.getCalendarClient();
+        if (calendarContext && calendarContext.client) {
+          const { client: calendar, calendarId } = calendarContext;
           try {
             const updatedEvent = {
               summary: `${appointment.appointment_type}: ${appointment.patient_name}`,
@@ -415,11 +554,13 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
             };
 
             await calendar.events.update({
-              calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+              calendarId: calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary',
               eventId: appointment.calendar_event_id,
               resource: updatedEvent
             });
             console.log('✅ Google Calendar event updated');
+
+            this._captureUpdatedCalendarCredentials(calendarContext);
           } catch (calendarError) {
             console.warn('⚠️  Calendar event update failed:', calendarError.message);
             // Continue with database update even if calendar fails
@@ -498,14 +639,17 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
 
       // Delete from Google Calendar if event exists
       if (appointment.calendar_event_id) {
-        const calendar = this.getCalendarClient();
-        if (calendar) {
+        const calendarContext = this.getCalendarClient();
+        if (calendarContext && calendarContext.client) {
+          const { client: calendar, calendarId } = calendarContext;
           try {
             await calendar.events.delete({
-              calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+              calendarId: calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary',
               eventId: appointment.calendar_event_id
             });
             console.log('✅ Calendar event deleted');
+
+            this._captureUpdatedCalendarCredentials(calendarContext);
           } catch (calendarError) {
             console.warn('⚠️  Calendar event deletion failed:', calendarError.message);
           }
@@ -552,7 +696,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       // Parse date with timezone
       const requestedTimezone = timezone || BUSINESS_HOURS.timezone;
       const requestedDate = this._parseDateWithTimezone(date, requestedTimezone);
-      
+
       if (isNaN(requestedDate)) {
         throw new Error('Invalid date format. Use YYYY-MM-DD');
       }
@@ -566,8 +710,24 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       const existingAppointments = db.getAppointmentsByDate(date);
       console.log('📋 Found', existingAppointments.length, 'existing appointments');
 
+      const internalCalendarEventIds = new Set(
+        existingAppointments
+          .filter(appt => appt.calendar_event_id)
+          .map(appt => appt.calendar_event_id)
+      );
+
+      const externalEvents = await this._getExternalCalendarEventsForDate(
+        date,
+        requestedTimezone,
+        internalCalendarEventIds
+      );
+
+      if (externalEvents.length > 0) {
+        console.log('📅 Found', externalEvents.length, 'external Google Calendar event(s)');
+      }
+
       // Get appointment type config if specified
-      const typeConfig = appointmentType && APPOINTMENT_TYPES[appointmentType] 
+      const typeConfig = appointmentType && APPOINTMENT_TYPES[appointmentType]
         ? APPOINTMENT_TYPES[appointmentType]
         : APPOINTMENT_TYPES['Mental Health Consultation'];
 
@@ -585,7 +745,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
 
       for (const slotTime of allSlots) {
         const slotStart = this._timeToDate(date, slotTime, requestedTimezone);
-        const slotEnd = new Date(slotStart.getTime() + 
+        const slotEnd = new Date(slotStart.getTime() +
           (typeConfig.duration_minutes + typeConfig.buffer_before_minutes + typeConfig.buffer_after_minutes) * 60 * 1000);
 
         // Check for conflicts with existing appointments
@@ -593,6 +753,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
           slotStart,
           slotEnd,
           existingAppointments,
+          externalEvents,
           typeConfig
         );
 
@@ -695,7 +856,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
 
     // Create date with timezone awareness
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-    
+
     // Create date object in specified timezone
     const startDate = this._createDateInTimezone(dateStr, timezone);
     const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
@@ -719,7 +880,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
     };
   }
 
-  static async _createCalendarEvent(calendar, appointment, originalData) {
+  static async _createCalendarEvent(calendar, calendarId, appointment, originalData) {
     const event = {
       summary: `${appointment.appointment_type}: ${appointment.patient_name}`,
       description: `
@@ -755,7 +916,7 @@ Appointment ID: ${appointment.id}
     };
 
     const response = await calendar.events.insert({
-      calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+      calendarId: calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary',
       resource: event
     });
 
@@ -778,8 +939,8 @@ Appointment ID: ${appointment.id}
         const slotEndMinute = (minute + totalSlotMinutes) % 60;
 
         // Check if slot fits within business hours
-        if (slotEndHour < businessHours.end || 
-            (slotEndHour === businessHours.end && slotEndMinute === 0)) {
+        if (slotEndHour < businessHours.end ||
+          (slotEndHour === businessHours.end && slotEndMinute === 0)) {
           const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
           slots.push(timeStr);
         }
@@ -793,8 +954,13 @@ Appointment ID: ${appointment.id}
    * Check if a time slot has conflicts with existing appointments
    * Accounts for buffer times and overlapping appointments
    */
-  static _hasTimeConflict(slotStart, slotEnd, existingAppointments, typeConfig) {
-    for (const appt of existingAppointments) {
+  static _hasTimeConflict(slotStart, slotEnd, existingAppointments, externalEvents, typeConfig) {
+    const combinedEvents = [
+      ...existingAppointments,
+      ...(externalEvents || [])
+    ];
+
+    for (const appt of combinedEvents) {
       // Skip cancelled appointments
       if (appt.status === 'cancelled') continue;
 
@@ -802,9 +968,9 @@ Appointment ID: ${appointment.id}
       const apptEnd = new Date(appt.end_time);
 
       // Get appointment type config to calculate total blocked time
-      const apptTypeConfig = APPOINTMENT_TYPES[appt.appointment_type] || 
-                            APPOINTMENT_TYPES['Mental Health Consultation'];
-      
+      const apptTypeConfig = APPOINTMENT_TYPES[appt.appointment_type] ||
+        APPOINTMENT_TYPES['Mental Health Consultation'];
+
       // Calculate total blocked time (appointment + buffers)
       const apptBlockedStart = new Date(apptStart.getTime() - apptTypeConfig.buffer_before_minutes * 60 * 1000);
       const apptBlockedEnd = new Date(apptEnd.getTime() + apptTypeConfig.buffer_after_minutes * 60 * 1000);
@@ -826,7 +992,7 @@ Appointment ID: ${appointment.id}
    * Check if a specific slot is available for booking
    * @param {String} excludeAppointmentId - Appointment ID to exclude from conflict check (for reschedules)
    */
-  static async _checkSlotAvailability(startISO, endISO, typeConfig, date, excludeAppointmentId = null) {
+  static async _checkSlotAvailability(startISO, endISO, typeConfig, date, timezone = BUSINESS_HOURS.timezone, excludeAppointmentId = null) {
     const slotStart = new Date(startISO);
     const slotEnd = new Date(endISO);
 
@@ -840,11 +1006,23 @@ Appointment ID: ${appointment.id}
       );
     }
 
-    // Check for conflicts
+    const internalCalendarEventIds = new Set(
+      existingAppointments
+        .filter(appt => appt.calendar_event_id)
+        .map(appt => appt.calendar_event_id)
+    );
+
+    const externalEvents = await this._getExternalCalendarEventsForDate(
+      date,
+      timezone,
+      internalCalendarEventIds
+    );
+
     const hasConflict = this._hasTimeConflict(
       slotStart,
       slotEnd,
       existingAppointments,
+      externalEvents,
       typeConfig
     );
 
@@ -860,7 +1038,7 @@ Appointment ID: ${appointment.id}
     // Buffer after can extend slightly past business hours, but the appointment itself must end by 17:00
     const businessStart = new Date(slotStart);
     businessStart.setHours(BUSINESS_HOURS.start, 0, 0, 0);
-    
+
     const businessEnd = new Date(slotStart);
     businessEnd.setHours(BUSINESS_HOURS.end, 0, 0, 0); // 17:00
 
@@ -889,6 +1067,61 @@ Appointment ID: ${appointment.id}
     return { available: true };
   }
 
+  static async _getExternalCalendarEventsForDate(date, timezone = BUSINESS_HOURS.timezone, internalCalendarEventIds = new Set()) {
+    const calendarContext = this.getCalendarClient();
+    if (!calendarContext || !calendarContext.client) {
+      return [];
+    }
+
+    try {
+      const startOfDay = new Date(`${date}T00:00:00`);
+      const endOfDay = new Date(`${date}T23:59:59`);
+
+      const response = await calendarContext.client.events.list({
+        calendarId: calendarContext.calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary',
+        timeMin: startOfDay.toISOString(),
+        timeMax: endOfDay.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
+        timeZone: timezone
+      });
+
+      const events = response.data.items || [];
+      const externalEvents = [];
+
+      for (const event of events) {
+        if (!event || event.status === 'cancelled') continue;
+        if (internalCalendarEventIds.has(event.id)) continue;
+
+        const start = event.start?.dateTime || event.start?.date;
+        const end = event.end?.dateTime || event.end?.date;
+
+        if (!start || !end) continue;
+
+        externalEvents.push({
+          start_time: new Date(start).toISOString(),
+          end_time: new Date(end).toISOString(),
+          status: 'external',
+          appointment_type: 'External Calendar Event'
+        });
+      }
+
+      this._captureUpdatedCalendarCredentials(calendarContext);
+
+      return externalEvents;
+    } catch (error) {
+      console.warn('⚠️  Failed to load Google Calendar events:', error.message);
+
+      if (calendarContext && calendarContext.user) {
+        db.updateUserCalendarTokens(calendarContext.user.id, {
+          error_message: error.message || 'Failed to load Google Calendar events'
+        });
+      }
+
+      return [];
+    }
+  }
+
   /**
    * Create a date in a specific timezone
    * Simplified approach - for production, consider using date-fns-tz
@@ -896,7 +1129,7 @@ Appointment ID: ${appointment.id}
   static _createDateInTimezone(dateTimeStr, timezone) {
     // Parse the date string
     const date = new Date(dateTimeStr);
-    
+
     // For now, we'll work with local time and let the database handle timezone
     // The timezone is stored for reference but we'll convert to UTC for storage
     // In a production system, you'd use a proper timezone library

@@ -354,13 +354,29 @@
             <!-- Signup Form -->
             <form id="signupForm" class="auth-form">
                 <div class="form-group">
-                    <label for="signupName">Full Name</label>
+                    <label for="signupName">Your Full Name</label>
                     <input type="text" id="signupName" placeholder="John Doe" required>
                 </div>
 
                 <div class="form-group">
+                    <label for="signupClinicName">Clinic Name</label>
+                    <input type="text" id="signupClinicName" placeholder="Acme Medical Center" required>
+                    <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
+                        This will be your clinic URL: doclittle.site/your-clinic-name
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="signupClinicPhone">Clinic Phone Number</label>
+                    <input type="tel" id="signupClinicPhone" placeholder="+15555551234" required>
+                    <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
+                        This is the number patients will call (E.164 format: +1XXXXXXXXXX)
+                    </small>
+                </div>
+
+                <div class="form-group">
                     <label for="signupEmail">Email Address</label>
-                    <input type="email" id="signupEmail" placeholder="you@company.com" required>
+                    <input type="email" id="signupEmail" placeholder="you@clinic.com" required>
                 </div>
 
                 <div class="form-group">
@@ -456,9 +472,27 @@
             e.preventDefault();
 
             const name = document.getElementById('signupName').value;
+            const clinicName = document.getElementById('signupClinicName').value;
+            const clinicPhone = document.getElementById('signupClinicPhone').value;
             const email = document.getElementById('signupEmail').value;
             const password = document.getElementById('signupPassword').value;
             const confirmPassword = document.getElementById('signupConfirmPassword').value;
+
+            if (!clinicName || clinicName.trim().length === 0) {
+                showError('Clinic name is required');
+                return;
+            }
+
+            if (!clinicPhone || clinicPhone.trim().length === 0) {
+                showError('Clinic phone number is required');
+                return;
+            }
+
+            // Validate phone number format (basic E.164 check)
+            if (!/^\+?[1-9]\d{1,14}$/.test(clinicPhone.replace(/\s+/g, ''))) {
+                showError('Please enter a valid phone number in E.164 format (e.g., +15555551234)');
+                return;
+            }
 
             if (password !== confirmPassword) {
                 showError('Passwords do not match');
@@ -470,7 +504,7 @@
                 return;
             }
 
-            await signup(name, email, password);
+            await signup(name, email, password, clinicName, clinicPhone);
         });
 
         async function login(email, password) {
@@ -532,7 +566,7 @@
             }
         }
 
-        async function signup(name, email, password) {
+        async function signup(name, email, password, clinicName, clinicPhone) {
             const signupBtn = document.getElementById('signupBtn');
 
             hideMessages();
@@ -543,18 +577,30 @@
                 const response = await fetch(`${API_BASE}/api/auth/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, email, password })
+                    body: JSON.stringify({ 
+                        name, 
+                        email, 
+                        password, 
+                        clinic_name: clinicName,
+                        clinic_phone: clinicPhone
+                    })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    showSuccess('Account created! Logging you in...');
+                    showSuccess('Account created! Setting up your clinic...');
+                    
+                    // Store user data
+                    sessionStorage.setItem('authenticated', 'true');
+                    sessionStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    // Redirect to clinic-specific URL
+                    // For now, redirect to business dashboard (clinic_id is stored in session)
+                    // TODO: Set up routing for doclittle.site/clinicname
                     setTimeout(() => {
-                        sessionStorage.setItem('authenticated', 'true');
-                        sessionStorage.setItem('user', JSON.stringify(data.user));
-                        window.location.href = 'business/dashboard.html';
-                    }, 1500);
+                        window.location.href = 'business/business-dashboard.html';
+                    }, 2000);
                 } else {
                     throw new Error(data.error || 'Signup failed');
                 }

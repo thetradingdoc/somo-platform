@@ -47,6 +47,20 @@
 
 **Files**: `middleware/auth.js`
 
+### 7. Admin Portal Protection ✅
+- `/admin/portal` and all `/api/admin/*` routes are gated by short-lived admin sessions
+- `ADMIN_PORTAL_SECRET` issues HTTP-only cookies via `/api/admin/session`
+- Static portal now renders a login overlay when the session expires
+
+**Files**: `middleware/admin-auth.js`, `server.js`, `public/admin/*`
+
+### 8. Per-Client API Keys ✅
+- New `merchant_api_keys` table stores hashed keys + audit metadata
+- Admin portal can mint, rotate, and revoke keys per clinic
+- Verification middleware matches SHA-256 hashes to prevent key leakage
+
+**Files**: `database.js`, `middleware/auth.js`, `server.js`, `public/admin/*`
+
 ## Installation
 
 ```bash
@@ -62,6 +76,7 @@ Optional environment variables:
 ```bash
 LOG_LEVEL=info  # error, warn, info, debug
 CIRCLE_WEBHOOK_SECRET=your_webhook_secret  # For Circle webhook verification
+ADMIN_PORTAL_SECRET=super_secure_passphrase  # Enables admin login
 ```
 
 ## What's Protected

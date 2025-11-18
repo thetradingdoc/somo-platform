@@ -100,13 +100,20 @@
             background: white;
         }
 
-        .user-info {
+                .user-info {
             display: flex;
             align-items: center;
             gap: 12px;
             padding: 12px;
             border-radius: 8px;
             background: var(--gray-50);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+            transform: translateY(-1px);
         }
 
         .user-avatar {
@@ -350,13 +357,13 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info">
+                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">VC</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Business Owner</div>
                         <div class="user-role">Owner</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">
+                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
                         🚪
                     </button>
                 </div>

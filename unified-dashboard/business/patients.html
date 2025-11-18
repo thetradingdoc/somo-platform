@@ -106,6 +106,13 @@
             padding: 12px;
             border-radius: 8px;
             background: var(--gray-50);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+            transform: translateY(-1px);
         }
 
         .user-avatar {
@@ -451,7 +458,8 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span>
+                    <span class="doc">Doc</span><span class="little">Little</span><span
+                        style="font-weight:700;">.</span>
                 </div>
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
@@ -484,13 +492,13 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info">
+                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
                         <div class="user-role">Provider</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">
+                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
                         🚪
                     </button>
                 </div>
@@ -547,13 +555,8 @@
             <div class="search-bar">
                 <div class="search-input-wrapper">
                     <span class="search-icon">🔍</span>
-                    <input
-                        type="text"
-                        id="searchInput"
-                        class="search-input"
-                        placeholder="Search patients by name, phone, or email..."
-                        oninput="searchCustomers()"
-                    >
+                    <input type="text" id="searchInput" class="search-input"
+                        placeholder="Search patients by name, phone, or email..." oninput="searchCustomers()">
                 </div>
             </div>
 
@@ -640,10 +643,10 @@
                 }
 
                 const patients = (bundle.entry || []).map(e => e.resource).map(r => {
-                    const name = (r.name && r.name[0]) ? `${(r.name[0].given||[''])[0]} ${r.name[0].family||''}`.trim() : 'Unknown Patient';
+                    const name = (r.name && r.name[0]) ? `${(r.name[0].given || [''])[0]} ${r.name[0].family || ''}`.trim() : 'Unknown Patient';
                     const telecom = r.telecom || [];
-                    const phone = (telecom.find(t => t.system==='phone')||{}).value || '';
-                    const email = (telecom.find(t => t.system==='email')||{}).value || '';
+                    const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
+                    const email = (telecom.find(t => t.system === 'email') || {}).value || '';
                     return {
                         fhir_id: r.id,
                         customer_name: name,
@@ -670,7 +673,7 @@
                             // Eligibility data not available - silently continue
                             console.debug(`No eligibility data for patient ${p.fhir_id}`);
                         }
-                        
+
                         // Fetch EHR data from Epic
                         let ehrData = null;
                         try {
@@ -683,9 +686,9 @@
                             // EHR data not available - silently continue
                             console.debug(`No EHR data for patient ${p.fhir_id}`);
                         }
-                        
-                        return { 
-                            ...p, 
+
+                        return {
+                            ...p,
                             eligibility: eligibilityData,
                             ehr_data: ehrData
                         };
@@ -914,7 +917,7 @@
             // Navigate to billing page for this patient
             window.location.href = `billing.html?patient=${encodeURIComponent(fhirId)}`;
         }
-        
+
         function viewPatientDetails(fhirId) {
             // Navigate to records, but also support inline insurance view via param
             window.location.href = `records.html?id=${encodeURIComponent(fhirId)}`;
@@ -1023,18 +1026,18 @@
         }
 
         // Inline insurance loader (if ?patientId= present on this page)
-        (function loadInlineInsurance(){
+        (function loadInlineInsurance() {
             try {
                 const params = new URLSearchParams(window.location.search);
                 const pid = params.get('patientId');
                 if (!pid) return;
                 document.getElementById('insCoveragePanel').style.display = 'block';
                 Promise.all([
-                    fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/insurance`).then(r=>r.json()),
-                    fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/eligibility`).then(r=>r.json())
+                    fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/insurance`).then(r => r.json()),
+                    fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(pid)}/eligibility`).then(r => r.json())
                 ]).then(([ins, elig]) => {
                     if (ins.success && Array.isArray(ins.insurance) && ins.insurance.length) {
-                        const primary = ins.insurance.find(i=>i.is_primary) || ins.insurance[0];
+                        const primary = ins.insurance.find(i => i.is_primary) || ins.insurance[0];
                         document.getElementById('uiInsProvider').textContent = primary.payer_name || primary.payer_id || '—';
                         document.getElementById('uiInsMember').textContent = primary.member_id || '—';
                     }
@@ -1048,11 +1051,10 @@
                         document.getElementById('uiInsCoins').textContent = (latest.coinsurance_percent != null) ? `${latest.coinsurance_percent}%` : '—';
                         document.getElementById('uiInsPlanSummary').textContent = latest.plan_summary || '—';
                     }
-                }).catch(()=>{});
-            } catch (_) {}
+                }).catch(() => { });
+            } catch (_) { }
         })();
     </script>
 </body>
 
 </html>
-

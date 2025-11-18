@@ -36,13 +36,43 @@ router.use((req, res, next) => {
  */
 router.post('/Patient', async (req, res) => {
   try {
-    const patient = await FHIRService.getOrCreatePatient(req.body);
+    const patientResult = await FHIRService.getOrCreatePatient(req.body, true);
+
+    // Check if duplicate was detected
+    if (patientResult.duplicate && patientResult.requiresPhoneConfirmation) {
+      return res.status(409).json({
+        resourceType: 'OperationOutcome',
+        issue: [{
+          severity: 'error',
+          code: 'duplicate',
+          diagnostics: patientResult.message || 'Duplicate patient found. Phone number confirmation required.'
+        }],
+        duplicate: true,
+        requiresPhoneConfirmation: true,
+        duplicates: patientResult.duplicates || [],
+        provided_name: patientResult.provided_name,
+        provided_phone: patientResult.provided_phone
+      });
+    }
+
+    // Patient was found or created successfully
+    const patient = patientResult.patient;
+    if (!patient) {
+      return res.status(400).json({
+        resourceType: 'OperationOutcome',
+        issue: [{
+          severity: 'error',
+          code: 'invalid',
+          diagnostics: 'Failed to create or find patient'
+        }]
+      });
+    }
 
     // Audit log
     await FHIRService.auditLog(
       'CREATE',
       'Patient',
-      patient.id,
+      patient.id || patient.resource_id,
       req.body.userId || 'system',
       req.ip,
       req.get('User-Agent')

@@ -8,6 +8,7 @@
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
+const http = require('http');
 
 class EpicAdapter {
   constructor() {
@@ -18,8 +19,102 @@ class EpicAdapter {
     this.productionBaseUrl = process.env.EPIC_PRODUCTION_BASE_URL || 'https://fhir.epic.com/interconnect-fhir-oauth';
     this.clientId = process.env.EPIC_CLIENT_ID; // Non-Production Client ID for sandbox: 2f2d99a7-4ac1-4a82-8559-03e1e680bf91
     this.clientSecret = process.env.EPIC_CLIENT_SECRET; // Optional for confidential clients
-    this.redirectUri = process.env.EPIC_REDIRECT_URI || `${process.env.BASE_URL || 'http://localhost:4000'}/api/ehr/epic/callback`;
+    
+    // Determine redirect URI - prioritize EPIC_REDIRECT_URI, then API_BASE_URL, then BASE_URL, then ngrok detection, then Railway URL, then localhost
+    if (process.env.EPIC_REDIRECT_URI) {
+      this.redirectUri = process.env.EPIC_REDIRECT_URI;
+    } else {
+      let baseUrl = process.env.API_BASE_URL || process.env.BASE_URL;
+      
+      if (!baseUrl) {
+        // Check if running on Railway
+        const railwayUrl = process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN;
+        if (railwayUrl) {
+          baseUrl = `https://${railwayUrl}`;
+        } else {
+          // For local development, try to detect ngrok synchronously
+          baseUrl = this._detectNgrokUrl();
+          
+          if (!baseUrl) {
+            if (process.env.NODE_ENV === 'production') {
+              // Production: use Railway backend URL
+              baseUrl = 'https://web-production-a783d.up.railway.app';
+            } else {
+              // Development: use localhost (but Epic usually requires HTTPS)
+              // Note: Epic sandbox typically requires HTTPS, so ngrok is recommended
+              baseUrl = 'http://localhost:4000';
+              console.warn('⚠️  Using localhost for Epic redirect URI. Epic sandbox requires HTTPS - use ngrok or set API_BASE_URL to ngrok URL.');
+            }
+          }
+        }
+      }
+      
+      this.redirectUri = `${baseUrl}/api/ehr/epic/callback`;
+    }
+    
     this.useSandbox = process.env.EPIC_USE_SANDBOX !== 'false';
+  }
+
+  /**
+   * Synchronously detect ngrok URL from local ngrok API
+   * Returns ngrok URL or null if not available
+   */
+  _detectNgrokUrl() {
+    try {
+      // Use synchronous HTTP request (for constructor)
+      const http = require('http');
+      const url = require('url');
+      
+      // Try to get ngrok info synchronously (with timeout)
+      // Note: This is a best-effort detection, might not work in all cases
+      let ngrokUrl = null;
+      
+      // For now, check environment variable first (user can set NGROK_URL)
+      if (process.env.NGROK_URL) {
+        return process.env.NGROK_URL;
+      }
+      
+      // Return null - async detection will happen when generateAuthUrl is called
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Get redirect URI, with async ngrok detection if needed
+   * For local development, always try to use ngrok if available (even if EPIC_REDIRECT_URI is set)
+   */
+  async getRedirectUri() {
+    // For local development, always try to detect ngrok first (even if EPIC_REDIRECT_URI is set)
+    // This allows testing with ngrok without modifying .env
+    const isLocalDevelopment = process.env.NODE_ENV !== 'production' && 
+                               !process.env.RAILWAY_STATIC_URL && 
+                               !process.env.RAILWAY_PUBLIC_DOMAIN;
+    
+    if (isLocalDevelopment) {
+      try {
+        const ngrokInfo = await axios.get('http://127.0.0.1:4040/api/tunnels', { timeout: 1000 }).catch(() => null);
+        if (ngrokInfo && ngrokInfo.data && ngrokInfo.data.tunnels && ngrokInfo.data.tunnels.length > 0) {
+          const httpsTunnel = ngrokInfo.data.tunnels.find(t => t.proto === 'https');
+          if (httpsTunnel) {
+            const ngrokUrl = `${httpsTunnel.public_url}/api/ehr/epic/callback`;
+            console.log(`🔗 Using ngrok URL for Epic redirect (local development): ${ngrokUrl}`);
+            console.log(`   Note: Make sure this URL is registered in Epic sandbox app settings`);
+            return ngrokUrl;
+          }
+        }
+      } catch (e) {
+        // ngrok not available or not running - continue with configured redirect URI
+        if (this.redirectUri && this.redirectUri.includes('doclittle.site')) {
+          console.warn('⚠️  Epic redirect URI points to doclittle.site, but backend is running locally.');
+          console.warn('   For local testing, use ngrok or update EPIC_REDIRECT_URI in .env');
+        }
+      }
+    }
+    
+    // Use configured redirect URI (from EPIC_REDIRECT_URI or auto-detected)
+    return this.redirectUri;
   }
 
   /**
@@ -44,12 +139,15 @@ class EpicAdapter {
    * @param {string} patientId - Optional patient ID for patient context
    * @returns {Object} Authorization URL and state token
    */
-  generateAuthUrl(providerId, patientId = null) {
+  async generateAuthUrl(providerId, patientId = null) {
     if (!this.clientId) {
       throw new Error('Epic Client ID not configured. Set EPIC_CLIENT_ID in .env');
     }
 
     const state = uuidv4();
+    
+    // Get redirect URI (with ngrok detection if needed)
+    const redirectUri = await this.getRedirectUri();
     
     // Epic SMART on FHIR authorization endpoint
     // Epic sandbox: https://fhir.epic.com/interconnect-fhir-oauth/oauth2/authorize
@@ -60,7 +158,7 @@ class EpicAdapter {
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: this.clientId,
-      redirect_uri: this.redirectUri,
+      redirect_uri: redirectUri,
       state: state,
       scope: 'patient/Encounter.read patient/Condition.read patient/Procedure.read patient/Observation.read patient/Coverage.read patient/DocumentReference.read patient/DiagnosticReport.read offline_access',
       aud: this.getBaseUrl() // Audience must match the base URL

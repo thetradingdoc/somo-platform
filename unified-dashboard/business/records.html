@@ -21,7 +21,14 @@
     .nav-item.active { background:var(--primary); color:#fff; }
     .nav-icon { font-size:20px; }
     .sidebar-footer { padding:16px; border-top:1px solid var(--gray-200); position:absolute; bottom:0; width:260px; background:#fff; }
-    .user-info { display:flex; align-items:center; gap:12px; padding:12px; border-radius:8px; background:var(--gray-50); }
+    .user-info {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+            transform: translateY(-1px); display:flex; align-items:center; gap:12px; padding:12px; border-radius:8px; background:var(--gray-50); }
     .user-avatar { width:40px; height:40px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
     .user-details { flex:1; }
     .user-name { font-weight:600; font-size:14px; color:var(--gray-900); }

@@ -1,52 +1,129 @@
 # DocLittle Documentation
 
-This directory contains all documentation for the DocLittle platform, organized by category.
+Complete documentation for the DocLittle Agentic Commerce Platform.
 
-## 📁 Directory Structure
+---
 
-### Setup (`setup/`)
-Configuration and setup guide:
-- **SETUP.md** - Complete setup guide (environment variables, local development, production deployment, domain configuration, voice agent setup, troubleshooting)
+## 📁 Documentation Structure
 
-### Architecture (`architecture/`)
-System architecture and design documents:
-- **VISION.md** - Overall vision and architecture of the platform
-- **PAYMENT_ARCHITECTURE.md** - Payment system architecture and flow
-- **HEALTHCARE_ASSESSMENT.md** - Assessment of healthcare use case, voice agent, and integrations
+### `/docs/azure/` - Azure Configuration ⭐ NEW
+- **README.md** - Azure setup and configuration guide
+- Complete Azure Communication Services setup
+- Email service configuration
+- DNS records and troubleshooting
 
-### API (`api/`)
-API documentation:
-- **API_DOCUMENTATION.md** - Complete API documentation (see also `openapi.yaml` in middleware-platform)
+### `/docs/email/` - Email Service ⭐ NEW
+- **README.md** - Email service documentation
+- Email debugging and diagnostics
+- Test endpoints and configuration
+- Email service status
 
-### Deployment (`deployment/`)
-Deployment and infrastructure guides:
-- **AZURE_EMAIL_SETUP.md** - Azure Communication Services Email setup
-- **AZURE_CUSTOM_DOMAIN_SETUP.md** - Azure email with custom domain setup
-- **BACKUP_STRATEGY.md** - Database backup strategy
-- **SECURITY_IMPROVEMENTS.md** - Security enhancements and best practices
+### `/docs/features/` - Feature Testing ⭐ NEW
+- **README.md** - Feature test results
+- Comprehensive feature validation
+- Production readiness status
 
-### Voice Agent (`voice-agent/`)
-Voice agent prompts and configuration:
-- **kelly-voice-agent-prompt.md** - Kelly's voice agent prompt
+### `/docs/architecture/` - System Architecture
+- **README.md** - Architecture overview (to be created)
+- Multi-tenant voice agent architecture
+- Payment processing architecture
+- Database schema design
+- Platform vision and roadmap
 
-## 📚 Quick Links
+### `/docs/api/` - API Documentation
+- **README.md** - API reference (to be created)
+- Complete API documentation
+- Endpoint reference
+- Authentication and usage
 
-### Getting Started
-1. [Complete Setup Guide](setup/SETUP.md) - Everything you need to get started
-2. [API Documentation](api/API_DOCUMENTATION.md)
+### `/docs/deployment/` - Deployment & Infrastructure
+- **README.md** - Deployment guide (to be created)
+- Azure custom domain setup
+- Azure email service setup
+- Backup strategy
+- Security improvements
 
-### Development
-1. [Vision & Architecture](architecture/VISION.md)
-2. [Payment Architecture](architecture/PAYMENT_ARCHITECTURE.md)
-3. [Voice Agent Prompts](voice-agent/kelly-voice-agent-prompt.md)
+### `/docs/setup/` - Setup Guides
+- **README.md** - Setup overview (to be created)
+- Google Calendar OAuth setup
+- Multi-tenant Google OAuth
+- Stripe Issuing setup
+- Main setup documentation
 
-### Deployment
-1. [Security Improvements](deployment/SECURITY_IMPROVEMENTS.md)
-2. [Backup Strategy](deployment/BACKUP_STRATEGY.md)
-3. [Azure Email Setup](deployment/AZURE_EMAIL_SETUP.md)
+### `/docs/testing/` - Testing Documentation
+- **README.md** - Testing guide (to be created)
+- Email booking test results
+- Test suites and results
+- Troubleshooting guides
 
-## 🔗 External Resources
+### `/docs/analysis/` - Analysis & Research
+- **README.md** - Analysis overview (to be created)
+- Voice agent call analysis
+- Uninsured user flow analysis
+- Insurance enrollment API research
+- Enrollment and verification flow
 
-- Main README: [`../README.md`](../README.md)
-- OpenAPI Spec: [`../middleware-platform/openapi.yaml`](../middleware-platform/openapi.yaml)
+### `/docs/integrations/` - Integration Documentation
+- **README.md** - Integrations overview (to be created)
+- Stedi vs UHC FHIR comparison
+- UHC FHIR service usage
+- Stripe Issuing integration
 
+### `/docs/voice-agent/` - Voice Agent
+- **README.md** - Voice agent guide (to be created)
+- Voice agent system prompts
+- Retell configuration
+- Voice agent architecture
+
+---
+
+## 🚀 Quick Start
+
+1. **New Setup?** → See `/docs/setup/README.md`
+2. **Azure Email?** → See `/docs/azure/README.md`
+3. **Email Issues?** → See `/docs/email/README.md`
+4. **API Reference?** → See `/docs/api/README.md`
+5. **Architecture?** → See `/docs/architecture/README.md`
+
+---
+
+## 📊 Recent Updates
+
+### November 15, 2025
+- ✅ Azure email fully configured and working
+- ✅ All 4 email types sending via Azure
+- ✅ Documentation reorganized into subfolders
+- ✅ Each subfolder has main README.md
+- ✅ Feature testing complete (9/9 passing)
+
+---
+
+## 🔍 Key Documents
+
+### For Setup
+- `/docs/azure/README.md` - Azure email setup
+- `/docs/setup/README.md` - Platform setup
+- `/docs/deployment/README.md` - Deployment guide
+
+### For Development
+- `/docs/architecture/README.md` - System architecture
+- `/docs/api/README.md` - API reference
+- `/docs/testing/README.md` - Testing guide
+
+### For Operations
+- `/docs/email/README.md` - Email service
+- `/docs/features/README.md` - Feature status
+- `/docs/integrations/README.md` - Integrations
+
+---
+
+## 📋 Documentation Standards
+
+- **Every subfolder** has a `README.md` as the main document
+- **All .md files** are organized in subfolders
+- **Main README.md** (this file) provides navigation
+- **Each README.md** includes an index of files in that folder
+
+---
+
+**Last Updated:** November 15, 2025
