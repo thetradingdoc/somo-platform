@@ -547,12 +547,170 @@ class FHIRService {
   }
 
   /**
+   * Fetch test eligibility data from Stedi sandbox and create patients
+   * This calls Stedi API with test member IDs to create eligibility checks
+   */
+  static async fetchTestPatientsFromStedi() {
+    try {
+      console.log('[FHIR] 🔄 Fetching test patients from Stedi sandbox...');
+      
+      const InsuranceService = require('./insurance-service');
+      
+      // Test patient data for Stedi sandbox
+      // These are common test member IDs used in healthcare sandboxes
+      const testPatients = [
+        {
+          patientName: 'John Smith',
+          dateOfBirth: '1980-01-15',
+          memberId: '123456789',
+          payerId: 'BCBS',
+          phone: '+15551234567',
+          email: 'john.smith@example.com'
+        },
+        {
+          patientName: 'Jane Doe',
+          dateOfBirth: '1985-05-20',
+          memberId: '987654321',
+          payerId: 'AETNA',
+          phone: '+15559876543',
+          email: 'jane.doe@example.com'
+        },
+        {
+          patientName: 'Robert Johnson',
+          dateOfBirth: '1990-08-10',
+          memberId: '456789123',
+          payerId: 'UHC',
+          phone: '+15555555555',
+          email: 'robert.johnson@example.com'
+        }
+      ];
+
+      let created = 0;
+      let eligibilityChecksCreated = 0;
+
+      for (const testPatient of testPatients) {
+        try {
+          // Check if patient already exists
+          const existingPatient = db.getFHIRPatientByPhone(testPatient.phone) || 
+                                 db.getFHIRPatientByEmail(testPatient.email);
+          
+          if (existingPatient) {
+            console.log(`[FHIR] ⏭️  Patient ${testPatient.patientName} already exists, skipping`);
+            continue;
+          }
+
+          // Call Stedi API to check eligibility (this will create an eligibility check)
+          console.log(`[FHIR] 📞 Checking eligibility for ${testPatient.patientName} (${testPatient.memberId})...`);
+          
+          const eligibilityData = {
+            patientName: testPatient.patientName,
+            dateOfBirth: testPatient.dateOfBirth,
+            memberId: testPatient.memberId,
+            payerId: testPatient.payerId,
+            serviceCode: '90834', // Common therapy CPT code
+            dateOfService: new Date().toISOString().split('T')[0],
+            patientId: null // Will be set after patient creation
+          };
+
+          // Create patient from test data first
+          const nameParts = testPatient.patientName.split(' ');
+          const family = nameParts.pop() || 'Unknown';
+          const given = nameParts.length > 0 ? nameParts : [testPatient.patientName];
+
+          const patientResult = await this.getOrCreatePatient({
+            name: {
+              family: family,
+              given: given
+            },
+            phone: testPatient.phone,
+            email: testPatient.email,
+            birthDate: testPatient.dateOfBirth
+          }, false);
+
+          if (!patientResult.patient) {
+            console.warn(`[FHIR] ⚠️  Failed to create patient ${testPatient.patientName}`);
+            continue;
+          }
+
+          const patientId = patientResult.patient.id || patientResult.patient.resource_id;
+          created++;
+          console.log(`[FHIR] ✅ Created patient ${testPatient.patientName} (ID: ${patientId})`);
+
+          // Now check eligibility with patient ID
+          eligibilityData.patientId = patientId;
+          const eligibilityResult = await InsuranceService.checkEligibility(eligibilityData);
+          
+          if (eligibilityResult) {
+            eligibilityChecksCreated++;
+            console.log(`[FHIR] ✅ Eligibility check created for ${testPatient.patientName}`);
+
+            // Find the eligibility check we just created (by member_id and payer_id)
+            const eligibilityCheck = db.prepare(`
+              SELECT id FROM eligibility_checks
+              WHERE member_id = ? AND payer_id = ? AND patient_id = ?
+              ORDER BY created_at DESC
+              LIMIT 1
+            `).get(testPatient.memberId, testPatient.payerId, patientId);
+
+            // Link the eligibility check to the patient (should already be linked, but ensure it)
+            if (eligibilityCheck) {
+              db.prepare(`
+                UPDATE eligibility_checks
+                SET patient_id = ?
+                WHERE id = ?
+              `).run(patientId, eligibilityCheck.id);
+
+              // Create patient_insurance record
+              const payer = db.prepare(`
+                SELECT payer_name FROM insurance_payers WHERE payer_id = ?
+              `).get(testPatient.payerId);
+
+              db.prepare(`
+                INSERT OR IGNORE INTO patient_insurance (
+                  id, patient_id, payer_id, payer_name, member_id, is_primary, is_verified
+                ) VALUES (?, ?, ?, ?, ?, 1, 1)
+              `).run(
+                uuidv4(),
+                patientId,
+                testPatient.payerId,
+                payer?.payer_name || testPatient.payerId,
+                testPatient.memberId
+              );
+            }
+          }
+        } catch (error) {
+          console.warn(`[FHIR] ⚠️  Error processing test patient ${testPatient.patientName}:`, error.message);
+        }
+      }
+
+      console.log(`[FHIR] ✅ Created ${created} test patients, ${eligibilityChecksCreated} eligibility checks`);
+      return { created, eligibilityChecksCreated };
+    } catch (error) {
+      console.error('[FHIR] ❌ Error fetching test patients from Stedi:', error);
+      return { created: 0, eligibilityChecksCreated: 0 };
+    }
+  }
+
+  /**
    * Sync patients from Stedi eligibility checks
    * Creates FHIR patients from eligibility_checks that don't have linked patients
    */
   static async syncPatientsFromStedi() {
     try {
       console.log('[FHIR] 🔄 Syncing patients from Stedi eligibility checks...');
+      
+      // First, try to fetch test patients from Stedi if no eligibility checks exist
+      const eligibilityCount = db.prepare(`
+        SELECT COUNT(*) as count FROM eligibility_checks
+      `).get();
+
+      if (eligibilityCount.count === 0) {
+        console.log('[FHIR] 📥 No eligibility checks found, fetching test data from Stedi sandbox...');
+        const fetchResult = await this.fetchTestPatientsFromStedi();
+        if (fetchResult.created > 0) {
+          return fetchResult;
+        }
+      }
       
       // Find eligibility_checks without linked patients
       const orphanedChecks = db.prepare(`
