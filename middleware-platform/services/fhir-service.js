@@ -547,13 +547,203 @@ class FHIRService {
   }
 
   /**
+   * Sync patients from Stedi eligibility checks
+   * Creates FHIR patients from eligibility_checks that don't have linked patients
+   */
+  static async syncPatientsFromStedi() {
+    try {
+      console.log('[FHIR] 🔄 Syncing patients from Stedi eligibility checks...');
+      
+      // Find eligibility_checks without linked patients
+      const orphanedChecks = db.prepare(`
+        SELECT DISTINCT 
+          ec.member_id,
+          ec.payer_id,
+          ec.payer_name,
+          ec.response_data,
+          ec.created_at
+        FROM eligibility_checks ec
+        WHERE ec.patient_id IS NULL 
+           OR ec.patient_id NOT IN (SELECT resource_id FROM fhir_patients WHERE is_deleted = 0)
+        ORDER BY ec.created_at DESC
+        LIMIT 50
+      `).all();
+
+      if (orphanedChecks.length === 0) {
+        console.log('[FHIR] ✅ No orphaned eligibility checks found');
+        return { created: 0, linked: 0 };
+      }
+
+      let created = 0;
+      let linked = 0;
+
+      for (const check of orphanedChecks) {
+        try {
+          // Parse response_data to extract patient information
+          let patientData = {
+            phone: null,
+            email: null,
+            name: null
+          };
+
+          if (check.response_data) {
+            try {
+              const response = typeof check.response_data === 'string'
+                ? JSON.parse(check.response_data)
+                : check.response_data;
+
+              // Extract patient info from Stedi response
+              if (response.patient_name) {
+                patientData.name = response.patient_name;
+              }
+              if (response.patient_phone) {
+                patientData.phone = response.patient_phone;
+              }
+              if (response.patient_email) {
+                patientData.email = response.patient_email;
+              }
+              if (response.subscriber && response.subscriber.name) {
+                patientData.name = response.subscriber.name;
+              }
+              if (response.subscriber && response.subscriber.phone) {
+                patientData.phone = response.subscriber.phone;
+              }
+            } catch (parseError) {
+              // Continue without patient data
+            }
+          }
+
+          // Try to find existing patient by member_id in patient_insurance
+          const existingInsurance = db.prepare(`
+            SELECT patient_id FROM patient_insurance
+            WHERE member_id = ? AND payer_id = ?
+            LIMIT 1
+          `).get(check.member_id, check.payer_id);
+
+          let patientId = existingInsurance?.patient_id;
+
+          // Check if patient exists
+          if (patientId) {
+            const existingPatient = db.prepare(`
+              SELECT resource_id FROM fhir_patients 
+              WHERE resource_id = ? AND is_deleted = 0
+            `).get(patientId);
+            if (!existingPatient) {
+              patientId = null;
+            }
+          }
+
+          // Try to find by phone or email
+          if (!patientId && patientData.phone) {
+            const patientByPhone = db.prepare(`
+              SELECT resource_id FROM fhir_patients
+              WHERE phone = ? AND is_deleted = 0
+              LIMIT 1
+            `).get(patientData.phone);
+            if (patientByPhone) {
+              patientId = patientByPhone.resource_id;
+            }
+          }
+
+          if (!patientId && patientData.email) {
+            const patientByEmail = db.prepare(`
+              SELECT resource_id FROM fhir_patients
+              WHERE email = ? AND is_deleted = 0
+              LIMIT 1
+            `).get(patientData.email);
+            if (patientByEmail) {
+              patientId = patientByEmail.resource_id;
+            }
+          }
+
+          // Create new patient if none found
+          if (!patientId) {
+            const patientName = patientData.name || `Member ${check.member_id}`;
+            const nameParts = patientName.split(' ');
+            const family = nameParts.pop() || 'Unknown';
+            const given = nameParts.length > 0 ? nameParts : [patientName];
+
+            const patientResult = await this.getOrCreatePatient({
+              name: {
+                family: family,
+                given: given
+              },
+              phone: patientData.phone,
+              email: patientData.email
+            }, false); // Don't require phone confirmation for sync
+
+            if (patientResult.patient) {
+              patientId = patientResult.patient.id || patientResult.patient.resource_id;
+              created++;
+            }
+          }
+
+          // Link eligibility_checks to patient
+          if (patientId) {
+            const updateResult = db.prepare(`
+              UPDATE eligibility_checks
+              SET patient_id = ?
+              WHERE member_id = ? AND payer_id = ? AND (patient_id IS NULL OR patient_id != ?)
+            `).run(patientId, check.member_id, check.payer_id, patientId);
+
+            if (updateResult.changes > 0) {
+              linked += updateResult.changes;
+            }
+
+            // Ensure patient_insurance record exists
+            const insuranceExists = db.prepare(`
+              SELECT id FROM patient_insurance
+              WHERE patient_id = ? AND member_id = ? AND payer_id = ?
+            `).get(patientId, check.member_id, check.payer_id);
+
+            if (!insuranceExists) {
+              const payer = db.prepare(`
+                SELECT payer_name FROM insurance_payers WHERE payer_id = ?
+              `).get(check.payer_id);
+
+              db.prepare(`
+                INSERT INTO patient_insurance (
+                  id, patient_id, payer_id, payer_name, member_id, is_primary, is_verified
+                ) VALUES (?, ?, ?, ?, ?, 1, 1)
+              `).run(
+                uuidv4(),
+                patientId,
+                check.payer_id,
+                check.payer_name || payer?.payer_name || 'Unknown',
+                check.member_id
+              );
+            }
+          }
+        } catch (error) {
+          console.warn(`[FHIR] ⚠️  Error processing member_id ${check.member_id}:`, error.message);
+        }
+      }
+
+      console.log(`[FHIR] ✅ Synced ${created} new patients, linked ${linked} eligibility checks`);
+      return { created, linked };
+    } catch (error) {
+      console.error('[FHIR] ❌ Error syncing patients from Stedi:', error);
+      return { created: 0, linked: 0 };
+    }
+  }
+
+  /**
    * Search patients
    * @param {Object} searchParams - Search parameters
    * @returns {Array} Array of FHIR Patient resources
    */
   static async searchPatients(searchParams) {
     try {
-      const patients = db.searchFHIRPatients(searchParams);
+      let patients = db.searchFHIRPatients(searchParams);
+      
+      // If no patients found and no search filters, try syncing from Stedi
+      if (patients.length === 0 && !searchParams.name && !searchParams.phone && !searchParams.email) {
+        console.log('[FHIR] No patients found, attempting to sync from Stedi eligibility checks...');
+        await this.syncPatientsFromStedi();
+        // Try again after sync
+        patients = db.searchFHIRPatients(searchParams);
+      }
+      
       return patients.map(p => p.resource_data);
     } catch (error) {
       console.error('[FHIR] Error in searchPatients:', error);

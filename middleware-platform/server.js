@@ -353,6 +353,51 @@ app.get('/login', (req, res) => {
   res.sendFile(getUnifiedDashboardPath('login.html'));
 });
 
+app.get(['/about', '/about.html'], (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  res.sendFile(getUnifiedDashboardPath('about.html'));
+});
+
+// Signup page (use case selection) - only on root domain
+app.get('/signup', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    // API subdomain has its own signup flow
+    return res.redirect('/');
+  }
+  // Serve use case selection page for root domain
+  res.sendFile(getUnifiedDashboardPath('signup.html'));
+});
+
+app.get('/signup/saas', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  // SaaS Platform - serve login.html with test accounts (insurer, provider, patient)
+  res.sendFile(getUnifiedDashboardPath('login.html'));
+});
+
+app.get('/signup/form', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.redirect('/');
+  }
+
+  // Check if this is for SaaS platform
+  const plan = req.query.plan;
+  if (plan === 'saas') {
+    // SaaS Platform signup/login - serve login.html with test accounts
+    res.sendFile(getUnifiedDashboardPath('login.html'));
+  } else {
+    // API Integration signup - should redirect to api.doclittle.site
+    res.redirect('https://api.doclittle.site');
+  }
+});
+
 app.get('/index.html', (req, res) => {
   const hostname = getHostname(req);
   if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
@@ -421,7 +466,7 @@ app.use('/api', invoiceRoutes);
 // Register /terms route (MANDATORY - requires session and email verification)
 app.get('/terms', (req, res) => {
   const sessionId = req.cookies?.customer_session;
-  
+
   // Check for session (user must be signed up first)
   if (!sessionId) {
     return res.redirect('/?redirect=/terms');
@@ -652,50 +697,95 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
-    // Look up clinic by phone number
-    const toNumber = req.body.To;
-    const clinicPhone = db.getClinicPhoneNumber(toNumber);
+    // Look up SaaS customer by dedicated Twilio phone number first
+    const toNumberRaw = req.body.To;
+    const normalizedToNumber = normalizePhoneNumber(toNumberRaw);
     let clinicId = null;
     let customerId = null;
+    let matchedCustomer = null;
     let retellAgentId = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
 
-    if (clinicPhone && clinicPhone.clinic_id) {
-      clinicId = clinicPhone.clinic_id;
-      customerId = clinicId; // Legacy: clinic_id used as customer_id
-      const clinic = db.getClinicById(clinicId);
-      if (clinic && clinic.retell_agent_id) {
-        retellAgentId = clinic.retell_agent_id;
-        console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
-        console.log(`   Using Retell agent: ${retellAgentId}`);
+    const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
+    if (customerByNumber) {
+      matchedCustomer = customerByNumber;
+      customerId = customerByNumber.id;
+      if (customerByNumber.retell_agent_id) {
+        retellAgentId = customerByNumber.retell_agent_id;
+      }
+      console.log(`✅ Matched customer ${customerByNumber.name || customerByNumber.company_name || customerByNumber.id} via Twilio number ${normalizedToNumber}`);
+
+      const credits = db.getCustomerCredits(customerId);
+      if (!credits || credits.credits_balance_minutes <= 0) {
+        console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
       }
     } else {
-      // Try to find customer by agent_id if provided in query params or headers
-      const agentIdFromRequest = req.query.agent_id || req.headers['x-retell-agent-id'];
-      if (agentIdFromRequest) {
-        const customer = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(agentIdFromRequest);
-        if (customer) {
-          customerId = customer.id;
-          retellAgentId = agentIdFromRequest;
-          console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
+      // Look up legacy clinic mapping
+      const clinicPhone = db.getClinicPhoneNumber(normalizedToNumber);
+      if (clinicPhone && clinicPhone.clinic_id) {
+        clinicId = clinicPhone.clinic_id;
+        customerId = clinicId; // Legacy: clinic_id used as customer_id
+        const clinic = db.getClinicById(clinicId);
+        if (clinic && clinic.retell_agent_id) {
+          retellAgentId = clinic.retell_agent_id;
+          console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
           console.log(`   Using Retell agent: ${retellAgentId}`);
-          
-          // Check credits before allowing call
-          const credits = db.getCustomerCredits(customerId);
-          if (!credits || credits.credits_balance_minutes <= 0) {
-            console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+        }
+      } else {
+        // Try to find customer by agent_id if provided in query params or headers
+        const agentIdFromRequest = req.query.agent_id || req.headers['x-retell-agent-id'];
+        if (agentIdFromRequest) {
+          const customer = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(agentIdFromRequest);
+          if (customer) {
+            matchedCustomer = customer;
+            customerId = customer.id;
+            retellAgentId = agentIdFromRequest;
+            console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
+            console.log(`   Using Retell agent: ${retellAgentId}`);
+
+            const credits = db.getCustomerCredits(customerId);
+            if (!credits || credits.credits_balance_minutes <= 0) {
+              console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+            }
+          } else {
+            console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
+            console.warn(`   Using default Retell agent: ${retellAgentId}`);
           }
         } else {
-          console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
+          console.warn(`⚠️  No clinic or customer found for phone number: ${normalizedToNumber}`);
           console.warn(`   Using default Retell agent: ${retellAgentId}`);
-      }
-    } else {
-      console.warn(`⚠️  No clinic found for phone number: ${toNumber}`);
-      console.warn(`   Using default Retell agent: ${retellAgentId}`);
+        }
       }
     }
 
     // CRITICAL: Register call with Retell FIRST (before responding)
     // But use a shorter timeout and handle errors gracefully
+    const metadata = {};
+    if (req.body.CallSid) {
+      metadata.twilio_call_sid = req.body.CallSid;
+    }
+    if (clinicId) {
+      metadata.clinic_id = clinicId;
+    }
+    if (customerId) {
+      metadata.customer_id = customerId;
+    }
+    if (matchedCustomer?.customer_type) {
+      metadata.customer_type = matchedCustomer.customer_type;
+    }
+
+    const dynamicVariables = {
+      merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
+    };
+    if (clinicId) {
+      dynamicVariables.clinic_id = String(clinicId);
+    }
+    if (customerId) {
+      dynamicVariables.customer_id = String(customerId);
+    }
+    if (matchedCustomer?.customer_type) {
+      dynamicVariables.customer_type = matchedCustomer.customer_type;
+    }
+
     const registerPayload = {
       agent_id: retellAgentId,
       audio_websocket_protocol: 'twilio',
@@ -703,16 +793,8 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       sample_rate: 8000,
       from_number: req.body.From,
       to_number: req.body.To,
-      metadata: {
-        twilio_call_sid: req.body.CallSid,
-        clinic_id: clinicId || null,
-        customer_id: customerId || null
-      },
-      retell_llm_dynamic_variables: {
-        clinic_id: clinicId || null,
-        customer_id: customerId || null,
-        merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
-      }
+      metadata,
+      retell_llm_dynamic_variables: dynamicVariables
     };
 
     console.log('📡 Registering call with Retell...');
@@ -729,7 +811,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
             'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
             'Content-Type': 'application/json'
           },
-          timeout: 3000 // Very short timeout - 3 seconds max
+          timeout: 8000 // allow up to 8 seconds for Retell to respond
         }
       );
 
@@ -764,6 +846,12 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       console.log('📞 Dialing to Retell SIP endpoint:', sipUri);
     } catch (retellError) {
       console.error('❌ Retell registration failed:', retellError.message);
+      if (retellError.response) {
+        console.error('   Status:', retellError.response.status);
+        console.error('   Data:', JSON.stringify(retellError.response.data));
+      } else if (retellError.request) {
+        console.error('   No response received from Retell (request sent).');
+      }
       // If Retell fails, return error TwiML immediately
       const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -786,34 +874,46 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
 
     // ========== FHIR INTEGRATION ==========
     // Process FHIR resources asynchronously AFTER responding to Twilio
-    // This prevents timeout issues
-    setImmediate(async () => {
-      try {
-        const callData = FHIRAdapter.retellCallToFHIR({
-          call_id: callId,
-          from_number: req.body.From,
-          to_number: req.body.To,
-          metadata: {
-            twilio_call_sid: req.body.CallSid,
-            merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
+    // This prevents timeout issues - FAILURES DO NOT BLOCK CALLS
+    if (process.env.ENABLE_FHIR !== 'false') {
+      setImmediate(async () => {
+        try {
+          // Only process FHIR if we have customer_id (for proper patient linking)
+          if (!customerId) {
+            console.log('[FHIR] Skipping FHIR processing - no customer_id found');
+            return;
           }
-        });
 
-        const fhirResources = await FHIRService.processVoiceCall(callData);
-        console.log(`[FHIR] Created Patient: ${fhirResources.patient.id}, Encounter: ${fhirResources.encounter.id}`);
+          const callData = FHIRAdapter.retellCallToFHIR({
+            call_id: callId,
+            from_number: req.body.From,
+            to_number: req.body.To,
+            metadata: {
+              twilio_call_sid: req.body.CallSid,
+              merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
+            }
+          });
 
-        // Store FHIR IDs for later use
-        global.activeCalls = global.activeCalls || {};
-        global.activeCalls[callId] = {
-          patientId: fhirResources.patient.id,
-          encounterId: fhirResources.encounter.id,
-          callSid: req.body.CallSid
-        };
-      } catch (fhirError) {
-        console.error('[FHIR] Error creating FHIR resources:', fhirError.message);
-        // Continue with call even if FHIR fails (for now)
-      }
-    });
+          const fhirResources = await FHIRService.processVoiceCall(callData);
+          console.log(`[FHIR] ✅ Created Patient: ${fhirResources.patient.id}, Encounter: ${fhirResources.encounter.id}`);
+
+          // Store FHIR IDs for later use
+          global.activeCalls = global.activeCalls || {};
+          global.activeCalls[callId] = {
+            patientId: fhirResources.patient.id,
+            encounterId: fhirResources.encounter.id,
+            callSid: req.body.CallSid
+          };
+        } catch (fhirError) {
+          // FHIR failures are non-blocking - log but don't crash
+          console.error('[FHIR] ⚠️  FHIR processing failed (non-blocking):', fhirError.message);
+          if (fhirError.stack) {
+            console.error('[FHIR] Stack:', fhirError.stack.split('\n').slice(0, 3).join('\n'));
+          }
+          // Continue with call - FHIR is optional for voice agent functionality
+        }
+      });
+    }
     // ======================================
 
   } catch (error) {
@@ -3620,13 +3720,13 @@ app.get('/api/admin/agent/stats', async (req, res) => {
 app.get('/api/admin/api-keys', async (req, res) => {
   try {
     const { customer_id, limit } = req.query;
-    
+
     const filters = {};
     if (customer_id) filters.customer_id = customer_id;
     if (limit) filters.limit = parseInt(limit) || 100;
-    
+
     const keys = db.getAllAPIKeys(filters);
-    
+
     // Get customer info for each key
     const keysWithCustomer = keys.map(key => {
       const customer = db.getCustomer(key.customer_id);
@@ -3640,7 +3740,7 @@ app.get('/api/admin/api-keys', async (req, res) => {
         } : null
       };
     });
-    
+
     res.json({
       success: true,
       api_keys: keysWithCustomer,
@@ -3662,7 +3762,7 @@ app.get('/api/admin/api-keys', async (req, res) => {
 app.get('/api/admin/api-keys/:keyId/recover', async (req, res) => {
   try {
     const { keyId } = req.params;
-    
+
     const keyRecord = db.getAPIKeyById(keyId);
     if (!keyRecord) {
       return res.status(404).json({
@@ -3670,21 +3770,21 @@ app.get('/api/admin/api-keys/:keyId/recover', async (req, res) => {
         error: 'API key not found'
       });
     }
-    
+
     if (!keyRecord.key_secret) {
       return res.status(404).json({
         success: false,
         error: 'API key secret not stored (cannot recover)'
       });
     }
-    
+
     // Decrypt the API key
     const { decryptApiKey } = require('./utils/api-keys');
     const decryptedKey = decryptApiKey(keyRecord.key_secret);
-    
+
     // Get customer info
     const customer = db.getCustomer(keyRecord.customer_id);
-    
+
     res.json({
       success: true,
       api_key: decryptedKey,
@@ -3716,14 +3816,14 @@ app.get('/api/admin/api-keys/:keyId/recover', async (req, res) => {
 app.get('/api/admin/feature-requests', async (req, res) => {
   try {
     const { status, customer_id, limit } = req.query;
-    
+
     const filters = {};
     if (status) filters.status = status;
     if (customer_id) filters.customer_id = customer_id;
     if (limit) filters.limit = parseInt(limit) || 100;
-    
+
     const requests = db.getAllFeatureRequests(filters);
-    
+
     // Get customer info for each request
     const requestsWithCustomer = requests.map(request => {
       const customer = db.getCustomer(request.customer_id);
@@ -3737,7 +3837,7 @@ app.get('/api/admin/feature-requests', async (req, res) => {
         } : null
       };
     });
-    
+
     res.json({
       success: true,
       feature_requests: requestsWithCustomer,
@@ -3760,28 +3860,28 @@ app.post('/api/admin/feature-requests/:requestId/update', async (req, res) => {
   try {
     const { requestId } = req.params;
     const { status, notes } = req.body;
-    
+
     if (!status || !['pending', 'approved', 'rejected'].includes(status)) {
       return res.status(400).json({
         success: false,
         error: 'Invalid status. Must be: pending, approved, or rejected'
       });
     }
-    
+
     // Get the request to check if it exists
     const allRequests = db.getAllFeatureRequests({});
     const request = allRequests.find(r => r.id === requestId);
-    
+
     if (!request) {
       return res.status(404).json({
         success: false,
         error: 'Feature request not found'
       });
     }
-    
+
     // Update status
     db.updateFeatureRequestStatus(requestId, status, notes || null);
-    
+
     // If approved, add feature to customer's api_features
     if (status === 'approved') {
       const customer = db.getCustomer(request.customer_id);
@@ -3796,7 +3896,7 @@ app.post('/api/admin/feature-requests/:requestId/update', async (req, res) => {
         } else if (!apiFeatures) {
           apiFeatures = [];
         }
-        
+
         if (!apiFeatures.includes(request.feature_name)) {
           apiFeatures.push(request.feature_name);
           db.db.prepare(`
@@ -3807,7 +3907,7 @@ app.post('/api/admin/feature-requests/:requestId/update', async (req, res) => {
         }
       }
     }
-    
+
     res.json({
       success: true,
       message: `Feature request ${status} successfully`,
@@ -6519,6 +6619,45 @@ app.get('/api/admin/patients/:id/eligibility', async (req, res) => {
     return res.json({ success: true, patientId, eligibility: elig, count: elig.length });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Restore Stedi patient data from eligibility_checks
+app.post('/api/admin/patients/restore-stedi', async (req, res) => {
+  try {
+    // Use the new syncPatientsFromStedi method from FHIRService
+    const result = await FHIRService.syncPatientsFromStedi();
+    
+    return res.json({ 
+      success: true, 
+      message: 'Stedi patient data restoration complete',
+      result 
+    });
+  } catch (error) {
+    console.error('❌ Error restoring Stedi patients:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Sync patients from Stedi (alternative endpoint)
+app.post('/api/admin/patients/sync-stedi', async (req, res) => {
+  try {
+    const result = await FHIRService.syncPatientsFromStedi();
+    
+    return res.json({ 
+      success: true, 
+      message: `Synced ${result.created} new patients, linked ${result.linked} eligibility checks`,
+      result 
+    });
+  } catch (error) {
+    console.error('❌ Error syncing patients from Stedi:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
