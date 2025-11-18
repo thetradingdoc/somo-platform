@@ -106,7 +106,7 @@
             background: white;
         }
 
-                .user-info {
+        .user-info {
             display: flex;
             align-items: center;
             gap: 12px;
@@ -653,6 +653,13 @@
                                 <option value="">-- Select a patient --</option>
                             </select>
                         </div>
+                        <div style="margin-bottom: 16px; padding: 12px; background: #eff6ff; border-radius: 6px; border: 1px solid #bfdbfe;">
+                            <div style="font-size: 12px; color: #1e40af; margin-bottom: 8px; font-weight: 500;">No patients? Create one:</div>
+                            <button id="createPatientBtn" 
+                                style="width: 100%; padding: 8px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.2s;">
+                                + Create New Patient
+                            </button>
+                        </div>
                         <button id="createClaimBtn" class="btn-primary"
                             style="width: 100%; padding: 12px; background: #1e40af; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s;"
                             disabled>
@@ -667,7 +674,33 @@
     <!-- PDF.js for rendering and text highlighting -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
-        const API_BASE = window.API_BASE || 'http://localhost:4000';
+        // Auto-detect API base URL based on current domain
+        function getApiBase() {
+            // If config.js set it, use that
+            if (window.API_BASE) {
+                return window.API_BASE;
+            }
+
+            // Auto-detect based on hostname
+            const hostname = window.location.hostname;
+
+            // Production domains - use api.doclittle.site
+            if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' ||
+                hostname.includes('doclittle.site') || hostname.includes('azurewebsites.net')) {
+                return 'https://api.doclittle.site';
+            }
+
+            // Local development
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:4000';
+            }
+
+            // Default to production API
+            return 'https://api.doclittle.site';
+        }
+
+        const API_BASE = getApiBase();
+        console.log('🌐 Using API Base URL:', API_BASE);
         let currentPDFData = null;
         let currentPDFText = '';
         let pdfDoc = null;
@@ -973,11 +1006,74 @@
         document.addEventListener('DOMContentLoaded', function () {
             const patientSelect = document.getElementById('patientSelect');
             const createClaimBtn = document.getElementById('createClaimBtn');
+            const createPatientBtn = document.getElementById('createPatientBtn');
 
             if (patientSelect) {
                 patientSelect.addEventListener('change', function () {
                     if (createClaimBtn) {
                         createClaimBtn.disabled = !this.value;
+                    }
+                });
+            }
+
+            // Handle Create Patient button
+            if (createPatientBtn) {
+                createPatientBtn.addEventListener('click', async function () {
+                    const firstName = prompt('Enter patient first name:');
+                    if (!firstName) return;
+
+                    const lastName = prompt('Enter patient last name:');
+                    if (!lastName) return;
+
+                    const phone = prompt('Enter patient phone number (optional):') || null;
+                    const email = prompt('Enter patient email (optional):') || null;
+
+                    try {
+                        createPatientBtn.disabled = true;
+                        createPatientBtn.textContent = 'Creating...';
+
+                        const patientData = {
+                            name: {
+                                family: lastName,
+                                given: [firstName]
+                            },
+                            phone: phone,
+                            email: email
+                        };
+
+                        const response = await fetch(`${API_BASE}/fhir/Patient`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(patientData)
+                        });
+
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.issue?.[0]?.diagnostics || 'Failed to create patient');
+                        }
+
+                        const newPatient = await response.json();
+                        alert(`Patient ${firstName} ${lastName} created successfully!`);
+                        
+                        // Reload patients dropdown
+                        await loadPatients();
+                        
+                        // Select the newly created patient
+                        if (patientSelect) {
+                            const patientId = newPatient.id || newPatient.resource_id;
+                            patientSelect.value = patientId;
+                            if (createClaimBtn) {
+                                createClaimBtn.disabled = false;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error creating patient:', error);
+                        alert('Error creating patient: ' + error.message);
+                    } finally {
+                        createPatientBtn.disabled = false;
+                        createPatientBtn.textContent = '+ Create New Patient';
                     }
                 });
             }

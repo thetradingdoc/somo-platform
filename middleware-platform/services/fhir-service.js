@@ -892,16 +892,7 @@ class FHIRService {
    */
   static async searchPatients(searchParams) {
     try {
-      let patients = db.searchFHIRPatients(searchParams);
-      
-      // If no patients found and no search filters, try syncing from Stedi
-      if (patients.length === 0 && !searchParams.name && !searchParams.phone && !searchParams.email) {
-        console.log('[FHIR] No patients found, attempting to sync from Stedi eligibility checks...');
-        await this.syncPatientsFromStedi();
-        // Try again after sync
-        patients = db.searchFHIRPatients(searchParams);
-      }
-      
+      const patients = db.searchFHIRPatients(searchParams);
       return patients.map(p => p.resource_data);
     } catch (error) {
       console.error('[FHIR] Error in searchPatients:', error);
