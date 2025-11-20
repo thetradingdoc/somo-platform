@@ -14,10 +14,10 @@ let stripe = null;
 try {
     stripe = stripeConfig.initializeStripe();
 } catch (error) {
-    // If it's a validation error, it's a security issue - exit
     if (error.message.includes('SECURITY ERROR')) {
         console.error('❌', error.message);
-        process.exit(1);
+        console.error('⚠️  Credits purchase endpoints disabled until Stripe keys are fixed.');
+        stripe = null;
     } else {
         console.warn('⚠️  Stripe not configured - Payment features will be disabled');
     }

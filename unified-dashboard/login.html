@@ -315,8 +315,11 @@
 <body>
     <div class="auth-container">
         <div class="auth-header">
-            <div class="logo" style="font-family: 'Times New Roman', Times, serif; font-style: italic; letter-spacing: -3px;">
-                <span style="font-style: italic;">Doc</span><span style="font-family: 'Verdana', Geneva, sans-serif; font-weight: 700;">Little</span><span style="font-weight: 700;">.</span>
+            <div class="logo"
+                style="font-family: 'Times New Roman', Times, serif; font-style: italic; letter-spacing: -3px;">
+                <span style="font-style: italic;">Doc</span><span
+                    style="font-family: 'Verdana', Geneva, sans-serif; font-weight: 700;">Little</span><span
+                    style="font-weight: 700;">.</span>
             </div>
             <p>Medical Coding Assistant</p>
         </div>
@@ -408,8 +411,7 @@
 
             <div id="g_id_onload"
                 data-client_id="733692195644-k21cf071v806e216qris7evhr3asps72.apps.googleusercontent.com"
-                data-callback="handleGoogleSignIn"
-                data-auto_prompt="false">
+                data-callback="handleGoogleSignIn" data-auto_prompt="false">
             </div>
 
             <button class="btn-google" id="googleSignInBtn">
@@ -457,7 +459,33 @@
     </div>
 
     <script>
-        const API_BASE = window.API_BASE || 'http://localhost:4000';
+        // Auto-detect API base URL based on current domain
+        function getApiBase() {
+            // If config.js set it, use that
+            if (window.API_BASE) {
+                return window.API_BASE;
+            }
+
+            // Auto-detect based on hostname
+            const hostname = window.location.hostname;
+
+            // Production domains - use api.doclittle.site
+            if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' ||
+                hostname.includes('doclittle.site') || hostname.includes('azurewebsites.net')) {
+                return 'https://api.doclittle.site';
+            }
+
+            // Local development
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:4000';
+            }
+
+            // Default to production API
+            return 'https://api.doclittle.site';
+        }
+
+        const API_BASE = getApiBase();
+        console.log('🌐 Using API Base URL:', API_BASE);
 
         // Login Form Handler
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -545,15 +573,16 @@
                     console.log('User email:', data.user.email);
                     
                     // Redirect based on user role and email (check email first for specific accounts)
+                    // Use absolute paths (starting with /) to work regardless of current URL
                     if (data.user.email === 'insurer@doclittle.com' || data.user.role === 'insurer_admin' || data.user.role === 'insurer') {
                         console.log('Redirecting to insurer dashboard...');
-                        window.location.href = 'insurer/insurer-dashboard.html';
+                        window.location.href = '/insurer/insurer-dashboard.html';
                     } else if (data.user.email === 'patient@doclittle.com' || data.user.role === 'patient') {
                         console.log('Redirecting to patient dashboard...');
-                        window.location.href = 'patients/patient-dashboard.html';
+                        window.location.href = '/patients/patient-dashboard.html';
                     } else {
                         console.log('Redirecting to business dashboard...');
-                        window.location.href = 'business/business-dashboard.html';
+                        window.location.href = '/business/business-dashboard.html';
                     }
                 } else {
                     throw new Error(data.error || 'Login failed');
@@ -599,7 +628,7 @@
                     // For now, redirect to business dashboard (clinic_id is stored in session)
                     // TODO: Set up routing for doclittle.site/clinicname
                     setTimeout(() => {
-                        window.location.href = 'business/business-dashboard.html';
+                        window.location.href = '/business/business-dashboard.html';
                     }, 2000);
                 } else {
                     throw new Error(data.error || 'Signup failed');
@@ -625,7 +654,7 @@
             // Decode JWT to get user info
             const base64Url = credential.split('.')[1];
             const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
                 return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
             }).join(''));
 
@@ -655,7 +684,7 @@
                     sessionStorage.setItem('user', JSON.stringify(data.user));
                     showSuccess('Welcome, ' + userData.name + '!');
                     setTimeout(() => {
-                        window.location.href = 'business/dashboard.html';
+                        window.location.href = '/business/business-dashboard.html';
                     }, 1000);
                 } else {
                     throw new Error(data.error || 'Google authentication failed');
@@ -667,7 +696,7 @@
         }
 
         // Initialize Google Sign-In button
-        window.onload = function() {
+        window.onload = function () {
             if (typeof google !== 'undefined') {
                 google.accounts.id.initialize({
                     client_id: '733692195644-k21cf071v806e216qris7evhr3asps72.apps.googleusercontent.com',
@@ -677,7 +706,7 @@
                 // Render button
                 const googleBtn = document.getElementById('googleSignInBtn');
                 if (googleBtn) {
-                    googleBtn.onclick = function() {
+                    googleBtn.onclick = function () {
                         google.accounts.id.prompt();
                     };
                 }

@@ -1,129 +1,91 @@
-# DocLittle Documentation
+# DocLittle Platform Documentation
 
-Complete documentation for the DocLittle Agentic Commerce Platform.
+Welcome to the DocLittle Medical Coding Assistant documentation.
 
----
+## 📚 Documentation Structure
 
-## 📁 Documentation Structure
+### [Patient Journey](./patient-journey/)
+Complete patient workflow documentation including:
+- Test scenarios and demos
+- Appointment setup
+- Patient data management
+- Full user journey flows
 
-### `/docs/azure/` - Azure Configuration ⭐ NEW
-- **README.md** - Azure setup and configuration guide
-- Complete Azure Communication Services setup
-- Email service configuration
-- DNS records and troubleshooting
+### [Integrations](./integrations/)
+Third-party API integrations:
+- **STEDI API** - Healthcare insurance operations (X12 EDI)
+- **UHC FHIR API** - UnitedHealthcare FHIR integration
+- Insurance eligibility, claims, and EOB processing
 
-### `/docs/email/` - Email Service ⭐ NEW
-- **README.md** - Email service documentation
-- Email debugging and diagnostics
-- Test endpoints and configuration
-- Email service status
+### [Voice Agent](./voice-agent/)
+Retell AI voice agent documentation:
+- 11 core voice agent functions
+- Production test results
+- Agent capabilities and configuration
+- Voice booking workflows
 
-### `/docs/features/` - Feature Testing ⭐ NEW
-- **README.md** - Feature test results
-- Comprehensive feature validation
-- Production readiness status
+### [Deployment](./deployment/)
+Production deployment documentation:
+- Azure deployment guides
+- DNS and SSL configuration
+- Deployment checklists
+- Recent deployment notes
 
-### `/docs/architecture/` - System Architecture
-- **README.md** - Architecture overview (to be created)
+### [Architecture](./architecture/)
+System architecture and design:
 - Multi-tenant voice agent architecture
-- Payment processing architecture
-- Database schema design
-- Platform vision and roadmap
+- Real-time language switching
+- System components and data flow
 
-### `/docs/api/` - API Documentation
-- **README.md** - API reference (to be created)
-- Complete API documentation
-- Endpoint reference
-- Authentication and usage
+### [Testing](./testing/)
+Testing documentation:
+- Test suites and scenarios
+- Voice agent flow tests
+- Tenant isolation tests
+- API testing guides
 
-### `/docs/deployment/` - Deployment & Infrastructure
-- **README.md** - Deployment guide (to be created)
-- Azure custom domain setup
-- Azure email service setup
-- Backup strategy
-- Security improvements
+## 🚀 Quick Links
 
-### `/docs/setup/` - Setup Guides
-- **README.md** - Setup overview (to be created)
-- Google Calendar OAuth setup
-- Multi-tenant Google OAuth
-- Stripe Issuing setup
-- Main setup documentation
+- **API Reference**: See [API documentation](../middleware-platform/routes/README.md)
+- **Setup Guide**: See [Setup documentation](./setup/README.md)
+- **Recent Deployments**: See [Deployment Notes](./deployment/DEPLOYMENT_NOTES_2025_11_20.md)
 
-### `/docs/testing/` - Testing Documentation
-- **README.md** - Testing guide (to be created)
-- Email booking test results
-- Test suites and results
-- Troubleshooting guides
+## 📋 Recent Updates
 
-### `/docs/analysis/` - Analysis & Research
-- **README.md** - Analysis overview (to be created)
-- Voice agent call analysis
-- Uninsured user flow analysis
-- Insurance enrollment API research
-- Enrollment and verification flow
+### November 20, 2025
+- ✅ Patient dashboard "Hi OJ" greeting implementation
+- ✅ Business hours extended to 7pm for 6pm appointments
+- ✅ Patient name update endpoint added
+- ✅ Documentation organized into structured directories
+- ✅ STEDI API endpoints documented
+- ✅ Voice agent capabilities documented
 
-### `/docs/integrations/` - Integration Documentation
-- **README.md** - Integrations overview (to be created)
-- Stedi vs UHC FHIR comparison
-- UHC FHIR service usage
-- Stripe Issuing integration
+## 🔍 Key Features
 
-### `/docs/voice-agent/` - Voice Agent
-- **README.md** - Voice agent guide (to be created)
-- Voice agent system prompts
-- Retell configuration
-- Voice agent architecture
+### Medical Bill Sorting Agent
+An intelligent agent that automates the entire medical billing workflow:
+1. Receives bills from providers, patients, insurers
+2. Sorts and categorizes by patient, provider, insurer
+3. Matches bills to appointments and EOBs
+4. Automates claim submission via STEDI
+5. Processes EOBs and calculates patient responsibility
+6. Deducts from patient wallet automatically
 
----
+### Voice Agent (Kelly)
+11 core functions for healthcare voice interactions:
+- Insurance collection and verification
+- Appointment scheduling and management
+- Payment checkout creation
+- Claim history retrieval
+- Multilingual support
 
-## 🚀 Quick Start
+### Insurance Integration (STEDI)
+X12 EDI transactions for healthcare:
+- Eligibility checks (270/271)
+- Claim submission (837)
+- Claim status (276/277)
+- Payer directory
 
-1. **New Setup?** → See `/docs/setup/README.md`
-2. **Azure Email?** → See `/docs/azure/README.md`
-3. **Email Issues?** → See `/docs/email/README.md`
-4. **API Reference?** → See `/docs/api/README.md`
-5. **Architecture?** → See `/docs/architecture/README.md`
+## 📞 Support
 
----
-
-## 📊 Recent Updates
-
-### November 15, 2025
-- ✅ Azure email fully configured and working
-- ✅ All 4 email types sending via Azure
-- ✅ Documentation reorganized into subfolders
-- ✅ Each subfolder has main README.md
-- ✅ Feature testing complete (9/9 passing)
-
----
-
-## 🔍 Key Documents
-
-### For Setup
-- `/docs/azure/README.md` - Azure email setup
-- `/docs/setup/README.md` - Platform setup
-- `/docs/deployment/README.md` - Deployment guide
-
-### For Development
-- `/docs/architecture/README.md` - System architecture
-- `/docs/api/README.md` - API reference
-- `/docs/testing/README.md` - Testing guide
-
-### For Operations
-- `/docs/email/README.md` - Email service
-- `/docs/features/README.md` - Feature status
-- `/docs/integrations/README.md` - Integrations
-
----
-
-## 📋 Documentation Standards
-
-- **Every subfolder** has a `README.md` as the main document
-- **All .md files** are organized in subfolders
-- **Main README.md** (this file) provides navigation
-- **Each README.md** includes an index of files in that folder
-
----
-
-**Last Updated:** November 15, 2025
+For questions or issues, refer to the specific documentation section or check the deployment notes for recent changes.

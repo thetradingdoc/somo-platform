@@ -980,9 +980,14 @@
                             patientId = patientData.id;
                             const name = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
                             document.getElementById('userName').textContent = name;
-                            const firstName = name.split(' ')[0];
-                            document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                            const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2);
+                            const nameParts = name.split(' ');
+                            const firstName = nameParts[0];
+                            // Show initials if name has 2+ parts (e.g., "Otieno Jeremiah" -> "OJ")
+                            const greeting = nameParts.length >= 2 
+                                ? `Hi ${nameParts.map(n => n[0]).join('').substring(0, 2)}`
+                                : `Hi ${firstName}`;
+                            document.getElementById('greetingTitle').textContent = greeting;
+                            const initials = nameParts.map(n => n[0]).join('').substring(0, 2);
                             document.getElementById('userAvatar').textContent = initials;
                             return;
                         }
@@ -1001,9 +1006,14 @@
                             patientId = patientData.id;
                             const name = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
                             document.getElementById('userName').textContent = name;
-                            const firstName = name.split(' ')[0];
-                            document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                            const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2);
+                            const nameParts = name.split(' ');
+                            const firstName = nameParts[0];
+                            // Show initials if name has 2+ parts (e.g., "Otieno Jeremiah" -> "OJ")
+                            const greeting = nameParts.length >= 2 
+                                ? `Hi ${nameParts.map(n => n[0]).join('').substring(0, 2)}`
+                                : `Hi ${firstName}`;
+                            document.getElementById('greetingTitle').textContent = greeting;
+                            const initials = nameParts.map(n => n[0]).join('').substring(0, 2);
                             document.getElementById('userAvatar').textContent = initials;
                             return;
                         }
@@ -1019,9 +1029,14 @@
                         const data = await response.json();
                         if (data.success && data.patient) {
                             document.getElementById('userName').textContent = data.patient.name;
-                            const firstName = data.patient.name.split(' ')[0];
-                            document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                            const initials = data.patient.name.split(' ').map(n => n[0]).join('').substring(0, 2);
+                            const nameParts = data.patient.name.split(' ');
+                            const firstName = nameParts[0];
+                            // Show initials if name has 2+ parts (e.g., "Otieno Jeremiah" -> "OJ")
+                            const greeting = nameParts.length >= 2 
+                                ? `Hi ${nameParts.map(n => n[0]).join('').substring(0, 2)}`
+                                : `Hi ${firstName}`;
+                            document.getElementById('greetingTitle').textContent = greeting;
+                            const initials = nameParts.map(n => n[0]).join('').substring(0, 2);
                             document.getElementById('userAvatar').textContent = initials;
                             patientId = data.patient.id;
                         }

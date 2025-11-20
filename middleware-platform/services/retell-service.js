@@ -21,8 +21,31 @@ class RetellService {
   generateClinicPrompt(clinicData) {
     try {
       // Read base prompt template
-      const templatePath = path.join(__dirname, '../../docs/voice-agent/kelly-voice-agent-prompt.md');
-      let template = fs.readFileSync(templatePath, 'utf8');
+      // Try multiple possible paths (local dev vs Azure deployment)
+      const possiblePaths = [
+        path.join(__dirname, '../../docs/voice-agent/kelly-voice-agent-prompt.md'), // Local dev
+        path.join(__dirname, '../docs/voice-agent/kelly-voice-agent-prompt.md'), // Azure (if docs copied)
+        path.join(process.cwd(), 'docs/voice-agent/kelly-voice-agent-prompt.md') // Fallback
+      ];
+      
+      let template = null;
+      for (const templatePath of possiblePaths) {
+        try {
+          if (fs.existsSync(templatePath)) {
+            template = fs.readFileSync(templatePath, 'utf8');
+            break;
+          }
+        } catch (e) {
+          // Try next path - silently continue
+          continue;
+        }
+      }
+      
+      // If template file not found, fall through to default prompt
+      if (!template) {
+        console.log('⚠️  Prompt file not found, using default prompt');
+        return this.getDefaultPrompt(clinicData);
+      }
       
       // Replace clinic-specific placeholders
       template = template.replace(/{{CLINIC_NAME}}/g, clinicData.name || 'the clinic');
@@ -52,6 +75,8 @@ You are friendly, professional, and helpful. Your role is to:
 - Check eligibility and benefits
 - Answer questions about services and coverage
 - Process payments when requested
+
+**MULTILINGUAL SUPPORT**: You are fluent in multiple languages including English, Russian, Spanish, Chinese, French, and German. You MUST automatically detect the language being spoken by the caller. If a caller starts speaking in Russian, Spanish, Chinese, French, or German (even without explicitly saying so), immediately switch to that language and continue the entire conversation in their preferred language. Do NOT wait for explicit language requests - detect the language from what they're saying.
 
 Clinic Name: ${clinicData.name || 'Unknown'}
 Business Hours: ${clinicData.business_hours || 'Monday-Friday, 9 AM - 5 PM'}
@@ -218,8 +243,12 @@ Always be polite, patient, and professional. If you don't know something, ask fo
     try {
       const updatePayload = {};
       
+      // Retell API v2 uses 'general_prompt' for updates (not 'system_prompt')
       if (updates.system_prompt) {
-        updatePayload.system_prompt = updates.system_prompt;
+        updatePayload.general_prompt = updates.system_prompt;
+      }
+      if (updates.general_prompt) {
+        updatePayload.general_prompt = updates.general_prompt;
       }
       if (updates.agent_name) {
         updatePayload.agent_name = updates.agent_name;
@@ -233,8 +262,9 @@ Always be polite, patient, and professional. If you don't know something, ask fo
 
       console.log(`📞 Updating Retell agent: ${agentId}`);
 
+      // Retell API uses /update-agent/ endpoint (not /v2/agent/)
       const response = await axios.patch(
-        `${this.apiBaseUrl}/v2/update-agent/${agentId}`,
+        `${this.apiBaseUrl}/update-agent/${agentId}`,
         updatePayload,
         {
           headers: {

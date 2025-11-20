@@ -72,7 +72,7 @@ const APPOINTMENT_TYPES = {
  */
 const BUSINESS_HOURS = {
   start: 9,   // 9 AM
-  end: 17,    // 5 PM (17:00)
+  end: 19,    // 7 PM (19:00) - Extended for 6pm demo appointments (50min duration)
   timezone: process.env.GOOGLE_CALENDAR_TIMEZONE || 'America/New_York',
   slot_interval_minutes: 15  // Minimum slot interval (15 minutes)
 };
@@ -217,6 +217,11 @@ class BookingService {
         throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
       }
 
+      const clinicId = this._ensureClinicId(
+        appointmentData.clinic_id,
+        'scheduling appointments'
+      );
+
       // Get appointment type configuration
       const appointmentType = appointmentData.appointment_type || 'Mental Health Consultation';
       const typeConfig = APPOINTMENT_TYPES[appointmentType] || APPOINTMENT_TYPES['Mental Health Consultation'];
@@ -236,6 +241,7 @@ class BookingService {
         typeConfig,
         appointmentDateTime.date,
         appointmentDateTime.timezone,
+        clinicId,
         null // No appointment to exclude for new bookings
       );
 
@@ -305,6 +311,7 @@ class BookingService {
       // Prepare appointment record
       const appointment = {
         id: appointmentId,
+        clinic_id: clinicId,
         patient_name: appointmentData.patient_name,
         patient_phone: appointmentData.patient_phone,
         patient_email: appointmentData.patient_email,
@@ -353,7 +360,7 @@ class BookingService {
       }
 
       // Save to database
-      db.createAppointment(appointment);
+      await db.createAppointment(appointment);
       console.log('✅ Appointment saved to database');
 
       // Send confirmation email if email provided
@@ -376,6 +383,7 @@ class BookingService {
         appointment: {
           id: appointment.id,
           confirmation_number: appointment.id.substring(5, 13).toUpperCase(),
+          clinic_id: clinicId,
           patient_name: appointment.patient_name,
           appointment_type: appointment.appointment_type,
           datetime: appointmentDateTime.displayTime,
@@ -404,16 +412,22 @@ class BookingService {
    * @param {String} appointmentId - Appointment ID or confirmation number
    * @returns {Object} - Confirmation result
    */
-  static async confirmAppointment(appointmentId) {
+  static async confirmAppointment(appointmentId, clinicId = null) {
     console.log('\n✅ BOOKING SERVICE: Confirm Appointment');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
       // Find appointment
-      const appointment = db.getAppointment(appointmentId);
+      const appointment = await db.getAppointment(appointmentId, clinicId || null);
       if (!appointment) {
-        throw new Error('Appointment not found');
+        throw new Error(clinicId ? 'Appointment not found for this clinic' : 'Appointment not found');
       }
+
+      if (clinicId && appointment.clinic_id && appointment.clinic_id !== clinicId) {
+        throw new Error('Appointment does not belong to this clinic');
+      }
+
+      const scopedClinicId = appointment.clinic_id || clinicId || null;
 
       console.log('📋 Found appointment:', appointment.id);
 
@@ -427,10 +441,10 @@ class BookingService {
       }
 
       // Update status
-      db.updateAppointmentStatus(appointmentId, 'confirmed');
+      db.updateAppointmentStatus(appointmentId, 'confirmed', null, scopedClinicId);
       console.log('✅ Appointment confirmed');
 
-      const updatedAppointment = db.getAppointment(appointmentId);
+      const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
 
       // Send confirmation email if email provided
       if (updatedAppointment.patient_email) {
@@ -468,16 +482,22 @@ class BookingService {
    * @param {String} timezone - Timezone (optional)
    * @returns {Object} - Reschedule result
    */
-  static async rescheduleAppointment(appointmentId, newDate, newTime, reason = null, timezone = null) {
+  static async rescheduleAppointment(appointmentId, newDate, newTime, reason = null, timezone = null, clinicId = null) {
     console.log('\n🔄 BOOKING SERVICE: Reschedule Appointment');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
       // Find appointment
-      const appointment = db.getAppointment(appointmentId);
+      const appointment = await db.getAppointment(appointmentId, clinicId || null);
       if (!appointment) {
-        throw new Error('Appointment not found');
+        throw new Error(clinicId ? 'Appointment not found for this clinic' : 'Appointment not found');
       }
+
+      if (clinicId && appointment.clinic_id && appointment.clinic_id !== clinicId) {
+        throw new Error('Appointment does not belong to this clinic');
+      }
+
+      const scopedClinicId = appointment.clinic_id || clinicId || null;
 
       console.log('📋 Found appointment:', appointment.id);
       console.log(`   Current: ${appointment.date} at ${appointment.time}`);
@@ -507,6 +527,7 @@ class BookingService {
         typeConfig,
         appointmentDateTime.date,
         appointmentDateTime.timezone,
+        scopedClinicId,
         appointment.id // Exclude current appointment from conflict check
       );
 
@@ -578,15 +599,15 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       };
 
       // Update database
-      db.updateAppointment(appointmentId, updateData);
+      db.updateAppointment(appointmentId, updateData, scopedClinicId);
 
       // Add reschedule note
       let notes = appointment.notes || '';
       const rescheduleNote = `Rescheduled from ${appointment.date} at ${appointment.time}. Reason: ${reason || 'Not specified'}`;
       notes = notes ? `${notes}\n${rescheduleNote}` : rescheduleNote;
-      db.updateAppointment(appointmentId, { notes });
+      db.updateAppointment(appointmentId, { notes }, scopedClinicId);
 
-      const updatedAppointment = db.getAppointment(appointmentId);
+      const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
 
       console.log('✅ Appointment rescheduled successfully');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -615,16 +636,22 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
    * @param {String} reason - Cancellation reason (optional)
    * @returns {Object} - Cancellation result
    */
-  static async cancelAppointment(appointmentId, reason = null) {
+  static async cancelAppointment(appointmentId, reason = null, clinicId = null) {
     console.log('\n❌ BOOKING SERVICE: Cancel Appointment');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
       // Find appointment
-      const appointment = db.getAppointment(appointmentId);
+      const appointment = await db.getAppointment(appointmentId, clinicId || null);
       if (!appointment) {
-        throw new Error('Appointment not found');
+        throw new Error(clinicId ? 'Appointment not found for this clinic' : 'Appointment not found');
       }
+
+      if (clinicId && appointment.clinic_id && appointment.clinic_id !== clinicId) {
+        throw new Error('Appointment does not belong to this clinic');
+      }
+
+      const scopedClinicId = appointment.clinic_id || clinicId || null;
 
       console.log('📋 Found appointment:', appointment.id);
 
@@ -657,10 +684,10 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       }
 
       // Update status
-      db.updateAppointmentStatus(appointmentId, 'cancelled', reason);
+      db.updateAppointmentStatus(appointmentId, 'cancelled', reason, scopedClinicId);
       console.log('✅ Appointment cancelled');
 
-      const updatedAppointment = db.getAppointment(appointmentId);
+      const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
@@ -688,11 +715,13 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
    * @param {String} timezone - Timezone for the date (optional)
    * @returns {Object} - Available slots
    */
-  static async getAvailableSlots(date, provider = null, appointmentType = null, timezone = null) {
+  static async getAvailableSlots(date, provider = null, appointmentType = null, timezone = null, clinicId = null) {
     console.log('\n🕐 BOOKING SERVICE: Get Available Slots');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
+      const scopedClinicId = this._ensureClinicId(clinicId, 'checking availability');
+
       // Parse date with timezone
       const requestedTimezone = timezone || BUSINESS_HOURS.timezone;
       const requestedDate = this._parseDateWithTimezone(date, requestedTimezone);
@@ -707,7 +736,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       }
 
       // Get existing appointments for that date
-      const existingAppointments = db.getAppointmentsByDate(date);
+      const existingAppointments = await db.getAppointmentsByDate(date, scopedClinicId);
       console.log('📋 Found', existingAppointments.length, 'existing appointments');
 
       const internalCalendarEventIds = new Set(
@@ -797,9 +826,10 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
    * @param {String} searchTerm - Phone number or email
    * @returns {Object} - Found appointments
    */
-  static async searchAppointments(searchTerm) {
+  static async searchAppointments(searchTerm, clinicId = null) {
     try {
-      const appointments = db.searchAppointments(searchTerm);
+      const scopedClinicId = this._ensureClinicId(clinicId, 'searching appointments');
+      const appointments = await db.searchAppointments(searchTerm, scopedClinicId);
 
       return {
         success: true,
@@ -817,6 +847,13 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
   }
 
   // ==================== PRIVATE HELPER METHODS ====================
+
+  static _ensureClinicId(clinicId, actionDescription) {
+    if (!clinicId) {
+      throw new Error(`clinic_id is required for ${actionDescription}`);
+    }
+    return clinicId;
+  }
 
   static _validateAppointmentData(data) {
     const errors = [];
@@ -992,12 +1029,12 @@ Appointment ID: ${appointment.id}
    * Check if a specific slot is available for booking
    * @param {String} excludeAppointmentId - Appointment ID to exclude from conflict check (for reschedules)
    */
-  static async _checkSlotAvailability(startISO, endISO, typeConfig, date, timezone = BUSINESS_HOURS.timezone, excludeAppointmentId = null) {
+  static async _checkSlotAvailability(startISO, endISO, typeConfig, date, timezone = BUSINESS_HOURS.timezone, clinicId = null, excludeAppointmentId = null) {
     const slotStart = new Date(startISO);
     const slotEnd = new Date(endISO);
 
     // Get existing appointments for the date
-    let existingAppointments = db.getAppointmentsByDate(date);
+    let existingAppointments = await db.getAppointmentsByDate(date, clinicId || null);
 
     // Exclude the appointment being rescheduled from conflict check
     if (excludeAppointmentId) {
@@ -1155,6 +1192,7 @@ Appointment ID: ${appointment.id}
     return {
       id: appointment.id,
       confirmation_number: appointment.id.substring(5, 13).toUpperCase(),
+      clinic_id: appointment.clinic_id || null,
       patient_name: appointment.patient_name,
       patient_phone: appointment.patient_phone,
       appointment_type: appointment.appointment_type,

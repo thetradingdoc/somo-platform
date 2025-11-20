@@ -3,9 +3,35 @@ const path = require('path');
 const fs = require('fs');
 const { hashApiKey } = require('./utils/api-keys');
 
+const usePostgres = !!process.env.POSTGRES_URL;
+let pgPool = null;
+let pgSql = null;
+let sqliteDb = null;
+let activeAdapter = null;
+
+function normalizePhoneNumber(phone) {
+  if (!phone) return phone;
+
+  const digitsOnly = phone.replace(/\D/g, '');
+
+  if (digitsOnly.length === 10) {
+    return '+1' + digitsOnly;
+  }
+
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
+    return '+' + digitsOnly;
+  }
+
+  if (phone.startsWith('+')) {
+    return phone;
+  }
+
+  return '+1' + digitsOnly;
+}
+
 // Use Azure's writable directory (/home) if available, otherwise use current directory
 // Azure App Service uses /home for writable files
-const dbDir = process.env.HOME || '/home' || __dirname;
+const defaultDbDir = process.env.HOME || '/home' || __dirname;
 
 // Environment-based database naming to separate production and test/dev data
 // Production: middleware-prod.db
@@ -27,22 +53,300 @@ if (process.env.DB_NAME) {
   dbFileName = process.env.DB_NAME;
 }
 
-const dbPath = path.join(dbDir, dbFileName);
+const dbPath = path.join(defaultDbDir, dbFileName);
 console.log(`📁 Database path: ${dbPath} (environment: ${env})`);
 
 // Ensure directory exists
 try {
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+  if (!fs.existsSync(defaultDbDir)) {
+    fs.mkdirSync(defaultDbDir, { recursive: true });
   }
 } catch (e) {
   console.warn('⚠️  Could not create db directory, using current directory');
+}
+
+if (usePostgres) {
+  try {
+    const { createPool } = require('./utils/postgres');
+    pgPool = createPool();
+    pgSql = pgPool;
+    console.log('🗄️  POSTGRES_URL detected – Postgres pool initialized');
+  } catch (err) {
+    console.error('❌ Failed to initialize Postgres pool:', err.message);
+    process.exit(1);
+  }
 }
 
 const db = new Database(dbPath);
 
 // Disable foreign key constraints during migrations (they can cause issues with ALTER TABLE)
 db.pragma('foreign_keys = OFF');
+
+function toBoolean(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n'].includes(normalized)) return false;
+  }
+  return Boolean(value);
+}
+
+function toJsonValue(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function syncClinicToPostgres(clinic) {
+  if (!pgPool || !clinic) return;
+  pgPool`
+    INSERT INTO clinics (
+      clinic_id, name, slug, phone_number, email, address, business_hours, services,
+      retell_agent_id, retell_agent_status, merchant_id, is_active, created_at, updated_at
+    ) VALUES (
+      ${clinic.clinic_id},
+      ${clinic.name},
+      ${clinic.slug},
+      ${clinic.phone_number || null},
+      ${clinic.email || null},
+      ${clinic.address || null},
+      ${clinic.business_hours || null},
+      ${toJsonValue(clinic.services)},
+      ${clinic.retell_agent_id || null},
+      ${clinic.retell_agent_status || 'pending'},
+      ${clinic.merchant_id || null},
+      ${toBoolean(clinic.is_active)},
+      ${clinic.created_at || null},
+      ${clinic.updated_at || null}
+    )
+    ON CONFLICT (clinic_id) DO UPDATE SET
+      name = EXCLUDED.name,
+      slug = EXCLUDED.slug,
+      phone_number = EXCLUDED.phone_number,
+      email = EXCLUDED.email,
+      address = EXCLUDED.address,
+      business_hours = EXCLUDED.business_hours,
+      services = EXCLUDED.services,
+      retell_agent_id = EXCLUDED.retell_agent_id,
+      retell_agent_status = EXCLUDED.retell_agent_status,
+      merchant_id = EXCLUDED.merchant_id,
+      is_active = EXCLUDED.is_active,
+      updated_at = COALESCE(EXCLUDED.updated_at, NOW());
+  `.catch(err => console.error('❌ Postgres sync [clinics] failed:', err.message));
+}
+
+function syncClinicPhoneToPostgres(phoneRow) {
+  if (!pgPool || !phoneRow) return;
+  pgPool`
+    INSERT INTO clinic_phone_numbers (phone_number, clinic_id, is_primary, created_at)
+    VALUES (
+      ${phoneRow.phone_number},
+      ${phoneRow.clinic_id},
+      ${toBoolean(phoneRow.is_primary !== undefined ? phoneRow.is_primary : true)},
+      ${phoneRow.created_at || new Date().toISOString()}
+    )
+    ON CONFLICT (phone_number) DO UPDATE SET
+      clinic_id = EXCLUDED.clinic_id,
+      is_primary = EXCLUDED.is_primary,
+      created_at = EXCLUDED.created_at;
+  `.catch(err => console.error('❌ Postgres sync [clinic_phone_numbers] failed:', err.message));
+}
+
+function syncAppointmentToPostgres(appointment) {
+  if (!pgPool || !appointment) return;
+  pgPool`
+    INSERT INTO appointments (
+      id, clinic_id, patient_name, patient_phone, patient_email, patient_id,
+      appointment_type, date, time, start_time, end_time, duration_minutes,
+      provider, status, notes, reminder_sent, calendar_event_id, calendar_link,
+      cancellation_reason, created_at, updated_at
+    ) VALUES (
+      ${appointment.id},
+      ${appointment.clinic_id || null},
+      ${appointment.patient_name},
+      ${appointment.patient_phone || null},
+      ${appointment.patient_email || null},
+      ${appointment.patient_id || null},
+      ${appointment.appointment_type || null},
+      ${appointment.date},
+      ${appointment.time},
+      ${appointment.start_time || null},
+      ${appointment.end_time || null},
+      ${appointment.duration_minutes || null},
+      ${appointment.provider || null},
+      ${appointment.status || null},
+      ${toJsonValue(appointment.notes)},
+      ${toBoolean(appointment.reminder_sent)},
+      ${appointment.calendar_event_id || null},
+      ${appointment.calendar_link || null},
+      ${appointment.cancellation_reason || null},
+      ${appointment.created_at || null},
+      ${appointment.updated_at || appointment.created_at || null}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      clinic_id = EXCLUDED.clinic_id,
+      patient_name = EXCLUDED.patient_name,
+      patient_phone = EXCLUDED.patient_phone,
+      patient_email = EXCLUDED.patient_email,
+      patient_id = EXCLUDED.patient_id,
+      appointment_type = EXCLUDED.appointment_type,
+      date = EXCLUDED.date,
+      time = EXCLUDED.time,
+      start_time = EXCLUDED.start_time,
+      end_time = EXCLUDED.end_time,
+      duration_minutes = EXCLUDED.duration_minutes,
+      provider = EXCLUDED.provider,
+      status = EXCLUDED.status,
+      notes = EXCLUDED.notes,
+      reminder_sent = EXCLUDED.reminder_sent,
+      calendar_event_id = EXCLUDED.calendar_event_id,
+      calendar_link = EXCLUDED.calendar_link,
+      cancellation_reason = EXCLUDED.cancellation_reason,
+      updated_at = COALESCE(EXCLUDED.updated_at, NOW());
+  `.catch(err => console.error('❌ Postgres sync [appointments] failed:', err.message));
+}
+
+function deleteAppointmentFromPostgres(appointmentId) {
+  if (!pgPool || !appointmentId) return;
+  pgPool`
+    DELETE FROM appointments WHERE id = ${appointmentId};
+  `.catch(err => console.error('❌ Postgres sync [appointments-delete] failed:', err.message));
+}
+
+function syncVoiceCheckoutToPostgres(checkout) {
+  if (!pgPool || !checkout) return;
+  pgPool`
+    INSERT INTO voice_checkouts (
+      id, clinic_id, merchant_id, product_id, product_name, quantity, amount,
+      customer_phone, customer_name, customer_email, appointment_id, payment_method,
+      status, payment_token, payment_intent_id, merchant_order_id,
+      fhir_patient_id, fhir_encounter_id, created_at, completed_at
+    ) VALUES (
+      ${checkout.id},
+      ${checkout.clinic_id || null},
+      ${checkout.merchant_id},
+      ${checkout.product_id},
+      ${checkout.product_name},
+      ${checkout.quantity || 1},
+      ${checkout.amount},
+      ${checkout.customer_phone},
+      ${checkout.customer_name || null},
+      ${checkout.customer_email || null},
+      ${checkout.appointment_id || null},
+      ${checkout.payment_method || null},
+      ${checkout.status || 'pending'},
+      ${checkout.payment_token || null},
+      ${checkout.payment_intent_id || null},
+      ${checkout.merchant_order_id || null},
+      ${checkout.fhir_patient_id || null},
+      ${checkout.fhir_encounter_id || null},
+      ${checkout.created_at || null},
+      ${checkout.completed_at || null}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      clinic_id = EXCLUDED.clinic_id,
+      merchant_id = EXCLUDED.merchant_id,
+      product_id = EXCLUDED.product_id,
+      product_name = EXCLUDED.product_name,
+      quantity = EXCLUDED.quantity,
+      amount = EXCLUDED.amount,
+      customer_phone = EXCLUDED.customer_phone,
+      customer_name = EXCLUDED.customer_name,
+      customer_email = EXCLUDED.customer_email,
+      appointment_id = EXCLUDED.appointment_id,
+      payment_method = EXCLUDED.payment_method,
+      status = EXCLUDED.status,
+      payment_token = EXCLUDED.payment_token,
+      payment_intent_id = EXCLUDED.payment_intent_id,
+      merchant_order_id = EXCLUDED.merchant_order_id,
+      fhir_patient_id = EXCLUDED.fhir_patient_id,
+      fhir_encounter_id = EXCLUDED.fhir_encounter_id,
+      completed_at = EXCLUDED.completed_at;
+  `.catch(err => console.error('❌ Postgres sync [voice_checkouts] failed:', err.message));
+}
+
+function syncVoiceCallToPostgres(call) {
+  if (!pgPool || !call) return;
+  pgPool`
+    INSERT INTO voice_call_log (
+      id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes,
+      credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd,
+      total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source,
+      cost_updated_at, created_at
+    ) VALUES (
+      ${call.id},
+      ${call.customer_id || null},
+      ${call.call_id},
+      ${call.twilio_call_sid || null},
+      ${call.call_duration_seconds || null},
+      ${call.call_duration_minutes || null},
+      ${call.credits_deducted || 0},
+      ${call.function_calls_count || 0},
+      ${call.status || 'active'},
+      ${call.twilio_cost_usd || null},
+      ${call.retell_cost_usd || null},
+      ${call.total_cost_usd || null},
+      ${call.twilio_cost_calculated_usd || null},
+      ${call.retell_cost_calculated_usd || null},
+      ${call.cost_source || null},
+      ${call.cost_updated_at || null},
+      ${call.created_at || null}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      customer_id = EXCLUDED.customer_id,
+      call_id = EXCLUDED.call_id,
+      twilio_call_sid = EXCLUDED.twilio_call_sid,
+      call_duration_seconds = EXCLUDED.call_duration_seconds,
+      call_duration_minutes = EXCLUDED.call_duration_minutes,
+      credits_deducted = EXCLUDED.credits_deducted,
+      function_calls_count = EXCLUDED.function_calls_count,
+      status = EXCLUDED.status,
+      twilio_cost_usd = EXCLUDED.twilio_cost_usd,
+      retell_cost_usd = EXCLUDED.retell_cost_usd,
+      total_cost_usd = EXCLUDED.total_cost_usd,
+      twilio_cost_calculated_usd = EXCLUDED.twilio_cost_calculated_usd,
+      retell_cost_calculated_usd = EXCLUDED.retell_cost_calculated_usd,
+      cost_source = EXCLUDED.cost_source,
+      cost_updated_at = COALESCE(EXCLUDED.cost_updated_at, voice_call_log.cost_updated_at),
+      created_at = COALESCE(EXCLUDED.created_at, voice_call_log.created_at);
+  `.catch(err => console.error('❌ Postgres sync [voice_call_log] failed:', err.message));
+}
+
+function syncFunctionCallToPostgres(funcLog) {
+  if (!pgPool || !funcLog) return;
+  pgPool`
+    INSERT INTO function_call_log (
+      id, customer_id, call_id, function_name, parameters,
+      response_time_ms, success, error_message, created_at
+    ) VALUES (
+      ${funcLog.id},
+      ${funcLog.customer_id || null},
+      ${funcLog.call_id || null},
+      ${funcLog.function_name},
+      ${toJsonValue(funcLog.parameters)},
+      ${funcLog.response_time_ms || null},
+      ${toBoolean(funcLog.success)},
+      ${funcLog.error_message || null},
+      ${funcLog.created_at || null}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      customer_id = EXCLUDED.customer_id,
+      call_id = EXCLUDED.call_id,
+      function_name = EXCLUDED.function_name,
+      parameters = EXCLUDED.parameters,
+      response_time_ms = EXCLUDED.response_time_ms,
+      success = EXCLUDED.success,
+      error_message = EXCLUDED.error_message,
+      created_at = COALESCE(EXCLUDED.created_at, function_call_log.created_at);
+  `.catch(err => console.error('❌ Postgres sync [function_call_log] failed:', err.message));
+}
 
 // Initialize tables
 db.exec(`
@@ -160,6 +464,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS voice_checkouts (
     id TEXT PRIMARY KEY,
+    clinic_id TEXT,
     merchant_id TEXT NOT NULL,
     product_id TEXT NOT NULL,
     product_name TEXT NOT NULL,
@@ -179,6 +484,7 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
     FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id),
     FOREIGN KEY (fhir_patient_id) REFERENCES fhir_patients(resource_id),
     FOREIGN KEY (fhir_encounter_id) REFERENCES fhir_encounters(resource_id)
   );
@@ -462,8 +768,15 @@ try {
       db.exec(`ALTER TABLE voice_checkouts ADD COLUMN appointment_id TEXT;`);
       console.log('✅ Migration complete: appointment_id column added');
     }
+    const hasCheckoutClinic = tableInfo.some(col => col.name === 'clinic_id');
+    if (!hasCheckoutClinic) {
+      console.log('📦 Adding clinic_id column to voice_checkouts table...');
+      db.exec(`ALTER TABLE voice_checkouts ADD COLUMN clinic_id TEXT;`);
+      console.log('✅ Migration complete: clinic_id column added to voice_checkouts');
+    }
     // Create index after column is added (or if it already exists)
     db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_checkouts_appointment_id ON voice_checkouts(appointment_id);`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_checkouts_clinic_id ON voice_checkouts(clinic_id);`);
   }
 } catch (migrationError) {
   console.warn('⚠️  Migration check failed:', migrationError.message);
@@ -709,6 +1022,28 @@ tablesToMigrate.forEach(tableName => {
     console.warn(`⚠️  ${tableName} clinic_id migration failed:`, migrationError.message);
   }
 });
+
+const DEFAULT_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'legacy-clinic';
+
+try {
+  const missingClinicRows = db.prepare(`
+    SELECT COUNT(1) as count
+    FROM appointments
+    WHERE clinic_id IS NULL OR clinic_id = ''
+  `).get();
+
+  if (missingClinicRows && missingClinicRows.count > 0) {
+    console.log(`📦 Backfilling clinic_id for ${missingClinicRows.count} legacy appointments...`);
+    db.prepare(`
+      UPDATE appointments
+      SET clinic_id = ?
+      WHERE clinic_id IS NULL OR clinic_id = ''
+    `).run(DEFAULT_CLINIC_ID);
+    console.log('✅ Legacy appointments now scoped to default clinic');
+  }
+} catch (migrationError) {
+  console.warn('⚠️  Appointment clinic backfill failed:', migrationError.message);
+}
 
 // Continue with remaining table creation
 db.exec(`
@@ -1060,6 +1395,10 @@ db.exec(`
     status TEXT DEFAULT 'pending',
     retell_agent_id TEXT,
     retell_agent_status TEXT DEFAULT 'pending',
+    customer_type TEXT DEFAULT 'api',
+    twilio_phone_number TEXT,
+    twilio_phone_sid TEXT,
+    pricing_tier TEXT DEFAULT 'starter',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -1334,7 +1673,11 @@ function migrateCustomersTable() {
       card_last4: 'TEXT',
       card_brand: 'TEXT',
       card_verified: 'BOOLEAN DEFAULT 0',
-      card_verified_at: 'DATETIME'
+      card_verified_at: 'DATETIME',
+      customer_type: "TEXT DEFAULT 'api'",
+      twilio_phone_number: 'TEXT',
+      twilio_phone_sid: 'TEXT',
+      pricing_tier: "TEXT DEFAULT 'starter'"
     };
 
     Object.keys(newColumns).forEach(colName => {
@@ -1359,7 +1702,7 @@ function migrateVoiceCallLogCosts() {
   try {
     const voiceCallLogColumns = db.pragma('table_info(voice_call_log)');
     const columnNames = voiceCallLogColumns.map(col => col.name);
-    
+
     const costColumns = {
       'twilio_call_sid': 'TEXT',
       'twilio_cost_usd': 'REAL',
@@ -1382,7 +1725,7 @@ function migrateVoiceCallLogCosts() {
     // Create indexes for cost tracking
     db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_call_log_twilio_sid ON voice_call_log(twilio_call_sid);`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_call_log_created_at ON voice_call_log(created_at);`);
-    
+
     console.log('✅ Migration complete: voice_call_log cost columns ensured');
   } catch (migrationError) {
     console.warn('⚠️  voice_call_log cost columns migration failed:', migrationError.message);
@@ -1753,88 +2096,183 @@ module.exports = {
   // ============================================
   // VOICE CHECKOUTS
   // ============================================
-  createVoiceCheckout: (checkout) => {
+  createVoiceCheckout: async (checkout) => {
     // Ensure customer_phone is never null (required field)
     const customerPhone = checkout.customer_phone || '0000000000';
 
-    return db.prepare(`
-      INSERT INTO voice_checkouts 
-      (id, merchant_id, product_id, product_name, quantity, amount, 
-       customer_phone, customer_name, customer_email, appointment_id, payment_method, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      checkout.id,
-      checkout.merchant_id,
-      checkout.product_id,
-      checkout.product_name,
-      checkout.quantity || 1,
-      checkout.amount,
-      customerPhone,
-      checkout.customer_name || null,
-      checkout.customer_email || null,
-      checkout.appointment_id || null,
-      checkout.payment_method || null,
-      checkout.status || 'pending'
-    );
+    if (usePostgres && pgPool) {
+      // Postgres path
+      await pgPool`
+        INSERT INTO voice_checkouts 
+        (id, clinic_id, merchant_id, product_id, product_name, quantity, amount, 
+         customer_phone, customer_name, customer_email, appointment_id, payment_method, status, created_at)
+        VALUES (
+          ${checkout.id},
+          ${checkout.clinic_id || null},
+          ${checkout.merchant_id},
+          ${checkout.product_id},
+          ${checkout.product_name},
+          ${checkout.quantity || 1},
+          ${checkout.amount},
+          ${customerPhone},
+          ${checkout.customer_name || null},
+          ${checkout.customer_email || null},
+          ${checkout.appointment_id || null},
+          ${checkout.payment_method || null},
+          ${checkout.status || 'pending'},
+          ${checkout.created_at || new Date().toISOString()}
+        )
+      `;
+      return { changes: 1, lastInsertRowid: checkout.id };
+    } else {
+      // SQLite path
+      const result = db.prepare(`
+        INSERT INTO voice_checkouts 
+        (id, clinic_id, merchant_id, product_id, product_name, quantity, amount, 
+         customer_phone, customer_name, customer_email, appointment_id, payment_method, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        checkout.id,
+        checkout.clinic_id || null,
+        checkout.merchant_id,
+        checkout.product_id,
+        checkout.product_name,
+        checkout.quantity || 1,
+        checkout.amount,
+        customerPhone,
+        checkout.customer_name || null,
+        checkout.customer_email || null,
+        checkout.appointment_id || null,
+        checkout.payment_method || null,
+        checkout.status || 'pending'
+      );
+      return result;
+    }
   },
 
-  getVoiceCheckout: (id) => {
-    return db.prepare('SELECT * FROM voice_checkouts WHERE id = ?').get(id);
+  getVoiceCheckout: async (id) => {
+    if (usePostgres && pgPool) {
+      const results = await pgPool`SELECT * FROM voice_checkouts WHERE id = ${id}`;
+      return results[0] || null;
+    } else {
+      return db.prepare('SELECT * FROM voice_checkouts WHERE id = ?').get(id);
+    }
   },
 
-  updateVoiceCheckout: (id, updates) => {
-    const fields = [];
-    const values = [];
+  updateVoiceCheckout: async (id, updates) => {
+    if (usePostgres && pgPool) {
+      // Postgres path - build dynamic update using sql helper
+      const setParts = [];
+      const values = [];
+      let paramIndex = 1;
 
-    if (updates.status) {
-      fields.push('status = ?');
-      values.push(updates.status);
-    }
-    if (updates.payment_intent_id) {
-      fields.push('payment_intent_id = ?');
-      values.push(updates.payment_intent_id);
-    }
-    if (updates.merchant_order_id) {
-      fields.push('merchant_order_id = ?');
-      values.push(updates.merchant_order_id);
-    }
-    if (updates.payment_token) {
-      fields.push('payment_token = ?');
-      values.push(updates.payment_token);
-    }
-    if (updates.fhir_patient_id) {
-      fields.push('fhir_patient_id = ?');
-      values.push(updates.fhir_patient_id);
-    }
-    if (updates.fhir_encounter_id) {
-      fields.push('fhir_encounter_id = ?');
-      values.push(updates.fhir_encounter_id);
-    }
-    if (updates.appointment_id !== undefined) {
-      fields.push('appointment_id = ?');
-      values.push(updates.appointment_id);
-    }
-    if (updates.payment_method) {
-      fields.push('payment_method = ?');
-      values.push(updates.payment_method);
-    }
-    if (updates.status === 'completed') {
-      fields.push('completed_at = CURRENT_TIMESTAMP');
-    }
+      if (updates.status !== undefined) {
+        setParts.push(`status = $${paramIndex++}`);
+        values.push(updates.status);
+      }
+      if (updates.payment_intent_id !== undefined) {
+        setParts.push(`payment_intent_id = $${paramIndex++}`);
+        values.push(updates.payment_intent_id);
+      }
+      if (updates.merchant_order_id !== undefined) {
+        setParts.push(`merchant_order_id = $${paramIndex++}`);
+        values.push(updates.merchant_order_id);
+      }
+      if (updates.payment_token !== undefined) {
+        setParts.push(`payment_token = $${paramIndex++}`);
+        values.push(updates.payment_token);
+      }
+      if (updates.fhir_patient_id !== undefined) {
+        setParts.push(`fhir_patient_id = $${paramIndex++}`);
+        values.push(updates.fhir_patient_id);
+      }
+      if (updates.fhir_encounter_id !== undefined) {
+        setParts.push(`fhir_encounter_id = $${paramIndex++}`);
+        values.push(updates.fhir_encounter_id);
+      }
+      if (updates.appointment_id !== undefined) {
+        setParts.push(`appointment_id = $${paramIndex++}`);
+        values.push(updates.appointment_id);
+      }
+      if (updates.payment_method !== undefined) {
+        setParts.push(`payment_method = $${paramIndex++}`);
+        values.push(updates.payment_method);
+      }
+      if (updates.status === 'completed') {
+        setParts.push('completed_at = NOW()');
+      }
 
-    if (fields.length === 0) return;
+      if (setParts.length === 0) return { changes: 0 };
 
-    values.push(id);
-    const query = `UPDATE voice_checkouts SET ${fields.join(', ')} WHERE id = ?`;
-    return db.prepare(query).run(...values);
+      values.push(id);
+      // Build query with proper parameterized values for postgres
+      const query = `UPDATE voice_checkouts SET ${setParts.join(', ')} WHERE id = $${paramIndex}`;
+      // Use postgres library's unsafe method for dynamic queries
+      const result = await pgPool.unsafe(query, values);
+      return { changes: result.count || 0 };
+    } else {
+      // SQLite path
+      const fields = [];
+      const values = [];
+
+      if (updates.status) {
+        fields.push('status = ?');
+        values.push(updates.status);
+      }
+      if (updates.payment_intent_id) {
+        fields.push('payment_intent_id = ?');
+        values.push(updates.payment_intent_id);
+      }
+      if (updates.merchant_order_id) {
+        fields.push('merchant_order_id = ?');
+        values.push(updates.merchant_order_id);
+      }
+      if (updates.payment_token) {
+        fields.push('payment_token = ?');
+        values.push(updates.payment_token);
+      }
+      if (updates.fhir_patient_id) {
+        fields.push('fhir_patient_id = ?');
+        values.push(updates.fhir_patient_id);
+      }
+      if (updates.fhir_encounter_id) {
+        fields.push('fhir_encounter_id = ?');
+        values.push(updates.fhir_encounter_id);
+      }
+      if (updates.appointment_id !== undefined) {
+        fields.push('appointment_id = ?');
+        values.push(updates.appointment_id);
+      }
+      if (updates.payment_method) {
+        fields.push('payment_method = ?');
+        values.push(updates.payment_method);
+      }
+      if (updates.status === 'completed') {
+        fields.push('completed_at = CURRENT_TIMESTAMP');
+      }
+
+      if (fields.length === 0) return { changes: 0 };
+
+      values.push(id);
+      const query = `UPDATE voice_checkouts SET ${fields.join(', ')} WHERE id = ?`;
+      return db.prepare(query).run(...values);
+    }
   },
 
-  getAllVoiceCheckouts: () => {
-    return db.prepare('SELECT * FROM voice_checkouts ORDER BY created_at DESC').all();
+  getAllVoiceCheckouts: async () => {
+    if (usePostgres && pgPool) {
+      return await pgPool`SELECT * FROM voice_checkouts ORDER BY created_at DESC`;
+    } else {
+      return db.prepare('SELECT * FROM voice_checkouts ORDER BY created_at DESC').all();
+    }
   },
 
-  getVoiceCheckoutsByMerchant: (merchantId) => {
-    return db.prepare('SELECT * FROM voice_checkouts WHERE merchant_id = ? ORDER BY created_at DESC').all(merchantId);
+  getVoiceCheckoutsByMerchant: async (merchantId) => {
+    if (usePostgres && pgPool) {
+      return await pgPool`SELECT * FROM voice_checkouts WHERE merchant_id = ${merchantId} ORDER BY created_at DESC`;
+    } else {
+      return db.prepare('SELECT * FROM voice_checkouts WHERE merchant_id = ? ORDER BY created_at DESC').all(merchantId);
+    }
   },
 
   // ============================================
@@ -2551,45 +2989,87 @@ module.exports = {
   // ============================================
 
   // Create clinic
-  createClinic(clinic) {
-    const stmt = db.prepare(`
-      INSERT INTO clinics (
-        clinic_id, name, slug, phone_number, email, retell_agent_id, retell_agent_status,
-        merchant_id, address, business_hours, services, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    return stmt.run(
-      clinic.clinic_id,
-      clinic.name,
-      clinic.slug,
-      clinic.phone_number || null,
-      clinic.email || null,
-      clinic.retell_agent_id || null,
-      clinic.retell_agent_status || 'pending',
-      clinic.merchant_id || null,
-      clinic.address || null,
-      clinic.business_hours || null,
-      clinic.services || null,
-      clinic.is_active !== undefined ? clinic.is_active : 1
-    );
+  async createClinic(clinic) {
+    if (usePostgres && pgPool) {
+      // Postgres path
+      await pgPool`
+        INSERT INTO clinics (
+          clinic_id, name, slug, phone_number, email, retell_agent_id, retell_agent_status,
+          merchant_id, address, business_hours, services, is_active, created_at, updated_at
+        ) VALUES (
+          ${clinic.clinic_id},
+          ${clinic.name},
+          ${clinic.slug},
+          ${clinic.phone_number || null},
+          ${clinic.email || null},
+          ${clinic.retell_agent_id || null},
+          ${clinic.retell_agent_status || 'pending'},
+          ${clinic.merchant_id || null},
+          ${clinic.address || null},
+          ${clinic.business_hours || null},
+          ${toJsonValue(clinic.services)},
+          ${toBoolean(clinic.is_active !== undefined ? clinic.is_active : 1)},
+          ${clinic.created_at || new Date().toISOString()},
+          ${clinic.updated_at || new Date().toISOString()}
+        )
+      `;
+      return { changes: 1, lastInsertRowid: clinic.clinic_id };
+    } else {
+      // SQLite path
+      const stmt = db.prepare(`
+        INSERT INTO clinics (
+          clinic_id, name, slug, phone_number, email, retell_agent_id, retell_agent_status,
+          merchant_id, address, business_hours, services, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      return stmt.run(
+        clinic.clinic_id,
+        clinic.name,
+        clinic.slug,
+        clinic.phone_number || null,
+        clinic.email || null,
+        clinic.retell_agent_id || null,
+        clinic.retell_agent_status || 'pending',
+        clinic.merchant_id || null,
+        clinic.address || null,
+        clinic.business_hours || null,
+        clinic.services || null,
+        clinic.is_active !== undefined ? clinic.is_active : 1
+      );
+    }
   },
 
   // Get clinic by ID
-  getClinicById(id) {
-    const stmt = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?');
-    return stmt.get(id);
+  async getClinicById(id) {
+    if (usePostgres && pgPool) {
+      const results = await pgPool`SELECT * FROM clinics WHERE clinic_id = ${id}`;
+      return results[0] || null;
+    } else {
+      const stmt = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?');
+      return stmt.get(id);
+    }
   },
 
   // Get clinic by slug
-  getClinicBySlug(slug) {
-    const stmt = db.prepare('SELECT * FROM clinics WHERE slug = ?');
-    return stmt.get(slug);
+  async getClinicBySlug(slug) {
+    if (usePostgres && pgPool) {
+      const results = await pgPool`SELECT * FROM clinics WHERE slug = ${slug}`;
+      return results[0] || null;
+    } else {
+      const stmt = db.prepare('SELECT * FROM clinics WHERE slug = ?');
+      return stmt.get(slug);
+    }
   },
 
   // Get clinic by phone number
-  getClinicByPhoneNumber(phoneNumber) {
-    const stmt = db.prepare('SELECT * FROM clinics WHERE phone_number = ? AND is_active = 1');
-    return stmt.get(phoneNumber);
+  async getClinicByPhoneNumber(phoneNumber) {
+    if (usePostgres && pgPool) {
+      const results = await pgPool`SELECT * FROM clinics WHERE phone_number = ${phoneNumber} AND is_active = true`;
+      return results[0] || null;
+    } else {
+      const stmt = db.prepare('SELECT * FROM clinics WHERE phone_number = ? AND is_active = 1');
+      return stmt.get(phoneNumber);
+    }
   },
 
   // Update clinic
@@ -2610,7 +3090,12 @@ module.exports = {
     values.push(id);
 
     const stmt = db.prepare(`UPDATE clinics SET ${fields.join(', ')} WHERE clinic_id = ?`);
-    return stmt.run(...values);
+    const result = stmt.run(...values);
+    if (pgPool && result.changes) {
+      const updatedClinic = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?').get(id);
+      syncClinicToPostgres(updatedClinic);
+    }
+    return result;
   },
 
   // Create clinic phone number
@@ -2620,11 +3105,16 @@ module.exports = {
         phone_number, clinic_id, is_primary
       ) VALUES (?, ?, ?)
     `);
-    return stmt.run(
+    const result = stmt.run(
       phoneData.phone_number,
       phoneData.clinic_id,
       phoneData.is_primary !== undefined ? phoneData.is_primary : 1
     );
+    if (pgPool) {
+      const phoneRow = db.prepare('SELECT * FROM clinic_phone_numbers WHERE phone_number = ?').get(phoneData.phone_number);
+      syncClinicPhoneToPostgres(phoneRow);
+    }
+    return result;
   },
 
   // Get clinic phone number by phone
@@ -3027,18 +3517,7 @@ module.exports = {
   // ============================================
 
   // Create new appointment
-  createAppointment(appointment) {
-    // Note: buffer_before_minutes and buffer_after_minutes are stored in notes JSON
-    // or we can add columns later if needed - for now, calculate from appointment_type
-    const stmt = db.prepare(`
-      INSERT INTO appointments (
-        id, patient_name, patient_phone, patient_email, patient_id,
-        appointment_type, date, time, start_time, end_time,
-        duration_minutes, provider, status, notes,
-        calendar_event_id, calendar_link, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
+  async createAppointment(appointment) {
     // Store buffer times in notes as JSON if not already JSON
     let notes = appointment.notes || '';
     if (appointment.buffer_before_minutes || appointment.buffer_after_minutes) {
@@ -3054,47 +3533,161 @@ module.exports = {
       }
     }
 
-    return stmt.run(
-      appointment.id,
-      appointment.patient_name,
-      appointment.patient_phone,
-      appointment.patient_email,
-      appointment.patient_id || null,
-      appointment.appointment_type,
-      appointment.date,
-      appointment.time,
-      appointment.start_time,
-      appointment.end_time,
-      appointment.duration_minutes,
-      appointment.provider,
-      appointment.status,
-      notes,
-      appointment.calendar_event_id,
-      appointment.calendar_link,
-      appointment.created_at
-    );
+    if (usePostgres && pgPool) {
+      // Postgres path
+      await pgPool`
+        INSERT INTO appointments (
+          id, clinic_id, patient_name, patient_phone, patient_email, patient_id,
+          appointment_type, date, time, start_time, end_time,
+          duration_minutes, provider, status, notes,
+          calendar_event_id, calendar_link, created_at
+        ) VALUES (
+          ${appointment.id},
+          ${appointment.clinic_id || null},
+          ${appointment.patient_name},
+          ${appointment.patient_phone},
+          ${appointment.patient_email},
+          ${appointment.patient_id || null},
+          ${appointment.appointment_type},
+          ${appointment.date},
+          ${appointment.time},
+          ${appointment.start_time},
+          ${appointment.end_time},
+          ${appointment.duration_minutes},
+          ${appointment.provider},
+          ${appointment.status},
+          ${notes},
+          ${appointment.calendar_event_id},
+          ${appointment.calendar_link},
+          ${appointment.created_at || new Date().toISOString()}
+        )
+      `;
+      return { changes: 1, lastInsertRowid: appointment.id };
+    } else {
+      // SQLite path
+      const stmt = db.prepare(`
+        INSERT INTO appointments (
+          id, clinic_id, patient_name, patient_phone, patient_email, patient_id,
+          appointment_type, date, time, start_time, end_time,
+          duration_minutes, provider, status, notes,
+          calendar_event_id, calendar_link, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      return stmt.run(
+        appointment.id,
+        appointment.clinic_id || null,
+        appointment.patient_name,
+        appointment.patient_phone,
+        appointment.patient_email,
+        appointment.patient_id || null,
+        appointment.appointment_type,
+        appointment.date,
+        appointment.time,
+        appointment.start_time,
+        appointment.end_time,
+        appointment.duration_minutes,
+        appointment.provider,
+        appointment.status,
+        notes,
+        appointment.calendar_event_id,
+        appointment.calendar_link,
+        appointment.created_at
+      );
+    }
   },
 
   // Get appointment by ID
-  getAppointment(id) {
-    const stmt = db.prepare('SELECT * FROM appointments WHERE id = ? OR id LIKE ?');
-    return stmt.get(id, `%${id}%`);
+  async getAppointment(id, clinicId = null) {
+    if (usePostgres && pgPool) {
+      // Postgres path
+      let query = pgPool`SELECT * FROM appointments WHERE id = ${id}`;
+      if (clinicId) {
+        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND clinic_id = ${clinicId}`;
+      }
+      const results = await query;
+      return results[0] || null;
+    } else {
+      // SQLite path
+      let query = 'SELECT * FROM appointments WHERE (id = ? OR id LIKE ?)';
+      const params = [id, `%${id}%`];
+
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+
+      const stmt = db.prepare(query);
+      return stmt.get(...params);
+    }
   },
 
   // Get appointments by date
-  getAppointmentsByDate(date) {
-    const stmt = db.prepare('SELECT * FROM appointments WHERE date = ? ORDER BY time ASC');
-    return stmt.all(date);
+  async getAppointmentsByDate(date, clinicId = null) {
+    if (usePostgres && pgPool) {
+      // Postgres path
+      let query;
+      if (clinicId) {
+        query = pgPool`SELECT * FROM appointments WHERE date = ${date} AND clinic_id = ${clinicId} ORDER BY time ASC`;
+      } else {
+        query = pgPool`SELECT * FROM appointments WHERE date = ${date} ORDER BY time ASC`;
+      }
+      return await query;
+    } else {
+      // SQLite path
+      let query = 'SELECT * FROM appointments WHERE date = ?';
+      const params = [date];
+
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+
+      query += ' ORDER BY time ASC';
+
+      const stmt = db.prepare(query);
+      return stmt.all(...params);
+    }
   },
 
   // Search appointments by phone or email
-  searchAppointments(searchTerm) {
-    const stmt = db.prepare(`
-      SELECT * FROM appointments
-      WHERE patient_phone LIKE ? OR patient_email LIKE ?
-      ORDER BY date DESC, time DESC
-    `);
-    return stmt.all(`%${searchTerm}%`, `%${searchTerm}%`);
+  async searchAppointments(searchTerm, clinicId = null) {
+    if (usePostgres && pgPool) {
+      // Postgres path
+      const searchPattern = `%${searchTerm}%`;
+      let query;
+      if (clinicId) {
+        query = pgPool`
+          SELECT * FROM appointments
+          WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
+            AND clinic_id = ${clinicId}
+          ORDER BY date DESC, time DESC
+        `;
+      } else {
+        query = pgPool`
+          SELECT * FROM appointments
+          WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
+          ORDER BY date DESC, time DESC
+        `;
+      }
+      return await query;
+    } else {
+      // SQLite path
+      let query = `
+        SELECT * FROM appointments
+        WHERE (patient_phone LIKE ? OR patient_email LIKE ?)
+      `;
+      const params = [`%${searchTerm}%`, `%${searchTerm}%`];
+
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+
+      query += ' ORDER BY date DESC, time DESC';
+
+      const stmt = db.prepare(query);
+      return stmt.all(...params);
+    }
   },
 
   // Get all appointments (with optional filters)
@@ -3117,6 +3710,11 @@ module.exports = {
       params.push(filters.provider);
     }
 
+    if (filters.clinic_id) {
+      query += ' AND clinic_id = ?';
+      params.push(filters.clinic_id);
+    }
+
     query += ' ORDER BY date DESC, time DESC';
 
     const stmt = db.prepare(query);
@@ -3124,19 +3722,32 @@ module.exports = {
   },
 
   // Update appointment status
-  updateAppointmentStatus(id, status, reason = null) {
-    const stmt = db.prepare(`
+  updateAppointmentStatus(id, status, reason = null, clinicId = null) {
+    let query = `
       UPDATE appointments
       SET status = ?,
           cancellation_reason = ?,
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? OR id LIKE ?
-    `);
-    return stmt.run(status, reason, id, `%${id}%`);
+      WHERE (id = ? OR id LIKE ?)
+    `;
+    const params = [status, reason, id, `%${id}%`];
+
+    if (clinicId) {
+      query += ' AND clinic_id = ?';
+      params.push(clinicId);
+    }
+
+    const stmt = db.prepare(query);
+    const result = stmt.run(...params);
+    if (pgPool && result.changes) {
+      const updatedAppointment = db.prepare('SELECT * FROM appointments WHERE id = ? LIMIT 1').get(id);
+      syncAppointmentToPostgres(updatedAppointment);
+    }
+    return result;
   },
 
   // Update appointment details (for rescheduling)
-  updateAppointment(id, updates) {
+  updateAppointment(id, updates, clinicId = null) {
     const fields = [];
     const values = [];
 
@@ -3176,43 +3787,89 @@ module.exports = {
 
     fields.push('updated_at = CURRENT_TIMESTAMP');
 
-    const query = `
+    let query = `
       UPDATE appointments
       SET ${fields.join(', ')}
       WHERE id = ? OR id LIKE ?
     `;
 
+    const params = [...values, id, `%${id}%`];
+
+    if (clinicId) {
+      query += ' AND clinic_id = ?';
+      params.push(clinicId);
+    }
+
     const stmt = db.prepare(query);
-    return stmt.run(...values, id, `%${id}%`);
+    const result = stmt.run(...params);
+    if (pgPool && result.changes) {
+      const updatedAppointment = db.prepare('SELECT * FROM appointments WHERE id = ? LIMIT 1').get(id);
+      syncAppointmentToPostgres(updatedAppointment);
+    }
+    return result;
   },
 
   // Update appointment reminder sent flag
-  markReminderSent(id) {
-    const stmt = db.prepare(`
+  markReminderSent(id, clinicId = null) {
+    let query = `
       UPDATE appointments
       SET reminder_sent = 1,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `);
-    return stmt.run(id);
+    `;
+    const params = [id];
+
+    if (clinicId) {
+      query += ' AND clinic_id = ?';
+      params.push(clinicId);
+    }
+
+    const stmt = db.prepare(query);
+    const result = stmt.run(...params);
+    if (pgPool && result.changes) {
+      const updatedAppointment = db.prepare('SELECT * FROM appointments WHERE id = ? LIMIT 1').get(id);
+      syncAppointmentToPostgres(updatedAppointment);
+    }
+    return result;
   },
 
   // Delete appointment (hard delete)
-  deleteAppointment(id) {
-    const stmt = db.prepare('DELETE FROM appointments WHERE id = ? OR id LIKE ?');
-    return stmt.run(id, `%${id}%`);
+  deleteAppointment(id, clinicId = null) {
+    let query = 'DELETE FROM appointments WHERE id = ? OR id LIKE ?';
+    const params = [id, `%${id}%`];
+
+    if (clinicId) {
+      query += ' AND clinic_id = ?';
+      params.push(clinicId);
+    }
+
+    const stmt = db.prepare(query);
+    const result = stmt.run(...params);
+    if (pgPool && result.changes) {
+      deleteAppointmentFromPostgres(id);
+    }
+    return result;
   },
 
   // Get upcoming appointments (next 7 days)
-  getUpcomingAppointments(limit = 10) {
+  getUpcomingAppointments(limit = 10, clinicId = null) {
     const today = new Date().toISOString().split('T')[0];
-    const stmt = db.prepare(`
+    let query = `
       SELECT * FROM appointments
       WHERE date >= ? AND status IN ('scheduled', 'confirmed')
-      ORDER BY date ASC, time ASC
-      LIMIT ?
-    `);
-    return stmt.all(today, limit);
+    `;
+    const params = [today];
+
+    if (clinicId) {
+      query += ' AND clinic_id = ?';
+      params.push(clinicId);
+    }
+
+    query += ' ORDER BY date ASC, time ASC LIMIT ?';
+    params.push(limit);
+
+    const stmt = db.prepare(query);
+    return stmt.all(...params);
   },
 
   // ============================================
@@ -3891,36 +4548,70 @@ module.exports = {
   },
 
   // Voice Call Logging
-  logVoiceCall(call) {
-    return db.prepare(`
-      INSERT INTO voice_call_log 
-      (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
-       credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
-       total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      call.id || require('crypto').randomBytes(16).toString('hex'),
-      call.customer_id || null,
-      call.call_id,
-      call.twilio_call_sid || null,
-      call.call_duration_seconds || null,
-      call.call_duration_minutes || null,
-      call.credits_deducted || 0,
-      call.function_calls_count || 0,
-      call.status || 'active',
-      call.twilio_cost_usd || null,
-      call.retell_cost_usd || null,
-      call.total_cost_usd || null,
-      call.twilio_cost_calculated_usd || null,
-      call.retell_cost_calculated_usd || null,
-      call.cost_source || null,
-      call.cost_updated_at || null
-    );
+  async logVoiceCall(call) {
+    const callId = call.id || require('crypto').randomBytes(16).toString('hex');
+    
+    if (usePostgres && pgPool) {
+      // Postgres path
+      await pgPool`
+        INSERT INTO voice_call_log 
+        (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
+         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
+         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at, created_at)
+        VALUES (
+          ${callId},
+          ${call.customer_id || null},
+          ${call.call_id},
+          ${call.twilio_call_sid || null},
+          ${call.call_duration_seconds || null},
+          ${call.call_duration_minutes || null},
+          ${call.credits_deducted || 0},
+          ${call.function_calls_count || 0},
+          ${call.status || 'active'},
+          ${call.twilio_cost_usd || null},
+          ${call.retell_cost_usd || null},
+          ${call.total_cost_usd || null},
+          ${call.twilio_cost_calculated_usd || null},
+          ${call.retell_cost_calculated_usd || null},
+          ${call.cost_source || null},
+          ${call.cost_updated_at || null},
+          ${call.created_at || new Date().toISOString()}
+        )
+      `;
+      return { changes: 1, lastInsertRowid: callId };
+    } else {
+      // SQLite path
+      const result = db.prepare(`
+        INSERT INTO voice_call_log 
+        (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
+         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
+         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        callId,
+        call.customer_id || null,
+        call.call_id,
+        call.twilio_call_sid || null,
+        call.call_duration_seconds || null,
+        call.call_duration_minutes || null,
+        call.credits_deducted || 0,
+        call.function_calls_count || 0,
+        call.status || 'active',
+        call.twilio_cost_usd || null,
+        call.retell_cost_usd || null,
+        call.total_cost_usd || null,
+        call.twilio_cost_calculated_usd || null,
+        call.retell_cost_calculated_usd || null,
+        call.cost_source || null,
+        call.cost_updated_at || null
+      );
+      return result;
+    }
   },
 
   // Update voice call costs
   updateVoiceCallCosts(callId, costData) {
-    return db.prepare(`
+    const result = db.prepare(`
       UPDATE voice_call_log 
       SET twilio_cost_usd = ?,
           retell_cost_usd = ?,
@@ -3939,6 +4630,11 @@ module.exports = {
       costData.cost_source || 'calculated',
       callId
     );
+    if (pgPool && result.changes) {
+      const updatedCall = db.prepare('SELECT * FROM voice_call_log WHERE call_id = ? ORDER BY created_at DESC LIMIT 1').get(callId);
+      syncVoiceCallToPostgres(updatedCall);
+    }
+    return result;
   },
 
   // Get voice call costs by customer
@@ -4009,22 +4705,47 @@ module.exports = {
   },
 
   // Function Call Logging
-  logFunctionCall(functionCall) {
-    return db.prepare(`
-      INSERT INTO function_call_log 
-      (id, customer_id, call_id, function_name, parameters, 
-       response_time_ms, success, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      functionCall.id || require('crypto').randomBytes(16).toString('hex'),
-      functionCall.customer_id || null,
-      functionCall.call_id || null,
-      functionCall.function_name,
-      functionCall.parameters ? JSON.stringify(functionCall.parameters) : null,
-      functionCall.response_time_ms || null,
-      functionCall.success ? 1 : 0,
-      functionCall.error_message || null
-    );
+  async logFunctionCall(functionCall) {
+    const entryId = functionCall.id || require('crypto').randomBytes(16).toString('hex');
+    
+    if (usePostgres && pgPool) {
+      // Postgres path
+      await pgPool`
+        INSERT INTO function_call_log 
+        (id, customer_id, call_id, function_name, parameters, 
+         response_time_ms, success, error_message, created_at)
+        VALUES (
+          ${entryId},
+          ${functionCall.customer_id || null},
+          ${functionCall.call_id || null},
+          ${functionCall.function_name},
+          ${toJsonValue(functionCall.parameters)},
+          ${functionCall.response_time_ms || null},
+          ${toBoolean(functionCall.success)},
+          ${functionCall.error_message || null},
+          ${functionCall.created_at || new Date().toISOString()}
+        )
+      `;
+      return { changes: 1, lastInsertRowid: entryId };
+    } else {
+      // SQLite path
+      const result = db.prepare(`
+        INSERT INTO function_call_log 
+        (id, customer_id, call_id, function_name, parameters, 
+         response_time_ms, success, error_message)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        entryId,
+        functionCall.customer_id || null,
+        functionCall.call_id || null,
+        functionCall.function_name,
+        functionCall.parameters ? JSON.stringify(functionCall.parameters) : null,
+        functionCall.response_time_ms || null,
+        functionCall.success ? 1 : 0,
+        functionCall.error_message || null
+      );
+      return result;
+    }
   },
 
   getFunctionCallsByCustomer(customerId, limit = 100) {
@@ -4166,7 +4887,7 @@ module.exports = {
   updateFeatureRequestStatus(requestId, status, notes = null) {
     const updates = ['status = ?'];
     const params = [status, requestId];
-    
+
     if (status === 'approved') {
       updates.push('approved_at = datetime("now")');
     }
@@ -4174,7 +4895,7 @@ module.exports = {
       updates.push('notes = ?');
       params.splice(1, 0, notes);
     }
-    
+
     return db.prepare(`
       UPDATE customer_feature_requests 
       SET ${updates.join(', ')} 
@@ -4185,24 +4906,24 @@ module.exports = {
   getAllFeatureRequests(filters = {}) {
     let query = 'SELECT * FROM customer_feature_requests WHERE 1=1';
     const params = [];
-    
+
     if (filters.status) {
       query += ' AND status = ?';
       params.push(filters.status);
     }
-    
+
     if (filters.customer_id) {
       query += ' AND customer_id = ?';
       params.push(filters.customer_id);
     }
-    
+
     query += ' ORDER BY requested_at DESC';
-    
+
     if (filters.limit) {
       query += ' LIMIT ?';
       params.push(filters.limit);
     }
-    
+
     return db.prepare(query).all(...params);
   },
 
@@ -4212,6 +4933,12 @@ module.exports = {
 
   getCustomerByEmail(email) {
     return db.prepare('SELECT * FROM customers WHERE email = ?').get(email);
+  },
+
+  getCustomerByTwilioNumber(phoneNumber) {
+    if (!phoneNumber) return null;
+    const normalized = normalizePhoneNumber(phoneNumber);
+    return db.prepare('SELECT * FROM customers WHERE twilio_phone_number = ?').get(normalized);
   },
 
   updateCustomer(id, updates) {
@@ -4366,7 +5093,7 @@ module.exports = {
   allocateFreeCredits(customerId, freeMinutes = 100) {
     // Check if credits record exists
     const existing = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
-    
+
     if (existing) {
       // Update existing record
       return db.prepare(`
@@ -4404,7 +5131,7 @@ module.exports = {
 
     // Calculate available free credits
     const availableFreeCredits = credits.free_credits_allocated - credits.free_credits_used;
-    
+
     // If trying to use more than free credits and no payment method, block
     if (minutesToDeduct > availableFreeCredits && !hasPaymentMethod) {
       throw new Error('Insufficient credits. Please add a payment method to continue using the service.');
@@ -4422,11 +5149,11 @@ module.exports = {
     // Only track overage (usage AFTER credits exhausted) for billing
     const now = new Date();
     const billingMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    
+
     // Calculate available credits before deduction (availableFreeCredits already calculated above)
     const availablePaidCredits = credits.paid_credits_purchased - credits.paid_credits_used;
     const totalAvailableCredits = availableFreeCredits + availablePaidCredits;
-    
+
     // Calculate overage (usage beyond available credits)
     // Overage = total usage - total available credits (if usage exceeds available)
     let overageMinutes = 0;
@@ -4434,11 +5161,11 @@ module.exports = {
       // This usage exceeds available credits - calculate overage
       overageMinutes = minutesToDeduct - totalAvailableCredits;
     }
-    
+
     // Track: total usage, free credits used, and overage (for billing)
     db.trackMonthlyUsage(
-      customerId, 
-      billingMonth, 
+      customerId,
+      billingMonth,
       minutesToDeduct, // Total voice minutes used
       0, // API requests tracked separately (handled in usage-logger)
       freeToDeduct, // Free credits used
@@ -4458,7 +5185,7 @@ module.exports = {
 
   addPaidCredits(customerId, minutesToAdd) {
     const credits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
-    
+
     if (!credits) {
       // Create credits record if it doesn't exist
       const { v4: uuidv4 } = require('uuid');
@@ -4541,7 +5268,7 @@ module.exports = {
   trackMonthlyUsage(customerId, billingMonth, voiceMinutes = 0, apiRequests = 0, freeCreditsUsed = 0, overageVoiceMinutes = 0, overageApiRequests = 0) {
     const { v4: uuidv4 } = require('uuid');
     const existing = db.prepare('SELECT * FROM monthly_usage WHERE customer_id = ? AND billing_month = ?').get(customerId, billingMonth);
-    
+
     if (existing) {
       // Update existing record
       return db.prepare(`
@@ -4580,47 +5307,47 @@ module.exports = {
   // Monthly Invoices
   createMonthlyInvoice(customerId, billingMonth, usage, options = {}) {
     const { v4: uuidv4 } = require('uuid');
-    
+
     // Base costs (Retell + Twilio + infrastructure)
     // Retell: ~$0.02/min, Twilio: ~$0.013/min, Infrastructure: ~$0.017/min = $0.05/min total
     const retellCostPerMin = options.retellCostPerMin || 0.02;
     const twilioCostPerMin = options.twilioCostPerMin || 0.013;
     const infraCostPerMin = options.infraCostPerMin || 0.017;
     const baseCostPerMin = retellCostPerMin + twilioCostPerMin + infraCostPerMin;
-    
+
     // API request costs (first 1,000 free per month)
     const apiBaseCostPer1k = options.apiBaseCostPer1k || 0.005; // Base cost for 1,000 requests
-    
+
     // Calculate base costs (actual costs we pay)
     const voiceMinutesBaseCost = (usage.overage_voice_minutes || 0) * baseCostPerMin;
     const apiRequestsBaseCost = (usage.overage_api_requests || 0) / 1000 * apiBaseCostPer1k;
     const baseCosts = voiceMinutesBaseCost + apiRequestsBaseCost;
-    
+
     // Integration costs (optional, per customer or flat fee)
     const integrationCosts = options.integrationCosts || 0;
-    
+
     // Markup percentage (default 50% markup = 1.5x multiplier)
     const markupPercentage = options.markupPercentage || 50;
     const markupMultiplier = 1 + (markupPercentage / 100);
-    
+
     // Calculate final prices (base costs + integration + markup)
     const subtotal = (baseCosts + integrationCosts) * markupMultiplier;
     const markupAmount = subtotal - (baseCosts + integrationCosts);
     const total = subtotal;
-    
+
     // Customer-facing prices (what we bill them)
     const voiceMinutesCost = (usage.overage_voice_minutes || 0) * 0.05; // $0.05/min billed to customer
     const apiRequestsCost = (usage.overage_api_requests || 0) / 1000 * 0.01; // $0.01/1k requests billed
-    
+
     // Generate invoice number (e.g., INV-2025-11-001)
     const invoicePrefix = `INV-${billingMonth.replace('-', '-')}`;
     const invoiceCount = db.prepare('SELECT COUNT(*) as count FROM monthly_invoices WHERE invoice_number LIKE ?').get(`${invoicePrefix}%`);
     const invoiceNumber = `${invoicePrefix}-${String((invoiceCount?.count || 0) + 1).padStart(3, '0')}`;
-    
+
     // Calculate due date (15 days from now)
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 15);
-    
+
     return db.prepare(`
       INSERT INTO monthly_invoices (
         id, customer_id, billing_month, invoice_number,
@@ -4637,36 +5364,36 @@ module.exports = {
       subtotal, total, dueDate.toISOString(), options.notes || null
     );
   },
-  
+
   getAllInvoices(filters = {}) {
     let query = 'SELECT * FROM monthly_invoices WHERE 1=1';
     const params = [];
-    
+
     if (filters.status) {
       query += ' AND status = ?';
       params.push(filters.status);
     }
-    
+
     if (filters.billing_month) {
       query += ' AND billing_month = ?';
       params.push(filters.billing_month);
     }
-    
+
     if (filters.customer_id) {
       query += ' AND customer_id = ?';
       params.push(filters.customer_id);
     }
-    
+
     query += ' ORDER BY billing_month DESC, created_at DESC';
-    
+
     if (filters.limit) {
       query += ' LIMIT ?';
       params.push(filters.limit);
     }
-    
+
     return db.prepare(query).all(...params);
   },
-  
+
   approveInvoice(invoiceId, approvedBy) {
     return db.prepare(`
       UPDATE monthly_invoices 
@@ -4677,7 +5404,7 @@ module.exports = {
       WHERE id = ?
     `).run(approvedBy, invoiceId);
   },
-  
+
   sendInvoice(invoiceId) {
     return db.prepare(`
       UPDATE monthly_invoices 
@@ -4744,24 +5471,24 @@ module.exports = {
   getAllAPIKeys(filters = {}) {
     let query = 'SELECT id, customer_id, key_prefix, created_at, last_used_at, is_active FROM api_keys WHERE 1=1';
     const params = [];
-    
+
     if (filters.customer_id) {
       query += ' AND customer_id = ?';
       params.push(filters.customer_id);
     }
-    
+
     if (filters.is_active !== undefined) {
       query += ' AND is_active = ?';
       params.push(filters.is_active ? 1 : 0);
     }
-    
+
     query += ' ORDER BY created_at DESC';
-    
+
     if (filters.limit) {
       query += ' LIMIT ?';
       params.push(filters.limit);
     }
-    
+
     return db.prepare(query).all(...params);
   },
 

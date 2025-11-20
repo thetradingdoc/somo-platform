@@ -168,11 +168,11 @@ class RetellWebSocketHandler {
         const connection = this.activeConnections.get(callId);
         if (!connection) return;
 
-            // Store call metadata from first message
-            if (message.call) {
-                connection.callMetadata = message.call;
-                connection.customerPhone = message.call.from_number || null;
-                
+        // Store call metadata from first message
+        if (message.call) {
+            connection.callMetadata = message.call;
+            connection.customerPhone = message.call.from_number || null;
+
                 // Store Twilio CallSid from metadata if available
                 if (message.call.metadata && message.call.metadata.twilio_call_sid) {
                     connection.twilio_call_sid = message.call.metadata.twilio_call_sid;
@@ -344,7 +344,7 @@ class RetellWebSocketHandler {
             const success = result.success !== false && !result.error;
 
             // Log function call to database
-            this.db.logFunctionCall({
+            await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
                 customer_id: customerId,
                 call_id: callId,
@@ -381,7 +381,7 @@ class RetellWebSocketHandler {
             });
 
             // Log failed function call
-            this.db.logFunctionCall({
+            await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
                 customer_id: customerId,
                 call_id: callId,
@@ -608,6 +608,26 @@ class RetellWebSocketHandler {
         return connection?.initialName || null;
     }
 
+    getClinicId(callId) {
+        const connection = this.activeConnections.get(callId);
+        if (!connection) {
+            return null;
+        }
+
+        if (connection.customer_id) {
+            return connection.customer_id;
+        }
+
+        const metadataClinic =
+            connection.callMetadata?.metadata?.clinic_id ||
+            connection.callMetadata?.metadata?.customer_id ||
+            connection.callMetadata?.dynamic_variables?.clinic_id ||
+            connection.callMetadata?.dynamic_variables?.customer_id ||
+            null;
+
+        return metadataClinic || null;
+    }
+
     // ==========================================
     // HEALTHCARE FUNCTION HANDLERS
     // ==========================================
@@ -688,7 +708,16 @@ class RetellWebSocketHandler {
                 };
             }
 
-            console.log(`📋 Scheduling appointment for ${args.patient_name} (${args.patient_email}) on ${args.date} at ${args.time}`);
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                console.warn(`⚠️  Missing clinic_id for schedule_appointment (callId: ${callId})`);
+                return {
+                    success: false,
+                    error: 'Missing clinic context. Unable to schedule appointment without clinic_id.'
+                };
+            }
+
+            console.log(`📋 Scheduling appointment for ${args.patient_name} (${args.patient_email}) on ${args.date} at ${args.time} [clinic: ${clinicId}]`);
 
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/schedule`, {
                 patient_name: args.patient_name,
@@ -698,7 +727,8 @@ class RetellWebSocketHandler {
                 date: args.date,
                 time: args.time,
                 timezone: args.timezone || 'America/New_York',
-                notes: args.notes
+                notes: args.notes,
+                clinic_id: clinicId
             });
 
             // If duplicate was detected, return the duplicate response
@@ -748,10 +778,19 @@ class RetellWebSocketHandler {
     // Handle get_available_slots function
     async handleGetAvailableSlots(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                return {
+                    success: false,
+                    error: 'Missing clinic context for availability check.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/available-slots`, {
                 date: args.date,
                 appointment_type: args.appointment_type,
-                timezone: args.timezone || 'America/New_York'
+                timezone: args.timezone || 'America/New_York',
+                clinic_id: clinicId
             });
 
             return response.data;
@@ -766,8 +805,17 @@ class RetellWebSocketHandler {
     // Handle search_appointments function
     async handleSearchAppointments(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                return {
+                    success: false,
+                    error: 'Missing clinic context for appointment search.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/search`, {
-                search_term: args.search_term
+                search_term: args.search_term,
+                clinic_id: clinicId
             });
 
             return response.data;
@@ -782,8 +830,17 @@ class RetellWebSocketHandler {
     // Handle confirm_appointment function
     async handleConfirmAppointment(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                return {
+                    success: false,
+                    error: 'Missing clinic context for confirmation.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/confirm`, {
-                appointment_id: args.appointment_id
+                appointment_id: args.appointment_id,
+                clinic_id: clinicId
             });
 
             return response.data;
@@ -798,9 +855,18 @@ class RetellWebSocketHandler {
     // Handle cancel_appointment function
     async handleCancelAppointment(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                return {
+                    success: false,
+                    error: 'Missing clinic context for cancellation.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/cancel`, {
                 appointment_id: args.appointment_id,
-                reason: args.reason
+                reason: args.reason,
+                clinic_id: clinicId
             });
 
             return response.data;
@@ -815,12 +881,21 @@ class RetellWebSocketHandler {
     // Handle reschedule_appointment function
     async handleRescheduleAppointment(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                return {
+                    success: false,
+                    error: 'Missing clinic context for rescheduling.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/reschedule`, {
                 appointment_id: args.appointment_id,
                 new_date: args.new_date,
                 new_time: args.new_time,
                 reason: args.reason,
-                timezone: args.timezone || 'America/New_York'
+                timezone: args.timezone || 'America/New_York',
+                clinic_id: clinicId
             });
 
             return response.data;
@@ -835,13 +910,22 @@ class RetellWebSocketHandler {
     // Handle create_appointment_checkout function
     async handleCreateAppointmentCheckout(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
+            if (!clinicId) {
+                return {
+                    success: false,
+                    error: 'Missing clinic context for creating checkout.'
+                };
+            }
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/checkout`, {
                 appointment_id: args.appointment_id,
                 customer_name: args.customer_name,
                 customer_email: args.customer_email,
                 customer_phone: args.customer_phone || this.getCustomerPhone(callId),
                 appointment_type: args.appointment_type,
-                amount: args.amount
+                amount: args.amount,
+                clinic_id: clinicId
             });
 
             return response.data;
@@ -856,9 +940,11 @@ class RetellWebSocketHandler {
     // Handle verify_checkout_code function
     async handleVerifyCheckoutCode(callId, args) {
         try {
+            const clinicId = this.getClinicId(callId);
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/checkout/verify`, {
                 payment_token: args.payment_token,
-                verification_code: args.verification_code
+                verification_code: args.verification_code,
+                clinic_id: clinicId
             });
 
             return response.data;

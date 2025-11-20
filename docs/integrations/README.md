@@ -1,55 +1,30 @@
 # Integrations Documentation
 
-Third-party integrations and API documentation.
+This directory contains documentation for third-party integrations and APIs.
 
----
+## 📁 Files
 
-## 📚 Documentation Index
+### [STEDI_API_ENDPOINTS.md](./STEDI_API_ENDPOINTS.md)
+Complete documentation of STEDI API integration for healthcare insurance operations:
 
-1. **STEDI_VS_UHC_FHIR_DATA_COMPARISON.md** 🔍 **FHIR COMPARISON**
-   - Stedi vs UHC FHIR comparison
-   - Data format differences
-   - Integration comparison
+**Endpoints Available:**
+1. **Eligibility Check** (X12 270/271) - `POST /x12/translate/270-to-edi`
+2. **Claim Submission** (X12 837) - `POST /x12/translate/837-to-edi`
+3. **Claim Status** (X12 276/277) - `POST /x12/translate/276-to-edi`
+4. **Payer Directory** - `GET /payers` or `GET /v1/payers`
 
-2. **UHC_FHIR_SERVICE_USAGE.md** 🏥 **UHC FHIR**
-   - UHC FHIR service usage
-   - API integration
-   - Usage examples
+**STEDI Sandbox Data Format:**
+- Member IDs: `TEST` + 6 digits (e.g., `TEST999888`)
+- Payer IDs: `UHC`, `BCBS`, `AETNA`, `CIGNA`
+- Service Codes: CPT codes (e.g., `90834`, `99213`)
 
-3. **UHC_FLEX_FHIR_API_ANALYSIS.md** 📊 **UHC FLEX**
-   - UHC Flex FHIR API analysis
-   - API capabilities
-   - Integration options
-
-4. **STRIPE_ISSUING_ON_DEMAND.md** 💳 **STRIPE ON-DEMAND**
-   - Stripe Issuing on-demand cards
-   - Card issuance flow
-   - Integration details
-
-5. **STRIPE_ISSUING_STATUS.md** 📋 **STRIPE STATUS**
-   - Stripe Issuing status
-   - Current implementation
-   - Status updates
-
----
-
-## 🔗 Integrations
-
-- **Stedi** - Insurance claims processing
-- **UHC FHIR** - Healthcare data integration
-- **Stripe** - Payment processing and card issuance
-- **Retell** - Voice agent platform
-- **Azure** - Email and cloud services
-
----
+**Production Connection:**
+- Base URL: `https://api.stedi.com`
+- Authentication: Bearer token via `STEDI_API_KEY`
+- Environment: `STEDI_API_BASE`, `STEDI_API_KEY`
 
 ## 🔗 Related Documentation
 
-- **Architecture:** `../architecture/README.md`
-- **API:** `../api/README.md`
-- **Main Docs:** `../README.md`
-
----
-
-**Last Updated:** November 15, 2025
-
+- [STEDI vs UHC FHIR Comparison](./STEDI_VS_UHC_FHIR_DATA_COMPARISON.md)
+- [UHC Flex FHIR API Analysis](./UHC_FLEX_FHIR_API_ANALYSIS.md)
+- [Patient Journey](../patient-journey/) - Insurance usage in patient workflows

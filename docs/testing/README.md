@@ -56,6 +56,16 @@ Test results, test suites, and testing guides.
     - Fixes applied
     - Issue resolution
 
+11. **TENANT_ISOLATION_TESTS.md** 🔒 **TENANT ISOLATION**
+    - Multi-tenant regression tests
+    - Covers `tests/test-tenant-isolation.js`
+    - Ensures clinic-scoped data access
+
+12. **VOICE_AGENT_FLOW.md** 🎙️ **VOICE FLOW**
+    - Twilio + Retell function simulation
+    - Covers `tests/test-voice-agent-flow.js`
+    - Validates scheduling, insurance, checkout automation
+
 ---
 
 ## 🧪 Test Status

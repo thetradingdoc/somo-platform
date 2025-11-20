@@ -16,12 +16,17 @@ Deployment guides, infrastructure setup, and operational documentation.
    - DNS configuration
    - SSL/TLS certificates
 
-3. **BACKUP_STRATEGY.md** 💾 **BACKUPS**
+3. **POSTGRES_MIGRATION.md** 🗄️ **POSTGRES HARDENING**
+   - SQLite → Postgres export script
+   - Bicep template for App Service + Postgres
+   - Cutover checklist
+
+4. **BACKUP_STRATEGY.md** 💾 **BACKUPS**
    - Database backup strategy
    - Backup procedures
    - Recovery plans
 
-4. **SECURITY_IMPROVEMENTS.md** 🔒 **SECURITY**
+5. **SECURITY_IMPROVEMENTS.md** 🔒 **SECURITY**
    - Security best practices
    - Security improvements
    - Compliance considerations

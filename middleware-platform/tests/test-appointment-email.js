@@ -20,7 +20,8 @@ const TEST_APPOINTMENT = {
     date: '2025-11-15', // Tomorrow
     time: '2:00 PM',
     timezone: 'America/New_York',
-    notes: 'Test appointment for email verification'
+    notes: 'Test appointment for email verification',
+    clinic_id: 'test-clinic-email'
 };
 
 async function testAppointmentEmail() {
@@ -28,6 +29,20 @@ async function testAppointmentEmail() {
     console.log('='.repeat(60));
 
     try {
+        // Clean up any existing appointments for the test date/time to avoid conflicts
+        console.log('\n🧹 Cleaning up existing appointments for test date...');
+        const existingAppts = await db.getAppointmentsByDate(TEST_APPOINTMENT.date, TEST_APPOINTMENT.clinic_id);
+        
+        // Delete appointments that might conflict (same time or overlapping)
+        existingAppts.forEach(appt => {
+            try {
+                db.deleteAppointment(appt.id, appt.clinic_id);
+                console.log(`  ✓ Deleted existing appointment ${appt.id} at ${appt.time}`);
+            } catch (err) {
+                console.warn(`  ⚠️  Failed to delete ${appt.id}: ${err.message}`);
+            }
+        });
+
         // Step 1: Create appointment
         console.log('\n📋 Step 1: Creating appointment...');
         console.log('Appointment Details:');
@@ -54,7 +69,7 @@ async function testAppointmentEmail() {
 
         // Step 2: Verify appointment in database
         console.log('\n📊 Step 2: Verifying appointment in database...');
-        const appointment = db.getAppointment(bookingResult.appointment.id);
+        const appointment = await db.getAppointment(bookingResult.appointment.id, TEST_APPOINTMENT.clinic_id);
 
         if (!appointment) {
             console.error('❌ Appointment not found in database!');

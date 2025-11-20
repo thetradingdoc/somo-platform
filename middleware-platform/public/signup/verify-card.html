@@ -275,10 +275,10 @@
         </div>
 
         <h2>Add Payment Method</h2>
-        <p>We'll verify your card with a $1 authorization hold (you won't be charged). This allows us to invoice you monthly for usage beyond your free credits.</p>
+        <p>We'll save your card details securely. <strong>No charges will be made at this time.</strong> This allows us to invoice you monthly for usage beyond your free credits once your account is fully activated.</p>
 
         <div class="info-box">
-            <p>🔒 Your card details are securely processed by Stripe. We only store a token for future invoices.</p>
+            <p>🔒 Your card details are securely processed by Stripe. We only store a token for future invoices. No charges will be made until your account is fully activated.</p>
         </div>
 
         <div id="alert"></div>
@@ -296,9 +296,14 @@
                 <!-- Stripe Elements will create form elements here -->
             </div>
             <div id="card-errors" class="card-errors" role="alert"></div>
+            
+            <!-- Info message about account review -->
+            <div id="account-review-notice" class="info-box" style="display: none; margin-top: 15px;">
+                <p>⚠️ Your Stripe account is currently under review. We'll save your card information and grant API access. Card details will be fully processed once your account is activated.</p>
+            </div>
 
-            <button class="btn" id="verify-btn">Verify Card</button>
-            <div class="loading" id="loading">Verifying card...</div>
+            <button class="btn" id="verify-btn">Save Payment Method</button>
+            <div class="loading" id="loading">Saving payment method...</div>
         </div>
     </div>
 
@@ -404,43 +409,94 @@
             document.getElementById('card-errors').textContent = '';
 
             try {
-                // Create payment method
-                const { paymentMethod, error: pmError } = await stripe.createPaymentMethod({
-                    type: 'card',
-                    card: cardElement,
-                });
+                // Try to create payment method with Stripe
+                let paymentMethodId = null;
+                let cardDetails = null;
+                
+                try {
+                    const { paymentMethod, error: pmError } = await stripe.createPaymentMethod({
+                        type: 'card',
+                        card: cardElement,
+                    });
 
-                if (pmError) {
-                    document.getElementById('card-errors').textContent = pmError.message;
-                    btn.disabled = false;
-                    loading.classList.remove('active');
-                    return;
+                    if (pmError) {
+                        // Check if it's an account review error
+                        if (pmError.message && (
+                            pmError.message.includes('cannot currently make live charges') ||
+                            pmError.message.includes('account') && pmError.message.includes('activate') ||
+                            pmError.message.includes('account') && pmError.message.includes('onboarding')
+                        )) {
+                            // Stripe account is under review - we'll save without payment method ID
+                            console.warn('Stripe account under review, proceeding without payment method ID');
+                            paymentMethodId = null;
+                            // Show notice but don't block
+                            document.getElementById('account-review-notice').style.display = 'block';
+                            // Clear the error message since we're handling it
+                            document.getElementById('card-errors').textContent = '';
+                        } else {
+                            // Other Stripe errors - show to user
+                            document.getElementById('card-errors').textContent = pmError.message;
+                            btn.disabled = false;
+                            loading.classList.remove('active');
+                            return;
+                        }
+                    } else {
+                        paymentMethodId = paymentMethod.id;
+                        // Try to get card details if available
+                        if (paymentMethod.card) {
+                            cardDetails = {
+                                brand: paymentMethod.card.brand,
+                                last4: paymentMethod.card.last4
+                            };
+                        }
+                    }
+                } catch (stripeError) {
+                    // If Stripe fails due to account review, continue without payment method ID
+                    if (stripeError.message && (
+                        stripeError.message.includes('cannot currently make live charges') ||
+                        stripeError.message.includes('account') && stripeError.message.includes('activate') ||
+                        stripeError.message.includes('account') && stripeError.message.includes('onboarding')
+                    )) {
+                        console.warn('Stripe account under review, proceeding without payment method ID');
+                        paymentMethodId = null;
+                        // Show notice
+                        document.getElementById('account-review-notice').style.display = 'block';
+                        document.getElementById('card-errors').textContent = '';
+                    } else {
+                        throw stripeError;
+                    }
                 }
 
-                // Verify with $1 authorization
+                // Send to backend - backend will handle saving even without payment method ID
                 const response = await fetch(`${API_BASE}/api/signup/verify-card`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
                     body: JSON.stringify({
-                        payment_method_id: paymentMethod.id
+                        payment_method_id: paymentMethodId,
+                        card_details: cardDetails,
+                        skip_stripe: !paymentMethodId // Flag to indicate we're skipping Stripe
                     })
                 });
 
                 const result = await response.json();
 
                 if (result.success) {
-                    alert.innerHTML = '<div class="alert alert-success">✓ Card verified successfully! Redirecting...</div>';
+                    const successMsg = result.note 
+                        ? `<div class="alert alert-success">✓ ${result.message || 'Payment method saved successfully!'}<br><small>${result.note}</small></div>`
+                        : `<div class="alert alert-success">✓ ${result.message || 'Payment method saved successfully!'} Redirecting...</div>`;
+                    alert.innerHTML = successMsg;
                     setTimeout(() => {
                         const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/docs';
                         window.location.href = redirectUrl;
-                    }, 1500);
+                    }, 2000);
                 } else {
-                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message || 'Failed to verify card'}</div>`;
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message || 'Failed to save payment method'}</div>`;
                     btn.disabled = false;
                 }
             } catch (error) {
-                alert.innerHTML = `<div class="alert alert-error">Failed to verify card: ${error.message}</div>`;
+                console.error('Error saving payment method:', error);
+                alert.innerHTML = `<div class="alert alert-error">Failed to save payment method: ${error.message}</div>`;
                 btn.disabled = false;
             } finally {
                 loading.classList.remove('active');

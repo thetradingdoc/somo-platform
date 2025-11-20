@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>About Doctor Little</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: #f8fafc;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #1e40af 0%, #2563eb 60%, #3b82f6 100%);
+            min-height: 100vh;
+            padding-bottom: 60px;
+        }
+
+        header {
+            padding: 32px clamp(20px, 6vw, 60px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-mark {
+            font-size: clamp(34px, 5vw, 46px);
+            letter-spacing: -4px;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .logo-mark .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .logo-mark .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
+        .logo-mark .dot {
+            font-weight: 700;
+        }
+
+        .back-link {
+            color: #93c5fd;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 40px;
+            padding: 0 clamp(20px, 6vw, 60px) 60px;
+            align-items: center;
+        }
+
+        .hero h2 {
+            font-size: clamp(32px, 6vw, 52px);
+            color: #ffffff;
+            line-height: 1.1;
+            margin-bottom: 16px;
+        }
+
+        .hero p {
+            color: rgba(226, 232, 240, 0.85);
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .cta-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 28px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #2563eb, #22d3ee);
+            color: #fff;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: 0 15px 40px rgba(37, 99, 235, .35);
+        }
+
+        .illustration {
+            position: relative;
+            padding: 30px;
+            background: rgba(15, 23, 42, 0.35);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 24px;
+            box-shadow: 0 30px 80px rgba(15, 23, 42, .35);
+        }
+
+        section {
+            padding: 0 clamp(20px, 6vw, 60px);
+            margin-bottom: 48px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            margin-bottom: 18px;
+            color: #bfdbfe;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .grid {
+            display: grid;
+            gap: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.45);
+        }
+
+        .card h3 {
+            margin-bottom: 12px;
+            font-size: 20px;
+            color: #f8fafc;
+        }
+
+        .card p {
+            color: rgba(226, 232, 240, 0.85);
+            line-height: 1.6;
+        }
+
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .list-item {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            color: rgba(226, 232, 240, 0.88);
+        }
+
+        .list-item span {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(59, 130, 246, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #bfdbfe;
+        }
+
+        footer {
+            text-align: center;
+            padding: 24px;
+            color: rgba(226, 232, 240, 0.7);
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="gradient-bg">
+        <header>
+            <div class="logo-mark">
+                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+            </div>
+            <a class="back-link" href="/">← Back to Home</a>
+        </header>
+
+        <section class="hero">
+            <div>
+                <h2>AI Voice Agents that Close the Billing Loop</h2>
+                <p>
+                    Doctor Little unifies Retell, Twilio, billing rules, and healthcare data into a single AI agent.
+                    From eligibility to payment reminders, every conversation is logged, auditable, and
+                    synchronized across patients, providers, and insurers.
+                </p>
+                <a class="cta-btn" href="/signup">Explore the Platform →</a>
+            </div>
+            <div class="illustration">
+                <svg viewBox="0 0 500 320" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#22d3ee" />
+                            <stop offset="100%" stop-color="#3b82f6" />
+                        </linearGradient>
+                    </defs>
+                    <rect x="20" y="30" rx="30" ry="30" width="460" height="260" fill="rgba(15,23,42,0.75)"
+                        stroke="#38bdf8" stroke-width="2" />
+                    <path d="M60 200 Q140 120 220 200 T380 200" fill="none" stroke="url(#grad)" stroke-width="6"
+                        stroke-linecap="round" />
+                    <circle cx="140" cy="140" r="18" fill="#22d3ee" opacity="0.8" />
+                    <circle cx="220" cy="220" r="20" fill="#38bdf8" opacity="0.8" />
+                    <circle cx="300" cy="160" r="16" fill="#60a5fa" opacity="0.8" />
+                    <rect x="110" y="70" width="280" height="20" rx="10" fill="#1e3a8a" />
+                    <rect x="110" y="280" width="180" height="18" rx="9" fill="#1e3a8a" />
+                </svg>
+            </div>
+        </section>
+
+        <section>
+            <div class="card" style="grid-column:1/-1">
+                <h3>Mission</h3>
+                <p>
+                    We remove friction from healthcare revenue cycles. Doctor Little agents collect the right
+                    data, explain balances in plain language, and deliver structured updates to EHRs, billing
+                    ledgers, and payer portals. The result: lower days in AR, happier callers, and
+                    compliant conversations you can trust.
+                </p>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-title">Who We Serve</div>
+            <div class="grid">
+                <div class="card">
+                    <h3>Patients</h3>
+                    <p>24/7 voice concierge that clarifies statements, verifies coverage, negotiates plans, and books
+                        payment commitments without long hold times.</p>
+                </div>
+                <div class="card">
+                    <h3>Providers</h3>
+                    <p>Automated follow-ups for denials, prior auth, and collections. Every interaction syncs to the
+                        Doctor Little dashboard and your practice systems.</p>
+                </div>
+                <div class="card">
+                    <h3>Insurers</h3>
+                    <p>Structured data handoffs with eligibility facts, CPT/ICD context, and timestamped recordings
+                        ensure payers act on complete information.</p>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <div class="section-title">AI Voice Billing Stack</div>
+            <div class="card list">
+                <div class="list-item">
+                    <span>1</span>
+                    <p>Retell agent orchestration + Doctor Little prompts keep tone compliant while pulling in live
+                        claim,
+                        eligibility, and payer rules.</p>
+                </div>
+                <div class="list-item">
+                    <span>2</span>
+                    <p>Twilio numbers per customer, automated SIP routing, and smart IVR pass the right call to the
+                        right AI intent.</p>
+                </div>
+                <div class="list-item">
+                    <span>3</span>
+                    <p>Credits, invoices, and usage tracking ensure every minute is accountable and ready for billing
+                        audits.</p>
+                </div>
+                <div class="list-item">
+                    <span>4</span>
+                    <p>Unified dashboard surfaces transcripts, status, and KPIs so finance and care teams can review in
+                        real time.</p>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            © Doctor Little — Intelligent medical billing conversations powered by AI.
+        </footer>
+    </div>
+</body>
+
+</html>

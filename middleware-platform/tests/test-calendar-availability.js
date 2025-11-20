@@ -44,7 +44,8 @@ async function run() {
             existing.forEach(appt => db.deleteAppointment(appt.id));
         }
 
-        const result = await BookingService.getAvailableSlots(testDate, null, null, testTimezone);
+        const TEST_CLINIC_ID = 'test-calendar-clinic';
+        const result = await BookingService.getAvailableSlots(testDate, null, null, testTimezone, TEST_CLINIC_ID);
 
         if (!result.success) {
             throw new Error(`Availability check failed: ${result.error}`);

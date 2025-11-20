@@ -71,7 +71,7 @@ class PaymentOrchestrator {
                 status: 'pending'
             };
 
-            db.createVoiceCheckout(checkout);
+            await db.createVoiceCheckout(checkout);
             console.log('✅ Checkout created:', checkoutId);
 
             // Route to payment method
@@ -216,7 +216,7 @@ class PaymentOrchestrator {
 
     static async getCheckoutStatus(checkoutId) {
         try {
-            const checkout = db.getVoiceCheckout(checkoutId);
+            const checkout = await db.getVoiceCheckout(checkoutId);
 
             if (!checkout) {
                 return new PaymentResponse({

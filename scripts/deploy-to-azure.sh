@@ -46,6 +46,7 @@ echo ""
 echo "📦 Creating deployment ZIP (without node_modules - Azure will install)..."
 echo "   - Including middleware-platform/"
 echo "   - Including unified-dashboard/"
+echo "   - Including docs/voice-agent/"
 
 # Create a temp directory for deployment
 TEMP_DIR=$(mktemp -d)
@@ -63,6 +64,12 @@ find "$TEMP_DIR" -name ".DS_Store" -delete 2>/dev/null || true
 # But since we're in root, we'll copy it as is and adjust server.js path in deployment
 cp -r "$PROJECT_ROOT/unified-dashboard" "$TEMP_DIR/"
 
+# Copy docs/voice-agent prompt templates so Retell service can load them in production
+if [ -d "$PROJECT_ROOT/docs/voice-agent" ]; then
+    mkdir -p "$TEMP_DIR/docs"
+    cp -r "$PROJECT_ROOT/docs/voice-agent" "$TEMP_DIR/docs/"
+fi
+
 # Create ZIP from temp directory
 DEPLOY_ZIP="$PROJECT_ROOT/deploy.zip"
 cd "$TEMP_DIR"
@@ -72,7 +79,6 @@ zip -r "$DEPLOY_ZIP" . \
     -x "*node_modules*" \
     -x "*.env*" \
     -x "*test*" \
-    -x "*.md" \
     -x "*.log" \
     -x ".DS_Store" \
     -x "middleware.db-journal" \

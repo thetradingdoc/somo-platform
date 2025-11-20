@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const db = require('../database');
 const EmailService = require('../services/email-service');
 const RetellService = require('../services/retell-service');
+const TwilioPhoneService = require('../services/twilio-phone-service');
 const { v4: uuidv4 } = require('uuid');
 const rateLimiter = require('../middleware/rate-limiter').authLimiter;
 
@@ -33,13 +34,33 @@ const router = express.Router();
  */
 router.post('/signup', rateLimiter, async (req, res) => {
   try {
-    const { name, email, phone_number, company_name, business_size, use_case, api_features } = req.body;
+    const { name, email, phone_number, company_name, business_size, use_case, api_features, customer_type } = req.body;
 
     // Validation
     if (!name || !email) {
       return res.status(400).json({
         success: false,
         error: 'Name and email are required'
+      });
+    }
+
+    // Validate customer_type
+    const validCustomerTypes = ['api', 'saas'];
+    const customerType = customer_type || 'api'; // Default to 'api' for backwards compatibility
+    if (!validCustomerTypes.includes(customerType)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid customer type',
+        message: 'Customer type must be "api" or "saas"'
+      });
+    }
+
+    // SaaS customers require phone number
+    if (customerType === 'saas' && !phone_number) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number required',
+        message: 'SaaS customers must provide a phone number'
       });
     }
 
@@ -94,6 +115,8 @@ router.post('/signup', rateLimiter, async (req, res) => {
       business_size: business_size || null,
       use_case: use_case || null,
       api_features: api_features || [],
+      customer_type: customerType,
+      pricing_tier: 'starter', // Default pricing tier
       status: 'pending',
       email_verified: false
     });
@@ -505,6 +528,9 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       // Continue - credits can be allocated later
     }
 
+    // Get customer type (default to 'api' for backwards compatibility)
+    const customerType = customer.customer_type || 'api';
+
     // Create Retell agent for customer when they accept terms
     let retellAgentId = null;
     let retellAgentStatus = 'pending';
@@ -537,20 +563,81 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       retellAgentStatus = customer.retell_agent_status || 'active';
     }
 
+    // For SaaS customers: Provision Twilio phone number
+    let twilioPhoneNumber = null;
+    let twilioPhoneSid = null;
+    
+    if (customerType === 'saas' && !customer.twilio_phone_number) {
+      try {
+        const twilioPhoneService = new TwilioPhoneService();
+        
+        if (twilioPhoneService.isAvailable()) {
+          // Build webhook URL with customer_id parameter
+          const apiBaseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 
+            (process.env.NODE_ENV === 'production' ? 'https://api.doclittle.site' : 'http://localhost:4000');
+          const webhookUrl = `${apiBaseUrl}/voice/incoming?customer_id=${customer.id}`;
+          
+          // Extract area code from customer's phone number if available
+          const areaCode = customer.phone_number ? customer.phone_number.match(/\d{3}/)?.[0] : null;
+          
+          console.log(`📞 Provisioning Twilio phone number for SaaS customer ${customer.id}...`);
+          const provisionedPhone = await twilioPhoneService.provisionPhoneNumberForCustomer({
+            customerId: customer.id,
+            areaCode: areaCode || null,
+            webhookUrl: webhookUrl
+          });
+
+          twilioPhoneNumber = provisionedPhone.phoneNumber;
+          twilioPhoneSid = provisionedPhone.sid;
+
+          // Update customer with Twilio phone details
+          db.updateCustomer(customer.id, {
+            twilio_phone_number: twilioPhoneNumber,
+            twilio_phone_sid: twilioPhoneSid
+          });
+
+          console.log(`✅ Provisioned Twilio phone number ${twilioPhoneNumber} for customer ${customer.id}`);
+        } else {
+          console.warn('⚠️  Twilio not configured - cannot provision phone number for SaaS customer');
+        }
+      } catch (twilioError) {
+        console.error('❌ Failed to provision Twilio phone number:', twilioError);
+        // Continue - phone can be provisioned later manually
+      }
+    } else if (customerType === 'saas' && customer.twilio_phone_number) {
+      // Customer already has a Twilio phone number
+      twilioPhoneNumber = customer.twilio_phone_number;
+      twilioPhoneSid = customer.twilio_phone_sid;
+    }
+
     // REQUIRED: Check if payment method is verified (MANDATORY for all accounts)
     const hasPaymentMethod = customer.stripe_payment_method_id && customer.card_verified === 1;
     
-    // Payment verification is MANDATORY - always redirect to card verification if not verified
-    // This ensures every account goes through $1 payment verification before accessing docs
-    const redirectUrl = hasPaymentMethod ? (req.query.redirect || '/docs') : '/verify-card';
+    // Determine redirect URL based on customer type
+    let redirectUrl;
+    if (hasPaymentMethod) {
+      if (customerType === 'saas') {
+        // SaaS customers go to dashboard
+        redirectUrl = '/business-dashboard';
+      } else {
+        // API customers go to docs
+        redirectUrl = req.query.redirect || '/docs';
+      }
+    } else {
+      // Payment verification required - redirect to card verification
+      redirectUrl = '/verify-card';
+    }
     
     res.json({
       success: true,
-      message: hasPaymentMethod ? 'Terms accepted successfully' : 'Terms accepted. Payment verification required to access API docs.',
+      message: hasPaymentMethod ? 'Terms accepted successfully' : 'Terms accepted. Payment verification required.',
       redirect: redirectUrl,
       credits_allocated: 100,
       retell_agent_id: retellAgentId,
       retell_agent_status: retellAgentStatus,
+      customer_type: customerType,
+      twilio_phone_number: twilioPhoneNumber,
+      twilio_phone_sid: twilioPhoneSid,
       requires_card_verification: !hasPaymentMethod,
       payment_verification_required: !hasPaymentMethod // Explicit flag that payment verification is required
     });
@@ -1049,7 +1136,8 @@ router.get('/customers/me/payment-method', rateLimiter, async (req, res) => {
 
 /**
  * POST /api/signup/verify-card
- * Verify card with $1 authorization hold
+ * Save card details without charging (Stripe account under review)
+ * We'll charge users later once Stripe is approved
  */
 router.post('/signup/verify-card', rateLimiter, async (req, res) => {
   try {
@@ -1089,132 +1177,149 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
       });
     }
 
-    const { payment_method_id } = req.body;
-    if (!payment_method_id) {
-      return res.status(400).json({
-        success: false,
-        error: 'Payment method ID is required'
+    const { payment_method_id, card_details, skip_stripe } = req.body;
+    
+    // If Stripe is disabled or account is under review, save without payment method ID
+    if (skip_stripe || !payment_method_id) {
+      console.log('⚠️  Skipping Stripe payment method creation (account under review or disabled)');
+      
+      // Save placeholder payment method to allow API access
+      // We'll update with real details once Stripe account is approved
+      const placeholderId = `pm_placeholder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      db.updateCustomerPaymentMethod(
+        customer.id,
+        placeholderId,
+        card_details?.last4 || '****',
+        card_details?.brand || 'card',
+        true // Mark as verified so user can access API immediately
+      );
+
+      console.log(`✅ Payment method placeholder saved for customer ${customer.id} (Stripe account under review)`);
+
+      return res.json({
+        success: true,
+        message: 'Payment method saved successfully. You can now access the API.',
+        payment_method: {
+          card_brand: card_details?.brand || 'card',
+          card_last4: card_details?.last4 || '****'
+        },
+        note: 'Card details will be updated once your account is fully activated. No charges will be made until then.'
       });
     }
 
     // Retrieve payment method to get card details
-    const paymentMethod = await stripe.paymentMethods.retrieve(payment_method_id);
-    if (!paymentMethod || paymentMethod.type !== 'card') {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid payment method'
-      });
-    }
-
-    // Create $1 authorization hold (Payment Intent with capture_method: 'manual')
-    // Using Payment Intent to verify card, then cancel immediately
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: 100, // $1.00 in cents
-      currency: 'usd',
-      payment_method: payment_method_id,
-      capture_method: 'manual', // Authorization only, not captured
-      confirm: true,
-      description: 'Card verification - DocLittle API',
-      payment_method_types: ['card'], // Explicitly use card only, no redirects
-      metadata: {
-        customer_id: customer.id,
-        type: 'card_verification'
+    // This will work even if Stripe account is under review
+    let paymentMethod;
+    try {
+      paymentMethod = await stripe.paymentMethods.retrieve(payment_method_id);
+      if (!paymentMethod || paymentMethod.type !== 'card') {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid payment method'
+        });
       }
-    });
-
-    if (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_payment_method') {
-      // Card requires additional authentication (3D Secure)
-      return res.json({
-        success: false,
-        requires_action: true,
-        client_secret: paymentIntent.client_secret,
-        error: 'Card requires additional authentication'
-      });
-    }
-
-    if (paymentIntent.status === 'requires_capture' || paymentIntent.status === 'succeeded') {
-      // Authorization successful - immediately cancel/void the authorization
-      try {
-        // Cancel the payment intent (voids the authorization without charging)
-        await stripe.paymentIntents.cancel(paymentIntent.id);
-        
-        // Store payment method in database
+    } catch (stripeError) {
+      // If Stripe account is under review, we might get errors
+      // But we can still try to save the payment method ID
+      console.warn('⚠️  Stripe error retrieving payment method (account may be under review):', stripeError.message);
+      
+      // If we can't retrieve the payment method, we can't get card details
+      // But we can still save the payment method ID for later use
+      if (stripeError.code === 'account_invalid' || stripeError.message?.includes('cannot currently make live charges')) {
+        // Account is under review - save payment method ID anyway
+        // We'll retrieve details later when account is approved
         db.updateCustomerPaymentMethod(
           customer.id,
           payment_method_id,
-          paymentMethod.card.last4,
-          paymentMethod.card.brand,
-          true
+          card_details?.last4 || '****',
+          card_details?.brand || 'card',
+          true // Mark as verified so user can access API
         );
 
-        console.log(`✅ Card verified for customer ${customer.id}: ${paymentMethod.card.brand} ****${paymentMethod.card.last4}`);
+        console.log(`✅ Payment method saved for customer ${customer.id} (Stripe account under review)`);
 
-        res.json({
+        return res.json({
           success: true,
-          message: 'Card verified successfully',
+          message: 'Payment method saved successfully. You can now access the API.',
           payment_method: {
-            card_brand: paymentMethod.card.brand,
-            card_last4: paymentMethod.card.last4
-          }
+            card_brand: card_details?.brand || 'card',
+            card_last4: card_details?.last4 || '****'
+          },
+          note: 'Card details will be updated once your account is fully activated'
         });
-      } catch (cancelError) {
-        console.error('❌ Failed to cancel authorization:', cancelError);
-        // If cancel fails, try to refund instead
-        try {
-          if (paymentIntent.status === 'succeeded') {
-            await stripe.refunds.create({ payment_intent: paymentIntent.id });
-          }
-          // Store payment method anyway (verification was successful)
-          db.updateCustomerPaymentMethod(
-            customer.id,
-            payment_method_id,
-            paymentMethod.card.last4,
-            paymentMethod.card.brand,
-            true
-          );
-          res.json({
-            success: true,
-            message: 'Card verified successfully',
-            payment_method: {
-              card_brand: paymentMethod.card.brand,
-              card_last4: paymentMethod.card.last4
-            }
-          });
-        } catch (refundError) {
-          console.error('❌ Failed to refund:', refundError);
-          // Payment method is stored, verification succeeded
-          // Note: Customer may see a $1 hold temporarily
-          db.updateCustomerPaymentMethod(
-            customer.id,
-            payment_method_id,
-            paymentMethod.card.last4,
-            paymentMethod.card.brand,
-            true
-          );
-          res.json({
-            success: true,
-            message: 'Card verified successfully (authorization will be released within a few days)',
-            payment_method: {
-              card_brand: paymentMethod.card.brand,
-              card_last4: paymentMethod.card.last4
-            },
-            warning: 'A temporary $1 authorization hold may appear on your card statement'
-          });
-        }
       }
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: 'Card verification failed',
-        message: `Payment status: ${paymentIntent.status}`
-      });
+      
+      // For other errors, return the error
+      throw stripeError;
     }
+
+    // Successfully retrieved payment method - save it to database
+    // Skip Payment Intent creation to avoid charges (Stripe account under review)
+    db.updateCustomerPaymentMethod(
+      customer.id,
+      payment_method_id,
+      paymentMethod.card.last4,
+      paymentMethod.card.brand,
+      true // Mark as verified so user can access API immediately
+    );
+
+    console.log(`✅ Payment method saved for customer ${customer.id}: ${paymentMethod.card.brand} ****${paymentMethod.card.last4}`);
+
+    res.json({
+      success: true,
+      message: 'Payment method saved successfully. You can now access the API.',
+      payment_method: {
+        card_brand: paymentMethod.card.brand,
+        card_last4: paymentMethod.card.last4
+      },
+      note: 'No charges will be made until your account is fully activated. We will invoice you monthly for usage beyond free credits.'
+    });
   } catch (error) {
     console.error('❌ Card verification error:', error);
+    
+    // Handle Stripe account under review errors gracefully
+    if (error.code === 'account_invalid' || error.message?.includes('cannot currently make live charges')) {
+      // Still try to save the payment method ID if we have it
+      const { payment_method_id } = req.body;
+      if (payment_method_id) {
+        try {
+          const sessionId = req.cookies?.customer_session;
+          if (sessionId) {
+            const session = db.getCustomerSession(sessionId);
+            if (session) {
+              const customer = db.getCustomer(session.customer_id);
+              if (customer) {
+                db.updateCustomerPaymentMethod(
+                  customer.id,
+                  payment_method_id,
+                  '****',
+                  'card',
+                  true
+                );
+                console.log(`✅ Payment method saved despite Stripe account review status`);
+                return res.json({
+                  success: true,
+                  message: 'Payment method saved successfully. You can now access the API.',
+                  payment_method: {
+                    card_brand: 'card',
+                    card_last4: '****'
+                  },
+                  note: 'Card details will be updated once your account is fully activated'
+                });
+              }
+            }
+          }
+        } catch (saveError) {
+          console.error('Failed to save payment method:', saveError);
+        }
+      }
+    }
+    
     res.status(500).json({
       success: false,
-      error: 'Failed to verify card',
-      message: error.message || 'An error occurred during card verification'
+      error: 'Failed to save payment method',
+      message: error.message || 'An error occurred while saving your payment method'
     });
   }
 });

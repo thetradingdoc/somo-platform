@@ -50,6 +50,13 @@ cat middleware-platform/retell-functions/retell-functions.json | jq '.tools | le
 
 # Check agent prompt
 ls -la docs/voice-agent/kelly-voice-agent-prompt.md
+
+# Tenant isolation regression
+cd middleware-platform
+node tests/test-tenant-isolation.js
+
+# Voice flow regression (Twilio + Retell)
+node tests/test-voice-agent-flow.js
 ```
 
 #### Frontend Tests

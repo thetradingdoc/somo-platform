@@ -122,10 +122,15 @@ python3 -m http.server 8000
 # Server
 PORT=4000
 NODE_ENV=production
+POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
 
 # Retell AI
 RETELL_API_KEY=your_retell_api_key
 RETELL_AGENT_ID=your_agent_id
+
+# Multi-tenant defaults / database
+POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
+DEFAULT_CLINIC_ID=clinic-default
 
 # Stripe
 STRIPE_SECRET_KEY=your_stripe_secret_key

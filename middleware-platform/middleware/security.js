@@ -14,10 +14,11 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com"], // unsafe-inline needed for signup page inline scripts
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://accounts.google.com", "https://cdnjs.cloudflare.com"], // Allow Google Sign-In and PDF.js
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
+      workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // Allow PDF.js worker and blob URLs
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com"],
+      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"], // Allow Stripe iframes for card input
     },
   },
@@ -92,16 +93,16 @@ function validatePhone(phone) {
  */
 function requestLogger(req, res, next) {
   const start = Date.now();
-  
+
   // Log request
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - IP: ${req.ip}`);
-  
+
   // Log response when finished
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} - ${duration}ms`);
   });
-  
+
   next();
 }
 

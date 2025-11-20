@@ -224,6 +224,16 @@ async handleScheduleAppointment(callId, args) {
 
 ---
 
+### Step 5.1: Clinic Context Enforcement
+
+- All `/voice/appointments/*` endpoints now require `clinic_id` in the payload or `x-clinic-id` header.
+- The Retell WebSocket handler injects the caller’s clinic into every HTTP call (schedule, confirm, cancel, reschedule, search, available slots).
+- `BookingService` validates that `clinic_id` is present for schedule/search requests and refuses to operate if the appointment belongs to another clinic.
+- `database.js` filters every appointment query/update by `clinic_id`, so cross-tenant lookups return zero rows.
+- `tests/test-tenant-isolation.js` creates appointments for two clinics with identical patient metadata to ensure one clinic can’t read the other’s records.
+
+---
+
 ### Step 6: Retell Agent Configuration
 
 **Per-Clinic Retell Agents:**

@@ -724,7 +724,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       if (clinicPhone && clinicPhone.clinic_id) {
         clinicId = clinicPhone.clinic_id;
         customerId = clinicId; // Legacy: clinic_id used as customer_id
-        const clinic = db.getClinicById(clinicId);
+        const clinic = await db.getClinicById(clinicId);
         if (clinic && clinic.retell_agent_id) {
           retellAgentId = clinic.retell_agent_id;
           console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
@@ -822,9 +822,9 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
 
       // Log call to database (async, don't block response)
       if (customerId || clinicId) {
-        setImmediate(() => {
+        setImmediate(async () => {
           try {
-            db.logVoiceCall({
+            await db.logVoiceCall({
               id: `call-${callId}`,
               customer_id: customerId || clinicId, // Use customer_id if available, fallback to clinic_id
               call_id: callId,
@@ -966,6 +966,7 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
 
     const args = req.body.args || req.body;
+    let clinicId = resolveClinicIdFromRequest(req, args);
 
     // Calculate amount based on insurance coverage if available
     // Default: fixed price per appointment if no insurance info
@@ -985,7 +986,16 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
       const searchTerm = customerPhone || args.customer_email || args.patient_email;
       if (searchTerm) {
         try {
-          const searchResult = await BookingService.searchAppointments(searchTerm);
+          let scopedClinic = clinicId;
+          if (!scopedClinic && appointmentId) {
+            const appointment = await db.getAppointment(appointmentId);
+            scopedClinic = appointment?.clinic_id || null;
+          }
+          if (!scopedClinic) {
+            throw new Error('Missing clinic context for appointment lookup');
+          }
+
+          const searchResult = await BookingService.searchAppointments(searchTerm, scopedClinic);
           if (searchResult.success && searchResult.appointments && searchResult.appointments.length > 0) {
             // Get the most recent scheduled/confirmed appointment
             const recentAppt = searchResult.appointments
@@ -1005,7 +1015,10 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
     // If appointment_id is available, calculate patient responsibility based on insurance
     if (appointmentId && !args.amount) {
       try {
-        const appointment = db.getAppointment(appointmentId);
+        const appointment = await db.getAppointment(appointmentId, clinicId || null);
+        if (appointment && !clinicId) {
+          clinicId = appointment.clinic_id || clinicId;
+        }
         if (appointment && appointment.patient_id) {
           // Try to get latest eligibility for this patient
           const eligibilityChecks = db.db.prepare(`
@@ -1049,6 +1062,18 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
       });
     }
 
+    if (!clinicId && appointmentId) {
+      const appointmentRecord = await db.getAppointment(appointmentId);
+      clinicId = appointmentRecord?.clinic_id || clinicId;
+    }
+
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to create a voice checkout'
+      });
+    }
+
     const checkout = {
       id: checkoutId,
       merchant_id: merchantId,
@@ -1060,16 +1085,17 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
       customer_name: args.customer_name || args.patient_name || 'Patient',
       customer_email: args.customer_email || args.patient_email || null,
       appointment_id: appointmentId, // Link to appointment
-      status: 'pending'
+      status: 'pending',
+      clinic_id: clinicId
     };
 
     // Store checkout
-    db.createVoiceCheckout(checkout);
+    await db.createVoiceCheckout(checkout);
 
     // Create Stripe card on-demand if patient has insurance and copay is due
     if (amount > 0 && appointmentId) {
       try {
-        const appointment = db.getAppointment(appointmentId);
+        const appointment = await db.getAppointment(appointmentId, clinicId);
         if (appointment && appointment.patient_id) {
           const FHIRService = require('./services/fhir-service');
           // Check if this is a copay (amount matches copay from eligibility)
@@ -1123,7 +1149,7 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
 
         // Send patient billing email
         if (appointmentId) {
-          const appointment = db.getAppointment(appointmentId);
+          const appointment = await db.getAppointment(appointmentId, clinicId);
           if (appointment) {
             const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
             const paymentLink = `${baseUrl}/payment/${paymentToken}`;
@@ -1220,7 +1246,7 @@ app.post('/voice/checkout/verify', async (req, res) => {
     }
 
     // Fetch checkout to email link
-    const checkout = db.getVoiceCheckout(tokenRecord.checkout_id);
+    const checkout = await db.getVoiceCheckout(tokenRecord.checkout_id);
     if (!checkout) {
       return res.status(404).json({ success: false, error: 'Checkout not found' });
     }
@@ -1480,7 +1506,7 @@ app.post('/voice/checkout/create', async (req, res) => {
         });
 
         // Update checkout with FHIR patient ID
-        db.updateVoiceCheckout(response.checkout_id, {
+        await db.updateVoiceCheckout(response.checkout_id, {
           fhir_patient_id: patient.id
         });
 
@@ -1582,7 +1608,7 @@ app.get('/payment/:token', async (req, res) => {
       `);
     }
 
-    const checkout = db.getVoiceCheckout(tokenRecord.checkout_id);
+    const checkout = await db.getVoiceCheckout(tokenRecord.checkout_id);
     if (!checkout) {
       return res.status(404).send(`
         <!DOCTYPE html>
@@ -1802,7 +1828,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     console.log(`   Amount: $${amount}`);
 
     // Get checkout to check for linked appointment and patient
-    const checkout = db.getVoiceCheckout(checkout_id);
+    const checkout = await db.getVoiceCheckout(checkout_id);
     if (!checkout) {
       throw new Error('Checkout not found');
     }
@@ -1934,7 +1960,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         console.log(`   Amount: $${amount} USDC`);
 
         // Update checkout status
-        db.updateVoiceCheckout(checkout_id, {
+        await db.updateVoiceCheckout(checkout_id, {
           status: 'completed',
           payment_method: 'wallet',
           payment_intent_id: transferResult.transferId || transferResult.id
@@ -1946,7 +1972,10 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         if (checkout.appointment_id) {
           try {
             const BookingService = require('./services/booking-service');
-            const confirmResult = await BookingService.confirmAppointment(checkout.appointment_id);
+            const confirmResult = await BookingService.confirmAppointment(
+              checkout.appointment_id,
+              checkout.clinic_id || null
+            );
             if (confirmResult.success) {
               console.log(`✅ Appointment ${checkout.appointment_id} auto-confirmed after payment`);
             } else {
@@ -2005,7 +2034,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     console.log(`✅ Stripe payment successful: ${paymentIntent.id}`);
 
     // Update checkout status
-    db.updateVoiceCheckout(checkout_id, {
+    await db.updateVoiceCheckout(checkout_id, {
       status: 'completed',
       payment_intent_id: paymentIntent.id
     });
@@ -2016,7 +2045,10 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     if (checkout.appointment_id) {
       try {
         const BookingService = require('./services/booking-service');
-        const confirmResult = await BookingService.confirmAppointment(checkout.appointment_id);
+        const confirmResult = await BookingService.confirmAppointment(
+          checkout.appointment_id,
+          checkout.clinic_id || null
+        );
         if (confirmResult.success) {
           console.log(`✅ Appointment ${checkout.appointment_id} auto-confirmed after payment`);
         } else {
@@ -2061,11 +2093,11 @@ function generateClinicSlug(clinicName) {
 }
 
 // Helper function to ensure unique clinic slug
-function ensureUniqueClinicSlug(baseSlug) {
+async function ensureUniqueClinicSlug(baseSlug) {
   let slug = baseSlug;
   let counter = 1;
 
-  while (db.getClinicBySlug(slug)) {
+  while (await db.getClinicBySlug(slug)) {
     slug = `${baseSlug}-${counter}`;
     counter++;
   }
@@ -2128,7 +2160,7 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     }
 
     // Check if phone number is already in use
-    const existingClinicByPhone = db.getClinicByPhoneNumber(normalizedPhone);
+    const existingClinicByPhone = await db.getClinicByPhoneNumber(normalizedPhone);
     if (existingClinicByPhone) {
       return res.status(400).json({
         success: false,
@@ -2137,7 +2169,7 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     }
 
     // Generate unique clinic slug
-    const clinicSlug = ensureUniqueClinicSlug(baseSlug);
+    const clinicSlug = await ensureUniqueClinicSlug(baseSlug);
 
     console.log(`\n🏥 Creating new clinic: ${clinic_name}`);
     console.log(`   Slug: ${clinicSlug}`);
@@ -2864,6 +2896,260 @@ app.post('/api/admin/session', handleAdminLogin);
 app.delete('/api/admin/session', handleAdminLogout);
 app.get('/api/admin/session', adminSessionStatus);
 
+// Seed test patients endpoint (public for initial setup)
+app.post('/api/admin/patients/seed-test', async (req, res) => {
+  try {
+    const { v4: uuidv4 } = require('uuid');
+    
+    const testPatients = [
+      {
+        firstName: 'Sarah',
+        lastName: 'Johnson',
+        phone: '+18622307479',
+        email: 'sarah.johnson@example.com',
+        birthDate: '1985-05-20',
+        memberId: 'TEST81941',
+        payerId: 'AETNA',
+        copay: 25,
+        allowedAmount: 150,
+        insurancePays: 125,
+        deductibleTotal: 1000,
+        deductibleRemaining: 600,
+        coinsurancePercent: 20,
+        planSummary: 'Standard PPO: outpatient mental health covered after copay; deductible applies to labs only.'
+      },
+      {
+        firstName: 'Michael',
+        lastName: 'Williams',
+        phone: '+15551234567',
+        email: 'michael.williams@example.com',
+        birthDate: '1980-01-15',
+        memberId: 'TEST902782',
+        payerId: 'BCBS',
+        copay: 20,
+        allowedAmount: 150,
+        insurancePays: 130,
+        deductibleTotal: 500,
+        deductibleRemaining: 200,
+        coinsurancePercent: 20,
+        planSummary: 'Covers outpatient mental health visits; prior auth not required for first 6 visits.'
+      }
+    ];
+
+    let created = 0;
+    let updated = 0;
+
+    for (const patientData of testPatients) {
+      try {
+        const fullName = `${patientData.firstName} ${patientData.lastName}`;
+        console.log(`\n📝 Processing: ${fullName} (${patientData.phone})`);
+        
+        // Normalize phone number for search (try both formats)
+        const phoneVariants = [
+          patientData.phone,
+          patientData.phone.replace('+1', ''),
+          patientData.phone.replace('+', ''),
+          `+1${patientData.phone.replace(/[^\d]/g, '')}`,
+          patientData.phone.replace(/[^\d]/g, '')
+        ];
+        
+        // Check if patient already exists (try different phone formats)
+        let existingPatient = null;
+        for (const phoneVariant of phoneVariants) {
+          existingPatient = db.db.prepare('SELECT * FROM fhir_patients WHERE phone = ? AND is_deleted = 0 ORDER BY created_at DESC LIMIT 1').get(phoneVariant);
+          if (existingPatient) {
+            console.log(`   Found existing patient with phone: ${phoneVariant}`);
+            break;
+          }
+        }
+        
+        let patientId;
+        if (existingPatient) {
+          patientId = existingPatient.resource_id;
+          console.log(`   ⏭️  Patient exists: ${patientId}, updating name...`);
+          
+          // Update patient name if needed
+          const currentName = existingPatient.name || '';
+          if (currentName !== fullName) {
+            let resourceData = {};
+            try {
+              resourceData = JSON.parse(existingPatient.resource_data);
+            } catch (e) {}
+            
+            resourceData.name = [{
+              use: 'official',
+              family: patientData.lastName,
+              given: [patientData.firstName]
+            }];
+            resourceData.resourceType = 'Patient';
+            
+            db.db.prepare(`
+              UPDATE fhir_patients
+              SET name = ?,
+                  resource_data = ?,
+                  updated_at = datetime('now')
+              WHERE resource_id = ?
+            `).run(fullName, JSON.stringify(resourceData), patientId);
+            console.log(`   ✅ Updated patient name to: ${fullName}`);
+          }
+          updated++;
+        } else {
+          // Create new patient
+          console.log(`   ➕ Creating new patient...`);
+          const patientResult = await FHIRService.getOrCreatePatient({
+            name: {
+              family: patientData.lastName,
+              given: [patientData.firstName]
+            },
+            phone: patientData.phone,
+            email: patientData.email,
+            birthDate: patientData.birthDate
+          }, false);
+
+          if (!patientResult.patient) {
+            console.warn(`   ⚠️  Failed to create patient ${fullName}`);
+            continue;
+          }
+
+          patientId = patientResult.patient.id || patientResult.patient.resource_id;
+          console.log(`   ✅ Created patient: ${patientId}`);
+          created++;
+        }
+
+        // Check if eligibility check already exists
+        const existingEligibility = db.db.prepare(`
+          SELECT id FROM eligibility_checks
+          WHERE patient_id = ? AND member_id = ? AND payer_id = ?
+          LIMIT 1
+        `).get(patientId, patientData.memberId, patientData.payerId);
+
+        if (!existingEligibility) {
+          // Create eligibility check
+          console.log(`   💳 Creating eligibility check...`);
+          const eligibilityId = `elig_${uuidv4()}`;
+          
+          db.db.prepare(`
+            INSERT INTO eligibility_checks (
+              id, patient_id, member_id, payer_id, service_code, date_of_service,
+              eligible, copay_amount, allowed_amount, insurance_pays,
+              deductible_total, deductible_remaining, coinsurance_percent,
+              plan_summary, response_data, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `).run(
+            eligibilityId,
+            patientId,
+            patientData.memberId,
+            patientData.payerId,
+            '90834',
+            new Date().toISOString().split('T')[0],
+            1,
+            patientData.copay,
+            patientData.allowedAmount,
+            patientData.insurancePays,
+            patientData.deductibleTotal,
+            patientData.deductibleRemaining,
+            patientData.coinsurancePercent,
+            patientData.planSummary,
+            JSON.stringify({
+              eligible: true,
+              copay: patientData.copay,
+              allowedAmount: patientData.allowedAmount,
+              insurancePays: patientData.insurancePays,
+              deductibleTotal: patientData.deductibleTotal,
+              deductibleRemaining: patientData.deductibleRemaining,
+              coinsurancePercent: patientData.coinsurancePercent,
+              planSummary: patientData.planSummary,
+              message: `Eligible - Copay $${patientData.copay}`
+            })
+          );
+          console.log(`   ✅ Eligibility check created`);
+        } else {
+          // Update existing eligibility check to ensure data is current
+          console.log(`   🔄 Updating existing eligibility check...`);
+          db.db.prepare(`
+            UPDATE eligibility_checks
+            SET copay_amount = ?,
+                allowed_amount = ?,
+                insurance_pays = ?,
+                deductible_total = ?,
+                deductible_remaining = ?,
+                coinsurance_percent = ?,
+                plan_summary = ?,
+                response_data = ?,
+                date_of_service = ?
+            WHERE id = ?
+          `).run(
+            patientData.copay,
+            patientData.allowedAmount,
+            patientData.insurancePays,
+            patientData.deductibleTotal,
+            patientData.deductibleRemaining,
+            patientData.coinsurancePercent,
+            patientData.planSummary,
+            JSON.stringify({
+              eligible: true,
+              copay: patientData.copay,
+              allowedAmount: patientData.allowedAmount,
+              insurancePays: patientData.insurancePays,
+              deductibleTotal: patientData.deductibleTotal,
+              deductibleRemaining: patientData.deductibleRemaining,
+              coinsurancePercent: patientData.coinsurancePercent,
+              planSummary: patientData.planSummary,
+              message: `Eligible - Copay $${patientData.copay}`
+            }),
+            new Date().toISOString().split('T')[0],
+            existingEligibility.id
+          );
+          console.log(`   ✅ Eligibility check updated`);
+        }
+
+        // Create or update patient_insurance record
+        const existingInsurance = db.db.prepare(`
+          SELECT id FROM patient_insurance
+          WHERE patient_id = ? AND payer_id = ? AND member_id = ?
+          LIMIT 1
+        `).get(patientId, patientData.payerId, patientData.memberId);
+
+        if (!existingInsurance) {
+          console.log(`   🏥 Creating insurance record...`);
+          db.db.prepare(`
+            INSERT INTO patient_insurance (
+              id, patient_id, payer_id, payer_name, member_id,
+              is_primary, is_verified, created_at
+            ) VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'))
+          `).run(
+            uuidv4(),
+            patientId,
+            patientData.payerId,
+            patientData.payerId,
+            patientData.memberId
+          );
+          console.log(`   ✅ Insurance record created`);
+        } else {
+          console.log(`   ⏭️  Insurance record already exists`);
+        }
+
+      } catch (error) {
+        console.error(`   ❌ Error processing patient ${patientData.firstName} ${patientData.lastName}:`, error.message);
+        console.error(error.stack);
+      }
+    }
+
+    return res.json({ 
+      success: true, 
+      message: `Seeded test patients: ${created} created, ${updated} updated`,
+      created,
+      updated
+    });
+  } catch (error) {
+    console.error('❌ Error seeding test patients:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 app.use('/api/admin', requireAdminAuth);
 
 function createMerchantForClinic(name) {
@@ -3138,7 +3424,7 @@ app.put('/api/admin/clients/:clinicId', async (req, res) => {
 app.get('/api/admin/stats', async (req, res) => {
   try {
     const clinics = db.prepare('SELECT * FROM clinics').all();
-    const allCheckouts = db.getAllVoiceCheckouts();
+    const allCheckouts = await db.getAllVoiceCheckouts();
 
     // Get real call data
     const allCalls = db.prepare('SELECT * FROM voice_call_log ORDER BY created_at DESC').all();
@@ -3248,6 +3534,7 @@ app.get('/api/admin/costs', async (req, res) => {
     const infraCost = 4200; // Monthly infrastructure estimate (Azure App Service)
 
     // Calculate costs per client
+    const allVoiceCheckouts = await db.getAllVoiceCheckouts();
     const byClient = clinics.map(clinic => {
       const clinicCalls = allCalls.filter(c => c.customer_id === clinic.clinic_id);
       const clinicMinutes = clinicCalls.reduce((sum, c) => sum + ((c.call_duration_seconds || 0) / 60), 0);
@@ -3256,7 +3543,7 @@ app.get('/api/admin/costs', async (req, res) => {
       const clinicInfraCost = infraCost / clinics.length; // Shared infrastructure
 
       // Get revenue for this client
-      const clinicCheckouts = db.getAllVoiceCheckouts().filter(c => {
+      const clinicCheckouts = allVoiceCheckouts.filter(c => {
         // Try to match by phone number or clinic_id if stored
         return c.customer_phone && db.getClinicPhoneNumber(c.customer_phone)?.clinic_id === clinic.clinic_id;
       });
@@ -3297,7 +3584,7 @@ app.get('/api/admin/costs', async (req, res) => {
 // Get usage metrics
 app.get('/api/admin/usage', async (req, res) => {
   try {
-    const allCheckouts = db.getAllVoiceCheckouts();
+    const allCheckouts = await db.getAllVoiceCheckouts();
     const totalMinutes = allCheckouts.length * 2;
 
     res.json({
@@ -3337,10 +3624,10 @@ app.get('/api/admin/logs', async (req, res) => {
     const errors = db.prepare(query).all(...params);
 
     // Get clinic names for errors
-    const logs = errors.map(error => {
+    const logs = await Promise.all(errors.map(async (error) => {
       let clinicName = 'Unknown';
       if (error.customer_id) {
-        const clinic = db.getClinicById(error.customer_id);
+        const clinic = await db.getClinicById(error.customer_id);
         if (clinic) clinicName = clinic.name;
       }
 
@@ -3356,7 +3643,7 @@ app.get('/api/admin/logs', async (req, res) => {
         resolved: error.resolved === 1,
         context: error.context ? JSON.parse(error.context) : null
       };
-    });
+    }));
 
     res.json({
       success: true,
@@ -3372,7 +3659,7 @@ app.get('/api/admin/logs', async (req, res) => {
 app.get('/api/admin/clients/:clinicId/analytics', async (req, res) => {
   try {
     const clinicId = req.params.clinicId;
-    const clinic = db.getClinicById(clinicId);
+    const clinic = await db.getClinicById(clinicId);
 
     if (!clinic) {
       return res.status(404).json({ success: false, error: 'Clinic not found' });
@@ -3389,7 +3676,7 @@ app.get('/api/admin/clients/:clinicId/analytics', async (req, res) => {
     const retellCost = totalMinutes * 0.02;
 
     // Get revenue
-    const checkouts = db.getAllVoiceCheckouts().filter(c => {
+    const checkouts = (await db.getAllVoiceCheckouts()).filter(c => {
       if (!c.customer_phone) return false;
       const phone = db.getClinicPhoneNumber(c.customer_phone);
       return phone && phone.clinic_id === clinicId;
@@ -3434,9 +3721,9 @@ app.get('/api/admin/clients/:clinicId/analytics', async (req, res) => {
   }
 });
 
-app.get('/api/admin/clients/:clinicId/api-keys', (req, res) => {
+app.get('/api/admin/clients/:clinicId/api-keys', async (req, res) => {
   try {
-    const clinic = db.getClinicById(req.params.clinicId);
+    const clinic = await db.getClinicById(req.params.clinicId);
     if (!clinic) {
       return res.status(404).json({ success: false, error: 'Clinic not found' });
     }
@@ -3455,9 +3742,9 @@ app.get('/api/admin/clients/:clinicId/api-keys', (req, res) => {
   }
 });
 
-app.post('/api/admin/clients/:clinicId/api-keys', (req, res) => {
+app.post('/api/admin/clients/:clinicId/api-keys', async (req, res) => {
   try {
-    const clinic = db.getClinicById(req.params.clinicId);
+    const clinic = await db.getClinicById(req.params.clinicId);
     if (!clinic) {
       return res.status(404).json({ success: false, error: 'Clinic not found' });
     }
@@ -3489,9 +3776,9 @@ app.post('/api/admin/clients/:clinicId/api-keys', (req, res) => {
   }
 });
 
-app.post('/api/admin/clients/:clinicId/api-keys/:keyId/revoke', (req, res) => {
+app.post('/api/admin/clients/:clinicId/api-keys/:keyId/revoke', async (req, res) => {
   try {
-    const clinic = db.getClinicById(req.params.clinicId);
+    const clinic = await db.getClinicById(req.params.clinicId);
     if (!clinic) {
       return res.status(404).json({ success: false, error: 'Clinic not found' });
     }
@@ -3522,7 +3809,7 @@ app.get('/api/admin/transactions', async (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const status = req.query.status;
 
-    let checkouts = db.getAllVoiceCheckouts();
+    let checkouts = await db.getAllVoiceCheckouts();
 
     if (status && status !== 'flagged') {
       checkouts = checkouts.filter(c => c.status === status);
@@ -3548,7 +3835,7 @@ app.get('/api/admin/transactions', async (req, res) => {
 // Get customers
 app.get('/api/admin/customers', async (req, res) => {
   try {
-    const allCheckouts = db.getAllVoiceCheckouts();
+    const allCheckouts = await db.getAllVoiceCheckouts();
 
     // Group by phone
     const customerMap = new Map();
@@ -3627,7 +3914,7 @@ app.get('/api/admin/customers', async (req, res) => {
 app.get('/api/admin/customers/:phone', async (req, res) => {
   try {
     const phone = req.params.phone;
-    const allCheckouts = db.getAllVoiceCheckouts();
+    const allCheckouts = await db.getAllVoiceCheckouts();
 
     const orders = allCheckouts.filter(c => c.customer_phone === phone);
 
@@ -3670,7 +3957,7 @@ app.get('/api/admin/agent/stats', async (req, res) => {
   try {
     const merchant_id = req.query.merchant_id;
 
-    let voiceCheckouts = db.getAllVoiceCheckouts();
+    let voiceCheckouts = await db.getAllVoiceCheckouts();
 
     if (merchant_id) {
       voiceCheckouts = voiceCheckouts.filter(c => c.merchant_id === merchant_id);
@@ -3926,6 +4213,28 @@ app.post('/api/admin/feature-requests/:requestId/update', async (req, res) => {
 // BOOKING/APPOINTMENT ENDPOINTS
 // ============================================
 
+function resolveClinicIdFromRequest(req, args = {}) {
+  const directClinicId =
+    args?.clinic_id ||
+    req.headers['x-clinic-id'] ||
+    req.query?.clinic_id ||
+    req.body?.clinic_id ||
+    null;
+
+  if (directClinicId) {
+    return directClinicId;
+  }
+
+  if (FALLBACK_CLINIC_ID) {
+    console.warn('⚠️  Using fallback clinic_id from DEFAULT_CLINIC_ID');
+    return FALLBACK_CLINIC_ID;
+  }
+
+  return null;
+}
+
+const FALLBACK_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || null;
+
 // Schedule new appointment (for voice agent)
 app.post('/voice/appointments/schedule', async (req, res) => {
   try {
@@ -3934,6 +4243,13 @@ app.post('/voice/appointments/schedule', async (req, res) => {
 
     // Extract args (handle Retell formats)
     let args = req.body.args || req.body;
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to schedule appointments'
+      });
+    }
 
     const appointmentData = {
       patient_name: args.patient_name,
@@ -3945,7 +4261,8 @@ app.post('/voice/appointments/schedule', async (req, res) => {
       duration_minutes: args.duration_minutes || 50,
       provider: args.provider,
       notes: args.notes,
-      timezone: args.timezone || 'America/New_York'
+      timezone: args.timezone || 'America/New_York',
+      clinic_id: clinicId
     };
 
     const result = await BookingService.scheduleAppointment(appointmentData);
@@ -3968,8 +4285,15 @@ app.post('/voice/appointments/confirm', async (req, res) => {
 
     const args = req.body.args || req.body;
     const appointmentId = args.appointment_id || args.confirmation_number;
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to confirm appointments'
+      });
+    }
 
-    const result = await BookingService.confirmAppointment(appointmentId);
+    const result = await BookingService.confirmAppointment(appointmentId, clinicId);
 
     res.json(result);
   } catch (error) {
@@ -3993,6 +4317,13 @@ app.post('/voice/appointments/reschedule', async (req, res) => {
     const newTime = args.new_time || args.time;
     const reason = args.reason || null;
     const timezone = args.timezone || null;
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to reschedule appointments'
+      });
+    }
 
     if (!newDate || !newTime) {
       return res.status(400).json({
@@ -4006,7 +4337,8 @@ app.post('/voice/appointments/reschedule', async (req, res) => {
       newDate,
       newTime,
       reason,
-      timezone
+      timezone,
+      clinicId
     );
 
     res.json(result);
@@ -4028,8 +4360,15 @@ app.post('/voice/appointments/cancel', async (req, res) => {
     const args = req.body.args || req.body;
     const appointmentId = args.appointment_id || args.confirmation_number;
     const reason = args.reason || null;
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to cancel appointments'
+      });
+    }
 
-    const result = await BookingService.cancelAppointment(appointmentId, reason);
+    const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
 
     res.json(result);
   } catch (error) {
@@ -4052,8 +4391,15 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
     const provider = args.provider || null;
     const appointmentType = args.appointment_type || null;
     const timezone = args.timezone || null;
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to check availability'
+      });
+    }
 
-    const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone);
+    const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId);
 
     res.json(result);
   } catch (error) {
@@ -4073,8 +4419,15 @@ app.post('/voice/appointments/search', async (req, res) => {
 
     const args = req.body.args || req.body;
     const searchTerm = args.phone || args.email || args.patient_phone || args.patient_email;
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required to search appointments'
+      });
+    }
 
-    const result = await BookingService.searchAppointments(searchTerm);
+    const result = await BookingService.searchAppointments(searchTerm, clinicId);
 
     res.json(result);
   } catch (error) {
@@ -4691,7 +5044,7 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
     let dateOfService = args.date_of_service;
 
     if (args.appointment_id) {
-      const appointment = db.getAppointment(args.appointment_id);
+      const appointment = await db.getAppointment(args.appointment_id);
       if (appointment) {
         serviceCode = serviceCode || InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type);
         dateOfService = dateOfService || appointment.date;
@@ -4741,7 +5094,7 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
     }
 
     // Get appointment details
-    const appointment = db.getAppointment(args.appointment_id);
+    const appointment = await db.getAppointment(args.appointment_id);
     if (!appointment) {
       return res.status(404).json({
         success: false,
@@ -6643,6 +6996,81 @@ app.post('/api/admin/patients/restore-stedi', async (req, res) => {
 });
 
 // Sync patients from Stedi (alternative endpoint)
+/**
+ * Update patient name
+ * PUT /api/admin/patients/:patientId/name
+ */
+app.put('/api/admin/patients/:patientId/name', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { family, given } = req.body;
+
+    if (!family || !given || !Array.isArray(given)) {
+      return res.status(400).json({
+        success: false,
+        error: 'family and given (array) are required'
+      });
+    }
+
+    const patient = db.getFHIRPatient(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        error: 'Patient not found'
+      });
+    }
+
+    const resource = typeof patient.resource_data === 'string'
+      ? JSON.parse(patient.resource_data)
+      : patient.resource_data;
+
+    const oldName = resource.name?.[0]
+      ? `${(resource.name[0].given || []).join(' ')} ${resource.name[0].family || ''}`.trim()
+      : 'Unknown';
+
+    // Update name
+    if (!resource.name || !resource.name[0]) {
+      resource.name = [{}];
+    }
+    resource.name[0].family = family;
+    resource.name[0].given = given;
+    resource.name[0].use = 'official';
+
+    const result = db.updateFHIRPatient(patientId, resource);
+
+    if (result && result.changes > 0) {
+      const newName = `${given.join(' ')} ${family}`.trim();
+      
+      // Update appointments
+      const appointments = db.getAllAppointments({}).filter(a => a.patient_id === patientId);
+      appointments.forEach(appt => {
+        db.updateAppointment(appt.id, { patient_name: newName });
+      });
+
+      console.log(`✅ Updated patient name: ${oldName} → ${newName}`);
+
+      res.json({
+        success: true,
+        patientId,
+        oldName,
+        newName,
+        appointmentsUpdated: appointments.length
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'No changes made'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error updating patient name:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.post('/api/admin/patients/sync-stedi', async (req, res) => {
   try {
     const result = await FHIRService.syncPatientsFromStedi();
@@ -7915,11 +8343,24 @@ app.put('/api/patient/appointments/:id/reschedule', async (req, res) => {
       });
     }
 
+    const appointment = await db.getAppointment(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Appointment not found'
+      });
+    }
+
+    const clinicId = appointment.clinic_id || null;
+
     // Use existing reschedule endpoint logic
     const result = await BookingService.rescheduleAppointment(
       appointmentId,
       new_date,
-      new_time
+      new_time,
+      null,
+      null,
+      clinicId
     );
 
     if (result.success) {
@@ -7959,8 +8400,18 @@ app.delete('/api/patient/appointments/:id', async (req, res) => {
       });
     }
 
+    const appointment = await db.getAppointment(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Appointment not found'
+      });
+    }
+
+    const clinicId = appointment.clinic_id || null;
+
     // Use existing cancel endpoint logic
-    const result = await BookingService.cancelAppointment(appointmentId, reason);
+    const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
 
     if (result.success) {
       res.json(result);
@@ -9615,7 +10066,7 @@ app.post('/api/test/appointment-email', async (req, res) => {
     }
 
     // Get appointment from database to check email status
-    const appointment = db.getAppointment(bookingResult.appointment.id);
+    const appointment = await db.getAppointment(bookingResult.appointment.id);
 
     // Check if email was sent
     let emailSent = false;
