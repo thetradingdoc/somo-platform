@@ -1051,6 +1051,14 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             loadDashboard();
+            
+            // Auto-refresh claims and benefits every 30 seconds to catch provider/insurer updates
+            setInterval(() => {
+                if (patientId || patientName) {
+                    loadClaims();
+                    loadBenefits();
+                }
+            }, 30000); // Refresh every 30 seconds
         });
 
         async function loadDashboard() {
@@ -1122,27 +1130,42 @@
                 loadStats(),
                 loadCardsSummary(patientId)
             ]);
+            
+            // Auto-refresh every 30 seconds to see claim updates
+            if (!window.claimRefreshInterval) {
+                window.claimRefreshInterval = setInterval(() => {
+                    loadClaims();
+                    loadStats();
+                }, 30000);
+            }
         }
 
         async function loadBenefits() {
             try {
-                // Get patient name from patientData or session
-                let nameToUse = patientName;
-                if (!nameToUse && patientData && patientData.name) {
-                    nameToUse = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
+                // Try to get patient ID first, then fall back to name
+                let url = '';
+                if (patientId) {
+                    url = `${API_BASE}/api/patient/benefits?patientId=${encodeURIComponent(patientId)}`;
+                } else {
+                    // Get patient name from patientData or session
+                    let nameToUse = patientName;
+                    if (!nameToUse && patientData && patientData.name) {
+                        nameToUse = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
+                    }
+
+                    if (!nameToUse) {
+                        document.getElementById('benefitsContent').innerHTML = `
+                            <div class="empty-state">
+                                <p>Patient name not available</p>
+                                <p style="font-size: 12px; color: var(--gray-500);">Please contact support</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    url = `${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(nameToUse)}`;
                 }
 
-                if (!nameToUse) {
-                    document.getElementById('benefitsContent').innerHTML = `
-                        <div class="empty-state">
-                            <p>Patient name not available</p>
-                            <p style="font-size: 12px; color: var(--gray-500);">Please contact support</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                const response = await fetch(`${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(nameToUse)}`);
+                const response = await fetch(url);
 
                 if (!response.ok) {
                     throw new Error('Failed to load benefits');
@@ -1151,7 +1174,15 @@
                 const data = await response.json();
 
                 if (!data.success) {
-                    throw new Error(data.error || 'Failed to load benefits');
+                    console.warn('Benefits API returned error:', data.error);
+                    // Show empty state instead of throwing
+                    document.getElementById('benefitsContent').innerHTML = `
+                        <div class="empty-state">
+                            <p>No insurance benefits found</p>
+                            <p style="font-size: 12px; color: var(--gray-500);">${data.error || 'Please contact support to set up your insurance'}</p>
+                        </div>
+                    `;
+                    return;
                 }
 
                 displayBenefits(data);
@@ -1314,12 +1345,18 @@
 
         async function loadClaims() {
             try {
-                if (!patientName) {
-                    throw new Error('Patient name is not available in the current session');
+                // Try to get patient ID first, then fall back to name
+                let url = '';
+                if (patientId) {
+                    url = `${API_BASE}/api/patient/benefits?patientId=${encodeURIComponent(patientId)}`;
+                } else if (patientName) {
+                    url = `${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(patientName)}`;
+                } else {
+                    throw new Error('Patient name or ID is not available in the current session');
                 }
 
                 // Get patient's benefits data which includes claims
-                const response = await fetch(`${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(patientName)}`);
+                const response = await fetch(url);
 
                 if (response.ok) {
                     const data = await response.json();

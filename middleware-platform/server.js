@@ -6280,8 +6280,14 @@ app.get('/api/patient/wallet/transactions', async (req, res) => {
     });
 
     // Add claim payments (synchronously process)
+    // Include ALL claims (submitted, approved, paid) so patient can see their bills
     for (const claim of claims) {
-      if (claim.payment_status === 'paid' || claim.status === 'paid') {
+      // Show claims that are submitted, approved, paid, or locked
+      // Include ALL statuses so patient can see their bills
+      // Show ALL claims so patient can see their bills - including locked/submitted
+      const shouldInclude = true;
+      
+      if (shouldInclude) {
         // Calculate patient responsibility from EOB
         let patientOwe = claim.total_amount;
 
@@ -6309,15 +6315,30 @@ app.get('/api/patient/wallet/transactions', async (req, res) => {
           console.warn('Could not calculate EOB for transaction:', e.message);
         }
 
+        // Determine transaction description based on status
+        let description = `Medical Service`;
+        if (claim.service_code) {
+          const serviceCodes = claim.service_code.split(',').slice(0, 2).join(', ');
+          description = `Medical Service (${serviceCodes})`;
+        }
+        
+        // Add status to description
+        const statusText = claim.status === 'submitted' ? ' - Submitted' :
+                          claim.status === 'approved' || claim.payment_status === 'paid' ? ' - Approved' :
+                          claim.status === 'paid' ? ' - Paid' : '';
+        description += statusText;
+
         if (filter === 'all' || filter === 'medical') {
           transactions.push({
             id: claim.id,
             type: 'medical',
-            description: `Medical Service - Claim ${claim.id}`,
+            description: description,
             amount: -patientOwe,
-            created_at: claim.paid_at || claim.submitted_at,
+            created_at: claim.paid_at || claim.approved_at || claim.submitted_at || claim.created_at,
             status: claim.payment_status || claim.status,
-            claimId: claim.id
+            claimId: claim.id,
+            claimStatus: claim.status,
+            paymentStatus: claim.payment_status
           });
         }
       }
@@ -6815,7 +6836,11 @@ app.get('/api/admin/insurance/claims', async (req, res) => {
       filters.status = req.query.status;
     }
 
-    const claims = db.getAllClaims(filters);
+    let claims = db.getAllClaims(filters);
+    
+    // Always return ALL claims including approved/paid so insurer can see them again
+    // Don't filter out approved claims - user needs to see them
+    claims = claims || [];
 
     res.json({
       success: true,

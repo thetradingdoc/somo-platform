@@ -2184,6 +2184,8 @@
                     await loadWallet();
                     await loadStripeCards();
                     await loadLastTransactions();
+                    await loadInsurance(); // Load insurance benefits
+                    await loadTransactions(); // Load full transactions
                     updateOverviewCards(); // Update overview cards
 
                     // Update greeting
@@ -2306,29 +2308,56 @@
                     }
                 }
 
-                if (patientName) {
-                    const response = await fetch(`${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(patientName)}`);
+                // Try multiple methods to get patient name
+                let nameToUse = patientName;
+                if (!nameToUse && patient && patient.name) {
+                    nameToUse = `${(patient.name[0].given || []).join(' ')} ${patient.name[0].family || ''}`.trim();
+                }
+                
+                if (nameToUse || patientId) {
+                    // Try by patientId first (more reliable)
+                    const url = patientId 
+                        ? `${API_BASE}/api/patient/benefits?patientId=${encodeURIComponent(patientId)}`
+                        : `${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(nameToUse)}`;
+                    
+                    const response = await fetch(url);
                     if (response.ok) {
                         const data = await response.json();
-                        if (data.insurance) {
-                            const insurance = data.insurance;
+                        if (data.success && (data.insurance || data.eligibility)) {
+                            const insurance = data.insurance || {};
+                            const eligibility = data.eligibility || {};
+                            
                             document.getElementById('insuranceInfo').innerHTML = `
                             <div class="insurance-item">
                                 <span class="insurance-label">Insurer</span>
-                                <span class="insurance-value">${insurance.payerName || 'N/A'}</span>
+                                <span class="insurance-value">${insurance.payer_name || insurance.payerName || eligibility.payer_id || 'N/A'}</span>
                             </div>
                             <div class="insurance-item">
                                 <span class="insurance-label">Member ID</span>
-                                <span class="insurance-value">${insurance.memberId || 'N/A'}</span>
+                                <span class="insurance-value">${insurance.member_id || insurance.memberId || 'N/A'}</span>
                             </div>
+                            ${insurance.plan_name || insurance.planName ? `
                             <div class="insurance-item">
                                 <span class="insurance-label">Plan</span>
-                                <span class="insurance-value">${insurance.planName || 'N/A'}</span>
+                                <span class="insurance-value">${insurance.plan_name || insurance.planName}</span>
                             </div>
+                            ` : ''}
+                            ${eligibility.eligible !== undefined ? `
+                            <div class="insurance-item">
+                                <span class="insurance-label">Eligibility</span>
+                                <span class="insurance-value">${eligibility.eligible ? 'Active' : 'Inactive'}</span>
+                            </div>
+                            ` : ''}
+                            <div class="insurance-item">
+                                <span class="insurance-label">Copay</span>
+                                <span class="insurance-value">$${(eligibility.copay_amount || insurance.copay_amount || 0).toFixed(2)}</span>
+                            </div>
+                            ${eligibility.deductible_remaining !== null && eligibility.deductible_remaining !== undefined ? `
                             <div class="insurance-item">
                                 <span class="insurance-label">Deductible Remaining</span>
-                                <span class="insurance-value">$${(insurance.deductibleRemaining || 0).toFixed(2)}</span>
+                                <span class="insurance-value">$${(eligibility.deductible_remaining || 0).toFixed(2)}</span>
                             </div>
+                            ` : ''}
                         `;
                         } else {
                             document.getElementById('insuranceInfo').innerHTML = '<div style="color: var(--gray-600);">No insurance information available</div>';
@@ -3030,6 +3059,15 @@
 
         // Initialize on page load
         initWallet();
+        
+        // Auto-refresh transactions and insurance every 30 seconds to catch provider/insurer updates
+        setInterval(() => {
+            if (patientId) {
+                loadTransactions();
+                loadInsurance();
+                updateBalance();
+            }
+        }, 30000); // Refresh every 30 seconds
 
         function updateModernBalanceDisplay(amount) {
             const formatted = `$${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

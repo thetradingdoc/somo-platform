@@ -382,16 +382,22 @@
 
             <!-- Claims Review Section -->
             <div class="dashboard-card">
-                <div class="card-header">
-                    <div class="card-title">Claims Review</div>
-                    <div class="card-icon">📋</div>
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="card-title">Claims Review</div>
+                        <div class="card-icon">📋</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="claimFilter" onchange="loadDashboardData()" style="padding: 8px 12px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
+                            <option value="pending">Pending Approval</option>
+                            <option value="approved">Approved Claims</option>
+                            <option value="all">All Claims</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="claimsContent">
                     <div class="empty-state">
-                        <p>No claims to review</p>
-                        <p style="font-size: 12px; color: var(--gray-500); margin-top: 8px;">
-                            Claims will appear here when submitted by healthcare providers
-                        </p>
+                        <p>Loading claims...</p>
                     </div>
                 </div>
             </div>
@@ -409,6 +415,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadUserInfo();
             loadDashboardData();
+            // Auto-refresh every 30 seconds to see approved payments
+            setInterval(loadDashboardData, 30000);
         });
 
         function loadUserInfo() {
@@ -428,17 +436,33 @@
                     if (data.success && data.claims) {
                         updateStats(data.claims);
                         
-                        // Filter to show only submitted/pending claims for approval
-                        const pendingClaims = data.claims.filter(c => 
-                            c.status === 'submitted' || c.status === 'pending' || c.status === 'draft'
-                        ).sort((a, b) => {
-                            // Sort by date, most recent first
-                            const dateA = new Date(a.submitted_at || a.created_at);
-                            const dateB = new Date(b.submitted_at || b.created_at);
+                        // Get filter from UI or default to 'pending'
+                        const filter = document.getElementById('claimFilter')?.value || 'pending';
+                        
+                        let filteredClaims = data.claims;
+                        if (filter === 'pending') {
+                            // Filter to show only submitted/pending claims for approval
+                            filteredClaims = data.claims.filter(c => 
+                                c.status === 'submitted' || c.status === 'pending' || c.status === 'draft'
+                            );
+                        } else if (filter === 'approved') {
+                            // Show approved/paid claims - ALWAYS show them so user can see again
+                            filteredClaims = data.claims.filter(c => 
+                                c.status === 'approved' || c.status === 'paid' || c.payment_status === 'paid' || c.payment_status === 'approved'
+                            );
+                        } else if (filter === 'all') {
+                            // Show all claims
+                            filteredClaims = data.claims;
+                        }
+                        
+                        // Sort by date, most recent first
+                        filteredClaims.sort((a, b) => {
+                            const dateA = new Date(a.submitted_at || a.approved_at || a.paid_at || a.created_at);
+                            const dateB = new Date(b.submitted_at || b.approved_at || b.paid_at || b.created_at);
                             return dateB - dateA;
                         });
                         
-                        displayClaims(pendingClaims);
+                        displayClaims(filteredClaims);
                     }
                 }
             } catch (error) {
@@ -460,13 +484,25 @@
 
         async function displayClaims(claims) {
             const container = document.getElementById('claimsContent');
+            const filter = document.getElementById('claimFilter')?.value || 'pending';
             
             if (claims.length === 0) {
+                const emptyMessage = filter === 'pending' 
+                    ? 'No claims pending approval'
+                    : filter === 'approved'
+                    ? 'No approved claims yet'
+                    : 'No claims found';
+                const emptySubtext = filter === 'pending'
+                    ? 'Claims will appear here when submitted by healthcare providers'
+                    : filter === 'approved'
+                    ? 'Approved claims will appear here'
+                    : 'Claims will appear here when available';
+                    
                 container.innerHTML = `
                     <div class="empty-state">
-                        <p>No claims pending approval</p>
+                        <p>${emptyMessage}</p>
                         <p style="font-size: 12px; color: var(--gray-500); margin-top: 8px;">
-                            Claims will appear here when submitted by healthcare providers
+                            ${emptySubtext}
                         </p>
                     </div>
                 `;
@@ -520,7 +556,7 @@
                                                    status === 'pending' ? 'status-pending' : 
                                                    status === 'approved' ? 'status-approved' : 
                                                    status === 'paid' ? 'status-completed' : 'status-pending';
-                                const canApprove = status === 'submitted' || status === 'pending';
+                                const canApprove = (status === 'submitted' || status === 'pending') && filter === 'pending';
                                 
                                 return `
                                     <tr style="border-bottom: 1px solid var(--gray-200);">
@@ -536,7 +572,7 @@
                                         <td style="padding: 12px;">
                                             <div style="display: flex; gap: 8px;">
                                                 <button class="btn btn-primary" onclick="reviewClaim('${claim.id}')" 
-                                                    style="font-size: 12px; padding: 6px 12px; background: var(--primary);">
+                                                    style="font-size: 12px; padding: 6px 12px; background: var(--primary); color: white; border: none;">
                                                     View
                                                 </button>
                                                 ${canApprove ? `
@@ -572,7 +608,8 @@
                 const result = await response.json();
                 if (result.success) {
                     alert(`✅ Claim approved! Payment of $${result.amount.toFixed(2)} processed.${result.deductibleUsed ? ` Deductible used: $${result.deductibleUsed.toFixed(2)}` : ''}`);
-                    // Reload dashboard
+                    // Reload dashboard and switch to approved filter to show the approved claim
+                    document.getElementById('claimFilter').value = 'approved';
                     loadDashboardData();
                 } else {
                     alert('❌ Error: ' + (result.error || 'Failed to approve claim'));
