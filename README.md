@@ -112,6 +112,26 @@ python3 -m http.server 8000
 # Frontend runs on http://localhost:8000
 ```
 
+### Local domain routing (mirrors production)
+
+To reproduce the production routing locally, point the doclittle domains to `127.0.0.1` before starting the middleware server:
+
+```bash
+sudo sh -c 'echo "127.0.0.1 doclittle.site api.doclittle.site" >> /etc/hosts'
+```
+
+With `middleware-platform` running (`npm start`), visit these URLs in your browser:
+
+| Surface                      | Local URL                       | Served From                              |
+|------------------------------|---------------------------------|------------------------------------------|
+| Admin landing                | https://doclittle.site/admin    | `unified-dashboard/admin/index.html`     |
+| Clinic/business dashboard    | https://doclittle.site/business/business-dashboard.html | `unified-dashboard/business` |
+| Insurer console              | https://doclittle.site/insurer/insurer-dashboard.html  | `unified-dashboard/insurer`  |
+| Patient wallet/portal        | https://doclittle.site/patients/wallet.html            | `unified-dashboard/patients` |
+| API & signup flow            | https://api.doclittle.site      | `middleware-platform/public/signup` + APIs |
+
+> The `/admin` route now provides a lightweight launcher linking to the clinic, insurer, and patient portals plus the API hub.
+
 ---
 
 ## 🔧 Environment Variables
@@ -194,6 +214,11 @@ VISA_MERCHANT_ID=your_merchant_id
 
 # Circle Webhook (optional)
 CIRCLE_WEBHOOK_SECRET=your_circle_webhook_secret
+
+# Developer safety toggles
+# Set to true only when you intentionally need to bypass the default guardrails
+ALLOW_LIVE_KEYS_IN_DEV=false   # Allow live Stripe keys in dev (defaults to blocked)
+ALLOW_TEST_EMAIL_BYPASS=false  # Allow signup bypass for test/integration emails
 ```
 
 ---

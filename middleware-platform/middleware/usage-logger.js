@@ -44,6 +44,7 @@ function usageLogger(req, res, next) {
     // Log to database (async, don't block response)
     setImmediate(() => {
       try {
+        // Always log to api_usage_log for debugging/analytics
         db.logAPIUsage({
           id: requestId,
           customer_id: customerId,
@@ -58,6 +59,53 @@ function usageLogger(req, res, next) {
           user_agent: userAgent,
           request_id: requestId
         });
+
+        // Track in monthly_usage for billing (only for authenticated customers with successful requests)
+        if (customerId && res.statusCode >= 200 && res.statusCode < 400) {
+          // Skip certain endpoints that shouldn't count toward billing
+          const excludedEndpoints = [
+            '/api/health',
+            '/api/docs',
+            '/api/status',
+            '/docs',
+            '/favicon.ico'
+          ];
+          
+          const shouldCount = !excludedEndpoints.some(excluded => req.path.startsWith(excluded));
+          
+          if (shouldCount) {
+            try {
+              // Calculate billing month (YYYY-MM format)
+              const now = new Date();
+              const billingMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+              
+              // Get current monthly usage to calculate overage
+              const currentUsage = db.getMonthlyUsage(customerId, billingMonth);
+              const currentApiRequests = currentUsage ? (currentUsage.api_requests_used || 0) : 0;
+              
+              // Free tier: first 1,000 API requests per month
+              const FREE_API_REQUESTS = 1000;
+              
+              // Calculate overage for THIS request
+              // If we're already at or over the free tier, this entire request is overage
+              const overageForThisRequest = currentApiRequests >= FREE_API_REQUESTS ? 1 : 0;
+              
+              // Track in monthly_usage for billing
+              db.trackMonthlyUsage(
+                customerId,
+                billingMonth,
+                0, // voiceMinutes (not applicable for API requests)
+                1, // apiRequests (count this request)
+                0, // freeCreditsUsed (voice credits, not applicable)
+                0, // overageVoiceMinutes (not applicable)
+                overageForThisRequest // overageApiRequests (portion of this request that's overage)
+              );
+            } catch (trackingError) {
+              // Don't fail if monthly usage tracking fails
+              console.error('⚠️  Failed to track monthly API usage:', trackingError.message);
+            }
+          }
+        }
       } catch (error) {
         // Don't fail request if logging fails
         console.error('⚠️  Failed to log API usage:', error.message);

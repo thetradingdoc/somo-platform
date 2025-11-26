@@ -506,17 +506,23 @@
                         Refresh
                     </button>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.9rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; font-size: 0.9rem;">
                     <div
                         style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px;">
-                        <div style="color: #64748b; font-size: 0.85rem;">Free Credits</div>
+                        <div style="color: #64748b; font-size: 0.85rem;">Free Voice Credits</div>
                         <div style="font-weight: 600; color: #16a34a; margin-top: 4px;" id="free-credits-value">
                             -</div>
                     </div>
                     <div
                         style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; padding: 12px;">
-                        <div style="color: #64748b; font-size: 0.85rem;">Paid Credits</div>
+                        <div style="color: #64748b; font-size: 0.85rem;">Paid Voice Credits</div>
                         <div style="font-weight: 600; color: #2563eb; margin-top: 4px;" id="paid-credits-value">
+                            -</div>
+                    </div>
+                    <div
+                        style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; padding: 12px;">
+                        <div style="color: #64748b; font-size: 0.85rem;">API Requests (Monthly)</div>
+                        <div style="font-weight: 600; color: #d97706; margin-top: 4px;" id="api-requests-value">
                             -</div>
                     </div>
                 </div>
@@ -917,10 +923,9 @@
                                 <div>
                                     <div class="invoice-number">${usage.billing_month}</div>
                                     <div class="invoice-details">
-                                        Voice: ${usage.voice_minutes_used || 0} min • 
-                                        API Requests: ${usage.api_requests_used || 0} • 
-                                        Free Credits: ${usage.free_credits_used || 0} min
-                                        ${usage.overage_voice_minutes > 0 ? ` • Overage: ${usage.overage_voice_minutes} min` : ''}
+                                        Voice: ${usage.voice_minutes_used || 0} min${usage.overage_voice_minutes > 0 ? ` (${usage.overage_voice_minutes} overage)` : ''} • 
+                                        API: ${usage.api_requests_used || 0} requests${usage.overage_api_requests > 0 ? ` (${usage.overage_api_requests} overage)` : ''} • 
+                                        Free Credits Used: ${usage.free_credits_used || 0} min
                                     </div>
                                 </div>
                             </div>
@@ -1058,6 +1063,9 @@
                         Free: ${free.remaining || 0} / ${free.allocated || 0} min<br>
                         Paid: ${paid.remaining || 0} / ${paid.purchased || 0} min
                     `;
+                    
+                    // Load API request usage
+                    loadAPIRequestUsage();
                 } else {
                     // Handle error case
                     document.getElementById('credits-balance-value').textContent = '0';
@@ -1140,6 +1148,52 @@
             }
         }
 
+        // Load API request usage
+        async function loadAPIRequestUsage() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/me/credits-and-billing`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const result = await response.json();
+                if (result.success && result.current_month_usage) {
+                    const usage = result.current_month_usage;
+                    const apiRequests = usage.api_requests_used || 0;
+                    const overageApi = usage.overage_api_requests || 0;
+                    const FREE_API_REQUESTS = 1000;
+                    const remaining = Math.max(0, FREE_API_REQUESTS - apiRequests);
+                    
+                    const apiRequestsElement = document.getElementById('api-requests-value');
+                    if (apiRequestsElement) {
+                        apiRequestsElement.innerHTML = `
+                            ${apiRequests} / ${FREE_API_REQUESTS} free<br>
+                            <span style="font-size: 0.75rem; color: ${overageApi > 0 ? '#dc2626' : '#64748b'};">
+                                ${overageApi > 0 ? `${overageApi} overage` : `${remaining} remaining`}
+                            </span>
+                        `;
+                    }
+                } else {
+                    const apiRequestsElement = document.getElementById('api-requests-value');
+                    if (apiRequestsElement) {
+                        apiRequestsElement.textContent = '0 / 1000 free';
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load API request usage:', error);
+                const apiRequestsElement = document.getElementById('api-requests-value');
+                if (apiRequestsElement) {
+                    apiRequestsElement.textContent = '-';
+                }
+            }
+        }
+
         async function loadUsageHistoryDetailed() {
             try {
                 const response = await fetch(`${API_BASE}/api/credits/usage`, {
@@ -1165,7 +1219,7 @@
                         return `
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #e2e8f0;">
                                 <div>
-                                    <div style="font-weight: 600; font-size: 0.9rem;">Call ${call.call_id.substring(0, 8)}...</div>
+                                    <div style="font-weight: 600; font-size: 0.9rem;">Voice Call ${call.call_id ? call.call_id.substring(0, 8) : 'N/A'}...</div>
                                     <div style="font-size: 0.85rem; color: #64748b; margin-top: 4px;">
                                         ${call.duration_minutes ? `${call.duration_minutes.toFixed(1)} minutes` : 'N/A'} • 
                                         ${call.credits_deducted || 0} credits${costInfo}${costSource} • 
@@ -1179,7 +1233,7 @@
                         `;
                     }).join('');
                 } else {
-                    document.getElementById('usage-container').innerHTML = '<p style="color: #64748b; font-size: 0.9rem;">No usage history yet.</p>';
+                    document.getElementById('usage-container').innerHTML = '<p style="color: #64748b; font-size: 0.9rem;">No voice call usage history yet.</p>';
                 }
             } catch (error) {
                 console.error('Failed to load usage history:', error);
@@ -1190,6 +1244,7 @@
         document.getElementById('refresh-credits').addEventListener('click', () => {
             // loadCreditsBalance() updates both Overview and Credits & Billing tabs
             loadCreditsBalance();
+            loadAPIRequestUsage();
             loadUsageHistoryDetailed();
         });
 
@@ -1390,6 +1445,7 @@
         loadAccountInfo();
         // loadCreditsBalance() updates both Overview and Credits & Billing tabs - no need for loadCreditsAndBilling()
         loadCreditsBalance();
+        loadAPIRequestUsage();
         loadCreditPackages();
         loadPaymentMethod();
         loadInvoices();

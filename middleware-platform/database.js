@@ -5163,15 +5163,28 @@ module.exports = {
     }
 
     // Track: total usage, free credits used, and overage (for billing)
-    db.trackMonthlyUsage(
-      customerId,
-      billingMonth,
-      minutesToDeduct, // Total voice minutes used
-      0, // API requests tracked separately (handled in usage-logger)
-      freeToDeduct, // Free credits used
-      overageMinutes, // Overage minutes (after credits exhausted)
-      0 // API overage tracked separately
-    );
+    // Inline the trackMonthlyUsage logic to avoid circular reference issues
+    const existing = db.prepare('SELECT * FROM monthly_usage WHERE customer_id = ? AND billing_month = ?').get(customerId, billingMonth);
+    if (existing) {
+      db.prepare(`
+        UPDATE monthly_usage 
+        SET voice_minutes_used = voice_minutes_used + ?,
+            api_requests_used = api_requests_used + ?,
+            free_credits_used = free_credits_used + ?,
+            overage_voice_minutes = overage_voice_minutes + ?,
+            overage_api_requests = overage_api_requests + ?,
+            updated_at = datetime('now')
+        WHERE customer_id = ? AND billing_month = ?
+      `).run(minutesToDeduct, 0, freeToDeduct, overageMinutes, 0, customerId, billingMonth);
+    } else {
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare(`
+        INSERT INTO monthly_usage (
+          id, customer_id, billing_month, voice_minutes_used, api_requests_used,
+          free_credits_used, overage_voice_minutes, overage_api_requests
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(uuidv4(), customerId, billingMonth, minutesToDeduct, 0, freeToDeduct, overageMinutes, 0);
+    }
 
     return db.prepare(`
       UPDATE customer_credits 

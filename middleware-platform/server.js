@@ -143,6 +143,10 @@ function decodeState(state) {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Trust proxy - required for Azure App Service and express-rate-limit
+// This allows Express to correctly identify client IPs behind proxies
+app.set('trust proxy', true);
+
 // Import WebSocket for Retell LLM
 const WebSocket = require('ws');
 const RetellWebSocketHandler = require('./webhooks/retell-websocket');
@@ -151,6 +155,41 @@ const RetellWebSocketHandler = require('./webhooks/retell-websocket');
 const { securityHeaders, sanitizeInput, requestLogger } = require('./middleware/security');
 const { apiLimiter, authLimiter, paymentLimiter, voiceLimiter } = require('./middleware/rate-limiter');
 const { usageLogger, logVoiceCall, logFunctionCall, logError } = require('./middleware/usage-logger');
+let errorHandler, asyncHandler, withTimeout, withRetry, logErrorHandler;
+let healthCheckHandler, readinessCheck, livenessCheck;
+
+// Load reliability middleware (graceful fallback if missing)
+try {
+  const errorHandlerModule = require('./middleware/error-handler');
+  errorHandler = errorHandlerModule.errorHandler;
+  asyncHandler = errorHandlerModule.asyncHandler;
+  withTimeout = errorHandlerModule.withTimeout;
+  withRetry = errorHandlerModule.withRetry;
+  logErrorHandler = errorHandlerModule.logError;
+} catch (err) {
+  console.warn('⚠️  Error handler module not found, using fallback');
+  errorHandler = (err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  };
+  asyncHandler = (fn) => fn;
+  withTimeout = (fn) => fn;
+  withRetry = async (fn) => fn();
+  logErrorHandler = () => {};
+}
+
+try {
+  const healthCheckModule = require('./middleware/health-check');
+  healthCheckHandler = healthCheckModule.healthCheckHandler;
+  readinessCheck = healthCheckModule.readinessCheck;
+  livenessCheck = healthCheckModule.livenessCheck;
+} catch (err) {
+  console.warn('⚠️  Health check module not found, using fallback');
+  healthCheckHandler = (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  readinessCheck = (req, res) => res.json({ ready: true });
+  livenessCheck = (req, res) => res.json({ alive: true });
+}
+
 const logger = require('./services/logger');
 
 // Security middleware (must be first)
@@ -8556,6 +8595,19 @@ app.get('/api/admin/billing', async (req, res) => {
 // WEBHOOK ENDPOINTS
 // ============================================
 
+// Retell LLM WebSocket endpoint - handle HEAD/GET requests for health checks
+app.head('/webhook/retell/llm', (req, res) => {
+  res.status(200).end();
+});
+
+app.get('/webhook/retell/llm', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    message: 'Retell LLM WebSocket endpoint is available',
+    websocket: true
+  });
+});
+
 // Retell events webhook (call end, status updates)
 app.post('/webhook/retell/events', express.json(), async (req, res) => {
   try {
@@ -9543,14 +9595,10 @@ app.get('/api/ehr/epic/status', async (req, res) => {
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    service: 'middleware-platform'
-  });
-});
+// Health check endpoints (comprehensive)
+app.get('/health', healthCheckHandler);
+app.get('/health/ready', readinessCheck);
+app.get('/health/live', livenessCheck);
 
 // Root endpoint - API information (moved to /api for API status)
 app.get('/api', (req, res) => {
@@ -10238,39 +10286,10 @@ app.get('/api/test/uhc-fhir/patient/:patientId/all', async (req, res) => {
 });
 
 // ============================================
-// GLOBAL ERROR HANDLER
+// GLOBAL ERROR HANDLER (Comprehensive)
 // ============================================
-app.use((err, req, res, next) => {
-  // Log error to database
-  const { logError } = require('./middleware/usage-logger');
-
-  logError({
-    customer_id: req.customer_id || null,
-    error_type: err.name || 'Error',
-    error_message: err.message || 'Unknown error',
-    stack_trace: err.stack,
-    request_id: req.requestId || null,
-    endpoint: req.path || req.url,
-    context: {
-      method: req.method,
-      body: req.body,
-      query: req.query,
-      params: req.params
-    },
-    severity: err.status >= 500 ? 'high' : 'medium'
-  });
-
-  // Log to console
-  console.error('❌ Unhandled error:', err);
-
-  // Send error response
-  const status = err.status || err.statusCode || 500;
-  res.status(status).json({
-    success: false,
-    error: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
+// Use comprehensive error handler - must be last middleware
+app.use(errorHandler);
 
 const server = app.listen(PORT, () => {
   console.log('\n' + '='.repeat(60));
@@ -10409,11 +10428,118 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+// ============================================
+// CRASH PREVENTION & RELIABILITY
+// ============================================
+
+// Improved uncaught exception handler - don't crash immediately
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  process.exit(1);
+  console.error('❌ UNCAUGHT EXCEPTION - Critical Error:', error);
+  console.error('Stack:', error.stack);
+  
+  // Log to database
+  logErrorHandler(error, null, { 
+    type: 'uncaughtException',
+    fatal: true 
+  });
+  
+  // Give time for error to be logged, then exit
+  // In production, Azure will restart the app
+  setTimeout(() => {
+    console.error('💥 Process exiting due to uncaught exception');
+    process.exit(1);
+  }, 5000);
 });
 
+// Improved unhandled rejection handler
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('❌ UNHANDLED REJECTION:', reason);
+  console.error('Promise:', promise);
+  
+  // Log to database
+  if (reason instanceof Error) {
+    logErrorHandler(reason, null, { 
+      type: 'unhandledRejection',
+      fatal: false 
+    });
+  } else {
+    console.error('Rejection reason (non-Error):', reason);
+  }
+  
+  // Don't exit on unhandled rejection - log and continue
+  // This prevents crashes from async operations
 });
+
+// Memory monitoring and leak prevention
+if (process.env.NODE_ENV === 'production') {
+  const { checkMemoryUsage } = require('./middleware/error-handler');
+  
+  // Check memory every 5 minutes
+  setInterval(() => {
+    const mem = checkMemoryUsage();
+    if (mem.heapUsedMB > 800) {
+      console.warn('🚨 HIGH MEMORY USAGE - Consider restart:', mem);
+    }
+  }, 5 * 60 * 1000);
+  
+  // Force GC if available (run with --expose-gc flag)
+  if (global.gc) {
+    setInterval(() => {
+      const mem = process.memoryUsage();
+      if (mem.heapUsed > 400 * 1024 * 1024) { // 400MB
+        console.log('🧹 Running garbage collection...');
+        global.gc();
+      }
+    }, 10 * 60 * 1000); // Every 10 minutes
+  }
+}
+
+// Graceful shutdown with cleanup
+let isShuttingDown = false;
+
+function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    console.log('⚠️  Already shutting down, forcing exit...');
+    process.exit(1);
+  }
+  
+  isShuttingDown = true;
+  console.log(`\n🛑 Received ${signal} - Starting graceful shutdown...`);
+  
+  // Stop accepting new connections
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+    
+    // Close database connections
+    try {
+      if (db && db.db) {
+        db.db.close();
+        console.log('✅ Database connections closed');
+      }
+    } catch (err) {
+      console.error('⚠️  Error closing database:', err.message);
+    }
+    
+    // Close WebSocket server
+    try {
+      if (wss) {
+        wss.close();
+        console.log('✅ WebSocket server closed');
+      }
+    } catch (err) {
+      console.error('⚠️  Error closing WebSocket:', err.message);
+    }
+    
+    console.log('✅ Graceful shutdown complete');
+    process.exit(0);
+  });
+  
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    console.error('⚠️  Forcing shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

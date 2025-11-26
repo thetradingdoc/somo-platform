@@ -28,6 +28,7 @@
                 <li><a href="#admin-api" class="nav-link">Admin API</a></li>
                 <li><a href="#webhooks" class="nav-link">Webhooks</a></li>
                 <li><a href="#mobile-integration" class="nav-link">Mobile Integration</a></li>
+                <li><a href="#pricing-billing" class="nav-link">Pricing & Billing</a></li>
                 <li><a href="#code-examples" class="nav-link">Code Examples</a></li>
             </ul>
         </nav>
@@ -72,6 +73,8 @@
                 <ol>
                     <li>Sign up for an account at <code>https://api.doclittle.site</code></li>
                     <li>Complete email verification and accept terms of service</li>
+                    <li>Add a payment method (required, but no charges until free credits are used)</li>
+                    <li>Receive 100 free voice minutes and 1,000 free API requests/month</li>
                     <li>Get your Retell Agent ID from your Profile (<code>GET /api/customers/me</code>)</li>
                     <li>Create API keys in your Profile (for REST API calls)</li>
                     <li>Integrate Retell SDK into your mobile app (Flutter/iOS/Android)</li>
@@ -535,6 +538,12 @@ client.newCall(request).enqueue(object : Callback {
                 </ul>
 
                 <h3>Usage Tracking & Billing</h3>
+                <p>DocLittle automatically tracks both voice call minutes and API requests:</p>
+                <ul>
+                    <li><strong>Voice Calls:</strong> Tracked by call duration (minutes). 100 free minutes included.</li>
+                    <li><strong>API Requests:</strong> Tracked per request. 1,000 free requests per month.</li>
+                    <li><strong>Overage Billing:</strong> $0.05/min for voice, $0.01/1k for API requests beyond free tier.</li>
+                </ul>
                 <p>Track your usage and view billing information:</p>
 
                 <div class="endpoint">
@@ -542,7 +551,15 @@ client.newCall(request).enqueue(object : Callback {
                         <span class="method get">GET</span>
                         <code class="endpoint-url">/api/credits/balance</code>
                     </div>
-                    <p>Get your current credit balance.</p>
+                    <p>Get your current credit balance for voice minutes (free and paid).</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/customers/me/credits-and-billing</code>
+                    </div>
+                    <p>Get comprehensive billing summary including voice minutes, API requests, current month usage, and invoice history.</p>
                 </div>
 
                 <div class="endpoint">
@@ -550,7 +567,7 @@ client.newCall(request).enqueue(object : Callback {
                         <span class="method get">GET</span>
                         <code class="endpoint-url">/api/credits/usage</code>
                     </div>
-                    <p>View your usage history.</p>
+                    <p>View detailed voice call usage history with costs and durations.</p>
                 </div>
 
                 <div class="endpoint">
@@ -565,10 +582,87 @@ client.newCall(request).enqueue(object : Callback {
                     <h4 style="margin-top: 0; color: #166534;">💡 Pro Tips</h4>
                     <ul style="margin-bottom: 0;">
                         <li>Each customer gets their own Retell agent automatically when they accept terms</li>
-                        <li>Pass <code>patient_id</code> in <code>dynamic_variables</code> for personalized conversations</li>
-                        <li>Voice minutes are automatically deducted from your credit balance</li>
+                        <li>Pass <code>customer_id</code> in <code>dynamic_variables</code> for proper usage tracking</li>
+                        <li>Voice minutes are automatically deducted from your credit balance (100 free minutes included)</li>
+                        <li>API requests are tracked separately (1,000 free requests per month)</li>
                         <li>View your profile at <a href="/profile">/profile</a> to manage credits, API keys, and billing</li>
                     </ul>
+                </div>
+            </section>
+
+            <!-- Pricing & Billing Section -->
+            <section id="pricing-billing" class="section">
+                <h2>Pricing & Billing</h2>
+                <p>DocLittle offers transparent, usage-based pricing with generous free credits to get you started.</p>
+
+                <h3>Free Credits</h3>
+                <p>New customers receive free credits upon account activation:</p>
+                <ul>
+                    <li><strong>Voice Call Minutes:</strong> 100 free minutes for voice calls (one-time allocation)</li>
+                    <li><strong>API Requests:</strong> 1,000 free API requests per month (resets monthly)</li>
+                </ul>
+                <p>Free credits are allocated when you accept the Terms of Service. No payment method required to use free credits.</p>
+
+                <h3>Usage-Based Pricing</h3>
+                <p>After free credits are exhausted, usage is billed as follows:</p>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #e2e8f0;">
+                                <th style="text-align: left; padding: 12px; font-weight: 600;">Service</th>
+                                <th style="text-align: left; padding: 12px; font-weight: 600;">Free Tier</th>
+                                <th style="text-align: left; padding: 12px; font-weight: 600;">Overage Pricing</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1px solid #e2e8f0;">
+                                <td style="padding: 12px;"><strong>Voice Calls</strong></td>
+                                <td style="padding: 12px;">100 minutes (one-time)</td>
+                                <td style="padding: 12px;">$0.05 per minute</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 12px;"><strong>API Requests</strong></td>
+                                <td style="padding: 12px;">1,000 requests/month</td>
+                                <td style="padding: 12px;">$0.01 per 1,000 requests</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>Payment Method Requirement</h3>
+                <p>A valid payment method must be on file before accessing the Service. <strong>No charges will be made until your free credits are exhausted.</strong> Your payment method will be charged monthly for usage beyond free credits.</p>
+
+                <h3>Billing & Invoicing</h3>
+                <ul>
+                    <li>Usage is tracked per calendar month</li>
+                    <li>Invoices are generated monthly for overage usage (beyond free credits)</li>
+                    <li>Payment is due within 15 days of invoice date</li>
+                    <li>View your usage and billing at <a href="/profile">/profile</a></li>
+                </ul>
+
+                <h3>Billing Endpoints</h3>
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/credits/balance</code>
+                    </div>
+                    <p>Get your current credit balance including free and paid credits.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/customers/me/credits-and-billing</code>
+                    </div>
+                    <p>Get comprehensive billing summary including current month usage, API requests, and invoice history.</p>
+                </div>
+
+                <div class="endpoint">
+                    <div class="endpoint-header">
+                        <span class="method get">GET</span>
+                        <code class="endpoint-url">/api/credits/usage</code>
+                    </div>
+                    <p>View detailed voice call usage history.</p>
                 </div>
             </section>
 

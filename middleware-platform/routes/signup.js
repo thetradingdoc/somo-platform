@@ -84,11 +84,37 @@ router.post('/signup', rateLimiter, async (req, res) => {
     // Check if email already exists
     const existingCustomer = db.getCustomerByEmail(email);
     if (existingCustomer) {
-      return res.status(409).json({
-        success: false,
-        error: 'Email already registered',
-        message: 'This email is already associated with an account'
-      });
+      // Allow bypass for test emails when ALLOW_TEST_EMAIL_BYPASS is enabled
+      const isTestEmail = email.includes('+test@') || email.includes('+6@gmail.com');
+      if (isTestEmail && process.env.ALLOW_TEST_EMAIL_BYPASS === 'true') {
+        console.log(`⚠️  Test email bypass enabled for: ${email} - using existing customer`);
+        // Use existing customer ID instead of creating new one
+        const customerId = existingCustomer.id;
+        
+        // Generate verification code for existing customer
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        db.createEmailVerificationCode(email, verificationCode, customerId);
+        
+        // Send verification email
+        try {
+          await EmailService.sendVerificationCode(email, verificationCode, existingCustomer.name);
+        } catch (emailError) {
+          console.error('❌ Failed to send verification email:', emailError);
+        }
+        
+        return res.json({
+          success: true,
+          message: 'Verification code sent to your email (test bypass)',
+          customer_id: customerId,
+          email: email
+        });
+      } else {
+        return res.status(409).json({
+          success: false,
+          error: 'Email already registered',
+          message: 'This email is already associated with an account'
+        });
+      }
     }
 
     // Check for active verification code (rate limiting)
@@ -419,18 +445,18 @@ router.post('/signup/resend-code', rateLimiter, async (req, res) => {
       });
     }
 
-    // Check rate limit (max 3 codes per hour)
+    // Check rate limit (max 5 codes per hour to prevent spam)
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const recentCodes = db.db.prepare(`
       SELECT COUNT(*) as count FROM email_verification_codes 
       WHERE email = ? AND created_at > ?
     `).get(email, oneHourAgo);
 
-    if (recentCodes && recentCodes.count >= 3) {
+    if (recentCodes && recentCodes.count >= 5) {
       return res.status(429).json({
         success: false,
         error: 'Too many verification requests',
-        message: 'Please wait before requesting another code'
+        message: 'You have reached the maximum number of verification codes (5 per hour). Please wait before requesting another code to prevent spam.'
       });
     }
 

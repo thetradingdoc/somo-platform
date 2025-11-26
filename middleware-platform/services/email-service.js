@@ -43,16 +43,31 @@ class EmailService {
     try {
       // Parse connection string: endpoint=https://...;accesskey=...
       const connString = process.env.AZURE_COMMUNICATION_CONNECTION_STRING;
-      const endpointMatch = connString.match(/endpoint=https?:\/\/([^;]+)/);
-      const accessKeyMatch = connString.match(/accesskey=([^;]+)/);
-      
+
+      // Handle escaped semicolons and backslashes
+      const cleanConnString = connString.replace(/\\;/g, ';').replace(/\\/g, '');
+
+      const endpointMatch = cleanConnString.match(/endpoint=https?:\/\/([^;]+)/);
+      const accessKeyMatch = cleanConnString.match(/accesskey=([^;]+)/);
+
       if (!endpointMatch || !accessKeyMatch) {
         throw new Error('Invalid connection string format');
       }
-      
-      const endpoint = `https://${endpointMatch[1]}`;
-      const accessKey = accessKeyMatch[1];
-      
+
+      // Remove trailing slashes and clean endpoint
+      let endpoint = endpointMatch[1].trim();
+      endpoint = endpoint.replace(/\/+$/, ''); // Remove trailing slashes
+      endpoint = `https://${endpoint}`;
+
+      const accessKey = accessKeyMatch[1].trim();
+
+      // Validate endpoint URL
+      try {
+        new URL(endpoint);
+      } catch (urlError) {
+        throw new Error(`Invalid endpoint URL: ${endpoint}`);
+      }
+
       // Create client with endpoint and access key
       return new azureEmailClient(endpoint, { key: accessKey });
     } catch (error) {
@@ -1279,7 +1294,7 @@ class EmailService {
     `;
 
     const adminEmail = process.env.ADMIN_EMAIL || 'richard@doclittle.site';
-    
+
     return await this.sendEmail({
       to: adminEmail,
       subject: `New Feature Request from ${customerName} - ${requestedFeatures.length} feature(s)`,

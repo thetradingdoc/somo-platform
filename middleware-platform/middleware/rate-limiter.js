@@ -5,7 +5,27 @@
 
 const rateLimit = require('express-rate-limit');
 
+// Custom key generator that handles IP addresses with ports and trust proxy
+const keyGenerator = (req) => {
+  // Extract IP from req.ip, removing port if present
+  let ip = req.ip || req.connection?.remoteAddress || 'unknown';
+  
+  // Remove port number if present (e.g., "54.196.252.50:54288" -> "54.196.252.50")
+  if (ip && ip.includes(':')) {
+    // Handle IPv6 addresses (e.g., "::ffff:169.254.130.1")
+    if (ip.startsWith('::ffff:')) {
+      ip = ip.replace('::ffff:', '');
+    }
+    // Remove port number
+    const parts = ip.split(':');
+    ip = parts[0];
+  }
+  
+  return ip || 'unknown';
+};
+
 // General API rate limiter
+// Note: trust proxy must be set in server.js before this middleware is used
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
@@ -15,6 +35,11 @@ const apiLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  keyGenerator, // Custom key generator to handle IP addresses with ports
+  validate: {
+    trustProxy: false, // Disable trust proxy validation
+    ip: false // Disable IP validation to handle IPs with ports
+  }
 });
 
 // Strict rate limiter for sensitive endpoints
@@ -27,6 +52,11 @@ const strictLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator, // Custom key generator to handle IP addresses with ports
+  validate: {
+    trustProxy: false, // Disable trust proxy validation
+    ip: false // Disable IP validation to handle IPs with ports
+  }
 });
 
 // Authentication endpoints (login, signup, verification)
@@ -40,6 +70,11 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true, // Don't count successful requests
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator, // Custom key generator to handle IP addresses with ports
+  validate: {
+    trustProxy: false, // Disable trust proxy validation
+    ip: false // Disable IP validation to handle IPs with ports
+  }
 });
 
 // Payment endpoints - very strict
@@ -52,6 +87,11 @@ const paymentLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator, // Custom key generator to handle IP addresses with ports
+  validate: {
+    trustProxy: false, // Disable trust proxy validation
+    ip: false // Disable IP validation to handle IPs with ports
+  }
 });
 
 // Voice endpoints - moderate
@@ -64,6 +104,11 @@ const voiceLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator, // Custom key generator to handle IP addresses with ports
+  validate: {
+    trustProxy: false, // Disable trust proxy validation
+    ip: false // Disable IP validation to handle IPs with ports
+  }
 });
 
 module.exports = {

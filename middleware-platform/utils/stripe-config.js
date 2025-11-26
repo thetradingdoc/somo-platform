@@ -29,10 +29,11 @@ function getStripeSecretKey() {
     );
   }
   
-  if (!isProduction && isLiveKey) {
+  // Allow live keys in dev if explicitly enabled via ALLOW_LIVE_KEYS_IN_DEV
+  if (!isProduction && isLiveKey && !process.env.ALLOW_LIVE_KEYS_IN_DEV) {
     throw new Error(
       'SECURITY ERROR: Production Stripe key detected in development environment! ' +
-      'Please use test keys (sk_test_...) in development.'
+      'Please use test keys (sk_test_...) in development or set ALLOW_LIVE_KEYS_IN_DEV=true'
     );
   }
   
@@ -71,10 +72,11 @@ function getStripePublishableKey() {
     );
   }
   
-  if (!isProduction && isLiveKey) {
+  // Allow live keys in dev if explicitly enabled via ALLOW_LIVE_KEYS_IN_DEV
+  if (!isProduction && isLiveKey && !process.env.ALLOW_LIVE_KEYS_IN_DEV) {
     throw new Error(
       'SECURITY ERROR: Production Stripe publishable key detected in development environment! ' +
-      'Please use test keys (pk_test_...) in development.'
+      'Please use test keys (pk_test_...) in development or set ALLOW_LIVE_KEYS_IN_DEV=true'
     );
   }
   

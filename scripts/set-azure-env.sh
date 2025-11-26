@@ -58,7 +58,7 @@ settings = [
 ]
 
 # Add required vars
-for key in ['STRIPE_SECRET_KEY', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 
+for key in ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 
             'TWILIO_PHONE_NUMBER', 'RETELL_API_KEY', 'RETELL_AGENT_ID',
             'AZURE_COMMUNICATION_CONNECTION_STRING', 'AZURE_EMAIL_SENDER']:
     if key in env_vars and env_vars[key]:
