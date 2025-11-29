@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service - DocLittle API</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .header h1 {
+            color: #1e40af;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            color: #1e40af;
+            line-height: 1;
+            margin-bottom: 10px;
+            letter-spacing: -2px;
+        }
+
+        .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+            color: #1e40af;
+        }
+
+        .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+            color: #1e40af;
+        }
+
+        .logo-brand .dot {
+            color: #1e40af;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: #64748b;
+            font-size: 1.1rem;
+        }
+
+        .terms-content {
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 30px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            line-height: 1.8;
+            color: #334155;
+        }
+
+        .terms-content h2 {
+            color: #1e293b;
+            font-size: 1.5rem;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+
+        .terms-content h3 {
+            color: #1e293b;
+            font-size: 1.2rem;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        .terms-content p {
+            margin-bottom: 15px;
+        }
+
+        .terms-content ul,
+        .terms-content ol {
+            margin-left: 30px;
+            margin-bottom: 15px;
+        }
+
+        .terms-content li {
+            margin-bottom: 8px;
+        }
+
+        .terms-content strong {
+            color: #1e293b;
+        }
+
+        .accept-section {
+            background: #f9fafb;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            margin-top: 2px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .checkbox-group label {
+            cursor: pointer;
+            color: #1e293b;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .checkbox-group label a {
+            color: #1e40af;
+            text-decoration: none;
+        }
+
+        .checkbox-group label a:hover {
+            text-decoration: underline;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: #1e40af;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #1e3a8a;
+        }
+
+        .btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #64748b;
+            margin-top: 15px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .terms-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+            </div>
+            <p>API Terms of Service</p>
+        </div>
+
+        <div id="alert"></div>
+
+        <div class="terms-content">
+            <h2>1. Agreement to Terms</h2>
+            <p>By accessing or using the DocLittle API Service ("Service"), you agree to be bound by these Terms of
+                Service ("Terms"). If you disagree with any part of these terms, then you do not have permission to
+                access the Service.</p>
+
+            <h2>2. Description of Service</h2>
+            <p>DocLittle provides an API service that enables voice commerce, healthcare integration, payment
+                processing, and related services through REST API endpoints, webhook integrations, and SDK access for
+                Flutter, iOS, and Android applications.</p>
+
+            <h2>3. Account Registration and API Keys</h2>
+            <h3>3.1 Account Requirements</h3>
+            <p>To use the Service, you must provide accurate, current, and complete information during registration and
+                maintain your account information.</p>
+
+            <h3>3.2 Email Verification</h3>
+            <p>You must verify your email address before accessing API documentation or creating API keys. Verification
+                codes expire after 15 minutes.</p>
+
+            <h3>3.3 API Keys</h3>
+            <p>API keys are required to access the Service and must be kept confidential. You are responsible for all
+                activities that occur under your API key(s). Do not share your API keys publicly or commit them to
+                version control systems.</p>
+
+            <h2>4. Pricing and Payment Terms</h2>
+            <h3>4.1 Free Credits</h3>
+            <p>New API customers receive free credits upon account activation:</p>
+            <ul>
+                <li><strong>Voice Call Minutes:</strong> 100 free minutes for voice calls (one-time allocation)</li>
+                <li><strong>API Requests:</strong> 1,000 free API requests per month (resets monthly)</li>
+            </ul>
+            <p>Free credits are allocated when you accept these Terms of Service. Voice credits are one-time, while API
+                request credits reset monthly.</p>
+
+            <h3>4.2 Usage-Based Pricing</h3>
+            <p>After free credits are exhausted, usage is billed as follows:</p>
+            <ul>
+                <li><strong>Voice Call Minutes:</strong> $0.05 per minute for voice calls processed through the API</li>
+                <li><strong>API Requests:</strong> $0.01 per 1,000 requests (first 1,000 requests per month are free)
+                </li>
+            </ul>
+
+            <h3>4.3 Payment Method Requirement</h3>
+            <p>A valid payment method must be on file before accessing the API. No charges will be made until your free
+                credits are exhausted. Your payment method will be charged monthly for usage beyond free credits.</p>
+
+            <h3>4.4 Billing</h3>
+            <p>Billing is calculated based on actual API usage. Usage is tracked per calendar month. Invoices are
+                generated monthly for overage usage (beyond free credits) and payment is due within 15 days of invoice
+                date. You will only be charged for usage that exceeds your free credit allocation.</p>
+
+            <h2>5. Acceptable Use Policy</h2>
+            <p>You agree NOT to use the Service to violate any applicable laws, infringe upon intellectual property
+                rights, transmit malicious code, engage in fraud, or use the Service for any illegal healthcare data
+                access or HIPAA violations.</p>
+
+            <h2>6. Healthcare Data and HIPAA Compliance</h2>
+            <p>If you use the API to process Protected Health Information (PHI), you are responsible for ensuring HIPAA
+                compliance and must have appropriate Business Associate Agreements (BAAs) in place with DocLittle.</p>
+
+            <h2>7. Intellectual Property</h2>
+            <p>The Service, including all content, features, and functionality, is owned by DocLittle and is protected
+                by copyright, trademark, and other intellectual property laws. You may not copy, reverse engineer, or
+                create derivative works of the API without express written permission.</p>
+
+            <h2>8. Data Privacy and Security</h2>
+            <p>We implement industry-standard security measures including encryption in transit (TLS), secure API key
+                storage, and regular security audits. You are responsible for securing your API keys and implementing
+                proper authentication in your applications.</p>
+
+            <h2>9. Service Availability</h2>
+            <p>We strive for 99.9% uptime but do not guarantee uninterrupted access. We reserve the right to modify,
+                suspend, or discontinue the API at any time. We will provide reasonable notice for planned maintenance.
+            </p>
+
+            <h2>10. Termination</h2>
+            <p>You may terminate your API account at any time. We may terminate or suspend your account immediately if
+                you violate these Terms, fail to pay fees, or engage in fraudulent activity.</p>
+
+            <h2>11. Disclaimer of Warranties</h2>
+            <p>THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+                IMPLIED.</p>
+
+            <h2>12. Limitation of Liability</h2>
+            <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, OUR TOTAL LIABILITY SHALL NOT EXCEED THE AMOUNT YOU PAID US IN
+                THE 12 MONTHS PRECEDING THE CLAIM.</p>
+
+            <h2>13. Contact Information</h2>
+            <p><strong>DocLittle</strong><br>
+                Email: support@doclittle.site<br>
+                API Documentation: https://api.doclittle.site/docs<br>
+                Website: https://doclittle.site</p>
+
+            <p style="margin-top: 30px; font-weight: 600;">Version 1.1 - Last Updated: January 2025</p>
+            <p style="margin-top: 10px; font-size: 0.9rem; color: #64748b;">By accepting these terms, you acknowledge
+                that you have read, understood, and agree to be bound by the Intellectual Property and Copyright
+                Protection clauses, including prohibitions on copying, reverse engineering, and unauthorized use of the
+                Service. You understand that free credits are provided as stated above and that you will be billed for
+                usage beyond your free credit allocation.</p>
+        </div>
+
+        <div class="accept-section">
+            <div class="checkbox-group">
+                <input type="checkbox" id="acceptTerms" required>
+                <label for="acceptTerms">
+                    I have read and agree to the <strong>DocLittle API Terms of Service</strong>.
+                    I understand that I will receive 100 free voice minutes (one-time) and 1,000 free API requests per
+                    month.
+                    I understand that I am responsible for compliance with all applicable laws and regulations,
+                    including HIPAA if I process healthcare data. I agree to provide a valid payment method and
+                    to pay for all usage beyond my free credit allocation according to the pricing terms outlined above.
+                </label>
+            </div>
+
+            <button class="btn" id="acceptBtn" disabled>Accept Terms and Continue</button>
+            <div class="loading" id="loading">Processing...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        const checkbox = document.getElementById('acceptTerms');
+        const acceptBtn = document.getElementById('acceptBtn');
+        const loading = document.getElementById('loading');
+        const alert = document.getElementById('alert');
+
+        // Enable/disable accept button based on checkbox
+        checkbox.addEventListener('change', () => {
+            acceptBtn.disabled = !checkbox.checked;
+        });
+
+        // Accept terms
+        acceptBtn.addEventListener('click', async () => {
+            acceptBtn.disabled = true;
+            loading.classList.add('active');
+            alert.innerHTML = '';
+
+            try {
+                const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/docs';
+                const response = await fetch(`${API_BASE}/api/signup/accept-terms?redirect=${encodeURIComponent(redirectUrl)}&customer_type=api`, {
+                    method: 'POST',
+                    credentials: 'include' // Include cookies
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert.innerHTML = `<div class="alert alert-success">Terms accepted! Redirecting...</div>`;
+                    setTimeout(() => {
+                        window.location.href = result.redirect || '/docs';
+                    }, 1000);
+                } else {
+                    alert.innerHTML = `<div class="alert alert-error">${result.error || result.message}</div>`;
+                    acceptBtn.disabled = false;
+                }
+            } catch (error) {
+                alert.innerHTML = `<div class="alert alert-error">Failed to accept terms: ${error.message}</div>`;
+                acceptBtn.disabled = false;
+            } finally {
+                loading.classList.remove('active');
+            }
+        });
+
+        // Check if user is already authenticated and has accepted terms
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/me`, {
+                    credentials: 'include'
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+                } else if (response.ok) {
+                    const result = await response.json();
+                    if (result.success && result.customer) {
+                        const termsCheck = await fetch(`${API_BASE}/api/signup/accept-terms`, {
+                            method: 'POST',
+                            credentials: 'include'
+                        });
+                        const termsResult = await termsCheck.json();
+                        if (termsResult.success && termsResult.redirect && termsResult.redirect !== window.location.pathname) {
+                            window.location.href = termsResult.redirect || '/docs';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Auth check failed:', error);
+            }
+        }
+
+        checkAuth();
+    </script>
+</body>
+
+</html>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -259,6 +260,7 @@
     </style>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
+
 <body>
     <div class="container">
         <div class="logo">
@@ -269,16 +271,19 @@
         </div>
 
         <div class="back-link">
-            <button class="back-icon" id="back-btn" onclick="window.history.back()" aria-label="Go back" title="Go back">
+            <button class="back-icon" id="back-btn" onclick="window.history.back()" aria-label="Go back"
+                title="Go back">
                 ←
             </button>
         </div>
 
         <h2>Add Payment Method</h2>
-        <p>We'll save your card details securely. <strong>No charges will be made at this time.</strong> This allows us to invoice you monthly for usage beyond your free credits once your account is fully activated.</p>
+        <p>We'll save your card details securely. <strong>No charges will be made at this time.</strong> This allows us
+            to invoice you monthly for usage beyond your free credits once your account is fully activated.</p>
 
         <div class="info-box">
-            <p>🔒 Your card details are securely processed by Stripe. We only store a token for future invoices. No charges will be made until your account is fully activated.</p>
+            <p>🔒 Your card details are securely processed by Stripe. We only store a token for future invoices. No
+                charges will be made until your account is fully activated.</p>
         </div>
 
         <div id="alert"></div>
@@ -296,10 +301,11 @@
                 <!-- Stripe Elements will create form elements here -->
             </div>
             <div id="card-errors" class="card-errors" role="alert"></div>
-            
+
             <!-- Info message about account review -->
             <div id="account-review-notice" class="info-box" style="display: none; margin-top: 15px;">
-                <p>⚠️ Your Stripe account is currently under review. We'll save your card information and grant API access. Card details will be fully processed once your account is activated.</p>
+                <p>⚠️ Your Stripe account is currently under review. We'll save your card information and grant API
+                    access. Card details will be fully processed once your account is activated.</p>
             </div>
 
             <button class="btn" id="verify-btn">Save Payment Method</button>
@@ -351,12 +357,12 @@
                         }
                     });
                 } else {
-                    document.getElementById('alert').innerHTML = 
+                    document.getElementById('alert').innerHTML =
                         '<div class="alert alert-error">Stripe not configured. Please contact support.</div>';
                 }
             } catch (error) {
                 console.error('Failed to initialize Stripe:', error);
-                document.getElementById('alert').innerHTML = 
+                document.getElementById('alert').innerHTML =
                     '<div class="alert alert-error">Failed to load payment form. Please refresh the page.</div>';
             }
         }
@@ -374,12 +380,38 @@
                         // Show stored card
                         document.getElementById('stored-card-section').style.display = 'block';
                         document.getElementById('card-form').style.display = 'none';
-                        document.getElementById('stored-card-info').textContent = 
+                        document.getElementById('stored-card-info').textContent =
                             `${result.payment_method.card_brand || 'Card'} ending in ${result.payment_method.card_last4}`;
-                        
-                        // Continue button
-                        document.getElementById('continue-btn').addEventListener('click', () => {
-                            const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/docs';
+
+                        // Continue button - check customer_type for proper redirect
+                        document.getElementById('continue-btn').addEventListener('click', async () => {
+                            let redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+
+                            // If no redirect in URL, check customer_type from API
+                            if (!redirectUrl) {
+                                try {
+                                    const customerRes = await fetch(`${API_BASE}/api/customers/me`, {
+                                        credentials: 'include'
+                                    });
+                                    if (customerRes.ok) {
+                                        const customerData = await customerRes.json();
+                                        if (customerData.success && customerData.customer) {
+                                            const customerType = customerData.customer.customer_type || 'saas';
+                                            redirectUrl = customerType === 'api'
+                                                ? '/docs'
+                                                : '/business/business-dashboard.html';
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.error('Error fetching customer type:', error);
+                                }
+                            }
+
+                            // Default fallback
+                            if (!redirectUrl) {
+                                redirectUrl = '/business/business-dashboard.html';
+                            }
+
                             window.location.href = redirectUrl;
                         });
                         return true;
@@ -394,7 +426,7 @@
         // Verify card
         document.getElementById('verify-btn').addEventListener('click', async () => {
             if (!stripe || !cardElement) {
-                document.getElementById('alert').innerHTML = 
+                document.getElementById('alert').innerHTML =
                     '<div class="alert alert-error">Payment form not ready. Please refresh the page.</div>';
                 return;
             }
@@ -412,7 +444,7 @@
                 // Try to create payment method with Stripe
                 let paymentMethodId = null;
                 let cardDetails = null;
-                
+
                 try {
                     const { paymentMethod, error: pmError } = await stripe.createPaymentMethod({
                         type: 'card',
@@ -482,12 +514,38 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    const successMsg = result.note 
+                    const successMsg = result.note
                         ? `<div class="alert alert-success">✓ ${result.message || 'Payment method saved successfully!'}<br><small>${result.note}</small></div>`
                         : `<div class="alert alert-success">✓ ${result.message || 'Payment method saved successfully!'} Redirecting...</div>`;
                     alert.innerHTML = successMsg;
-                    setTimeout(() => {
-                        const redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '/docs';
+                    setTimeout(async () => {
+                        let redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+
+                        // If no redirect in URL, check customer_type from API
+                        if (!redirectUrl) {
+                            try {
+                                const customerRes = await fetch(`${API_BASE}/api/customers/me`, {
+                                    credentials: 'include'
+                                });
+                                if (customerRes.ok) {
+                                    const customerData = await customerRes.json();
+                                    if (customerData.success && customerData.customer) {
+                                        const customerType = customerData.customer.customer_type || 'saas';
+                                        redirectUrl = customerType === 'api'
+                                            ? '/docs'
+                                            : '/business/business-dashboard.html';
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Error fetching customer type:', error);
+                            }
+                        }
+
+                        // Default fallback to business dashboard (SaaS is most common)
+                        if (!redirectUrl) {
+                            redirectUrl = '/business/business-dashboard.html';
+                        }
+
                         window.location.href = redirectUrl;
                     }, 2000);
                 } else {
@@ -512,5 +570,5 @@
         })();
     </script>
 </body>
-</html>
 
+</html>

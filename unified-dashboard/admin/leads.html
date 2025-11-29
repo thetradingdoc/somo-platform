@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Search & Calling - DocLittle Admin</title>
+    <link rel="stylesheet" href="../assets/css/global.css">
+    <script src="../assets/js/config.js"></script>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-400: #9ca3af;
+            --gray-500: #6b7280;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-50);
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            margin: 0 0 8px 0;
+            font-size: 28px;
+            color: var(--gray-900);
+        }
+
+        .header p {
+            margin: 0;
+            color: var(--gray-600);
+        }
+
+        .search-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .search-form {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 10px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .jobs-grid,
+        .leads-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .job-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid var(--gray-200);
+        }
+
+        .job-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: var(--gray-900);
+        }
+
+        .job-card .clinic-name {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+
+        .job-card .job-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: var(--gray-600);
+        }
+
+        .job-card .job-meta span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .job-card .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .job-card .btn-sm {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .contact-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+
+        .contact-status.has-phone {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .contact-status.has-email {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .contact-status.missing {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-open {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-closed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 900px) {
+            .container {
+                padding: 16px;
+            }
+
+            .search-form {
+                grid-template-columns: 1fr;
+            }
+
+            .jobs-grid,
+            .leads-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .job-card {
+                padding: 16px;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            .job-card .actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+
+        .status-calling {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray-500);
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .saved-jobs-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .saved-jobs-section h2 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            color: var(--gray-900);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Clinic Lead Generation & Sales</h1>
+            <p>Find medical clinics and have our AI agent call them to sell our medical billing software</p>
+            <p style="margin-top:12px;color:var(--gray-600);font-size:15px;">
+                Tip: search for <strong>“medical receptionist”</strong> in <strong>US,NY</strong> to mirror the curated API insight.
+            </p>
+        </div>
+
+        <div class="search-section">
+            <form class="search-form" id="searchForm">
+                <div class="form-group">
+                    <label>Search Query</label>
+                    <input type="text" id="searchQuery" value="medical clinics" placeholder="e.g., medical clinics, healthcare facilities">
+                </div>
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" id="location" value="US,NY" placeholder="US,NY">
+                </div>
+                <div class="form-group">
+                    <label>Days Back</label>
+                    <select id="days">
+                        <option value="1" selected>Today</option>
+                        <option value="3">Last 3 days</option>
+                        <option value="7">Last week</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Search Clinics</button>
+            </form>
+        </div>
+
+        <div id="errorMessage" style="display: none;"></div>
+        <div id="loadingMessage" class="loading" style="display: none;">Searching for clinic leads...</div>
+        <div id="leadsResults"></div>
+
+        <div class="saved-jobs-section">
+            <h2>Saved Clinic Leads</h2>
+            <div id="savedLeads"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.API_BASE_URL || 'http://localhost:4000';
+
+        // Get admin auth token (you'll need to implement proper auth)
+        function getAuthHeaders() {
+            // TODO: Get from localStorage or session
+            return {
+                'Content-Type': 'application/json'
+            };
+        }
+
+        // Search for jobs
+        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = document.getElementById('searchQuery').value;
+            const location = document.getElementById('location').value;
+            const days = document.getElementById('days').value;
+
+            document.getElementById('errorMessage').style.display = 'none';
+            document.getElementById('loadingMessage').style.display = 'block';
+            document.getElementById('jobsResults').innerHTML = '';
+
+            try {
+                const response = await fetch(
+                    `${API_BASE}/api/admin/leads/search?q=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}&days=${days}`,
+                    { headers: getAuthHeaders() }
+                );
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.message || 'Failed to search clinics');
+                }
+
+                displaySearchResults(data.leads || data.jobs || []);
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorMessage').style.display = 'block';
+            } finally {
+                document.getElementById('loadingMessage').style.display = 'none';
+            }
+        });
+
+        // Display search results
+        function displaySearchResults(leads) {
+            const container = document.getElementById('leadsResults');
+            
+            if (!leads || leads.length === 0) {
+                container.innerHTML = '<p class="loading">No clinics found</p>';
+                return;
+            }
+
+            container.innerHTML = '<h2 style="margin-bottom: 16px;">Clinic Leads Found</h2><div class="leads-grid"></div>';
+            const grid = container.querySelector('.leads-grid');
+
+            leads.forEach(lead => {
+                const card = createLeadCard(lead, true);
+                grid.appendChild(card);
+            });
+        }
+
+        // Save lead
+        async function saveLead(externalId, leadData) {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/save`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(leadData)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    let message = 'Lead saved successfully!';
+                    if (data.extracted_contacts) {
+                        const contacts = data.extracted_contacts;
+                        if (contacts.phone || contacts.email) {
+                            message += `\n\nContact info extracted:\n`;
+                            if (contacts.phone) message += `Phone: ${contacts.phone}\n`;
+                            if (contacts.email) message += `Email: ${contacts.email}`;
+                        }
+                    }
+                    alert(message);
+                    loadSavedLeads();
+                } else {
+                    alert('Failed to save lead: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error saving lead: ' + error.message);
+            }
+        }
+
+        // Create clinic lead card
+        function createLeadCard(lead, isSearchResult = false) {
+            const card = document.createElement('div');
+            card.className = 'lead-card';
+            
+            const statusClass = lead.status === 'new' ? 'status-open' : 
+                              lead.status === 'contacted' ? 'status-calling' : 
+                              lead.status === 'closed' ? 'status-closed' : 'status-open';
+            
+            const hasPhone = lead.clinic_phone && lead.clinic_phone !== 'null';
+            const hasEmail = lead.clinic_email && lead.clinic_email !== 'null';
+            const hasSourceUrl = lead.source_url && lead.source_url !== 'null';
+            
+            // Qualification: Must have phone + email + be clinic
+            const isQualified = hasPhone && hasEmail && lead.clinic_name;
+            
+            let contactStatus = '';
+            if (isQualified) {
+                contactStatus = '<div class="contact-status has-phone">✅ QUALIFIED (Phone + Email + Clinic)</div>';
+            } else if (hasPhone && hasEmail) {
+                contactStatus = '<div class="contact-status has-email">⚠️ Missing: Clinic verification</div>';
+            } else if (hasPhone && !hasEmail) {
+                contactStatus = '<div class="contact-status missing">⚠️ Missing: Email</div>';
+            } else if (hasEmail && !hasPhone) {
+                contactStatus = '<div class="contact-status missing">⚠️ Missing: Phone</div>';
+            } else if (hasSourceUrl) {
+                contactStatus = '<div class="contact-status missing">⚠️ No contact info - can extract</div>';
+            } else {
+                contactStatus = '<div class="contact-status missing">❌ Not Qualified (needs phone + email)</div>';
+            }
+            
+            card.innerHTML = `
+                <h3>${lead.clinic_name || lead.title || 'Medical Clinic'}</h3>
+                <div class="clinic-name">${lead.location || 'Location not specified'}</div>
+                <div class="lead-meta">
+                    <span>📍 ${lead.location || 'Location not specified'}</span>
+                    ${hasPhone ? `<span>📞 ${lead.clinic_phone}</span>` : '<span>📞 Phone not available</span>'}
+                    ${hasEmail ? `<span>✉️ ${lead.clinic_email}</span>` : '<span>✉️ Email not available</span>'}
+                    ${lead.posted_at ? `<span>📅 Posted: ${lead.posted_at}</span>` : ''}
+                    ${lead.source_url ? `<span>🔗 <a href="${lead.source_url}" target="_blank">View Source</a></span>` : ''}
+                </div>
+                ${contactStatus}
+                <div class="actions">
+                    ${isSearchResult ? `
+                        <button class="btn btn-success btn-sm" onclick="saveLead('${lead.external_id}', ${JSON.stringify(lead).replace(/'/g, "\\'")})">Save Lead</button>
+                    ` : `
+                        <span class="status-badge ${statusClass}">${lead.status || 'new'}</span>
+                        ${hasSourceUrl && !hasPhone && !hasEmail ? `<button class="btn btn-sm" onclick="extractContact('${lead.id}')">Extract Contact</button>` : ''}
+                        ${isQualified ? `
+                            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px;">
+                                <button class="btn btn-primary btn-sm" onclick="callClinic('${lead.id}', 'instant')" title="Call immediately">📞 Call Now</button>
+                                <button class="btn btn-sm" onclick="scheduleCall('${lead.id}')" title="Schedule call">📅 Schedule</button>
+                            </div>
+                        ` : ''}
+                        ${hasEmail ? `<button class="btn btn-sm" onclick="emailClinic('${lead.id}')">📧 Email Clinic</button>` : ''}
+                        <button class="btn btn-sm" onclick="viewLead('${lead.id}')">View Details</button>
+                    `}
+                </div>
+                ${!isSearchResult ? `<div class="lead-activity-summary" id="activity-${lead.id}" style="margin-top: 12px; font-size: 12px; color: var(--gray-600);">
+                    <span class="loading-activity">Loading activity...</span>
+                </div>` : ''}
+            `;
+            
+            return card;
+        }
+
+
+        // Call clinic (agent sales call) - instant or scheduled
+        async function callClinic(leadId, scheduleType = 'instant') {
+            if (scheduleType === 'instant') {
+            if (!confirm('Have our AI agent call this clinic to sell our medical billing software?')) return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/call`, {
+                    method: 'POST',
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        schedule_type: scheduleType
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (scheduleType === 'instant') {
+                    alert(`✅ Agent call initiated!\n\nCall ID: ${data.call.call_id}\nRemaining calls this month: ${data.call_usage.calls_remaining}`);
+                    } else {
+                        alert(`✅ Call scheduled successfully!\n\nSchedule: ${data.schedule || 'Scheduled'}\nRemaining calls this month: ${data.call_usage.calls_remaining}`);
+                    }
+                    loadSavedLeads();
+                    // Refresh activity for this lead
+                    loadLeadActivity(leadId);
+                } else {
+                    alert('Failed to initiate call: ' + (data.message || data.error));
+                }
+            } catch (error) {
+                alert('Error initiating call: ' + error.message);
+            }
+        }
+
+        // Schedule call with options
+        async function scheduleCall(leadId) {
+            const scheduleType = prompt('Schedule call:\n\nEnter "weekly" for weekly calls\nEnter "monthly" for monthly calls\nOr enter a date (YYYY-MM-DD):');
+            
+            if (!scheduleType) return;
+
+            let schedule = scheduleType.toLowerCase();
+            if (schedule === 'weekly' || schedule === 'monthly') {
+                await callClinic(leadId, schedule);
+            } else {
+                // Validate date format
+                const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+                if (dateRegex.test(schedule)) {
+                    await callClinic(leadId, schedule);
+                } else {
+                    alert('Invalid date format. Please use YYYY-MM-DD (e.g., 2024-12-15)');
+                }
+            }
+        }
+
+        // Load activity summary for a lead
+        async function loadLeadActivity(leadId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/activities`, {
+                    headers: getAuthHeaders()
+                });
+                const data = await response.json();
+                
+                if (data.success && data.activities) {
+                    const container = document.getElementById(`activity-${leadId}`);
+                    if (container) {
+                        const calls = data.activities.filter(a => a.activity_type === 'call').length;
+                        const emails = data.activities.filter(a => a.activity_type === 'email').length;
+                        const sms = data.activities.filter(a => a.activity_type === 'sms').length;
+                        const lastActivity = data.activities.length > 0 ? new Date(data.activities[0].activity_date).toLocaleDateString() : 'Never';
+                        
+                        let activityText = '';
+                        if (calls > 0 || emails > 0 || sms > 0) {
+                            const parts = [];
+                            if (calls > 0) parts.push(`📞 ${calls} call${calls > 1 ? 's' : ''}`);
+                            if (emails > 0) parts.push(`📧 ${emails} email${emails > 1 ? 's' : ''}`);
+                            if (sms > 0) parts.push(`💬 ${sms} SMS${sms > 1 ? 's' : ''}`);
+                            activityText = `${parts.join(' • ')} • Last: ${lastActivity}`;
+                        } else {
+                            activityText = 'No activity yet';
+                        }
+                        
+                        container.innerHTML = activityText;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading activity:', error);
+                const container = document.getElementById(`activity-${leadId}`);
+                if (container) {
+                    container.innerHTML = 'Error loading activity';
+                }
+            }
+        }
+
+        // Extract contact info
+        async function extractContact(leadId) {
+            if (!confirm('Extract phone and email from job posting page?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/extract-contact`, {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.extracted.phone || data.extracted.email) {
+                        alert(`Contact info extracted!\nPhone: ${data.extracted.phone || 'Not found'}\nEmail: ${data.extracted.email || 'Not found'}`);
+                    } else {
+                        alert('No contact info found on the job posting page.');
+                    }
+                    loadSavedLeads();
+                } else {
+                    alert('Failed to extract contact: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error extracting contact: ' + error.message);
+            }
+        }
+
+        // Email clinic
+        async function emailClinic(leadId) {
+            const lead = await getLeadDetails(leadId);
+            if (lead && lead.clinic_email) {
+                const subject = encodeURIComponent(`DocLittle Medical Billing Software - Quick Demo Request`);
+                const body = encodeURIComponent(`Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`);
+                window.location.href = `mailto:${lead.clinic_email}?subject=${subject}&body=${body}`;
+            } else {
+                alert('Email not available for this lead');
+            }
+        }
+
+        // Get lead details
+        async function getLeadDetails(leadId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}`, {
+                    headers: getAuthHeaders()
+                });
+                const data = await response.json();
+                return data.success ? data.lead : null;
+            } catch (error) {
+                return null;
+            }
+        }
+
+        // View lead details in CRM
+        async function viewLead(leadId) {
+            window.location.href = `/admin/crm-lead.html?id=${leadId}`;
+        }
+
+        // Load saved jobs
+        async function loadSavedLeads() {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads`, {
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    const container = document.getElementById('savedLeads');
+                    
+                    if (data.leads.length === 0) {
+                        container.innerHTML = '<p class="loading">No saved clinic leads yet. Search for clinics and save them to start calling!</p>';
+                        return;
+                    }
+
+                    // Show call usage stats
+                    const statsHtml = data.call_usage ? `
+                        <div style="background: #f3f4f6; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                            <strong>Monthly Call Usage:</strong> ${data.call_usage.calls_used} / ${data.call_usage.limit} calls used
+                            (${data.call_usage.calls_remaining} remaining)
+                        </div>
+                    ` : '';
+
+                    container.innerHTML = statsHtml + '<div class="leads-grid"></div>';
+                    const grid = container.querySelector('.leads-grid');
+
+                    data.leads.forEach(lead => {
+                        const card = createLeadCard(lead, false);
+                        grid.appendChild(card);
+                        // Load activity for each lead
+                        loadLeadActivity(lead.id);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading saved leads:', error);
+            }
+        }
+
+        // Load saved leads on page load
+        loadSavedLeads();
+    </script>
+</body>
+</html>
+

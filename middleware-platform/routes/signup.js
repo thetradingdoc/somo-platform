@@ -36,6 +36,10 @@ router.post('/signup', rateLimiter, async (req, res) => {
   try {
     const { name, email, phone_number, company_name, business_size, use_case, api_features, customer_type } = req.body;
 
+    // Log received customer_type for debugging
+    console.log(`📝 Signup request - customer_type from body: ${customer_type || 'undefined'}`);
+    console.log(`📝 Full request body:`, JSON.stringify({ name, email, customer_type, company_name }, null, 2));
+
     // Validation
     if (!name || !email) {
       return res.status(400).json({
@@ -46,7 +50,7 @@ router.post('/signup', rateLimiter, async (req, res) => {
 
     // Validate customer_type
     const validCustomerTypes = ['api', 'saas'];
-    const customerType = customer_type || 'api'; // Default to 'api' for backwards compatibility
+    const customerType = customer_type || 'saas'; // Default to 'saas' (most common use case)
     if (!validCustomerTypes.includes(customerType)) {
       return res.status(400).json({
         success: false,
@@ -90,18 +94,18 @@ router.post('/signup', rateLimiter, async (req, res) => {
         console.log(`⚠️  Test email bypass enabled for: ${email} - using existing customer`);
         // Use existing customer ID instead of creating new one
         const customerId = existingCustomer.id;
-        
+
         // Generate verification code for existing customer
         const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
         db.createEmailVerificationCode(email, verificationCode, customerId);
-        
+
         // Send verification email
         try {
           await EmailService.sendVerificationCode(email, verificationCode, existingCustomer.name);
         } catch (emailError) {
           console.error('❌ Failed to send verification email:', emailError);
         }
-        
+
         return res.json({
           success: true,
           message: 'Verification code sent to your email (test bypass)',
@@ -132,7 +136,7 @@ router.post('/signup', rateLimiter, async (req, res) => {
 
     // Create customer account (pending email verification)
     const customerId = `cust_${uuidv4()}`;
-    db.createCustomer({
+    const customerRecord = {
       id: customerId,
       name,
       email,
@@ -145,7 +149,29 @@ router.post('/signup', rateLimiter, async (req, res) => {
       pricing_tier: 'starter', // Default pricing tier
       status: 'pending',
       email_verified: false
-    });
+    };
+    db.createCustomer(customerRecord);
+
+    // Create/Update lead in pipeline
+    try {
+      db.upsertLeadFromCustomer({
+        id: customerId,
+        name,
+        email,
+        phone_number: phone_number || null,
+        company_name: company_name || null,
+        business_size: business_size || null,
+        use_case: use_case || null
+      }, {
+        source: 'self_signup',
+        pipeline_stage: 'new',
+        status: 'new',
+        activity_subject: 'Signup form submitted',
+        activity_description: `${name} (${email}) submitted the signup form.`
+      });
+    } catch (leadError) {
+      console.warn('⚠️  Failed to create signup lead:', leadError.message);
+    }
 
     // Generate verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
@@ -211,6 +237,16 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
       });
     }
 
+    // Mark lead as qualified
+    try {
+      db.qualifyLeadByEmail(customer.email, {
+        activity_description: 'Email verified via signup flow.',
+        notes: `Signup verified on ${new Date().toISOString()}`
+      });
+    } catch (leadError) {
+      console.warn('⚠️  Failed to qualify lead after verification:', leadError.message);
+    }
+
     // Create session
     const sessionId = db.createCustomerSession(
       customer.id,
@@ -226,6 +262,13 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     });
 
+    // Check if customer_type is already set AND is valid
+    // Always show integration selection if customer_type is not explicitly set or is invalid
+    const hasCustomerType = customer.customer_type && (customer.customer_type === 'api' || customer.customer_type === 'saas');
+
+    // Log for debugging
+    console.log(`✅ Email verified for customer ${customer.id}, customer_type: ${customer.customer_type || 'null'}, hasCustomerType: ${hasCustomerType}`);
+
     res.json({
       success: true,
       message: 'Email verified successfully',
@@ -233,9 +276,12 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
         id: customer.id,
         name: customer.name,
         email: customer.email,
-        email_verified: true
+        email_verified: true,
+        customer_type: customer.customer_type || null // Return actual customer_type from DB
       },
-      next_step: 'accept_terms' // Client should redirect to /terms
+      // Always show integration selection to ensure user confirms their choice
+      // This prevents issues where default 'saas' was set but user wants 'api'
+      next_step: 'select_integration' // Always show integration selection after email verification
     });
   } catch (error) {
     console.error('❌ Email verification error:', error);
@@ -378,8 +424,10 @@ router.post('/signin/verify', rateLimiter, async (req, res) => {
 
     // Check what the next step should be
     const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
-    let nextStep = 'docs';
-    let redirect = '/docs';
+    const customerType = customer.customer_type || 'saas'; // Default to saas
+
+    let nextStep = customerType === 'saas' ? 'dashboard' : 'docs';
+    let redirect = customerType === 'saas' ? '/business/business-dashboard.html' : '/docs';
 
     if (!termsAccepted) {
       nextStep = 'terms';
@@ -528,8 +576,12 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     // Check if already accepted
     const existingAcceptance = db.hasAcceptedTerms(customer.id, '1.0');
     if (existingAcceptance) {
-      // Already accepted - redirect to docs
-      const redirectUrl = req.query.redirect || '/docs';
+      // Already accepted - redirect based on customer type
+      const customerType = customer.customer_type || 'api';
+      const defaultRedirect = customerType === 'saas'
+        ? '/business/business-dashboard.html'
+        : '/docs';
+      const redirectUrl = req.query.redirect || defaultRedirect;
       return res.json({
         success: true,
         message: 'Terms already accepted',
@@ -545,22 +597,41 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       req.get('user-agent')
     );
 
-    // Allocate 100 free minutes when customer accepts terms
+    // Get customer type from query param or customer record (use saved value, default to 'saas')
+    // IMPORTANT: Use the customer_type from the database, not from query param
+    // Query param is only used if customer_type is not set in DB
+    const customerTypeFromQuery = req.query.customer_type;
+    const customerType = customer.customer_type || customerTypeFromQuery || 'saas';
+
+    // Log for debugging
+    console.log(`📝 Accept-terms: customer_type from DB: ${customer.customer_type || 'null'}, from query: ${customerTypeFromQuery || 'null'}, final: ${customerType}`);
+
+    // Update customer type if provided in query
+    if (customerTypeFromQuery && customerTypeFromQuery !== customer.customer_type) {
+      db.updateCustomer(customer.id, { customer_type: customerTypeFromQuery });
+      customer.customer_type = customerTypeFromQuery;
+    }
+
+    // Allocate free credits based on customer type
     try {
-      db.allocateFreeCredits(customer.id, 100);
-      console.log(`✅ Allocated 100 free minutes to customer ${customer.id}`);
+      if (customerType === 'saas') {
+        // SaaS customers get 250 free minutes per month
+        db.allocateFreeCredits(customer.id, 250);
+        console.log(`✅ Allocated 250 free minutes (SaaS) to customer ${customer.id}`);
+      } else {
+        // API customers get 100 free minutes (one-time)
+        db.allocateFreeCredits(customer.id, 100);
+        console.log(`✅ Allocated 100 free minutes (API) to customer ${customer.id}`);
+      }
     } catch (creditsError) {
       console.error('❌ Failed to allocate free credits:', creditsError);
       // Continue - credits can be allocated later
     }
 
-    // Get customer type (default to 'api' for backwards compatibility)
-    const customerType = customer.customer_type || 'api';
-
     // Create Retell agent for customer when they accept terms
     let retellAgentId = null;
     let retellAgentStatus = 'pending';
-    
+
     // Only create agent if customer doesn't already have one
     if (!customer.retell_agent_id) {
       try {
@@ -592,20 +663,39 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     // For SaaS customers: Provision Twilio phone number
     let twilioPhoneNumber = null;
     let twilioPhoneSid = null;
-    
+
     if (customerType === 'saas' && !customer.twilio_phone_number) {
       try {
         const twilioPhoneService = new TwilioPhoneService();
-        
+
         if (twilioPhoneService.isAvailable()) {
           // Build webhook URL with customer_id parameter
-          const apiBaseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 
+          const apiBaseUrl = process.env.API_BASE_URL || process.env.BASE_URL ||
             (process.env.NODE_ENV === 'production' ? 'https://api.doclittle.site' : 'http://localhost:4000');
           const webhookUrl = `${apiBaseUrl}/voice/incoming?customer_id=${customer.id}`;
-          
+
           // Extract area code from customer's phone number if available
-          const areaCode = customer.phone_number ? customer.phone_number.match(/\d{3}/)?.[0] : null;
-          
+          // US phone numbers: +1XXXXXXXXXX or 1XXXXXXXXXX or XXXXXXXXXX
+          // Area code is the first 3 digits after country code (1)
+          let areaCode = null;
+          if (customer.phone_number) {
+            // Remove all non-digit characters
+            const digitsOnly = customer.phone_number.replace(/\D/g, '');
+            // If starts with 1 (US country code), area code is digits 2-4
+            // Otherwise, area code is first 3 digits
+            if (digitsOnly.length >= 10) {
+              if (digitsOnly.startsWith('1') && digitsOnly.length === 11) {
+                areaCode = digitsOnly.substring(1, 4); // Skip country code, get next 3 digits
+              } else if (digitsOnly.length === 10) {
+                areaCode = digitsOnly.substring(0, 3); // First 3 digits
+              }
+            }
+            // Validate area code is 3 digits and doesn't start with 0 or 1
+            if (areaCode && (areaCode.length !== 3 || areaCode.startsWith('0') || areaCode.startsWith('1'))) {
+              areaCode = null; // Invalid area code
+            }
+          }
+
           console.log(`📞 Provisioning Twilio phone number for SaaS customer ${customer.id}...`);
           const provisionedPhone = await twilioPhoneService.provisionPhoneNumberForCustomer({
             customerId: customer.id,
@@ -638,27 +728,32 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
 
     // REQUIRED: Check if payment method is verified (MANDATORY for all accounts)
     const hasPaymentMethod = customer.stripe_payment_method_id && customer.card_verified === 1;
-    
+
     // Determine redirect URL based on customer type
     let redirectUrl;
+    const creditsAllocated = customerType === 'saas' ? 250 : 100;
+
     if (hasPaymentMethod) {
       if (customerType === 'saas') {
         // SaaS customers go to dashboard
-        redirectUrl = '/business-dashboard';
+        redirectUrl = req.query.redirect || '/business/business-dashboard.html';
       } else {
         // API customers go to docs
         redirectUrl = req.query.redirect || '/docs';
       }
     } else {
-      // Payment verification required - redirect to card verification
-      redirectUrl = '/verify-card';
+      // Payment verification required - redirect to card verification with proper redirect
+      const cardVerifyRedirect = customerType === 'saas'
+        ? '/business/business-dashboard.html'
+        : '/docs';
+      redirectUrl = `/verify-card?redirect=${encodeURIComponent(cardVerifyRedirect)}&customer_type=${customerType}`;
     }
-    
+
     res.json({
       success: true,
       message: hasPaymentMethod ? 'Terms accepted successfully' : 'Terms accepted. Payment verification required.',
       redirect: redirectUrl,
-      credits_allocated: 100,
+      credits_allocated: creditsAllocated,
       retell_agent_id: retellAgentId,
       retell_agent_status: retellAgentStatus,
       customer_type: customerType,
@@ -988,31 +1083,31 @@ router.post('/customers/me/feature-requests', rateLimiter, async (req, res) => {
       });
     }
 
-            // Get current customer to check existing features
-            const customer = db.getCustomer(session.customer_id);
-            if (!customer) {
-              return res.status(404).json({
-                success: false,
-                error: 'Customer not found'
-              });
-            }
+    // Get current customer to check existing features
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        error: 'Customer not found'
+      });
+    }
 
-            if (!customer.email_verified) {
-              return res.status(400).json({
-                success: false,
-                error: 'Email not verified'
-              });
-            }
+    if (!customer.email_verified) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email not verified'
+      });
+    }
 
-            // MANDATORY: Check if terms accepted
-            const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
-            if (!termsAccepted) {
-              return res.status(403).json({
-                success: false,
-                error: 'Terms not accepted',
-                message: 'You must accept the terms of service before submitting feature requests. Please visit /terms to accept.'
-              });
-            }
+    // MANDATORY: Check if terms accepted
+    const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+    if (!termsAccepted) {
+      return res.status(403).json({
+        success: false,
+        error: 'Terms not accepted',
+        message: 'You must accept the terms of service before submitting feature requests. Please visit /terms to accept.'
+      });
+    }
 
     // Parse existing features
     let existingFeatures = customer.api_features;
@@ -1088,7 +1183,7 @@ router.get('/signup/stripe-config', rateLimiter, async (req, res) => {
     const stripeConfig = require('../utils/stripe-config');
     const publishableKey = stripeConfig.getStripePublishableKey();
     const mode = stripeConfig.getStripeMode();
-    
+
     res.json({
       success: true,
       publishable_key: publishableKey,
@@ -1145,7 +1240,7 @@ router.get('/customers/me/payment-method', rateLimiter, async (req, res) => {
     }
 
     const paymentMethod = db.getCustomerPaymentMethod(session.customer_id);
-    
+
     res.json({
       success: true,
       payment_method: paymentMethod || null
@@ -1204,15 +1299,15 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
     }
 
     const { payment_method_id, card_details, skip_stripe } = req.body;
-    
+
     // If Stripe is disabled or account is under review, save without payment method ID
     if (skip_stripe || !payment_method_id) {
       console.log('⚠️  Skipping Stripe payment method creation (account under review or disabled)');
-      
+
       // Save placeholder payment method to allow API access
       // We'll update with real details once Stripe account is approved
       const placeholderId = `pm_placeholder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
       db.updateCustomerPaymentMethod(
         customer.id,
         placeholderId,
@@ -1249,7 +1344,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
       // If Stripe account is under review, we might get errors
       // But we can still try to save the payment method ID
       console.warn('⚠️  Stripe error retrieving payment method (account may be under review):', stripeError.message);
-      
+
       // If we can't retrieve the payment method, we can't get card details
       // But we can still save the payment method ID for later use
       if (stripeError.code === 'account_invalid' || stripeError.message?.includes('cannot currently make live charges')) {
@@ -1275,7 +1370,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
           note: 'Card details will be updated once your account is fully activated'
         });
       }
-      
+
       // For other errors, return the error
       throw stripeError;
     }
@@ -1303,7 +1398,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Card verification error:', error);
-    
+
     // Handle Stripe account under review errors gracefully
     if (error.code === 'account_invalid' || error.message?.includes('cannot currently make live charges')) {
       // Still try to save the payment method ID if we have it
@@ -1341,7 +1436,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
         }
       }
     }
-    
+
     res.status(500).json({
       success: false,
       error: 'Failed to save payment method',
@@ -1357,7 +1452,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
 router.post('/customers/signout', rateLimiter, async (req, res) => {
   try {
     const sessionId = req.cookies?.customer_session;
-    
+
     if (sessionId) {
       // Delete session from database
       db.deleteCustomerSession(sessionId);
@@ -1387,6 +1482,69 @@ router.post('/customers/signout', rateLimiter, async (req, res) => {
     res.json({
       success: true,
       message: 'Signed out successfully'
+    });
+  }
+});
+
+/**
+ * POST /api/signup/update-customer-type
+ * Update customer type after integration selection
+ */
+router.post('/signup/update-customer-type', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Session required',
+        message: 'Please complete signup first'
+      });
+    }
+
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session',
+        message: 'Please sign up again'
+      });
+    }
+
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email_verified) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email not verified',
+        message: 'Please verify your email first'
+      });
+    }
+
+    const { customer_type } = req.body;
+    if (!customer_type || !['api', 'saas'].includes(customer_type)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid customer type',
+        message: 'Customer type must be "api" or "saas"'
+      });
+    }
+
+    // Update customer type
+    db.updateCustomer(customer.id, { customer_type });
+
+    res.json({
+      success: true,
+      message: 'Integration type updated',
+      customer: {
+        id: customer.id,
+        customer_type: customer_type
+      }
+    });
+  } catch (error) {
+    console.error('❌ Update customer type error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update customer type',
+      message: error.message
     });
   }
 });

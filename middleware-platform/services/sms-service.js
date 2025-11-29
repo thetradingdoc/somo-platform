@@ -121,6 +121,78 @@ class SMSService {
     }
 
     /**
+     * Send generic SMS message
+     * @param {string} phoneNumber - Recipient phone number
+     * @param {string} message - SMS message content
+     * @returns {Promise<Object>} Result object with success status
+     */
+    static async sendSMS(phoneNumber, message) {
+        try {
+            const client = this.getTwilioClient();
+            const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+            const formattedPhone = this.formatPhoneNumber(phoneNumber);
+
+            if (!this.validatePhoneNumber(formattedPhone)) {
+                throw new Error(`Invalid phone number format: ${phoneNumber}`);
+            }
+
+            if (client && fromNumber) {
+                console.log('\n📱 SENDING SMS VIA TWILIO');
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log(`From: ${fromNumber}`);
+                console.log(`To: ${formattedPhone}`);
+                console.log(`Message: ${message}`);
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+                const result = await client.messages.create({
+                    body: message,
+                    from: fromNumber,
+                    to: formattedPhone
+                });
+
+                console.log(`✅ SMS sent successfully!`);
+                console.log(`   Message SID: ${result.sid}`);
+                console.log(`   Status: ${result.status}\n`);
+
+                return {
+                    success: true,
+                    message_sid: result.sid,
+                    status: result.status,
+                    to: formattedPhone,
+                    provider: 'twilio',
+                    real_sms: true
+                };
+            } else {
+                // Fallback to simulation
+                console.log('\n📱 SMS SIMULATION (Twilio not configured)');
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.log(`To: ${formattedPhone}`);
+                console.log(`Message: ${message}`);
+                console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+                return {
+                    success: true,
+                    simulated: true,
+                    message: 'SMS simulated - Twilio not configured',
+                    phone: formattedPhone,
+                    provider: 'console',
+                    real_sms: false
+                };
+            }
+
+        } catch (error) {
+            console.error('❌ SMS Service Error:', error.message);
+            return {
+                success: false,
+                error: error.message,
+                code: error.code || 'UNKNOWN',
+                phone: phoneNumber,
+                real_sms: false
+            };
+        }
+    }
+
+    /**
      * Send order confirmation SMS
      * Called after payment is completed
      */

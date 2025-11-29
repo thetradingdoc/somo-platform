@@ -49,6 +49,29 @@ class RetellWebSocketHandler {
         ws.on('close', async () => {
             console.log(`📴 Call ended: ${callId}`);
 
+            // Update lead call if this is a sales call
+            try {
+                const leadCall = this.db.db.prepare('SELECT * FROM lead_calls WHERE call_id = ?').get(callId);
+                if (leadCall) {
+                    const callDuration = Date.now() - connection.startTime;
+                    const callDurationSeconds = Math.floor(callDuration / 1000);
+                    const callCost = (callDurationSeconds / 60) * 0.05; // $0.05/min
+
+                    this.db.db.prepare(`
+                        UPDATE lead_calls 
+                        SET call_status = 'completed',
+                            call_duration_seconds = ?,
+                            call_cost = ?,
+                            updated_at = datetime('now')
+                        WHERE call_id = ?
+                    `).run(callDurationSeconds, callCost, callId);
+
+                    console.log(`✅ Updated lead call ${leadCall.id} - Duration: ${Math.round(callDurationSeconds / 60)} min, Cost: $${callCost.toFixed(2)}`);
+                }
+            } catch (error) {
+                console.error('⚠️  Error updating lead call:', error.message);
+            }
+
             // Deduct credits when call ends
             const connection = this.activeConnections.get(callId);
             if (connection && connection.customer_id) {
@@ -114,19 +137,19 @@ class RetellWebSocketHandler {
                     // ========== COST TRACKING ==========
                     // Fetch and store costs from Twilio and Retell APIs
                     try {
-                        const twilioCallSid = connection.twilio_call_sid || 
-                                             connection.callMetadata?.metadata?.twilio_call_sid ||
-                                             null;
-                        
+                        const twilioCallSid = connection.twilio_call_sid ||
+                            connection.callMetadata?.metadata?.twilio_call_sid ||
+                            null;
+
                         console.log(`💰 Fetching costs for call ${callId}...`);
                         console.log(`   Twilio CallSid: ${twilioCallSid || 'not found'}`);
-                        
+
                         // Fetch costs from APIs (with fallback to calculated)
                         const costData = await fetchCallCosts(twilioCallSid, callId, callDurationMinutes);
-                        
+
                         // Update voice_call_log with costs
                         this.db.updateVoiceCallCosts(callId, costData);
-                        
+
                         console.log(`✅ Costs tracked for call ${callId}:`);
                         console.log(`   Twilio: $${costData.twilio_cost_usd?.toFixed(4) || 'N/A'} (${costData.cost_source === 'api' && costData.twilio_cost_usd ? 'API' : 'calculated'})`);
                         console.log(`   Retell: $${costData.retell_cost_usd?.toFixed(4) || 'N/A'} (${costData.cost_source === 'api' && costData.retell_cost_usd ? 'API' : 'calculated'})`);
@@ -173,10 +196,10 @@ class RetellWebSocketHandler {
             connection.callMetadata = message.call;
             connection.customerPhone = message.call.from_number || null;
 
-                // Store Twilio CallSid from metadata if available
-                if (message.call.metadata && message.call.metadata.twilio_call_sid) {
-                    connection.twilio_call_sid = message.call.metadata.twilio_call_sid;
-                }
+            // Store Twilio CallSid from metadata if available
+            if (message.call.metadata && message.call.metadata.twilio_call_sid) {
+                connection.twilio_call_sid = message.call.metadata.twilio_call_sid;
+            }
 
             // Extract customer_id from various sources
             // Priority: dynamic_variables > metadata > agent_id lookup > phone number lookup
@@ -329,8 +352,28 @@ class RetellWebSocketHandler {
                     result = await this.handleVerifyCheckoutCode(callId, functionArgs);
                     break;
 
+                case 'schedule_demo':
+                    result = await this.handleScheduleDemo(callId, functionArgs);
+                    break;
+
+                case 'collect_contact_info':
+                    result = await this.handleCollectContactInfo(callId, functionArgs);
+                    break;
+
+                case 'end_call':
+                    result = await this.handleEndCall(callId, functionArgs);
+                    break;
+
                 case 'get_patient_claims':
                     result = await this.handleGetPatientClaims(callId, functionArgs);
+                    break;
+
+                case 'send_followup_email':
+                    result = await this.handleSendFollowupEmail(callId, functionArgs);
+                    break;
+
+                case 'send_followup_sms':
+                    result = await this.handleSendFollowupSMS(callId, functionArgs);
                     break;
 
                 default:
@@ -988,6 +1031,265 @@ class RetellWebSocketHandler {
 
             return claimsResponse.data;
         } catch (error) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Handle schedule_demo function (for sales agent)
+    async handleScheduleDemo(callId, args) {
+        try {
+            const connection = this.activeConnections.get(callId);
+            const leadId = connection?.callMetadata?.lead_id || args.lead_id;
+
+            console.log(`📅 Scheduling demo for ${args.clinic_name} (${args.contact_email}) on ${args.preferred_date} at ${args.preferred_time}`);
+
+            // Create demo record in database (you may want to create a demos table)
+            // For now, we'll update the lead with demo information
+            if (leadId) {
+                try {
+                    const currentLead = this.db.db.prepare('SELECT notes FROM leads WHERE id = ?').get(leadId);
+                    const newNotes = (currentLead?.notes || '') + '\nDemo scheduled: ' + args.preferred_date + ' at ' + args.preferred_time + ' (' + args.contact_name + ')';
+
+                    this.db.db.prepare(`
+                        UPDATE leads 
+                        SET pipeline_stage = 'demo_scheduled',
+                            status = 'demo_scheduled',
+                            notes = ?,
+                            follow_up_date = ?,
+                            next_action = 'Demo scheduled',
+                            updated_at = datetime('now')
+                        WHERE id = ?
+                    `).run(
+                        newNotes,
+                        args.preferred_date,
+                        leadId
+                    );
+                    console.log(`✅ Updated lead ${leadId} with demo information`);
+                } catch (dbError) {
+                    console.warn('⚠️  Could not update lead:', dbError.message);
+                }
+            }
+
+            // In a real implementation, you might want to:
+            // 1. Send calendar invite via email
+            // 2. Create a calendar event
+            // 3. Send confirmation SMS
+
+            return {
+                success: true,
+                message: `Demo scheduled successfully for ${args.preferred_date} at ${args.preferred_time}`,
+                demo_date: args.preferred_date,
+                demo_time: args.preferred_time,
+                contact_email: args.contact_email,
+                confirmation: `Great! I've scheduled your demo for ${args.preferred_date} at ${args.preferred_time}. You'll receive a confirmation email at ${args.contact_email} shortly. Looking forward to showing you how DocLittle can help ${args.clinic_name}!`
+            };
+        } catch (error) {
+            console.error('❌ Error scheduling demo:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Handle collect_contact_info function (for sales agent)
+    async handleCollectContactInfo(callId, args) {
+        try {
+            const connection = this.activeConnections.get(callId);
+            const leadId = connection?.callMetadata?.lead_id || args.lead_id;
+
+            console.log(`📝 Collecting contact info for ${args.clinic_name}: ${args.contact_name} (${args.contact_email})`);
+
+            // Update lead with contact information
+            if (leadId) {
+                try {
+                    const updates = {};
+                    if (args.contact_email) {
+                        updates.clinic_email = args.contact_email;
+                    }
+                    if (args.contact_phone) {
+                        updates.clinic_phone = args.contact_phone;
+                    }
+                    if (args.interest_level) {
+                        updates.lead_score = args.interest_level === 'high' ? 90 :
+                            args.interest_level === 'medium' ? 60 :
+                                args.interest_level === 'low' ? 30 : 10;
+                        updates.priority = args.interest_level === 'high' ? 1 :
+                            args.interest_level === 'medium' ? 5 : 10;
+                    }
+                    if (Object.keys(updates).length > 0) {
+                        // Get current notes first if we need to append
+                        if (args.notes) {
+                            const currentLead = this.db.db.prepare('SELECT notes FROM leads WHERE id = ?').get(leadId);
+                            updates.notes = (currentLead?.notes || '') + '\n' + args.notes;
+                        }
+                        this.db.updateLead(leadId, updates);
+                        console.log(`✅ Updated lead ${leadId} with contact information`);
+                    }
+                } catch (dbError) {
+                    console.warn('⚠️  Could not update lead:', dbError.message);
+                }
+            }
+
+            return {
+                success: true,
+                message: 'Contact information collected successfully',
+                contact_name: args.contact_name,
+                contact_email: args.contact_email,
+                contact_phone: args.contact_phone,
+                interest_level: args.interest_level
+            };
+        } catch (error) {
+            console.error('❌ Error collecting contact info:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Handle end_call function (for sales agent)
+    async handleEndCall(callId, args) {
+        try {
+            const connection = this.activeConnections.get(callId);
+            const leadId = connection?.callMetadata?.lead_id;
+
+            console.log(`📴 Ending call: ${args.reason || 'completed'}`);
+
+            // Update lead based on call outcome
+            if (leadId) {
+                try {
+                    const updates = {};
+                    if (args.reason === 'demo_scheduled') {
+                        updates.pipeline_stage = 'demo_scheduled';
+                        updates.status = 'demo_scheduled';
+                    } else if (args.reason === 'not_interested') {
+                        updates.pipeline_stage = 'closed_lost';
+                        updates.status = 'not_interested';
+                    } else if (args.reason === 'callback_requested') {
+                        updates.pipeline_stage = 'contacted';
+                        updates.status = 'callback_requested';
+                    }
+
+                    if (args.outcome) {
+                        const currentLead = this.db.db.prepare('SELECT notes FROM leads WHERE id = ?').get(leadId);
+                        updates.notes = (currentLead?.notes || '') + '\nCall outcome: ' + args.outcome;
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        this.db.updateLead(leadId, updates);
+                    }
+                } catch (dbError) {
+                    console.warn('⚠️  Could not update lead:', dbError.message);
+                }
+            }
+
+            // Close the WebSocket connection
+            if (connection && connection.ws) {
+                connection.ws.close();
+            }
+
+            return {
+                success: true,
+                message: 'Call ended successfully',
+                reason: args.reason
+            };
+        } catch (error) {
+            console.error('❌ Error ending call:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Handle send_followup_email function
+    async handleSendFollowupEmail(callId, args) {
+        try {
+            const connection = this.activeConnections.get(callId);
+            const leadId = connection?.callMetadata?.lead_id || args.lead_id;
+
+            const toEmail = args.to_email || args.email;
+            const subject = args.subject || 'Follow-up from DocLittle';
+            const body = args.body || args.message || '';
+
+            if (!toEmail) {
+                return {
+                    success: false,
+                    error: 'Missing required parameter: to_email'
+                };
+            }
+
+            // Call the HTTP endpoint (which handles email sending and logging)
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+            const response = await axios.post(`${apiBaseUrl}/api/retell/send-followup-email`, {
+                call: { call_id: callId },
+                parameters: {
+                    to_email: toEmail,
+                    subject: subject,
+                    body: body,
+                    lead_id: leadId
+                }
+            }, {
+                headers: {
+                    'X-Retell-Secret': process.env.RETELL_WEBHOOK_SECRET || ''
+                }
+            });
+
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error sending follow-up email:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    // Handle send_followup_sms function
+    async handleSendFollowupSMS(callId, args) {
+        try {
+            const connection = this.activeConnections.get(callId);
+            const leadId = connection?.callMetadata?.lead_id || args.lead_id;
+
+            const toPhone = args.to_phone || args.phone;
+            const message = args.message || args.body || '';
+
+            if (!toPhone) {
+                return {
+                    success: false,
+                    error: 'Missing required parameter: to_phone'
+                };
+            }
+
+            if (!message) {
+                return {
+                    success: false,
+                    error: 'Missing required parameter: message'
+                };
+            }
+
+            // Call the HTTP endpoint (which handles SMS sending and logging)
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+            const response = await axios.post(`${apiBaseUrl}/api/retell/send-followup-sms`, {
+                call: { call_id: callId },
+                parameters: {
+                    to_phone: toPhone,
+                    message: message,
+                    lead_id: leadId
+                }
+            }, {
+                headers: {
+                    'X-Retell-Secret': process.env.RETELL_WEBHOOK_SECRET || ''
+                }
+            });
+
+            return response.data;
+        } catch (error) {
+            console.error('❌ Error sending follow-up SMS:', error);
             return {
                 success: false,
                 error: error.message

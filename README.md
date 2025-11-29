@@ -147,6 +147,10 @@ POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
 # Retell AI
 RETELL_API_KEY=your_retell_api_key
 RETELL_AGENT_ID=your_agent_id
+RETELL_SALES_AGENT_ID=your_sales_agent_id  # Optional: Dedicated agent for sales calls (or use RETELL_AGENT_ID)
+
+# Twilio (for outbound calls)
+TWILIO_PHONE_NUMBER=+1234567890  # Your Twilio number in E.164 format (e.g., +15551234567)
 
 # Multi-tenant defaults / database
 POSTGRES_URL=postgresql://user:password@host:5432/middleware?sslmode=require
@@ -219,6 +223,24 @@ CIRCLE_WEBHOOK_SECRET=your_circle_webhook_secret
 # Set to true only when you intentionally need to bypass the default guardrails
 ALLOW_LIVE_KEYS_IN_DEV=false   # Allow live Stripe keys in dev (defaults to blocked)
 ALLOW_TEST_EMAIL_BYPASS=false  # Allow signup bypass for test/integration emails
+
+# Job search provider (optional, for agent clinic outreach)
+# Option 1: JSearch API (RapidAPI) - Recommended for richer job feeds
+JOB_SEARCH_API_URL=https://jsearch.p.rapidapi.com/search
+JOB_SEARCH_API_KEY=your_rapidapi_key  # Your X-RapidAPI-Key from RapidAPI
+JOB_SEARCH_ENGINE=jsearch
+
+# Option 2: SerpAPI Google Jobs endpoint (alternative)
+# JOB_SEARCH_API_URL=https://serpapi.com/search.json
+# JOB_SEARCH_API_KEY=your_serpapi_key
+# JOB_SEARCH_ENGINE=google_jobs
+
+# Medical receptionist automation (daily Azure job)
+ADMIN_PORTAL_BASE_URL=https://doclittle.site       # optional override
+MEDICAL_RECEPTIONIST_LOCATION=US,NY               # defaults to US,NY
+MEDICAL_RECEPTIONIST_DAYS=1                       # defaults to 1 (today)
+MEDICAL_RECEPTIONIST_MAX_LEADS=3                  # how many leads to save per run
+INTERNAL_JOB_TOKEN=super-secure-cron-token        # optional bypass for rate limiter
 ```
 
 ---

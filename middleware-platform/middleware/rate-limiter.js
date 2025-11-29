@@ -5,6 +5,10 @@
 
 const rateLimit = require('express-rate-limit');
 
+const INTERNAL_JOB_TOKEN = process.env.INTERNAL_JOB_TOKEN || null;
+const shouldSkipInternalJob = (req) =>
+  INTERNAL_JOB_TOKEN && req.headers['x-internal-job-token'] === INTERNAL_JOB_TOKEN;
+
 // Custom key generator that handles IP addresses with ports and trust proxy
 const keyGenerator = (req) => {
   // Extract IP from req.ip, removing port if present
@@ -39,7 +43,8 @@ const apiLimiter = rateLimit({
   validate: {
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
-  }
+  },
+  skip: shouldSkipInternalJob
 });
 
 // Strict rate limiter for sensitive endpoints
@@ -56,7 +61,8 @@ const strictLimiter = rateLimit({
   validate: {
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
-  }
+  },
+  skip: shouldSkipInternalJob
 });
 
 // Authentication endpoints (login, signup, verification)
@@ -74,7 +80,26 @@ const authLimiter = rateLimit({
   validate: {
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
-  }
+  },
+  skip: shouldSkipInternalJob
+});
+
+// Internal admin dashboard fetches (allow generous burst, still guard abuse)
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: parseInt(process.env.ADMIN_API_MAX_REQUESTS || '300', 10), // generous default
+  message: {
+    error: 'Admin data refresh limit reached. Please pause for a moment.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: {
+    trustProxy: false,
+    ip: false
+  },
+  skip: shouldSkipInternalJob
 });
 
 // Payment endpoints - very strict
@@ -91,7 +116,8 @@ const paymentLimiter = rateLimit({
   validate: {
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
-  }
+  },
+  skip: shouldSkipInternalJob
 });
 
 // Voice endpoints - moderate
@@ -108,13 +134,15 @@ const voiceLimiter = rateLimit({
   validate: {
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
-  }
+  },
+  skip: shouldSkipInternalJob
 });
 
 module.exports = {
   apiLimiter,
   strictLimiter,
   authLimiter,
+  adminLimiter,
   paymentLimiter,
   voiceLimiter
 };

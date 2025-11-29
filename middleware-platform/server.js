@@ -175,7 +175,7 @@ try {
   asyncHandler = (fn) => fn;
   withTimeout = (fn) => fn;
   withRetry = async (fn) => fn();
-  logErrorHandler = () => {};
+  logErrorHandler = () => { };
 }
 
 try {
@@ -250,7 +250,13 @@ app.get('/docs', (req, res, next) => {
   const hasVerifiedPayment = customer.stripe_payment_method_id && customer.card_verified === 1;
   if (!hasVerifiedPayment) {
     // Payment verification is MANDATORY - redirect to verify-card
-    return res.redirect('/verify-card?redirect=/docs');
+    // Check customer_type to determine proper redirect
+    const customer = db.getCustomer(session.customer_id);
+    const customerType = customer?.customer_type || 'saas';
+    const cardVerifyRedirect = customerType === 'saas'
+      ? '/business/business-dashboard.html'
+      : '/docs';
+    return res.redirect(`/verify-card?redirect=${encodeURIComponent(cardVerifyRedirect)}&customer_type=${customerType}`);
   }
 
   // Customer is authenticated, has accepted terms, and has verified payment method - serve docs
@@ -295,6 +301,16 @@ function getUnifiedDashboardPath(...subPaths) {
 // Root endpoint - route based on domain
 app.get('/', (req, res) => {
   const hostname = getHostname(req);
+
+  // Localhost - serve landing page for development
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    const landingPath = path.join(__dirname, 'public', 'landing.html');
+    if (require('fs').existsSync(landingPath)) {
+      return res.sendFile(landingPath);
+    }
+    // Fallback to admin if landing page doesn't exist
+    return res.redirect('/admin');
+  }
 
   // API subdomain - check if user is already logged in
   if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
@@ -386,8 +402,19 @@ app.get('/landing', (req, res) => {
 
 app.get('/login', (req, res) => {
   const hostname = getHostname(req);
-  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
-    return res.status(404).json({ error: 'Not found on API subdomain' });
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net' || hostname === 'localhost') {
+    // For API subdomain/localhost, serve the API signup page (which has signin functionality)
+    return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
+  }
+  res.sendFile(getUnifiedDashboardPath('login.html'));
+});
+
+// Handle /login.html requests (redirect to /login or serve same file)
+app.get('/login.html', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net' || hostname === 'localhost') {
+    // For API subdomain/localhost, serve the API signup page (which has signin functionality)
+    return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
   res.sendFile(getUnifiedDashboardPath('login.html'));
 });
@@ -407,6 +434,24 @@ app.get('/signup', (req, res) => {
     // API subdomain has its own signup flow
     return res.redirect('/');
   }
+
+  // Check if user is already verified and has session - redirect to appropriate dashboard
+  const sessionId = req.cookies?.customer_session;
+  if (sessionId) {
+    const session = db.getCustomerSession(sessionId);
+    if (session) {
+      const customer = db.getCustomer(session.customer_id);
+      if (customer && customer.email_verified) {
+        // User is verified - redirect based on customer_type
+        const customerType = customer.customer_type || 'saas';
+        const redirectUrl = customerType === 'saas'
+          ? '/business/business-dashboard.html'
+          : '/docs';
+        return res.redirect(redirectUrl);
+      }
+    }
+  }
+
   // Serve use case selection page for root domain
   res.sendFile(getUnifiedDashboardPath('signup.html'));
 });
@@ -502,6 +547,30 @@ app.use('/api/credits', creditsRoutes);
 // ============================================
 const invoiceRoutes = require('./routes/invoices');
 app.use('/api', invoiceRoutes);
+
+// Admin job search (scraped jobs for agent outreach)
+const adminLeadsRoutes = require('./routes/admin-leads');
+app.use('/api/admin/leads', adminLeadsRoutes);
+
+// Retell custom function endpoints
+const retellFunctionsRoutes = require('./routes/retell-functions');
+app.use('/api/retell', retellFunctionsRoutes);
+
+// ============================================
+// Customer Agent Routes (Prompt Management)
+// ============================================
+const customerAgentRoutes = require('./routes/customer-agent');
+app.use('/api/customer/agent', customerAgentRoutes);
+
+// ============================================
+// Customer Billing Routes (Pay-as-you-go)
+// ============================================
+const customerBillingRoutes = require('./routes/customer-billing');
+app.use('/api/customer/billing', customerBillingRoutes);
+
+// Customer Dashboard (Tenant-scoped data)
+const customerDashboardRoutes = require('./routes/customer-dashboard');
+app.use('/api/customer/dashboard', customerDashboardRoutes);
 // Register /terms route (MANDATORY - requires session and email verification)
 app.get('/terms', (req, res) => {
   const sessionId = req.cookies?.customer_session;
@@ -522,9 +591,12 @@ app.get('/terms', (req, res) => {
     return res.redirect('/?redirect=/terms');
   }
 
-  // User is signed up and email verified - show terms page
-  // They must accept terms to proceed (handled in terms.html)
-  res.sendFile(path.join(__dirname, 'public', 'signup', 'terms.html'));
+  // Determine customer type (default to 'api' for backwards compatibility)
+  const customerType = customer.customer_type || 'api';
+
+  // Serve appropriate terms file based on customer type
+  const termsFile = customerType === 'saas' ? 'terms-saas.html' : 'terms-api.html';
+  res.sendFile(path.join(__dirname, 'public', 'signup', termsFile));
 });
 
 // Register /profile route (Customer Profile)
@@ -736,62 +808,89 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
+    // Check if this is an outbound sales call (from query params)
+    const isOutboundSales = req.query.call_type === 'sales_outbound' || req.query.lead_id;
+    const leadId = req.query.lead_id;
+    const clinicName = req.query.clinic_name ? decodeURIComponent(req.query.clinic_name) : null;
+
     // Look up SaaS customer by dedicated Twilio phone number first
     const toNumberRaw = req.body.To;
     const normalizedToNumber = normalizePhoneNumber(toNumberRaw);
     let clinicId = null;
     let customerId = null;
     let matchedCustomer = null;
-    let retellAgentId = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
 
-    const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
-    if (customerByNumber) {
-      matchedCustomer = customerByNumber;
-      customerId = customerByNumber.id;
-      if (customerByNumber.retell_agent_id) {
-        retellAgentId = customerByNumber.retell_agent_id;
-      }
-      console.log(`✅ Matched customer ${customerByNumber.name || customerByNumber.company_name || customerByNumber.id} via Twilio number ${normalizedToNumber}`);
+    // For outbound sales calls, use sales agent; otherwise use default
+    let retellAgentId = isOutboundSales
+      ? (process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a')
+      : (process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a');
 
-      const credits = db.getCustomerCredits(customerId);
-      if (!credits || credits.credits_balance_minutes <= 0) {
-        console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+    if (isOutboundSales) {
+      console.log('📞 OUTBOUND SALES CALL DETECTED');
+      console.log(`   Lead ID: ${leadId}`);
+      console.log(`   Clinic: ${clinicName}`);
+      console.log(`   Using Sales Agent: ${retellAgentId}`);
+
+      // For outbound calls, the "To" number is the target (clinic), not our number
+      // We don't need to look up customer by number - we have lead_id
+      if (leadId) {
+        const lead = db.getLead(leadId);
+        if (lead) {
+          console.log(`✅ Found lead: ${lead.clinic_name}`);
+          // Use lead data for context
+          clinicId = leadId; // Use lead ID as identifier
+        }
       }
     } else {
-      // Look up legacy clinic mapping
-      const clinicPhone = db.getClinicPhoneNumber(normalizedToNumber);
-      if (clinicPhone && clinicPhone.clinic_id) {
-        clinicId = clinicPhone.clinic_id;
-        customerId = clinicId; // Legacy: clinic_id used as customer_id
-        const clinic = await db.getClinicById(clinicId);
-        if (clinic && clinic.retell_agent_id) {
-          retellAgentId = clinic.retell_agent_id;
-          console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
-          console.log(`   Using Retell agent: ${retellAgentId}`);
+      const customerByNumber = db.getCustomerByTwilioNumber(normalizedToNumber);
+      if (customerByNumber) {
+        matchedCustomer = customerByNumber;
+        customerId = customerByNumber.id;
+        if (customerByNumber.retell_agent_id) {
+          retellAgentId = customerByNumber.retell_agent_id;
+        }
+        console.log(`✅ Matched customer ${customerByNumber.name || customerByNumber.company_name || customerByNumber.id} via Twilio number ${normalizedToNumber}`);
+
+        const credits = db.getCustomerCredits(customerId);
+        if (!credits || credits.credits_balance_minutes <= 0) {
+          console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
         }
       } else {
-        // Try to find customer by agent_id if provided in query params or headers
-        const agentIdFromRequest = req.query.agent_id || req.headers['x-retell-agent-id'];
-        if (agentIdFromRequest) {
-          const customer = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(agentIdFromRequest);
-          if (customer) {
-            matchedCustomer = customer;
-            customerId = customer.id;
-            retellAgentId = agentIdFromRequest;
-            console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
+        // Look up legacy clinic mapping
+        const clinicPhone = db.getClinicPhoneNumber(normalizedToNumber);
+        if (clinicPhone && clinicPhone.clinic_id) {
+          clinicId = clinicPhone.clinic_id;
+          customerId = clinicId; // Legacy: clinic_id used as customer_id
+          const clinic = await db.getClinicById(clinicId);
+          if (clinic && clinic.retell_agent_id) {
+            retellAgentId = clinic.retell_agent_id;
+            console.log(`✅ Found clinic: ${clinic.name} (${clinicId})`);
             console.log(`   Using Retell agent: ${retellAgentId}`);
-
-            const credits = db.getCustomerCredits(customerId);
-            if (!credits || credits.credits_balance_minutes <= 0) {
-              console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
-            }
-          } else {
-            console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
-            console.warn(`   Using default Retell agent: ${retellAgentId}`);
           }
         } else {
-          console.warn(`⚠️  No clinic or customer found for phone number: ${normalizedToNumber}`);
-          console.warn(`   Using default Retell agent: ${retellAgentId}`);
+          // Try to find customer by agent_id if provided in query params or headers
+          const agentIdFromRequest = req.query.agent_id || req.headers['x-retell-agent-id'];
+          if (agentIdFromRequest) {
+            const customer = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(agentIdFromRequest);
+            if (customer) {
+              matchedCustomer = customer;
+              customerId = customer.id;
+              retellAgentId = agentIdFromRequest;
+              console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
+              console.log(`   Using Retell agent: ${retellAgentId}`);
+
+              const credits = db.getCustomerCredits(customerId);
+              if (!credits || credits.credits_balance_minutes <= 0) {
+                console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+              }
+            } else {
+              console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
+              console.warn(`   Using default Retell agent: ${retellAgentId}`);
+            }
+          } else {
+            console.warn(`⚠️  No clinic or customer found for phone number: ${normalizedToNumber}`);
+            console.warn(`   Using default Retell agent: ${retellAgentId}`);
+          }
         }
       }
     }
@@ -801,6 +900,12 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     const metadata = {};
     if (req.body.CallSid) {
       metadata.twilio_call_sid = req.body.CallSid;
+    }
+    // Add lead metadata for outbound sales calls
+    if (isOutboundSales && leadId) {
+      metadata.lead_id = leadId;
+      metadata.call_type = 'sales_outbound';
+      metadata.clinic_name = clinicName;
     }
     if (clinicId) {
       metadata.clinic_id = clinicId;
@@ -815,6 +920,20 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     const dynamicVariables = {
       merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
     };
+
+    // For outbound sales calls, add lead-specific variables
+    if (isOutboundSales && leadId) {
+      const lead = db.getLead(leadId);
+      if (lead) {
+        dynamicVariables.clinic_name = lead.clinic_name || clinicName || 'the clinic';
+        dynamicVariables.clinic_location = lead.location || 'Unknown';
+        dynamicVariables.job_title = lead.title || 'Medical Receptionist';
+        dynamicVariables.lead_id = leadId;
+        dynamicVariables.lead_source = lead.source || 'job_search';
+        console.log(`📋 Added lead context to dynamic variables`);
+      }
+    }
+
     if (clinicId) {
       dynamicVariables.clinic_id = String(clinicId);
     }
@@ -860,6 +979,32 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       console.log('✅ Call registered! Call ID:', callId);
 
       // Log call to database (async, don't block response)
+      // For outbound sales calls, also log to lead_calls
+      if (isOutboundSales && leadId) {
+        setImmediate(async () => {
+          try {
+            // Update lead call record with Retell call ID
+            const leadCalls = db.db.prepare('SELECT * FROM lead_calls WHERE call_id = ? OR call_id LIKE ?').all(
+              req.query.call_id || '',
+              `%${req.body.CallSid}%`
+            );
+            if (leadCalls.length > 0) {
+              const leadCall = leadCalls[0];
+              db.db.prepare(`
+                UPDATE lead_calls 
+                SET call_id = ?,
+                    call_status = 'ringing',
+                    updated_at = datetime('now')
+                WHERE id = ?
+              `).run(callId, leadCall.id);
+              console.log(`📝 Updated lead call record with Retell call ID: ${callId}`);
+            }
+          } catch (logError) {
+            console.error('⚠️  Failed to update lead call:', logError.message);
+          }
+        });
+      }
+
       if (customerId || clinicId) {
         setImmediate(async () => {
           try {
@@ -880,9 +1025,16 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
         });
       }
 
-      // Build SIP URI using the call_id (as per Retell docs)
-      sipUri = `sip:${callId}@5t4n6j0wnrl.sip.livekit.cloud`;
+      // Get SIP URI from Retell response if available, otherwise use default format
+      // Retell may return sip_uri, sip_endpoint, or we construct it from call_id
+      sipUri = retellRegisterResp.data.sip_uri ||
+        retellRegisterResp.data.sip_endpoint ||
+        `sip:${callId}@5t4n6j0wnrl.sip.livekit.cloud`;
+
       console.log('📞 Dialing to Retell SIP endpoint:', sipUri);
+      if (isOutboundSales) {
+        console.log('   📋 Outbound sales call - using sales agent prompt');
+      }
     } catch (retellError) {
       console.error('❌ Retell registration failed:', retellError.message);
       if (retellError.response) {
@@ -954,7 +1106,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       });
     }
     // ======================================
-
+    // Main try block ends here - response already sent
   } catch (error) {
     console.error('❌ Error handling incoming call:');
 
@@ -995,6 +1147,79 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
 
     res.type('text/xml');
     res.send(errorTwiml);
+  }
+});
+
+// Twilio Status Callback - receives call status updates
+app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const callSid = req.body.CallSid;
+    const callStatus = req.body.CallStatus;
+    const direction = req.body.Direction;
+    const from = req.body.From;
+    const to = req.body.To;
+    const sequenceNumber = req.body.SequenceNumber || '0';
+
+    console.log(`\n📊 CALL STATUS UPDATE`);
+    console.log(`   Call SID: ${callSid}`);
+    console.log(`   Status: ${callStatus}`);
+    console.log(`   Direction: ${direction}`);
+    console.log(`   From: ${from} → To: ${to}`);
+    console.log(`   Sequence: ${sequenceNumber}`);
+
+    // Log status update to database if we have a matching call record
+    if (callSid) {
+      setImmediate(async () => {
+        try {
+          // Try to find lead call by Twilio Call SID
+          const leadCalls = db.db.prepare(`
+            SELECT * FROM lead_calls 
+            WHERE call_id LIKE ? OR call_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+          `).all(`%${callSid}%`, callSid);
+
+          if (leadCalls.length > 0) {
+            const leadCall = leadCalls[0];
+            db.db.prepare(`
+              UPDATE lead_calls 
+              SET call_status = ?,
+                  updated_at = datetime('now')
+              WHERE id = ?
+            `).run(callStatus, leadCall.id);
+
+            // Create activity if status changed significantly
+            if (callStatus === 'completed' || callStatus === 'failed' || callStatus === 'busy' || callStatus === 'no-answer') {
+              db.createLeadActivity({
+                lead_id: leadCall.lead_id,
+                activity_type: 'call',
+                activity_subject: `Call Status: ${callStatus}`,
+                activity_description: `Twilio call status update: ${callStatus} (Call SID: ${callSid})`,
+                created_by: 'system',
+                metadata: JSON.stringify({
+                  call_sid: callSid,
+                  call_status: callStatus,
+                  direction: direction,
+                  from: from,
+                  to: to
+                })
+              });
+            }
+
+            console.log(`   ✅ Updated lead call record with status: ${callStatus}`);
+          }
+        } catch (logError) {
+          console.error('⚠️  Failed to log status update:', logError.message);
+        }
+      });
+    }
+
+    // Return 200 OK to acknowledge receipt
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('❌ Error in status callback:', error.message);
+    // Still return 200 to prevent Twilio from retrying
+    res.status(200).send('OK');
   }
 });
 
@@ -2939,7 +3164,7 @@ app.get('/api/admin/session', adminSessionStatus);
 app.post('/api/admin/patients/seed-test', async (req, res) => {
   try {
     const { v4: uuidv4 } = require('uuid');
-    
+
     const testPatients = [
       {
         firstName: 'Sarah',
@@ -2982,7 +3207,7 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
       try {
         const fullName = `${patientData.firstName} ${patientData.lastName}`;
         console.log(`\n📝 Processing: ${fullName} (${patientData.phone})`);
-        
+
         // Normalize phone number for search (try both formats)
         const phoneVariants = [
           patientData.phone,
@@ -2991,7 +3216,7 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
           `+1${patientData.phone.replace(/[^\d]/g, '')}`,
           patientData.phone.replace(/[^\d]/g, '')
         ];
-        
+
         // Check if patient already exists (try different phone formats)
         let existingPatient = null;
         for (const phoneVariant of phoneVariants) {
@@ -3001,27 +3226,27 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
             break;
           }
         }
-        
+
         let patientId;
         if (existingPatient) {
           patientId = existingPatient.resource_id;
           console.log(`   ⏭️  Patient exists: ${patientId}, updating name...`);
-          
+
           // Update patient name if needed
           const currentName = existingPatient.name || '';
           if (currentName !== fullName) {
             let resourceData = {};
             try {
               resourceData = JSON.parse(existingPatient.resource_data);
-            } catch (e) {}
-            
+            } catch (e) { }
+
             resourceData.name = [{
               use: 'official',
               family: patientData.lastName,
               given: [patientData.firstName]
             }];
             resourceData.resourceType = 'Patient';
-            
+
             db.db.prepare(`
               UPDATE fhir_patients
               SET name = ?,
@@ -3066,7 +3291,7 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
           // Create eligibility check
           console.log(`   💳 Creating eligibility check...`);
           const eligibilityId = `elig_${uuidv4()}`;
-          
+
           db.db.prepare(`
             INSERT INTO eligibility_checks (
               id, patient_id, member_id, payer_id, service_code, date_of_service,
@@ -3174,17 +3399,17 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
       }
     }
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: `Seeded test patients: ${created} created, ${updated} updated`,
       created,
       updated
     });
   } catch (error) {
     console.error('❌ Error seeding test patients:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -4290,6 +4515,23 @@ app.post('/voice/appointments/schedule', async (req, res) => {
       });
     }
 
+    // Extract customer_id from metadata (set during call registration)
+    let customerId = null;
+    if (args.metadata && args.metadata.customer_id) {
+      customerId = args.metadata.customer_id;
+    } else if (args.customer_id) {
+      customerId = args.customer_id;
+    } else if (req.body.metadata && req.body.metadata.customer_id) {
+      customerId = req.body.metadata.customer_id;
+    } else {
+      // Try to find customer by clinic_id (legacy support)
+      const clinic = await db.getClinicById(clinicId);
+      if (clinic && clinic.merchant_id) {
+        // For legacy clinics, we might not have customer_id
+        console.warn(`⚠️  No customer_id found for clinic ${clinicId}. Appointment will be created without tenant isolation.`);
+      }
+    }
+
     const appointmentData = {
       patient_name: args.patient_name,
       patient_phone: args.patient_phone,
@@ -4301,7 +4543,8 @@ app.post('/voice/appointments/schedule', async (req, res) => {
       provider: args.provider,
       notes: args.notes,
       timezone: args.timezone || 'America/New_York',
-      clinic_id: clinicId
+      clinic_id: clinicId,
+      customer_id: customerId // Add customer_id for tenant isolation
     };
 
     const result = await BookingService.scheduleAppointment(appointmentData);
@@ -6325,7 +6568,7 @@ app.get('/api/patient/wallet/transactions', async (req, res) => {
       // Include ALL statuses so patient can see their bills
       // Show ALL claims so patient can see their bills - including locked/submitted
       const shouldInclude = true;
-      
+
       if (shouldInclude) {
         // Calculate patient responsibility from EOB
         let patientOwe = claim.total_amount;
@@ -6360,11 +6603,11 @@ app.get('/api/patient/wallet/transactions', async (req, res) => {
           const serviceCodes = claim.service_code.split(',').slice(0, 2).join(', ');
           description = `Medical Service (${serviceCodes})`;
         }
-        
+
         // Add status to description
         const statusText = claim.status === 'submitted' ? ' - Submitted' :
-                          claim.status === 'approved' || claim.payment_status === 'paid' ? ' - Approved' :
-                          claim.status === 'paid' ? ' - Paid' : '';
+          claim.status === 'approved' || claim.payment_status === 'paid' ? ' - Approved' :
+            claim.status === 'paid' ? ' - Paid' : '';
         description += statusText;
 
         if (filter === 'all' || filter === 'medical') {
@@ -6876,7 +7119,7 @@ app.get('/api/admin/insurance/claims', async (req, res) => {
     }
 
     let claims = db.getAllClaims(filters);
-    
+
     // Always return ALL claims including approved/paid so insurer can see them again
     // Don't filter out approved claims - user needs to see them
     claims = claims || [];
@@ -7044,17 +7287,17 @@ app.post('/api/admin/patients/restore-stedi', async (req, res) => {
   try {
     // Use the new syncPatientsFromStedi method from FHIRService
     const result = await FHIRService.syncPatientsFromStedi();
-    
-    return res.json({ 
-      success: true, 
+
+    return res.json({
+      success: true,
       message: 'Stedi patient data restoration complete',
-      result 
+      result
     });
   } catch (error) {
     console.error('❌ Error restoring Stedi patients:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -7104,7 +7347,7 @@ app.put('/api/admin/patients/:patientId/name', async (req, res) => {
 
     if (result && result.changes > 0) {
       const newName = `${given.join(' ')} ${family}`.trim();
-      
+
       // Update appointments
       const appointments = db.getAllAppointments({}).filter(a => a.patient_id === patientId);
       appointments.forEach(appt => {
@@ -7138,17 +7381,17 @@ app.put('/api/admin/patients/:patientId/name', async (req, res) => {
 app.post('/api/admin/patients/sync-stedi', async (req, res) => {
   try {
     const result = await FHIRService.syncPatientsFromStedi();
-    
-    return res.json({ 
-      success: true, 
+
+    return res.json({
+      success: true,
       message: `Synced ${result.created} new patients, linked ${result.linked} eligibility checks`,
-      result 
+      result
     });
   } catch (error) {
     console.error('❌ Error syncing patients from Stedi:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    return res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -8645,7 +8888,7 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
           // Get call duration from Retell
           const durationSeconds = body.duration_seconds || body.call?.duration_seconds || null;
 
-          // Update call log in database
+          // Update voice call log (for customer calls)
           const existingCall = db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
           if (existingCall) {
             // Get function call count for this call
@@ -8665,9 +8908,38 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
               callId
             );
 
-            console.log(`✅ Updated call log for ${callId}: ${durationSeconds}s, ${functionCallCount} functions`);
-          } else {
-            console.warn(`⚠️  Call ${callId} not found in database`);
+            console.log(`✅ Updated voice call log for ${callId}: ${durationSeconds}s, ${functionCallCount} functions`);
+          }
+
+          // Update lead call (for sales calls)
+          const leadCall = db.prepare('SELECT * FROM lead_calls WHERE call_id = ?').get(callId);
+          if (leadCall) {
+            const callCost = durationSeconds ? (durationSeconds / 60) * 0.05 : null;
+
+            db.prepare(`
+              UPDATE lead_calls 
+              SET call_status = 'completed',
+                  call_duration_seconds = ?,
+                  call_cost = ?,
+                  updated_at = datetime('now')
+              WHERE call_id = ?
+            `).run(durationSeconds, callCost, callId);
+
+            // Create activity
+            db.createLeadActivity({
+              lead_id: leadCall.lead_id,
+              activity_type: 'call',
+              activity_subject: 'Call Completed',
+              activity_description: `Sales call completed. Duration: ${durationSeconds ? Math.round(durationSeconds / 60) : 'unknown'} minutes. Cost: $${callCost ? callCost.toFixed(2) : 'unknown'}`,
+              created_by: 'system',
+              metadata: JSON.stringify({
+                retell_call_id: callId,
+                duration_seconds: durationSeconds,
+                cost: callCost
+              })
+            });
+
+            console.log(`✅ Updated lead call for ${callId}: ${durationSeconds}s, $${callCost ? callCost.toFixed(2) : 'unknown'}`);
           }
         } catch (updateError) {
           console.error('❌ Failed to update call log:', updateError.message);
@@ -8873,6 +9145,37 @@ app.post('/webhook/stripe', async (req, res) => {
         } else {
           // Regular payment intent - handle as before
           console.log(`📝 Processing regular payment: ${paymentIntent.id}`);
+        }
+        break;
+
+      case 'checkout.session.completed':
+        const checkoutSession = event.data.object;
+        console.log(`✅ Checkout session completed: ${checkoutSession.id}`);
+
+        // Handle payment method setup (for pay-as-you-go billing)
+        if (checkoutSession.mode === 'setup' && checkoutSession.setup_intent) {
+          try {
+            const setupIntent = await stripe.setupIntents.retrieve(checkoutSession.setup_intent);
+            const customerId = checkoutSession.metadata?.customer_id;
+
+            if (customerId && setupIntent.payment_method) {
+              const paymentMethod = await stripe.paymentMethods.retrieve(setupIntent.payment_method);
+
+              // Update customer with payment method
+              db.updateCustomer(customerId, {
+                stripe_customer_id: checkoutSession.customer || null,
+                stripe_payment_method_id: setupIntent.payment_method,
+                card_last4: paymentMethod.card?.last4 || null,
+                card_brand: paymentMethod.card?.brand || null,
+                card_verified: 1,
+                card_verified_at: new Date().toISOString()
+              });
+
+              console.log(`✅ Payment method saved for customer ${customerId}`);
+            }
+          } catch (error) {
+            console.error('❌ Error processing setup intent:', error);
+          }
         }
         break;
 
@@ -10436,13 +10739,13 @@ process.on('SIGTERM', () => {
 process.on('uncaughtException', (error) => {
   console.error('❌ UNCAUGHT EXCEPTION - Critical Error:', error);
   console.error('Stack:', error.stack);
-  
+
   // Log to database
-  logErrorHandler(error, null, { 
+  logErrorHandler(error, null, {
     type: 'uncaughtException',
-    fatal: true 
+    fatal: true
   });
-  
+
   // Give time for error to be logged, then exit
   // In production, Azure will restart the app
   setTimeout(() => {
@@ -10455,17 +10758,17 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ UNHANDLED REJECTION:', reason);
   console.error('Promise:', promise);
-  
+
   // Log to database
   if (reason instanceof Error) {
-    logErrorHandler(reason, null, { 
+    logErrorHandler(reason, null, {
       type: 'unhandledRejection',
-      fatal: false 
+      fatal: false
     });
   } else {
     console.error('Rejection reason (non-Error):', reason);
   }
-  
+
   // Don't exit on unhandled rejection - log and continue
   // This prevents crashes from async operations
 });
@@ -10473,7 +10776,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // Memory monitoring and leak prevention
 if (process.env.NODE_ENV === 'production') {
   const { checkMemoryUsage } = require('./middleware/error-handler');
-  
+
   // Check memory every 5 minutes
   setInterval(() => {
     const mem = checkMemoryUsage();
@@ -10481,7 +10784,7 @@ if (process.env.NODE_ENV === 'production') {
       console.warn('🚨 HIGH MEMORY USAGE - Consider restart:', mem);
     }
   }, 5 * 60 * 1000);
-  
+
   // Force GC if available (run with --expose-gc flag)
   if (global.gc) {
     setInterval(() => {
@@ -10502,14 +10805,14 @@ function gracefulShutdown(signal) {
     console.log('⚠️  Already shutting down, forcing exit...');
     process.exit(1);
   }
-  
+
   isShuttingDown = true;
   console.log(`\n🛑 Received ${signal} - Starting graceful shutdown...`);
-  
+
   // Stop accepting new connections
   server.close(() => {
     console.log('✅ HTTP server closed');
-    
+
     // Close database connections
     try {
       if (db && db.db) {
@@ -10519,7 +10822,7 @@ function gracefulShutdown(signal) {
     } catch (err) {
       console.error('⚠️  Error closing database:', err.message);
     }
-    
+
     // Close WebSocket server
     try {
       if (wss) {
@@ -10529,11 +10832,11 @@ function gracefulShutdown(signal) {
     } catch (err) {
       console.error('⚠️  Error closing WebSocket:', err.message);
     }
-    
+
     console.log('✅ Graceful shutdown complete');
     process.exit(0);
   });
-  
+
   // Force shutdown after 30 seconds
   setTimeout(() => {
     console.error('⚠️  Forcing shutdown after timeout');

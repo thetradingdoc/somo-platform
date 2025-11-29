@@ -1270,6 +1270,16 @@
         if (urlParams.get('redirect')) {
             // User was redirected here from /docs or /terms
         }
+
+        // Check if accessed via /login - show signin tab by default
+        if (window.location.pathname === '/login') {
+            isSigninMode = true;
+            document.getElementById('tab-signin').click();
+        } else if (window.location.pathname === '/signup' || window.location.pathname === '/') {
+            // For /signup or /, default to signup tab
+            isSigninMode = false;
+            document.getElementById('tab-signup').click();
+        }
     </script>
 </body>
 </html>
