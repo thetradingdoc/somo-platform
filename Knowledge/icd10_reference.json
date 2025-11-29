@@ -1,12 +1,1357 @@
 [
-  {"code": "F32.9", "description": "Major depressive disorder, single episode, unspecified", "category": "Mental Health"},
-  {"code": "F41.1", "description": "Generalized anxiety disorder", "category": "Mental Health"},
-  {"code": "F43.10", "description": "Post-traumatic stress disorder, unspecified", "category": "Mental Health"},
-  {"code": "F34.1", "description": "Dysthymic disorder", "category": "Mental Health"},
-  {"code": "F90.0", "description": "Attention-deficit hyperactivity disorder, predominantly inattentive type", "category": "Mental Health"},
-  {"code": "F50.9", "description": "Eating disorder, unspecified", "category": "Mental Health"},
-  {"code": "F33.1", "description": "Major depressive disorder, recurrent, moderate", "category": "Mental Health"},
-  {"code": "F42.9", "description": "Obsessive-compulsive disorder, unspecified", "category": "Mental Health"},
-  {"code": "F51.01", "description": "Primary insomnia", "category": "Sleep Disorders"},
-  {"code": "F63.81", "description": "Intermittent explosive disorder", "category": "Behavioral"}
+  {
+    "code": "Z00.00",
+    "description": "Encounter for general adult medical examination without abnormal findings",
+    "category": "Preventive Care"
+  },
+  {
+    "code": "Z00.01",
+    "description": "Encounter for general adult medical examination with abnormal findings",
+    "category": "Preventive Care"
+  },
+  {
+    "code": "Z00.121",
+    "description": "Encounter for routine child health examination with abnormal findings",
+    "category": "Preventive Care"
+  },
+  {
+    "code": "Z00.129",
+    "description": "Encounter for routine child health examination without abnormal findings",
+    "category": "Preventive Care"
+  },
+  {
+    "code": "Z00.00",
+    "description": "Encounter for general adult medical examination without abnormal findings",
+    "category": "Preventive Care"
+  },
+  {
+    "code": "Z13.9",
+    "description": "Encounter for screening, unspecified",
+    "category": "Preventive Care"
+  },
+  {
+    "code": "Z51.11",
+    "description": "Encounter for antineoplastic chemotherapy",
+    "category": "Oncology"
+  },
+  {
+    "code": "Z87.891",
+    "description": "Personal history of nicotine dependence",
+    "category": "History"
+  },
+  {
+    "code": "Z79.84",
+    "description": "Long term (current) use of insulin",
+    "category": "History"
+  },
+  {
+    "code": "Z79.899",
+    "description": "Other long term (current) drug therapy",
+    "category": "History"
+  },
+  {
+    "code": "E11.9",
+    "description": "Type 2 diabetes mellitus without complications",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E11.65",
+    "description": "Type 2 diabetes mellitus with hyperglycemia",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E11.21",
+    "description": "Type 2 diabetes mellitus with diabetic nephropathy",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E11.40",
+    "description": "Type 2 diabetes mellitus with diabetic neuropathy, unspecified",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E11.621",
+    "description": "Type 2 diabetes mellitus with foot ulcer",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E10.9",
+    "description": "Type 1 diabetes mellitus without complications",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E78.5",
+    "description": "Hyperlipidemia, unspecified",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E78.00",
+    "description": "Pure hypercholesterolemia, unspecified",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E78.2",
+    "description": "Mixed hyperlipidemia",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E03.9",
+    "description": "Hypothyroidism, unspecified",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E05.90",
+    "description": "Thyrotoxicosis, unspecified without thyrotoxic crisis or storm",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E66.9",
+    "description": "Obesity, unspecified",
+    "category": "Endocrine"
+  },
+  {
+    "code": "E66.01",
+    "description": "Morbid (severe) obesity due to excess calories",
+    "category": "Endocrine"
+  },
+  {
+    "code": "I10",
+    "description": "Essential (primary) hypertension",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I11.9",
+    "description": "Hypertensive heart disease without heart failure",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I12.9",
+    "description": "Hypertensive chronic kidney disease with stage 1 through stage 4 chronic kidney disease, or unspecified chronic kidney disease",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I20.9",
+    "description": "Angina pectoris, unspecified",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I21.9",
+    "description": "Acute myocardial infarction, unspecified",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I25.10",
+    "description": "Atherosclerotic heart disease of native coronary artery without angina pectoris",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I50.9",
+    "description": "Heart failure, unspecified",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I50.20",
+    "description": "Unspecified systolic (congestive) heart failure",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I50.30",
+    "description": "Unspecified diastolic (congestive) heart failure",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I50.40",
+    "description": "Unspecified combined systolic (congestive) and diastolic (congestive) heart failure",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I48.91",
+    "description": "Unspecified atrial fibrillation",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I49.9",
+    "description": "Cardiac arrhythmia, unspecified",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I73.9",
+    "description": "Peripheral vascular disease, unspecified",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "I87.2",
+    "description": "Venous insufficiency (chronic) (peripheral)",
+    "category": "Cardiovascular"
+  },
+  {
+    "code": "J44.1",
+    "description": "Chronic obstructive pulmonary disease with (acute) exacerbation",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J44.0",
+    "description": "Chronic obstructive pulmonary disease with acute lower respiratory infection",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J44.9",
+    "description": "Chronic obstructive pulmonary disease, unspecified",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J45.909",
+    "description": "Unspecified asthma, uncomplicated",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J45.901",
+    "description": "Unspecified asthma with (acute) exacerbation",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J18.9",
+    "description": "Pneumonia, unspecified organism",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J06.9",
+    "description": "Acute upper respiratory infection, unspecified",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J00",
+    "description": "Acute nasopharyngitis [common cold]",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J11.1",
+    "description": "Influenza due to unidentified influenza virus with other respiratory manifestations",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J40",
+    "description": "Bronchitis, not specified as acute or chronic",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J41.0",
+    "description": "Simple chronic bronchitis",
+    "category": "Respiratory"
+  },
+  {
+    "code": "J96.00",
+    "description": "Acute respiratory failure, unspecified whether with hypoxia or hypercapnia",
+    "category": "Respiratory"
+  },
+  {
+    "code": "M79.3",
+    "description": "Panniculitis, unspecified",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M54.5",
+    "description": "Low back pain",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M54.9",
+    "description": "Dorsalgia, unspecified",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M25.561",
+    "description": "Pain in right knee",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M25.562",
+    "description": "Pain in left knee",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M79.3",
+    "description": "Panniculitis, unspecified",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M25.511",
+    "description": "Pain in right shoulder",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M25.512",
+    "description": "Pain in left shoulder",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M79.89",
+    "description": "Other specified soft tissue disorders",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M17.11",
+    "description": "Unilateral primary osteoarthritis, right knee",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M17.12",
+    "description": "Unilateral primary osteoarthritis, left knee",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M19.90",
+    "description": "Unspecified osteoarthritis, unspecified site",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M79.3",
+    "description": "Panniculitis, unspecified",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M54.2",
+    "description": "Cervicalgia",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M54.6",
+    "description": "Pain in thoracic spine",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M25.561",
+    "description": "Pain in right knee",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "M79.3",
+    "description": "Panniculitis, unspecified",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "S72.001A",
+    "description": "Unspecified fracture of right femoral neck, initial encounter for closed fracture",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "S72.002A",
+    "description": "Unspecified fracture of left femoral neck, initial encounter for closed fracture",
+    "category": "Musculoskeletal"
+  },
+  {
+    "code": "K21.9",
+    "description": "Gastro-esophageal reflux disease without esophagitis",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K21.00",
+    "description": "Gastro-esophageal reflux disease with esophagitis, without bleeding",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K59.00",
+    "description": "Constipation, unspecified",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K59.09",
+    "description": "Other constipation",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K92.2",
+    "description": "Gastrointestinal hemorrhage, unspecified",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K25.9",
+    "description": "Gastric ulcer, unspecified as acute or chronic, without hemorrhage or perforation",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K29.30",
+    "description": "Chronic gastritis, unspecified, without bleeding",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K29.90",
+    "description": "Gastritis, unspecified, without bleeding",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K57.30",
+    "description": "Diverticulosis of large intestine without perforation or abscess without bleeding",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K57.32",
+    "description": "Diverticulosis of large intestine without perforation or abscess with bleeding",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K80.20",
+    "description": "Calculus of gallbladder without obstruction",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "K83.9",
+    "description": "Disorder of biliary tract, unspecified",
+    "category": "Gastrointestinal"
+  },
+  {
+    "code": "N18.6",
+    "description": "End stage renal disease",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N18.9",
+    "description": "Chronic kidney disease, unspecified",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N18.30",
+    "description": "Chronic kidney disease, stage 3 unspecified",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N18.31",
+    "description": "Chronic kidney disease, stage 3a",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N18.32",
+    "description": "Chronic kidney disease, stage 3b",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N39.0",
+    "description": "Urinary tract infection, site not specified",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N40.1",
+    "description": "Benign prostatic hyperplasia with lower urinary tract symptoms",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N13.9",
+    "description": "Obstructive and reflux uropathy, unspecified",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N20.0",
+    "description": "Calculus of kidney",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N20.1",
+    "description": "Calculus of ureter",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "N25.81",
+    "description": "Nephrogenic diabetes insipidus",
+    "category": "Genitourinary"
+  },
+  {
+    "code": "L70.9",
+    "description": "Acne, unspecified",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L70.0",
+    "description": "Acne vulgaris",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L50.9",
+    "description": "Urticaria, unspecified",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L53.9",
+    "description": "Erythematous condition, unspecified",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L98.9",
+    "description": "Disorder of the skin and subcutaneous tissue, unspecified",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L03.90",
+    "description": "Cellulitis, unspecified",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L03.119",
+    "description": "Cellulitis of unspecified part of limb",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L89.159",
+    "description": "Pressure ulcer of sacral region, stage 4",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L89.309",
+    "description": "Pressure ulcer of unspecified hip, unstageable",
+    "category": "Dermatology"
+  },
+  {
+    "code": "L71.9",
+    "description": "Rosacea, unspecified",
+    "category": "Dermatology"
+  },
+  {
+    "code": "B34.9",
+    "description": "Viral infection, unspecified",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "B97.89",
+    "description": "Other viral agents as the cause of diseases classified elsewhere",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "A49.9",
+    "description": "Bacterial infection, unspecified site",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "B95.9",
+    "description": "Unspecified bacterial agent as the cause of diseases classified elsewhere",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "A41.9",
+    "description": "Sepsis, unspecified organism",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "B35.9",
+    "description": "Dermatophytosis, unspecified",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "B37.9",
+    "description": "Candidiasis, unspecified",
+    "category": "Infectious Disease"
+  },
+  {
+    "code": "F32.9",
+    "description": "Major depressive disorder, single episode, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F32.0",
+    "description": "Major depressive disorder, single episode, mild",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F32.1",
+    "description": "Major depressive disorder, single episode, moderate",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F32.2",
+    "description": "Major depressive disorder, single episode, severe without psychotic features",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F32.3",
+    "description": "Major depressive disorder, single episode, severe with psychotic features",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F33.0",
+    "description": "Major depressive disorder, recurrent, mild",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F33.1",
+    "description": "Major depressive disorder, recurrent, moderate",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F33.2",
+    "description": "Major depressive disorder, recurrent severe without psychotic features",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F33.3",
+    "description": "Major depressive disorder, recurrent, severe with psychotic features",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F33.9",
+    "description": "Major depressive disorder, recurrent, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F41.0",
+    "description": "Panic disorder [episodic paroxysmal anxiety] without agoraphobia",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F41.1",
+    "description": "Generalized anxiety disorder",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F41.9",
+    "description": "Anxiety disorder, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F43.10",
+    "description": "Post-traumatic stress disorder, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F43.11",
+    "description": "Post-traumatic stress disorder, acute",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F43.12",
+    "description": "Post-traumatic stress disorder, chronic",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F34.1",
+    "description": "Persistent depressive disorder (dysthymia)",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F90.0",
+    "description": "Attention-deficit hyperactivity disorder, predominantly inattentive type",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F90.1",
+    "description": "Attention-deficit hyperactivity disorder, predominantly hyperactive type",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F90.2",
+    "description": "Attention-deficit hyperactivity disorder, combined type",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F90.9",
+    "description": "Attention-deficit hyperactivity disorder, unspecified type",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F50.9",
+    "description": "Eating disorder, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F42.9",
+    "description": "Obsessive-compulsive disorder, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F51.01",
+    "description": "Primary insomnia",
+    "category": "Sleep Disorders"
+  },
+  {
+    "code": "F51.09",
+    "description": "Other insomnia not due to a substance or known physiological condition",
+    "category": "Sleep Disorders"
+  },
+  {
+    "code": "F63.81",
+    "description": "Intermittent explosive disorder",
+    "category": "Behavioral"
+  },
+  {
+    "code": "F31.9",
+    "description": "Bipolar disorder, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F31.81",
+    "description": "Bipolar II disorder",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F31.9",
+    "description": "Bipolar disorder, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F20.9",
+    "description": "Schizophrenia, unspecified",
+    "category": "Mental Health"
+  },
+  {
+    "code": "F84.0",
+    "description": "Autism spectrum disorder",
+    "category": "Mental Health"
+  },
+  {
+    "code": "G93.1",
+    "description": "Anoxic brain damage, not elsewhere classified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G93.9",
+    "description": "Disorder of brain, unspecified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G89.29",
+    "description": "Other chronic pain",
+    "category": "Neurological"
+  },
+  {
+    "code": "G89.21",
+    "description": "Chronic pain due to trauma",
+    "category": "Neurological"
+  },
+  {
+    "code": "G89.4",
+    "description": "Chronic pain syndrome",
+    "category": "Neurological"
+  },
+  {
+    "code": "G40.909",
+    "description": "Epilepsy, unspecified, not intractable, without status epilepticus",
+    "category": "Neurological"
+  },
+  {
+    "code": "G40.901",
+    "description": "Epilepsy, unspecified, not intractable, with status epilepticus",
+    "category": "Neurological"
+  },
+  {
+    "code": "G47.00",
+    "description": "Insomnia, unspecified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G47.33",
+    "description": "Obstructive sleep apnea (adult) (pediatric)",
+    "category": "Neurological"
+  },
+  {
+    "code": "G47.30",
+    "description": "Sleep apnea, unspecified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G93.1",
+    "description": "Anoxic brain damage, not elsewhere classified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G91.9",
+    "description": "Hydrocephalus, unspecified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G25.9",
+    "description": "Extrapyramidal and movement disorder, unspecified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G20",
+    "description": "Parkinson's disease",
+    "category": "Neurological"
+  },
+  {
+    "code": "G30.9",
+    "description": "Alzheimer's disease, unspecified",
+    "category": "Neurological"
+  },
+  {
+    "code": "G31.84",
+    "description": "Mild cognitive impairment, so stated",
+    "category": "Neurological"
+  },
+  {
+    "code": "H52.13",
+    "description": "Myopia, bilateral",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H52.10",
+    "description": "Unspecified hypermetropia",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H52.4",
+    "description": "Presbyopia",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H52.223",
+    "description": "Irregular astigmatism, bilateral",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H25.9",
+    "description": "Unspecified age-related cataract",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H40.9",
+    "description": "Unspecified open-angle glaucoma",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H10.9",
+    "description": "Unspecified conjunctivitis",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H53.9",
+    "description": "Unspecified visual disturbance",
+    "category": "Ophthalmology"
+  },
+  {
+    "code": "H90.3",
+    "description": "Sensorineural hearing loss, bilateral",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "H90.5",
+    "description": "Unspecified hearing loss, bilateral",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "H66.90",
+    "description": "Otitis media, unspecified, unspecified ear",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "H66.91",
+    "description": "Otitis media, unspecified, right ear",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "H66.92",
+    "description": "Otitis media, unspecified, left ear",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "H65.199",
+    "description": "Other acute nonsuppurative otitis media, unspecified ear",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "J31.0",
+    "description": "Chronic rhinitis",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "J32.9",
+    "description": "Chronic sinusitis, unspecified",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "J35.01",
+    "description": "Chronic tonsillitis",
+    "category": "Otolaryngology"
+  },
+  {
+    "code": "C50.919",
+    "description": "Malignant neoplasm of unspecified site of unspecified female breast",
+    "category": "Oncology"
+  },
+  {
+    "code": "C78.00",
+    "description": "Secondary malignant neoplasm of unspecified lung",
+    "category": "Oncology"
+  },
+  {
+    "code": "C34.90",
+    "description": "Malignant neoplasm of unspecified part of unspecified bronchus or lung",
+    "category": "Oncology"
+  },
+  {
+    "code": "C61",
+    "description": "Malignant neoplasm of prostate",
+    "category": "Oncology"
+  },
+  {
+    "code": "C18.9",
+    "description": "Malignant neoplasm of colon, unspecified",
+    "category": "Oncology"
+  },
+  {
+    "code": "C25.9",
+    "description": "Malignant neoplasm of pancreas, unspecified",
+    "category": "Oncology"
+  },
+  {
+    "code": "C50.919",
+    "description": "Malignant neoplasm of unspecified site of unspecified female breast",
+    "category": "Oncology"
+  },
+  {
+    "code": "D50.9",
+    "description": "Iron deficiency anemia, unspecified",
+    "category": "Hematology"
+  },
+  {
+    "code": "D64.9",
+    "description": "Anemia, unspecified",
+    "category": "Hematology"
+  },
+  {
+    "code": "R50.9",
+    "description": "Fever, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R51",
+    "description": "Headache",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R06.02",
+    "description": "Shortness of breath",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R06.00",
+    "description": "Dyspnea, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R53.83",
+    "description": "Other fatigue",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R50.9",
+    "description": "Fever, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R06.02",
+    "description": "Shortness of breath",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.9",
+    "description": "Unspecified abdominal pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.10",
+    "description": "Upper abdominal pain, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.11",
+    "description": "Right upper quadrant pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.12",
+    "description": "Left upper quadrant pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.13",
+    "description": "Epigastric pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.30",
+    "description": "Lower abdominal pain, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.31",
+    "description": "Right lower quadrant pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.32",
+    "description": "Left lower quadrant pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R10.33",
+    "description": "Periumbilical pain",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R11.0",
+    "description": "Nausea",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R11.2",
+    "description": "Nausea with vomiting, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R19.7",
+    "description": "Diarrhea, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R05.9",
+    "description": "Cough, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R09.89",
+    "description": "Other specified symptoms and signs involving the circulatory and respiratory systems",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R25.2",
+    "description": "Fasciculation",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R25.9",
+    "description": "Unspecified abnormal involuntary movements",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R42",
+    "description": "Dizziness and giddiness",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R55",
+    "description": "Syncope and collapse",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R73.9",
+    "description": "Hyperglycemia, unspecified",
+    "category": "Symptoms"
+  },
+  {
+    "code": "R94.31",
+    "description": "Abnormal electrocardiogram [ECG] [EKG]",
+    "category": "Symptoms"
+  },
+  {
+    "code": "S72.001A",
+    "description": "Unspecified fracture of right femoral neck, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S72.002A",
+    "description": "Unspecified fracture of left femoral neck, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S72.009A",
+    "description": "Unspecified fracture of unspecified femoral neck, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S72.91XA",
+    "description": "Unspecified fracture of right femur, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S72.92XA",
+    "description": "Unspecified fracture of left femur, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S42.001A",
+    "description": "Unspecified fracture of upper end of right humerus, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S42.002A",
+    "description": "Unspecified fracture of upper end of left humerus, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S52.501A",
+    "description": "Unspecified fracture of the radial styloid process, right arm, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S52.502A",
+    "description": "Unspecified fracture of the radial styloid process, left arm, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S82.001A",
+    "description": "Unspecified fracture of right patella, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S82.002A",
+    "description": "Unspecified fracture of left patella, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S82.91XA",
+    "description": "Unspecified fracture of right lower leg, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S82.92XA",
+    "description": "Unspecified fracture of left lower leg, initial encounter for closed fracture",
+    "category": "Injury"
+  },
+  {
+    "code": "S06.9X0A",
+    "description": "Unspecified intracranial injury without loss of consciousness, initial encounter",
+    "category": "Injury"
+  },
+  {
+    "code": "S06.9X1A",
+    "description": "Unspecified intracranial injury with loss of consciousness of 30 minutes or less, initial encounter",
+    "category": "Injury"
+  },
+  {
+    "code": "Z87.891",
+    "description": "Personal history of nicotine dependence",
+    "category": "History"
+  },
+  {
+    "code": "Z87.19",
+    "description": "Personal history of other diseases of the digestive system",
+    "category": "History"
+  },
+  {
+    "code": "Z87.438",
+    "description": "Personal history of other diseases of urinary system",
+    "category": "History"
+  },
+  {
+    "code": "Z87.41",
+    "description": "Personal history of diseases of kidney and ureters",
+    "category": "History"
+  },
+  {
+    "code": "Z85.3",
+    "description": "Personal history of malignant neoplasm of breast",
+    "category": "History"
+  },
+  {
+    "code": "Z85.46",
+    "description": "Personal history of malignant neoplasm of prostate",
+    "category": "History"
+  },
+  {
+    "code": "Z85.828",
+    "description": "Personal history of malignant neoplasm of other specified sites",
+    "category": "History"
+  },
+  {
+    "code": "Z79.84",
+    "description": "Long term (current) use of insulin",
+    "category": "History"
+  },
+  {
+    "code": "Z79.82",
+    "description": "Long term (current) use of aspirin",
+    "category": "History"
+  },
+  {
+    "code": "Z79.899",
+    "description": "Other long term (current) drug therapy",
+    "category": "History"
+  },
+  {
+    "code": "Z95.1",
+    "description": "Presence of aortocoronary bypass graft",
+    "category": "History"
+  },
+  {
+    "code": "Z95.2",
+    "description": "Presence of prosthetic heart valve",
+    "category": "History"
+  },
+  {
+    "code": "Z98.1",
+    "description": "Arthrodesis status",
+    "category": "History"
+  },
+  {
+    "code": "Z90.89",
+    "description": "Acquired absence of other specified organs",
+    "category": "History"
+  },
+  {
+    "code": "Z51.11",
+    "description": "Encounter for antineoplastic chemotherapy",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z51.12",
+    "description": "Encounter for antineoplastic immunotherapy",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z51.81",
+    "description": "Encounter for therapeutic drug level monitoring",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z48.3",
+    "description": "Aftercare following surgery for injury and trauma",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z47.1",
+    "description": "Aftercare following joint replacement surgery",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z47.89",
+    "description": "Encounter for other orthopedic aftercare",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z46.6",
+    "description": "Encounter for fitting and adjustment of urinary device",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z46.1",
+    "description": "Encounter for fitting and adjustment of spectacles and contact lenses",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z45.09",
+    "description": "Encounter for adjustment and management of other part of cardiac device",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z44.9",
+    "description": "Encounter for fitting and adjustment of unspecified external prosthetic device",
+    "category": "Treatment"
+  },
+  {
+    "code": "Z13.9",
+    "description": "Encounter for screening, unspecified",
+    "category": "Screening"
+  },
+  {
+    "code": "Z13.6",
+    "description": "Encounter for screening for cardiovascular disorders",
+    "category": "Screening"
+  },
+  {
+    "code": "Z13.228",
+    "description": "Encounter for screening for other metabolic disorders",
+    "category": "Screening"
+  },
+  {
+    "code": "Z13.820",
+    "description": "Encounter for screening for osteoporosis",
+    "category": "Screening"
+  },
+  {
+    "code": "Z12.72",
+    "description": "Encounter for screening for malignant neoplasm of prostate",
+    "category": "Screening"
+  },
+  {
+    "code": "Z12.11",
+    "description": "Encounter for screening for malignant neoplasm of colon",
+    "category": "Screening"
+  },
+  {
+    "code": "Z12.72",
+    "description": "Encounter for screening for malignant neoplasm of prostate",
+    "category": "Screening"
+  },
+  {
+    "code": "Z12.31",
+    "description": "Encounter for screening mammogram for malignant neoplasm of breast",
+    "category": "Screening"
+  },
+  {
+    "code": "Z00.00",
+    "description": "Encounter for general adult medical examination without abnormal findings",
+    "category": "Screening"
+  },
+  {
+    "code": "Z00.01",
+    "description": "Encounter for general adult medical examination with abnormal findings",
+    "category": "Screening"
+  },
+  {
+    "code": "Z00.121",
+    "description": "Encounter for routine child health examination with abnormal findings",
+    "category": "Screening"
+  },
+  {
+    "code": "Z00.129",
+    "description": "Encounter for routine child health examination without abnormal findings",
+    "category": "Screening"
+  },
+  {
+    "code": "R69",
+    "description": "Illness, unspecified",
+    "category": "Unspecified"
+  },
+  {
+    "code": "Z99.3",
+    "description": "Dependence on wheelchair",
+    "category": "Status"
+  },
+  {
+    "code": "Z99.2",
+    "description": "Dependence on renal dialysis",
+    "category": "Status"
+  },
+  {
+    "code": "Z99.11",
+    "description": "Dependence on respirator [ventilator] status",
+    "category": "Status"
+  },
+  {
+    "code": "Z99.89",
+    "description": "Dependence on other enabling machines and devices",
+    "category": "Status"
+  },
+  {
+    "code": "Z74.01",
+    "description": "Bed-confined",
+    "category": "Status"
+  },
+  {
+    "code": "Z74.09",
+    "description": "Other reduced mobility",
+    "category": "Status"
+  },
+  {
+    "code": "Z74.3",
+    "description": "Need for continuous supervision",
+    "category": "Status"
+  },
+  {
+    "code": "Z74.09",
+    "description": "Other reduced mobility",
+    "category": "Status"
+  },
+  {
+    "code": "Z91.19",
+    "description": "Patient's noncompliance with other medical treatment and regimen",
+    "category": "Status"
+  },
+  {
+    "code": "Z91.14",
+    "description": "Patient's noncompliance with dietary regimen",
+    "category": "Status"
+  },
+  {
+    "code": "Z91.15",
+    "description": "Patient's noncompliance with renal dialysis",
+    "category": "Status"
+  }
 ]

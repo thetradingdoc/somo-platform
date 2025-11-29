@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Dashboard - DocLittle</title>
+    <link rel="stylesheet" href="../assets/css/global.css">
+    <script src="../assets/js/config.js"></script>
+    <style>
+        :root {
+            --bg: #050608;
+            --panel: #0d1117;
+            --panel-dark: #090c11;
+            --border: #1c2028;
+            --text: #f5f5f5;
+            --muted: #8b949e;
+            --accent: #7c5dfa;
+            --accent-green: #22c55e;
+            --accent-yellow: #fbbf24;
+            --accent-red: #ef4444;
+            --accent-blue: #38bdf8;
+        }
+        :root.light {
+            --bg: #f5f7fb;
+            --panel: #ffffff;
+            --panel-dark: #eef1f8;
+            --border: #e2e8f0;
+            --text: #101528;
+            --muted: #54607a;
+            --accent: #5c43d0;
+            --accent-green: #16a34a;
+            --accent-yellow: #f59e0b;
+            --accent-red: #dc2626;
+            --accent-blue: #2563eb;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .app-container { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 70px;
+            background: var(--panel-dark);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            gap: 20px;
+        }
+        .sidebar-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            transition: 0.2s;
+        }
+        .sidebar-icon:hover, .sidebar-icon.active {
+            background: var(--accent);
+            color: white;
+        }
+        .main-content {
+            flex: 1;
+            padding: 28px 36px;
+            overflow-y: auto;
+        }
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            gap: 16px;
+        }
+        .header-meta {
+            display: flex;
+            flex-direction: column;
+        }
+        .dashboard-header h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 0.5px;
+        }
+        .dashboard-header select {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .theme-toggle {
+            border: 1px solid var(--border);
+            background: var(--panel-dark);
+            color: var(--text);
+            border-radius: 999px;
+            padding: 6px 16px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .metric-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .metric-label {
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+        .metric-value {
+            font-size: 26px;
+            font-weight: 600;
+        }
+        .metric-subtext {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .dashboard-layout {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 18px;
+        }
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+        }
+        .panel h2 {
+            margin: 0 0 16px;
+            font-size: 16px;
+            letter-spacing: 0.3px;
+        }
+        .forecast-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .forecast-table th, .forecast-table td {
+            text-align: left;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .forecast-table th {
+            color: var(--muted);
+            font-weight: 500;
+        }
+        .tag {
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(124,93,250,0.2);
+            color: var(--accent);
+        }
+        .opportunity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .opportunity-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: var(--panel-dark);
+        }
+        .opportunity-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .progress-ring {
+            font-size: 24px;
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+        .opportunity-meta {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+        .highlight-card {
+            background: linear-gradient(135deg, #1b1f2a, #131722);
+            border: 1px solid #2c3140;
+        }
+        .highlight-title {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--muted);
+        }
+        .highlight-job {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 6px 0;
+        }
+        .highlight-meta {
+            font-size: 13px;
+            color: var(--muted);
+            margin: 2px 0;
+        }
+        .highlight-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .button {
+            flex: 1;
+            text-align: center;
+            padding: 10px 0;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .button:hover { opacity: 0.9; }
+        .insights-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .insight-item {
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+        }
+        .insight-item:last-child { border-bottom: none; }
+        .insight-title {
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .insight-value {
+            font-size: 11px;
+            color: var(--muted);
+        }
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 24px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-icon active" title="CRM">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+            </div>
+            <a class="sidebar-icon" href="/admin/leads.html" title="Lead Generator">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2C5.14 2 2 5.14 2 9c0 1.94.78 3.7 2.05 5L2 20l6-2.05c1.3 0 2.5-.38 3.5-1.04-.02-.3-.03-.61-.03-.91 0-4 3.14-7.25 7-7.96C17.14 4.1 13.37 2 9 2zm11 9c-.32 0-.63.02-.94.05.6.92.94 2.01.94 3.19 0 3.31-2.69 6-6 6-.67 0-1.32-.11-1.92-.32C12.62 21.04 14.7 22 17 22l5 2-1.55-5.18C21.71 17.37 22 16.22 22 15c0-2.76-2.24-5-5-5z"/></svg>
+            </a>
+            <a class="sidebar-icon" href="/admin" title="Admin Home">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            </a>
+        </div>
+        <div class="main-content">
+            <div class="dashboard-header">
+                <div class="header-meta">
+                    <span style="font-size:12px;color:var(--muted);">DocLittle • Unified Operations</span>
+                    <h1>Revenue Pipeline</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="theme-toggle" id="themeToggle">Switch Theme</button>
+                    <select id="quarterSelect">
+                        <option>2024 Q1</option>
+                        <option>2023 Q4</option>
+                    </select>
+                </div>
+            </div>
+            <div class="metrics-grid" id="metricsGrid"></div>
+            <div class="dashboard-layout">
+                <div class="main-column">
+                    <section class="panel">
+                        <h2>Pipeline Snapshot</h2>
+                        <table class="forecast-table" id="forecastTable">
+                            <thead>
+                                <tr>
+                                    <th>Clinic</th>
+                                    <th>Stage</th>
+                                    <th>Location</th>
+                                    <th>Score</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="forecastTableBody">
+                                <tr><td colspan="5" class="empty">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+
+                    <section class="panel">
+                        <h2>Opportunities to Escalate</h2>
+                        <div class="opportunity-list" id="opportunitiesList">
+                            <div class="empty">Loading...</div>
+                        </div>
+                    </section>
+                </div>
+                <aside class="side-column">
+                    <section class="panel highlight-card" id="highlightCard">
+                        <div class="highlight-title">Spotlight Lead</div>
+                        <div class="empty">Searching “Medical Receptionist”...</div>
+                    </section>
+                    <section class="panel">
+                        <h2>Pipeline Insights</h2>
+                        <ul class="insights-list" id="insightsList">
+                            <li class="insight-item">
+                                <div class="insight-title">Loading insights…</div>
+                            </li>
+                        </ul>
+                    </section>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.API_BASE_URL || 'http://localhost:4000';
+        let highlightLead = null;
+
+        const root = document.documentElement;
+        const themeToggle = document.getElementById('themeToggle');
+        const savedTheme = localStorage.getItem('dl-theme') || 'light';
+
+        function applyTheme(theme) {
+            if (theme === 'light') {
+                root.classList.add('light');
+                if (themeToggle) themeToggle.textContent = 'Switch to Dark';
+            } else {
+                root.classList.remove('light');
+                if (themeToggle) themeToggle.textContent = 'Switch to Light';
+            }
+        }
+
+        applyTheme(savedTheme);
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const next = root.classList.contains('light') ? 'dark' : 'light';
+                localStorage.setItem('dl-theme', next);
+                applyTheme(next);
+            });
+        }
+
+        function getAuthHeaders() {
+            return { 'Content-Type': 'application/json' };
+        }
+
+        function formatCurrency(value) {
+            if (!value && value !== 0) return '$0';
+            if (value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
+            return `$${value}`;
+        }
+
+        function formatStage(stage) {
+            if (!stage) return 'New';
+            return stage.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function computeMetrics(stats, usage, closedWonCount) {
+            const totalLeads = stats.total || 0;
+            const qualified = stats.qualified || 0;
+            const followUps = stats.stages?.reduce((sum, s) => sum + (s.needs_followup || 0), 0) || 0;
+            const callsUsed = usage.calls_used || 0;
+            const planTarget = 120; // placeholder plan
+            const gapToPlan = Math.max(planTarget - closedWonCount, 0);
+            const commit = Math.round(totalLeads * 0.6);
+            const probable = Math.round(totalLeads * 0.45);
+            const bestCase = Math.round(totalLeads * 0.7);
+
+            return [
+                { label: 'Gap to Plan', value: `${gapToPlan}`, sub: `Plan ${planTarget} • Closed ${closedWonCount}` },
+                { label: 'Qualified Leads', value: qualified, sub: 'Phone + Email + Clinic' },
+                { label: 'Follow-ups Due', value: followUps, sub: 'Needs attention now' },
+                { label: 'Calls Used', value: `${callsUsed}/250`, sub: 'Monthly limit' },
+                { label: 'Commit', value: commit, sub: 'Warm opportunities' },
+                { label: 'Probable', value: probable, sub: 'In motion' },
+                { label: 'Best Case', value: bestCase, sub: 'Stretch target' }
+            ];
+        }
+
+        function renderMetrics(stats, usage, closedWonCount) {
+            const grid = document.getElementById('metricsGrid');
+            const metrics = computeMetrics(stats, usage, closedWonCount);
+            grid.innerHTML = metrics.map(metric => `
+                <div class="metric-card">
+                    <div class="metric-label">${metric.label}</div>
+                    <div class="metric-value">${metric.value}</div>
+                    <div class="metric-subtext">${metric.sub || ''}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderForecastTable(leads = []) {
+            const body = document.getElementById('forecastTableBody');
+            if (!leads.length) {
+                body.innerHTML = `<tr><td colspan="5" class="empty">No qualified leads yet. Search & save clinics to populate this view.</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = leads.slice(0, 8).map(lead => {
+                const score = lead.lead_score || Math.min(90, 60 + (lead.call_count || 0) * 5);
+                const value = lead.estimated_value || (score * 120);
+                return `
+                    <tr>
+                        <td>${lead.clinic_name}</td>
+                        <td><span class="tag">${formatStage(lead.pipeline_stage)}</span></td>
+                        <td>${lead.location || '—'}</td>
+                        <td>${score}%</td>
+                        <td>${formatCurrency(value)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderOpportunities(leads = []) {
+            const container = document.getElementById('opportunitiesList');
+            if (!leads.length) {
+                container.innerHTML = `<div class="empty">No follow-ups due. Great job staying ahead!</div>`;
+                return;
+            }
+
+            container.innerHTML = leads.slice(0, 3).map(lead => {
+                const probability = lead.lead_score || 85;
+                return `
+                    <div class="opportunity-card">
+                        <div class="opportunity-top">
+                            <div>
+                                <div>${lead.clinic_name}</div>
+                                <div class="opportunity-meta">${lead.location || 'Unknown'} • ${formatStage(lead.pipeline_stage)}</div>
+                            </div>
+                            <div class="progress-ring">${probability}%</div>
+                        </div>
+                        <div class="opportunity-meta">Follow-up: ${lead.follow_up_date ? new Date(lead.follow_up_date).toLocaleDateString() : 'Today'}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderHighlight(lead) {
+            const card = document.getElementById('highlightCard');
+            if (!lead) {
+                card.innerHTML = `
+                    <div class="highlight-title">Spotlight Lead</div>
+                    <div class="empty">No Medical Receptionist lead found yet. Run the search to populate this card.</div>
+                `;
+                return;
+            }
+
+            highlightLead = lead;
+            card.innerHTML = `
+                <div class="highlight-title">Spotlight Lead</div>
+                <div class="highlight-job">${lead.title || 'Medical Receptionist'}</div>
+                <div class="highlight-meta">${lead.clinic_name || 'Unknown Clinic'}</div>
+                <div class="highlight-meta">📍 ${lead.location || 'N/A'}</div>
+                <div class="highlight-meta">📞 ${lead.clinic_phone || 'Not available'}</div>
+                <div class="highlight-meta">⌚ ${lead.opening_hours || 'Opening hours unavailable'}</div>
+                <div class="highlight-meta">📅 Posted ${lead.posted_at ? new Date(lead.posted_at).toLocaleDateString() : 'Recently'}</div>
+                <div class="highlight-actions">
+                    <button class="button" onclick="saveHighlightLead()">Add Lead</button>
+                    <a class="button primary" href="${lead.source_url || '#'}" target="_blank" rel="noopener">View Posting</a>
+                </div>
+            `;
+        }
+
+        function renderInsights(stats, usage, followUps) {
+            const list = document.getElementById('insightsList');
+            const openOpportunities = stats.total || 0;
+            const followCount = followUps.length;
+            const onTime = openOpportunities ? Math.round(((openOpportunities - followCount) / openOpportunities) * 100) : 100;
+            const callsUsed = usage.calls_used || 0;
+            const insights = [
+                { title: 'Open qualified opportunities', value: `${stats.qualified || 0}` },
+                { title: 'Follow-ups needing action today', value: `${followCount}` },
+                { title: 'On-time contact rate', value: `${onTime}%` },
+                { title: 'Calls placed this month', value: `${callsUsed}` },
+                { title: 'Average pipeline score', value: `${Math.round((stats.stages || []).reduce((sum, s) => sum + (s.avg_score || 0), 0) / ((stats.stages || []).length || 1)) || 0}%` }
+            ];
+
+            list.innerHTML = insights.map(item => `
+                <li class="insight-item">
+                    <div class="insight-title">${item.title}</div>
+                    <div class="insight-value">${item.value}</div>
+                </li>
+            `).join('');
+        }
+
+        async function saveHighlightLead() {
+            if (!highlightLead) return alert('No highlight lead to save yet.');
+
+            try {
+                const payload = {
+                    external_id: highlightLead.external_id || highlightLead.id,
+                    title: highlightLead.title,
+                    clinic_name: highlightLead.clinic_name,
+                    clinic_phone: highlightLead.clinic_phone,
+                    clinic_email: highlightLead.clinic_email,
+                    opening_hours: highlightLead.opening_hours,
+                    location: highlightLead.location,
+                    source_url: highlightLead.source_url,
+                    posted_at: highlightLead.posted_at,
+                    source: 'medical_receptionist_insight'
+                };
+
+                const response = await fetch(`${API_BASE}/api/admin/leads/save`, {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('Lead saved! You can now call it from the lead generator.');
+                } else {
+                    alert(data.error || data.message || 'Failed to save lead');
+                }
+            } catch (error) {
+                alert('Error saving lead: ' + error.message);
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const [
+                    statsRes,
+                    usageRes,
+                    qualifiedRes,
+                    followUpRes,
+                    insightRes,
+                    closedWonRes
+                ] = await Promise.all([
+                    fetch(`${API_BASE}/api/admin/leads/pipeline/stats`, { headers: getAuthHeaders() }),
+                    fetch(`${API_BASE}/api/admin/leads/stats/usage`, { headers: getAuthHeaders() }),
+                    fetch(`${API_BASE}/api/admin/leads/qualified?limit=10`, { headers: getAuthHeaders() }),
+                    fetch(`${API_BASE}/api/admin/leads/pipeline/follow-up`, { headers: getAuthHeaders() }),
+                    fetch(`${API_BASE}/api/admin/leads/insights/medical-receptionist?location=US,NY`, { headers: getAuthHeaders() }),
+                    fetch(`${API_BASE}/api/admin/leads/pipeline/closed_won`, { headers: getAuthHeaders() })
+                ]);
+
+                const statsData = await statsRes.json();
+                const usageData = await usageRes.json();
+                const qualifiedData = await qualifiedRes.json();
+                const followUpData = await followUpRes.json();
+                const insightData = await insightRes.json();
+                const closedData = await closedWonRes.json();
+
+                if (statsData.success) {
+                    renderMetrics(statsData, usageData.success ? usageData : {}, closedData.success ? closedData.total : 0);
+                }
+
+                renderForecastTable(qualifiedData.success ? qualifiedData.leads : []);
+                renderOpportunities(followUpData.success ? followUpData.leads : []);
+                renderHighlight(insightData.success ? insightData.lead : null);
+                renderInsights(statsData.success ? statsData : {}, usageData.success ? usageData : {}, followUpData.success ? followUpData.leads : []);
+            } catch (error) {
+                console.error('Dashboard load error:', error);
+            }
+        }
+
+        loadDashboard();
+        setInterval(loadDashboard, 60000);
+    </script>
+</body>
+</html>
+

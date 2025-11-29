@@ -312,6 +312,7 @@ class BookingService {
       const appointment = {
         id: appointmentId,
         clinic_id: clinicId,
+        customer_id: appointmentData.customer_id || null, // Include customer_id for tenant isolation
         patient_name: appointmentData.patient_name,
         patient_phone: appointmentData.patient_phone,
         patient_email: appointmentData.patient_email,

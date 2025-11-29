@@ -13,7 +13,8 @@
         "backup:auto": "node scripts/backup-database.js --auto",
         "export:postgres": "node scripts/export-sqlite-to-postgres.js",
         "test:postgres": "node tests/test-postgres-routing.js",
-        "setup:postgres": "./scripts/setup-test-postgres.sh"
+        "setup:postgres": "./scripts/setup-test-postgres.sh",
+        "search:medical": "node scripts/run-medical-receptionist-search.js"
     },
     "keywords": [
         "ai-commerce",

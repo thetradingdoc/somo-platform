@@ -1569,6 +1569,72 @@ db.exec(`
     FOREIGN KEY (customer_id) REFERENCES customers(id)
   );
 
+  CREATE TABLE IF NOT EXISTS leads (
+    id TEXT PRIMARY KEY,
+    external_id TEXT UNIQUE,
+    title TEXT NOT NULL,
+    clinic_name TEXT NOT NULL,
+    clinic_phone TEXT,
+    clinic_email TEXT,
+    opening_hours TEXT,
+    location TEXT,
+    source_url TEXT,
+    status TEXT DEFAULT 'new',
+    pipeline_stage TEXT DEFAULT 'new',
+    is_qualified INTEGER DEFAULT 0,
+    priority INTEGER DEFAULT 5,
+    lead_score INTEGER DEFAULT 0,
+    source TEXT DEFAULT 'google_search',
+    posted_at TEXT,
+    notes TEXT,
+    call_count INTEGER DEFAULT 0,
+    last_called_at DATETIME,
+    follow_up_date DATETIME,
+    next_action TEXT,
+    estimated_value REAL,
+    owner_id TEXT,
+    is_test INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS lead_calls (
+    id TEXT PRIMARY KEY,
+    lead_id TEXT NOT NULL,
+    call_id TEXT,
+    call_status TEXT DEFAULT 'pending',
+    call_duration_seconds INTEGER,
+    call_cost REAL,
+    transcript_url TEXT,
+    notes TEXT,
+    outcome TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lead_id) REFERENCES leads(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS lead_activities (
+    id TEXT PRIMARY KEY,
+    lead_id TEXT NOT NULL,
+    activity_type TEXT NOT NULL,
+    activity_subject TEXT,
+    activity_description TEXT,
+    activity_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (lead_id) REFERENCES leads(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS monthly_call_usage (
+    id TEXT PRIMARY KEY,
+    billing_month TEXT NOT NULL UNIQUE,
+    calls_used INTEGER DEFAULT 0,
+    calls_remaining INTEGER DEFAULT 250,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_customer_credits_customer ON customer_credits(customer_id);
   CREATE INDEX IF NOT EXISTS idx_credit_purchases_customer ON credit_purchases(customer_id);
   CREATE INDEX IF NOT EXISTS idx_credit_purchases_status ON credit_purchases(status);
@@ -1578,6 +1644,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_monthly_invoices_customer ON monthly_invoices(customer_id);
   CREATE INDEX IF NOT EXISTS idx_monthly_invoices_billing_month ON monthly_invoices(billing_month);
   CREATE INDEX IF NOT EXISTS idx_monthly_invoices_status ON monthly_invoices(status);
+  CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
+  CREATE INDEX IF NOT EXISTS idx_leads_pipeline_stage ON leads(pipeline_stage);
+  CREATE INDEX IF NOT EXISTS idx_leads_is_qualified ON leads(is_qualified);
+  CREATE INDEX IF NOT EXISTS idx_leads_clinic_name ON leads(clinic_name);
+  CREATE INDEX IF NOT EXISTS idx_leads_priority ON leads(priority);
+  CREATE INDEX IF NOT EXISTS idx_leads_follow_up_date ON leads(follow_up_date);
+  CREATE INDEX IF NOT EXISTS idx_lead_calls_lead_id ON lead_calls(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_lead_calls_status ON lead_calls(call_status);
+  CREATE INDEX IF NOT EXISTS idx_lead_activities_lead_id ON lead_activities(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_lead_activities_type ON lead_activities(activity_type);
+  CREATE INDEX IF NOT EXISTS idx_lead_activities_date ON lead_activities(activity_date);
+  CREATE INDEX IF NOT EXISTS idx_monthly_call_usage_month ON monthly_call_usage(billing_month);
 `);
 
 // Re-enable foreign keys after table creation
@@ -1652,6 +1730,149 @@ function migratePatientPortalSessionsEmail() {
   }
 }
 
+// Migration: Add job call revenue columns to monthly_invoices table
+function migrateMonthlyInvoicesJobCalls() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(monthly_invoices)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('job_calls_count')) {
+      console.log('🔄 Migrating: Adding job_calls_count column to monthly_invoices table');
+      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN job_calls_count INTEGER DEFAULT 0").run();
+    }
+
+    if (!columnNames.includes('job_calls_revenue')) {
+      console.log('🔄 Migrating: Adding job_calls_revenue column to monthly_invoices table');
+      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN job_calls_revenue REAL DEFAULT 0").run();
+    }
+
+    if (!columnNames.includes('job_calls_cost')) {
+      console.log('🔄 Migrating: Adding job_calls_cost column to monthly_invoices table');
+      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN job_calls_cost REAL DEFAULT 0").run();
+    }
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: job call columns added to monthly_invoices');
+  } catch (error) {
+    console.warn('⚠️  Monthly invoices job calls migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add pipeline fields to leads table
+function migrateLeadsPipeline() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(leads)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('pipeline_stage')) {
+      console.log('🔄 Migrating: Adding pipeline_stage column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN pipeline_stage TEXT DEFAULT 'new'").run();
+    }
+
+    if (!columnNames.includes('is_qualified')) {
+      console.log('🔄 Migrating: Adding is_qualified column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN is_qualified INTEGER DEFAULT 0").run();
+
+      // Auto-qualify existing leads that have phone + email
+      db.prepare(`
+        UPDATE leads 
+        SET is_qualified = 1 
+        WHERE clinic_phone IS NOT NULL 
+          AND clinic_phone != '' 
+          AND clinic_email IS NOT NULL 
+          AND clinic_email != ''
+      `).run();
+    }
+
+    if (!columnNames.includes('lead_score')) {
+      console.log('🔄 Migrating: Adding lead_score column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN lead_score INTEGER DEFAULT 0").run();
+    }
+
+    if (!columnNames.includes('follow_up_date')) {
+      console.log('🔄 Migrating: Adding follow_up_date column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN follow_up_date DATETIME").run();
+    }
+
+    if (!columnNames.includes('next_action')) {
+      console.log('🔄 Migrating: Adding next_action column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN next_action TEXT").run();
+    }
+
+    if (!columnNames.includes('estimated_value')) {
+      console.log('🔄 Migrating: Adding estimated_value column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN estimated_value REAL").run();
+    }
+
+    if (!columnNames.includes('owner_id')) {
+      console.log('🔄 Migrating: Adding owner_id column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN owner_id TEXT").run();
+    }
+
+    if (!columnNames.includes('opening_hours')) {
+      console.log('🔄 Migrating: Adding opening_hours column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN opening_hours TEXT").run();
+    }
+
+    if (!columnNames.includes('is_test')) {
+      console.log('🔄 Migrating: Adding is_test column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN is_test INTEGER DEFAULT 0").run();
+    }
+
+    if (!columnNames.includes('lead_type')) {
+      console.log('🔄 Migrating: Adding lead_type column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN lead_type TEXT DEFAULT 'sales'").run();
+      
+      // Set lead_type based on source field for existing leads
+      // Sales leads: source = 'google_search' or 'job_search'
+      // Customer leads: source = 'self_signup'
+      db.prepare(`
+        UPDATE leads 
+        SET lead_type = CASE 
+          WHEN source = 'self_signup' THEN 'customer'
+          ELSE 'sales'
+        END
+      `).run();
+    }
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: pipeline columns added to leads');
+  } catch (error) {
+    console.warn('⚠️  Leads pipeline migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add customer_id to appointments table for tenant isolation
+function migrateAppointmentsCustomerId() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(appointments)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('customer_id')) {
+      console.log('🔄 Migrating: Adding customer_id column to appointments table');
+      db.prepare("ALTER TABLE appointments ADD COLUMN customer_id TEXT").run();
+
+      // Create index for faster queries
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_appointments_customer_id ON appointments(customer_id)").run();
+
+      console.log('✅ Migration complete: customer_id added to appointments table');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.warn('⚠️  Appointments customer_id migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Migration: Add missing columns to customers table
 function migrateCustomersTable() {
   try {
@@ -1669,15 +1890,18 @@ function migrateCustomersTable() {
       updated_at: 'DATETIME DEFAULT CURRENT_TIMESTAMP',
       retell_agent_id: 'TEXT',
       retell_agent_status: "TEXT DEFAULT 'pending'",
+      stripe_customer_id: 'TEXT',
       stripe_payment_method_id: 'TEXT',
       card_last4: 'TEXT',
       card_brand: 'TEXT',
       card_verified: 'BOOLEAN DEFAULT 0',
       card_verified_at: 'DATETIME',
-      customer_type: "TEXT DEFAULT 'api'",
+      customer_type: "TEXT DEFAULT 'saas'",
       twilio_phone_number: 'TEXT',
       twilio_phone_sid: 'TEXT',
-      pricing_tier: "TEXT DEFAULT 'starter'"
+      pricing_tier: "TEXT DEFAULT 'starter'",
+      custom_prompt: 'TEXT',
+      prompt_updated_at: 'DATETIME'
     };
 
     Object.keys(newColumns).forEach(colName => {
@@ -1735,8 +1959,11 @@ function migrateVoiceCallLogCosts() {
 // Run migrations on startup
 migrateInsuranceClaimsTable();
 migratePatientPortalSessionsEmail();
+migrateMonthlyInvoicesJobCalls();
+migrateLeadsPipeline();
 migrateCustomersTable();
 migrateVoiceCallLogCosts();
+migrateAppointmentsCustomerId();
 
 /**
  * Helper to safely stringify data
@@ -3537,13 +3764,14 @@ module.exports = {
       // Postgres path
       await pgPool`
         INSERT INTO appointments (
-          id, clinic_id, patient_name, patient_phone, patient_email, patient_id,
+          id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
           appointment_type, date, time, start_time, end_time,
           duration_minutes, provider, status, notes,
           calendar_event_id, calendar_link, created_at
         ) VALUES (
           ${appointment.id},
           ${appointment.clinic_id || null},
+          ${appointment.customer_id || null},
           ${appointment.patient_name},
           ${appointment.patient_phone},
           ${appointment.patient_email},
@@ -3567,15 +3795,16 @@ module.exports = {
       // SQLite path
       const stmt = db.prepare(`
         INSERT INTO appointments (
-          id, clinic_id, patient_name, patient_phone, patient_email, patient_id,
+          id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
           appointment_type, date, time, start_time, end_time,
           duration_minutes, provider, status, notes,
           calendar_event_id, calendar_link, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       return stmt.run(
         appointment.id,
         appointment.clinic_id || null,
+        appointment.customer_id || null,
         appointment.patient_name,
         appointment.patient_phone,
         appointment.patient_email,
@@ -3597,12 +3826,17 @@ module.exports = {
   },
 
   // Get appointment by ID
-  async getAppointment(id, clinicId = null) {
+  // Get appointment by ID (supports both clinicId and customerId for tenant isolation)
+  async getAppointment(id, clinicId = null, customerId = null) {
     if (usePostgres && pgPool) {
       // Postgres path
-      let query = pgPool`SELECT * FROM appointments WHERE id = ${id}`;
-      if (clinicId) {
+      let query;
+      if (customerId) {
+        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND customer_id = ${customerId}`;
+      } else if (clinicId) {
         query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND clinic_id = ${clinicId}`;
+      } else {
+        query = pgPool`SELECT * FROM appointments WHERE id = ${id}`;
       }
       const results = await query;
       return results[0] || null;
@@ -3611,7 +3845,10 @@ module.exports = {
       let query = 'SELECT * FROM appointments WHERE (id = ? OR id LIKE ?)';
       const params = [id, `%${id}%`];
 
-      if (clinicId) {
+      if (customerId) {
+        query += ' AND customer_id = ?';
+        params.push(customerId);
+      } else if (clinicId) {
         query += ' AND clinic_id = ?';
         params.push(clinicId);
       }
@@ -3649,13 +3886,20 @@ module.exports = {
     }
   },
 
-  // Search appointments by phone or email
-  async searchAppointments(searchTerm, clinicId = null) {
+  // Search appointments by phone or email (supports both clinicId and customerId for tenant isolation)
+  async searchAppointments(searchTerm, clinicId = null, customerId = null) {
     if (usePostgres && pgPool) {
       // Postgres path
       const searchPattern = `%${searchTerm}%`;
       let query;
-      if (clinicId) {
+      if (customerId) {
+        query = pgPool`
+          SELECT * FROM appointments
+          WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
+            AND customer_id = ${customerId}
+          ORDER BY date DESC, time DESC
+        `;
+      } else if (clinicId) {
         query = pgPool`
           SELECT * FROM appointments
           WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
@@ -3678,7 +3922,10 @@ module.exports = {
       `;
       const params = [`%${searchTerm}%`, `%${searchTerm}%`];
 
-      if (clinicId) {
+      if (customerId) {
+        query += ' AND customer_id = ?';
+        params.push(customerId);
+      } else if (clinicId) {
         query += ' AND clinic_id = ?';
         params.push(clinicId);
       }
@@ -3694,6 +3941,12 @@ module.exports = {
   getAllAppointments(filters = {}) {
     let query = 'SELECT * FROM appointments WHERE 1=1';
     const params = [];
+
+    // Tenant isolation: Filter by customer_id if provided
+    if (filters.customer_id) {
+      query += ' AND customer_id = ?';
+      params.push(filters.customer_id);
+    }
 
     if (filters.status) {
       query += ' AND status = ?';
@@ -3721,8 +3974,8 @@ module.exports = {
     return stmt.all(...params);
   },
 
-  // Update appointment status
-  updateAppointmentStatus(id, status, reason = null, clinicId = null) {
+  // Update appointment status (supports both clinicId and customerId for tenant isolation)
+  updateAppointmentStatus(id, status, reason = null, clinicId = null, customerId = null) {
     let query = `
       UPDATE appointments
       SET status = ?,
@@ -3732,7 +3985,10 @@ module.exports = {
     `;
     const params = [status, reason, id, `%${id}%`];
 
-    if (clinicId) {
+    if (customerId) {
+      query += ' AND customer_id = ?';
+      params.push(customerId);
+    } else if (clinicId) {
       query += ' AND clinic_id = ?';
       params.push(clinicId);
     }
@@ -3746,8 +4002,8 @@ module.exports = {
     return result;
   },
 
-  // Update appointment details (for rescheduling)
-  updateAppointment(id, updates, clinicId = null) {
+  // Update appointment details (for rescheduling) - supports both clinicId and customerId for tenant isolation
+  updateAppointment(id, updates, clinicId = null, customerId = null) {
     const fields = [];
     const values = [];
 
@@ -3795,7 +4051,10 @@ module.exports = {
 
     const params = [...values, id, `%${id}%`];
 
-    if (clinicId) {
+    if (customerId) {
+      query += ' AND customer_id = ?';
+      params.push(customerId);
+    } else if (clinicId) {
       query += ' AND clinic_id = ?';
       params.push(clinicId);
     }
@@ -5317,6 +5576,29 @@ module.exports = {
     `).all(customerId);
   },
 
+  // Calculate lead call costs for a billing month
+  getLeadCallCostsForMonth(billingMonth) {
+    // Get all completed lead calls in the billing month
+    const [year, month] = billingMonth.split('-');
+    const startDate = `${billingMonth}-01`;
+    const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
+
+    const calls = db.prepare(`
+      SELECT 
+        COUNT(*) as call_count,
+        COALESCE(SUM(call_cost), 0) as total_cost
+      FROM lead_calls
+      WHERE call_status = 'completed'
+        AND DATE(created_at) >= ?
+        AND DATE(created_at) <= ?
+    `).get(startDate, endDate);
+
+    return {
+      lead_calls_count: calls.call_count || 0,
+      lead_calls_cost: calls.total_cost || 0
+    };
+  },
+
   // Monthly Invoices
   createMonthlyInvoice(customerId, billingMonth, usage, options = {}) {
     const { v4: uuidv4 } = require('uuid');
@@ -5336,6 +5618,11 @@ module.exports = {
     const apiRequestsBaseCost = (usage.overage_api_requests || 0) / 1000 * apiBaseCostPer1k;
     const baseCosts = voiceMinutesBaseCost + apiRequestsBaseCost;
 
+    // Get lead call costs for this billing month (these are costs, not revenue)
+    const leadCalls = this.getLeadCallCostsForMonth(billingMonth);
+    const leadCallsCost = leadCalls.lead_calls_cost || 0;
+    const leadCallsCount = leadCalls.lead_calls_count || 0;
+
     // Integration costs (optional, per customer or flat fee)
     const integrationCosts = options.integrationCosts || 0;
 
@@ -5343,9 +5630,11 @@ module.exports = {
     const markupPercentage = options.markupPercentage || 50;
     const markupMultiplier = 1 + (markupPercentage / 100);
 
-    // Calculate final prices (base costs + integration + markup)
-    const subtotal = (baseCosts + integrationCosts) * markupMultiplier;
-    const markupAmount = subtotal - (baseCosts + integrationCosts);
+    // Calculate final prices (base costs + lead call costs + integration + markup)
+    // Lead call costs are added to base costs (they're expenses, not revenue)
+    const totalBaseCosts = baseCosts + leadCallsCost;
+    const subtotal = (totalBaseCosts + integrationCosts) * markupMultiplier;
+    const markupAmount = subtotal - (totalBaseCosts + integrationCosts);
     const total = subtotal;
 
     // Customer-facing prices (what we bill them)
@@ -5366,13 +5655,15 @@ module.exports = {
         id, customer_id, billing_month, invoice_number,
         voice_minutes, api_requests,
         voice_minutes_cost, api_requests_cost,
+        job_calls_count, job_calls_cost,
         base_costs, integration_costs, markup_percentage, markup_amount,
         subtotal, total, due_date, status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
     `).run(
       uuidv4(), customerId, billingMonth, invoiceNumber,
       usage.voice_minutes_used || 0, usage.api_requests_used || 0,
       voiceMinutesCost, apiRequestsCost,
+      leadCallsCount, leadCallsCost,
       baseCosts, integrationCosts, markupPercentage, markupAmount,
       subtotal, total, dueDate.toISOString(), options.notes || null
     );
@@ -5433,6 +5724,18 @@ module.exports = {
   },
 
   getCustomerInvoices(customerId) {
+    return db.prepare(`
+      SELECT * FROM monthly_invoices 
+      WHERE customer_id = ? 
+      ORDER BY billing_month DESC, created_at DESC
+    `).all(customerId);
+  },
+
+  getMonthlyInvoiceByCustomerAndMonth(customerId, billingMonth) {
+    return db.prepare('SELECT * FROM monthly_invoices WHERE customer_id = ? AND billing_month = ?').get(customerId, billingMonth);
+  },
+
+  getMonthlyInvoicesByCustomer(customerId) {
     return db.prepare(`
       SELECT * FROM monthly_invoices 
       WHERE customer_id = ? 
@@ -5511,6 +5814,757 @@ module.exports = {
       SET last_used_at = CURRENT_TIMESTAMP 
       WHERE id = ?
     `).run(keyId);
+  },
+
+  // Leads Management (for agent calling)
+  createLead(leadData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = leadData.id || uuidv4();
+
+    // Keywords that indicate a clinic needs our AI billing/insurance product
+    const PRODUCT_KEYWORDS = [
+      'billing', 'insurance', 'medical billing', 'insurance verification', 'claims',
+      'emr', 'ehr', 'electronic medical records', 'electronic health records',
+      'medical records', 'patient records', 'cpt codes', 'icd codes', 'coding',
+      'prior authorization', 'pre-authorization', 'eligibility', 'benefits verification',
+      'claim submission', 'claim processing', 'denials', 'appeals', 'revenue cycle',
+      'ar', 'accounts receivable', 'collections', 'payment posting', 'charge capture'
+    ];
+
+    // Check if job description qualifies them for our AI product
+    const qualifiesFromDesc = leadData.description && PRODUCT_KEYWORDS.some(keyword =>
+      leadData.description.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    // Auto-qualify: Must have (phone OR email) AND (be a clinic OR qualifies from description)
+    const hasPhone = leadData.clinic_phone && leadData.clinic_phone.trim() !== '';
+    const hasEmail = leadData.clinic_email && leadData.clinic_email.trim() !== '';
+    const hasContact = hasPhone || hasEmail;
+
+    const isClinic = leadData.clinic_name && (
+      leadData.clinic_name.toLowerCase().includes('clinic') ||
+      leadData.clinic_name.toLowerCase().includes('medical') ||
+      leadData.clinic_name.toLowerCase().includes('health') ||
+      leadData.clinic_name.toLowerCase().includes('dental') ||
+      leadData.clinic_name.toLowerCase().includes('care')
+    ) || leadData.source === 'google_search'; // Assume clinics from our search
+
+    // Qualify if: has contact AND (is clinic OR description matches our product)
+    const isQualified = hasContact && (isClinic || qualifiesFromDesc) ? 1 : 0;
+
+    // Check if description column exists, add if not
+    const tableInfo = db.prepare("PRAGMA table_info(leads)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('description')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN description TEXT').run();
+        console.log('✅ Added description column to leads table');
+      } catch (err) {
+        // Column might already exist, ignore
+      }
+    }
+
+    // Check if salary column exists, add if not
+    if (!columnNames.includes('salary')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN salary TEXT').run();
+        console.log('✅ Added salary column to leads table');
+      } catch (err) {
+        // Column might already exist, ignore
+      }
+    }
+
+    // Check if specialty column exists, add if not
+    if (!columnNames.includes('specialty')) {
+      try {
+        db.prepare('ALTER TABLE leads ADD COLUMN specialty TEXT').run();
+        console.log('✅ Added specialty column to leads table');
+      } catch (err) {
+        // Column might already exist, ignore
+      }
+    }
+
+    // Detect specialty from job description (prioritize description)
+    function detectSpecialtyFromDescription(desc) {
+      if (!desc || desc.trim().length < 10) return null;
+
+      const descLower = desc.toLowerCase();
+
+      // Dental
+      if (descLower.match(/\b(dental|dentist|orthodont|oral surgery|periodont|endodont|prosthodont)\b/)) {
+        return 'Dental';
+      }
+
+      // Therapy/Mental Health
+      if (descLower.match(/\b(therapist|therapy|mental health|counseling|counselor|psychotherapy|psychologist|psychiatric|behavioral health|substance abuse|addiction treatment)\b/)) {
+        return 'Therapy';
+      }
+
+      // Physical Therapy
+      if (descLower.match(/\b(physical therapy|physiotherapy|pt|physical therapist|rehabilitation|rehab)\b/)) {
+        return 'Physical Therapy';
+      }
+
+      // Occupational Therapy
+      if (descLower.match(/\b(occupational therapy|ot|occupational therapist)\b/)) {
+        return 'Occupational Therapy';
+      }
+
+      // Speech Therapy
+      if (descLower.match(/\b(speech therapy|speech therapist|slp|speech language)\b/)) {
+        return 'Speech Therapy';
+      }
+
+      // Cardiology
+      if (descLower.match(/\b(cardiology|cardiac|cardiologist|heart)\b/)) {
+        return 'Cardiology';
+      }
+
+      // Dermatology
+      if (descLower.match(/\b(dermatology|dermatologist|skin)\b/)) {
+        return 'Dermatology';
+      }
+
+      // Pediatrics
+      if (descLower.match(/\b(pediatric|pediatrics|pediatrician|children|kids)\b/)) {
+        return 'Pediatrics';
+      }
+
+      // Orthopedics
+      if (descLower.match(/\b(orthopedic|orthopedics|orthopedic surgeon|bone|joint)\b/)) {
+        return 'Orthopedics';
+      }
+
+      // Urgent Care
+      if (descLower.match(/\b(urgent care|urgentcare|walk-in)\b/)) {
+        return 'Urgent Care';
+      }
+
+      // Primary Care
+      if (descLower.match(/\b(primary care|family practice|family medicine|general practice)\b/)) {
+        return 'Primary Care';
+      }
+
+      // OB/GYN
+      if (descLower.match(/\b(obgyn|ob\/gyn|obstetric|gynecology|women's health)\b/)) {
+        return 'OB/GYN';
+      }
+
+      // Eye Care
+      if (descLower.match(/\b(ophthalmology|ophthalmologist|eye care|optometry|vision)\b/)) {
+        return 'Eye Care';
+      }
+
+      // Chiropractic
+      if (descLower.match(/\b(chiropractic|chiropractor|spinal)\b/)) {
+        return 'Chiropractic';
+      }
+
+      // Medical (generic fallback)
+      if (descLower.match(/\b(medical|clinic|healthcare|health care)\b/)) {
+        return 'Medical';
+      }
+
+      return null;
+    }
+
+    // Detect specialty from company name first (most reliable)
+    function detectSpecialtyFromName(clinicName) {
+      if (!clinicName) return null;
+      const nameLower = clinicName.toLowerCase();
+
+      // Wellness centers (check first - specific)
+      if (nameLower.includes('wellness') || nameLower.includes('wellbeing')) {
+        return 'Wellness';
+      }
+
+      // Dental (check for dental, dentist, dentistry, DMD, DDS)
+      if (nameLower.includes('dental') || nameLower.includes('dentist') || nameLower.includes('dentistry') ||
+        nameLower.includes(' dmd') || nameLower.includes(' dds') || nameLower.match(/\bdmd\b/) || nameLower.match(/\bdds\b/)) {
+        return 'Dental';
+      }
+
+      // Physical Therapy (check before general therapy)
+      if (nameLower.includes('physical therapy') || nameLower.includes('physiotherapy') || nameLower.includes('sportscare')) {
+        return 'Physical Therapy';
+      }
+
+      // Occupational Therapy
+      if (nameLower.includes('occupational therapy')) {
+        return 'Occupational Therapy';
+      }
+
+      // Speech Therapy
+      if (nameLower.includes('speech therapy') || nameLower.includes('speech language')) {
+        return 'Speech Therapy';
+      }
+
+      // Urgent Care
+      if (nameLower.includes('urgent care') || nameLower.includes('urgentcare') || nameLower.includes('wellnow')) {
+        return 'Urgent Care';
+      }
+
+      // Therapy/Mental Health (general - check after specific therapies)
+      if (nameLower.includes('therapy') || nameLower.includes('therapist') || nameLower.includes('counseling')) {
+        return 'Therapy';
+      }
+
+      // Other specialties from name
+      if (nameLower.includes('cardiology') || nameLower.includes('cardiac')) {
+        return 'Cardiology';
+      }
+      if (nameLower.includes('dermatology') || nameLower.includes('dermatologist')) {
+        return 'Dermatology';
+      }
+      if (nameLower.includes('pediatric') || nameLower.includes('pediatrics')) {
+        return 'Pediatrics';
+      }
+      if (nameLower.includes('orthopedic') || nameLower.includes('orthopedics')) {
+        return 'Orthopedics';
+      }
+      if (nameLower.includes('primary care') || nameLower.includes('family practice')) {
+        return 'Primary Care';
+      }
+      if (nameLower.includes('allergy') || nameLower.includes('asthma') || nameLower.includes('sinus')) {
+        return 'Allergy & Immunology';
+      }
+      if (nameLower.includes('healogics') || nameLower.includes('wound care')) {
+        return 'Wound Care';
+      }
+
+      return null;
+    }
+
+    // Try company name first, then description
+    let specialty = detectSpecialtyFromName(leadData.clinic_name);
+
+    if (!specialty) {
+      specialty = detectSpecialtyFromDescription(leadData.description);
+    }
+
+    // Determine lead_type: 'sales' for job search leads, 'customer' for signups
+    const leadType = leadData.lead_type || (leadData.source === 'self_signup' ? 'customer' : 'sales');
+
+    const result = db.prepare(`
+      INSERT INTO leads (
+        id, external_id, title, clinic_name, clinic_phone, clinic_email, opening_hours,
+        location, source_url, status, pipeline_stage, is_qualified, priority, lead_score, source, posted_at, notes, description, salary, specialty, follow_up_date, next_action, estimated_value, owner_id, is_test, lead_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      leadData.external_id || null,
+      leadData.title || leadData.clinic_name || 'Medical Clinic',
+      leadData.clinic_name || 'Unknown Clinic',
+      leadData.clinic_phone || null,
+      leadData.clinic_email || null,
+      leadData.opening_hours || null,
+      leadData.location || null,
+      leadData.source_url || null,
+      leadData.status || 'new',
+      leadData.pipeline_stage || 'new',
+      isQualified,
+      leadData.priority || 5,
+      leadData.lead_score || 0,
+      leadData.source || 'google_search',
+      leadData.posted_at || null,
+      leadData.notes || null,
+      leadData.description || null,
+      leadData.salary || null,
+      specialty,
+      leadData.follow_up_date || null,
+      leadData.next_action || null,
+      leadData.estimated_value || null,
+      leadData.owner_id || null,
+      leadData.is_test || 0,
+      leadType
+    );
+
+    // Return result with id for consistency (SQLite returns lastInsertRowid, but we use explicit id)
+    return { ...result, id: id };
+  },
+
+  getLead(id) {
+    return db.prepare('SELECT * FROM leads WHERE id = ?').get(id);
+  },
+
+  getLeadByExternalId(externalId) {
+    return db.prepare('SELECT * FROM leads WHERE external_id = ?').get(externalId);
+  },
+
+  getAllLeads(filters = {}) {
+    let query = 'SELECT * FROM leads WHERE 1=1';
+    const params = [];
+
+    // Filter out test leads by default (unless explicitly requested)
+    // In production, always exclude test leads
+    // In development, exclude test leads unless show_test=true
+    const env = process.env.NODE_ENV || 'development';
+    const isProduction = env === 'production' || env === 'prod';
+
+    if (filters.show_test === true) {
+      // Explicitly show test leads only
+      query += ' AND is_test = 1';
+    } else if (filters.include_test === true) {
+      // Include both test and non-test (no filter)
+      // No filter needed
+    } else {
+      // Default: exclude test leads
+      query += ' AND (is_test IS NULL OR is_test = 0)';
+    }
+
+    if (filters.status) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
+
+    if (filters.pipeline_stage) {
+      query += ' AND pipeline_stage = ?';
+      params.push(filters.pipeline_stage);
+    }
+
+    if (filters.clinic_name) {
+      query += ' AND clinic_name LIKE ?';
+      params.push(`%${filters.clinic_name}%`);
+    }
+
+    // Filter by lead_type: 'sales' or 'customer'
+    if (filters.lead_type) {
+      query += ' AND lead_type = ?';
+      params.push(filters.lead_type);
+    }
+
+    // Filter: must have at least phone OR email (contactable)
+    if (filters.has_contact === true) {
+      query += ' AND ((clinic_phone IS NOT NULL AND LENGTH(clinic_phone) > 0) OR (clinic_email IS NOT NULL AND LENGTH(clinic_email) > 0))';
+    }
+
+    if (filters.has_phone === true) {
+      query += ' AND clinic_phone IS NOT NULL AND LENGTH(clinic_phone) > 0';
+    }
+
+    if (filters.needs_followup === true) {
+      query += ' AND follow_up_date IS NOT NULL AND follow_up_date <= datetime("now")';
+    }
+
+    query += ' ORDER BY priority DESC, lead_score DESC, created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return db.prepare(query).all(...params);
+  },
+
+  getLeadsByPipelineStage(stage) {
+    return db.prepare(`
+      SELECT 
+        l.*,
+        COALESCE(SUM(lc.call_cost), 0) as total_call_cost,
+        COUNT(lc.id) as call_count
+      FROM leads l
+      LEFT JOIN lead_calls lc ON l.id = lc.lead_id
+      WHERE l.pipeline_stage = ? 
+      GROUP BY l.id
+      ORDER BY l.lead_score DESC, l.priority DESC, l.created_at DESC
+    `).all(stage);
+  },
+
+  getLeadByEmail(email) {
+    if (!email) return null;
+    return db.prepare('SELECT * FROM leads WHERE clinic_email = ?').get(email.toLowerCase());
+  },
+
+  upsertLeadFromCustomer(customer, options = {}) {
+    if (!customer?.email) return null;
+    const normalizedEmail = customer.email.toLowerCase();
+    const existingLead = this.getLeadByEmail(normalizedEmail);
+
+    // Mark as test lead if in development/local environment
+    const env = process.env.NODE_ENV || 'development';
+    const isProduction = env === 'production' || env === 'prod';
+    const isTestLead = !isProduction || options.is_test === true;
+
+    const leadPayload = {
+      title: options.title || `Inbound - ${customer.use_case || 'API Signup'}`,
+      clinic_name: customer.company_name || customer.name || 'DocLittle Prospect',
+      clinic_phone: customer.phone_number || null,
+      clinic_email: normalizedEmail,
+      location: customer.business_size || customer.use_case || null,
+      status: options.status || 'new',
+      pipeline_stage: options.pipeline_stage || 'new',
+      priority: options.priority || 5,
+      lead_score: options.lead_score || 15,
+      source: options.source || 'self_signup',
+      notes: options.notes || null,
+      follow_up_date: options.follow_up_date || null,
+      next_action: options.next_action || 'Qualify inbound signup',
+      estimated_value: options.estimated_value || null,
+      is_test: isTestLead ? 1 : 0,
+      lead_type: 'customer' // Customer signup leads are always 'customer' type
+    };
+
+    if (existingLead) {
+      this.updateLead(existingLead.id, leadPayload);
+      if (options.activity_description) {
+        this.createLeadActivity({
+          lead_id: existingLead.id,
+          activity_type: options.activity_type || 'update',
+          activity_subject: options.activity_subject || 'Lead updated',
+          activity_description: options.activity_description
+        });
+      }
+      return existingLead.id;
+    }
+
+    const created = this.createLead(leadPayload);
+    const leadId = created.id || created.lastInsertRowid;
+
+    // Verify lead exists in database before creating activity
+    if (leadId) {
+      try {
+        // Verify the lead actually exists in the database
+        const verifyLead = this.getLead(leadId);
+        if (!verifyLead) {
+          console.warn(`⚠️  Lead ${leadId} not found in database after creation. Skipping activity creation.`);
+          return leadId;
+        }
+
+        // Now create activity with verified lead ID
+        this.createLeadActivity({
+          lead_id: leadId,
+          activity_type: 'created',
+          activity_subject: 'Inbound signup',
+          activity_description: `${customer.name || customer.company_name || normalizedEmail} submitted the signup form.`
+        });
+      } catch (activityError) {
+        // Log but don't fail - activity creation is non-critical
+        console.warn('⚠️  Failed to create lead activity:', activityError.message);
+        if (activityError.message.includes('FOREIGN KEY')) {
+          console.warn(`   Lead ID: ${leadId}`);
+          console.warn(`   Lead exists: ${!!this.getLead(leadId)}`);
+        }
+      }
+    }
+    return leadId;
+  },
+
+  qualifyLeadByEmail(email, options = {}) {
+    if (!email) return null;
+    const lead = this.getLeadByEmail(email.toLowerCase());
+    if (!lead) return null;
+
+    this.updateLead(lead.id, Object.assign({
+      pipeline_stage: options.pipeline_stage || 'qualified',
+      status: options.status || 'qualified',
+      is_qualified: 1,
+      lead_score: Math.max(lead.lead_score || 0, options.lead_score || 60),
+      notes: options.notes || lead.notes
+    }, options.updates || {}));
+
+    this.createLeadActivity({
+      lead_id: lead.id,
+      activity_type: options.activity_type || 'qualification',
+      activity_subject: options.activity_subject || 'Signup verified',
+      activity_description: options.activity_description || 'Lead verified email and completed onboarding.'
+    });
+
+    return lead.id;
+  },
+
+  getLeadsNeedingFollowUp() {
+    return db.prepare(`
+      SELECT * FROM leads 
+      WHERE follow_up_date IS NOT NULL 
+        AND follow_up_date <= datetime('now')
+        AND pipeline_stage NOT IN ('closed_won', 'closed_lost')
+      ORDER BY follow_up_date ASC, priority DESC
+    `).all();
+  },
+
+  getPipelineStats() {
+    const stats = db.prepare(`
+      SELECT 
+        pipeline_stage,
+        COUNT(*) as count,
+        SUM(CASE WHEN is_qualified = 1 THEN 1 ELSE 0 END) as qualified_count,
+        SUM(CASE WHEN clinic_phone IS NOT NULL AND clinic_phone != '' THEN 1 ELSE 0 END) as has_phone,
+        SUM(CASE WHEN follow_up_date IS NOT NULL AND follow_up_date <= datetime('now') THEN 1 ELSE 0 END) as needs_followup,
+        AVG(lead_score) as avg_score,
+        SUM(estimated_value) as total_value
+      FROM leads
+      WHERE pipeline_stage NOT IN ('closed_won', 'closed_lost')
+      GROUP BY pipeline_stage
+    `).all();
+
+    const total = db.prepare("SELECT COUNT(*) as count FROM leads WHERE pipeline_stage NOT IN ('closed_won', 'closed_lost')").get();
+    const qualified = db.prepare("SELECT COUNT(*) as count FROM leads WHERE is_qualified = 1 AND pipeline_stage NOT IN ('closed_won', 'closed_lost')").get();
+
+    return {
+      stages: stats,
+      total: total?.count || 0,
+      qualified: qualified?.count || 0
+    };
+  },
+
+  updateLead(id, updates) {
+    const fields = [];
+    const values = [];
+
+    Object.keys(updates).forEach(key => {
+      if (key !== 'id' && key !== 'is_qualified') {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    });
+
+    // Re-check qualification if phone or email changed
+    if (updates.clinic_phone !== undefined || updates.clinic_email !== undefined) {
+      const lead = this.getLead(id);
+      if (lead) {
+        const hasPhone = (updates.clinic_phone || lead.clinic_phone) && (updates.clinic_phone || lead.clinic_phone).trim() !== '';
+        const hasEmail = (updates.clinic_email || lead.clinic_email) && (updates.clinic_email || lead.clinic_email).trim() !== '';
+        const isClinic = lead.clinic_name && (
+          lead.clinic_name.toLowerCase().includes('clinic') ||
+          lead.clinic_name.toLowerCase().includes('medical') ||
+          lead.clinic_name.toLowerCase().includes('health')
+        );
+        fields.push('is_qualified = ?');
+        values.push((hasPhone && hasEmail && isClinic) ? 1 : 0);
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = datetime(\'now\')');
+    values.push(id);
+
+    return db.prepare(`
+      UPDATE leads 
+      SET ${fields.join(', ')}
+      WHERE id = ?
+    `).run(...values);
+  },
+
+  deleteLead(id) {
+    // First delete related records (cascade delete)
+    db.prepare('DELETE FROM lead_activities WHERE lead_id = ?').run(id);
+    db.prepare('DELETE FROM lead_calls WHERE lead_id = ?').run(id);
+    // Then delete the lead
+    return db.prepare('DELETE FROM leads WHERE id = ?').run(id);
+  },
+
+  deleteTestLeads() {
+    // Identify test leads by multiple patterns:
+    // 1. is_test = 1
+    // 2. Clinic names containing "Test"
+    // 3. Emails containing test patterns (test@example.com, drlittlekids, gigtogigdev, doctorjay254, etc.)
+    const testEmailPatterns = [
+      'test@example.com',
+      'drlittlekids',
+      'gigtogigdev',
+      'doctorjay254'
+    ];
+
+    // Build query to find test leads
+    let query = `
+      SELECT id FROM leads 
+      WHERE is_test = 1 
+         OR clinic_name LIKE '%Test%'
+         OR clinic_name LIKE '%Debug%'
+         OR clinic_name LIKE '%Webhook%'
+    `;
+
+    // Add email pattern matching
+    const emailConditions = testEmailPatterns.map(pattern => `clinic_email LIKE '%${pattern}%'`).join(' OR ');
+    if (emailConditions) {
+      query += ` OR (${emailConditions})`;
+    }
+
+    const testLeads = db.prepare(query).all();
+    const deletedCount = { leads: 0, calls: 0, activities: 0 };
+
+    // Delete each test lead and related records
+    for (const lead of testLeads) {
+      // Count related records before deletion
+      const calls = db.prepare('SELECT COUNT(*) as count FROM lead_calls WHERE lead_id = ?').get(lead.id);
+      const activities = db.prepare('SELECT COUNT(*) as count FROM lead_activities WHERE lead_id = ?').get(lead.id);
+      
+      deletedCount.calls += calls?.count || 0;
+      deletedCount.activities += activities?.count || 0;
+
+      // Delete related records
+      db.prepare('DELETE FROM lead_activities WHERE lead_id = ?').run(lead.id);
+      db.prepare('DELETE FROM lead_calls WHERE lead_id = ?').run(lead.id);
+      
+      // Delete the lead
+      db.prepare('DELETE FROM leads WHERE id = ?').run(lead.id);
+      deletedCount.leads++;
+    }
+
+    return deletedCount;
+  },
+
+  // Lead Calls Management
+  createLeadCall(callData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = callData.id || uuidv4();
+
+    return db.prepare(`
+      INSERT INTO lead_calls (
+        id, lead_id, call_id, call_status, call_duration_seconds,
+        call_cost, transcript_url, notes, outcome
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      callData.lead_id,
+      callData.call_id || null,
+      callData.call_status || 'pending',
+      callData.call_duration_seconds || null,
+      callData.call_cost || null,
+      callData.transcript_url || null,
+      callData.notes || null,
+      callData.outcome || null
+    );
+  },
+
+  getLeadCall(id) {
+    return db.prepare('SELECT * FROM lead_calls WHERE id = ?').get(id);
+  },
+
+  getLeadCallsByLeadId(leadId) {
+    return db.prepare(`
+      SELECT * FROM lead_calls 
+      WHERE lead_id = ? 
+      ORDER BY created_at DESC
+    `).all(leadId);
+  },
+
+  updateLeadCall(id, updates) {
+    const fields = [];
+    const values = [];
+
+    Object.keys(updates).forEach(key => {
+      if (key !== 'id') {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    });
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = datetime(\'now\')');
+    values.push(id);
+
+    return db.prepare(`
+      UPDATE lead_calls 
+      SET ${fields.join(', ')}
+      WHERE id = ?
+    `).run(...values);
+  },
+
+  // Monthly Call Usage Tracking (250 calls/month limit)
+  getMonthlyCallUsage(billingMonth) {
+    const usage = db.prepare('SELECT * FROM monthly_call_usage WHERE billing_month = ?').get(billingMonth);
+
+    if (!usage) {
+      // Initialize for this month
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare(`
+        INSERT INTO monthly_call_usage (id, billing_month, calls_used, calls_remaining)
+        VALUES (?, ?, 0, 250)
+      `).run(uuidv4(), billingMonth);
+      return db.prepare('SELECT * FROM monthly_call_usage WHERE billing_month = ?').get(billingMonth);
+    }
+
+    return usage;
+  },
+
+  incrementCallUsage(billingMonth) {
+    const usage = this.getMonthlyCallUsage(billingMonth);
+
+    if (usage.calls_remaining <= 0) {
+      throw new Error(`Monthly call limit reached (250 calls). Current usage: ${usage.calls_used}`);
+    }
+
+    return db.prepare(`
+      UPDATE monthly_call_usage 
+      SET calls_used = calls_used + 1,
+          calls_remaining = calls_remaining - 1,
+          updated_at = datetime('now')
+      WHERE billing_month = ?
+    `).run(billingMonth);
+  },
+
+  getCallUsageStats() {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return this.getMonthlyCallUsage(currentMonth);
+  },
+
+  // Lead Activities Management
+  createLeadActivity(activityData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = activityData.id || uuidv4();
+
+    return db.prepare(`
+      INSERT INTO lead_activities (
+        id, lead_id, activity_type, activity_subject, activity_description,
+        activity_date, created_by, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      activityData.lead_id,
+      activityData.activity_type, // 'call', 'email', 'meeting', 'note', 'update'
+      activityData.activity_subject || null,
+      activityData.activity_description || null,
+      activityData.activity_date || new Date().toISOString(),
+      activityData.created_by || null,
+      activityData.metadata ? JSON.stringify(activityData.metadata) : null
+    );
+  },
+
+  getLeadActivities(leadId, filters = {}) {
+    let query = 'SELECT * FROM lead_activities WHERE lead_id = ?';
+    const params = [leadId];
+
+    if (filters.activity_type) {
+      query += ' AND activity_type = ?';
+      params.push(filters.activity_type);
+    }
+
+    query += ' ORDER BY activity_date DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return db.prepare(query).all(...params);
+  },
+
+  getAllQualifiedLeads(filters = {}) {
+    let query = 'SELECT * FROM leads WHERE is_qualified = 1';
+    const params = [];
+
+    if (filters.pipeline_stage) {
+      query += ' AND pipeline_stage = ?';
+      params.push(filters.pipeline_stage);
+    }
+
+    if (filters.needs_followup === true) {
+      query += ' AND follow_up_date IS NOT NULL AND follow_up_date <= datetime("now")';
+    }
+
+    query += ' ORDER BY lead_score DESC, priority DESC, created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return db.prepare(query).all(...params);
   },
 
   // Database reference for direct access

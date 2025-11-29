@@ -1,5 +1,551 @@
 [
   {
+    "id": "annual_physical_adult",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["annual", "physical", "exam", "wellness", "preventive", "checkup", "routine"],
+      "procedure_keywords": ["physical", "examination", "wellness", "preventive", "screening"]
+    },
+    "icd10": [{"code": "Z00.00", "description": "Encounter for general adult medical examination without abnormal findings"}],
+    "cpt": [{"code": "99395", "description": "Periodic comprehensive preventive medicine reevaluation and management, established patient"}],
+    "rationale": "Annual preventive physical examination for established adult patient."
+  },
+  {
+    "id": "annual_physical_adult_abnormal",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["annual", "physical", "exam", "wellness", "preventive", "checkup", "routine", "abnormal"],
+      "procedure_keywords": ["physical", "examination", "wellness", "preventive", "screening"]
+    },
+    "icd10": [{"code": "Z00.01", "description": "Encounter for general adult medical examination with abnormal findings"}],
+    "cpt": [{"code": "99395", "description": "Periodic comprehensive preventive medicine reevaluation and management, established patient"}],
+    "rationale": "Annual preventive physical examination for established adult patient with abnormal findings."
+  },
+  {
+    "id": "well_child_exam",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["well child", "well-child", "pediatric", "child exam", "routine child", "wellness child"],
+      "procedure_keywords": ["physical", "examination", "wellness", "preventive", "screening", "checkup"]
+    },
+    "icd10": [{"code": "Z00.129", "description": "Encounter for routine child health examination without abnormal findings"}],
+    "cpt": [{"code": "99391", "description": "Periodic comprehensive preventive medicine reevaluation and management, new patient, infant"}],
+    "rationale": "Routine well-child examination for pediatric patient."
+  },
+  {
+    "id": "follow_up_established_low",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": 15,
+      "diagnosis_keywords": ["follow up", "follow-up", "f/u", "recheck", "recheck"],
+      "procedure_keywords": ["follow up", "recheck", "review", "check"]
+    },
+    "icd10": [{"code": "Z51.11", "description": "Encounter for antineoplastic chemotherapy"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Brief follow-up visit for established patient, low complexity (15 minutes)."
+  },
+  {
+    "id": "follow_up_established_moderate",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": 25,
+      "diagnosis_keywords": ["follow up", "follow-up", "f/u", "recheck"],
+      "procedure_keywords": ["follow up", "recheck", "review", "evaluation"]
+    },
+    "icd10": [{"code": "Z51.11", "description": "Encounter for antineoplastic chemotherapy"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Follow-up visit for established patient, moderate complexity (25 minutes)."
+  },
+  {
+    "id": "follow_up_established_high",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": 40,
+      "diagnosis_keywords": ["follow up", "follow-up", "f/u", "recheck"],
+      "procedure_keywords": ["follow up", "recheck", "review", "evaluation", "complex"]
+    },
+    "icd10": [{"code": "Z51.11", "description": "Encounter for antineoplastic chemotherapy"}],
+    "cpt": [{"code": "99215", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and high level of medical decision making"}],
+    "rationale": "Complex follow-up visit for established patient, high complexity (40+ minutes)."
+  },
+  {
+    "id": "new_patient_low",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": 20,
+      "diagnosis_keywords": ["new patient", "initial", "first visit"],
+      "procedure_keywords": ["evaluation", "examination", "consultation"]
+    },
+    "icd10": [{"code": "Z00.00", "description": "Encounter for general adult medical examination without abnormal findings"}],
+    "cpt": [{"code": "99203", "description": "Office or other outpatient visit for the evaluation and management of a new patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "New patient visit, low complexity (20 minutes)."
+  },
+  {
+    "id": "new_patient_moderate",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": 30,
+      "diagnosis_keywords": ["new patient", "initial", "first visit"],
+      "procedure_keywords": ["evaluation", "examination", "consultation"]
+    },
+    "icd10": [{"code": "Z00.00", "description": "Encounter for general adult medical examination without abnormal findings"}],
+    "cpt": [{"code": "99204", "description": "Office or other outpatient visit for the evaluation and management of a new patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "New patient visit, moderate complexity (30 minutes)."
+  },
+  {
+    "id": "new_patient_high",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": 45,
+      "diagnosis_keywords": ["new patient", "initial", "first visit", "complex"],
+      "procedure_keywords": ["evaluation", "examination", "consultation", "comprehensive"]
+    },
+    "icd10": [{"code": "Z00.00", "description": "Encounter for general adult medical examination without abnormal findings"}],
+    "cpt": [{"code": "99205", "description": "Office or other outpatient visit for the evaluation and management of a new patient, which requires a medically appropriate history and/or examination and high level of medical decision making"}],
+    "rationale": "New patient visit, high complexity (45+ minutes)."
+  },
+  {
+    "id": "upper_respiratory_infection",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["cold", "uri", "upper respiratory", "nasal congestion", "runny nose", "sneezing", "rhinorrhea", "cough"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "J00", "description": "Acute nasopharyngitis [common cold]"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Acute upper respiratory infection evaluation and management."
+  },
+  {
+    "id": "influenza",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["flu", "influenza", "fever", "chills", "body aches", "myalgia"],
+      "procedure_keywords": ["evaluation", "examination", "rapid flu", "flu test"]
+    },
+    "icd10": [{"code": "J11.1", "description": "Influenza due to unidentified influenza virus with other respiratory manifestations"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Influenza-like illness evaluation and management."
+  },
+  {
+    "id": "urinary_tract_infection",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["uti", "urinary tract infection", "dysuria", "frequency", "urgency", "burning", "cystitis"],
+      "procedure_keywords": ["evaluation", "examination", "urinalysis", "urine test"]
+    },
+    "icd10": [{"code": "N39.0", "description": "Urinary tract infection, site not specified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Urinary tract infection evaluation and management."
+  },
+  {
+    "id": "sinusitis",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["sinusitis", "sinus infection", "sinus pain", "facial pain", "nasal discharge", "postnasal drip"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "J32.9", "description": "Chronic sinusitis, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Sinusitis evaluation and management."
+  },
+  {
+    "id": "pharyngitis",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["sore throat", "pharyngitis", "throat pain", "strep", "tonsillitis"],
+      "procedure_keywords": ["evaluation", "examination", "rapid strep", "throat culture"]
+    },
+    "icd10": [{"code": "J02.9", "description": "Acute pharyngitis, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Pharyngitis evaluation and management."
+  },
+  {
+    "id": "hypertension_follow_up",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["hypertension", "high blood pressure", "htn", "bp", "blood pressure"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication"]
+    },
+    "icd10": [{"code": "I10", "description": "Essential (primary) hypertension"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Hypertension follow-up and medication management."
+  },
+  {
+    "id": "diabetes_type2_follow_up",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["diabetes", "diabetic", "type 2", "dm2", "blood sugar", "glucose", "a1c", "hba1c"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication", "management"]
+    },
+    "icd10": [{"code": "E11.9", "description": "Type 2 diabetes mellitus without complications"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Type 2 diabetes follow-up and medication management."
+  },
+  {
+    "id": "diabetes_type2_with_complications",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["diabetes", "diabetic", "type 2", "dm2", "neuropathy", "nephropathy", "retinopathy", "foot ulcer"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication", "management", "complications"]
+    },
+    "icd10": [
+      {"code": "E11.9", "description": "Type 2 diabetes mellitus without complications"},
+      {"code": "E11.40", "description": "Type 2 diabetes mellitus with diabetic neuropathy, unspecified"}
+    ],
+    "cpt": [{"code": "99215", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and high level of medical decision making"}],
+    "rationale": "Type 2 diabetes with complications, high complexity management."
+  },
+  {
+    "id": "hyperlipidemia_follow_up",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["cholesterol", "hyperlipidemia", "high cholesterol", "ldl", "hdl", "triglycerides", "lipid"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication"]
+    },
+    "icd10": [{"code": "E78.5", "description": "Hyperlipidemia, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Hyperlipidemia follow-up and medication management."
+  },
+  {
+    "id": "chest_pain_evaluation",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["chest pain", "chest discomfort", "angina", "pressure", "tightness"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "ecg", "ekg", "cardiac"]
+    },
+    "icd10": [{"code": "R07.9", "description": "Chest pain, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Chest pain evaluation, moderate complexity."
+  },
+  {
+    "id": "heart_failure_follow_up",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["heart failure", "chf", "congestive", "shortness of breath", "dyspnea", "edema", "swelling"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication", "management"]
+    },
+    "icd10": [{"code": "I50.9", "description": "Heart failure, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Heart failure follow-up and medication management."
+  },
+  {
+    "id": "atrial_fibrillation",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["atrial fibrillation", "afib", "a-fib", "arrhythmia", "irregular heartbeat", "palpitations"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "ecg", "ekg", "monitoring"]
+    },
+    "icd10": [{"code": "I48.91", "description": "Unspecified atrial fibrillation"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Atrial fibrillation evaluation and management."
+  },
+  {
+    "id": "low_back_pain",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["back pain", "low back", "lumbar", "lumbago", "sciatica"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "physical exam"]
+    },
+    "icd10": [{"code": "M54.5", "description": "Low back pain"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Low back pain evaluation and management."
+  },
+  {
+    "id": "knee_pain",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["knee pain", "knee", "patellar", "meniscus", "arthritis knee"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "physical exam"]
+    },
+    "icd10": [{"code": "M25.561", "description": "Pain in right knee"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Knee pain evaluation and management."
+  },
+  {
+    "id": "osteoarthritis_knee",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["osteoarthritis", "oa", "arthritis", "knee", "joint pain", "degenerative"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "injection", "steroid"]
+    },
+    "icd10": [{"code": "M17.11", "description": "Unilateral primary osteoarthritis, right knee"}],
+    "cpt": [
+      {"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"},
+      {"code": "20610", "description": "Arthrocentesis, aspiration and/or injection, major joint or bursa (eg, shoulder, hip, knee, subacromial bursa); without ultrasound guidance"}
+    ],
+    "rationale": "Osteoarthritis of knee with possible injection."
+  },
+  {
+    "id": "shoulder_pain",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["shoulder pain", "shoulder", "rotator cuff", "impingement", "frozen shoulder"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "physical exam"]
+    },
+    "icd10": [{"code": "M25.511", "description": "Pain in right shoulder"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Shoulder pain evaluation and management."
+  },
+  {
+    "id": "asthma_follow_up",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["asthma", "wheezing", "shortness of breath", "dyspnea", "bronchospasm"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication", "inhaler"]
+    },
+    "icd10": [{"code": "J45.909", "description": "Unspecified asthma, uncomplicated"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Asthma follow-up and medication management."
+  },
+  {
+    "id": "asthma_exacerbation",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["asthma", "exacerbation", "wheezing", "shortness of breath", "dyspnea", "acute"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "treatment", "nebulizer"]
+    },
+    "icd10": [{"code": "J45.901", "description": "Unspecified asthma with (acute) exacerbation"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Asthma exacerbation evaluation and treatment."
+  },
+  {
+    "id": "copd_follow_up",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["copd", "emphysema", "chronic bronchitis", "shortness of breath", "dyspnea"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication"]
+    },
+    "icd10": [{"code": "J44.9", "description": "Chronic obstructive pulmonary disease, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "COPD follow-up and medication management."
+  },
+  {
+    "id": "gastroesophageal_reflux",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["gerd", "reflux", "heartburn", "acid reflux", "indigestion", "dyspepsia"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "medication"]
+    },
+    "icd10": [{"code": "K21.9", "description": "Gastro-esophageal reflux disease without esophagitis"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "GERD evaluation and management."
+  },
+  {
+    "id": "constipation",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["constipation", "bowel", "stool", "difficulty", "infrequent"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "K59.00", "description": "Constipation, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Constipation evaluation and management."
+  },
+  {
+    "id": "acne",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["acne", "pimples", "blackheads", "whiteheads", "breakout"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "treatment"]
+    },
+    "icd10": [{"code": "L70.9", "description": "Acne, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Acne evaluation and treatment."
+  },
+  {
+    "id": "rash",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["rash", "skin", "dermatitis", "eczema", "itching", "pruritus"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "skin exam"]
+    },
+    "icd10": [{"code": "L98.9", "description": "Disorder of the skin and subcutaneous tissue, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Rash or skin condition evaluation."
+  },
+  {
+    "id": "cellulitis",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["cellulitis", "skin infection", "redness", "swelling", "warmth", "tender"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "wound"]
+    },
+    "icd10": [{"code": "L03.90", "description": "Cellulitis, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Cellulitis evaluation and antibiotic management."
+  },
+  {
+    "id": "headache",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["headache", "migraine", "cephalgia", "head pain"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "R51", "description": "Headache"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Headache evaluation and management."
+  },
+  {
+    "id": "migraine",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["migraine", "migraine headache", "aura", "photophobia", "phonophobia"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "treatment"]
+    },
+    "icd10": [{"code": "G43.909", "description": "Migraine, unspecified, not intractable, without status migrainosus"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Migraine evaluation and treatment."
+  },
+  {
+    "id": "dizziness",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["dizziness", "vertigo", "lightheaded", "unsteady", "balance"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "R42", "description": "Dizziness and giddiness"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Dizziness evaluation and management."
+  },
+  {
+    "id": "fatigue",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["fatigue", "tired", "exhausted", "weakness", "lethargy"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "lab", "blood work"]
+    },
+    "icd10": [{"code": "R53.83", "description": "Other fatigue"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Fatigue evaluation, may require lab work."
+  },
+  {
+    "id": "abdominal_pain",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["abdominal pain", "stomach pain", "belly pain", "abdomen"],
+      "procedure_keywords": ["evaluation", "examination", "assessment", "physical exam"]
+    },
+    "icd10": [{"code": "R10.9", "description": "Unspecified abdominal pain"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Abdominal pain evaluation and management."
+  },
+  {
+    "id": "nausea_vomiting",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["nausea", "vomiting", "nauseated", "emesis", "queasy"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "R11.2", "description": "Nausea with vomiting, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Nausea and vomiting evaluation and management."
+  },
+  {
+    "id": "diarrhea",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["diarrhea", "diarrhoea", "loose stools", "frequent bowel"],
+      "procedure_keywords": ["evaluation", "examination", "assessment"]
+    },
+    "icd10": [{"code": "R19.7", "description": "Diarrhea, unspecified"}],
+    "cpt": [{"code": "99213", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and low level of medical decision making"}],
+    "rationale": "Diarrhea evaluation and management."
+  },
+  {
+    "id": "hypothyroidism",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["hypothyroidism", "underactive thyroid", "tsh", "thyroid", "levothyroxine"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "medication"]
+    },
+    "icd10": [{"code": "E03.9", "description": "Hypothyroidism, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Hypothyroidism follow-up and medication management."
+  },
+  {
+    "id": "chronic_kidney_disease",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["ckd", "chronic kidney", "renal", "kidney disease", "creatinine", "egfr"],
+      "procedure_keywords": ["follow up", "monitoring", "check", "review", "lab"]
+    },
+    "icd10": [{"code": "N18.9", "description": "Chronic kidney disease, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Chronic kidney disease monitoring and management."
+  },
+  {
+    "id": "screening_mammogram",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["mammogram", "breast screening", "breast cancer screening"],
+      "procedure_keywords": ["screening", "mammogram", "mammography"]
+    },
+    "icd10": [{"code": "Z12.31", "description": "Encounter for screening mammogram for malignant neoplasm of breast"}],
+    "cpt": [{"code": "77067", "description": "Screening mammography, bilateral (2-view study of each breast), including computer-aided detection (CAD) when performed"}],
+    "rationale": "Screening mammogram for breast cancer."
+  },
+  {
+    "id": "screening_colonoscopy",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["colonoscopy", "colon screening", "colorectal screening"],
+      "procedure_keywords": ["screening", "colonoscopy", "colon"]
+    },
+    "icd10": [{"code": "Z12.11", "description": "Encounter for screening for malignant neoplasm of colon"}],
+    "cpt": [{"code": "45378", "description": "Colonoscopy, flexible; diagnostic, including collection of specimen(s) by brushing or washing, when performed (separate procedure)"}],
+    "rationale": "Screening colonoscopy for colorectal cancer."
+  },
+  {
+    "id": "screening_psa",
+    "match": {
+      "appointment_type": null,
+      "duration_minutes": null,
+      "diagnosis_keywords": ["psa", "prostate screening", "prostate cancer screening"],
+      "procedure_keywords": ["screening", "psa", "prostate"]
+    },
+    "icd10": [{"code": "Z12.72", "description": "Encounter for screening for malignant neoplasm of prostate"}],
+    "cpt": [{"code": "G0103", "description": "Psa screening"}],
+    "rationale": "PSA screening for prostate cancer."
+  },
+  {
     "id": "psychotherapy_50",
     "match": {
       "appointment_type": "Outpatient psychotherapy",
@@ -24,6 +570,42 @@
     "rationale": "Standard 30-45 minute psychotherapy session for depressive disorder."
   },
   {
+    "id": "psychotherapy_45",
+    "match": {
+      "appointment_type": "Outpatient psychotherapy",
+      "duration_minutes": 45,
+      "diagnosis_keywords": ["anxiety", "depression", "ptsd", "trauma", "stress"],
+      "procedure_keywords": ["psychotherapy", "cbt", "therapy", "counseling"]
+    },
+    "icd10": [{"code": "F41.1", "description": "Generalized anxiety disorder"}],
+    "cpt": [{"code": "90837", "description": "Psychotherapy, 60 minutes with patient and/or family member"}],
+    "rationale": "Standard 45-60 minute psychotherapy session."
+  },
+  {
+    "id": "psychotherapy_bipolar",
+    "match": {
+      "appointment_type": "Outpatient psychotherapy",
+      "duration_minutes": null,
+      "diagnosis_keywords": ["bipolar", "manic", "mania", "mood disorder"],
+      "procedure_keywords": ["psychotherapy", "therapy", "counseling"]
+    },
+    "icd10": [{"code": "F31.9", "description": "Bipolar disorder, unspecified"}],
+    "cpt": [{"code": "90837", "description": "Psychotherapy, 60 minutes with patient and/or family member"}],
+    "rationale": "Psychotherapy for bipolar disorder."
+  },
+  {
+    "id": "psychotherapy_ptsd",
+    "match": {
+      "appointment_type": "Outpatient psychotherapy",
+      "duration_minutes": null,
+      "diagnosis_keywords": ["ptsd", "post-traumatic", "trauma", "traumatic"],
+      "procedure_keywords": ["psychotherapy", "therapy", "counseling", "emdr", "trauma therapy"]
+    },
+    "icd10": [{"code": "F43.10", "description": "Post-traumatic stress disorder, unspecified"}],
+    "cpt": [{"code": "90837", "description": "Psychotherapy, 60 minutes with patient and/or family member"}],
+    "rationale": "Psychotherapy for post-traumatic stress disorder."
+  },
+  {
     "id": "medication_management",
     "match": {
       "appointment_type": "Psychiatric medication management",
@@ -33,9 +615,57 @@
     },
     "icd10": [{"code": "F43.10", "description": "Post-traumatic stress disorder, unspecified"}],
     "cpt": [
-      {"code": "99214", "description": "Office or outpatient visit, established patient, moderate complexity"},
+      {"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"},
       {"code": "90833", "description": "Psychotherapy, 30 minutes with patient and/or family member when performed with an evaluation and management service"}
     ],
     "rationale": "Medication management visit with moderate complexity and brief psychotherapy add-on."
+  },
+  {
+    "id": "medication_management_depression",
+    "match": {
+      "appointment_type": "Psychiatric medication management",
+      "duration_minutes": null,
+      "diagnosis_keywords": ["depression", "depressive", "mdd", "major depressive"],
+      "procedure_keywords": ["medication", "management", "evaluation", "antidepressant"]
+    },
+    "icd10": [{"code": "F32.9", "description": "Major depressive disorder, single episode, unspecified"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Medication management for depression."
+  },
+  {
+    "id": "medication_management_anxiety",
+    "match": {
+      "appointment_type": "Psychiatric medication management",
+      "duration_minutes": null,
+      "diagnosis_keywords": ["anxiety", "gad", "generalized anxiety", "panic"],
+      "procedure_keywords": ["medication", "management", "evaluation", "anxiolytic"]
+    },
+    "icd10": [{"code": "F41.1", "description": "Generalized anxiety disorder"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Medication management for anxiety disorder."
+  },
+  {
+    "id": "medication_management_adhd",
+    "match": {
+      "appointment_type": "Psychiatric medication management",
+      "duration_minutes": null,
+      "diagnosis_keywords": ["adhd", "attention deficit", "hyperactivity", "add"],
+      "procedure_keywords": ["medication", "management", "evaluation", "stimulant"]
+    },
+    "icd10": [{"code": "F90.9", "description": "Attention-deficit hyperactivity disorder, unspecified type"}],
+    "cpt": [{"code": "99214", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and moderate level of medical decision making"}],
+    "rationale": "Medication management for ADHD."
+  },
+  {
+    "id": "medication_management_bipolar",
+    "match": {
+      "appointment_type": "Psychiatric medication management",
+      "duration_minutes": null,
+      "diagnosis_keywords": ["bipolar", "manic", "mania", "mood stabilizer"],
+      "procedure_keywords": ["medication", "management", "evaluation"]
+    },
+    "icd10": [{"code": "F31.9", "description": "Bipolar disorder, unspecified"}],
+    "cpt": [{"code": "99215", "description": "Office or other outpatient visit for the evaluation and management of an established patient, which requires a medically appropriate history and/or examination and high level of medical decision making"}],
+    "rationale": "Medication management for bipolar disorder, high complexity."
   }
 ]

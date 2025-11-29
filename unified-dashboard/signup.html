@@ -1,392 +1,1538 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign Up - DocLittle</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocLittle | Join the Network</title>
+  <link rel="stylesheet" href="/assets/css/global.css" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f9fafb;
+      --card: #ffffff;
+      --card-border: #e5e7eb;
+      --text: #0f172a;
+      --muted: #6b7280;
+      --accent: #7c5dfa;
+      --accent-dark: #6d48f2;
+      --shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
+      --success: #16a34a;
+      --danger: #dc2626;
+    }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
+    body {
+      margin: 0;
+      background: var(--bg);
+      font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
 
-        .container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
-            width: 100%;
-            padding: 40px;
-        }
+    .shell {
+      width: 100%;
+      max-width: 1100px;
+      display: none;
+      /* Hidden by default, shown after integration selection */
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 32px;
+    }
 
-        .logo {
-            text-align: center;
-            margin-bottom: 32px;
-        }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: var(--shadow);
+    }
 
-        .logo-text {
-            font-size: 48px;
-            font-weight: 300;
-            letter-spacing: -4px;
-            color: #1e40af;
-            margin-bottom: 8px;
-        }
+    .hero h1 {
+      margin: 0;
+      font-size: 2.25rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
 
-        .logo-text .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-        }
+    .hero p {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
 
-        .logo-text .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
-        }
+    .timeline {
+      margin-top: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
 
-        .logo-subtitle {
-            color: #64748b;
-            font-size: 14px;
-            font-weight: 500;
-        }
+    .timeline-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
 
-        h1 {
-            font-size: 28px;
-            font-weight: 700;
-            color: #1e293b;
-            margin-bottom: 8px;
-            text-align: center;
-        }
+    .timeline-bullet {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 6px;
+    }
 
-        .subtitle {
-            text-align: center;
-            color: #64748b;
-            font-size: 16px;
-            margin-bottom: 32px;
-        }
+    .timeline-body h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
 
-        .use-case-selection {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            margin-bottom: 32px;
-        }
+    .timeline-body p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
 
-        .use-case-option {
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 24px;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: white;
-        }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
 
-        .use-case-option:hover {
-            border-color: #3b82f6;
-            background: #f8fafc;
-        }
+    label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
 
-        .use-case-option.selected {
-            border-color: #2563eb;
-            background: #eff6ff;
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
-        }
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: #fdfdfd;
+      font-size: 1rem;
+      color: var(--text);
+    }
 
-        .use-case-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
+    textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
 
-        .use-case-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1e293b;
-        }
+    button {
+      border: none;
+      border-radius: 12px;
+      background: var(--accent);
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
 
-        .use-case-description {
-            color: #64748b;
-            font-size: 14px;
-            line-height: 1.6;
-            margin-top: 8px;
-        }
+    button:hover {
+      background: var(--accent-dark);
+      transform: translateY(-1px);
+    }
 
-        .use-case-features {
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid #e2e8f0;
-        }
+    .muted {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
 
-        .use-case-features ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
+    .hidden {
+      display: none;
+    }
 
-        .use-case-features li {
-            color: #475569;
-            font-size: 13px;
-            padding: 4px 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+    .code-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      margin: 16px 0;
+    }
 
-        .use-case-features li::before {
-            content: '✓';
-            color: #10b981;
-            font-weight: 700;
-        }
+    .code-grid input {
+      text-align: center;
+      font-size: 1.25rem;
+      font-weight: 600;
+      padding: 12px;
+    }
 
-        .radio-button {
-            width: 20px;
-            height: 20px;
-            border: 2px solid #cbd5e1;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
+    .toast {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 0.92rem;
+    }
 
-        .radio-button::after {
-            content: '';
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #2563eb;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
+    .toast.success {
+      background: rgba(22, 163, 74, 0.15);
+      color: var(--success);
+    }
 
-        .use-case-option.selected .radio-button {
-            border-color: #2563eb;
-        }
+    .toast.error {
+      background: rgba(220, 38, 38, 0.15);
+      color: var(--danger);
+    }
 
-        .use-case-option.selected .radio-button::after {
-            opacity: 1;
-        }
+    .toast.info {
+      background: rgba(37, 99, 235, 0.15);
+      color: #2563eb;
+    }
 
-        .button {
-            width: 100%;
-            padding: 14px 24px;
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-top: 8px;
-        }
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
 
-        .button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
-        }
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
-        .button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
 
-        .alert {
-            padding: 12px 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
+    .loading-text {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-        .alert-info {
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            color: #1e40af;
-        }
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
 
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
+    .tag {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(124, 93, 250, 0.08);
+      color: var(--accent);
+      font-size: 0.85rem;
+    }
 
-        .loading.active {
-            display: block;
-        }
+    @media (max-width: 960px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
 
-        .spinner {
-            border: 3px solid #f3f4f6;
-            border-top: 3px solid #2563eb;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 12px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .back-link {
-            text-align: center;
-            margin-top: 24px;
-        }
-
-        .back-link a {
-            color: #64748b;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .back-link a:hover {
-            color: #2563eb;
-        }
-    </style>
+      .panel {
+        padding: 24px;
+      }
+    }
+  </style>
 </head>
+
 <body>
-    <div class="container">
-        <div class="logo">
-            <div class="logo-text">
-                <span class="doc">Doc</span><span class="little">Little</span>.
+  <div class="shell">
+    <section class="panel hero">
+      <p class="muted" style="margin-bottom:8px;">DocLittle • Voice AI for Healthcare</p>
+      <h1>Start Free Today</h1>
+      <p style="font-size:1.1rem;line-height:1.6;margin-top:12px;">
+        Get started with <strong>free credits</strong>—no credit card required. Choose your integration type and we'll
+        set everything up in minutes.
+      </p>
+
+      <!-- Free Credits Highlight -->
+      <div
+        style="margin-top:24px;padding:16px;background:linear-gradient(135deg, rgba(124, 93, 250, 0.1) 0%, rgba(109, 72, 242, 0.1) 100%);border-radius:12px;border-left:4px solid var(--accent);">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:2rem;">🎁</span>
+          <div>
+            <div style="font-weight:700;color:var(--accent);font-size:1.1rem;margin-bottom:4px;">Free Credits Included
             </div>
-            <div class="logo-subtitle">Voice AI for Healthcare</div>
+            <div style="color:var(--muted);font-size:0.95rem;">API: 100 min + 1,000 requests/month • SaaS: 250 min/month
+              (resets)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline" style="margin-top:32px;">
+        <div class="timeline-item">
+          <div class="timeline-bullet"></div>
+          <div class="timeline-body">
+            <h3>Step 1 · Tell us about your clinic</h3>
+            <p>Share your clinic details—we use this to personalize your AI agent.</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-bullet"></div>
+          <div class="timeline-body">
+            <h3>Step 2 · Verify your email</h3>
+            <p>We'll send a secure 6-digit code to verify your account.</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-bullet"></div>
+          <div class="timeline-body">
+            <h3>Step 3 · Choose your integration</h3>
+            <p>Select API or SaaS platform—both include free credits to get started.</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-bullet"></div>
+          <div class="timeline-body">
+            <h3>Step 4 · Start building</h3>
+            <p>Access your dashboard, API keys, or dedicated phone number—ready in minutes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:32px;">
+        <div class="tags" style="margin-bottom:16px;">
+          <div class="tag" style="background:rgba(22, 163, 74, 0.1);color:#16a34a;">✓ HIPAA-ready</div>
+          <div class="tag" style="background:rgba(124, 93, 250, 0.1);color:var(--accent);">✓ Free credits</div>
+          <div class="tag" style="background:rgba(22, 163, 74, 0.1);color:#16a34a;">✓ No credit card</div>
+          <div class="tag" style="background:rgba(124, 93, 250, 0.1);color:var(--accent);">✓ Setup in minutes</div>
+        </div>
+        <p class="muted" style="font-size:0.9rem;">Questions? Email <a href="mailto:richard@doclittle.site"
+            style="color:var(--accent);">richard@doclittle.site</a></p>
+      </div>
+    </section>
+
+    <section class="panel" id="step-intake">
+      <h2 style="margin-top:0;">Tell us about your clinic</h2>
+      <p class="muted" style="margin-top:4px;">We use this to pre-build the billing agent and score your lead.</p>
+
+      <form id="signupForm">
+        <div>
+          <label>Full Name</label>
+          <input type="text" name="name" required placeholder="Dr. Kelly Rivers" />
         </div>
 
-        <h1>Choose Your Integration</h1>
-        <p class="subtitle">Select how you'd like to use DocLittle</p>
-
-        <div id="alert" class="alert" style="display: none;"></div>
-
-        <div class="use-case-selection">
-            <div class="use-case-option" data-type="api">
-                <div class="use-case-header">
-                    <div class="radio-button"></div>
-                    <div class="use-case-title">API Integration</div>
-                </div>
-                <div class="use-case-description">
-                    Integrate DocLittle voice AI into your own application using our SDK or REST API.
-                </div>
-                <div class="use-case-features">
-                    <ul>
-                        <li>Retell SDK for Flutter, iOS, Android</li>
-                        <li>REST API endpoints</li>
-                        <li>Full control over voice calls</li>
-                        <li>API keys for authentication</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="use-case-option" data-type="saas">
-                <div class="use-case-header">
-                    <div class="radio-button"></div>
-                    <div class="use-case-title">SaaS Platform</div>
-                </div>
-                <div class="use-case-description">
-                    Get a dedicated phone number and full-service voice AI with our web dashboard.
-                </div>
-                <div class="use-case-features">
-                    <ul>
-                        <li>Dedicated phone number provisioned</li>
-                        <li>Web dashboard for management</li>
-                        <li>Automated call routing</li>
-                        <li>Built-in patient management</li>
-                    </ul>
-                </div>
-            </div>
+        <div>
+          <label>Work Email</label>
+          <input type="email" name="email" required placeholder="kelly@yourclinic.com" />
         </div>
 
-        <button id="continue-btn" class="button" disabled>
-            Continue
+        <div>
+          <label>Clinic / Company</label>
+          <input type="text" name="company_name" placeholder="Rivers Pediatrics" />
+        </div>
+
+        <div>
+          <label>Clinic Phone (optional)</label>
+          <div style="display:flex;gap:8px;align-items:stretch;">
+            <select name="country_code" id="countryCode"
+              style="width:100px;padding:12px 14px;border-radius:12px;border:1px solid var(--card-border);background:#fdfdfd;font-size:1rem;color:var(--text);">
+              <option value="+1" selected>+1 US</option>
+              <option value="+44">+44 UK</option>
+              <option value="+33">+33 FR</option>
+              <option value="+49">+49 DE</option>
+              <option value="+81">+81 JP</option>
+              <option value="+86">+86 CN</option>
+              <option value="+91">+91 IN</option>
+              <option value="+61">+61 AU</option>
+              <option value="+55">+55 BR</option>
+              <option value="+52">+52 MX</option>
+              <option value="+34">+34 ES</option>
+              <option value="+39">+39 IT</option>
+              <option value="+31">+31 NL</option>
+              <option value="+46">+46 SE</option>
+              <option value="+47">+47 NO</option>
+              <option value="+41">+41 CH</option>
+              <option value="+32">+32 BE</option>
+              <option value="+351">+351 PT</option>
+              <option value="+353">+353 IE</option>
+              <option value="+358">+358 FI</option>
+              <option value="+45">+45 DK</option>
+              <option value="+64">+64 NZ</option>
+              <option value="+27">+27 ZA</option>
+              <option value="+971">+971 AE</option>
+              <option value="+65">+65 SG</option>
+              <option value="+852">+852 HK</option>
+              <option value="+82">+82 KR</option>
+              <option value="+66">+66 TH</option>
+              <option value="+60">+60 MY</option>
+              <option value="+62">+62 ID</option>
+              <option value="+63">+63 PH</option>
+              <option value="+84">+84 VN</option>
+              <option value="+7">+7 RU</option>
+              <option value="+90">+90 TR</option>
+              <option value="+20">+20 EG</option>
+              <option value="+234">+234 NG</option>
+              <option value="+254">+254 KE</option>
+              <option value="+212">+212 MA</option>
+              <option value="+54">+54 AR</option>
+              <option value="+56">+56 CL</option>
+              <option value="+57">+57 CO</option>
+              <option value="+51">+51 PE</option>
+            </select>
+            <input type="tel" name="phone_number" id="phoneNumber" placeholder="555 123 4567" style="flex:1;" />
+          </div>
+          <p style="margin-top:4px;font-size:0.85rem;color:var(--muted);">Phone will be saved in E.164 format
+            (+1XXXXXXXXXX)</p>
+        </div>
+
+        <div>
+          <label>Team Size</label>
+          <select name="business_size">
+            <option value="1-5">1-5 providers</option>
+            <option value="6-15">6-15 providers</option>
+            <option value="16-40">16-40 providers</option>
+            <option value="40+">40+ providers</option>
+          </select>
+        </div>
+
+        <div>
+          <label>What are you trying to automate?</label>
+          <textarea name="use_case" placeholder="Prior auth + Medicaid billing + call routing..."></textarea>
+        </div>
+
+        <!-- Customer type is set automatically from integration selection, stored in hidden field -->
+        <input type="hidden" name="customer_type" id="customerTypeInput" value="saas" />
+
+        <button type="submit" id="signupSubmit">
+          <span id="signupSubmitText">Continue →</span>
+          <span id="signupSubmitSpinner" class="spinner hidden"></span>
         </button>
+        <div class="toast error hidden" id="signupError"></div>
+        <div class="toast info hidden" id="signupLoading">
+          <span class="loading-text">
+            <span class="spinner"></span>
+            Sending verification code to your email via Gmail...
+          </span>
+        </div>
+      </form>
+    </section>
 
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <div>Redirecting...</div>
+    <section class="panel hidden" id="step-integration">
+      <h2 style="margin-top:0;">Choose Your Integration</h2>
+      <p class="muted" style="margin-top:4px;">Select how you'd like to use DocLittle</p>
+
+      <div class="use-case-selection" style="margin-top:24px;">
+        <!-- API Integration Option -->
+        <div class="use-case-option" data-type="api"
+          style="cursor:pointer;padding:24px;border:2px solid var(--card-border);border-radius:16px;margin-bottom:20px;transition:all 0.3s;position:relative;overflow:hidden;background:white;">
+          <div
+            style="position:absolute;top:0;right:0;background:linear-gradient(135deg, #7c5dfa 0%, #6d48f2 100%);color:white;padding:6px 16px;border-radius:0 16px 0 16px;font-size:0.75rem;font-weight:600;">
+            DEVELOPER
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;margin-top:8px;">
+            <div class="radio-button"
+              style="width:24px;height:24px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="width:12px;height:12px;border-radius:50%;background:var(--accent);display:none;"></div>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:1.25rem;color:var(--text);">API Integration</div>
+              <div style="color:var(--muted);font-size:0.9rem;margin-top:2px;">Build your own solution</div>
+            </div>
+          </div>
+
+          <!-- Free Credits Badge -->
+          <div
+            style="background:linear-gradient(135deg, rgba(124, 93, 250, 0.1) 0%, rgba(109, 72, 242, 0.1) 100%);border-left:3px solid var(--accent);padding:12px;border-radius:8px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:1.5rem;">🎁</span>
+              <div>
+                <div style="font-weight:700;color:var(--accent);font-size:1rem;">FREE Forever</div>
+                <div style="color:var(--muted);font-size:0.85rem;">100 voice minutes (one-time) + 1,000 API
+                  requests/month</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="color:var(--muted);margin-bottom:16px;font-size:0.95rem;line-height:1.6;">
+            Integrate DocLittle voice AI into your own application using our SDK or REST API.
+          </div>
+
+          <ul style="list-style:none;padding:0;margin:0 0 16px 0;color:var(--text);font-size:0.9rem;">
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>Retell SDK for Flutter, iOS, Android</span>
+            </li>
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>REST API endpoints</span>
+            </li>
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>Full control over voice calls</span>
+            </li>
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>API keys for authentication</span>
+            </li>
+          </ul>
+
+          <!-- Pricing -->
+          <div style="border-top:1px solid var(--card-border);padding-top:16px;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="color:var(--muted);font-size:0.85rem;">After free credits:</span>
+              <span style="font-weight:700;color:var(--text);">$0.05/min</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:var(--muted);font-size:0.85rem;">API requests:</span>
+              <span style="font-weight:700;color:var(--text);">$0.001/request</span>
+            </div>
+          </div>
         </div>
 
-        <div class="back-link">
-            <a href="/">← Back to home</a>
+        <!-- SaaS Platform Option -->
+        <div class="use-case-option" data-type="saas"
+          style="cursor:pointer;padding:24px;border:2px solid var(--card-border);border-radius:16px;transition:all 0.3s;position:relative;overflow:hidden;background:white;">
+          <div
+            style="position:absolute;top:0;right:0;background:linear-gradient(135deg, #16a34a 0%, #15803d 100%);color:white;padding:6px 16px;border-radius:0 16px 0 16px;font-size:0.75rem;font-weight:600;">
+            RECOMMENDED
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;margin-top:8px;">
+            <div class="radio-button"
+              style="width:24px;height:24px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <div style="width:12px;height:12px;border-radius:50%;background:var(--accent);display:none;"></div>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:1.25rem;color:var(--text);">SaaS Platform</div>
+              <div style="color:var(--muted);font-size:0.9rem;margin-top:2px;">Ready-to-use solution</div>
+            </div>
+          </div>
+
+          <!-- Free Credits Badge -->
+          <div
+            style="background:linear-gradient(135deg, rgba(22, 163, 74, 0.1) 0%, rgba(21, 128, 61, 0.1) 100%);border-left:3px solid var(--success);padding:12px;border-radius:8px;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:1.5rem;">🎁</span>
+              <div>
+                <div style="font-weight:700;color:var(--success);font-size:1rem;">FREE Every Month</div>
+                <div style="color:var(--muted);font-size:0.85rem;">250 voice minutes/month (resets monthly) + Dedicated
+                  phone number</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="color:var(--muted);margin-bottom:16px;font-size:0.95rem;line-height:1.6;">
+            Get a dedicated phone number and full-service voice AI with our web dashboard. No coding required.
+          </div>
+
+          <ul style="list-style:none;padding:0;margin:0 0 16px 0;color:var(--text);font-size:0.9rem;">
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>Dedicated phone number (provisioned automatically)</span>
+            </li>
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>Web dashboard for management</span>
+            </li>
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>Automated call routing & patient management</span>
+            </li>
+            <li style="margin-bottom:10px;display:flex;align-items:start;gap:8px;">
+              <span style="color:var(--success);font-weight:bold;flex-shrink:0;">✓</span>
+              <span>HIPAA-compliant & secure</span>
+            </li>
+          </ul>
+
+          <!-- Pricing -->
+          <div style="border-top:1px solid var(--card-border);padding-top:16px;margin-top:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:var(--muted);font-size:0.85rem;">After free 250 min/month:</span>
+              <span style="font-weight:700;color:var(--text);">$0.05/min</span>
+            </div>
+            <div
+              style="margin-top:8px;padding:8px;background:rgba(124, 93, 250, 0.05);border-radius:6px;font-size:0.8rem;color:var(--muted);text-align:center;">
+              No monthly fees • Pay only for what you use
+            </div>
+          </div>
         </div>
+      </div>
+
+      <button id="integrationContinue" class="btn"
+        style="width:100%;margin-top:24px;padding:14px;background:var(--accent);color:white;border:none;border-radius:12px;font-weight:600;cursor:pointer;opacity:0.5;pointer-events:none;"
+        disabled>
+        Continue →
+      </button>
+    </section>
+
+    <section class="panel hidden" id="step-code">
+      <h2 style="margin-top:0;">Enter verification code</h2>
+      <p class="muted" id="codeInstructions">We just sent a 6-digit code to your email.</p>
+
+      <div class="code-grid" id="codeGrid">
+        <input type="text" maxlength="1" inputmode="numeric" />
+        <input type="text" maxlength="1" inputmode="numeric" />
+        <input type="text" maxlength="1" inputmode="numeric" />
+        <input type="text" maxlength="1" inputmode="numeric" />
+        <input type="text" maxlength="1" inputmode="numeric" />
+        <input type="text" maxlength="1" inputmode="numeric" />
+      </div>
+
+      <button id="verifyBtn">
+        <span id="verifyBtnText">Verify &amp; unlock</span>
+        <span id="verifyBtnSpinner" class="spinner hidden"></span>
+      </button>
+      <button id="resendBtn" style="background:transparent;color:var(--accent);box-shadow:none;">
+        <span id="resendBtnText">Resend code</span>
+        <span id="resendBtnSpinner" class="spinner hidden"></span>
+      </button>
+      <div class="toast error hidden" id="codeError"></div>
+      <div class="toast success hidden" id="codeSuccess"></div>
+      <div class="toast info hidden" id="codeLoading">
+        <span class="loading-text">
+          <span class="spinner"></span>
+          <span id="codeLoadingText">Sending verification code to your email via Gmail...</span>
+        </span>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    const SIGNUP_API_BASE = window.location.origin;
+    const signupForm = document.getElementById('signupForm');
+    const signupPanel = document.getElementById('step-intake');
+    const codePanel = document.getElementById('step-code');
+    const integrationPanel = document.getElementById('step-integration');
+    const signupError = document.getElementById('signupError');
+    const codeError = document.getElementById('codeError');
+    const codeSuccess = document.getElementById('codeSuccess');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const resendBtn = document.getElementById('resendBtn');
+    const codeInputs = Array.from(document.querySelectorAll('#codeGrid input'));
+    let pendingEmail = '';
+    let selectedIntegrationType = null;
+
+    function showPanel(panel) {
+      [signupPanel, codePanel, integrationPanel].forEach(p => {
+        if (p) p.classList.add('hidden');
+      });
+      if (panel) panel.classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showError(el, msg) {
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+
+    function hideError(el) {
+      el.classList.add('hidden');
+      el.textContent = '';
+    }
+
+    // Set customer_type from URL parameter if present
+    const urlParams = new URLSearchParams(window.location.search);
+    const customerTypeFromUrl = urlParams.get('customer_type');
+    if (customerTypeFromUrl) {
+      const customerTypeInput = document.getElementById('customerTypeInput');
+      if (customerTypeInput) {
+        customerTypeInput.value = customerTypeFromUrl;
+      }
+    } else {
+      // Default to 'saas' if not specified
+      const customerTypeInput = document.getElementById('customerTypeInput');
+      if (customerTypeInput && !customerTypeInput.value) {
+        customerTypeInput.value = 'saas';
+      }
+    }
+
+    signupForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      hideError(signupError);
+
+      const submitBtn = document.getElementById('signupSubmit');
+      const submitBtnText = document.getElementById('signupSubmitText');
+      const submitBtnSpinner = document.getElementById('signupSubmitSpinner');
+      const signupLoading = document.getElementById('signupLoading');
+
+      // Show loading state
+      submitBtn.disabled = true;
+      submitBtnText.textContent = 'Sending...';
+      submitBtnSpinner.classList.remove('hidden');
+      signupLoading.classList.remove('hidden');
+
+      const formData = new FormData(signupForm);
+      const payload = Object.fromEntries(formData.entries());
+
+      // Ensure customer_type is set (from form, URL, or default to saas)
+      if (!payload.customer_type) {
+        const customerTypeFromUrl = new URLSearchParams(window.location.search).get('customer_type');
+        const customerTypeFromInput = document.getElementById('customerTypeInput')?.value;
+        payload.customer_type = customerTypeFromUrl || customerTypeFromInput || 'saas';
+      }
+
+      console.log('Submitting signup with customer_type:', payload.customer_type);
+
+      // Format phone number to E.164 standard if provided
+      if (payload.phone_number && payload.phone_number.trim()) {
+        const countryCode = payload.country_code || '+1';
+        const phoneDigits = payload.phone_number.replace(/\D/g, '');
+        if (phoneDigits) {
+          // Combine country code and phone number in E.164 format
+          payload.phone_number = countryCode + phoneDigits;
+        } else {
+          payload.phone_number = '';
+        }
+      }
+      // Remove country_code from payload (not needed in backend)
+      delete payload.country_code;
+
+      try {
+        const res = await fetch(`${SIGNUP_API_BASE}/api/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.message || data.error || 'Failed to submit form');
+        }
+        pendingEmail = data.email;
+        document.getElementById('codeInstructions').textContent =
+          `We sent a 6-digit code to ${pendingEmail}. Check spam if you don't see it.`;
+        codeInputs.forEach(input => input.value = '');
+
+        // Hide loading, show success
+        signupLoading.classList.add('hidden');
+        showPanel(codePanel);
+        codeInputs[0].focus();
+      } catch (err) {
+        showError(signupError, err.message);
+        signupLoading.classList.add('hidden');
+      } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtnText.textContent = 'Continue →';
+        submitBtnSpinner.classList.add('hidden');
+      }
+    });
+
+    codeInputs.forEach((input, index) => {
+      input.addEventListener('input', (e) => {
+        const value = e.target.value.replace(/\D/g, '');
+        e.target.value = value;
+        if (value && index < codeInputs.length - 1) {
+          codeInputs[index + 1].focus();
+        }
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !e.target.value && index > 0) {
+          codeInputs[index - 1].focus();
+        }
+      });
+    });
+
+    async function verifyCode() {
+      hideError(codeError);
+      codeSuccess.classList.add('hidden');
+      const code = codeInputs.map(input => input.value).join('');
+      if (code.length !== 6) {
+        showError(codeError, 'Enter the 6-digit code.');
+        return;
+      }
+
+      const verifyBtnText = document.getElementById('verifyBtnText');
+      const verifyBtnSpinner = document.getElementById('verifyBtnSpinner');
+
+      // Show loading state
+      verifyBtn.disabled = true;
+      verifyBtnText.textContent = 'Verifying...';
+      verifyBtnSpinner.classList.remove('hidden');
+
+      try {
+        const res = await fetch(`${SIGNUP_API_BASE}/api/signup/verify-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingEmail, code })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || data.error || 'Verification failed');
+        codeSuccess.textContent = 'Email verified! Redirecting...';
+        codeSuccess.classList.remove('hidden');
+
+        // Check next step from API
+        if (data.next_step === 'select_integration') {
+          // Show integration selection panel
+          showPanel(integrationPanel);
+          initializeIntegrationSelection();
+        } else if (data.next_step === 'accept_terms') {
+          // Get customer_type from API response (most reliable - comes from database)
+          const customerType = data.customer?.customer_type || 'saas';
+          console.log('Redirecting to terms with customer_type:', customerType);
+
+          // Redirect to terms page with appropriate redirect based on customer type
+          const termsRedirect = customerType === 'api'
+            ? '/docs'
+            : '/business/business-dashboard.html';
+          window.location.href = `/terms?redirect=${encodeURIComponent(termsRedirect)}&customer_type=${customerType}`;
+        } else {
+          // Terms already accepted - redirect based on customer type from database
+          const customerType = data.customer?.customer_type || 'saas';
+          console.log('Terms already accepted, redirecting with customer_type:', customerType);
+
+          if (customerType === 'api') {
+            window.location.href = 'https://api.doclittle.site';
+          } else {
+            // SaaS customers go to business dashboard
+            window.location.href = '/business/business-dashboard.html';
+          }
+        }
+      } catch (err) {
+        showError(codeError, err.message);
+      } finally {
+        // Reset button state
+        verifyBtn.disabled = false;
+        verifyBtnText.textContent = 'Verify & unlock';
+        verifyBtnSpinner.classList.add('hidden');
+      }
+    }
+
+    verifyBtn.addEventListener('click', () => verifyCode());
+
+    resendBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      hideError(codeError);
+
+      const resendBtnText = document.getElementById('resendBtnText');
+      const resendBtnSpinner = document.getElementById('resendBtnSpinner');
+      const codeLoading = document.getElementById('codeLoading');
+      const codeLoadingText = document.getElementById('codeLoadingText');
+
+      // Show loading state
+      resendBtn.disabled = true;
+      resendBtnText.textContent = 'Sending...';
+      resendBtnSpinner.classList.remove('hidden');
+      codeLoadingText.textContent = 'Resending verification code to your email via Gmail...';
+      codeLoading.classList.remove('hidden');
+
+      try {
+        const res = await fetch(`${SIGNUP_API_BASE}/api/signup/resend-code`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: pendingEmail })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || data.error || 'Unable to resend code');
+        codeSuccess.textContent = 'New code sent! Check your email.';
+        codeSuccess.classList.remove('hidden');
+        codeLoading.classList.add('hidden');
+      } catch (err) {
+        showError(codeError, err.message);
+        codeLoading.classList.add('hidden');
+      } finally {
+        // Reset button state
+        resendBtn.disabled = false;
+        resendBtnText.textContent = 'Resend code';
+        resendBtnSpinner.classList.add('hidden');
+      }
+    });
+
+    // Initialize integration selection after email verification
+    function initializeIntegrationSelection() {
+      const useCaseOptions = document.querySelectorAll('#step-integration .use-case-option');
+      const continueBtn = document.getElementById('integrationContinue');
+
+      if (useCaseOptions.length > 0) {
+        useCaseOptions.forEach(option => {
+          option.addEventListener('click', () => {
+            // Remove selected from all
+            useCaseOptions.forEach(opt => {
+              opt.style.borderColor = 'var(--card-border)';
+              opt.style.borderWidth = '2px';
+              opt.style.background = 'transparent';
+              opt.style.boxShadow = 'none';
+              opt.style.transform = 'translateY(0)';
+              const radio = opt.querySelector('.radio-button > div');
+              if (radio) radio.style.display = 'none';
+            });
+
+            // Select this option
+            option.style.borderColor = 'var(--accent)';
+            option.style.borderWidth = '2px';
+            option.style.background = 'rgba(124, 93, 250, 0.08)';
+            option.style.boxShadow = '0 4px 12px rgba(124, 93, 250, 0.15)';
+            option.style.transform = 'translateY(-2px)';
+            const radio = option.querySelector('.radio-button > div');
+            if (radio) radio.style.display = 'block';
+
+            selectedIntegrationType = option.dataset.type;
+
+            // Enable continue button
+            if (continueBtn) {
+              continueBtn.disabled = false;
+              continueBtn.style.opacity = '1';
+              continueBtn.style.pointerEvents = 'auto';
+            }
+          });
+        });
+      }
+
+      // Handle continue button
+      if (continueBtn) {
+        continueBtn.addEventListener('click', async () => {
+          if (!selectedIntegrationType) return;
+
+          continueBtn.disabled = true;
+          continueBtn.textContent = 'Processing...';
+
+          try {
+            // Update customer_type via API
+            const response = await fetch(`${SIGNUP_API_BASE}/api/signup/update-customer-type`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ customer_type: selectedIntegrationType })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+              // Redirect to terms page
+              const termsRedirect = selectedIntegrationType === 'api'
+                ? '/docs'
+                : '/business/business-dashboard.html';
+              window.location.href = `/terms?redirect=${encodeURIComponent(termsRedirect)}&customer_type=${selectedIntegrationType}`;
+            } else {
+              throw new Error(data.error || 'Failed to update integration type');
+            }
+          } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to save selection. Please try again.');
+            continueBtn.disabled = false;
+            continueBtn.textContent = 'Continue →';
+          }
+        });
+      }
+    }
+  </script>
+</body>
+
+</html>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up - DocLittle</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo-text {
+      font-size: 48px;
+      font-weight: 300;
+      letter-spacing: -4px;
+      color: #1e40af;
+      margin-bottom: 8px;
+    }
+
+    .logo-text .doc {
+      font-family: 'Times New Roman', Times, serif;
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .logo-text .little {
+      font-family: 'Verdana', Geneva, sans-serif;
+      font-weight: 700;
+    }
+
+    .logo-subtitle {
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #64748b;
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+
+    .use-case-selection {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .use-case-option {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: white;
+      position: relative;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
+
+    .use-case-option:hover {
+      border-color: #3b82f6;
+      background: #f8fafc;
+    }
+
+    .use-case-option.selected {
+      border-color: #2563eb;
+      background: #eff6ff;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+    }
+
+    .use-case-option:active {
+      transform: scale(0.98);
+    }
+
+    /* Ensure all child elements don't block clicks */
+    .use-case-option * {
+      pointer-events: none;
+    }
+
+    .use-case-option {
+      pointer-events: auto;
+    }
+
+    .use-case-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .use-case-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .use-case-description {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-top: 8px;
+    }
+
+    .use-case-features {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .use-case-features ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .use-case-features li {
+      color: #475569;
+      font-size: 13px;
+      padding: 4px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .use-case-features li::before {
+      content: '✓';
+      color: #10b981;
+      font-weight: 700;
+    }
+
+    .radio-button {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #cbd5e1;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .radio-button::after {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #2563eb;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .use-case-option.selected .radio-button {
+      border-color: #2563eb;
+    }
+
+    .use-case-option.selected .radio-button::after {
+      opacity: 1;
+    }
+
+    .button {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+    }
+
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .alert-info {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 3px solid #f3f4f6;
+      border-top: 3px solid #2563eb;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 24px;
+    }
+
+    .back-link a {
+      color: #64748b;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link a:hover {
+      color: #2563eb;
+    }
+
+    /* Mobile Responsive Styles */
+    @media (max-width: 768px) {
+      body {
+        padding: 16px;
+        align-items: flex-start;
+        padding-top: 20px;
+      }
+
+      .container {
+        padding: 24px 20px;
+        border-radius: 12px;
+        max-width: 100%;
+      }
+
+      .logo-text {
+        font-size: 36px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .subtitle {
+        font-size: 14px;
+      }
+
+      .use-case-option {
+        padding: 20px 16px;
+        min-height: 60px;
+        /* Ensure adequate touch target */
+      }
+
+      .use-case-title {
+        font-size: 16px;
+      }
+
+      .use-case-description {
+        font-size: 13px;
+      }
+
+      .use-case-features li {
+        font-size: 12px;
+      }
+
+      .button {
+        padding: 16px 20px;
+        font-size: 15px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 12px;
+        padding-top: 16px;
+      }
+
+      .container {
+        padding: 20px 16px;
+      }
+
+      .logo-text {
+        font-size: 32px;
+        margin-bottom: 4px;
+      }
+
+      .logo-subtitle {
+        font-size: 12px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .subtitle {
+        font-size: 13px;
+        margin-bottom: 24px;
+      }
+
+      .use-case-option {
+        padding: 16px;
+        min-height: 50px;
+        /* Ensure adequate touch target */
+      }
+
+      .use-case-header {
+        gap: 10px;
+      }
+
+      .radio-button {
+        width: 18px;
+        height: 18px;
+      }
+
+      .radio-button::after {
+        width: 8px;
+        height: 8px;
+      }
+
+      .use-case-title {
+        font-size: 15px;
+      }
+
+      .use-case-description {
+        font-size: 12px;
+        margin-top: 6px;
+      }
+
+      .use-case-features {
+        margin-top: 10px;
+        padding-top: 10px;
+      }
+
+      .use-case-features li {
+        font-size: 11px;
+        padding: 3px 0;
+      }
+
+      .button {
+        padding: 14px 18px;
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Integration Selection - Show first if no customer_type in URL -->
+  <div class="container" id="integrationSelection">
+    <div class="logo">
+      <div class="logo-text">
+        <span class="doc">Doc</span><span class="little">Little</span>.
+      </div>
+      <div class="logo-subtitle">Voice AI for Healthcare</div>
     </div>
 
-    <script>
-        const API_BASE = window.location.origin.includes('api.doclittle.site') 
-            ? 'https://api.doclittle.site' 
-            : (window.location.origin.includes('localhost') ? 'http://localhost:4000' : window.location.origin);
+    <h1>Choose Your Integration</h1>
+    <p class="subtitle">Select how you'd like to use DocLittle</p>
 
-        let selectedType = null;
+    <div id="alert" class="alert" style="display: none;"></div>
 
-        // Handle use case selection
-        document.querySelectorAll('.use-case-option').forEach(option => {
-            option.addEventListener('click', () => {
-                // Remove selected class from all options
-                document.querySelectorAll('.use-case-option').forEach(opt => {
-                    opt.classList.remove('selected');
-                });
+    <div class="use-case-selection">
+      <div class="use-case-option" data-type="api">
+        <div class="use-case-header">
+          <div class="radio-button"></div>
+          <div class="use-case-title">API Integration</div>
+        </div>
+        <div class="use-case-description">
+          Integrate DocLittle voice AI into your own application using our SDK or REST API.
+        </div>
+        <div class="use-case-features">
+          <ul>
+            <li>Retell SDK for Flutter, iOS, Android</li>
+            <li>REST API endpoints</li>
+            <li>Full control over voice calls</li>
+            <li>API keys for authentication</li>
+          </ul>
+        </div>
+      </div>
 
-                // Add selected class to clicked option
-                option.classList.add('selected');
-                selectedType = option.dataset.type;
+      <div class="use-case-option" data-type="saas">
+        <div class="use-case-header">
+          <div class="radio-button"></div>
+          <div class="use-case-title">SaaS Platform</div>
+        </div>
+        <div class="use-case-description">
+          Get a dedicated phone number and full-service voice AI with our web dashboard.
+        </div>
+        <div class="use-case-features">
+          <ul>
+            <li>Dedicated phone number provisioned</li>
+            <li>Web dashboard for management</li>
+            <li>Automated call routing</li>
+            <li>Built-in patient management</li>
+          </ul>
+        </div>
+      </div>
+    </div>
 
-                // Enable continue button
-                document.getElementById('continue-btn').disabled = false;
-            });
+    <button id="continue-btn" class="button" disabled style="opacity: 0.5; cursor: not-allowed;">
+      Continue
+    </button>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div>Redirecting...</div>
+    </div>
+
+    <div class="back-link">
+      <a href="/">← Back to home</a>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin.includes('api.doclittle.site')
+      ? 'https://api.doclittle.site'
+      : (window.location.origin.includes('localhost') ? 'http://localhost:4000' : window.location.origin);
+
+    let selectedType = null;
+
+    // Handle use case selection - auto-proceed when clicked
+    const useCaseOptions = document.querySelectorAll('.use-case-option');
+
+    if (useCaseOptions.length > 0) {
+      useCaseOptions.forEach(option => {
+        const selectAndProceed = (e) => {
+          if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+
+          // Remove selected class from all options
+          useCaseOptions.forEach(opt => {
+            opt.classList.remove('selected');
+          });
+
+          // Add selected class to clicked option
+          option.classList.add('selected');
+          selectedType = option.dataset.type;
+
+          console.log('Selected type:', selectedType);
+
+          // Auto-proceed after a brief visual feedback
+          setTimeout(() => {
+            proceedWithSelection();
+          }, 200);
+        };
+
+        // Support both click and touch events
+        option.addEventListener('click', selectAndProceed);
+
+        // Prevent double-firing on mobile
+        let touchStartTime = 0;
+        option.addEventListener('touchstart', (e) => {
+          touchStartTime = Date.now();
         });
 
-        // Handle continue button
-        document.getElementById('continue-btn').addEventListener('click', async () => {
-            if (!selectedType) {
-                showAlert('Please select an option', 'info');
-                return;
-            }
-
-            const btn = document.getElementById('continue-btn');
-            const loading = document.getElementById('loading');
-            
-            btn.disabled = true;
-            loading.classList.add('active');
-
-            try {
-                if (selectedType === 'api') {
-                    // Redirect to API signup page (api.doclittle.site)
-                    window.location.href = 'https://api.doclittle.site';
-                } else if (selectedType === 'saas') {
-                    // SaaS Platform - go to login page with test accounts (insurer, provider, patient)
-                    window.location.href = '/signup/form?plan=saas';
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showAlert('An error occurred. Please try again.', 'info');
-                btn.disabled = false;
-                loading.classList.remove('active');
-            }
+        option.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const touchDuration = Date.now() - touchStartTime;
+          if (touchDuration < 300) { // Quick tap
+            selectAndProceed(e);
+          }
         });
 
-        function showAlert(message, type = 'info') {
-            const alert = document.getElementById('alert');
-            alert.textContent = message;
-            alert.className = `alert alert-${type}`;
-            alert.style.display = 'block';
+        // Make the entire card area clickable
+        option.style.cursor = 'pointer';
+        option.style.webkitTapHighlightColor = 'transparent';
+      });
+    }
 
-            setTimeout(() => {
-                alert.style.display = 'none';
-            }, 5000);
+    // Function to proceed with the selected integration type
+    function proceedWithSelection() {
+      if (!selectedType) {
+        return;
+      }
+
+      try {
+        if (selectedType === 'api') {
+          // Redirect to API signup page (api.doclittle.site)
+          window.location.href = 'https://api.doclittle.site';
+        } else if (selectedType === 'saas') {
+          // SaaS Platform - show signup form with customer_type=saas
+          const integrationContainer = document.getElementById('integrationSelection');
+          const signupShell = document.querySelector('.shell');
+
+          if (integrationContainer && signupShell) {
+            // Hide integration selection
+            integrationContainer.style.display = 'none';
+            // Show signup form
+            signupShell.style.display = 'grid';
+            // Set customer type in hidden field
+            const customerTypeInput = document.getElementById('customerTypeInput');
+            if (customerTypeInput) {
+              customerTypeInput.value = 'saas';
+            }
+            // Update URL without reload
+            window.history.pushState({}, '', '/signup?customer_type=saas');
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            // Fallback: redirect with query param
+            window.location.href = '/signup?customer_type=saas';
+          }
         }
-    </script>
-</body>
-</html>
+      } catch (error) {
+        console.error('Error:', error);
+        showAlert('An error occurred. Please try again.', 'info');
+      }
+    }
 
+    // Handle continue button
+    document.getElementById('continue-btn').addEventListener('click', async () => {
+      if (!selectedType) {
+        showAlert('Please select an option', 'info');
+        return;
+      }
+
+      const btn = document.getElementById('continue-btn');
+      const loading = document.getElementById('loading');
+
+      btn.disabled = true;
+      loading.classList.add('active');
+
+      try {
+        if (selectedType === 'api') {
+          // Redirect to API signup page (api.doclittle.site)
+          window.location.href = 'https://api.doclittle.site';
+        } else if (selectedType === 'saas') {
+          // SaaS Platform - go to login page with test accounts (insurer, provider, patient)
+          window.location.href = '/signup/form?plan=saas';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showAlert('An error occurred. Please try again.', 'info');
+        btn.disabled = false;
+        loading.classList.remove('active');
+      }
+    });
+
+    function showAlert(message, type = 'info') {
+      const alert = document.getElementById('alert');
+      alert.textContent = message;
+      alert.className = `alert alert-${type}`;
+      alert.style.display = 'block';
+
+      setTimeout(() => {
+        alert.style.display = 'none';
+      }, 5000);
+    }
+  </script>
+</body>
+
+</html>

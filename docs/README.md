@@ -44,6 +44,25 @@ Testing documentation:
 - Tenant isolation tests
 - API testing guides
 
+### [Middleware Platform](./middleware-platform/)
+Backend platform documentation:
+- SIP authentication troubleshooting
+- Retell configuration guides
+- Platform-specific setup and configuration
+
+### [API Design](./api/design/)
+API architecture and design documentation:
+- API architecture overview
+- Authentication design
+- Azure integration strategy
+- Customer configuration system
+
+### [Reports](./reports/)
+Historical system reviews and reports:
+- System status reports
+- Comprehensive test results
+- Historical snapshots
+
 ## 🚀 Quick Links
 
 - **API Reference**: See [API documentation](../middleware-platform/routes/README.md)

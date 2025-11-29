@@ -561,6 +561,288 @@
                 gap: 16px;
             }
         }
+
+        /* Onboarding Modal */
+        .onboarding-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .onboarding-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+
+        .onboarding-content {
+            position: relative;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .onboarding-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .onboarding-logo {
+            font-size: 48px;
+            font-weight: 300;
+            color: var(--primary);
+            line-height: 1;
+            margin-bottom: 16px;
+            letter-spacing: -2px;
+        }
+
+        .onboarding-logo .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .onboarding-logo .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
+        .onboarding-logo .dot {
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .onboarding-header h1 {
+            font-size: 28px;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .onboarding-subtitle {
+            color: var(--gray-600);
+            font-size: 16px;
+        }
+
+        .onboarding-steps {
+            display: grid;
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .onboarding-step {
+            display: flex;
+            gap: 16px;
+            padding: 20px;
+            border-radius: 12px;
+            background: var(--gray-50);
+            transition: all 0.3s;
+            opacity: 0.5;
+        }
+
+        .onboarding-step.active {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            color: white;
+            opacity: 1;
+            transform: scale(1.02);
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.3);
+        }
+
+        .step-icon {
+            font-size: 32px;
+            flex-shrink: 0;
+        }
+
+        .onboarding-step h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: inherit;
+        }
+
+        .onboarding-step p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: inherit;
+            opacity: 0.9;
+        }
+
+        .onboarding-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .onboarding-actions .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .onboarding-actions .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .onboarding-actions .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .onboarding-actions .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-700);
+        }
+
+        .onboarding-actions .btn-secondary:hover {
+            background: var(--gray-200);
+        }
+
+        @media (max-width: 768px) {
+            .onboarding-content {
+                padding: 24px;
+                max-width: 95%;
+            }
+
+            .onboarding-header h1 {
+                font-size: 24px;
+            }
+
+            .onboarding-step {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+
+        /* PDF Coding Modal Styles */
+        .pdf-coding-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pdf-modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+
+        .pdf-modal-content {
+            position: relative;
+            background: white;
+            border-radius: 12px;
+            width: 95%;
+            height: 95%;
+            max-width: 1400px;
+            max-height: 90vh;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .pdf-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            z-index: 10;
+        }
+
+        .pdf-modal-header h2 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+            color: var(--gray-900);
+        }
+
+        .pdf-modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray-500);
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pdf-modal-close:hover {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
+
+        .pdf-modal-body {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .pdf-modal-content {
+                width: 100%;
+                height: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+        }
     </style>
 </head>
 
@@ -577,7 +859,7 @@
             </div>
 
             <nav class="sidebar-nav">
-                <a href="pdf-coding.html" class="nav-item">
+                <a href="#" class="nav-item" onclick="event.preventDefault(); openPdfCodingModal(); return false;">
                     <span class="nav-icon">📄</span>
                     <span>Scan</span>
                 </a>
@@ -736,10 +1018,74 @@
         </main>
     </div>
 
+    <!-- PDF Coding Modal -->
+    <div id="pdfCodingModal" class="pdf-coding-modal" style="display: none;">
+        <div class="pdf-modal-overlay" onclick="closePdfCodingModal()"></div>
+        <div class="pdf-modal-content">
+            <div class="pdf-modal-header">
+                <h2>📄 PDF Medical Coding</h2>
+                <button class="pdf-modal-close" onclick="closePdfCodingModal()">✕</button>
+            </div>
+            <div class="pdf-modal-body" id="pdfCodingContent">
+                <!-- PDF Coding interface will be loaded here via iframe -->
+                <iframe id="pdfCodingIframe" src="pdf-coding.html" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onboarding Welcome Modal -->
+    <div id="onboardingModal" class="onboarding-modal" style="display: none;">
+        <div class="onboarding-overlay"></div>
+        <div class="onboarding-content">
+            <div class="onboarding-header">
+                <div class="onboarding-logo">
+                    <span class="doc">Doc</span><span class="little">Little</span><span class="dot">.</span>
+                </div>
+                <h1>Welcome to DocLittle! 🎉</h1>
+                <p class="onboarding-subtitle">Your voice AI assistant for healthcare is ready to help</p>
+            </div>
+
+            <div class="onboarding-steps">
+                <div class="onboarding-step active" data-step="1">
+                    <div class="step-icon">📞</div>
+                    <h3>Your Dedicated Phone Number</h3>
+                    <p>You now have a dedicated phone number that patients can call. All calls are automatically handled
+                        by your AI voice agent.</p>
+                </div>
+
+                <div class="onboarding-step" data-step="2">
+                    <div class="step-icon">🎙️</div>
+                    <h3>Voice Agent Settings</h3>
+                    <p>Customize your agent's behavior, business hours, and responses in the Voice Agent settings. You
+                        can even customize the prompt!</p>
+                </div>
+
+                <div class="onboarding-step" data-step="3">
+                    <div class="step-icon">👥</div>
+                    <h3>Patient Management</h3>
+                    <p>View all your patients, their call history, and manage appointments from the Patients page.</p>
+                </div>
+
+                <div class="onboarding-step" data-step="4">
+                    <div class="step-icon">💳</div>
+                    <h3>Billing & Usage</h3>
+                    <p>Track your usage, view invoices, and manage your payment method. You have 250 free minutes per
+                        month!</p>
+                </div>
+            </div>
+
+            <div class="onboarding-actions">
+                <button class="btn btn-secondary" id="skipOnboarding">Skip Tour</button>
+                <button class="btn btn-primary" id="startTour">Start Tour</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
         let userData = null;
         let statsInterval = null;
+        let onboardingStep = 0;
 
         // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
@@ -758,16 +1104,102 @@
             console.warn('Error checking user role:', e);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             // Load userData AFTER DOM is ready
             userData = JSON.parse(sessionStorage.getItem('user'));
 
             loadUserInfo();
             loadDashboardData();
 
+            // Check if user needs onboarding
+            await checkOnboarding();
+
             // Refresh every 30 seconds
             statsInterval = setInterval(loadDashboardData, 30000);
         });
+
+        async function checkOnboarding() {
+            try {
+                // Check if onboarding was already completed
+                const onboardingCompleted = localStorage.getItem('onboarding_completed');
+                if (onboardingCompleted === 'true') {
+                    return; // Don't show onboarding if already completed
+                }
+
+                // Check customer data to see if they're new
+                const response = await fetch(`${API_BASE}/api/customers/me`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.customer) {
+                        const customer = data.customer;
+
+                        // Show onboarding for SaaS customers who just signed up
+                        // Check if account was created recently (within last 24 hours)
+                        const createdAt = new Date(customer.created_at || customer.createdAt);
+                        const hoursSinceCreation = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+
+                        if (customer.customer_type === 'saas' && hoursSinceCreation < 24) {
+                            showOnboarding();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking onboarding:', error);
+            }
+        }
+
+        function showOnboarding() {
+            const modal = document.getElementById('onboardingModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                onboardingStep = 1;
+                updateOnboardingStep();
+
+                // Set up event listeners
+                const skipBtn = document.getElementById('skipOnboarding');
+                const startBtn = document.getElementById('startTour');
+
+                if (skipBtn) {
+                    skipBtn.onclick = () => hideOnboarding();
+                }
+
+                if (startBtn) {
+                    startBtn.onclick = () => {
+                        hideOnboarding();
+                        // Show welcome message
+                        setTimeout(() => {
+                            alert('Welcome! Explore your dashboard. Key areas:\n\n' +
+                                '📞 Voice Agent - Configure your AI assistant\n' +
+                                '👥 Patients - View patient records and history\n' +
+                                '💳 Billing - Track usage and manage payments\n' +
+                                '⚙️ Settings - Customize your account');
+                        }, 300);
+                    };
+                }
+            }
+        }
+
+        function hideOnboarding() {
+            const modal = document.getElementById('onboardingModal');
+            if (modal) {
+                modal.style.display = 'none';
+                localStorage.setItem('onboarding_completed', 'true');
+            }
+        }
+
+        function updateOnboardingStep() {
+            const steps = document.querySelectorAll('.onboarding-step');
+            steps.forEach((step, index) => {
+                if (index + 1 === onboardingStep) {
+                    step.classList.add('active');
+                } else {
+                    step.classList.remove('active');
+                }
+            });
+        }
 
         function loadUserInfo() {
             if (userData) {
@@ -864,22 +1296,26 @@
 
         async function loadRecentCalls() {
             try {
-                // Load recent calls directly from DB (voice checkouts)
-                const res = await fetch(`${API_BASE}/api/admin/transactions?limit=10`);
+                // Load recent calls scoped to this customer (tenant-isolated)
+                const res = await fetch(`${API_BASE}/api/customer/dashboard/calls?limit=10`, {
+                    credentials: 'include'
+                });
                 const data = await res.json();
 
                 if (data.success) {
                     // Also populate tabbed recent panel
                     const container = document.getElementById('recentCallsList');
-                    container.innerHTML = data.transactions.slice(0, 10).map(call => {
+                    if (data.calls && data.calls.length > 0) {
+                        container.innerHTML = data.calls.map(call => {
                         const time = new Date(call.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-                        const statusText = call.status.charAt(0).toUpperCase() + call.status.slice(1);
+                            const statusText = (call.status || 'completed').charAt(0).toUpperCase() + (call.status || 'completed').slice(1);
+                            const duration = call.call_duration_seconds ? `${Math.floor(call.call_duration_seconds / 60)}m ${call.call_duration_seconds % 60}s` : 'N/A';
                         return `
                             <div class="patient-item">
                                 <div class="patient-info">
-                                    <div class="patient-id">${call.id}</div>
-                                    <div class="patient-name">${call.customer_name || 'Anonymous'}</div>
-                                    <div class="patient-phone">${call.customer_phone || ''}</div>
+                                        <div class="patient-id">${call.call_id || call.id}</div>
+                                        <div class="patient-name">Call ${call.call_id ? call.call_id.substring(0, 8) : 'N/A'}</div>
+                                        <div class="patient-phone">Duration: ${duration}</div>
                                 </div>
                                 <div class="patient-details">
                                     <div class="call-duration">${time}</div>
@@ -888,9 +1324,17 @@
                             </div>
                         `;
                     }).join('');
+                    } else {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📞</div>
+                                <p>No calls yet. Call history will appear here.</p>
+                            </div>
+                        `;
+                    }
                 }
             } catch (error) {
-                console.error('Error loading patients:', error);
+                console.error('Error loading calls:', error);
             }
         }
 
@@ -898,7 +1342,10 @@
 
         async function loadUpcomingCalls() {
             try {
-                const res = await fetch(`${API_BASE}/api/admin/appointments/upcoming?limit=8`);
+                // Load upcoming appointments scoped to this customer (tenant-isolated)
+                const res = await fetch(`${API_BASE}/api/customer/dashboard/appointments/upcoming?limit=8`, {
+                    credentials: 'include'
+                });
                 const data = await res.json();
                 const container = document.getElementById('upcomingCallsList');
                 if (!data.success || data.count === 0) {
@@ -1064,6 +1511,42 @@
             sessionStorage.clear();
             window.location.href = '../login.html';
         }
+
+        // PDF Coding Modal Functions
+        function openPdfCodingModal() {
+            const modal = document.getElementById('pdfCodingModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                document.body.style.overflow = 'hidden'; // Prevent background scrolling
+                
+                // Mark Scan button as active
+                const scanButton = document.querySelector('a[onclick*="openPdfCodingModal"]');
+                if (scanButton) {
+                    scanButton.classList.add('active');
+                }
+            }
+        }
+
+        function closePdfCodingModal() {
+            const modal = document.getElementById('pdfCodingModal');
+            if (modal) {
+                modal.style.display = 'none';
+                document.body.style.overflow = ''; // Restore scrolling
+                
+                // Remove active state from Scan button
+                const scanButton = document.querySelector('a[onclick*="openPdfCodingModal"]');
+                if (scanButton) {
+                    scanButton.classList.remove('active');
+                }
+            }
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closePdfCodingModal();
+            }
+        });
     </script>
 </body>
 

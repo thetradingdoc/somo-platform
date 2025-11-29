@@ -35,28 +35,77 @@ function parseCptFile(filePath) {
 
   const raw = fs.readFileSync(filePath, 'utf8');
   const lines = raw.split(/\r?\n/);
-  let currentCategory = 'Uncategorized';
+  let currentCategory = 'Clinical Laboratory Services';
   const codes = [];
   const seen = new Set();
+
+  // Skip header lines
+  const skipPatterns = [
+    /^LIST OF CPT/i,
+    /^This code list is effective/i,
+    /^CLINICAL LABORATORY SERVICES/i,
+    /^INCLUDE CPT codes/i,
+    /^EXCLUDE CPT codes/i,
+    /^INCLUDE the following/i,
+    /^RADIOLOGY SERVICES/i,
+    /^PHYSICAL THERAPY SERVICES/i,
+    /^OCCUPATIONAL THERAPY SERVICES/i,
+    /^SPEECH-LANGUAGE PATHOLOGY SERVICES/i,
+    /^DURABLE MEDICAL EQUIPMENT/i,
+    /^PROSTHETICS/i,
+    /^ORTHOTICS/i,
+    /^HOME HEALTH SERVICES/i,
+    /^PERSONAL CARE SERVICES/i,
+    /^AMBULANCE SERVICES/i,
+    /^SUPPLIES/i,
+    /^OTHER SERVICES/i
+  ];
 
   for (let rawLine of lines) {
     if (!rawLine) continue;
     let line = rawLine.replace(/\u00A0/g, ' ').trim();
     if (!line) continue;
 
-    if (line.startsWith('"')) {
-      line = line.replace(/^"|"$/g, '').trim();
-    }
-
-    if (isHeading(line) && !/^INCLUDE|^EXCLUDE/.test(line)) {
-      currentCategory = line;
+    // Skip header lines
+    if (skipPatterns.some(pattern => pattern.test(line))) {
+      // Update category if it's a section header
+      if (/^CLINICAL LABORATORY/i.test(line)) {
+        currentCategory = 'Clinical Laboratory Services';
+      } else if (/^RADIOLOGY/i.test(line)) {
+        currentCategory = 'Radiology Services';
+      } else if (/^PHYSICAL THERAPY/i.test(line)) {
+        currentCategory = 'Physical Therapy';
+      } else if (/^OCCUPATIONAL THERAPY/i.test(line)) {
+        currentCategory = 'Occupational Therapy';
+      } else if (/^SPEECH/i.test(line)) {
+        currentCategory = 'Speech Therapy';
+      } else if (/^DURABLE MEDICAL/i.test(line)) {
+        currentCategory = 'Durable Medical Equipment';
+      } else if (/^PROSTHETICS/i.test(line)) {
+        currentCategory = 'Prosthetics';
+      } else if (/^ORTHOTICS/i.test(line)) {
+        currentCategory = 'Orthotics';
+      } else if (/^HOME HEALTH/i.test(line)) {
+        currentCategory = 'Home Health';
+      } else if (/^AMBULANCE/i.test(line)) {
+        currentCategory = 'Ambulance Services';
+      } else if (/^SUPPLIES/i.test(line)) {
+        currentCategory = 'Supplies';
+      } else if (/^OTHER SERVICES/i.test(line)) {
+        currentCategory = 'Other Services';
+      }
       continue;
     }
 
-    if (/^(INCLUDE|EXCLUDE)/i.test(line)) {
-      continue;
+    // Skip lines that are just quotes or instructions
+    if (line.startsWith('"') && line.endsWith('"')) {
+      const inner = line.replace(/^"|"$/g, '').trim();
+      if (inner.length > 100 || /^INCLUDE|^EXCLUDE/i.test(inner)) {
+        continue;
+      }
     }
 
+    // Parse tab-separated or space-separated code and description
     const parts = rawLine.split(/\t+/).map(p => p.trim()).filter(Boolean);
     let code = null;
     let description = null;
@@ -65,6 +114,7 @@ function parseCptFile(filePath) {
       code = normalizeCode(parts[0]);
       description = parts.slice(1).join(' ').replace(/"/g, '').trim();
     } else {
+      // Try space-separated format: CODE Description
       const match = line.match(/^([0-9A-Za-z]{4,7})\s+(.+)$/);
       if (match) {
         code = normalizeCode(match[1]);
@@ -72,7 +122,23 @@ function parseCptFile(filePath) {
       }
     }
 
-    if (!code || !description) {
+    // Validate code format (must be alphanumeric, 3-7 chars, not all letters)
+    if (!code || !description || description.length < 3) {
+      continue;
+    }
+
+    // Skip if code looks like a header (all caps long text)
+    if (code.length > 7 || /^[A-Z]{10,}$/.test(code)) {
+      continue;
+    }
+
+    // Skip if description is too long (likely a header)
+    if (description.length > 200) {
+      continue;
+    }
+
+    // Skip common non-code patterns
+    if (/^(LIST|THIS|INCLUDE|EXCLUDE|CLINICAL|RADIOLOGY|PHYSICAL|OCCUPATIONAL|SPEECH|DURABLE|PROSTHETICS|ORTHOTICS|HOME|AMBULANCE|SUPPLIES|OTHER)/i.test(description)) {
       continue;
     }
 

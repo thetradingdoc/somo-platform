@@ -23,30 +23,28 @@ if (GROQ_API_KEY) {
 const DEFAULT_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 function buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidates, icdReference }) {
-  const context = patientContext ? JSON.stringify(patientContext, null, 2) : 'Not provided';
+  // Truncate patient context if too long
+  const context = patientContext ? JSON.stringify(patientContext, null, 2).slice(0, 500) : 'Not provided';
   const cptSection = cptCandidates.length
-    ? cptCandidates.map(item => `- ${item.code}: ${item.description} (keywords: ${item.matched_keywords.join(', ')})`).join('\n')
+    ? cptCandidates.map(item => `${item.code}: ${item.description}`).join('\n')
     : 'No candidate CPT codes found';
   const icdSection = icdReference.length
-    ? icdReference.map(item => `- ${item.code}: ${item.description}`).join('\n')
+    ? icdReference.map(item => `${item.code}: ${item.description}`).join('\n')
     : 'No ICD-10 reference codes available';
 
-  return `You are a certified medical coding specialist. Review the clinical note and recommended code references.
-Respond with JSON containing three keys: "icd10" (array), "cpt" (array), and "rationale" (string).
-Each array element must include "code", "description", and "confidence" (0-1).
-Only select codes from the provided reference lists. If no code applies, return an empty array.
+  return `You are a certified medical coding specialist. Review the clinical note and select appropriate codes.
+Respond with JSON: {"icd10": [{"code": "...", "description": "...", "confidence": 0.0-1.0}], "cpt": [{"code": "...", "description": "...", "confidence": 0.0-1.0}], "rationale": "..."}
+Only use codes from the reference lists below. Return empty arrays if no codes apply.
 
 Clinical Note:
 ${clinicalNote}
 
-Encounter Type: ${encounterType || 'Unknown'}
-Patient Context:
-${context}
+Encounter: ${encounterType || 'Unknown'}
 
-Candidate CPT Codes:
+CPT Candidates:
 ${cptSection}
 
-Reference ICD-10 Codes:
+ICD-10 Reference:
 ${icdSection}
 `;
 }
@@ -75,10 +73,17 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
     };
   }
 
-  const cptCandidates = knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 12 });
-  const icdReference = knowledgeService.getReferenceIcdCodes(15);
+  // Truncate very long clinical notes to prevent token overflow
+  // Keep last 4000 characters (most recent/relevant info) if note is too long
+  const MAX_NOTE_LENGTH = 4000;
+  const truncatedNote = clinicalNote.length > MAX_NOTE_LENGTH 
+    ? clinicalNote.slice(-MAX_NOTE_LENGTH) + '\n[... previous content truncated ...]'
+    : clinicalNote;
 
-  const prompt = buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidates, icdReference });
+  const cptCandidates = knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 10 });
+  const icdReference = knowledgeService.getReferenceIcdCodes(12);
+
+  const prompt = buildPrompt({ clinicalNote: truncatedNote, encounterType, patientContext, cptCandidates, icdReference });
 
   try {
     const response = await groq.chat.completions.create({
@@ -86,7 +91,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       messages: [
         {
           role: 'system',
-          content: 'You are a certified medical coder. Always follow AMA and CMS guidelines.'
+          content: 'You are a certified medical coder. Always follow AMA and CMS guidelines. Respond with valid JSON only.'
         },
         {
           role: 'user',
@@ -94,7 +99,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
         }
       ],
       response_format: { type: 'json_object' },
-      max_tokens: 600,
+      max_tokens: 2000,
       temperature: 0.2
     });
 
@@ -118,7 +123,15 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       }
     };
   } catch (error) {
-    console.error('❌ Groq API error:', error.message);
+    // Log full error details for debugging
+    const errorDetails = error.response?.data || error.message;
+    console.error('❌ Groq API error:', error.status || error.code || 'Unknown', errorDetails);
+    
+    // Check if it's a token limit error
+    if (error.message?.includes('max completion tokens') || error.message?.includes('json_validate_failed')) {
+      console.warn('⚠️  Token limit reached - consider truncating clinical note further or reducing candidate codes');
+    }
+    
     // Fall back to knowledge service on error
     console.warn('⚠️  Falling back to knowledge service due to Groq error');
     const cptCandidates = knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 });

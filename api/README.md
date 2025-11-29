@@ -8,11 +8,12 @@
 
 ## 📋 Table of Contents
 
-1. [API Architecture](./design/API_ARCHITECTURE.md)
-2. [Authentication](./design/AUTHENTICATION.md)
-3. [API Reference](./docs/API_REFERENCE.md)
-4. [Webhooks](./design/WEBHOOKS.md)
-5. [SDK & Examples](./examples/README.md)
+1. [API Architecture](../docs/api/design/API_ARCHITECTURE.md)
+2. [Authentication](../docs/api/design/AUTHENTICATION.md)
+3. [Azure Integration](../docs/api/design/AZURE_INTEGRATION.md)
+4. [Customer Configuration](../docs/api/design/CUSTOMER_CONFIG.md)
+5. [API Reference](../docs/api/API_DOCUMENTATION.md)
+6. [SDK & Examples](./examples/README.md) (Coming Soon)
 
 ---
 
@@ -31,21 +32,20 @@
 ```
 api/
 ├── README.md                    # This file
-├── design/                      # Architecture & design documents
-│   ├── API_ARCHITECTURE.md     # Overall API architecture
-│   ├── AUTHENTICATION.md       # Auth strategy
-│   ├── WEBHOOKS.md             # Webhook system design
-│   ├── RATE_LIMITING.md        # Rate limiting strategy
-│   └── CUSTOMER_CONFIG.md      # Customer configuration system
-├── docs/                        # API documentation
-│   ├── API_REFERENCE.md        # Complete API reference
-│   ├── QUICK_START.md          # Quick start guide
-│   └── INTEGRATION_GUIDE.md    # Full integration guide
-└── examples/                    # Code examples & SDKs
+└── examples/                    # Code examples & SDKs (Coming Soon)
     ├── README.md               # Examples index
     ├── javascript/             # JavaScript SDK & examples
     ├── python/                 # Python SDK & examples
     └── curl/                   # cURL examples
+
+Documentation has been moved to docs/api/:
+├── docs/api/
+│   ├── API_DOCUMENTATION.md    # Complete API reference
+│   └── design/                 # Architecture & design documents
+│       ├── API_ARCHITECTURE.md
+│       ├── AUTHENTICATION.md
+│       ├── AZURE_INTEGRATION.md
+│       └── CUSTOMER_CONFIG.md
 ```
 
 ---

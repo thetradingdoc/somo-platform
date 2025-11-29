@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Little API - Healthcare Intelligence Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
+            --secondary: #2563eb;
+            --accent: #60a5fa;
+            --white: #ffffff;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-300: #d1d5db;
+            --gray-600: #4b5563;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--white);
+            color: var(--gray-900);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Geometric decorative elements */
+        .geometric-decoration {
+            position: absolute;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.05;
+        }
+
+        .geometric-1 {
+            top: 10%;
+            right: -100px;
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+            transform: rotate(45deg);
+        }
+
+        .geometric-2 {
+            bottom: 20%;
+            left: -150px;
+            width: 500px;
+            height: 500px;
+            background: linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%);
+            border-radius: 50%;
+            transform: rotate(-30deg);
+        }
+
+        /* Navigation */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--gray-200);
+            padding: 20px 40px;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+            letter-spacing: -1px;
+        }
+
+        .nav-logo .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .nav-logo .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
+        .nav-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            color: var(--gray-700);
+            text-decoration: none;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--primary);
+            background: var(--gray-50);
+        }
+
+        .nav-link.btn-nav {
+            background: var(--primary);
+            color: var(--white);
+        }
+
+        .nav-link.btn-nav:hover {
+            background: var(--primary-dark);
+        }
+
+        /* Hero Section */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 120px 20px 80px;
+            overflow: hidden;
+            background: linear-gradient(180deg, var(--white) 0%, var(--gray-50) 100%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 1200px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .brand-logo {
+            margin-bottom: 40px;
+        }
+
+        .brand-name {
+            font-size: clamp(42px, 7vw, 84px);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            color: var(--primary);
+            letter-spacing: -2px;
+        }
+
+        .brand-name .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+        }
+
+        .brand-name .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
+        .brand-tagline {
+            font-size: clamp(16px, 2.5vw, 24px);
+            font-weight: 400;
+            color: var(--gray-600);
+            margin-bottom: 60px;
+            letter-spacing: 0.3px;
+        }
+
+        .main-headline {
+            font-size: clamp(32px, 5.5vw, 64px);
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 30px;
+            color: var(--gray-900);
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .headline-highlight {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subheadline {
+            font-size: clamp(18px, 2.2vw, 22px);
+            font-weight: 400;
+            color: var(--gray-600);
+            margin-bottom: 50px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.7;
+        }
+
+        /* CTA Buttons */
+        .cta-section {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 80px;
+        }
+
+        .btn {
+            padding: 16px 36px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: var(--white);
+            box-shadow: 0 4px 16px rgba(30, 64, 175, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--white);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--primary);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+
+        /* Features Section */
+        .features {
+            position: relative;
+            z-index: 2;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 100px 20px;
+            background: var(--white);
+        }
+
+        .section-title {
+            font-size: clamp(36px, 5vw, 48px);
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 16px;
+            color: var(--gray-900);
+        }
+
+        .section-subtitle {
+            font-size: 20px;
+            text-align: center;
+            color: var(--gray-600);
+            margin-bottom: 60px;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 32px;
+            margin-top: 60px;
+        }
+
+        .feature-card {
+            background: var(--white);
+            border: 2px solid var(--gray-200);
+            border-radius: 16px;
+            padding: 40px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--primary-light));
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+            box-shadow: 0 12px 32px rgba(30, 64, 175, 0.1);
+        }
+
+        .feature-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 24px;
+            display: inline-block;
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            font-size: 32px;
+        }
+
+        .feature-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--gray-900);
+        }
+
+        .feature-description {
+            font-size: 16px;
+            color: var(--gray-600);
+            line-height: 1.7;
+        }
+
+        /* API Description */
+        .api-description {
+            position: relative;
+            z-index: 2;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 80px 20px;
+            text-align: center;
+            background: var(--gray-50);
+        }
+
+        .api-description p {
+            font-size: clamp(18px, 2.2vw, 22px);
+            line-height: 1.8;
+            color: var(--gray-700);
+            margin-bottom: 30px;
+        }
+
+        .api-description .highlight {
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        /* Value Props */
+        .value-props {
+            background: var(--white);
+            padding: 100px 20px;
+        }
+
+        .value-props-grid {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 40px;
+        }
+
+        .value-prop {
+            text-align: center;
+        }
+
+        .value-prop-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            display: inline-block;
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            margin: 0 auto 24px;
+        }
+
+        .value-prop-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--gray-900);
+        }
+
+        .value-prop-description {
+            font-size: 16px;
+            color: var(--gray-600);
+            line-height: 1.6;
+        }
+
+        /* Footer */
+        .footer {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            padding: 60px 20px;
+            border-top: 1px solid var(--gray-200);
+            margin-top: 100px;
+            background: var(--gray-50);
+        }
+
+        .footer p {
+            color: var(--gray-600);
+            font-size: 14px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 16px 20px;
+            }
+
+            .nav-actions {
+                gap: 8px;
+            }
+
+            .nav-link {
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+
+            .cta-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .value-props-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Blue accent line */
+        .blue-line {
+            width: 100px;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            margin: 40px auto;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-logo">
+            <span class="doc">Doc</span><span class="little">Little</span>
+        </div>
+        <div class="nav-actions">
+            <a href="/login" class="nav-link">Sign In</a>
+            <a href="/signup" class="nav-link btn-nav">Get Started</a>
+        </div>
+    </nav>
+
+    <div class="hero">
+        <!-- Geometric decorative elements -->
+        <div class="geometric-decoration geometric-1"></div>
+        <div class="geometric-decoration geometric-2"></div>
+
+        <div class="hero-content">
+            <div class="brand-logo">
+                <h1 class="brand-name">
+                    <span class="doc">Doc</span><span class="little">Little</span>
+                </h1>
+                <p class="brand-tagline">Voice AI Platform for Healthcare Commerce</p>
+            </div>
+
+            <h2 class="main-headline">
+                Built on <span class="headline-highlight">Research</span>.<br>
+                Powered by <span class="headline-highlight">Intelligence</span>.<br>
+                Secured by <span class="headline-highlight">Technology</span>.
+            </h2>
+
+            <p class="subheadline">
+                White-label voice AI agent platform enabling healthcare providers to offer 
+                voice-powered commerce, patient services, and seamless EHR integration 
+                through natural language conversations.
+            </p>
+
+            <div class="cta-section">
+                <a href="/signup" class="btn btn-primary">
+                    Get Started
+                    <span>→</span>
+                </a>
+                <a href="/login" class="btn btn-secondary">
+                    Sign In
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="value-props">
+        <div class="value-props-grid">
+            <div class="value-prop">
+                <div class="value-prop-icon">🔬</div>
+                <h3 class="value-prop-title">Research-Driven</h3>
+                <p class="value-prop-description">
+                    Built on the latest healthcare research and medical standards. 
+                    FHIR-compliant, evidence-based, and continuously updated.
+                </p>
+            </div>
+
+            <div class="value-prop">
+                <div class="value-prop-icon">🧠</div>
+                <h3 class="value-prop-title">Intelligent Automation</h3>
+                <p class="value-prop-description">
+                    AI-powered voice agents that understand context, learn from 
+                    interactions, and deliver personalized patient experiences.
+                </p>
+            </div>
+
+            <div class="value-prop">
+                <div class="value-prop-icon">🔒</div>
+                <h3 class="value-prop-title">Enterprise Security</h3>
+                <p class="value-prop-description">
+                    HIPAA-compliant infrastructure with end-to-end encryption, 
+                    audit trails, and rigorous security protocols.
+                </p>
+            </div>
+
+            <div class="value-prop">
+                <div class="value-prop-icon">⚡</div>
+                <h3 class="value-prop-title">Advanced Technology</h3>
+                <p class="value-prop-description">
+                    Modern APIs, real-time processing, and seamless integrations 
+                    with EHR systems, payment processors, and insurance networks.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="api-description">
+        <div class="blue-line"></div>
+        <p>
+            Doctor Little is a comprehensive <span class="highlight">healthcare intelligence platform</span> 
+            that enables healthcare providers to automate operations, enhance patient care, 
+            and streamline workflows through intelligent technology.
+        </p>
+        <p>
+            Our API integrates <span class="highlight">voice AI agents</span>, 
+            <span class="highlight">medical billing automation</span>, 
+            <span class="highlight">insurance processing</span>, 
+            and <span class="highlight">FHIR-compliant data management</span> into a single, 
+            secure, and scalable platform.
+        </p>
+        <div class="blue-line"></div>
+    </div>
+
+    <div class="features">
+        <h2 class="section-title">Platform Capabilities</h2>
+        <p class="section-subtitle">
+            Everything you need to modernize your healthcare operations
+        </p>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🎙️</div>
+                <h3 class="feature-title">Intelligent Voice Agents</h3>
+                <p class="feature-description">
+                    Natural language processing that handles patient calls, 
+                    schedules appointments, processes orders, and provides 
+                    24/7 multilingual support with context awareness.
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">💳</div>
+                <h3 class="feature-title">Automated Billing & Payments</h3>
+                <p class="feature-description">
+                    Intelligent claims processing, real-time eligibility verification, 
+                    and secure payment collection. Integrates with STEDI, Stripe, 
+                    Circle wallets, and major insurance networks.
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🏥</div>
+                <h3 class="feature-title">FHIR-Compliant Integration</h3>
+                <p class="feature-description">
+                    HL7 FHIR R4-compliant patient records, encounters, and healthcare 
+                    data management. Seamlessly connects with Epic, 1upHealth, 
+                    and other leading EHR systems.
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">📅</div>
+                <h3 class="feature-title">Smart Scheduling</h3>
+                <p class="feature-description">
+                    AI-powered appointment management with calendar integration, 
+                    automated reminders, and intelligent conflict resolution. 
+                    Syncs with Google Calendar and major EHR systems.
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🔐</div>
+                <h3 class="feature-title">Insurance Intelligence</h3>
+                <p class="feature-description">
+                    Real-time eligibility verification, automated claim submission, 
+                    status tracking, and EOB processing. X12 EDI transactions 
+                    for all major payers with intelligent error handling.
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">📱</div>
+                <h3 class="feature-title">Developer-First APIs</h3>
+                <p class="feature-description">
+                    RESTful APIs, webhooks, and comprehensive SDKs for Flutter, 
+                    iOS, and Android. White-label solutions that integrate 
+                    seamlessly into your existing applications.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="api-description">
+        <div class="blue-line"></div>
+        <p>
+            Start with <span class="highlight">100 free voice minutes</span> and 
+            <span class="highlight">1,000 free API requests</span> per month. 
+            Enterprise-grade security and reliability from day one.
+        </p>
+        <div style="margin-top: 40px;">
+            <a href="/signup" class="btn btn-primary">
+                Get Started Free
+                <span>→</span>
+            </a>
+        </div>
+        <div class="blue-line"></div>
+    </div>
+
+    <div class="footer">
+        <p>&copy; 2024 Doctor Little. All rights reserved.</p>
+        <p style="margin-top: 10px; font-size: 12px; opacity: 0.7;">
+            Research • Intelligence • Safety • Technology
+        </p>
+    </div>
+</body>
+</html>
