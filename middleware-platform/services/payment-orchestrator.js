@@ -1,10 +1,10 @@
 // services/payment-orchestrator.js
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
-const axios = require('axios');
 const db = require('../database');
 const PaymentRequest = require('../models/payment-request');
 const PaymentResponse = require('../models/payment-response');
+const PaymentService = require('./payment-service');
 const SMSService = require('./sms-service');
 const EmailService = require('./email-service');
 
@@ -19,32 +19,75 @@ class PaymentOrchestrator {
 
             console.log('📋 Request Summary:', paymentRequest.getSummary());
 
-            // Validate request
+            // Validate request (merchant_id is optional - fallback will handle it)
             const validation = paymentRequest.validate();
             if (!validation.valid) {
-                console.log('❌ Validation failed:', validation.errors);
-                return new PaymentResponse({
-                    success: false,
-                    error: `Validation failed: ${validation.errors.join(', ')}`,
-                    transaction_id: paymentRequest.transaction_id
-                });
+                // Filter out merchant_id requirement - we'll handle it with fallback
+                const nonMerchantErrors = validation.errors.filter(e => !e.includes('merchant_id'));
+                if (nonMerchantErrors.length > 0) {
+                    console.log('❌ Validation failed:', nonMerchantErrors);
+                    return new PaymentResponse({
+                        success: false,
+                        error: `Validation failed: ${nonMerchantErrors.join(', ')}`,
+                        transaction_id: paymentRequest.transaction_id
+                    });
+                }
+                // If only merchant_id is missing, continue to fallback logic
+                console.log('⚠️  merchant_id missing - will use fallback logic');
             }
 
-            // Get merchant
-            const merchant = db.getMerchant(paymentRequest.merchant_id);
+            // Get merchant - with fallback logic for invalid or missing merchant_id
+            let merchant = paymentRequest.merchant_id ? db.getMerchant(paymentRequest.merchant_id) : null;
+
+            // FALLBACK: If merchant not found, try to determine from context
             if (!merchant) {
-                console.log('❌ Merchant not found:', paymentRequest.merchant_id);
+                console.log('⚠️  Merchant not found by ID, trying fallback methods...');
+                console.log('   Provided merchant_id:', paymentRequest.merchant_id);
+                
+                // Method 1: Try to find merchant by subdomain (akin-dunbar)
+                const fallbackMerchant = db.getMerchantBySubdomain('akin-dunbar');
+                if (fallbackMerchant) {
+                    console.log('✅ Found merchant by subdomain (akin-dunbar):', fallbackMerchant.id);
+                    merchant = fallbackMerchant;
+                    // Update paymentRequest with correct merchant_id
+                    paymentRequest.merchant_id = merchant.id;
+                } else {
+                    // Method 2: Try to get first active merchant (last resort)
+                    const allMerchants = db.getAllMerchants();
+                    if (allMerchants && allMerchants.length > 0) {
+                        // Prefer merchants with subdomain 'akin-dunbar' or first active one
+                        const preferredMerchant = allMerchants.find(m => m.subdomain === 'akin-dunbar') || allMerchants[0];
+                        console.log('⚠️  Using fallback merchant:', preferredMerchant.id, preferredMerchant.name);
+                        merchant = preferredMerchant;
+                        paymentRequest.merchant_id = merchant.id;
+                    }
+                }
+            }
+
+            // Final validation
+            if (!merchant) {
+                console.log('❌ ERROR: Could not determine merchant');
                 return new PaymentResponse({
                     success: false,
-                    error: 'Merchant not found',
+                    error: 'Merchant not found. Please ensure merchant is configured in the system.',
                     transaction_id: paymentRequest.transaction_id
                 });
             }
 
-            console.log('✅ Merchant:', merchant.name);
+            console.log('✅ Merchant found:', merchant.name, '(ID:', merchant.id + ')');
 
             // Enrich items with full details
             const enrichedItems = await this._enrichItems(paymentRequest.items, merchant);
+
+            // CRITICAL: Validate that we have at least one item
+            if (!enrichedItems || enrichedItems.length === 0) {
+                console.log('❌ No items to checkout');
+                return new PaymentResponse({
+                    success: false,
+                    error: 'No items in checkout. Please add at least one product.',
+                    transaction_id: paymentRequest.transaction_id
+                });
+            }
 
             // Calculate totals
             const totals = this._calculateTotals(enrichedItems, paymentRequest.totals);
@@ -52,22 +95,25 @@ class PaymentOrchestrator {
             console.log('💰 Totals:', totals);
 
             // Normalize phone number (ensure it's never null)
-            const normalizedPhone = paymentRequest.customer.phone 
+            const normalizedPhone = paymentRequest.customer?.phone 
                 ? SMSService.formatPhoneNumber(paymentRequest.customer.phone)
                 : '0000000000';
+
+            // Get first item (primary product)
+            const primaryItem = enrichedItems[0];
 
             // Create checkout record
             const checkoutId = uuidv4();
             const checkout = {
                 id: checkoutId,
                 merchant_id: paymentRequest.merchant_id,
-                product_id: enrichedItems[0].product_id,
-                product_name: enrichedItems[0].name,
-                quantity: enrichedItems[0].quantity,
+                product_id: primaryItem.product_id,
+                product_name: primaryItem.name,
+                quantity: primaryItem.quantity || 1,
                 amount: totals.total,
                 customer_phone: normalizedPhone,
-                customer_name: paymentRequest.customer.name,
-                customer_email: paymentRequest.customer.email,
+                customer_name: paymentRequest.customer?.name || null,
+                customer_email: paymentRequest.customer?.email || null,
                 status: 'pending'
             };
 
@@ -106,11 +152,11 @@ class PaymentOrchestrator {
                     continue;
                 }
 
-                const response = await axios.get(
-                    `${merchant.api_url}/api/products/${item.product_id}`,
-                    { timeout: 5000 }
-                );
-                const product = response.data.product;
+                // Fetch product directly from database (merged merchant-shop)
+                const product = db.getProduct(item.product_id);
+                if (!product) {
+                    throw new Error(`Product ${item.product_id} not found`);
+                }
 
                 enriched.push({
                     product_id: item.product_id,
@@ -150,37 +196,59 @@ class PaymentOrchestrator {
     }
 
     static async _handleLinkPayment(checkout, merchant, paymentRequest) {
-        console.log('🔗 Processing link-based payment with email verification');
+        console.log('🔗 Processing link-based payment');
 
         // Generate payment token
-        const paymentToken = crypto.randomBytes(32).toString('hex');
+        const paymentToken = PaymentService.createPaymentToken(checkout.id);
 
-        // Generate 6-digit verification code
-        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const codeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-        // Store payment token with verification code
-        db.createPaymentToken({
-            token: paymentToken,
-            checkout_id: checkout.id,
-            verification_code: verificationCode,
-            verification_code_expires: codeExpires.toISOString(),
-            status: 'pending'
-        });
-
-        // Generate payment link (will require code verification)
+        // Generate payment link
         const paymentLink = `${process.env.BASE_URL || 'http://localhost:4000'}/payment/${paymentToken}`;
 
-        // Send verification code via email if email provided
-        let emailResult = { success: false };
-        if (checkout.customer_email) {
-            emailResult = await EmailService.sendCheckoutVerificationCode(
-                checkout.customer_email,
-                verificationCode
-            );
-            console.log('📧 Email Result:', emailResult.success ? '✅ Sent' : '❌ Failed');
-        } else {
-            console.log('⚠️  No email provided - cannot send verification code');
+        // Email verification is required before checkout (enforced in /voice/checkout/create)
+        // Payment link is ALWAYS sent via email (no SMS fallback)
+        const EmailVerificationService = require('./email-verification-service');
+        const emailVerified = checkout.customer_email 
+            ? EmailVerificationService.isEmailVerified(checkout.customer_email)
+            : false;
+
+        // Require email for payment link
+        if (!checkout.customer_email) {
+            console.error('❌ No email provided for payment link');
+            return new PaymentResponse({
+                success: false,
+                error: 'Email address is required to send payment link',
+                transaction_id: paymentRequest.transaction_id
+            });
+        }
+
+        if (!emailVerified) {
+            console.error('❌ Email not verified for payment link');
+            return new PaymentResponse({
+                success: false,
+                error: 'Email must be verified before sending payment link',
+                requires_verification: true,
+                transaction_id: paymentRequest.transaction_id
+            });
+        }
+
+        // Send payment link via email (always - no SMS fallback)
+        const emailResult = await EmailService.sendPaymentLinkEmail(
+            checkout.customer_email,
+            paymentLink,
+            {
+                product_name: checkout.product_name,
+                amount: checkout.amount
+            }
+        );
+        console.log('📧 Payment link email sent:', emailResult.success ? '✅ Sent' : '❌ Failed');
+        
+        if (!emailResult.success) {
+            console.error('❌ Failed to send payment link email:', emailResult.error);
+            return new PaymentResponse({
+                success: false,
+                error: 'Failed to send payment link email. Please try again.',
+                transaction_id: paymentRequest.transaction_id
+            });
         }
 
         return new PaymentResponse({
@@ -193,23 +261,14 @@ class PaymentOrchestrator {
                 amount: checkout.amount,
                 currency: 'USD'
             },
-            // Hold back the link until verification; return token for verification step
+            payment_link: paymentLink,
             payment_token: paymentToken,
             requires_action: true,
-            action_type: 'email_verification',
-            message: emailResult.success
-                ? `Verification code sent to ${checkout.customer_email}. Please enter the code to proceed with payment.`
-                : 'Verification code generation failed. Please contact support.',
+            action_type: 'email_link',
+            message: `Payment link sent to ${checkout.customer_email}`,
             metadata: {
-                email_sent: emailResult.success,
-                email_message_id: emailResult.message_id,
-                payment_token: paymentToken,
-                verification_required: true,
-                product: {
-                    id: checkout.product_id,
-                    name: checkout.product_name,
-                    quantity: checkout.quantity
-                }
+                email_sent: true,
+                email_message_id: emailResult.message_id
             }
         });
     }

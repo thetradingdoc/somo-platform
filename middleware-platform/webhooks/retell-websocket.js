@@ -8,6 +8,7 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 const { fetchCallCosts } = require('../utils/cost-tracker');
+const SMSService = require('../services/sms-service');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -194,7 +195,10 @@ class RetellWebSocketHandler {
         // Store call metadata from first message
         if (message.call) {
             connection.callMetadata = message.call;
-            connection.customerPhone = message.call.from_number || null;
+            // CRITICAL: Normalize phone number to +1 format for US customers
+            connection.customerPhone = message.call.from_number 
+                ? SMSService.formatPhoneNumber(message.call.from_number)
+                : null;
 
             // Store Twilio CallSid from metadata if available
             if (message.call.metadata && message.call.metadata.twilio_call_sid) {
@@ -352,6 +356,11 @@ class RetellWebSocketHandler {
                     result = await this.handleVerifyCheckoutCode(callId, functionArgs);
                     break;
 
+                case 'verify_email_code':
+                case 'verify_email_verification_code':
+                    result = await this.handleEmailVerificationCode(callId, functionArgs);
+                    break;
+
                 case 'schedule_demo':
                     result = await this.handleScheduleDemo(callId, functionArgs);
                     break;
@@ -368,12 +377,24 @@ class RetellWebSocketHandler {
                     result = await this.handleGetPatientClaims(callId, functionArgs);
                     break;
 
+                case 'get_order_tracking':
+                    result = await this.handleGetOrderTracking(callId, functionArgs);
+                    break;
+
                 case 'send_followup_email':
                     result = await this.handleSendFollowupEmail(callId, functionArgs);
                     break;
 
                 case 'send_followup_sms':
                     result = await this.handleSendFollowupSMS(callId, functionArgs);
+                    break;
+
+                case 'search_products':
+                    result = await this.handleSearchProducts(callId, functionArgs);
+                    break;
+
+                case 'create_checkout':
+                    result = await this.handleCreateCheckout(callId, functionArgs);
                     break;
 
                 default:
@@ -447,7 +468,57 @@ class RetellWebSocketHandler {
         }
     }
 
-    // Handle product search
+    // Handle search_products function call
+    async handleSearchProducts(callId, functionArgs) {
+        const query = functionArgs.query || functionArgs.search_query;
+        if (!query) {
+            return {
+                success: false,
+                error: 'Query parameter is required for product search'
+            };
+        }
+
+        const connection = this.activeConnections.get(callId);
+        if (!connection) {
+            return {
+                success: false,
+                error: 'Connection not found'
+            };
+        }
+
+        try {
+            console.log(`🔍 Searching products: ${query}`);
+
+            // Call your middleware API
+            // Note: merchant_id will be determined by fallback logic if invalid
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+            const response = await axios.post(`${apiBaseUrl}/voice/products/search`, {
+                merchant_id: functionArgs.merchant_id || 'd10794ff-ca11-4e6f-93e9-560162b4f884', // Will use fallback if invalid
+                query: query
+            });
+
+            const products = response.data.products || [];
+
+            // Store search results
+            connection.lastSearchResults = products;
+
+            return {
+                success: true,
+                products: products,
+                total: products.length,
+                query: query
+            };
+
+        } catch (error) {
+            console.error('❌ Product search error:', error);
+            return {
+                success: false,
+                error: error.response?.data?.error || error.message || 'Failed to search products'
+            };
+        }
+    }
+
+    // Handle product search (legacy - kept for backward compatibility)
     async handleProductSearch(callId, query) {
         const connection = this.activeConnections.get(callId);
 
@@ -455,8 +526,10 @@ class RetellWebSocketHandler {
             console.log(`🔍 Searching products: ${query}`);
 
             // Call your middleware API
-            const response = await axios.post('http://localhost:4000/voice/products/search', {
-                merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884',
+            // Note: merchant_id will be determined by fallback logic if invalid
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+            const response = await axios.post(`${apiBaseUrl}/voice/products/search`, {
+                merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884', // Will use fallback if invalid
                 query: query
             });
 
@@ -473,13 +546,25 @@ class RetellWebSocketHandler {
                 return;
             }
 
-            // Format product list for voice
-            const productList = products.slice(0, 3).map((p, i) =>
-                `${i + 1}. ${p.title} for $${p.price}`
-            ).join('. ');
+            // Format product list for voice with stock levels
+            const productList = products.slice(0, 3).map((p, i) => {
+                const productName = p.title || p.name || 'Product';
+                const price = p.price || '0.00';
+                const inventory = p.inventory || 0;
+                const stockStatus = inventory > 0 ? `In stock (${inventory} available)` : 'Out of stock';
+                return `${i + 1}. ${productName} - $${price}. ${stockStatus}`;
+            }).join('. ');
 
-            const response_text = products.length === 1
-                ? `I found ${products[0].title} for $${products[0].price}. ${products[0].description}. Would you like to purchase this?`
+            const response_text = products.length === 1 && products[0]
+                ? (() => {
+                    const product = products[0];
+                    const productName = product.title || product.name || 'a product';
+                    const price = product.price || '0.00';
+                    const description = product.description || '';
+                    const inventory = product.inventory || 0;
+                    const stockStatus = inventory > 0 ? `In stock (${inventory} available)` : 'Out of stock';
+                    return `I found ${productName} - $${price}. ${description}. ${stockStatus}. Would you like to purchase this?`;
+                })()
                 : `I found ${products.length} products: ${productList}. Which one interests you?`;
 
             this.sendToRetell(connection.ws, {
@@ -508,6 +593,122 @@ class RetellWebSocketHandler {
         }
     }
 
+    // Handle create_checkout function call
+    async handleCreateCheckout(callId, functionArgs) {
+        const connection = this.activeConnections.get(callId);
+        if (!connection) {
+            return {
+                success: false,
+                error: 'Connection not found'
+            };
+        }
+
+        // CRITICAL: Extract and store email from function arguments OR connection state
+        let customerEmail = functionArgs.customer_email || functionArgs.email;
+        
+        // FALLBACK: If not in function args, try to get from connection state (where it might have been stored earlier)
+        if (!customerEmail) {
+            customerEmail = this.getCustomerEmail(callId);
+            console.log(`⚠️  Email not in function args, checking connection state: ${customerEmail || 'not found'}`);
+        }
+        
+        // Store email in connection for future use
+        if (customerEmail) {
+            connection.customerEmail = customerEmail;
+            console.log(`✅ Stored customer email in connection: ${customerEmail}`);
+        }
+
+        // Extract other required parameters
+        const productId = functionArgs.product_id;
+        const quantity = functionArgs.quantity || 1;
+        const customerName = functionArgs.customer_name || this.getCustomerName(callId) || 'Customer';
+        const customerPhone = functionArgs.customer_phone || this.getCustomerPhone(callId);
+
+        if (!productId) {
+            return {
+                success: false,
+                error: 'product_id is required'
+            };
+        }
+
+        if (!customerEmail) {
+            return {
+                success: false,
+                error: 'customer_email is required. Please provide your email address.',
+                requires_email: true
+            };
+        }
+
+        try {
+            console.log(`💳 Creating checkout via function call: ${productId}`);
+            console.log(`📧 Email being sent: ${customerEmail || 'MISSING!'}`);
+            console.log(`📋 Function args:`, JSON.stringify(functionArgs, null, 2));
+
+            // Get merchant ID
+            let merchantId = functionArgs.merchant_id || 'd10794ff-ca11-4e6f-93e9-560162b4f884';
+            
+            if (connection.callMetadata && connection.callMetadata.retell_llm_dynamic_variables) {
+                const dynamicVars = connection.callMetadata.retell_llm_dynamic_variables;
+                if (dynamicVars.merchant_id) {
+                    merchantId = dynamicVars.merchant_id;
+                }
+            }
+            
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+
+            // Create checkout request payload
+            const checkoutPayload = {
+                merchant_id: merchantId,
+                product_id: productId,
+                customer_name: customerName,
+                customer_phone: customerPhone,
+                customer_email: customerEmail,
+                quantity: quantity
+            };
+            
+            console.log(`📤 Sending checkout request:`, JSON.stringify({
+                ...checkoutPayload,
+                customer_email: customerEmail ? `${customerEmail.substring(0, 3)}***` : 'MISSING'
+            }, null, 2));
+
+            // Create checkout
+            const response = await axios.post(`${apiBaseUrl}/voice/checkout/create`, checkoutPayload);
+
+            if (response.data.success) {
+                const checkout = response.data;
+                console.log(`✅ Checkout created: ${checkout.checkout_id}`);
+                
+                return {
+                    success: true,
+                    checkout_id: checkout.checkout_id,
+                    payment_token: checkout.payment_token,
+                    amount: checkout.amount,
+                    product_name: checkout.product_name || checkout.product?.name,
+                    message: `Checkout created successfully. Payment link will be sent to ${customerEmail} after verification.`
+                };
+            } else if (response.data.requires_verification) {
+                return {
+                    success: false,
+                    requires_verification: true,
+                    error: 'Email verification required',
+                    message: `A verification code has been sent to ${customerEmail}. Please verify your email to complete checkout.`
+                };
+            } else {
+                return {
+                    success: false,
+                    error: response.data.error || 'Checkout creation failed'
+                };
+            }
+
+        } catch (error) {
+            console.error('❌ Create checkout error:', error);
+            return {
+                success: false,
+                error: error.response?.data?.error || error.message || 'Failed to create checkout'
+            };
+        }
+    }
+
     // Handle purchase intent
     async handlePurchaseIntent(callId, productInfo) {
         const connection = this.activeConnections.get(callId);
@@ -515,16 +716,74 @@ class RetellWebSocketHandler {
         // Extract customer info from call
         const customerPhone = this.getCustomerPhone(callId);
         const customerName = this.getCustomerName(callId) || 'Customer';
+        const customerEmail = this.getCustomerEmail(callId);
 
         try {
             console.log(`💳 Creating checkout for: ${productInfo.product_id}`);
 
-            // Create checkout via middleware
-            const response = await axios.post('http://localhost:4000/voice/checkout/create', {
-                merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884',
+            // Get merchant ID
+            let merchantId = 'd10794ff-ca11-4e6f-93e9-560162b4f884'; // Default, will use fallback if invalid
+            
+            if (connection.callMetadata && connection.callMetadata.retell_llm_dynamic_variables) {
+                const dynamicVars = connection.callMetadata.retell_llm_dynamic_variables;
+                if (dynamicVars.merchant_id) {
+                    merchantId = dynamicVars.merchant_id;
+                }
+            }
+            
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+
+            // Check if email verification is required
+            if (!customerEmail) {
+                this.sendToRetell(connection.ws, {
+                    type: 'response',
+                    response: {
+                        content: "I need your email address to complete your purchase. Could you please provide your email address?",
+                        end_call: false
+                    }
+                });
+                return;
+            }
+
+            // Check verification status
+            const verificationStatus = await axios.get(`${apiBaseUrl}/voice/verify/status/${encodeURIComponent(customerEmail)}`);
+            
+            if (!verificationStatus.data.verified) {
+                // Send verification code
+                console.log(`📧 Sending verification code to: ${customerEmail}`);
+                const sendCodeResponse = await axios.post(`${apiBaseUrl}/voice/verify/send-code`, {
+                    email: customerEmail,
+                    customer_id: connection.customer_id,
+                    customer_name: customerName
+                });
+
+                if (sendCodeResponse.data.success) {
+                    this.sendToRetell(connection.ws, {
+                        type: 'response',
+                        response: {
+                            content: `I've sent a verification code to ${customerEmail}. Please check your email and provide me with the 6-digit code to verify your account before completing your purchase.`,
+                            end_call: false
+                        }
+                    });
+                    // Store that we're waiting for verification
+                    connection.pendingVerification = {
+                        email: customerEmail,
+                        productInfo: productInfo,
+                        merchantId: merchantId
+                    };
+                    return;
+                } else {
+                    throw new Error('Failed to send verification code');
+                }
+            }
+
+            // Email is verified, proceed with checkout
+            const response = await axios.post(`${apiBaseUrl}/voice/checkout/create`, {
+                merchant_id: merchantId,
                 product_id: productInfo.product_id,
                 customer_name: customerName,
                 customer_phone: customerPhone,
+                customer_email: customerEmail,
                 quantity: 1
             });
 
@@ -534,23 +793,124 @@ class RetellWebSocketHandler {
                 this.sendToRetell(connection.ws, {
                     type: 'response',
                     response: {
-                        content: `Perfect! I've sent a payment link to ${customerPhone}. The total is $${checkout.amount}. You can complete your purchase using that link. Is there anything else I can help you with?`,
+                        content: `Perfect! I've sent a payment link to your email at ${customerEmail}. The total is $${checkout.amount}. You can complete your purchase using that link. Is there anything else I can help you with?`,
                         end_call: false
                     }
                 });
 
                 console.log(`✅ Checkout created: ${checkout.checkout_id}`);
-                console.log(`📱 SMS sent to: ${customerPhone}`);
+                console.log(`📧 Payment link sent to: ${customerEmail}`);
+            } else if (response.data.requires_verification) {
+                // Should not happen if we checked above, but handle it anyway
+                this.sendToRetell(connection.ws, {
+                    type: 'response',
+                    response: {
+                        content: `I need to verify your email before completing your purchase. I've sent a verification code to ${customerEmail}. Please check your email and provide me with the 6-digit code.`,
+                        end_call: false
+                    }
+                });
+                connection.pendingVerification = {
+                    email: customerEmail,
+                    productInfo: productInfo,
+                    merchantId: merchantId
+                };
             } else {
-                throw new Error('Checkout creation failed');
+                throw new Error(response.data.error || 'Checkout creation failed');
             }
 
         } catch (error) {
             console.error('❌ Purchase error:', error);
+            const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
             this.sendToRetell(connection.ws, {
                 type: 'response',
                 response: {
-                    content: "I'm sorry, I'm having trouble processing that order. Please try again or call us for assistance.",
+                    content: `I'm sorry, I'm having trouble processing that order: ${errorMessage}. Please try again or call us for assistance.`,
+                    end_call: false
+                }
+            });
+        }
+    }
+
+    // Handle email verification code (from function call)
+    async handleEmailVerificationCode(callId, functionArgs) {
+        const email = functionArgs.email || functionArgs.customer_email;
+        const code = functionArgs.code || functionArgs.verification_code;
+
+        if (!email || !code) {
+            return {
+                success: false,
+                error: 'Email and verification code are required'
+            };
+        }
+
+        // Store email in connection for future use
+        const connection = this.activeConnections.get(callId);
+        if (connection) {
+            connection.customerEmail = email;
+        }
+
+        await this.handleEmailVerification(callId, email, code);
+
+        return {
+            success: true,
+            message: 'Email verification processed'
+        };
+    }
+
+    // Handle email verification code (internal)
+    async handleEmailVerification(callId, email, code) {
+        const connection = this.activeConnections.get(callId);
+        if (!connection) return;
+
+        try {
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+            const verifyResponse = await axios.post(`${apiBaseUrl}/voice/verify/verify-code`, {
+                email: email,
+                code: code
+            });
+
+            if (verifyResponse.data.success) {
+                // If there's a pending checkout, complete it
+                if (connection.pendingVerification) {
+                    const { productInfo, merchantId } = connection.pendingVerification;
+                    const customerPhone = this.getCustomerPhone(callId);
+                    const customerName = this.getCustomerName(callId) || 'Customer';
+
+                    this.sendToRetell(connection.ws, {
+                        type: 'response',
+                        response: {
+                            content: "Great! Your email is verified. Let me complete your purchase now.",
+                            end_call: false
+                        }
+                    });
+
+                    // Proceed with checkout
+                    await this.handlePurchaseIntent(callId, productInfo);
+                    delete connection.pendingVerification;
+                } else {
+                    this.sendToRetell(connection.ws, {
+                        type: 'response',
+                        response: {
+                            content: "Perfect! Your email has been verified. How can I help you today?",
+                            end_call: false
+                        }
+                    });
+                }
+            } else {
+                this.sendToRetell(connection.ws, {
+                    type: 'response',
+                    response: {
+                        content: `I'm sorry, that verification code is incorrect or has expired. ${verifyResponse.data.error || 'Please request a new code.'}`,
+                        end_call: false
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('❌ Verification error:', error);
+            this.sendToRetell(connection.ws, {
+                type: 'response',
+                response: {
+                    content: "I'm sorry, I'm having trouble verifying your code. Please try again.",
                     end_call: false
                 }
             });
@@ -623,15 +983,30 @@ class RetellWebSocketHandler {
     }
 
     // Helper: Get customer phone from Retell call
+    // CRITICAL: Always returns normalized phone number with +1 for US customers
     getCustomerPhone(callId) {
         const connection = this.activeConnections.get(callId);
-        return connection?.customerPhone || connection?.callMetadata?.from_number || null;
+        const phone = connection?.customerPhone || connection?.callMetadata?.from_number || null;
+        
+        // Normalize phone number if it exists (ensures +1 prefix for US numbers)
+        if (phone) {
+            const SMSService = require('../services/sms-service');
+            return SMSService.formatPhoneNumber(phone);
+        }
+        
+        return null;
     }
 
     // Helper: Get customer name
     getCustomerName(callId) {
         const connection = this.activeConnections.get(callId);
         return connection?.customerName || connection?.initialName || null;
+    }
+
+    // Helper: Get customer email
+    getCustomerEmail(callId) {
+        const connection = this.activeConnections.get(callId);
+        return connection?.customerEmail || null;
     }
 
     // Helper: Store customer name (called when name is first provided)
@@ -688,7 +1063,9 @@ class RetellWebSocketHandler {
                 member_id: args.member_id,
                 payer_name: args.payer_name,
                 payer_id: args.payer_id,
-                patient_phone: args.patient_phone || this.getCustomerPhone(callId),
+                patient_phone: args.patient_phone 
+                    ? SMSService.formatPhoneNumber(args.patient_phone) 
+                    : this.getCustomerPhone(callId),
                 patient_email: args.patient_email,
                 service_code: args.service_code,
                 call_id: callId, // Pass callId for fraud validation
@@ -741,7 +1118,14 @@ class RetellWebSocketHandler {
             }
 
             // Ensure phone number is provided (required for duplicate detection)
-            const patientPhone = args.patient_phone || this.getCustomerPhone(callId);
+            // CRITICAL: Normalize phone number to +1 format for US customers
+            let patientPhone = args.patient_phone || this.getCustomerPhone(callId);
+            
+            // Normalize phone number if provided (auto-adds +1 for US numbers)
+            if (patientPhone) {
+                patientPhone = SMSService.formatPhoneNumber(patientPhone);
+            }
+            
             if (!patientPhone) {
                 return {
                     success: false,
@@ -965,7 +1349,7 @@ class RetellWebSocketHandler {
                 appointment_id: args.appointment_id,
                 customer_name: args.customer_name,
                 customer_email: args.customer_email,
-                customer_phone: args.customer_phone || this.getCustomerPhone(callId),
+                customer_phone: args.customer_phone ? SMSService.formatPhoneNumber(args.customer_phone) : this.getCustomerPhone(callId),
                 appointment_type: args.appointment_type,
                 amount: args.amount,
                 clinic_id: clinicId
@@ -1000,6 +1384,47 @@ class RetellWebSocketHandler {
     }
 
     // Handle get_patient_claims function
+    async handleGetOrderTracking(callId, args) {
+        try {
+            console.log(`📦 Getting order tracking for call ${callId}`);
+            
+            const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+            
+            // Call the voice tracking endpoint
+            // CRITICAL: Normalize phone number to +1 format for US customers
+            const response = await axios.post(`${apiBaseUrl}/voice/orders/tracking`, {
+                order_id: args.order_id,
+                customer_email: args.customer_email,
+                customer_phone: args.customer_phone ? SMSService.formatPhoneNumber(args.customer_phone) : null
+            });
+
+            if (!response.data.success) {
+                return {
+                    success: false,
+                    error: response.data.error || 'Failed to get tracking information'
+                };
+            }
+
+            // Return formatted result for voice agent
+            return {
+                success: true,
+                found: response.data.found,
+                message: response.data.message,
+                delivery_status: response.data.delivery_status,
+                driver_name: response.data.driver_name,
+                driver_phone: response.data.driver_phone,
+                estimated_arrival: response.data.estimated_arrival,
+                current_location: response.data.current_location
+            };
+        } catch (error) {
+            console.error('❌ Error getting order tracking:', error.message);
+            return {
+                success: false,
+                error: error.response?.data?.error || error.message || 'Failed to get tracking information'
+            };
+        }
+    }
+
     async handleGetPatientClaims(callId, args) {
         try {
             // Get the initial name stored when caller first identified themselves

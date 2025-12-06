@@ -1119,6 +1119,443 @@ class EmailService {
   }
 
   /**
+   * Send welcome email with subdomain and password
+   */
+  static async sendWelcomeEmail(customerEmail, customerName, subdomain, customerType, merchantId, password = null) {
+    const baseDomain = process.env.BASE_DOMAIN || 'doclittle.site';
+    const baseUrl = process.env.BASE_URL || (process.env.NODE_ENV === 'production'
+      ? `https://${baseDomain}`
+      : 'http://localhost:4000');
+
+    // Determine login URL based on subdomain
+    const loginUrl = subdomain
+      ? `https://${subdomain}.${baseDomain}/login`
+      : `${baseUrl}/login`;
+
+    const accountType = customerType === 'saas' ? 'SaaS Platform' : 'API Integration';
+    const dashboardType = customerType === 'saas' ? 'business dashboard' : 'API documentation';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
+            line-height: 1.6; 
+            color: #1e293b; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f8fafc;
+          }
+          .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            width: 100%;
+            box-sizing: border-box;
+          }
+          @media (max-width: 600px) {
+            .container {
+              padding: 10px;
+            }
+          }
+          .email-wrapper {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center; 
+          }
+          .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            line-height: 1;
+            margin-bottom: 15px;
+            letter-spacing: -2px;
+          }
+          .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+          }
+          .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 10px;
+          }
+          .content { 
+            background: white; 
+            padding: 40px 30px; 
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+          }
+          .content h2 {
+            color: #1e293b;
+            font-size: 20px;
+            margin: 0 0 15px 0;
+            font-weight: 600;
+          }
+          .content p {
+            color: #64748b;
+            font-size: 16px;
+            margin: 15px 0;
+            line-height: 1.6;
+          }
+          .info-box {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+          }
+          .info-row {
+            display: flex;
+            flex-direction: column;
+            padding: 12px 0;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          .info-row:last-child {
+            border-bottom: none;
+          }
+          .info-label {
+            color: #64748b;
+            font-weight: 500;
+            font-size: 14px;
+            margin-bottom: 6px;
+          }
+          .info-value {
+            color: #1e293b;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            word-break: break-all;
+            overflow-wrap: break-word;
+            line-height: 1.5;
+          }
+          @media (max-width: 600px) {
+            .content {
+              padding: 25px 20px;
+            }
+            .header {
+              padding: 30px 20px;
+            }
+            .logo-brand {
+              font-size: 36px;
+            }
+            .header h1 {
+              font-size: 20px;
+            }
+            .content h2 {
+              font-size: 18px;
+            }
+            .content p {
+              font-size: 15px;
+            }
+            .info-box {
+              padding: 15px;
+            }
+          }
+          @media (min-width: 480px) {
+            .info-row {
+              flex-direction: row;
+              justify-content: space-between;
+              align-items: flex-start;
+            }
+            .info-label {
+              margin-bottom: 0;
+              margin-right: 15px;
+              flex-shrink: 0;
+            }
+            .info-value {
+              text-align: right;
+              flex: 1;
+            }
+          }
+          .button { 
+            display: inline-block; 
+            background: #1e40af; 
+            color: white; 
+            padding: 14px 28px; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            margin: 20px 0;
+            font-weight: 600;
+            font-size: 16px;
+          }
+          .button:hover {
+            background: #1d4ed8;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b; 
+            font-size: 14px; 
+          }
+          .footer a {
+            color: #1e40af;
+            text-decoration: none;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="email-wrapper">
+            <div class="header">
+              <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span>.
+              </div>
+              <h1>Welcome to DocLittle!</h1>
+            </div>
+            <div class="content">
+              <h2>Hi ${customerName || 'there'},</h2>
+              <p>Thank you for signing up for DocLittle! Your account has been successfully created and is ready to use.</p>
+              
+              <div class="info-box">
+                <div class="info-row">
+                  <span class="info-label">Account Type:</span>
+                  <span class="info-value">${accountType}</span>
+                </div>
+                ${subdomain ? `
+                <div class="info-row">
+                  <span class="info-label">Your Dashboard URL:</span>
+                  <span class="info-value">${subdomain}.${baseDomain}</span>
+                </div>
+                ` : ''}
+                <div class="info-row">
+                  <span class="info-label">Email:</span>
+                  <span class="info-value">${customerEmail}</span>
+                </div>
+                ${password ? `
+                <div class="info-row" style="border-top: 2px solid #1e40af; margin-top: 10px; padding-top: 10px;">
+                  <span class="info-label" style="color: #1e40af; font-weight: 700;">Password:</span>
+                  <span class="info-value" style="color: #1e40af; font-weight: 700; font-size: 18px;">${password}</span>
+                </div>
+                ` : ''}
+              </div>
+              
+              <p><strong>Getting Started:</strong></p>
+              <p>To access your ${dashboardType}, please log in using your email and the password provided above.</p>
+              
+              ${password ? `
+              <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 6px;">
+                <p style="margin: 0; color: #92400e; font-weight: 600;">🔐 Important: Save this password securely. You can change it later in your account settings.</p>
+              </div>
+              ` : ''}
+              
+              <div style="text-align: center;">
+                <a href="${loginUrl}" class="button">Log In to Dashboard</a>
+              </div>
+              
+              ${subdomain ? `
+              <p><strong>Your Unique Domain:</strong></p>
+              <p>You can access your dashboard directly at:</p>
+              <div style="text-align: center; margin: 20px 0;">
+                <a href="https://${subdomain}.${baseDomain}" style="color: #1e40af; font-weight: 600; font-size: 18px;">https://${subdomain}.${baseDomain}</a>
+              </div>
+              ` : ''}
+              
+              <p>If you have any questions or need help getting started, please don't hesitate to contact our support team.</p>
+              
+              <p>Best regards,<br>The DocLittle Team</p>
+              
+              <div class="footer">
+                <p>This is an automated welcome email from DocLittle.</p>
+                <p>Visit us at <a href="https://doclittle.site">doclittle.site</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: customerEmail,
+      subject: `Welcome to DocLittle - Your Account is Ready!`,
+      html: html
+    });
+  }
+
+  /**
+   * Send password reset email
+   */
+  static async sendPasswordResetEmail(email, name, resetUrl) {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, 'Helvetica Neue', sans-serif; 
+            line-height: 1.6; 
+            color: #1e293b; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f8fafc;
+          }
+          .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+          }
+          .email-wrapper {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center; 
+          }
+          .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            line-height: 1;
+            margin-bottom: 15px;
+            letter-spacing: -2px;
+          }
+          .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+          }
+          .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 10px;
+          }
+          .content { 
+            background: white; 
+            padding: 40px 30px; 
+          }
+          .content h2 {
+            color: #1e293b;
+            font-size: 20px;
+            margin: 0 0 15px 0;
+            font-weight: 600;
+          }
+          .content p {
+            color: #64748b;
+            font-size: 16px;
+            margin: 15px 0;
+            line-height: 1.6;
+          }
+          .button { 
+            display: inline-block; 
+            background: #1e40af; 
+            color: white; 
+            padding: 14px 28px; 
+            text-decoration: none; 
+            border-radius: 6px; 
+            margin: 20px 0;
+            font-weight: 600;
+            font-size: 16px;
+          }
+          .button:hover {
+            background: #1d4ed8;
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b; 
+            font-size: 14px; 
+          }
+          .footer a {
+            color: #1e40af;
+            text-decoration: none;
+          }
+          .warning-box {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 6px;
+          }
+          .warning-box p {
+            margin: 0;
+            color: #92400e;
+            font-size: 14px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="email-wrapper">
+            <div class="header">
+              <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span>.
+              </div>
+              <h1>Reset Your Password</h1>
+            </div>
+            <div class="content">
+              <h2>Hi ${name || 'there'},</h2>
+              <p>You requested to reset your password. Click the button below to create a new password:</p>
+              
+              <div style="text-align: center;">
+                <a href="${resetUrl}" class="button">Reset Password</a>
+              </div>
+              
+              <p>Or copy and paste this link into your browser:</p>
+              <p style="word-break: break-all; color: #1e40af; font-family: monospace; font-size: 14px;">${resetUrl}</p>
+              
+              <div class="warning-box">
+                <p><strong>⚠️ This link will expire in 1 hour.</strong> If you didn't request a password reset, please ignore this email.</p>
+              </div>
+              
+              <p>If you have any questions, please contact our support team.</p>
+              
+              <p>Best regards,<br>The DocLittle Team</p>
+              
+              <div class="footer">
+                <p>This is an automated email from DocLittle.</p>
+                <p>Visit us at <a href="https://doclittle.site">doclittle.site</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: email,
+      subject: 'DocLittle - Reset Your Password',
+      html: html
+    });
+  }
+
+  /**
    * Send feature request notification to admin
    */
   static async sendFeatureRequestNotification(customerEmail, customerName, requestedFeatures, companyName) {
@@ -1298,6 +1735,152 @@ class EmailService {
     return await this.sendEmail({
       to: adminEmail,
       subject: `New Feature Request from ${customerName} - ${requestedFeatures.length} feature(s)`,
+      html: html
+    });
+  }
+
+  /**
+   * Send low credit alert email
+   */
+  static async sendLowCreditAlert(customerEmail, customerName, creditBalance, subdomain = null) {
+    const baseDomain = process.env.BASE_DOMAIN || 'doclittle.site';
+    const dashboardUrl = subdomain
+      ? `https://${subdomain}.${baseDomain}/billing`
+      : `${process.env.BASE_URL || 'https://api.doclittle.site'}/billing`;
+
+    const isCritical = creditBalance < 25;
+    const alertLevel = isCritical ? 'Critical' : 'Low';
+    const alertColor = isCritical ? '#dc2626' : '#f59e0b';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; 
+            line-height: 1.6; 
+            color: #1e293b; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f8fafc;
+          }
+          .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+          }
+          .email-wrapper {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, ${alertColor} 0%, ${isCritical ? '#991b1b' : '#d97706'} 100%); 
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center; 
+          }
+          .header h1 { margin: 0; font-size: 28px; font-weight: 700; }
+          .content { padding: 40px 30px; }
+          .alert-box {
+            background: ${isCritical ? '#fef2f2' : '#fffbeb'};
+            border-left: 4px solid ${alertColor};
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+          }
+          .credit-display {
+            font-size: 48px;
+            font-weight: 900;
+            color: ${alertColor};
+            text-align: center;
+            margin: 20px 0;
+          }
+          .button { 
+            display: inline-block; 
+            padding: 16px 32px; 
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            margin: 20px 0;
+            font-weight: 600;
+            text-align: center;
+          }
+          .button:hover { background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            color: #64748b; 
+            font-size: 14px; 
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="email-wrapper">
+            <div class="header">
+              <h1>⚠️ ${alertLevel} Credit Alert</h1>
+            </div>
+            <div class="content">
+              <p>Hi ${customerName},</p>
+              
+              <div class="alert-box">
+                <p style="margin: 0; font-weight: 600; color: ${alertColor};">
+                  ${isCritical
+        ? 'Your credits are running critically low!'
+        : 'Your credits are running low.'}
+                </p>
+              </div>
+
+              <div class="credit-display">
+                ${creditBalance} min
+              </div>
+              
+              <p style="text-align: center; color: #64748b; margin-bottom: 30px;">
+                ${isCritical
+        ? 'You have less than 25 minutes remaining. Add credits now to avoid service interruption.'
+        : 'You have less than 50 minutes remaining. Consider adding credits to continue uninterrupted service.'}
+              </p>
+
+              <div style="text-align: center;">
+                <a href="${dashboardUrl}" class="button">Buy More Credits →</a>
+              </div>
+
+              <p style="margin-top: 30px; color: #64748b; font-size: 14px;">
+                <strong>What happens when credits run out?</strong><br>
+                If your credits reach zero and you don't have a payment method on file, 
+                your AI assistant will pause until you add credits or a payment method.
+              </p>
+
+              <p style="margin-top: 20px; color: #64748b; font-size: 14px;">
+                <strong>Need help?</strong><br>
+                Contact us at <a href="mailto:support@doclittle.site" style="color: #1e40af;">support@doclittle.site</a> 
+                or visit your dashboard to manage your account.
+              </p>
+            </div>
+            <div class="footer">
+              <p>This is an automated alert from DocLittle.</p>
+              <p style="margin-top: 10px;">
+                <a href="${dashboardUrl}" style="color: #1e40af; text-decoration: none;">Manage Credits</a> | 
+                <a href="https://doclittle.site" style="color: #1e40af; text-decoration: none;">Visit Website</a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: customerEmail,
+      subject: `⚠️ ${alertLevel} Credit Alert: ${creditBalance} minutes remaining`,
       html: html
     });
   }

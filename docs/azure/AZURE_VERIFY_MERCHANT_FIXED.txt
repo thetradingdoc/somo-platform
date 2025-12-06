@@ -1,0 +1,197 @@
+cd /home/site/wwwroot/middleware-platform && NODE_ENV=production DB_NAME=middleware-prod.db HOME=/home node << 'EOF'
+/**
+ * FIXED: Verify Merchant and Test Inventory
+ * Uses correct database methods and ensures correct DB file
+ */
+
+// Force database path before requiring
+process.env.DB_NAME = 'middleware-prod.db';
+process.env.DB_PATH = '/home/middleware-prod.db';
+
+const db = require('./database');
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🔍 VERIFYING MERCHANT AND INVENTORY (FIXED)');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+const MERCHANT_ID = '6d1daad9-13c7-490c-916d-0ccc02506db5';
+const PRODUCT_ID = '011eaf99-d0a6-4c74-b36c-e21441765787';
+
+// Check which database file is actually being used
+console.log('📁 Database Info:');
+console.log(`   DB_NAME env: ${process.env.DB_NAME}`);
+console.log(`   DB_PATH env: ${process.env.DB_PATH}`);
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`   Database instance: ${db.db ? '✅ Available' : '❌ Not available'}\n`);
+
+// Step 1: Check merchant
+console.log('1️⃣  CHECKING MERCHANT...\n');
+try {
+  const merchant = db.getMerchant(MERCHANT_ID);
+  
+  if (merchant) {
+    console.log('✅ Merchant found!');
+    console.log(`   ID: ${merchant.id}`);
+    console.log(`   Name: ${merchant.name}`);
+    console.log(`   Subdomain: ${merchant.subdomain || 'N/A'}`);
+    console.log(`   API URL: ${merchant.api_url || '❌ NOT SET'}`);
+    console.log(`   Status: ${merchant.status || 'N/A'}\n`);
+  } else {
+    console.log('❌ Merchant NOT found!');
+    console.log(`   Looking for ID: ${MERCHANT_ID}\n`);
+    
+    // Try to find by subdomain
+    console.log('🔍 Trying to find by subdomain "akin-dunbar"...');
+    try {
+      const bySubdomain = db.getMerchantBySubdomain('akin-dunbar');
+      if (bySubdomain) {
+        console.log(`✅ Found merchant by subdomain:`);
+        console.log(`   ID: ${bySubdomain.id}`);
+        console.log(`   Name: ${bySubdomain.name}`);
+        console.log(`   API URL: ${bySubdomain.api_url || 'NOT SET'}`);
+        console.log(`   ⚠️  This is a different ID than expected!\n`);
+      } else {
+        console.log('   ❌ No merchant found with subdomain "akin-dunbar"\n');
+      }
+    } catch (e) {
+      console.log(`   Error: ${e.message}\n`);
+    }
+    
+    // List all merchants
+    console.log('📋 All merchants in database:');
+    try {
+      const allMerchants = db.getAllMerchants();
+      if (allMerchants && allMerchants.length > 0) {
+        allMerchants.forEach((m, i) => {
+          console.log(`   ${i + 1}. ${m.name}`);
+          console.log(`      ID: ${m.id}`);
+          console.log(`      Subdomain: ${m.subdomain || 'N/A'}`);
+          console.log(`      API URL: ${m.api_url || 'NOT SET'}\n`);
+        });
+      } else {
+        console.log('   ⚠️  No merchants found in database\n');
+      }
+    } catch (e) {
+      console.log(`   Error listing merchants: ${e.message}\n`);
+    }
+  }
+} catch (error) {
+  console.log(`❌ Error checking merchant: ${error.message}\n`);
+  console.log(error.stack);
+}
+
+// Step 2: Check product
+console.log('2️⃣  CHECKING PRODUCT...\n');
+try {
+  const product = db.getProduct(PRODUCT_ID);
+  
+  if (product) {
+    console.log('✅ Product found!');
+    console.log(`   ID: ${product.id}`);
+    console.log(`   Name: ${product.name}`);
+    console.log(`   Price: $${product.price}`);
+    console.log(`   Inventory: ${product.inventory}`);
+    console.log(`   Merchant ID: ${product.merchant_id}\n`);
+    
+    // Check if merchant_id matches
+    if (product.merchant_id !== MERCHANT_ID) {
+      console.log(`⚠️  WARNING: Product merchant_id (${product.merchant_id}) doesn't match expected (${MERCHANT_ID})\n`);
+    }
+  } else {
+    console.log('❌ Product NOT found!');
+    console.log(`   Looking for ID: ${PRODUCT_ID}\n`);
+    
+    // Try to find products by merchant
+    console.log('🔍 Searching for products with merchant_id...');
+    try {
+      const products = db.getProductsByMerchant(MERCHANT_ID);
+      if (products && products.length > 0) {
+        console.log(`   Found ${products.length} products for this merchant:\n`);
+        products.slice(0, 5).forEach((p, i) => {
+          console.log(`   ${i + 1}. ${p.name} (ID: ${p.id})`);
+          console.log(`      Inventory: ${p.inventory}\n`);
+        });
+      } else {
+        console.log('   ⚠️  No products found for this merchant\n');
+      }
+    } catch (e) {
+      console.log(`   Error: ${e.message}\n`);
+    }
+  }
+} catch (error) {
+  console.log(`❌ Error checking product: ${error.message}\n`);
+  console.log(error.stack);
+}
+
+// Step 3: Test inventory decrement
+console.log('3️⃣  TESTING INVENTORY DECREMENT...\n');
+try {
+  const product = db.getProduct(PRODUCT_ID);
+  
+  if (product) {
+    const beforeInventory = product.inventory;
+    console.log(`📊 Inventory before: ${beforeInventory}`);
+    
+    // Decrement by 1
+    db.updateInventory(PRODUCT_ID, 1);
+    
+    // Check after
+    const productAfter = db.getProduct(PRODUCT_ID);
+    const afterInventory = productAfter.inventory;
+    console.log(`📊 Inventory after: ${afterInventory}`);
+    
+    if (afterInventory < beforeInventory) {
+      console.log(`✅ Inventory decremented successfully!`);
+      console.log(`   Decreased by: ${beforeInventory - afterInventory}\n`);
+      
+      // Restore inventory for testing
+      console.log('🔄 Restoring inventory for testing...');
+      const restoreAmount = beforeInventory - afterInventory;
+      db.db.prepare('UPDATE products SET inventory = inventory + ? WHERE id = ?').run(restoreAmount, PRODUCT_ID);
+      const restored = db.getProduct(PRODUCT_ID);
+      console.log(`✅ Inventory restored to: ${restored.inventory}\n`);
+    } else {
+      console.log(`❌ Inventory was NOT decremented!\n`);
+    }
+  } else {
+    console.log('⚠️  Cannot test inventory - product not found\n');
+  }
+} catch (error) {
+  console.log(`❌ Error testing inventory: ${error.message}\n`);
+  console.log(error.stack);
+}
+
+// Step 4: Check recent checkouts
+console.log('4️⃣  CHECKING RECENT CHECKOUTS...\n');
+try {
+  // Get recent voice checkouts
+  const checkouts = db.db.prepare(`
+    SELECT * FROM voice_checkouts 
+    WHERE merchant_id = ? 
+    ORDER BY created_at DESC 
+    LIMIT 5
+  `).all(MERCHANT_ID);
+  
+  if (checkouts.length > 0) {
+    console.log(`📋 Found ${checkouts.length} recent checkouts:\n`);
+    checkouts.forEach((c, i) => {
+      console.log(`   ${i + 1}. Checkout ${c.id}`);
+      console.log(`      Status: ${c.status}`);
+      console.log(`      Merchant ID: ${c.merchant_id}`);
+      console.log(`      Product: ${c.product_name}`);
+      console.log(`      Amount: $${c.amount}`);
+      console.log(`      Created: ${c.created_at}\n`);
+    });
+  } else {
+    console.log('⚠️  No recent checkouts found for this merchant\n');
+  }
+} catch (error) {
+  console.log(`❌ Error checking checkouts: ${error.message}\n`);
+  console.log(error.stack);
+}
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('✅ VERIFICATION COMPLETE');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+EOF
+

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -338,8 +339,15 @@
         }
 
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
         }
 
         .pulsing {
@@ -347,13 +355,15 @@
         }
     </style>
 </head>
+
 <body>
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span>
+                    <span class="doc">Doc</span><span class="little">Little</span><span
+                        style="font-weight:700;">.</span>
                 </div>
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
@@ -383,9 +393,9 @@
                     <span class="nav-icon">🎙️</span>
                     <span>Voice Agent</span>
                 </a>
-                <a href="../treatments.html" class="nav-item">
-                    <span class="nav-icon">🏷️</span>
-                    <span>Treatments</span>
+                <a href="../products.html" class="nav-item">
+                    <span class="nav-icon">📦</span>
+                    <span>Products</span>
                 </a>
                 <a href="../settings.html" class="nav-item">
                     <span class="nav-icon">⚙️</span>
@@ -479,11 +489,11 @@
         }
 
         // Set current date
-        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         });
 
         // Load data on page load
@@ -491,7 +501,7 @@
             loadTodaySchedule();
             loadLiveStats();
             loadNextPatient();
-            
+
             // Auto-refresh every 30 seconds
             setInterval(() => {
                 loadTodaySchedule();
@@ -536,16 +546,16 @@
             }
 
             container.innerHTML = schedule.map(apt => {
-                const time = new Date(`2000-01-01T${apt.time}`).toLocaleTimeString('en-US', { 
-                    hour: 'numeric', 
+                const time = new Date(`2000-01-01T${apt.time}`).toLocaleTimeString('en-US', {
+                    hour: 'numeric',
                     minute: '2-digit',
-                    hour12: true 
+                    hour12: true
                 });
-                
+
                 let statusClass = '';
                 let statusText = apt.status_display || apt.status;
                 let statusBadgeClass = 'badge-success';
-                
+
                 if (apt.is_current) {
                     statusClass = 'current';
                     statusBadgeClass = 'badge-warning';
@@ -601,18 +611,18 @@
                     const patient = data.next_patient;
                     const card = document.getElementById('nextPatientCard');
                     card.style.display = 'block';
-                    
+
                     document.getElementById('nextPatientTime').textContent = patient.time_until || 'Soon';
                     if (patient.is_soon) {
                         document.getElementById('nextPatientTime').classList.add('pulsing');
                     }
-                    
-                    const time = new Date(`2000-01-01T${patient.time}`).toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
+
+                    const time = new Date(`2000-01-01T${patient.time}`).toLocaleTimeString('en-US', {
+                        hour: 'numeric',
                         minute: '2-digit',
-                        hour12: true 
+                        hour12: true
                     });
-                    
+
                     document.getElementById('nextPatientInfo').innerHTML = `
                         <div class="next-patient-item">
                             <div class="next-patient-label">Patient Name</div>
@@ -642,5 +652,5 @@
         }
     </script>
 </body>
-</html>
 
+</html>

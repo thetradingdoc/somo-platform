@@ -220,10 +220,15 @@ class AP2Adapter {
      * Format cart for merchant API
      */
     static toMerchantOrderFormat(cart, cartMandate, paymentMandate) {
+        // CRITICAL: Validate cart has items
+        if (!cart.items || cart.items.length === 0) {
+            throw new Error('Cart has no items');
+        }
+
         return {
             product_id: cart.items[0].product_id, // Simplified for single item
-            quantity: cart.items[0].quantity,
-            customer_email: cartMandate.cart_details.customer_email || 'ap2@customer.com',
+            quantity: cart.items[0].quantity || 1,
+            customer_email: cartMandate.cart_details?.customer_email || 'ap2@customer.com',
             customer_name: cartMandate.shipping_address?.name || 'AP2 Customer',
             shipping_address: cartMandate.shipping_address,
             total_amount: cart.total,

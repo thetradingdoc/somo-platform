@@ -1,5 +1,15 @@
 // server.js - FIXED WITH PAYMENT ORCHESTRATOR AND PROPER DATABASE
-require('dotenv').config();
+// Load environment variables from .env if dotenv is available.
+// In Azure, env vars are provided by App Settings, so dotenv may not be installed.
+try {
+  require('dotenv').config();
+} catch (e) {
+  console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
+}
+
+// SECURITY: Validate environment variables on startup
+const { validateAndExitIfInvalid } = require('./utils/env-validator');
+validateAndExitIfInvalid();
 
 const express = require('express');
 const cors = require('cors');
@@ -196,7 +206,46 @@ const logger = require('./services/logger');
 app.use(securityHeaders);
 
 // CORS
-app.use(cors());
+// IMPORTANT: We must explicitly allow credentials and trusted origins,
+// otherwise browser requests with `credentials: 'include'` will fail
+// with a generic "Failed to fetch" error (as seen on tenant login).
+const allowedOrigins = [
+  'https://doclittle.site',
+  'https://www.doclittle.site',
+  'https://api.doclittle.site',
+  'http://localhost:4000',
+  'http://localhost:3000'
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser / same-origin requests with no Origin header (e.g. curl, internal calls)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Allow explicit origins in the safelist
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow any subdomain of doclittle.site (e.g. akin-dunbar.doclittle.site)
+    if (/^https?:\/\/([a-z0-9-]+\.)*doclittle\.site$/i.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Block everything else
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie']
+};
+
+app.use(cors(corsOptions));
+// Handle preflight for all routes
+app.options('*', cors(corsOptions));
 
 // Cookie parser
 app.use(cookieParser());
@@ -286,6 +335,39 @@ function getHostname(req) {
   return req.headers.host?.split(':')[0] || req.headers.host;
 }
 
+// Helper function to extract subdomain from hostname
+function getSubdomain(hostname) {
+  if (!hostname) return null;
+
+  // Remove port if present
+  const host = hostname.split(':')[0];
+
+  // Split by dots
+  const parts = host.split('.');
+
+  // For localhost, no subdomain
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return null;
+  }
+
+  // For known domains, extract subdomain
+  // e.g., "tenant.doclittle.site" -> "tenant"
+  // e.g., "tenant.doclittle.azurewebsites.net" -> "tenant"
+  if (parts.length >= 3) {
+    // Check if it's a known domain
+    const knownDomains = ['doclittle.site', 'doclittle.azurewebsites.net'];
+    const domain = parts.slice(-2).join('.'); // Get last 2 parts (e.g., "doclittle.site")
+    const azureDomain = parts.slice(-3).join('.'); // Get last 3 parts for Azure (e.g., "doclittle.azurewebsites.net")
+
+    if (knownDomains.includes(domain) || knownDomains.includes(azureDomain)) {
+      // Return first part as subdomain
+      return parts[0];
+    }
+  }
+
+  return null;
+}
+
 // Helper function to get unified-dashboard path (works both locally and in Azure)
 function getUnifiedDashboardPath(...subPaths) {
   const fs = require('fs');
@@ -301,8 +383,37 @@ function getUnifiedDashboardPath(...subPaths) {
 // Root endpoint - route based on domain
 app.get('/', (req, res) => {
   const hostname = getHostname(req);
+  const subdomain = getSubdomain(hostname);
 
-  // Localhost - serve landing page for development
+  // Tenant subdomain routing (e.g., tenant.doclittle.site)
+  if (subdomain && subdomain !== 'api' && subdomain !== 'www') {
+    // Look up merchant by subdomain
+    const merchant = db.getMerchantBySubdomain(subdomain);
+
+    if (merchant) {
+      // Check if user has valid session
+      const sessionId = req.cookies?.customer_session;
+      if (sessionId) {
+        const session = db.getCustomerSession(sessionId);
+        if (session) {
+          const customer = db.getCustomer(session.customer_id);
+          // Verify customer belongs to this merchant
+          if (customer && customer.merchant_id === merchant.id) {
+            // User is authenticated and belongs to this tenant - serve dashboard
+            const dashboardPath = getUnifiedDashboardPath('business', 'business-dashboard.html');
+            if (require('fs').existsSync(dashboardPath)) {
+              return res.sendFile(dashboardPath);
+            }
+          }
+        }
+      }
+      // No valid session or wrong tenant - redirect to login
+      return res.redirect(`/login?subdomain=${subdomain}`);
+    }
+    // Subdomain not found - fall through to default routing
+  }
+
+  // Localhost - serve voice agent marketing landing page (same as doclittle.site)
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     const landingPath = path.join(__dirname, 'public', 'landing.html');
     if (require('fs').existsSync(landingPath)) {
@@ -344,15 +455,22 @@ app.get('/', (req, res) => {
     return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
 
-  // Root domain - serve unified dashboard landing page
+  // Root domain - serve voice agent marketing landing page (same as localhost)
   if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname === 'doclittle.azurewebsites.net') {
-    const landingPath = getUnifiedDashboardPath('landing.html');
+    const landingPath = path.join(__dirname, 'public', 'landing.html');
     if (require('fs').existsSync(landingPath)) {
       return res.sendFile(landingPath);
     }
   }
 
-  // Default fallback to signup (for API subdomain or unknown domains)
+  // Default fallback - ONLY for API subdomain or unknown domains
+  // CRITICAL: If we got here with a tenant subdomain, redirect to login instead
+  if (subdomain && subdomain !== 'api' && subdomain !== 'www') {
+    console.log(`[ROOT ROUTE] Tenant subdomain "${subdomain}" but merchant not found - redirecting to login`);
+    return res.redirect('/login');
+  }
+
+  // Default fallback to signup (ONLY for API subdomain or unknown domains)
   // Check for session first
   const sessionId = req.cookies?.customer_session;
   if (sessionId) {
@@ -379,6 +497,8 @@ app.get('/', (req, res) => {
       }
     }
   }
+  // Only serve API signup page if we're on API subdomain or unknown domain
+  console.log('[ROOT ROUTE] Serving API signup page as default fallback');
   res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
 });
 
@@ -402,21 +522,71 @@ app.get('/landing', (req, res) => {
 
 app.get('/login', (req, res) => {
   const hostname = getHostname(req);
-  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net' || hostname === 'localhost') {
-    // For API subdomain/localhost, serve the API signup page (which has signin functionality)
+  const subdomain = getSubdomain(hostname);
+
+  console.log(`\n[LOGIN ROUTE] ==========================================`);
+  console.log(`[LOGIN ROUTE] REQUEST RECEIVED`);
+  console.log(`[LOGIN ROUTE] Hostname: ${hostname}`);
+  console.log(`[LOGIN ROUTE] Subdomain: ${subdomain}`);
+  console.log(`[LOGIN ROUTE] Path: ${req.path}`);
+  console.log(`[LOGIN ROUTE] ==========================================\n`);
+
+  // CRITICAL: Explicitly check for API subdomain first
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    console.log('[LOGIN ROUTE] ✅ API subdomain detected - serving API signup page (code-based)');
     return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
-  res.sendFile(getUnifiedDashboardPath('login.html'));
+
+  // Check for localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    console.log('[LOGIN ROUTE] ✅ Localhost detected - serving API signup page');
+    return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
+  }
+
+  // CRITICAL: Tenant subdomain detection - MUST serve password login page
+  if (subdomain && subdomain !== 'api' && subdomain !== 'www') {
+    console.log(`[LOGIN ROUTE] 🔍 Tenant subdomain detected: "${subdomain}"`);
+    const merchant = db.getMerchantBySubdomain(subdomain);
+    if (merchant) {
+      console.log(`[LOGIN ROUTE] ✅ Valid tenant found - serving PASSWORD login page for ${subdomain}`);
+      const loginPath = getUnifiedDashboardPath('login.html');
+      const fs = require('fs');
+      if (fs.existsSync(loginPath)) {
+        console.log(`[LOGIN ROUTE] ✅ File exists: ${loginPath}`);
+        return res.sendFile(loginPath);
+      } else {
+        console.error(`[LOGIN ROUTE] ❌ File NOT found: ${loginPath}`);
+        return res.status(500).send('Login page not found');
+      }
+    } else {
+      console.log(`[LOGIN ROUTE] ⚠️  Subdomain "${subdomain}" not found in database - but still serving tenant login page`);
+      // Even if merchant not found, serve tenant login page (not API signup)
+      const loginPath = getUnifiedDashboardPath('login.html');
+      const fs = require('fs');
+      if (fs.existsSync(loginPath)) {
+        return res.sendFile(loginPath);
+      }
+    }
+  }
+
+  // Default: serve business dashboard login (password-based) for root domain or other cases
+  // THIS SHOULD NEVER SERVE API SIGNUP PAGE
+  console.log('[LOGIN ROUTE] ✅ Serving default business dashboard login (password-based)');
+  const loginPath = getUnifiedDashboardPath('login.html');
+  const fs = require('fs');
+  if (fs.existsSync(loginPath)) {
+    console.log(`[LOGIN ROUTE] ✅ File exists: ${loginPath}`);
+    return res.sendFile(loginPath);
+  } else {
+    console.error(`[LOGIN ROUTE] ❌ File NOT found: ${loginPath}`);
+    return res.status(500).send('Login page not found');
+  }
 });
 
 // Handle /login.html requests (redirect to /login or serve same file)
 app.get('/login.html', (req, res) => {
-  const hostname = getHostname(req);
-  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net' || hostname === 'localhost') {
-    // For API subdomain/localhost, serve the API signup page (which has signin functionality)
-    return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
-  }
-  res.sendFile(getUnifiedDashboardPath('login.html'));
+  // Just redirect to /login to use the same logic
+  return res.redirect('/login');
 });
 
 app.get(['/about', '/about.html'], (req, res) => {
@@ -425,6 +595,24 @@ app.get(['/about', '/about.html'], (req, res) => {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
   res.sendFile(getUnifiedDashboardPath('about.html'));
+});
+
+// Reset password page
+app.get('/reset-password', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  res.sendFile(getUnifiedDashboardPath('reset-password.html'));
+});
+
+// Signup complete page
+app.get('/signup-complete', (req, res) => {
+  const hostname = getHostname(req);
+  if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
+    return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  res.sendFile(getUnifiedDashboardPath('signup-complete.html'));
 });
 
 // Signup page (use case selection) - only on root domain
@@ -461,7 +649,7 @@ app.get('/signup/saas', (req, res) => {
   if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
-  // SaaS Platform - serve login.html with test accounts (insurer, provider, patient)
+  // SaaS Platform - serve login.html
   res.sendFile(getUnifiedDashboardPath('login.html'));
 });
 
@@ -474,7 +662,7 @@ app.get('/signup/form', (req, res) => {
   // Check if this is for SaaS platform
   const plan = req.query.plan;
   if (plan === 'saas') {
-    // SaaS Platform signup/login - serve login.html with test accounts
+    // SaaS Platform signup/login - serve login.html
     res.sendFile(getUnifiedDashboardPath('login.html'));
   } else {
     // API Integration signup - should redirect to api.doclittle.site
@@ -548,6 +736,16 @@ app.use('/api/credits', creditsRoutes);
 const invoiceRoutes = require('./routes/invoices');
 app.use('/api', invoiceRoutes);
 
+// Products and Orders routes (merged from merchant-shop)
+const productRoutes = require('./routes/products');
+const orderRoutes = require('./routes/orders');
+app.use('/api/products', productRoutes);
+app.use('/api/orders', orderRoutes);
+
+// Onboarding routes
+const onboardingRoutes = require('./routes/onboarding');
+app.use('/api/onboarding', onboardingRoutes);
+
 // Admin job search (scraped jobs for agent outreach)
 const adminLeadsRoutes = require('./routes/admin-leads');
 app.use('/api/admin/leads', adminLeadsRoutes);
@@ -555,6 +753,14 @@ app.use('/api/admin/leads', adminLeadsRoutes);
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
+
+// Voice routes (product search, checkout, etc.)
+const voiceRoutes = require('./routes/voice');
+app.use('/voice', voiceRoutes);
+
+// Payment routes (payment page and processing)
+const paymentRoutes = require('./routes/payment');
+app.use('/api/payment', paymentRoutes);
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -591,12 +797,8 @@ app.get('/terms', (req, res) => {
     return res.redirect('/?redirect=/terms');
   }
 
-  // Determine customer type (default to 'api' for backwards compatibility)
-  const customerType = customer.customer_type || 'api';
-
-  // Serve appropriate terms file based on customer type
-  const termsFile = customerType === 'saas' ? 'terms-saas.html' : 'terms-api.html';
-  res.sendFile(path.join(__dirname, 'public', 'signup', termsFile));
+  // Serve unified terms of service (includes both SaaS and API pricing)
+  res.sendFile(path.join(__dirname, 'public', 'signup', 'terms.html'));
 });
 
 // Register /profile route (Customer Profile)
@@ -660,8 +862,33 @@ app.get('/favicon.ico', (req, res) => {
   res.send(svgFavicon);
 });
 
+// CRITICAL: Block static file serving of API signup page on tenant subdomains
+// This MUST come before static file middleware
+app.use((req, res, next) => {
+  const hostname = req.headers.host?.split(':')[0] || req.headers.host;
+  const subdomain = getSubdomain(hostname);
+
+  // Block ANY access to API signup page from tenant subdomains
+  if (req.path.includes('/signup') &&
+    hostname &&
+    !hostname.includes('api.doclittle.site') &&
+    !hostname.includes('localhost') &&
+    !hostname.includes('127.0.0.1')) {
+    if (subdomain && subdomain !== 'api' && subdomain !== 'www') {
+      console.log(`[STATIC BLOCK] ⛔ Blocked API signup page access from tenant subdomain: ${subdomain}`);
+      console.log(`[STATIC BLOCK] Request path: ${req.path}`);
+      return res.redirect('/login');
+    }
+  }
+  next();
+});
+
 // Serve static files from public directory (after security middleware and routes)
-app.use(express.static(path.join(__dirname, 'public')));
+// CRITICAL: This comes AFTER all routes, so routes take precedence
+app.use(express.static(path.join(__dirname, 'public'), {
+  // Don't serve index files automatically - let routes handle it
+  index: false
+}));
 
 console.log('✅ Database initialized');
 console.log('✅ FHIR integration enabled');
@@ -704,6 +931,10 @@ app.use('/api/pdf-coding', pdfCodingRoutes);
 // ============================================
 const usageRoutes = require('./routes/usage');
 app.use('/api/usage', usageRoutes);
+
+// Usage Monitor Routes (monthly billing & usage tracking)
+const usageMonitorRoutes = require('./routes/usage-monitor');
+app.use('/api/usage-monitor', usageMonitorRoutes);
 
 // ============================================
 // Utility & Helpers
@@ -851,9 +1082,29 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
         }
         console.log(`✅ Matched customer ${customerByNumber.name || customerByNumber.company_name || customerByNumber.id} via Twilio number ${normalizedToNumber}`);
 
+        // CRITICAL: Get merchant_id from customer for voice functions
+        if (customerByNumber.merchant_id) {
+          console.log(`✅ Customer has merchant_id: ${customerByNumber.merchant_id}`);
+        } else {
+          console.warn(`⚠️  Customer ${customerId} has no merchant_id. Voice product/order functions may not work.`);
+        }
+
+        // Check credit balance before allowing call
         const credits = db.getCustomerCredits(customerId);
         if (!credits || credits.credits_balance_minutes <= 0) {
-          console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+          // Check if customer has payment method (allows overage)
+          const customer = db.getCustomer(customerId);
+          const hasPaymentMethod = customer && customer.stripe_payment_method_id && customer.card_verified === 1;
+
+          if (!hasPaymentMethod) {
+            console.warn(`⚠️  Customer ${customerId} has no credits and no payment method. Call may be blocked.`);
+            // Note: We still allow the call to proceed, but will track overage
+            // In production, you might want to block calls here
+          } else {
+            console.log(`ℹ️  Customer ${customerId} has no credits but has payment method - allowing call with overage billing`);
+          }
+        } else {
+          console.log(`✅ Customer ${customerId} has ${credits.credits_balance_minutes} credits available`);
         }
       } else {
         // Look up legacy clinic mapping
@@ -879,9 +1130,29 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
               console.log(`✅ Found customer by agent_id: ${customer.name} (${customerId})`);
               console.log(`   Using Retell agent: ${retellAgentId}`);
 
+              // CRITICAL: Get merchant_id from customer for voice functions
+              if (customer.merchant_id) {
+                console.log(`✅ Customer has merchant_id: ${customer.merchant_id}`);
+              } else {
+                console.warn(`⚠️  Customer ${customerId} has no merchant_id. Voice product/order functions may not work.`);
+              }
+
+              // Check credit balance before allowing call
               const credits = db.getCustomerCredits(customerId);
               if (!credits || credits.credits_balance_minutes <= 0) {
-                console.warn(`⚠️  Customer ${customerId} has no credits. Call will still proceed but no credits will be deducted.`);
+                // Check if customer has payment method (allows overage)
+                const customer = db.getCustomer(customerId);
+                const hasPaymentMethod = customer && customer.stripe_payment_method_id && customer.card_verified === 1;
+
+                if (!hasPaymentMethod) {
+                  console.warn(`⚠️  Customer ${customerId} has no credits and no payment method. Call may be blocked.`);
+                  // Note: We still allow the call to proceed, but will track overage
+                  // In production, you might want to block calls here
+                } else {
+                  console.log(`ℹ️  Customer ${customerId} has no credits but has payment method - allowing call with overage billing`);
+                }
+              } else {
+                console.log(`✅ Customer ${customerId} has ${credits.credits_balance_minutes} credits available`);
               }
             } else {
               console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
@@ -915,6 +1186,20 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     }
     if (matchedCustomer?.customer_type) {
       metadata.customer_type = matchedCustomer.customer_type;
+    }
+    // CRITICAL: Add merchant_id to metadata for voice functions (product search, order creation, tracking)
+    if (matchedCustomer && matchedCustomer.merchant_id) {
+      metadata.merchant_id = matchedCustomer.merchant_id;
+      console.log(`✅ Added merchant_id ${matchedCustomer.merchant_id} to voice call metadata`);
+    } else if (customerId) {
+      // Try to get merchant_id from customer record if not already in matchedCustomer
+      const customer = db.getCustomer(customerId);
+      if (customer && customer.merchant_id) {
+        metadata.merchant_id = customer.merchant_id;
+        console.log(`✅ Added merchant_id ${customer.merchant_id} to voice call metadata`);
+      } else {
+        console.warn(`⚠️  No merchant_id found for customer ${customerId}. Voice product/order functions will not work.`);
+      }
     }
 
     const dynamicVariables = {
@@ -1159,18 +1444,83 @@ app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: 
     const from = req.body.From;
     const to = req.body.To;
     const sequenceNumber = req.body.SequenceNumber || '0';
+    const callDuration = req.body.CallDuration; // Duration in seconds (only on completed calls)
+    const callDurationMinutes = callDuration ? parseFloat(callDuration) / 60 : null;
 
     console.log(`\n📊 CALL STATUS UPDATE`);
     console.log(`   Call SID: ${callSid}`);
     console.log(`   Status: ${callStatus}`);
     console.log(`   Direction: ${direction}`);
     console.log(`   From: ${from} → To: ${to}`);
+    console.log(`   Duration: ${callDuration ? `${callDuration}s (${callDurationMinutes?.toFixed(2)} min)` : 'N/A'}`);
     console.log(`   Sequence: ${sequenceNumber}`);
 
     // Log status update to database if we have a matching call record
     if (callSid) {
       setImmediate(async () => {
         try {
+          // Update voice_call_log with duration and calculate costs if call completed
+          const voiceCall = db.db.prepare('SELECT * FROM voice_call_log WHERE twilio_call_sid = ? ORDER BY created_at DESC LIMIT 1').get(callSid);
+
+          if (voiceCall) {
+            // Update call status and duration
+            if (callDuration) {
+              db.db.prepare(`
+                UPDATE voice_call_log 
+                SET call_duration_seconds = ?,
+                    call_duration_minutes = ?,
+                    status = ?,
+                    cost_updated_at = datetime('now')
+                WHERE id = ?
+              `).run(
+                parseInt(callDuration),
+                callDurationMinutes,
+                callStatus,
+                voiceCall.id
+              );
+
+              // Calculate and update costs using UsageMonitor
+              const UsageMonitor = require('./services/usage-monitor');
+              await UsageMonitor.logVoiceCallUsage({
+                call_id: voiceCall.call_id,
+                customer_id: voiceCall.customer_id,
+                twilio_call_sid: callSid,
+                call_duration_seconds: parseInt(callDuration),
+                call_duration_minutes: callDurationMinutes,
+                status: callStatus
+              });
+
+              // Deduct credits for completed calls
+              if (voiceCall.customer_id && callStatus === 'completed' && callDurationMinutes > 0) {
+                try {
+                  const creditsToDeduct = Math.ceil(callDurationMinutes); // Round up to nearest minute
+                  db.deductCredits(voiceCall.customer_id, creditsToDeduct);
+
+                  // Update voice_call_log with credits deducted
+                  db.db.prepare(`
+                    UPDATE voice_call_log 
+                    SET credits_deducted = ?
+                    WHERE id = ?
+                  `).run(creditsToDeduct, voiceCall.id);
+
+                  console.log(`   ✅ Deducted ${creditsToDeduct} credits from customer ${voiceCall.customer_id}`);
+                } catch (creditError) {
+                  console.error(`   ❌ Failed to deduct credits: ${creditError.message}`);
+                  // Continue - don't fail the call status update
+                }
+              }
+
+              console.log(`   ✅ Updated voice call with duration and costs`);
+            } else {
+              // Just update status
+              db.db.prepare(`
+                UPDATE voice_call_log 
+                SET status = ?
+                WHERE id = ?
+              `).run(callStatus, voiceCall.id);
+            }
+          }
+
           // Try to find lead call by Twilio Call SID
           const leadCalls = db.db.prepare(`
             SELECT * FROM lead_calls 
@@ -1201,7 +1551,8 @@ app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: 
                   call_status: callStatus,
                   direction: direction,
                   from: from,
-                  to: to
+                  to: to,
+                  duration: callDuration
                 })
               });
             }
@@ -1625,69 +1976,142 @@ app.post('/voice/checkout/verify', async (req, res) => {
 // ============================================
 // VOICE COMMERCE ENDPOINTS
 // ============================================
+// NOTE: Voice routes are now handled by routes/voice.js (mounted above)
+// This section kept for reference but duplicate route removed
 
-// Search products for voice agent
-app.post('/voice/products/search', async (req, res) => {
+// Get order tracking for voice agent
+app.post('/voice/orders/tracking', async (req, res) => {
   try {
-    console.log('\n🔍 VOICE: Product Search Request');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('\n📦 VOICE: Order Tracking Request');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-    const { merchant_id, query } = req.args || req.body.args || req.body;
+    const TrackingService = require('./services/tracking-service');
 
-    if (!merchant_id) {
-      return res.status(400).json({
-        success: false,
-        error: 'merchant_id is required'
+    // Handle both Retell format and direct format
+    let order_id, customer_email, customer_phone;
+
+    if (req.body.args) {
+      // Retell format
+      order_id = req.body.args.order_id;
+      customer_email = req.body.args.customer_email;
+      customer_phone = req.body.args.customer_phone;
+    } else {
+      // Direct format
+      order_id = req.body.order_id;
+      customer_email = req.body.customer_email;
+      customer_phone = req.body.customer_phone;
+    }
+
+    console.log('Order ID:', order_id || 'not provided');
+    console.log('Customer Email:', customer_email || 'not provided');
+    console.log('Customer Phone:', customer_phone || 'not provided');
+
+    let order = null;
+
+    // Try to find order by ID first
+    if (order_id) {
+      order = db.getOrder(order_id);
+    }
+
+    // CRITICAL: Get merchant_id from metadata to scope order search
+    const merchant_id = req.body.metadata?.merchant_id ||
+      req.body.merchant_id ||
+      req.body.args?.merchant_id;
+
+    // If not found by ID, search by customer email or phone (scoped to merchant)
+    if (!order && (customer_email || customer_phone)) {
+      // Scope search to merchant_id if available
+      const ordersToSearch = merchant_id
+        ? db.getOrdersByMerchant(merchant_id)
+        : db.getAllOrders();
+
+      order = ordersToSearch.find(o => {
+        const emailMatch = customer_email && o.customer_email &&
+          o.customer_email.toLowerCase() === customer_email.toLowerCase();
+        const phoneMatch = customer_phone && o.customer_phone &&
+          o.customer_phone.replace(/\D/g, '') === customer_phone.replace(/\D/g, '');
+        return emailMatch || phoneMatch;
+      });
+
+      // If multiple orders found, get the most recent one
+      if (!order && ordersToSearch.length > 0) {
+        const matchingOrders = ordersToSearch.filter(o => {
+          const emailMatch = customer_email && o.customer_email &&
+            o.customer_email.toLowerCase() === customer_email.toLowerCase();
+          const phoneMatch = customer_phone && o.customer_phone &&
+            o.customer_phone.replace(/\D/g, '') === customer_phone.replace(/\D/g, '');
+          return emailMatch || phoneMatch;
+        });
+
+        if (matchingOrders.length > 0) {
+          // Sort by created_at descending and get most recent
+          order = matchingOrders.sort((a, b) =>
+            new Date(b.created_at) - new Date(a.created_at)
+          )[0];
+        }
+      }
+    }
+
+    // Verify order belongs to merchant if merchant_id is available
+    if (order && merchant_id && order.merchant_id !== merchant_id) {
+      console.warn(`⚠️  Order ${order.id} does not belong to merchant ${merchant_id}`);
+      order = null; // Don't return order from different merchant
+    }
+
+    if (!order) {
+      console.log('❌ Order not found');
+      return res.json({
+        success: true,
+        found: false,
+        message: 'I couldn\'t find an order matching that information. Could you please provide your order number or email address?'
       });
     }
 
-    console.log(`🏪 Searching products for merchant: ${merchant_id}`);
-    console.log(`🔎 Query: ${query || 'all products'}`);
+    console.log('✅ Order found:', order.id);
+    console.log('   Status:', order.delivery_status || order.status);
+    console.log('   Driver:', order.driver_name || 'not assigned');
 
-    const merchantShopUrl = process.env.MERCHANT_SHOP_URL || 'http://localhost:3000';
-    const productsResponse = await axios.get(`${merchantShopUrl}/api/products`, { timeout: 5000 });
-    const productsData = productsResponse.data;
+    // Get tracking summary formatted for voice
+    const trackingSummary = TrackingService.getTrackingSummary(order);
 
-    if (!productsData.success) {
-      throw new Error('Failed to fetch products from merchant');
+    // Parse tracking events if available
+    let trackingEvents = [];
+    if (order.tracking_events) {
+      try {
+        trackingEvents = typeof order.tracking_events === 'string'
+          ? JSON.parse(order.tracking_events)
+          : order.tracking_events;
+      } catch (e) {
+        console.warn('⚠️  Failed to parse tracking_events');
+      }
     }
 
-    // Filter products by query if provided
-    let filteredProducts = productsData.products;
-    if (query) {
-      const searchTerm = query.toLowerCase();
-      filteredProducts = productsData.products.filter(product =>
-        (product.name || '').toLowerCase().includes(searchTerm) ||
-        (product.description || '').toLowerCase().includes(searchTerm) ||
-        (product.category || '').toLowerCase().includes(searchTerm)
-      );
-      console.log(`🔍 Filtered to ${filteredProducts.length} products matching "${query}"`);
-    }
-
-    const formattedProducts = filteredProducts.map(product => ({
-      id: product.id,
-      title: product.name,
-      price: product.price,
-      description: product.description,
-      category: product.category,
-      in_stock: true
-    }));
-
-    console.log(`✅ Returning ${formattedProducts.length} products`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     res.json({
       success: true,
-      products: formattedProducts,
-      product_count: formattedProducts.length,
-      merchant_id: merchant_id
+      found: true,
+      order_id: order.id,
+      message: trackingSummary.message,
+      delivery_status: order.delivery_status || order.status,
+      driver_name: order.driver_name || null,
+      driver_phone: order.driver_phone || null,
+      current_location: order.current_latitude && order.current_longitude ? {
+        latitude: order.current_latitude,
+        longitude: order.current_longitude,
+        address: order.current_address || null
+      } : null,
+      estimated_arrival: order.estimated_arrival || null,
+      last_update: order.last_location_update || order.updated_at,
+      events: trackingEvents.slice(-5) // Last 5 events for voice context
     });
 
   } catch (error) {
-    console.error('❌ Error searching products:', error);
+    console.error('❌ Voice order tracking error:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       success: false,
-      error: error.message,
-      products: []
+      error: error.message
     });
   }
 });
@@ -1717,9 +2141,26 @@ app.post('/voice/checkout/create', async (req, res) => {
 
     console.log('Extracted args:', JSON.stringify(args, null, 2));
 
+    // CRITICAL: Get merchant_id from metadata (from voice/incoming handler)
+    // Fallback to args if not in metadata
+    const merchant_id = req.body.metadata?.merchant_id ||
+      args.merchant_id ||
+      req.body.merchant_id;
+
+    if (!merchant_id) {
+      console.error('❌ ERROR: merchant_id is missing from voice checkout creation');
+      return res.status(400).json({
+        success: false,
+        error: 'merchant_id is required',
+        message: 'Merchant ID not found in call metadata. This may indicate the customer has not completed onboarding.'
+      });
+    }
+
+    console.log(`✅ Using merchant_id: ${merchant_id} for checkout creation`);
+
     // TRANSFORM: Retell flat format → PaymentRequest nested format
     const transformedData = {
-      merchant_id: args.merchant_id,
+      merchant_id: merchant_id, // Use from metadata
       customer: {
         name: args.customer_name || null,
         phone: args.customer_phone || null,  // Will be normalized by SMSService
@@ -2405,7 +2846,16 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       });
     }
 
-    // Check if user already exists
+    // CRITICAL: Check if customer already exists (multitenancy check)
+    const existingCustomer = db.getCustomerByEmail(email);
+    if (existingCustomer) {
+      return res.status(400).json({
+        success: false,
+        error: 'An account with this email already exists'
+      });
+    }
+
+    // Check if user already exists (backward compatibility check)
     const existingUser = db.getUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({
@@ -2435,14 +2885,80 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
     // Generate unique clinic slug
     const clinicSlug = await ensureUniqueClinicSlug(baseSlug);
 
-    console.log(`\n🏥 Creating new clinic: ${clinic_name}`);
+    console.log(`\n🏥 Creating new clinic with multitenancy: ${clinic_name}`);
     console.log(`   Slug: ${clinicSlug}`);
     console.log(`   Phone: ${normalizedPhone}`);
     console.log(`   Owner: ${name} (${email})`);
 
-    // Step 1: Create clinic record
-    const clinicId = `clinic-${uuidv4()}`;
+    // CRITICAL STEP 1: Create merchant with subdomain (multitenancy)
     const merchantId = `merchant-${uuidv4()}`;
+    const apiKey = `mk_${crypto.randomBytes(32).toString('hex')}`;
+
+    try {
+      const merchant = {
+        id: merchantId,
+        name: clinic_name, // Use clinic_name as merchant name
+        api_key: apiKey,
+        api_url: '',
+        webhook_url: '',
+        enabled_platforms: ['voice'], // SaaS customers use voice platform
+        status: 'active'
+      };
+
+      // This will automatically generate a unique subdomain
+      db.createMerchant(merchant);
+
+      // Get the merchant to retrieve the generated subdomain
+      const createdMerchant = db.getMerchant(merchantId);
+      console.log(`✅ Merchant created: ${merchantId} with subdomain: ${createdMerchant?.subdomain || 'N/A'}`);
+    } catch (merchantError) {
+      console.error('❌ Failed to create merchant:', merchantError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create merchant account. Please try again.'
+      });
+    }
+
+    // CRITICAL STEP 2: Create customer record (multitenancy)
+    const customerId = `cust_${uuidv4()}`;
+    let password_hash;
+    if (bcrypt) {
+      password_hash = await bcrypt.hash(password, 10);
+    } else {
+      password_hash = crypto.createHash('sha256').update(password).digest('hex');
+      console.log('⚠️  Using SHA256 instead of BCrypt (install bcryptjs for secure hashing)');
+    }
+
+    try {
+      db.createCustomer({
+        id: customerId,
+        name,
+        email,
+        phone_number: normalizedPhone,
+        company_name: clinic_name,
+        customer_type: 'saas', // Landing page signups are SaaS customers
+        merchant_id: merchantId,
+        email_verified: true, // Auto-verify for landing page signups
+        status: 'active',
+        password_hash: password_hash
+      });
+      console.log(`✅ Customer created: ${customerId}`);
+    } catch (customerError) {
+      console.error('❌ Failed to create customer:', customerError);
+      // Cleanup: delete merchant if customer creation fails
+      try {
+        db.prepare('DELETE FROM merchants WHERE id = ?').run(merchantId);
+      } catch (cleanupError) {
+        console.error('❌ Failed to cleanup merchant:', cleanupError);
+      }
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create customer account. Please try again.'
+      });
+    }
+
+    // STEP 3: Create clinic record (backward compatibility)
+    const clinicId = `clinic-${uuidv4()}`;
 
     try {
       db.createClinic({
@@ -2456,13 +2972,10 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       console.log(`✅ Clinic created: ${clinicId}`);
     } catch (clinicError) {
       console.error('❌ Failed to create clinic:', clinicError);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to create clinic. Please try again.'
-      });
+      // Don't fail - clinic is optional for multitenancy
     }
 
-    // Step 2: Create Retell agent
+    // STEP 4: Create Retell agent
     let retellAgentId = null;
     let retellAgentStatus = 'pending';
 
@@ -2476,50 +2989,46 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       if (agentResult.success) {
         retellAgentId = agentResult.agent_id;
         retellAgentStatus = 'active';
+        db.updateCustomerRetellAgent(customerId, retellAgentId, retellAgentStatus);
         console.log(`✅ Retell agent created: ${retellAgentId}`);
       } else {
         console.warn(`⚠️  Retell agent creation failed: ${agentResult.error}`);
-        console.warn(`   Clinic will be created without agent. Admin can add agent later.`);
-        // Continue with clinic creation even if agent fails
+        // Continue - agent can be created later
       }
     } catch (retellError) {
       console.error('❌ Retell agent creation error:', retellError);
-      // Continue with clinic creation even if agent fails
+      // Continue - agent can be created later
     }
 
-    // Update clinic with Retell agent ID
-    if (retellAgentId) {
-      db.updateClinic(clinicId, {
-        retell_agent_id: retellAgentId,
-        retell_agent_status: retellAgentStatus
-      });
+    // Update clinic with Retell agent ID (if exists)
+    if (retellAgentId && clinicId) {
+      try {
+        db.updateClinic(clinicId, {
+          retell_agent_id: retellAgentId,
+          retell_agent_status: retellAgentStatus
+        });
+      } catch (clinicUpdateError) {
+        console.warn('⚠️  Failed to update clinic with Retell agent:', clinicUpdateError);
+      }
     }
 
-    // Step 3: Link phone number to clinic
-    try {
-      db.createClinicPhoneNumber({
-        id: `phone-${uuidv4()}`,
-        clinic_id: clinicId,
-        phone_number: normalizedPhone,
-        status: 'active'
-      });
-      console.log(`✅ Phone number linked to clinic`);
-    } catch (phoneError) {
-      console.error('❌ Failed to link phone number:', phoneError);
-      // Continue even if phone linking fails
+    // STEP 5: Link phone number to clinic (backward compatibility)
+    if (clinicId) {
+      try {
+        db.createClinicPhoneNumber({
+          id: `phone-${uuidv4()}`,
+          clinic_id: clinicId,
+          phone_number: normalizedPhone,
+          status: 'active'
+        });
+        console.log(`✅ Phone number linked to clinic`);
+      } catch (phoneError) {
+        console.error('❌ Failed to link phone number:', phoneError);
+        // Continue even if phone linking fails
+      }
     }
 
-    // Step 4: Hash password
-    let password_hash;
-    if (bcrypt) {
-      password_hash = await bcrypt.hash(password, 10);
-    } else {
-      // Fallback: use crypto (NOT SECURE - for demo only)
-      password_hash = crypto.createHash('sha256').update(password).digest('hex');
-      console.log('⚠️  Using SHA256 instead of BCrypt (install bcryptjs for secure hashing)');
-    }
-
-    // Step 5: Create user with clinic_id
+    // STEP 6: Create user record (backward compatibility with clinic system)
     const userId = `user-${uuidv4()}`;
     try {
       db.createUser({
@@ -2535,33 +3044,86 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       console.log(`✅ User created: ${userId}`);
     } catch (userError) {
       console.error('❌ Failed to create user:', userError);
-      // Cleanup: delete clinic if user creation fails
-      // (In production, you might want to use transactions)
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to create user account. Please try again.'
-      });
+      // Don't fail - user record is for backward compatibility
     }
 
-    // Update last login
-    db.updateUserLastLogin(userId);
+    // STEP 7: Allocate free credits on signup
+    try {
+      const customerType = 'saas'; // Landing page signups are SaaS customers
+      const freeCredits = 250; // SaaS customers get 250 free minutes
+      db.allocateFreeCredits(customerId, freeCredits);
+      console.log(`✅ Allocated ${freeCredits} free credits to customer ${customerId} (${customerType})`);
+    } catch (creditError) {
+      console.error('❌ Failed to allocate free credits:', creditError);
+      // Don't fail the request - credits can be allocated manually later
+    }
 
-    const session = {
-      id: userId,
-      email,
-      name,
-      role: 'healthcare_provider',
-      merchant_id: merchantId,
-      clinic_id: clinicId,
-      clinic_slug: clinicSlug,
-      token: Buffer.from(email).toString('base64')
+    // STEP 8: Create customer session
+    const sessionId = db.createCustomerSession(
+      customerId,
+      req.ip,
+      req.get('user-agent')
+    );
+
+    // Set session cookie with domain for cross-subdomain access
+    const isSecure = process.env.NODE_ENV === 'production' || req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const cookieOptions = {
+      httpOnly: true,
+      secure: isSecure,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     };
+    
+    // Set domain for cross-subdomain cookie sharing in production
+    if (process.env.NODE_ENV === 'production' || req.headers.host?.includes('doclittle.site')) {
+      cookieOptions.domain = '.doclittle.site';
+    }
+    
+    res.cookie('customer_session', sessionId, cookieOptions);
 
-    console.log(`✅ Clinic signup completed: ${clinic_name} (${clinicSlug})`);
+    // STEP 9: Get merchant to retrieve subdomain
+    const merchant = db.getMerchant(merchantId);
+    const subdomain = merchant?.subdomain || null;
+
+    // STEP 10: Send welcome email with subdomain and password (async, don't block response)
+    setImmediate(async () => {
+      try {
+        const EmailService = require('./services/email-service');
+        await EmailService.sendWelcomeEmail(
+          email,
+          name,
+          subdomain,
+          'saas', // Landing page signups are SaaS customers
+          merchantId,
+          password // Send the password they chose
+        );
+        console.log(`✅ Welcome email sent to ${email} with subdomain: ${subdomain || 'N/A'}`);
+      } catch (emailError) {
+        console.error('❌ Failed to send welcome email:', emailError);
+        // Don't fail the request if email fails
+      }
+    });
+
+    console.log(`✅ Clinic signup completed with multitenancy: ${clinic_name} (subdomain: ${subdomain || 'N/A'})`);
 
     res.json({
       success: true,
-      user: session,
+      customer: {
+        id: customerId,
+        name,
+        email,
+        merchant_id: merchantId,
+        subdomain: subdomain
+      },
+      user: {
+        id: userId,
+        email,
+        name,
+        role: 'healthcare_provider',
+        merchant_id: merchantId,
+        clinic_id: clinicId,
+        clinic_slug: clinicSlug
+      },
       clinic: {
         id: clinicId,
         name: clinic_name,
@@ -2570,7 +3132,8 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
         retell_agent_id: retellAgentId,
         retell_agent_status: retellAgentStatus
       },
-      clinic_slug: clinicSlug // For redirect
+      subdomain: subdomain, // Return subdomain for frontend
+      clinic_slug: clinicSlug // For redirect (backward compatibility)
     });
   } catch (error) {
     console.error('❌ Signup error:', error);
@@ -2593,53 +3156,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       });
     }
 
-    // Check demo accounts FIRST (for testing accounts)
-    const demoAccounts = {
-      'insurer@doclittle.com': {
-        password: 'demo123',
-        name: 'Insurer Admin',
-        role: 'insurer_admin',
-        merchant_id: null
-      },
-      'provider@doclittle.com': {
-        password: 'demo123',
-        name: 'Healthcare Provider',
-        role: 'healthcare_provider',
-        merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884'
-      },
-      'patient@doclittle.com': {
-        password: 'demo123',
-        name: 'Patient Wallet',
-        role: 'patient',
-        merchant_id: null
-      },
-      'admin@platform.com': {
-        password: 'admin123',
-        name: 'Platform Admin',
-        role: 'platform_admin',
-        merchant_id: null
-      }
-    };
-
-    const demoAccount = demoAccounts[email];
-
-    // If it's a demo account, check demo password first
-    if (demoAccount && demoAccount.password === password) {
-      const session = {
-        email: email,
-        name: demoAccount.name,
-        role: demoAccount.role,
-        merchant_id: demoAccount.merchant_id,
-        token: Buffer.from(email).toString('base64')
-      };
-
-      console.log(`✅ Demo account login: ${email}`);
-
-      return res.json({
-        success: true,
-        user: session
-      });
-    }
+    // Test accounts removed for security
+    // All authentication now goes through database
 
     // Check database for other users
     const user = db.getUserByEmail(email);
@@ -9142,6 +9660,138 @@ app.post('/webhook/stripe', async (req, res) => {
             console.error(`❌ Error processing wallet deposit webhook:`, error);
             // Don't throw - we'll retry or handle manually
           }
+        } else if (paymentIntent.metadata && paymentIntent.metadata.checkout_id) {
+          // VOICE CHECKOUT PAYMENT - Complete checkout automatically
+          console.log(`💳 Processing voice checkout payment: ${paymentIntent.id}`);
+          console.log(`   Checkout ID: ${paymentIntent.metadata.checkout_id}`);
+          
+          try {
+            const checkoutId = paymentIntent.metadata.checkout_id;
+            const checkout = await db.getVoiceCheckout(checkoutId);
+            
+            if (!checkout) {
+              console.error(`❌ Checkout not found: ${checkoutId}`);
+              // Return 200 to prevent Stripe retries, but log error
+              return res.json({ received: true, error: 'Checkout not found' });
+            }
+            
+            // IDEMPOTENCY: Check if already completed
+            if (checkout.status === 'completed') {
+              console.log(`✅ Checkout ${checkoutId} already completed - skipping`);
+              return res.json({ received: true, message: 'Already completed' });
+            }
+            
+            // Process payment token if provided
+            if (paymentIntent.metadata.payment_token) {
+              const PaymentService = require('./services/payment-service');
+              const tokenResult = await PaymentService.processPayment(
+                paymentIntent.metadata.payment_token,
+                paymentIntent.id
+              );
+              
+              if (!tokenResult.success) {
+                console.warn(`⚠️  Token processing failed: ${tokenResult.error}`);
+                // Continue anyway - payment succeeded in Stripe
+              }
+            }
+            
+            // Complete checkout (inline implementation - same logic as /voice/checkout/complete route)
+            const { v4: uuidv4 } = require('uuid');
+            const axios = require('axios');
+            const VoiceAdapter = require('./adapters/voice-adapter');
+            
+            // Get merchant - with fallback logic
+            let merchant = db.getMerchant(checkout.merchant_id);
+            if (!merchant) {
+              const fallbackMerchant = db.getMerchantBySubdomain('akin-dunbar');
+              merchant = fallbackMerchant || db.getAllMerchants()?.[0];
+            }
+            
+            if (!merchant) {
+              throw new Error('Merchant not found');
+            }
+            
+            // Decrement inventory
+            if (checkout.product_id && checkout.quantity) {
+              try {
+                const product = db.getProduct(checkout.product_id);
+                if (product && product.merchant_id === checkout.merchant_id && product.inventory >= checkout.quantity) {
+                  db.updateInventory(checkout.product_id, checkout.quantity);
+                }
+              } catch (inventoryError) {
+                console.error('❌ Error decrementing inventory:', inventoryError);
+              }
+            }
+            
+            // Create order
+            const orderData = VoiceAdapter.toMerchantOrderFormat(checkout);
+            let merchantOrder = null;
+            
+            if (merchant.api_url) {
+              try {
+                const orderResponse = await axios.post(`${merchant.api_url}/api/orders`, orderData, { timeout: 10000 });
+                merchantOrder = orderResponse.data.order;
+              } catch (apiError) {
+                console.error('❌ Merchant API call failed:', apiError.message);
+              }
+            }
+            
+            if (!merchantOrder) {
+              const orderId = uuidv4();
+              db.createOrder({
+                id: orderId,
+                merchant_id: checkout.merchant_id,
+                product_id: checkout.product_id,
+                quantity: checkout.quantity,
+                customer_email: checkout.customer_email || 'guest@example.com',
+                customer_name: checkout.customer_name,
+                customer_phone: checkout.customer_phone,
+                total_amount: checkout.amount,
+                status: 'paid',
+                payment_status: 'paid',
+                source: 'voice'
+              });
+              merchantOrder = { id: orderId };
+            }
+            
+            // Update checkout status
+            await db.updateVoiceCheckout(checkoutId, {
+              status: 'completed',
+              payment_intent_id: paymentIntent.id,
+              merchant_order_id: merchantOrder.id,
+              completed_at: new Date().toISOString()
+            });
+            
+            // Create transaction record for admin tracking
+            db.createTransaction({
+              id: uuidv4(),
+              merchant_id: checkout.merchant_id,
+              platform: 'voice',
+              platform_order_id: checkoutId,
+              merchant_order_id: merchantOrder.id,
+              product_id: checkout.product_id,
+              amount: checkout.amount,
+              status: 'completed',
+              customer_email: checkout.customer_email || checkout.customer_phone,
+              completed_at: new Date().toISOString()
+            });
+            
+            console.log(`✅ Voice checkout ${checkoutId} completed via webhook`);
+          } catch (error) {
+            console.error(`❌ Error completing voice checkout from webhook:`, error);
+            console.error(`   Checkout ID: ${paymentIntent.metadata.checkout_id}`);
+            console.error(`   Payment Intent: ${paymentIntent.id}`);
+            console.error(`   Error: ${error.message}`);
+            console.error(`   Stack: ${error.stack}`);
+            
+            // Log error but return 200 to prevent Stripe retries
+            // Admin can manually retry failed checkouts
+            // Return 200 so Stripe doesn't retry (we'll handle manually)
+            return res.json({ 
+              received: true, 
+              error: 'Checkout completion failed - logged for manual review' 
+            });
+          }
         } else {
           // Regular payment intent - handle as before
           console.log(`📝 Processing regular payment: ${paymentIntent.id}`);
@@ -9204,6 +9854,77 @@ app.post('/webhook/stripe', async (req, res) => {
           } catch (error) {
             console.error(`❌ Error updating failed deposit:`, error);
           }
+        } else if (failedPayment.metadata && failedPayment.metadata.checkout_id) {
+          // VOICE CHECKOUT PAYMENT FAILED - Update checkout status
+          const checkoutId = failedPayment.metadata.checkout_id;
+          console.log(`❌ Voice checkout payment failed: ${checkoutId}`);
+          
+          try {
+            await db.updateVoiceCheckout(checkoutId, {
+              status: 'failed',
+              payment_intent_id: failedPayment.id
+            });
+            
+            // Create failed transaction record for admin tracking
+            const { v4: uuidv4 } = require('uuid');
+            const checkout = await db.getVoiceCheckout(checkoutId);
+            if (checkout) {
+              db.createTransaction({
+                id: uuidv4(),
+                merchant_id: checkout.merchant_id,
+                platform: 'voice',
+                platform_order_id: checkoutId,
+                product_id: checkout.product_id,
+                amount: checkout.amount,
+                status: 'failed',
+                customer_email: checkout.customer_email || checkout.customer_phone,
+                completed_at: null
+              });
+            }
+            
+            console.log(`✅ Checkout ${checkoutId} marked as failed`);
+          } catch (error) {
+            console.error(`❌ Error updating failed checkout:`, error);
+          }
+        }
+        break;
+
+      case 'payment_intent.canceled':
+        const canceledPayment = event.data.object;
+        console.log(`🚫 PaymentIntent ${canceledPayment.id} canceled`);
+
+        if (canceledPayment.metadata && canceledPayment.metadata.checkout_id) {
+          // VOICE CHECKOUT PAYMENT CANCELED - Update checkout status
+          const checkoutId = canceledPayment.metadata.checkout_id;
+          console.log(`🚫 Voice checkout payment canceled: ${checkoutId}`);
+          
+          try {
+            await db.updateVoiceCheckout(checkoutId, {
+              status: 'cancelled',
+              payment_intent_id: canceledPayment.id
+            });
+            
+            // Create cancelled transaction record for admin tracking
+            const { v4: uuidv4 } = require('uuid');
+            const checkout = await db.getVoiceCheckout(checkoutId);
+            if (checkout) {
+              db.createTransaction({
+                id: uuidv4(),
+                merchant_id: checkout.merchant_id,
+                platform: 'voice',
+                platform_order_id: checkoutId,
+                product_id: checkout.product_id,
+                amount: checkout.amount,
+                status: 'cancelled',
+                customer_email: checkout.customer_email || checkout.customer_phone,
+                completed_at: null
+              });
+            }
+            
+            console.log(`✅ Checkout ${checkoutId} marked as cancelled`);
+          } catch (error) {
+            console.error(`❌ Error updating cancelled checkout:`, error);
+          }
         }
         break;
 
@@ -9215,9 +9936,17 @@ app.post('/webhook/stripe', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error processing Stripe webhook:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
+    console.error('   Event type:', event?.type);
+    console.error('   Payment Intent:', event?.data?.object?.id);
+    console.error('   Stack:', error.stack);
+    
+    // CRITICAL: Always return 200 to Stripe to prevent retries
+    // We log errors for manual review instead of retrying
+    // This prevents infinite retry loops if there's a persistent issue
+    res.status(200).json({ 
+      received: true, 
+      error: 'Webhook processing failed - logged for review',
+      error_message: error.message
     });
   }
 });
@@ -10624,6 +11353,17 @@ const server = app.listen(PORT, () => {
   console.log(`   POST   http://localhost:${PORT}/api/admin/insurance/cache/refresh ⭐ NEW`);
   console.log(`   GET    http://localhost:${PORT}/api/admin/metrics ⭐ NEW`);
   console.log(`   POST   http://localhost:${PORT}/api/admin/insurance/sync-payers`);
+  console.log('\n📦 Products & Orders (Merged from merchant-shop):');
+  console.log(`   GET    http://localhost:${PORT}/api/products`);
+  console.log(`   GET    http://localhost:${PORT}/api/products/:id`);
+  console.log(`   GET    http://localhost:${PORT}/api/products/search?q=query`);
+  console.log(`   POST   http://localhost:${PORT}/api/products`);
+  console.log(`   PUT    http://localhost:${PORT}/api/products/:id`);
+  console.log(`   DELETE http://localhost:${PORT}/api/products/:id`);
+  console.log(`   GET    http://localhost:${PORT}/api/orders`);
+  console.log(`   GET    http://localhost:${PORT}/api/orders/:id`);
+  console.log(`   POST   http://localhost:${PORT}/api/orders`);
+  console.log(`   PUT    http://localhost:${PORT}/api/orders/:id/status`);
   console.log('\n📊 Dashboard API:');
   console.log(`   POST   http://localhost:${PORT}/api/auth/login`);
   console.log(`   GET    http://localhost:${PORT}/api/admin/stats`);

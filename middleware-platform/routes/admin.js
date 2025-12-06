@@ -195,6 +195,190 @@ router.get('/transactions', (req, res) => {
 });
 
 /**
+ * Get all active deliveries across all merchants
+ * GET /api/admin/deliveries
+ * Returns all orders with delivery tracking information
+ */
+router.get('/deliveries', (req, res) => {
+    try {
+        const allOrders = db.getAllOrders();
+        
+        // Filter for orders with delivery tracking
+        const deliveries = allOrders
+            .filter(order => 
+                order.delivery_status && 
+                order.delivery_status !== 'pending' &&
+                order.delivery_status !== 'cancelled'
+            )
+            .map(order => {
+                const merchant = db.getMerchant(order.merchant_id);
+                return {
+                    ...order,
+                    merchant_name: merchant ? merchant.name : 'Unknown',
+                    has_location: !!(order.current_latitude && order.current_longitude),
+                    distance_to_delivery: null // Will be calculated if both locations available
+                };
+            })
+            .sort((a, b) => {
+                // Sort by: active deliveries first, then by last update
+                const aActive = a.delivery_status === 'out_for_delivery' || a.delivery_status === 'in_transit';
+                const bActive = b.delivery_status === 'out_for_delivery' || b.delivery_status === 'in_transit';
+                
+                if (aActive !== bActive) {
+                    return aActive ? -1 : 1;
+                }
+                
+                const aTime = a.last_location_update ? new Date(a.last_location_update) : new Date(0);
+                const bTime = b.last_location_update ? new Date(b.last_location_update) : new Date(0);
+                return bTime - aTime;
+            });
+
+        // Group by status
+        const byStatus = {
+            active: deliveries.filter(d => d.delivery_status === 'out_for_delivery' || d.delivery_status === 'in_transit'),
+            delivered: deliveries.filter(d => d.delivery_status === 'delivered'),
+            other: deliveries.filter(d => !['out_for_delivery', 'in_transit', 'delivered'].includes(d.delivery_status))
+        };
+
+        res.json({
+            success: true,
+            count: deliveries.length,
+            active: byStatus.active.length,
+            delivered: byStatus.delivered.length,
+            deliveries: deliveries,
+            by_status: byStatus
+        });
+    } catch (error) {
+        console.error('❌ Error fetching deliveries:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Get delivery analytics
+ * GET /api/admin/deliveries/analytics
+ * Returns delivery metrics and statistics
+ */
+router.get('/deliveries/analytics', (req, res) => {
+    try {
+        const allOrders = db.getAllOrders();
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        // Filter orders with delivery tracking
+        const deliveries = allOrders.filter(order => 
+            order.delivery_status && 
+            order.delivery_status !== 'pending' &&
+            order.delivery_status !== 'cancelled'
+        );
+
+        // Calculate metrics
+        const totalDeliveries = deliveries.length;
+        const activeDeliveries = deliveries.filter(d => 
+            d.delivery_status === 'out_for_delivery' || d.delivery_status === 'in_transit'
+        ).length;
+        const completedDeliveries = deliveries.filter(d => 
+            d.delivery_status === 'delivered'
+        ).length;
+
+        // Time-based metrics
+        const recentDeliveries = deliveries.filter(d => {
+            const created = new Date(d.created_at);
+            return created >= oneDayAgo;
+        });
+
+        const weeklyDeliveries = deliveries.filter(d => {
+            const created = new Date(d.created_at);
+            return created >= oneWeekAgo;
+        });
+
+        const monthlyDeliveries = deliveries.filter(d => {
+            const created = new Date(d.created_at);
+            return created >= oneMonthAgo;
+        });
+
+        // Calculate average delivery time (for completed orders)
+        const completedWithTimes = deliveries
+            .filter(d => d.delivery_status === 'delivered' && d.created_at && d.completed_at)
+            .map(d => {
+                const created = new Date(d.created_at);
+                const completed = new Date(d.completed_at);
+                return (completed - created) / (1000 * 60); // minutes
+            });
+
+        const avgDeliveryTimeMinutes = completedWithTimes.length > 0
+            ? completedWithTimes.reduce((sum, time) => sum + time, 0) / completedWithTimes.length
+            : 0;
+
+        // Auto-confirmation rate
+        const autoConfirmed = deliveries.filter(d => {
+            // Check if delivery was auto-confirmed (would need to check transaction logs)
+            // For now, estimate based on delivery_status and timing
+            return d.delivery_status === 'delivered' && d.last_location_update && d.completed_at;
+        }).length;
+
+        const autoConfirmRate = completedDeliveries > 0
+            ? (autoConfirmed / completedDeliveries) * 100
+            : 0;
+
+        // Location update frequency
+        const ordersWithUpdates = deliveries.filter(d => d.last_location_update);
+        const avgUpdateFrequency = ordersWithUpdates.length > 0
+            ? ordersWithUpdates.length / totalDeliveries * 100
+            : 0;
+
+        // By merchant
+        const byMerchant = {};
+        deliveries.forEach(d => {
+            const merchantId = d.merchant_id;
+            if (!byMerchant[merchantId]) {
+                const merchant = db.getMerchant(merchantId);
+                byMerchant[merchantId] = {
+                    merchant_id: merchantId,
+                    merchant_name: merchant ? merchant.name : 'Unknown',
+                    total: 0,
+                    active: 0,
+                    completed: 0
+                };
+            }
+            byMerchant[merchantId].total++;
+            if (d.delivery_status === 'out_for_delivery' || d.delivery_status === 'in_transit') {
+                byMerchant[merchantId].active++;
+            }
+            if (d.delivery_status === 'delivered') {
+                byMerchant[merchantId].completed++;
+            }
+        });
+
+        res.json({
+            success: true,
+            metrics: {
+                total_deliveries: totalDeliveries,
+                active_deliveries: activeDeliveries,
+                completed_deliveries: completedDeliveries,
+                recent_24h: recentDeliveries.length,
+                recent_7d: weeklyDeliveries.length,
+                recent_30d: monthlyDeliveries.length,
+                avg_delivery_time_minutes: Math.round(avgDeliveryTimeMinutes),
+                auto_confirm_rate_percent: Math.round(autoConfirmRate * 10) / 10,
+                location_update_coverage_percent: Math.round(avgUpdateFrequency * 10) / 10
+            },
+            by_merchant: Object.values(byMerchant),
+            time_periods: {
+                last_24h: recentDeliveries.length,
+                last_7d: weeklyDeliveries.length,
+                last_30d: monthlyDeliveries.length
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error fetching delivery analytics:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * Get transaction details
  * GET /api/admin/transactions/:id
  */
@@ -400,6 +584,85 @@ router.get('/voice/analytics', (req, res) => {
         });
     } catch (error) {
         console.error('Voice analytics error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Get all customers
+ * GET /api/admin/customers
+ */
+router.get('/customers', (req, res) => {
+    try {
+        const customers = db.db.prepare('SELECT * FROM customers ORDER BY created_at DESC').all();
+        res.json({
+            success: true,
+            customers: customers
+        });
+    } catch (error) {
+        console.error('Get customers error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Get incomplete signups
+ * GET /api/admin/incomplete-signups
+ */
+router.get('/incomplete-signups', (req, res) => {
+    try {
+        const incomplete = db.db.prepare(`
+            SELECT * FROM incomplete_signups 
+            WHERE is_completed = 0 
+            ORDER BY signup_started_at DESC
+        `).all();
+        res.json({
+            success: true,
+            incomplete_signups: incomplete
+        });
+    } catch (error) {
+        console.error('Get incomplete signups error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Allocate credits to a customer
+ * POST /api/admin/customers/:customer_id/credits
+ * Body: { credits: number }
+ */
+router.post('/customers/:customer_id/credits', (req, res) => {
+    try {
+        const { customer_id } = req.params;
+        const { credits } = req.body;
+
+        if (!credits || credits < 1) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid credits amount'
+            });
+        }
+
+        const customer = db.getCustomer(customer_id);
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                error: 'Customer not found'
+            });
+        }
+
+        // Allocate free credits
+        db.allocateFreeCredits(customer_id, credits);
+
+        console.log(`✅ Admin allocated ${credits} credits to customer ${customer_id}`);
+
+        res.json({
+            success: true,
+            message: `Successfully allocated ${credits} credits`,
+            credits_allocated: credits
+        });
+    } catch (error) {
+        console.error('Allocate credits error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

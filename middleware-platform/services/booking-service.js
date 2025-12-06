@@ -360,9 +360,21 @@ class BookingService {
         console.log('ℹ️  Running in mock mode - no calendar event created');
       }
 
-      // Save to database
-      await db.createAppointment(appointment);
-      console.log('✅ Appointment saved to database');
+      // SECURITY: Save to database with conflict check
+      // Note: There's still a small race condition window between availability check and insert
+      // For production, consider adding database-level unique constraints on (clinic_id, start_time, status)
+      try {
+        await db.createAppointment(appointment);
+        console.log('✅ Appointment saved to database');
+      } catch (dbError) {
+        // Check if it's a unique constraint violation (double booking)
+        if (dbError.message && dbError.message.includes('UNIQUE constraint')) {
+          console.error('❌ Appointment conflict detected - slot may have been booked by another request');
+          throw new Error('This time slot was just booked by another patient. Please select a different time.');
+        }
+        // Re-throw other database errors
+        throw dbError;
+      }
 
       // Send confirmation email if email provided
       if (appointment.patient_email) {

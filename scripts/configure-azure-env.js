@@ -67,14 +67,23 @@ const settings = [
 ];
 
 // Add required secrets if they exist
+// SECURITY: These are now required in production - server will fail to start if missing
 const requiredVars = [
+    // Critical security secrets (REQUIRED in production)
+    'ADMIN_PORTAL_SECRET',
+    'API_KEY_ENCRYPTION_KEY',
+    'RETELL_WEBHOOK_SECRET',
+    // Payment (required if using payments)
     'STRIPE_SECRET_KEY',
     'STRIPE_PUBLISHABLE_KEY',
+    // Core services
+    'RETELL_API_KEY',
+    'RETELL_AGENT_ID',
+    // Twilio (if using SMS)
     'TWILIO_ACCOUNT_SID',
     'TWILIO_AUTH_TOKEN',
     'TWILIO_PHONE_NUMBER',
-    'RETELL_API_KEY',
-    'RETELL_AGENT_ID',
+    // Azure email (if using Azure email)
     'AZURE_COMMUNICATION_CONNECTION_STRING',
     'AZURE_EMAIL_SENDER'
 ];

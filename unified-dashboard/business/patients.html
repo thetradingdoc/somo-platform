@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clients - Medical Coding Assistant</title>
+    <title>Customer List - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
     <style>
@@ -426,19 +426,90 @@
             margin-bottom: 16px;
         }
 
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 1001;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu-toggle:hover {
+            background: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        /* Sidebar Overlay for Mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
         @media (max-width: 768px) {
+            .mobile-menu-toggle {
+                display: block;
+            }
+
             .sidebar {
-                width: 100%;
-                position: relative;
-                height: auto;
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                width: 280px;
+                max-width: 85vw;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+                box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
             }
 
             .main-content {
                 margin-left: 0;
+                padding: 16px;
+                padding-top: 70px;
+            }
+
+            .page-header {
+                padding: 16px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .page-title {
+                font-size: 24px;
             }
 
             .stats-grid {
                 grid-template-columns: 1fr;
+                gap: 16px;
             }
 
             .patients-grid {
@@ -448,14 +519,53 @@
             .customer-stats {
                 grid-template-columns: 1fr;
             }
+
+            .customer-card {
+                padding: 16px;
+            }
+
+            /* Touch-friendly buttons */
+            .btn {
+                min-height: 44px;
+                padding: 12px 20px;
+            }
+
+            .nav-item {
+                min-height: 48px;
+                padding: 14px 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 12px;
+                padding-top: 70px;
+            }
+
+            .page-title {
+                font-size: 20px;
+            }
+
+            .mobile-menu-toggle {
+                top: 12px;
+                left: 12px;
+                padding: 10px 14px;
+                font-size: 18px;
+            }
         }
     </style>
 </head>
 
 <body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+    
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+    
     <div class="layout">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
                     <span class="doc">Doc</span><span class="little">Little</span><span
@@ -464,35 +574,36 @@
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="pdf-coding.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
+                <a href="business-dashboard.html" class="nav-item">
+                    <span class="nav-icon">📊</span>
+                    <span>Dashboard</span>
                 </a>
-                <a href="invoices.html" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
+                <a href="products.html" class="nav-item">
+                    <span class="nav-icon">📦</span>
+                    <span>Products</span>
+                </a>
+                <a href="orders.html" class="nav-item">
+                    <span class="nav-icon">🛒</span>
+                    <span>Orders</span>
                 </a>
                 <a href="patients.html" class="nav-item active">
                     <span class="nav-icon">👥</span>
-                    <span>Patients</span>
+                    <span>Customer List</span>
+                </a>
+                <a href="agent.html" class="nav-item">
+                    <span class="nav-icon">🎙️</span>
+                    <span>Voice Agent</span>
                 </a>
                 <a href="billing.html" class="nav-item">
                     <span class="nav-icon">💳</span>
                     <span>Billing</span>
                 </a>
-                <a href="wallets.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
+                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
@@ -508,8 +619,8 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
-                <h1 class="page-title">Client Directory</h1>
-                <p class="page-subtitle">View and manage client records</p>
+                <h1 class="page-title">Customer List</h1>
+                <p class="page-subtitle">View and manage customer records and orders</p>
             </div>
 
             <!-- Stats Grid -->
@@ -556,7 +667,7 @@
                 <div class="search-input-wrapper">
                     <span class="search-icon">🔍</span>
                     <input type="text" id="searchInput" class="search-input"
-                        placeholder="Search patients by name, phone, or email..." oninput="searchCustomers()">
+                        placeholder="Search customers by name, phone, or email..." oninput="searchCustomers()">
                 </div>
             </div>
 
@@ -610,8 +721,66 @@
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
+        const MERCHANT_API = `${API_BASE}/api`;
         let userData = null;
         let allCustomers = [];
+
+        // Mobile sidebar toggle functions
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('active');
+                if (sidebar.classList.contains('open')) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+            }
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        function setupMobileNavClose() {
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    if (window.innerWidth <= 768) {
+                        closeSidebar();
+                    }
+                });
+            });
+        }
+
+        function renderSidebar() {
+            if (!window.TENANT_CONFIG) return;
+            const navEl = document.getElementById('sidebarNav');
+            if (!navEl) return;
+
+            // Use 'customers' tab id for shop tenants, 'patients' for clinics
+            const activeId = window.TENANT_CONFIG.tenant_type === 'shop' ? 'customers' : 'patients';
+
+            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
+                <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
+                    <span class="nav-icon">${item.icon}</span>
+                    <span>${item.label}</span>
+                </a>
+            `).join('');
+
+            const subtitleEl = document.querySelector('.sidebar-subtitle');
+            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
+                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
+            }
+        }
 
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
@@ -620,8 +789,24 @@
         userData = JSON.parse(sessionStorage.getItem('user'));
 
         document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
+            setupMobileNavClose();
             loadUserInfo();
             loadCustomers();
+
+            // Close sidebar on window resize if switching to desktop
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) {
+                    closeSidebar();
+                }
+            });
+
+            // Close sidebar on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeSidebar();
+                }
+            });
         });
 
         function loadUserInfo() {
@@ -634,7 +819,12 @@
 
         async function loadCustomers() {
             try {
-                // Fetch FHIR patients (source of truth)
+                // For shop tenants, build customers from merchant orders (commerce view)
+                if (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop') {
+                    return await loadShopCustomersFromOrders();
+                }
+
+                // For clinic tenants, use FHIR + insurance/EHR as before
                 const response = await fetch(`${API_BASE}/fhir/Patient`);
                 const bundle = await response.json();
 
@@ -699,11 +889,90 @@
                 displayCustomers(allCustomers);
                 updateStatsFromPatients(allCustomers);
             } catch (error) {
-                console.error('Error loading patients:', error);
+                console.error('Error loading patients/customers:', error);
                 document.getElementById('customersList').innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">❌</div>
-                        <p>Failed to load patients. Make sure middleware is running.</p>
+                        <p>Failed to load customer data. Make sure middleware is running.</p>
+                        <button class="btn btn-secondary" onclick="loadCustomers()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Load customers for shop tenants using merchant orders
+        async function loadShopCustomersFromOrders() {
+            try {
+                const response = await fetch(`${MERCHANT_API}/orders`, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '../login.html';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                if (!data.success || !Array.isArray(data.orders)) {
+                    throw new Error(data.error || 'Failed to load orders');
+                }
+
+                const orders = data.orders;
+                const byCustomer = new Map();
+
+                orders.forEach(order => {
+                    const email = (order.customer_email || '').toLowerCase();
+                    const phone = (order.customer_phone || '').toLowerCase();
+                    const key = email || phone || (order.customer_name || '').toLowerCase() || order.id;
+
+                    if (!byCustomer.has(key)) {
+                        byCustomer.set(key, {
+                            customer_name: order.customer_name || 'Customer',
+                            customer_email: order.customer_email || '',
+                            customer_phone: order.customer_phone || '',
+                            total_orders: 0,
+                            total_spend: 0,
+                            last_order_at: null,
+                            channels: new Set()
+                        });
+                    }
+
+                    const c = byCustomer.get(key);
+                    c.total_orders += 1;
+                    c.total_spend += parseFloat(order.total_amount || 0);
+
+                    if (order.created_at) {
+                        const created = new Date(order.created_at);
+                        if (!c.last_order_at || created > new Date(c.last_order_at)) {
+                            c.last_order_at = order.created_at;
+                        }
+                    }
+
+                    const source = (order.source || 'voice').toLowerCase();
+                    c.channels.add(source);
+                });
+
+                const customers = Array.from(byCustomer.values()).map(c => ({
+                    ...c,
+                    channels: Array.from(c.channels)
+                }));
+
+                allCustomers = customers;
+                displayCustomers(allCustomers);
+                updateStatsFromPatients(allCustomers);
+            } catch (error) {
+                console.error('Error loading shop customers from orders:', error);
+                document.getElementById('customersList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <p>Failed to load customers from orders. Make sure middleware is running.</p>
                         <button class="btn btn-secondary" onclick="loadCustomers()">Retry</button>
                     </div>
                 `;
@@ -712,12 +981,69 @@
 
         function updateStatsFromPatients(patients) {
             const total = patients.length;
-            const eligible = patients.filter(p => p.eligibility && p.eligibility.eligible).length;
-            const hasCoverage = patients.filter(p => p.eligibility).length;
+
+            // For clinic tenants, keep insurance-focused stats
+            if (!window.TENANT_CONFIG || window.TENANT_CONFIG.tenant_type !== 'shop') {
+                const eligible = patients.filter(p => p.eligibility && p.eligibility.eligible).length;
+                const hasCoverage = patients.filter(p => p.eligibility).length;
+                const totalCopays = patients
+                    .filter(p => p.eligibility && p.eligibility.copay_amount)
+                    .reduce((sum, p) => sum + (p.eligibility.copay_amount || 0), 0);
+
+                document.getElementById('totalCustomers').textContent = total;
+                document.getElementById('newCustomers').textContent = eligible;
+                document.getElementById('repeatCustomers').textContent = hasCoverage;
+                document.getElementById('avgOrderValue').textContent = `$${totalCopays.toFixed(2)}`;
+                return;
+            }
+
+            // For shop tenants, compute simple commerce stats from orders-derived customers
+            const now = new Date();
+            const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+            let activeCount = 0;
+            let repeatCount = 0;
+            let totalOrders = 0;
+            let totalRevenue = 0;
+
+            patients.forEach(c => {
+                const orders = c.total_orders || 0;
+                const spend = c.total_spend || 0;
+                totalOrders += orders;
+                totalRevenue += spend;
+
+                if (orders > 1) repeatCount += 1;
+
+                if (c.last_order_at) {
+                    const last = new Date(c.last_order_at);
+                    if (!isNaN(last.getTime()) && (now - last) <= THIRTY_DAYS) {
+                        activeCount += 1;
+                    }
+                }
+            });
+
+            const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
+
             document.getElementById('totalCustomers').textContent = total;
-            document.getElementById('newCustomers').textContent = eligible;
-            document.getElementById('repeatCustomers').textContent = hasCoverage;
-            document.getElementById('avgOrderValue').textContent = `$${patients.filter(p => p.eligibility && p.eligibility.copay_amount).reduce((sum, p) => sum + (p.eligibility.copay_amount || 0), 0).toFixed(2)}`;
+            document.getElementById('newCustomers').textContent = activeCount;
+            document.getElementById('repeatCustomers').textContent = repeatCount;
+            document.getElementById('avgOrderValue').textContent = `$${avgOrderValue.toFixed(2)}`;
+
+            // Also adjust labels to be commerce oriented
+            const statsTitles = document.querySelectorAll('.stat-title');
+            if (statsTitles.length >= 4) {
+                statsTitles[0].textContent = 'Total Customers';
+                statsTitles[1].textContent = 'Active Customers (30d)';
+                statsTitles[2].textContent = 'Repeat Buyers';
+                statsTitles[3].textContent = 'Avg Order Value';
+            }
+            const statChanges = document.querySelectorAll('.stat-change');
+            if (statChanges.length >= 4) {
+                statChanges[0].textContent = 'All-time';
+                statChanges[1].textContent = 'Last 30 days';
+                statChanges[2].textContent = 'Customers with >1 order';
+                statChanges[3].textContent = 'Revenue / Orders';
+            }
         }
 
         function displayCustomers(customers) {
@@ -743,7 +1069,55 @@
             const hasEhrData = patient.ehr_data && patient.ehr_data.encounters && patient.ehr_data.encounters.length > 0;
             const eligibility = patient.eligibility || null;
 
-            // Extract EHR data summary
+            // If this is a shop tenant, render a commerce-style customer card
+            if (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop') {
+                const orders = patient.total_orders || 0;
+                const spend = patient.total_spend || 0;
+                const lastOrder = patient.last_order_at
+                    ? new Date(patient.last_order_at).toLocaleDateString()
+                    : '—';
+                const channels = (patient.channels && patient.channels.length)
+                    ? patient.channels.join(', ')
+                    : '—';
+
+                return `
+                <div class="customer-card">
+                    <div class="customer-header">
+                        <div class="customer-avatar">${initials}</div>
+                        <div class="customer-info">
+                            <div class="customer-name">${patient.customer_name}</div>
+                            <div class="customer-contact">${phone}${email ? ' · ' + email : ''}</div>
+                        </div>
+                    </div>
+
+                    <div class="customer-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">${orders}</div>
+                            <div class="stat-label">Total Orders</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">$${spend.toFixed(2)}</div>
+                            <div class="stat-label">Lifetime Spend</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${lastOrder}</div>
+                            <div class="stat-label">Last Order</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${channels}</div>
+                            <div class="stat-label">Channel</div>
+                        </div>
+                    </div>
+
+                    <div class="customer-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="goToOrders()">View Orders</button>
+                        ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone}')">📞 Contact</button>` : ''}
+                    </div>
+                </div>
+                `;
+            }
+
+            // Extract EHR data summary (clinic tenants only)
             let ehrSummary = '';
             if (hasEhrData) {
                 const encounters = patient.ehr_data.encounters;
@@ -916,6 +1290,10 @@
         function viewPatientBilling(fhirId) {
             // Navigate to billing page for this patient
             window.location.href = `billing.html?patient=${encodeURIComponent(fhirId)}`;
+        }
+
+        function goToOrders() {
+            window.location.href = 'orders.html';
         }
 
         function viewPatientDetails(fhirId) {

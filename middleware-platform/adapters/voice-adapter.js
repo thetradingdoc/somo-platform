@@ -9,17 +9,37 @@ class VoiceAdapter {
      * Convert voice format products to simple format
      */
     static toVoiceFormat(products) {
-        return products.map(product => ({
-            id: product.id,
-            name: product.name,
-            description: this._truncateDescription(product.description),
-            price: product.price.toFixed(2),
-            price_spoken: `$${product.price.toFixed(2)}`,
-            currency: 'USD',
-            available: product.inventory > 0,
-            inventory: product.inventory,
-            category: product.category || ''
-        }));
+        if (!Array.isArray(products)) {
+            console.error('⚠️ VoiceAdapter.toVoiceFormat: products is not an array:', typeof products);
+            return [];
+        }
+
+        return products.map((product, index) => {
+            // Debug: Log first product structure
+            if (index === 0) {
+                console.log('🔍 VoiceAdapter: First product keys:', Object.keys(product));
+                console.log('🔍 VoiceAdapter: First product.name:', product.name, 'type:', typeof product.name);
+            }
+
+            // Ensure we have valid data - check multiple possible name fields
+            const name = product.name || product.Name || product.NAME || product.title || product.Title || 'Unnamed Product';
+            const price = parseFloat(product.price || product.Price || 0) || 0;
+            const inventory = parseInt(product.inventory || product.Inventory || 0) || 0;
+            const description = product.description || product.Description || '';
+            const category = product.category || product.Category || '';
+
+            return {
+                id: product.id || product.ID || '',
+                name: name,
+                description: this._truncateDescription(description),
+                price: price.toFixed(2),
+                price_spoken: `$${price.toFixed(2)}`,
+                currency: 'USD',
+                available: inventory > 0,
+                inventory: inventory,
+                category: category
+            };
+        });
     }
 
     /**
@@ -51,11 +71,17 @@ class VoiceAdapter {
             data = rawRequest;
         }
 
+        // CRITICAL: Normalize phone number to +1 format for US customers
+        const SMSService = require('../services/sms-service');
+        const normalizedPhone = data.customer_phone
+            ? SMSService.formatPhoneNumber(data.customer_phone)
+            : null;
+
         return {
             merchant_id: data.merchant_id,
             customer: {
                 name: data.customer_name,
-                phone: data.customer_phone,
+                phone: normalizedPhone,
                 email: data.customer_email
             },
             items: [{
@@ -92,15 +118,23 @@ class VoiceAdapter {
      * Convert standard payment response to voice format
      */
     static fromStandardResponse(standardResponse) {
+        // Only set default message if successful and no error
+        const defaultMessage = standardResponse.success && !standardResponse.error 
+            ? 'Payment link sent via email' 
+            : null;
+        
         return {
             success: standardResponse.success,
             checkout_id: standardResponse.checkout_id,
             payment_token: standardResponse.payment_token,
             payment_link: standardResponse.payment_link,
-            amount: standardResponse.payment.amount?.toFixed(2),
-            currency: standardResponse.payment.currency,
-            sms_sent: standardResponse.metadata?.sms_sent || false,
-            message: standardResponse.message || 'Payment link sent via SMS'
+            amount: standardResponse.payment?.amount?.toFixed(2),
+            currency: standardResponse.payment?.currency || 'USD',
+            email_sent: standardResponse.metadata?.email_sent || false,
+            message: standardResponse.message || defaultMessage,
+            error: standardResponse.error || null,
+            requires_action: standardResponse.requires_action || false,
+            action_type: standardResponse.action_type || null
         };
     }
 

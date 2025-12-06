@@ -244,6 +244,12 @@
             background: var(--gray-50);
         }
 
+        /* Table wrapper for horizontal scrolling on mobile */
+        .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         .patient-name {
             font-weight: 600;
             color: var(--gray-900);
@@ -264,6 +270,7 @@
             font-weight: 600;
             font-size: 13px;
             transition: background 0.2s;
+            min-height: 44px; /* Touch-friendly */
         }
 
         .view-eob-btn:hover {
@@ -459,13 +466,140 @@
             font-size: 64px;
             margin-bottom: 16px;
         }
+
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 1001;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+        }
+
+        .mobile-menu-toggle:hover {
+            background: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        /* Sidebar Overlay for Mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-menu-toggle {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                width: 280px;
+                max-width: 85vw;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+                box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+                padding: 16px;
+                padding-top: 70px;
+            }
+
+            .page-header {
+                padding: 16px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .page-title {
+                font-size: 24px;
+            }
+
+            /* Horizontal scrolling for tables */
+            .table-wrapper {
+                margin: 0 -16px;
+                padding: 0 16px;
+            }
+
+            .patient-table {
+                min-width: 600px;
+            }
+
+            /* Touch-friendly buttons */
+            .btn {
+                min-height: 44px;
+                padding: 12px 20px;
+            }
+
+            .nav-item {
+                min-height: 48px;
+                padding: 14px 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 12px;
+                padding-top: 70px;
+            }
+
+            .page-title {
+                font-size: 20px;
+            }
+
+            .mobile-menu-toggle {
+                top: 12px;
+                left: 12px;
+                padding: 10px 14px;
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 
 <body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
+    
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+    
     <div class="layout">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
                     <span class="doc">Doc</span><span class="little">Little</span>.
@@ -473,35 +607,36 @@
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="pdf-coding.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
+                <a href="business-dashboard.html" class="nav-item">
+                    <span class="nav-icon">📊</span>
+                    <span>Dashboard</span>
                 </a>
-                <a href="invoices.html" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
+                <a href="products.html" class="nav-item">
+                    <span class="nav-icon">📦</span>
+                    <span>Products</span>
+                </a>
+                <a href="orders.html" class="nav-item">
+                    <span class="nav-icon">🛒</span>
+                    <span>Orders</span>
                 </a>
                 <a href="patients.html" class="nav-item">
                     <span class="nav-icon">👥</span>
-                    <span>Patients</span>
+                    <span>Customer List</span>
+                </a>
+                <a href="agent.html" class="nav-item">
+                    <span class="nav-icon">🎙️</span>
+                    <span>Voice Agent</span>
                 </a>
                 <a href="billing.html" class="nav-item active">
                     <span class="nav-icon">💳</span>
                     <span>Billing</span>
                 </a>
-                <a href="wallets.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
+                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
@@ -521,6 +656,20 @@
                     <p class="page-subtitle">Explanation of Benefits (EOB) for all patients</p>
                 </div>
 
+                <!-- Credits Balance Banner -->
+                <div class="credits-banner" id="creditsBanner" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; margin-bottom: 8px;">Available Credits</div>
+                            <div style="font-size: 36px; font-weight: 700; margin-bottom: 4px;">
+                                <span id="billingCreditsBalance">0</span> <span style="font-size: 20px; font-weight: 400; opacity: 0.9;">minutes</span>
+                            </div>
+                            <div style="font-size: 14px; opacity: 0.9;" id="billingCreditsDetails">Loading...</div>
+                        </div>
+                        <div style="font-size: 48px; opacity: 0.3;">⚡</div>
+                    </div>
+                </div>
+
                 <div class="patient-list">
                     <div class="patient-list-header">
                         <div class="search-input-wrapper">
@@ -530,7 +679,7 @@
                         </div>
                     </div>
 
-                    <div id="patientsTableContainer">
+                    <div id="patientsTableContainer" class="table-wrapper">
                         <table class="patient-table">
                             <thead>
                                 <tr>
@@ -579,15 +728,92 @@
         let allPatients = [];
         let currentPatientId = null;
 
+        // Mobile sidebar toggle functions
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.toggle('open');
+                overlay.classList.toggle('active');
+                if (sidebar.classList.contains('open')) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = '';
+                }
+            }
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        function setupMobileNavClose() {
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    if (window.innerWidth <= 768) {
+                        closeSidebar();
+                    }
+                });
+            });
+        }
+
+        function renderSidebar() {
+            if (!window.TENANT_CONFIG) return;
+            const navEl = document.getElementById('sidebarNav');
+            if (!navEl) return;
+
+            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
+                <a href="${item.href}" class="nav-item ${item.id === 'billing' ? 'active' : ''}">
+                    <span class="nav-icon">${item.icon}</span>
+                    <span>${item.label}</span>
+                </a>
+            `).join('');
+
+            const subtitleEl = document.querySelector('.sidebar-subtitle');
+            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
+                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
+            }
+
+            // For shop tenants, tweak header copy
+            if (window.TENANT_CONFIG.tenant_type === 'shop') {
+                const titleEl = document.querySelector('.page-title');
+                const subtitleEl2 = document.querySelector('.page-subtitle');
+                if (titleEl) titleEl.textContent = 'Billing & Usage';
+                if (subtitleEl2) subtitleEl2.textContent = 'Voice credits and commerce billing overview';
+            }
+        }
+
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
         }
 
-        const userData = JSON.parse(sessionStorage.getItem('user'));
+        // Safe JSON.parse with error handling
+        let userData = null;
+        try {
+            const userStr = sessionStorage.getItem('user');
+            userData = userStr ? JSON.parse(userStr) : null;
+        } catch (error) {
+            console.error('Error parsing user data from sessionStorage:', error);
+            userData = null;
+        }
+        
         if (userData) {
-            document.getElementById('userName').textContent = userData.name;
-            const initials = userData.name.split(' ').map(n => n[0]).join('');
-            document.getElementById('userAvatar').textContent = initials;
+            const userNameEl = document.getElementById('userName');
+            const userAvatarEl = document.getElementById('userAvatar');
+            if (userNameEl && userData.name) {
+                userNameEl.textContent = userData.name;
+            }
+            if (userAvatarEl && userData.name) {
+                const initials = userData.name.split(' ').map(n => n[0]).join('');
+                userAvatarEl.textContent = initials;
+            }
         }
 
         // Check if patient parameter in URL
@@ -595,11 +821,122 @@
         const patientParam = urlParams.get('patient');
 
         document.addEventListener('DOMContentLoaded', () => {
-            loadBillingData();
-            if (patientParam) {
-                showEOBDetail(patientParam);
+            renderSidebar();
+            setupMobileNavClose();
+            loadCredits();
+
+            // Close sidebar on window resize if switching to desktop
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) {
+                    closeSidebar();
+                }
+            });
+
+            // Close sidebar on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeSidebar();
+                }
+            });
+
+            // For clinic tenants, show full EOB billing UI
+            if (!window.TENANT_CONFIG || window.TENANT_CONFIG.tenant_type !== 'shop') {
+                loadBillingData();
+                if (patientParam) {
+                    showEOBDetail(patientParam);
+                }
+                return;
+            }
+
+            // For shop tenants, show a simple commerce billing placeholder
+            const tbody = document.getElementById('patientsTableBody');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align: center; padding: 48px;">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">🛒</div>
+                                <p>Commerce billing is handled through your orders and subscription usage.</p>
+                                <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
+                                    This medical billing & claims view is only used for clinics. For your shop, review:
+                                    <br/>• Orders tab for sales
+                                    <br/>• Credits banner above for voice minutes usage
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
             }
         });
+
+        async function loadCredits() {
+            try {
+                const res = await fetch(`${API_BASE}/api/usage-monitor/credits`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.credits) {
+                        const credits = data.credits;
+                        const balance = credits.balance || 0;
+                        const freeAllocated = credits.free_allocated || 0;
+                        const freeUsed = credits.free_used || 0;
+                        const freeRemaining = credits.free_remaining || 0;
+                        const paidRemaining = credits.paid_remaining || 0;
+                        
+                        // Update balance display with null checks
+                        const balanceEl = document.getElementById('billingCreditsBalance');
+                        const detailsEl = document.getElementById('billingCreditsDetails');
+                        
+                        if (balanceEl) {
+                            balanceEl.textContent = balance.toLocaleString();
+                        }
+                        
+                        // Update details
+                        let details = '';
+                        if (freeAllocated > 0) {
+                            details = `${freeRemaining.toLocaleString()} free min remaining`;
+                            if (paidRemaining > 0) {
+                                details += ` + ${paidRemaining.toLocaleString()} paid min`;
+                            }
+                        } else if (paidRemaining > 0) {
+                            details = `${paidRemaining.toLocaleString()} paid minutes remaining`;
+                        } else {
+                            details = 'No credits available';
+                        }
+                        
+                        if (detailsEl) {
+                            detailsEl.textContent = details;
+                        }
+                        
+                        // Update banner color based on balance
+                        const banner = document.getElementById('creditsBanner');
+                        if (banner) {
+                            if (balance < 50) {
+                                banner.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+                            } else if (balance < 100) {
+                                banner.style.background = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
+                            }
+                        }
+                    } else {
+                        const balanceEl = document.getElementById('billingCreditsBalance');
+                        const detailsEl = document.getElementById('billingCreditsDetails');
+                        if (balanceEl) balanceEl.textContent = '0';
+                        if (detailsEl) detailsEl.textContent = 'No credits allocated';
+                    }
+                } else {
+                    console.warn('Failed to load credits:', res.status);
+                    const detailsEl = document.getElementById('billingCreditsDetails');
+                    if (detailsEl) detailsEl.textContent = 'Unable to load credits';
+                }
+            } catch (error) {
+                console.error('Error loading credits:', error);
+                const balanceEl = document.getElementById('billingCreditsBalance');
+                const detailsEl = document.getElementById('billingCreditsDetails');
+                if (balanceEl) balanceEl.textContent = '0';
+                if (detailsEl) detailsEl.textContent = 'Error loading credits';
+            }
+        }
 
         async function loadBillingData() {
             try {
@@ -686,7 +1023,9 @@
         }
 
         function filterPatients() {
-            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const searchInput = document.getElementById('searchInput');
+            if (!searchInput) return;
+            const searchTerm = searchInput.value.toLowerCase();
 
             if (!searchTerm) {
                 displayPatientList(allPatients);

@@ -21,9 +21,11 @@ function hashApiKey(apiKey) {
 
 /**
  * Get encryption key for API keys (from env or generate master key)
- * This should be set in production via API_KEY_ENCRYPTION_KEY env variable
+ * SECURITY: In production, API_KEY_ENCRYPTION_KEY is REQUIRED
  */
 function getEncryptionKey() {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  
   if (process.env.API_KEY_ENCRYPTION_KEY) {
     // Use provided key (must be 32 bytes for AES-256)
     const key = Buffer.from(process.env.API_KEY_ENCRYPTION_KEY, 'hex');
@@ -33,9 +35,14 @@ function getEncryptionKey() {
     // If not 32 bytes, derive one using PBKDF2
     return crypto.pbkdf2Sync(process.env.API_KEY_ENCRYPTION_KEY, 'doclittle-api-keys', 100000, 32, 'sha256');
   }
-  // Fallback: use a derived key from a default secret (NOT for production)
-  // In production, always set API_KEY_ENCRYPTION_KEY
-  console.warn('⚠️  API_KEY_ENCRYPTION_KEY not set - using default key derivation (NOT secure for production)');
+  
+  // SECURITY: In production, fail if encryption key is not set
+  if (isProduction) {
+    throw new Error('SECURITY ERROR: API_KEY_ENCRYPTION_KEY is required in production. API key encryption cannot proceed.');
+  }
+  
+  // Development: warn and use default (for local testing only)
+  console.warn('⚠️  API_KEY_ENCRYPTION_KEY not set - using default key derivation (DEVELOPMENT ONLY - NOT secure)');
   return crypto.pbkdf2Sync('doclittle-default-secret-change-in-production', 'doclittle-api-keys', 100000, 32, 'sha256');
 }
 

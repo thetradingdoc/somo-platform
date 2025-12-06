@@ -13,7 +13,7 @@ const shouldSkipInternalJob = (req) =>
 const keyGenerator = (req) => {
   // Extract IP from req.ip, removing port if present
   let ip = req.ip || req.connection?.remoteAddress || 'unknown';
-  
+
   // Remove port number if present (e.g., "54.196.252.50:54288" -> "54.196.252.50")
   if (ip && ip.includes(':')) {
     // Handle IPv6 addresses (e.g., "::ffff:169.254.130.1")
@@ -24,7 +24,7 @@ const keyGenerator = (req) => {
     const parts = ip.split(':');
     ip = parts[0];
   }
-  
+
   return ip || 'unknown';
 };
 
@@ -65,7 +65,7 @@ const strictLimiter = rateLimit({
   skip: shouldSkipInternalJob
 });
 
-// Authentication endpoints (login, signup, verification)
+// Authentication endpoints (login, signup, verification) - stricter
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // Limit each IP to 5 auth attempts per windowMs
@@ -80,6 +80,25 @@ const authLimiter = rateLimit({
   validate: {
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
+  },
+  skip: shouldSkipInternalJob
+});
+
+// More lenient limiter for tenant logins (email + password) so real users don't hit 429 easily
+const lenientAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Allow more attempts per IP for login-only endpoint
+  message: {
+    error: 'Too many login attempts, please wait and try again.',
+    retryAfter: '15 minutes'
+  },
+  skipSuccessfulRequests: true, // Successful logins don't count
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: {
+    trustProxy: false,
+    ip: false
   },
   skip: shouldSkipInternalJob
 });
@@ -142,6 +161,7 @@ module.exports = {
   apiLimiter,
   strictLimiter,
   authLimiter,
+  lenientAuthLimiter,
   adminLimiter,
   paymentLimiter,
   voiceLimiter

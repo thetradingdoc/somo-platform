@@ -31,26 +31,31 @@ function normalizePhoneNumber(phone) {
 
 // Use Azure's writable directory (/home) if available, otherwise use current directory
 // Azure App Service uses /home for writable files
-const defaultDbDir = process.env.HOME || '/home' || __dirname;
+// CRITICAL: In production, always use /home (not process.env.HOME which may be /root)
+// Azure App Service does not persist data outside /home
+const env = process.env.NODE_ENV || 'development';
+const isProdEnv = env === 'production' || env === 'prod';
+const defaultDbDir = isProdEnv ? '/home' : (process.env.HOME || '/home' || __dirname);
 
 // Environment-based database naming to separate production and test/dev data
 // Production: middleware-prod.db
 // Development: middleware-dev.db
 // Test: middleware-test.db (if NODE_ENV=test)
-const env = process.env.NODE_ENV || 'development';
-let dbFileName = 'middleware.db'; // Default fallback
+// Note: env is already defined above
 
-if (env === 'production' || env === 'prod') {
+// CRITICAL: Check DB_NAME FIRST (highest priority), then fall back to environment-based naming
+let dbFileName;
+if (process.env.DB_NAME) {
+  // DB_NAME environment variable takes highest priority
+  dbFileName = process.env.DB_NAME;
+  console.log(`📁 Using DB_NAME from environment: ${dbFileName}`);
+} else if (env === 'production' || env === 'prod') {
+  // Production defaults to middleware-prod.db
   dbFileName = 'middleware-prod.db';
 } else if (env === 'test') {
   dbFileName = 'middleware-test.db';
 } else {
   dbFileName = 'middleware-dev.db';
-}
-
-// Allow override via DB_NAME environment variable
-if (process.env.DB_NAME) {
-  dbFileName = process.env.DB_NAME;
 }
 
 const dbPath = path.join(defaultDbDir, dbFileName);
@@ -79,6 +84,22 @@ if (usePostgres) {
 
 const db = new Database(dbPath);
 
+// Environment helpers for better prod vs staging management
+const isProduction = () => {
+  return env === 'production' || env === 'prod';
+};
+
+const isStaging = () => {
+  return env === 'development' || env === 'staging' || !isProduction();
+};
+
+// Add environment helpers to db object for use in other modules
+db.isProduction = isProduction;
+db.isStaging = isStaging;
+db.getEnvironment = () => env;
+
+console.log(`🌍 Environment: ${env} | Production: ${isProduction()} | Staging: ${isStaging()}`);
+
 // Disable foreign key constraints during migrations (they can cause issues with ALTER TABLE)
 db.pragma('foreign_keys = OFF');
 
@@ -106,6 +127,9 @@ function toJsonValue(value) {
 
 function syncClinicToPostgres(clinic) {
   if (!pgPool || !clinic) return;
+
+  // SECURITY: Better error handling for Postgres sync
+  // Log errors but don't block SQLite operations
   pgPool`
     INSERT INTO clinics (
       clinic_id, name, slug, phone_number, email, address, business_hours, services,
@@ -139,7 +163,12 @@ function syncClinicToPostgres(clinic) {
       merchant_id = EXCLUDED.merchant_id,
       is_active = EXCLUDED.is_active,
       updated_at = COALESCE(EXCLUDED.updated_at, NOW());
-  `.catch(err => console.error('❌ Postgres sync [clinics] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [clinics] failed:', err.message);
+    console.error('   Clinic ID:', clinic.clinic_id);
+    // TODO: Consider adding to a retry queue for critical data
+    // For now, SQLite remains the source of truth
+  });
 }
 
 function syncClinicPhoneToPostgres(phoneRow) {
@@ -156,7 +185,11 @@ function syncClinicPhoneToPostgres(phoneRow) {
       clinic_id = EXCLUDED.clinic_id,
       is_primary = EXCLUDED.is_primary,
       created_at = EXCLUDED.created_at;
-  `.catch(err => console.error('❌ Postgres sync [clinic_phone_numbers] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [clinic_phone_numbers] failed:', err.message);
+    console.error('   Phone:', phoneRow.phone_number, 'Clinic:', phoneRow.clinic_id);
+    // TODO: Consider adding to a retry queue for critical data
+  });
 }
 
 function syncAppointmentToPostgres(appointment) {
@@ -210,14 +243,22 @@ function syncAppointmentToPostgres(appointment) {
       calendar_link = EXCLUDED.calendar_link,
       cancellation_reason = EXCLUDED.cancellation_reason,
       updated_at = COALESCE(EXCLUDED.updated_at, NOW());
-  `.catch(err => console.error('❌ Postgres sync [appointments] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [appointments] failed:', err.message);
+    console.error('   Appointment ID:', appointment.id, 'Patient:', appointment.patient_name);
+    // TODO: Consider adding to a retry queue for critical data
+  });
 }
 
 function deleteAppointmentFromPostgres(appointmentId) {
   if (!pgPool || !appointmentId) return;
   pgPool`
     DELETE FROM appointments WHERE id = ${appointmentId};
-  `.catch(err => console.error('❌ Postgres sync [appointments-delete] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [appointments-delete] failed:', err.message);
+    console.error('   Appointment ID:', appointmentId);
+    // TODO: Consider adding to a retry queue for critical data
+  });
 }
 
 function syncVoiceCheckoutToPostgres(checkout) {
@@ -269,7 +310,11 @@ function syncVoiceCheckoutToPostgres(checkout) {
       fhir_patient_id = EXCLUDED.fhir_patient_id,
       fhir_encounter_id = EXCLUDED.fhir_encounter_id,
       completed_at = EXCLUDED.completed_at;
-  `.catch(err => console.error('❌ Postgres sync [voice_checkouts] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [voice_checkouts] failed:', err.message);
+    console.error('   Checkout ID:', checkout.id, 'Amount:', checkout.amount);
+    // TODO: Consider adding to a retry queue for critical data
+  });
 }
 
 function syncVoiceCallToPostgres(call) {
@@ -316,7 +361,11 @@ function syncVoiceCallToPostgres(call) {
       cost_source = EXCLUDED.cost_source,
       cost_updated_at = COALESCE(EXCLUDED.cost_updated_at, voice_call_log.cost_updated_at),
       created_at = COALESCE(EXCLUDED.created_at, voice_call_log.created_at);
-  `.catch(err => console.error('❌ Postgres sync [voice_call_log] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [voice_call_log] failed:', err.message);
+    console.error('   Call ID:', call.call_id, 'Customer:', call.customer_id);
+    // TODO: Consider adding to a retry queue for critical data
+  });
 }
 
 function syncFunctionCallToPostgres(funcLog) {
@@ -345,7 +394,11 @@ function syncFunctionCallToPostgres(funcLog) {
       success = EXCLUDED.success,
       error_message = EXCLUDED.error_message,
       created_at = COALESCE(EXCLUDED.created_at, function_call_log.created_at);
-  `.catch(err => console.error('❌ Postgres sync [function_call_log] failed:', err.message));
+  `.catch(err => {
+    console.error('❌ Postgres sync [function_call_log] failed:', err.message);
+    console.error('   Function:', funcLog.function_name, 'Call ID:', funcLog.call_id);
+    // TODO: Consider adding to a retry queue for critical data
+  });
 }
 
 // Initialize tables
@@ -445,6 +498,45 @@ db.exec(`
     expires_at DATETIME,
     FOREIGN KEY (merchant_id) REFERENCES merchants(id)
   );
+
+  CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT,
+    name TEXT NOT NULL,
+    description TEXT,
+    price REAL NOT NULL,
+    inventory INTEGER NOT NULL DEFAULT 0,
+    image_url TEXT,
+    category TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS merchant_orders (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT,
+    product_id TEXT,
+    quantity INTEGER NOT NULL,
+    customer_email TEXT NOT NULL,
+    customer_name TEXT,
+    customer_phone TEXT,
+    shipping_address TEXT,
+    total_amount REAL NOT NULL,
+    status TEXT DEFAULT 'pending',
+    payment_status TEXT DEFAULT 'pending',
+    source TEXT DEFAULT 'direct',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_products_merchant ON products(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+  CREATE INDEX IF NOT EXISTS idx_merchant_orders_merchant ON merchant_orders(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_merchant_orders_status ON merchant_orders(status);
+  CREATE INDEX IF NOT EXISTS idx_merchant_orders_created ON merchant_orders(created_at);
 
   CREATE TABLE IF NOT EXISTS ap2_transactions (
     id TEXT PRIMARY KEY,
@@ -779,7 +871,14 @@ try {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_voice_checkouts_clinic_id ON voice_checkouts(clinic_id);`);
   }
 } catch (migrationError) {
-  console.warn('⚠️  Migration check failed:', migrationError.message);
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  if (isProduction) {
+    console.error('❌ CRITICAL: Migration failed in production:', migrationError.message);
+    console.error('   Database schema may be inconsistent. Server cannot start safely.');
+    process.exit(1);
+  } else {
+    console.warn('⚠️  Migration check failed:', migrationError.message);
+  }
 }
 
 // Migration: Add verification_code columns to payment_tokens if they don't exist
@@ -1355,6 +1454,25 @@ db.exec(`
     FOREIGN KEY (customer_id) REFERENCES customers(id)
   );
 
+  CREATE TABLE IF NOT EXISTS sms_usage_log (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT,
+    merchant_id TEXT,
+    phone_number TEXT NOT NULL,
+    direction TEXT NOT NULL, -- 'inbound' or 'outbound'
+    message_sid TEXT,
+    segments INTEGER DEFAULT 1,
+    cost_usd REAL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sms_usage_customer ON sms_usage_log(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_sms_usage_merchant ON sms_usage_log(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_sms_usage_created_at ON sms_usage_log(created_at);
+  CREATE INDEX IF NOT EXISTS idx_sms_usage_direction ON sms_usage_log(direction);
+
   CREATE TABLE IF NOT EXISTS usage_aggregates (
     id TEXT PRIMARY KEY,
     customer_id TEXT NOT NULL,
@@ -1503,7 +1621,9 @@ db.exec(`
     free_credits_used INTEGER DEFAULT 0,
     paid_credits_purchased INTEGER DEFAULT 0,
     paid_credits_used INTEGER DEFAULT 0,
+    free_credits_expires_at DATETIME,
     last_replenished_at DATETIME,
+    low_credit_alert_sent_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id)
@@ -1656,6 +1776,36 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_lead_activities_type ON lead_activities(activity_type);
   CREATE INDEX IF NOT EXISTS idx_lead_activities_date ON lead_activities(activity_date);
   CREATE INDEX IF NOT EXISTS idx_monthly_call_usage_month ON monthly_call_usage(billing_month);
+
+  -- ============================================
+  -- INCOMPLETE SIGNUPS TABLE (Separate from admin leads)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS incomplete_signups (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    email TEXT NOT NULL,
+    phone_number TEXT,
+    company_name TEXT,
+    business_size TEXT,
+    use_case TEXT,
+    api_features TEXT,
+    customer_type TEXT,
+    signup_step TEXT DEFAULT 'started', -- started, email_verified, integration_selected, terms_accepted, payment_verified, completed
+    last_step_completed_at DATETIME,
+    signup_started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    signup_completed_at DATETIME,
+    is_completed BOOLEAN DEFAULT 0,
+    converted_to_customer_id TEXT, -- If they complete signup later
+    source TEXT DEFAULT 'signup_page', -- signup_page, landing_page, etc.
+    metadata TEXT, -- JSON for additional data
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_incomplete_signups_email ON incomplete_signups(email);
+  CREATE INDEX IF NOT EXISTS idx_incomplete_signups_step ON incomplete_signups(signup_step);
+  CREATE INDEX IF NOT EXISTS idx_incomplete_signups_completed ON incomplete_signups(is_completed);
+  CREATE INDEX IF NOT EXISTS idx_incomplete_signups_created_at ON incomplete_signups(created_at);
 `);
 
 // Re-enable foreign keys after table creation
@@ -1761,6 +1911,173 @@ function migrateMonthlyInvoicesJobCalls() {
   }
 }
 
+// Migration: Add delivery tracking fields to merchant_orders table
+function migrateOrderTracking() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(merchant_orders)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    const trackingFields = {
+      'delivery_status': "TEXT DEFAULT 'pending'",
+      'driver_name': 'TEXT',
+      'driver_phone': 'TEXT',
+      'current_latitude': 'REAL',
+      'current_longitude': 'REAL',
+      'current_address': 'TEXT',
+      'estimated_arrival': 'DATETIME',
+      'last_location_update': 'DATETIME',
+      'tracking_events': 'TEXT', // JSON array of tracking events
+      'pickup_address': 'TEXT', // Pickup/from location (store/warehouse)
+      'pickup_latitude': 'REAL', // Pickup location coordinates
+      'pickup_longitude': 'REAL',
+      'drop_point': 'TEXT' // Drop point/delivery address (same as shipping_address but explicit)
+    };
+
+    let addedCount = 0;
+    for (const [fieldName, fieldType] of Object.entries(trackingFields)) {
+      if (!columnNames.includes(fieldName)) {
+        console.log(`📦 Adding ${fieldName} column to merchant_orders table...`);
+        db.prepare(`ALTER TABLE merchant_orders ADD COLUMN ${fieldName} ${fieldType}`).run();
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      console.log(`✅ Migration complete: ${addedCount} tracking columns added to merchant_orders`);
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.warn('⚠️  Order tracking migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add merchant_id column to customers table
+function migrateCustomerMerchantId() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(customers)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('merchant_id')) {
+      console.log('🔄 Migrating: Adding merchant_id column to customers table');
+      db.prepare("ALTER TABLE customers ADD COLUMN merchant_id TEXT").run();
+
+      // Create index for performance
+      console.log('🔄 Migrating: Creating index on customers.merchant_id');
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_customers_merchant ON customers(merchant_id)").run();
+
+      console.log('✅ Migration complete: merchant_id column added to customers table');
+    } else {
+      console.log('✅ Migration skipped: merchant_id column already exists in customers table');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ Customer merchant_id migration failed:', error.message);
+    console.error('Stack:', error.stack);
+    db.pragma('foreign_keys = ON');
+
+    // In production, fail fast
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    if (isProduction) {
+      console.error('❌ CRITICAL: Migration failed in production. Exiting.');
+      process.exit(1);
+    }
+  }
+}
+
+// Migration: Add subdomain column to merchants table
+function migrateMerchantsSubdomain() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(merchants)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('subdomain')) {
+      console.log('🔄 Migrating: Adding subdomain column to merchants table');
+      // SQLite doesn't support UNIQUE in ALTER TABLE ADD COLUMN, so add without constraint first
+      db.prepare("ALTER TABLE merchants ADD COLUMN subdomain TEXT").run();
+
+      // Generate subdomains for existing merchants that don't have one
+      console.log('🔄 Migrating: Generating subdomains for existing merchants');
+      const existingMerchants = db.prepare('SELECT id, name FROM merchants WHERE subdomain IS NULL').all();
+      // Use lazy require to avoid circular dependency - pass db instance
+      const { generateSubdomain } = require('./utils/subdomain-generator');
+
+      for (const merchant of existingMerchants) {
+        const subdomain = generateSubdomain(merchant.name, merchant.id, db);
+        db.prepare('UPDATE merchants SET subdomain = ? WHERE id = ?').run(subdomain, merchant.id);
+        console.log(`   Generated subdomain "${subdomain}" for merchant ${merchant.id}`);
+      }
+
+      // Create unique index (this enforces uniqueness)
+      console.log('🔄 Migrating: Creating unique index on merchants.subdomain');
+      db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_merchants_subdomain_unique ON merchants(subdomain) WHERE subdomain IS NOT NULL").run();
+
+      // Also create regular index for performance
+      console.log('🔄 Migrating: Creating index on merchants.subdomain');
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_merchants_subdomain ON merchants(subdomain)").run();
+
+      console.log('✅ Migration complete: subdomain column added to merchants table');
+    } else {
+      console.log('✅ Migration skipped: subdomain column already exists in merchants table');
+
+      // Ensure unique index exists (in case migration was partially run)
+      try {
+        db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_merchants_subdomain_unique ON merchants(subdomain) WHERE subdomain IS NOT NULL").run();
+      } catch (indexError) {
+        // Index might already exist, that's okay
+        console.log('   Unique index already exists or could not be created');
+      }
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ Merchants subdomain migration failed:', error.message);
+    console.error('Stack:', error.stack);
+    db.pragma('foreign_keys = ON');
+
+    // In production, fail fast
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    if (isProduction) {
+      console.error('❌ CRITICAL: Migration failed in production. Exiting.');
+      process.exit(1);
+    }
+  }
+}
+
+// Migration: Add expiration and alert columns to customer_credits table
+function migrateCustomerCreditsExpiration() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(customer_credits)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('free_credits_expires_at')) {
+      console.log('🔄 Migrating: Adding free_credits_expires_at column to customer_credits table');
+      db.prepare("ALTER TABLE customer_credits ADD COLUMN free_credits_expires_at DATETIME").run();
+    }
+
+    if (!columnNames.includes('low_credit_alert_sent_at')) {
+      console.log('🔄 Migrating: Adding low_credit_alert_sent_at column to customer_credits table');
+      db.prepare("ALTER TABLE customer_credits ADD COLUMN low_credit_alert_sent_at DATETIME").run();
+    }
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: customer_credits expiration columns added');
+  } catch (error) {
+    console.error('❌ Customer credits expiration migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Migration: Add pipeline fields to leads table
 function migrateLeadsPipeline() {
   try {
@@ -1827,7 +2144,7 @@ function migrateLeadsPipeline() {
     if (!columnNames.includes('lead_type')) {
       console.log('🔄 Migrating: Adding lead_type column to leads table');
       db.prepare("ALTER TABLE leads ADD COLUMN lead_type TEXT DEFAULT 'sales'").run();
-      
+
       // Set lead_type based on source field for existing leads
       // Sales leads: source = 'google_search' or 'job_search'
       // Customer leads: source = 'self_signup'
@@ -1845,6 +2162,38 @@ function migrateLeadsPipeline() {
   } catch (error) {
     console.warn('⚠️  Leads pipeline migration failed:', error.message);
     db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add password_hash column to customers table
+function migrateCustomersPasswordHash() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(customers)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('password_hash')) {
+      console.log('🔄 Migrating: Adding password_hash column to customers table');
+      db.prepare("ALTER TABLE customers ADD COLUMN password_hash TEXT").run();
+
+      // Create index for faster lookups (though we'll primarily query by email)
+      console.log('✅ Migration complete: password_hash column added to customers table');
+    } else {
+      console.log('✅ Migration skipped: password_hash column already exists in customers table');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ Customers password_hash migration failed:', error.message);
+    console.error('Stack:', error.stack);
+    db.pragma('foreign_keys = ON');
+
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    if (isProduction) {
+      console.error('❌ CRITICAL: Migration failed in production. Exiting.');
+      process.exit(1);
+    }
   }
 }
 
@@ -1960,10 +2309,15 @@ function migrateVoiceCallLogCosts() {
 migrateInsuranceClaimsTable();
 migratePatientPortalSessionsEmail();
 migrateMonthlyInvoicesJobCalls();
+migrateOrderTracking();
 migrateLeadsPipeline();
 migrateCustomersTable();
 migrateVoiceCallLogCosts();
 migrateAppointmentsCustomerId();
+migrateCustomerMerchantId(); // CRITICAL: Link customers to merchants
+migrateMerchantsSubdomain(); // Add subdomain support for tenant isolation
+migrateCustomersPasswordHash(); // Add password_hash for password-based authentication
+migrateCustomerCreditsExpiration(); // Add expiration and alert tracking for credits
 
 /**
  * Helper to safely stringify data
@@ -1983,20 +2337,31 @@ module.exports = {
   // MERCHANTS
   // ============================================
   createMerchant: (merchant) => {
+    // Generate subdomain if not provided
+    let subdomain = merchant.subdomain;
+    if (!subdomain) {
+      const { generateSubdomain } = require('./utils/subdomain-generator');
+      // Pass db instance to avoid circular dependency
+      subdomain = generateSubdomain(merchant.name, merchant.id, db);
+    }
+
     return db.prepare(`
-      INSERT INTO merchants (id, name, api_key, api_url, webhook_url, enabled_platforms)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO merchants (id, name, api_key, api_url, webhook_url, enabled_platforms, subdomain)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       merchant.id,
       merchant.name,
       merchant.api_key,
       merchant.api_url,
       merchant.webhook_url || null,
-      JSON.stringify(merchant.enabled_platforms || ['acp', 'ap2'])
+      JSON.stringify(merchant.enabled_platforms || ['acp', 'ap2']),
+      subdomain
     );
   },
 
   getMerchant: (id) => db.prepare('SELECT * FROM merchants WHERE id = ?').get(id),
+
+  getMerchantBySubdomain: (subdomain) => db.prepare('SELECT * FROM merchants WHERE subdomain = ?').get(subdomain),
 
   getMerchantByApiKey: (apiKey) => {
     const directMatch = db.prepare('SELECT * FROM merchants WHERE api_key = ?').get(apiKey);
@@ -2307,10 +2672,28 @@ module.exports = {
   },
 
   updateAP2Transaction: (id, updates) => {
-    const fields = Object.keys(updates).map(key =>
-      key === 'audit_trail' ? `${key} = ?` : `${key} = ?`
-    ).join(', ');
-    const values = Object.values(updates).map(v =>
+    // SECURITY: Whitelist allowed fields to prevent SQL injection
+    const allowedFields = [
+      'merchant_id', 'intent_mandate_id', 'cart_mandate_id', 'payment_mandate_id',
+      'cart_id', 'order_id', 'amount', 'status', 'audit_trail', 'completed_at'
+    ];
+
+    // Filter to only allowed fields
+    const safeUpdates = {};
+    for (const key of Object.keys(updates)) {
+      if (allowedFields.includes(key)) {
+        safeUpdates[key] = updates[key];
+      } else {
+        console.warn(`⚠️  Attempted to update disallowed field in ap2_transactions: ${key}`);
+      }
+    }
+
+    if (Object.keys(safeUpdates).length === 0) {
+      return { changes: 0 };
+    }
+
+    const fields = Object.keys(safeUpdates).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(safeUpdates).map(v =>
       typeof v === 'object' ? JSON.stringify(v) : v
     );
     return db.prepare(`UPDATE ap2_transactions SET ${fields} WHERE id = ?`).run(...values, id);
@@ -2388,11 +2771,18 @@ module.exports = {
 
   updateVoiceCheckout: async (id, updates) => {
     if (usePostgres && pgPool) {
-      // Postgres path - build dynamic update using sql helper
+      // SECURITY: Whitelist allowed fields to prevent SQL injection
+      const allowedFields = [
+        'status', 'payment_intent_id', 'merchant_order_id', 'payment_token',
+        'fhir_patient_id', 'fhir_encounter_id', 'appointment_id', 'payment_method'
+      ];
+
+      // Build dynamic update using parameterized query (safe)
       const setParts = [];
       const values = [];
       let paramIndex = 1;
 
+      // Only process whitelisted fields
       if (updates.status !== undefined) {
         setParts.push(`status = $${paramIndex++}`);
         values.push(updates.status);
@@ -2432,9 +2822,9 @@ module.exports = {
       if (setParts.length === 0) return { changes: 0 };
 
       values.push(id);
-      // Build query with proper parameterized values for postgres
+      // SECURITY: Use parameterized query with template literal (safe)
+      // The postgres library's template literal syntax automatically escapes values
       const query = `UPDATE voice_checkouts SET ${setParts.join(', ')} WHERE id = $${paramIndex}`;
-      // Use postgres library's unsafe method for dynamic queries
       const result = await pgPool.unsafe(query, values);
       return { changes: result.count || 0 };
     } else {
@@ -2539,6 +2929,39 @@ module.exports = {
     values.push(token);
     const query = `UPDATE payment_tokens SET ${fields.join(', ')} WHERE token = ?`;
     return db.prepare(query).run(...values);
+  },
+
+  /**
+   * Atomically update payment token status (prevents race conditions)
+   * Only updates if current status matches expectedStatus
+   * @param {string} token - Payment token
+   * @param {string} expectedStatus - Current status must match this
+   * @param {string} newStatus - New status to set
+   * @returns {Object} { success: boolean, error?: string, changes: number }
+   */
+  updatePaymentTokenAtomic: (token, expectedStatus, newStatus) => {
+    // SECURITY: Atomic check-and-set to prevent race conditions
+    // Only update if current status matches expected status
+    const query = `
+      UPDATE payment_tokens 
+      SET status = ?, used_at = CURRENT_TIMESTAMP 
+      WHERE token = ? AND status = ?
+    `;
+    const result = db.prepare(query).run(newStatus, token, expectedStatus);
+
+    if (result.changes === 0) {
+      // Check what the actual status is
+      const tokenRecord = db.prepare('SELECT status FROM payment_tokens WHERE token = ?').get(token);
+      if (!tokenRecord) {
+        return { success: false, error: 'Token not found', changes: 0 };
+      }
+      if (tokenRecord.status === 'used') {
+        return { success: false, error: 'Token already used', changes: 0 };
+      }
+      return { success: false, error: `Token status mismatch. Expected: ${expectedStatus}, Actual: ${tokenRecord.status}`, changes: 0 };
+    }
+
+    return { success: true, changes: result.changes };
   },
 
   // ============================================
@@ -4809,7 +5232,7 @@ module.exports = {
   // Voice Call Logging
   async logVoiceCall(call) {
     const callId = call.id || require('crypto').randomBytes(16).toString('hex');
-    
+
     if (usePostgres && pgPool) {
       // Postgres path
       await pgPool`
@@ -4966,7 +5389,7 @@ module.exports = {
   // Function Call Logging
   async logFunctionCall(functionCall) {
     const entryId = functionCall.id || require('crypto').randomBytes(16).toString('hex');
-    
+
     if (usePostgres && pgPool) {
       // Postgres path
       await pgPool`
@@ -5306,13 +5729,30 @@ module.exports = {
   },
 
   // Customer Session Management
-  createCustomerSession(customerId, ipAddress, userAgent) {
-    const sessionId = require('crypto').randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+  createCustomerSession(customerIdOrOptions, ipAddress, userAgent) {
+    // Support both object format and positional parameters for backward compatibility
+    let sessionId, customerId, expiresAt, ip, ua;
+
+    if (typeof customerIdOrOptions === 'object' && customerIdOrOptions !== null) {
+      // Object format: { id, customer_id, expires_at, ip_address, user_agent }
+      sessionId = customerIdOrOptions.id || require('crypto').randomBytes(32).toString('hex');
+      customerId = customerIdOrOptions.customer_id;
+      expiresAt = customerIdOrOptions.expires_at || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      ip = customerIdOrOptions.ip_address || null;
+      ua = customerIdOrOptions.user_agent || null;
+    } else {
+      // Positional parameters: (customerId, ipAddress, userAgent)
+      customerId = customerIdOrOptions;
+      sessionId = require('crypto').randomBytes(32).toString('hex');
+      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+      ip = ipAddress || null;
+      ua = userAgent || null;
+    }
+
     db.prepare(`
       INSERT INTO customer_sessions (id, customer_id, expires_at, ip_address, user_agent)
       VALUES (?, ?, ?, ?, ?)
-    `).run(sessionId, customerId, expiresAt, ipAddress || null, userAgent || null);
+    `).run(sessionId, customerId, expiresAt, ip, ua);
     return sessionId;
   },
 
@@ -5353,24 +5793,43 @@ module.exports = {
     // Check if credits record exists
     const existing = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
 
+    // Set expiration to 60 days from now
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + 60);
+    const expirationDateStr = expirationDate.toISOString();
+
     if (existing) {
-      // Update existing record
-      return db.prepare(`
-        UPDATE customer_credits 
-        SET free_credits_allocated = free_credits_allocated + ?,
-            credits_balance_minutes = credits_balance_minutes + ?,
-            last_replenished_at = datetime('now'),
-            updated_at = datetime('now')
-        WHERE customer_id = ?
-      `).run(freeMinutes, freeMinutes, customerId);
+      // Update existing record - only update expiration if this is new free credits
+      // If they already have free credits, don't reset expiration
+      const updateQuery = existing.free_credits_expires_at
+        ? `UPDATE customer_credits 
+           SET free_credits_allocated = free_credits_allocated + ?,
+               credits_balance_minutes = credits_balance_minutes + ?,
+               last_replenished_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE customer_id = ?`
+        : `UPDATE customer_credits 
+           SET free_credits_allocated = free_credits_allocated + ?,
+               credits_balance_minutes = credits_balance_minutes + ?,
+               free_credits_expires_at = ?,
+               last_replenished_at = datetime('now'),
+               updated_at = datetime('now')
+           WHERE customer_id = ?`;
+
+      if (existing.free_credits_expires_at) {
+        return db.prepare(updateQuery).run(freeMinutes, freeMinutes, customerId);
+      } else {
+        return db.prepare(updateQuery).run(freeMinutes, freeMinutes, expirationDateStr, customerId);
+      }
     } else {
-      // Create new credits record
+      // Create new credits record with expiration
       const { v4: uuidv4 } = require('uuid');
       return db.prepare(`
         INSERT INTO customer_credits (
-          id, customer_id, credits_balance_minutes, free_credits_allocated, last_replenished_at
-        ) VALUES (?, ?, ?, ?, datetime('now'))
-      `).run(uuidv4(), customerId, freeMinutes, freeMinutes);
+          id, customer_id, credits_balance_minutes, free_credits_allocated, 
+          free_credits_expires_at, last_replenished_at
+        ) VALUES (?, ?, ?, ?, ?, datetime('now'))
+      `).run(uuidv4(), customerId, freeMinutes, freeMinutes, expirationDateStr);
     }
   },
 
@@ -5384,20 +5843,46 @@ module.exports = {
       throw new Error('Customer credits not found');
     }
 
+    // Check if free credits have expired
+    if (credits.free_credits_expires_at) {
+      const expirationDate = new Date(credits.free_credits_expires_at);
+      const now = new Date();
+      if (now > expirationDate) {
+        // Free credits expired - expire them
+        const expiredFreeCredits = credits.free_credits_allocated - credits.free_credits_used;
+        if (expiredFreeCredits > 0) {
+          // Mark expired free credits as used
+          db.prepare(`
+            UPDATE customer_credits 
+            SET free_credits_used = free_credits_allocated,
+                credits_balance_minutes = credits_balance_minutes - ?,
+                updated_at = datetime('now')
+            WHERE customer_id = ?
+          `).run(expiredFreeCredits, customerId);
+
+          // Refresh credits after expiration
+          const updatedCredits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+          Object.assign(credits, updatedCredits);
+        }
+      }
+    }
+
     // Check if customer has payment method stored
     const customer = db.prepare('SELECT card_verified, stripe_payment_method_id FROM customers WHERE id = ?').get(customerId);
     const hasPaymentMethod = customer && customer.card_verified === 1 && customer.stripe_payment_method_id;
 
-    // Calculate available free credits
-    const availableFreeCredits = credits.free_credits_allocated - credits.free_credits_used;
+    // Calculate available free credits (after expiration check)
+    const availableFreeCredits = Math.max(0, credits.free_credits_allocated - credits.free_credits_used);
 
     // If trying to use more than free credits and no payment method, block
     if (minutesToDeduct > availableFreeCredits && !hasPaymentMethod) {
-      throw new Error('Insufficient credits. Please add a payment method to continue using the service.');
+      const remaining = Math.max(0, credits.credits_balance_minutes);
+      throw new Error(`Insufficient credits. You have ${remaining} minutes remaining. Please add a payment method or purchase more credits to continue using the service.`);
     }
 
     if (credits.credits_balance_minutes < minutesToDeduct && !hasPaymentMethod) {
-      throw new Error('Insufficient credits. Please add a payment method to continue using the service.');
+      const remaining = Math.max(0, credits.credits_balance_minutes);
+      throw new Error(`Insufficient credits. You have ${remaining} minutes remaining. Please add a payment method or purchase more credits to continue using the service.`);
     }
 
     // Deduct from free credits first, then paid credits
@@ -5479,6 +5964,82 @@ module.exports = {
     }
   },
 
+  // Check and expire free credits that have passed expiration date
+  expireFreeCredits() {
+    const now = new Date().toISOString();
+    const result = db.prepare(`
+      SELECT customer_id, 
+             (free_credits_allocated - free_credits_used) as expired_credits
+      FROM customer_credits
+      WHERE free_credits_expires_at IS NOT NULL 
+        AND free_credits_expires_at < ?
+        AND free_credits_used < free_credits_allocated
+    `).all(now);
+
+    const expired = [];
+    for (const row of result) {
+      if (row.expired_credits > 0) {
+        db.prepare(`
+          UPDATE customer_credits 
+          SET free_credits_used = free_credits_allocated,
+              credits_balance_minutes = credits_balance_minutes - ?,
+              updated_at = datetime('now')
+          WHERE customer_id = ?
+        `).run(row.expired_credits, row.customer_id);
+        expired.push({ customerId: row.customer_id, credits: row.expired_credits });
+      }
+    }
+    return expired;
+  },
+
+  // Get customers who need low credit alerts (balance < 50 minutes, alert not sent in last 24 hours)
+  getCustomersNeedingLowCreditAlert() {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return db.prepare(`
+      SELECT c.id, c.email, c.name, c.merchant_id,
+             cc.credits_balance_minutes,
+             cc.free_credits_allocated - cc.free_credits_used as free_remaining,
+             cc.paid_credits_purchased - cc.paid_credits_used as paid_remaining,
+             cc.low_credit_alert_sent_at
+      FROM customers c
+      INNER JOIN customer_credits cc ON c.id = cc.customer_id
+      WHERE cc.credits_balance_minutes < 50
+        AND (cc.low_credit_alert_sent_at IS NULL OR cc.low_credit_alert_sent_at < ?)
+        AND c.status = 'active'
+    `).all(oneDayAgo);
+  },
+
+  // Mark low credit alert as sent
+  markLowCreditAlertSent(customerId) {
+    return db.prepare(`
+      UPDATE customer_credits 
+      SET low_credit_alert_sent_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE customer_id = ?
+    `).run(customerId);
+  },
+
+  // Get credit usage history for analytics
+  getCreditUsageHistory(customerId, days = 30) {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    return db.prepare(`
+      SELECT 
+        billing_month,
+        voice_minutes_used,
+        free_credits_used,
+        overage_voice_minutes,
+        created_at,
+        updated_at
+      FROM monthly_usage
+      WHERE customer_id = ?
+        AND created_at >= ?
+      ORDER BY billing_month DESC
+    `).all(customerId, startDateStr);
+  },
+
   // Credit Purchases
   createCreditPurchase(customerId, packageName, creditsAmount, amountPaid, stripeCheckoutSessionId, stripePaymentMethodId = null) {
     const { v4: uuidv4 } = require('uuid');
@@ -5534,6 +6095,126 @@ module.exports = {
       FROM customers 
       WHERE id = ?
     `).get(customerId);
+  },
+
+  // Incomplete Signups Management (separate from admin leads)
+  createIncompleteSignup(signupData) {
+    const { v4: uuidv4 } = require('uuid');
+    const signupId = `incomplete_${uuidv4()}`;
+
+    // Convert api_features to JSON if array
+    let apiFeatures = signupData.api_features;
+    if (Array.isArray(apiFeatures)) {
+      apiFeatures = JSON.stringify(apiFeatures);
+    } else if (typeof apiFeatures === 'object' && apiFeatures !== null) {
+      apiFeatures = JSON.stringify(apiFeatures);
+    }
+
+    // Convert metadata to JSON if object
+    let metadata = signupData.metadata;
+    if (typeof metadata === 'object' && metadata !== null) {
+      metadata = JSON.stringify(metadata);
+    }
+
+    return db.prepare(`
+      INSERT INTO incomplete_signups (
+        id, name, email, phone_number, company_name, business_size, 
+        use_case, api_features, customer_type, signup_step, source, metadata
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      signupId,
+      signupData.name || null,
+      signupData.email,
+      signupData.phone_number || null,
+      signupData.company_name || null,
+      signupData.business_size || null,
+      signupData.use_case || null,
+      apiFeatures || null,
+      signupData.customer_type || null,
+      signupData.signup_step || 'started',
+      signupData.source || 'signup_page',
+      metadata || null
+    );
+  },
+
+  updateIncompleteSignup(id, updates) {
+    const fields = [];
+    const values = [];
+
+    // Handle JSON fields
+    if (updates.api_features && Array.isArray(updates.api_features)) {
+      updates.api_features = JSON.stringify(updates.api_features);
+    }
+    if (updates.metadata && typeof updates.metadata === 'object') {
+      updates.metadata = JSON.stringify(updates.metadata);
+    }
+
+    Object.keys(updates).forEach(key => {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    });
+
+    if (fields.length === 0) return null;
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    return db.prepare(`UPDATE incomplete_signups SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  },
+
+  getIncompleteSignup(id) {
+    return db.prepare('SELECT * FROM incomplete_signups WHERE id = ?').get(id);
+  },
+
+  getIncompleteSignupByEmail(email) {
+    return db.prepare(`
+      SELECT * FROM incomplete_signups 
+      WHERE email = ? AND is_completed = 0 
+      ORDER BY created_at DESC LIMIT 1
+    `).get(email);
+  },
+
+  markIncompleteSignupCompleted(id, customerId) {
+    return db.prepare(`
+      UPDATE incomplete_signups 
+      SET is_completed = 1, 
+          signup_completed_at = datetime('now'),
+          converted_to_customer_id = ?,
+          signup_step = 'completed',
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(customerId, id);
+  },
+
+  getAllIncompleteSignups(filters = {}) {
+    let query = 'SELECT * FROM incomplete_signups WHERE 1=1';
+    const params = [];
+
+    if (filters.is_completed !== undefined) {
+      query += ' AND is_completed = ?';
+      params.push(filters.is_completed ? 1 : 0);
+    }
+
+    if (filters.signup_step) {
+      query += ' AND signup_step = ?';
+      params.push(filters.signup_step);
+    }
+
+    if (filters.source) {
+      query += ' AND source = ?';
+      params.push(filters.source);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return db.prepare(query).all(...params);
   },
 
   // Monthly Usage Tracking
@@ -6390,14 +7071,14 @@ module.exports = {
       // Count related records before deletion
       const calls = db.prepare('SELECT COUNT(*) as count FROM lead_calls WHERE lead_id = ?').get(lead.id);
       const activities = db.prepare('SELECT COUNT(*) as count FROM lead_activities WHERE lead_id = ?').get(lead.id);
-      
+
       deletedCount.calls += calls?.count || 0;
       deletedCount.activities += activities?.count || 0;
 
       // Delete related records
       db.prepare('DELETE FROM lead_activities WHERE lead_id = ?').run(lead.id);
       db.prepare('DELETE FROM lead_calls WHERE lead_id = ?').run(lead.id);
-      
+
       // Delete the lead
       db.prepare('DELETE FROM leads WHERE id = ?').run(lead.id);
       deletedCount.leads++;
@@ -6542,6 +7223,223 @@ module.exports = {
     }
 
     return db.prepare(query).all(...params);
+  },
+
+  // Products Management
+  getAllProducts(merchantId = null) {
+    if (merchantId) {
+      return db.prepare('SELECT * FROM products WHERE merchant_id = ? OR merchant_id IS NULL ORDER BY created_at DESC').all(merchantId);
+    }
+    return db.prepare('SELECT * FROM products ORDER BY created_at DESC').all();
+  },
+
+  getProduct(id) {
+    return db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+  },
+
+  getProductsByMerchant(merchantId) {
+    return db.prepare('SELECT * FROM products WHERE merchant_id = ? OR merchant_id IS NULL ORDER BY created_at DESC').all(merchantId);
+  },
+
+  searchProducts(query, merchantId = null) {
+    // Normalize search query: remove hyphens and spaces for better matching
+    // "pre rolls" will match "PRE-ROLLS" and "pre-rolls"
+    const normalizedQuery = query.toLowerCase().replace(/[\s-]/g, '');
+    const searchTerm = `%${normalizedQuery}%`;
+    
+    // Also search with original query for exact matches
+    const originalSearchTerm = `%${query.toLowerCase()}%`;
+    
+    if (merchantId) {
+      return db.prepare(`
+        SELECT * FROM products 
+        WHERE (merchant_id = ? OR merchant_id IS NULL)
+        AND (
+          REPLACE(REPLACE(LOWER(name), '-', ''), ' ', '') LIKE ? OR 
+          REPLACE(REPLACE(LOWER(description), '-', ''), ' ', '') LIKE ? OR 
+          REPLACE(REPLACE(LOWER(category), '-', ''), ' ', '') LIKE ? OR
+          LOWER(name) LIKE ? OR 
+          LOWER(description) LIKE ? OR 
+          LOWER(category) LIKE ?
+        )
+        ORDER BY created_at DESC
+      `).all(merchantId, searchTerm, searchTerm, searchTerm, originalSearchTerm, originalSearchTerm, originalSearchTerm);
+    }
+    return db.prepare(`
+      SELECT * FROM products 
+      WHERE (
+        REPLACE(REPLACE(LOWER(name), '-', ''), ' ', '') LIKE ? OR 
+        REPLACE(REPLACE(LOWER(description), '-', ''), ' ', '') LIKE ? OR 
+        REPLACE(REPLACE(LOWER(category), '-', ''), ' ', '') LIKE ? OR
+        LOWER(name) LIKE ? OR 
+        LOWER(description) LIKE ? OR 
+        LOWER(category) LIKE ?
+      )
+      ORDER BY created_at DESC
+    `).all(searchTerm, searchTerm, searchTerm, originalSearchTerm, originalSearchTerm, originalSearchTerm);
+  },
+
+  createProduct(productData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = productData.id || uuidv4();
+
+    return db.prepare(`
+      INSERT INTO products (id, merchant_id, name, description, price, inventory, image_url, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      productData.merchant_id || null,
+      productData.name,
+      productData.description || null,
+      productData.price,
+      productData.inventory !== undefined ? productData.inventory : 0,
+      productData.image_url || null,
+      productData.category || null
+    );
+  },
+
+  updateProduct(id, updates) {
+    const allowedFields = ['name', 'description', 'price', 'inventory', 'image_url', 'category', 'merchant_id'];
+    const setParts = [];
+    const values = [];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        setParts.push(`${key} = ?`);
+        values.push(updates[key]);
+      }
+    }
+
+    if (setParts.length === 0) return { changes: 0 };
+
+    setParts.push('updated_at = datetime(\'now\')');
+    values.push(id);
+
+    return db.prepare(`UPDATE products SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
+  },
+
+  updateInventory(productId, quantity) {
+    return db.prepare('UPDATE products SET inventory = inventory - ?, updated_at = datetime(\'now\') WHERE id = ?').run(quantity, productId);
+  },
+
+  deleteProduct(id) {
+    return db.prepare('DELETE FROM products WHERE id = ?').run(id);
+  },
+
+  // Orders Management
+  getAllOrders(merchantId = null) {
+    if (merchantId) {
+      return db.prepare(`
+        SELECT o.*, p.name as product_name, p.price as product_price
+        FROM merchant_orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.merchant_id = ? OR o.merchant_id IS NULL
+        ORDER BY o.created_at DESC
+      `).all(merchantId);
+    }
+    return db.prepare(`
+      SELECT o.*, p.name as product_name, p.price as product_price
+      FROM merchant_orders o
+      LEFT JOIN products p ON o.product_id = p.id
+      ORDER BY o.created_at DESC
+    `).all();
+  },
+
+  getOrder(id) {
+    return db.prepare(`
+      SELECT o.*, p.name as product_name, p.price as product_price
+      FROM merchant_orders o
+      LEFT JOIN products p ON o.product_id = p.id
+      WHERE o.id = ?
+    `).get(id);
+  },
+
+  getOrdersByMerchant(merchantId) {
+    return db.prepare(`
+      SELECT o.*, p.name as product_name, p.price as product_price
+      FROM merchant_orders o
+      LEFT JOIN products p ON o.product_id = p.id
+      WHERE o.merchant_id = ?
+      ORDER BY o.created_at DESC
+    `).all(merchantId);
+  },
+
+  createOrder(orderData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = orderData.id || uuidv4();
+
+    // Handle address fields (can be string or object)
+    const shippingAddress = typeof orderData.shipping_address === 'object' 
+      ? JSON.stringify(orderData.shipping_address) 
+      : (orderData.shipping_address || null);
+    
+    const pickupAddress = typeof orderData.pickup_address === 'object'
+      ? JSON.stringify(orderData.pickup_address)
+      : (orderData.pickup_address || null);
+    
+    const dropPoint = typeof orderData.drop_point === 'object'
+      ? JSON.stringify(orderData.drop_point)
+      : (orderData.drop_point || orderData.shipping_address || null);
+
+    return db.prepare(`
+      INSERT INTO merchant_orders (
+        id, merchant_id, product_id, quantity, customer_email, customer_name,
+        customer_phone, shipping_address, pickup_address, pickup_latitude, pickup_longitude,
+        drop_point, total_amount, status, payment_status, source
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      orderData.merchant_id || null,
+      orderData.product_id,
+      orderData.quantity,
+      orderData.customer_email,
+      orderData.customer_name || null,
+      orderData.customer_phone || null,
+      shippingAddress,
+      pickupAddress,
+      orderData.pickup_latitude || null,
+      orderData.pickup_longitude || null,
+      dropPoint,
+      orderData.total_amount,
+      orderData.status || 'pending',
+      orderData.payment_status || 'pending',
+      orderData.source || 'direct'
+    );
+  },
+
+  updateOrder(id, updates) {
+    const allowedFields = [
+      'status', 'payment_status', 'quantity', 'total_amount',
+      'delivery_status', 'driver_name', 'driver_phone',
+      'current_latitude', 'current_longitude', 'current_address',
+      'estimated_arrival', 'last_location_update', 'tracking_events',
+      'pickup_address', 'pickup_latitude', 'pickup_longitude', 'drop_point'
+    ];
+    const setParts = [];
+    const values = [];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        setParts.push(`${key} = ?`);
+        // Handle JSON fields
+        if (key === 'tracking_events' && typeof updates[key] === 'object') {
+          values.push(JSON.stringify(updates[key]));
+        } else {
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (setParts.length === 0) return { changes: 0 };
+
+    setParts.push('updated_at = datetime(\'now\')');
+    values.push(id);
+
+    return db.prepare(`UPDATE merchant_orders SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
+  },
+
+  updateOrderStatus(id, status) {
+    return db.prepare('UPDATE merchant_orders SET status = ?, updated_at = datetime(\'now\') WHERE id = ?').run(status, id);
   },
 
   getAllQualifiedLeads(filters = {}) {

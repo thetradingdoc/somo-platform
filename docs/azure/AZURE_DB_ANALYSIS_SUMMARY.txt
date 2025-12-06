@@ -1,0 +1,52 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 DATABASE ANALYSIS SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## FINDINGS:
+
+### ✅ CORRECT PRODUCTION DATABASE: middleware-prod.db (1.23 MB)
+- ✅ 1 merchant (with subdomain column)
+- ✅ 2 customers  
+- ✅ 98 products
+- ✅ Has all modern tables (products, merchant_orders, etc.)
+- ✅ This is where akin-dunbar tenant data should be
+
+### ❌ LEGACY DATABASE: middleware.db (0.88 MB)
+- ❌ 0 merchants (missing subdomain column)
+- ❌ 1 customer (old data)
+- ❌ Missing products table
+- ❌ Missing newer tables (merchant_orders, products, etc.)
+- ⚠️  This is old/legacy data
+
+## PROBLEM:
+
+The database module is using middleware.db instead of middleware-prod.db even when:
+- NODE_ENV=production is set
+- DB_NAME=middleware-prod.db is set
+
+This happens because the database path is determined when the module loads, and the environment variable check order was wrong.
+
+## SOLUTION:
+
+1. ✅ Fixed database.js to check DB_NAME FIRST (highest priority)
+2. ✅ Production now defaults to middleware-prod.db
+3. ✅ DB_NAME environment variable will override correctly
+
+## RECOMMENDATION:
+
+**You only need ONE database: middleware-prod.db**
+
+The middleware.db file is legacy and can be:
+- Archived/backed up
+- Deleted (after confirming all important data is in middleware-prod.db)
+- Or left as-is (it won't be used anymore)
+
+## NEXT STEPS:
+
+1. Deploy the fixed database.js
+2. Test that the application now uses middleware-prod.db
+3. Verify akin-dunbar tenant data is accessible
+4. Consider archiving/deleting middleware.db once confirmed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+

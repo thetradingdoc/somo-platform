@@ -424,7 +424,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
+                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
@@ -457,11 +457,17 @@
             window.location.href = '../login.html';
         }
 
-        // Load user info
+        // Load user info with null checks
         const userName = sessionStorage.getItem('userName') || 'Healthcare Provider';
         const userRole = sessionStorage.getItem('userRole') || 'Provider';
-        document.getElementById('userName').textContent = userName;
-        document.getElementById('userRole').textContent = userRole;
+        const userNameEl = document.getElementById('userName');
+        const userRoleEl = document.getElementById('userRole');
+        if (userNameEl) {
+            userNameEl.textContent = userName;
+        }
+        if (userRoleEl) {
+            userRoleEl.textContent = userRole;
+        }
 
         // Logout function
         function logout() {

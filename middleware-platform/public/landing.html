@@ -1,12 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doctor Little API - Healthcare Intelligence Platform</title>
+    <title>Doctor Little - AI Assistant That Boosts Your Business Sales</title>
+    <meta name="description"
+        content="AI Assistant for healthcare businesses. Automate calls, SMS, email, appointments, reminders, and invoicing. Boost sales, reduce costs, remove admin burden. Starting at $99/month.">
+    <meta property="og:title" content="Doctor Little - AI Assistant That Boosts Your Business Sales">
+    <meta property="og:description"
+        content="Automate calls, SMS, email, appointments, reminders, and invoicing. Boost sales, reduce costs, remove admin burden. Starting at $99/month.">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Doctor Little - AI Assistant That Boosts Your Business Sales">
+    <meta name="twitter:description"
+        content="Automate calls, SMS, email, appointments, reminders, and invoicing. Boost sales, reduce costs, remove admin burden. Starting at $99/month.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.23/bundled/lenis.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -15,20 +29,39 @@
         }
 
         :root {
-            --primary: #1e40af;
-            --primary-dark: #1e3a8a;
-            --primary-light: #3b82f6;
-            --secondary: #2563eb;
-            --accent: #60a5fa;
+            --fintech-blue: #1e40af;
+            --fintech-blue-dark: #1e3a8a;
+            --fintech-blue-light: #3b82f6;
+            --fintech-blue-bright: #60a5fa;
+            --fintech-blue-pale: #dbeafe;
             --white: #ffffff;
             --gray-50: #f9fafb;
             --gray-100: #f3f4f6;
             --gray-200: #e5e7eb;
-            --gray-300: #d1d5db;
             --gray-600: #4b5563;
             --gray-700: #374151;
             --gray-800: #1f2937;
             --gray-900: #111827;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        html.lenis {
+            height: auto;
+        }
+
+        .lenis.lenis-smooth {
+            scroll-behavior: auto;
+        }
+
+        .lenis.lenis-smooth [data-lenis-prevent] {
+            overscroll-behavior: contain;
+        }
+
+        .lenis.lenis-stopped {
+            overflow: hidden;
         }
 
         body {
@@ -37,57 +70,114 @@
             color: var(--gray-900);
             overflow-x: hidden;
             line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
         }
 
-        /* Geometric decorative elements */
-        .geometric-decoration {
+        /* Floating Elements with Better Animation */
+        .float-element {
             position: absolute;
+            border-radius: 50%;
+            opacity: 0.08;
+            animation: float 25s infinite ease-in-out;
             pointer-events: none;
-            z-index: 1;
-            opacity: 0.05;
+            filter: blur(40px);
         }
 
-        .geometric-1 {
-            top: 10%;
-            right: -100px;
+        .float-1 {
             width: 400px;
             height: 400px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-            transform: rotate(45deg);
-        }
-
-        .geometric-2 {
-            bottom: 20%;
+            background: var(--fintech-blue);
+            top: 5%;
             left: -150px;
-            width: 500px;
-            height: 500px;
-            background: linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%);
-            border-radius: 50%;
-            transform: rotate(-30deg);
+            animation-delay: 0s;
         }
 
-        /* Navigation */
+        .float-2 {
+            width: 300px;
+            height: 300px;
+            background: var(--fintech-blue-light);
+            top: 50%;
+            right: -100px;
+            animation-delay: 7s;
+        }
+
+        .float-3 {
+            width: 250px;
+            height: 250px;
+            background: var(--fintech-blue-bright);
+            bottom: 15%;
+            left: 8%;
+            animation-delay: 14s;
+        }
+
+        .float-4 {
+            width: 200px;
+            height: 200px;
+            background: var(--fintech-blue);
+            top: 75%;
+            right: 15%;
+            animation-delay: 21s;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translate(0, 0) rotate(0deg) scale(1);
+            }
+
+            25% {
+                transform: translate(50px, -40px) rotate(90deg) scale(1.1);
+            }
+
+            50% {
+                transform: translate(-30px, 30px) rotate(180deg) scale(0.9);
+            }
+
+            75% {
+                transform: translate(40px, 20px) rotate(270deg) scale(1.05);
+            }
+        }
+
+        /* Modern Navigation */
         .nav {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid var(--gray-200);
-            padding: 20px 40px;
-            z-index: 100;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid rgba(30, 64, 175, 0.1);
+            padding: 20px 60px;
+            z-index: 1000;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav.scrolled {
+            padding: 16px 60px;
+            box-shadow: 0 8px 32px rgba(30, 64, 175, 0.12);
+            border-bottom: 1px solid rgba(30, 64, 175, 0.15);
         }
 
         .nav-logo {
-            font-size: 24px;
+            font-size: 32px;
             font-weight: 700;
-            color: var(--primary);
-            letter-spacing: -1px;
+            color: var(--fintech-blue);
+            letter-spacing: -1.5px;
+            text-decoration: none;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-block;
+        }
+
+        .nav-logo:hover {
+            transform: scale(1.05);
         }
 
         .nav-logo .doc {
@@ -101,205 +191,396 @@
             font-weight: 700;
         }
 
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            margin-right: 20px;
+        }
+
         .nav-actions {
             display: flex;
-            gap: 12px;
+            gap: 8px;
+            align-items: center;
         }
 
         .nav-link {
-            padding: 10px 20px;
+            position: relative;
+            padding: 12px 20px;
             color: var(--gray-700);
             text-decoration: none;
             font-weight: 500;
+            font-size: 15px;
             border-radius: 8px;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 8px;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background: var(--fintech-blue);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .nav-link:hover {
-            color: var(--primary);
-            background: var(--gray-50);
+            color: var(--fintech-blue);
+        }
+
+        .nav-link:hover::after {
+            transform: scaleX(1);
+        }
+
+        .nav-link span {
+            position: relative;
+            z-index: 1;
         }
 
         .nav-link.btn-nav {
-            background: var(--primary);
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
             color: var(--white);
+            box-shadow: 0 4px 16px rgba(30, 64, 175, 0.25);
+            border: none;
+        }
+
+        .nav-link.btn-nav::before {
+            background: linear-gradient(135deg, var(--fintech-blue-dark) 0%, var(--fintech-blue) 100%);
         }
 
         .nav-link.btn-nav:hover {
-            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.35);
         }
 
-        /* Hero Section */
+        /* Hero Section - Enhanced */
         .hero {
             position: relative;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 120px 20px 80px;
+            padding: 140px 20px 100px;
             overflow: hidden;
-            background: linear-gradient(180deg, var(--white) 0%, var(--gray-50) 100%);
+            background: linear-gradient(135deg,
+                    var(--fintech-blue-pale) 0%,
+                    var(--white) 30%,
+                    var(--white) 70%,
+                    var(--fintech-blue-pale) 100%);
         }
 
         .hero-content {
             position: relative;
             z-index: 2;
-            max-width: 1200px;
+            max-width: 1400px;
             width: 100%;
             text-align: center;
         }
 
-        .brand-logo {
-            margin-bottom: 40px;
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 36px;
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            color: var(--white);
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 50px;
+            animation: pulse 2s infinite, slideDown 0.6s ease-out;
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+            letter-spacing: 0.3px;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .brand-name {
-            font-size: clamp(42px, 7vw, 84px);
-            font-weight: 800;
+        .hero-badge:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(30, 64, 175, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+        }
+
+        .hero-badge span:first-child {
+            font-size: 20px;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 8px 24px rgba(30, 64, 175, 0.3);
+            }
+
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 12px 32px rgba(30, 64, 175, 0.4);
+            }
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero-title {
+            font-size: clamp(56px, 8vw, 120px);
+            font-weight: 900;
             line-height: 1.1;
-            margin-bottom: 20px;
-            color: var(--primary);
-            letter-spacing: -2px;
+            margin-bottom: 50px;
+            margin-top: 0;
+            color: var(--gray-900);
+            letter-spacing: -4px;
+            animation: fadeInUp 0.8s ease-out 0.4s both;
         }
 
-        .brand-name .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
-        .brand-name .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
+        .hero-title .highlight {
+            position: relative;
         }
 
-        .brand-tagline {
-            font-size: clamp(16px, 2.5vw, 24px);
+        .rotating-text {
+            display: inline-block;
+            position: relative;
+            min-height: 1.2em;
+            vertical-align: top;
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            color: var(--white);
+            padding: 8px 20px;
+            border-radius: 12px;
+            margin-left: 8px;
+        }
+
+        .rotating-text-item {
+            position: absolute;
+            top: 8px;
+            left: 20px;
+            right: 20px;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            pointer-events: none;
+            color: var(--white);
+        }
+
+        .rotating-text-item.active {
+            position: relative;
+            opacity: 1;
+            transform: translateY(0);
+            top: 0;
+            left: 0;
+            right: 0;
+        }
+
+        .hero-title .highlight::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            background: linear-gradient(90deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            opacity: 0.2;
+            border-radius: 4px;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(22px, 3.5vw, 36px);
             font-weight: 400;
             color: var(--gray-600);
-            margin-bottom: 60px;
-            letter-spacing: 0.3px;
-        }
-
-        .main-headline {
-            font-size: clamp(32px, 5.5vw, 64px);
-            font-weight: 800;
-            line-height: 1.2;
-            margin-bottom: 30px;
-            color: var(--gray-900);
+            margin-bottom: 40px;
             max-width: 900px;
             margin-left: auto;
             margin-right: auto;
+            line-height: 1.6;
+            animation: fadeInUp 0.8s ease-out 0.4s both;
         }
 
-        .headline-highlight {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
 
-        .subheadline {
-            font-size: clamp(18px, 2.2vw, 22px);
-            font-weight: 400;
-            color: var(--gray-600);
-            margin-bottom: 50px;
-            max-width: 800px;
-            margin-left: auto;
-            margin-right: auto;
-            line-height: 1.7;
-        }
-
-        /* CTA Buttons */
-        .cta-section {
+        .cta-buttons {
             display: flex;
             gap: 20px;
             justify-content: center;
             flex-wrap: wrap;
             margin-bottom: 80px;
+            animation: fadeInUp 0.8s ease-out 0.6s both;
         }
 
         .btn {
-            padding: 16px 36px;
-            font-size: 16px;
-            font-weight: 600;
-            border-radius: 12px;
+            padding: 20px 48px;
+            font-size: 18px;
+            font-weight: 700;
+            border-radius: 14px;
             border: none;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             text-decoration: none;
             display: inline-flex;
             align-items: center;
-            gap: 10px;
-            letter-spacing: 0.3px;
+            gap: 12px;
+            letter-spacing: 0.5px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
             color: var(--white);
-            box-shadow: 0 4px 16px rgba(30, 64, 175, 0.3);
+            box-shadow: 0 4px 20px rgba(30, 64, 175, 0.25);
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.4);
+            box-shadow: 0 8px 30px rgba(30, 64, 175, 0.35);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
         }
 
         .btn-secondary {
             background: var(--white);
-            color: var(--primary);
-            border: 2px solid var(--primary);
+            color: var(--fintech-blue);
+            border: 2px solid var(--fintech-blue);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
 
         .btn-secondary:hover {
-            background: var(--primary);
+            background: var(--fintech-blue);
             color: var(--white);
             transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(30, 64, 175, 0.25);
         }
 
-        /* Features Section */
-        .features {
+        .btn-secondary:active {
+            transform: translateY(0);
+        }
+
+        .btn span {
             position: relative;
-            z-index: 2;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 100px 20px;
+            z-index: 1;
+            transition: transform 0.3s;
+        }
+
+        .btn:hover span {
+            transform: translateX(4px);
+        }
+
+        /* Features Carousel - Enhanced */
+        .features-section {
+            position: relative;
+            padding: 120px 20px;
             background: var(--white);
+            overflow: hidden;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 80px;
         }
 
         .section-title {
-            font-size: clamp(36px, 5vw, 48px);
-            font-weight: 800;
-            text-align: center;
-            margin-bottom: 16px;
+            font-size: clamp(42px, 6vw, 72px);
+            font-weight: 900;
+            margin-bottom: 20px;
             color: var(--gray-900);
+            letter-spacing: -2px;
         }
 
         .section-subtitle {
-            font-size: 20px;
-            text-align: center;
+            font-size: 22px;
             color: var(--gray-600);
-            margin-bottom: 60px;
-            max-width: 700px;
-            margin-left: auto;
-            margin-right: auto;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
         }
 
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 32px;
-            margin-top: 60px;
+        .carousel-container {
+            position: relative;
+            max-width: 1400px;
+            margin: 0 auto;
+            overflow: hidden;
+            padding: 20px 0;
+        }
+
+        .carousel-track {
+            display: flex;
+            gap: 30px;
+            animation: scroll 40s linear infinite;
+        }
+
+        .carousel-track:hover {
+            animation-play-state: paused;
+        }
+
+        @keyframes scroll {
+            0% {
+                transform: translateX(0);
+            }
+
+            100% {
+                transform: translateX(-50%);
+            }
         }
 
         .feature-card {
+            min-width: 380px;
             background: var(--white);
             border: 2px solid var(--gray-200);
-            border-radius: 16px;
-            padding: 40px;
-            transition: all 0.3s ease;
+            border-radius: 20px;
+            padding: 40px 32px;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
             overflow: hidden;
+            box-shadow: 0 2px 16px rgba(0, 0, 0, 0.04);
+            will-change: transform;
         }
 
         .feature-card::before {
@@ -308,151 +589,470 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--primary), var(--primary-light));
+            height: 6px;
+            background: linear-gradient(90deg, var(--fintech-blue), var(--fintech-blue-light));
             transform: scaleX(0);
-            transition: transform 0.3s ease;
+            transition: transform 0.4s ease;
+            transform-origin: left;
+        }
+
+        .feature-card::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--fintech-blue-pale) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
         }
 
         .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--primary);
-            box-shadow: 0 12px 32px rgba(30, 64, 175, 0.1);
+            transform: translateY(-8px);
+            border-color: var(--fintech-blue);
+            box-shadow: 0 12px 40px rgba(30, 64, 175, 0.15);
         }
 
         .feature-card:hover::before {
             transform: scaleX(1);
         }
 
+        .feature-card:hover::after {
+            opacity: 1;
+        }
+
         .feature-icon {
-            font-size: 48px;
-            margin-bottom: 24px;
-            display: inline-block;
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            border-radius: 16px;
+            width: 70px;
+            height: 70px;
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            border-radius: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: var(--white);
             font-size: 32px;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.25);
+            transition: transform 0.3s;
+        }
+
+        .feature-card:hover .feature-icon {
+            transform: rotate(5deg) scale(1.1);
         }
 
         .feature-title {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 12px;
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 16px;
             color: var(--gray-900);
+            position: relative;
+            z-index: 1;
         }
 
         .feature-description {
-            font-size: 16px;
+            font-size: 17px;
             color: var(--gray-600);
-            line-height: 1.7;
-        }
-
-        /* API Description */
-        .api-description {
-            position: relative;
-            z-index: 2;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 80px 20px;
-            text-align: center;
-            background: var(--gray-50);
-        }
-
-        .api-description p {
-            font-size: clamp(18px, 2.2vw, 22px);
             line-height: 1.8;
-            color: var(--gray-700);
-            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
         }
 
-        .api-description .highlight {
-            color: var(--primary);
-            font-weight: 700;
-        }
-
-        /* Value Props */
-        .value-props {
-            background: var(--white);
+        /* Stats Section - Enhanced */
+        .stats-section {
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-dark) 100%);
             padding: 100px 20px;
+            color: var(--white);
+            position: relative;
+            overflow: hidden;
         }
 
-        .value-props-grid {
+        .stats-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .stats-grid {
             max-width: 1200px;
             margin: 0 auto;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 40px;
+            gap: 50px;
+            position: relative;
+            z-index: 1;
         }
 
-        .value-prop {
+        .stat-item {
             text-align: center;
+            padding: 30px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
         }
 
-        .value-prop-icon {
-            font-size: 48px;
-            margin-bottom: 20px;
-            display: inline-block;
-            width: 100px;
-            height: 100px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            border-radius: 50%;
+        .stat-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-number {
+            font-size: clamp(48px, 6vw, 80px);
+            font-weight: 900;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, var(--white) 0%, var(--fintech-blue-pale) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 20px;
+            font-weight: 600;
+            opacity: 0.95;
+        }
+
+        /* Pricing Section - Enhanced */
+        .pricing-section {
+            padding: 120px 20px;
+            background: linear-gradient(180deg, var(--white) 0%, var(--gray-50) 100%);
+        }
+
+        .pricing-credits-badge {
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 12px;
+            padding: 18px 36px;
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
             color: var(--white);
-            margin: 0 auto 24px;
-        }
-
-        .value-prop-title {
+            border-radius: 50px;
             font-size: 20px;
             font-weight: 700;
+            margin: 0 auto 60px;
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.3);
+            animation: pulse 2s infinite;
+            max-width: fit-content;
+        }
+
+        .pricing-grid {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 40px;
+            margin-top: 60px;
+        }
+
+        .pricing-card {
+            background: var(--white);
+            border-radius: 28px;
+            padding: 50px 40px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            border: 2px solid var(--gray-200);
+        }
+
+        .pricing-card.featured {
+            border: 3px solid var(--fintech-blue);
+            transform: scale(1.05);
+            box-shadow: 0 20px 60px rgba(30, 64, 175, 0.2);
+        }
+
+        .pricing-card.featured::before {
+            content: 'Most Popular';
+            position: absolute;
+            top: 20px;
+            right: -35px;
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            color: var(--white);
+            padding: 8px 50px;
+            font-size: 14px;
+            font-weight: 700;
+            transform: rotate(45deg);
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+        }
+
+        .pricing-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--fintech-blue-pale) 0%, transparent 100%);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-12px) scale(1.02);
+            box-shadow: 0 24px 80px rgba(30, 64, 175, 0.2);
+            border-color: var(--fintech-blue);
+        }
+
+        .pricing-card.featured:hover {
+            transform: translateY(-12px) scale(1.07);
+        }
+
+        .pricing-card:hover::after {
+            opacity: 1;
+        }
+
+        .pricing-header {
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-tier {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--fintech-blue);
+            text-transform: uppercase;
+            letter-spacing: 1px;
             margin-bottom: 12px;
+        }
+
+        .pricing-title {
+            font-size: 32px;
+            font-weight: 900;
+            margin-bottom: 16px;
             color: var(--gray-900);
         }
 
-        .value-prop-description {
+        .pricing-price {
+            font-size: 56px;
+            font-weight: 900;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+            line-height: 1;
+        }
+
+        .pricing-price .currency {
+            font-size: 32px;
+            vertical-align: top;
+        }
+
+        .pricing-price .period {
+            font-size: 20px;
+            font-weight: 500;
+            color: var(--gray-600);
+        }
+
+        .pricing-description {
             font-size: 16px;
             color: var(--gray-600);
+            margin-bottom: 40px;
             line-height: 1.6;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-features {
+            list-style: none;
+            margin-bottom: 40px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-features li {
+            padding: 14px 0;
+            font-size: 16px;
+            color: var(--gray-700);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .pricing-features li:last-child {
+            border-bottom: none;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            background: var(--fintech-blue-pale);
+            color: var(--fintech-blue);
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .pricing-cta {
+            width: 100%;
+            padding: 18px 32px;
+            font-size: 18px;
+            font-weight: 700;
+            border-radius: 14px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+
+        .pricing-cta.primary {
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            color: var(--white);
+            box-shadow: 0 8px 24px rgba(30, 64, 175, 0.3);
+        }
+
+        .pricing-cta.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(30, 64, 175, 0.4);
+        }
+
+        .pricing-cta.secondary {
+            background: var(--white);
+            color: var(--fintech-blue);
+            border: 2px solid var(--fintech-blue);
+        }
+
+        .pricing-cta.secondary:hover {
+            background: var(--fintech-blue);
+            color: var(--white);
+            transform: translateY(-2px);
+        }
+
+        /* CTA Section - Enhanced */
+        .cta-section {
+            background: linear-gradient(135deg, var(--fintech-blue-pale) 0%, var(--white) 50%, var(--fintech-blue-pale) 100%);
+            padding: 120px 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--fintech-blue-pale) 0%, transparent 70%);
+            opacity: 0.5;
+            border-radius: 50%;
+        }
+
+        .cta-box {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--white);
+            border-radius: 32px;
+            padding: 80px 60px;
+            box-shadow: 0 30px 80px rgba(30, 64, 175, 0.15);
+            border: 2px solid var(--fintech-blue-pale);
+            position: relative;
+            z-index: 1;
+        }
+
+        .cta-box h2 {
+            font-size: clamp(40px, 5vw, 64px);
+            font-weight: 900;
+            margin-bottom: 24px;
+            color: var(--gray-900);
+            letter-spacing: -2px;
+        }
+
+        .cta-box p {
+            font-size: 22px;
+            color: var(--gray-600);
+            margin-bottom: 50px;
+            line-height: 1.6;
+        }
+
+        .free-credits-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 16px 32px;
+            background: linear-gradient(135deg, var(--fintech-blue) 0%, var(--fintech-blue-light) 100%);
+            color: var(--white);
+            border-radius: 50px;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 40px;
+            box-shadow: 0 12px 40px rgba(30, 64, 175, 0.35);
+            animation: pulse 2s infinite;
         }
 
         /* Footer */
         .footer {
-            position: relative;
-            z-index: 2;
+            background: var(--gray-900);
+            color: var(--white);
+            padding: 60px 20px 30px;
             text-align: center;
-            padding: 60px 20px;
-            border-top: 1px solid var(--gray-200);
-            margin-top: 100px;
-            background: var(--gray-50);
         }
 
         .footer p {
-            color: var(--gray-600);
+            opacity: 0.7;
             font-size: 14px;
         }
 
         /* Responsive */
+        /* Modern Responsive Design */
+        @media (max-width: 1024px) {
+            .nav {
+                padding: 20px 40px;
+            }
+        }
+
         @media (max-width: 768px) {
             .nav {
-                padding: 16px 20px;
+                padding: 16px 24px;
+            }
+
+            .nav-logo {
+                font-size: 26px;
+            }
+
+            .nav-right {
+                gap: 0;
+            }
+
+            .nav-links {
+                display: none;
             }
 
             .nav-actions {
-                gap: 8px;
+                gap: 6px;
             }
 
             .nav-link {
-                padding: 8px 16px;
+                padding: 10px 16px;
                 font-size: 14px;
             }
 
-            .cta-section {
+            .nav-link.btn-nav {
+                padding: 10px 20px;
+            }
+
+            .cta-buttons {
                 flex-direction: column;
                 align-items: stretch;
             }
@@ -462,220 +1062,575 @@
                 justify-content: center;
             }
 
-            .features-grid {
+            .feature-card {
+                min-width: 300px;
+            }
+
+            .benefits-grid {
                 grid-template-columns: 1fr;
             }
 
-            .value-props-grid {
-                grid-template-columns: 1fr;
+            .cta-box {
+                padding: 50px 30px;
             }
         }
 
-        /* Blue accent line */
-        .blue-line {
-            width: 100px;
-            height: 4px;
-            background: linear-gradient(90deg, transparent, var(--primary), transparent);
-            margin: 40px auto;
-            border-radius: 2px;
+        @media (max-width: 480px) {
+            .nav {
+                padding: 12px 20px;
+            }
+
+            .nav-logo {
+                font-size: 22px;
+            }
+
+            .nav-link {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
         }
     </style>
 </head>
+
 <body>
-    <nav class="nav">
-        <div class="nav-logo">
+    <nav class="nav" id="mainNav">
+        <a href="/" class="nav-logo">
             <span class="doc">Doc</span><span class="little">Little</span>
-        </div>
-        <div class="nav-actions">
-            <a href="/login" class="nav-link">Sign In</a>
-            <a href="/signup" class="nav-link btn-nav">Get Started</a>
+        </a>
+        <div class="nav-right">
+            <div class="nav-links">
+                <a href="#features" class="nav-link"><span>Features</span></a>
+                <a href="#pricing" class="nav-link"><span>Pricing</span></a>
+                <a href="#benefits" class="nav-link"><span>Benefits</span></a>
+            </div>
+            <div class="nav-actions">
+                <a href="/login" class="nav-link"><span>Sign In</span></a>
+                <a href="/signup" class="nav-link btn-nav"><span>Get Started</span></a>
+            </div>
         </div>
     </nav>
 
-    <div class="hero">
-        <!-- Geometric decorative elements -->
-        <div class="geometric-decoration geometric-1"></div>
-        <div class="geometric-decoration geometric-2"></div>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="float-element float-1"></div>
+        <div class="float-element float-2"></div>
+        <div class="float-element float-3"></div>
+        <div class="float-element float-4"></div>
 
         <div class="hero-content">
-            <div class="brand-logo">
-                <h1 class="brand-name">
-                    <span class="doc">Doc</span><span class="little">Little</span>
-                </h1>
-                <p class="brand-tagline">Voice AI Platform for Healthcare Commerce</p>
+            <div class="hero-badge">
+                <span>✨</span>
+                <span>Built for healthcare businesses</span>
+            </div>
+            <h1 class="hero-title">
+                An AI Assistant that<br>
+                <span class="highlight rotating-text">
+                    <span class="rotating-text-item active">Removes Admin Burden</span>
+                    <span class="rotating-text-item">Boost Sales</span>
+                    <span class="rotating-text-item">Automates Calls & SMS</span>
+                    <span class="rotating-text-item">Books Appointments</span>
+                    <span class="rotating-text-item">Sets Reminders</span>
+                </span>
+            </h1>
+        </div>
+    </section>
+
+    <!-- Features Carousel -->
+    <section class="features-section" id="features">
+        <div class="section-header">
+            <h2 class="section-title">Boost Sales with Complete Automation</h2>
+            <p class="section-subtitle">Handle calls, SMS, email, appointments, reminders, and invoicing—all at a
+                fraction of the cost</p>
+        </div>
+
+        <div class="carousel-container">
+            <div class="carousel-track">
+                <!-- Feature 1 -->
+                <div class="feature-card">
+                    <div class="feature-icon">📞</div>
+                    <h3 class="feature-title">Handle Inbound & Outbound Calls</h3>
+                    <p class="feature-description">
+                        Answer calls 24/7, make outbound calls for follow-ups, schedule appointments, and answer
+                        questions. Never miss a call. Professional, friendly, and always available.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3 class="feature-title">SMS & Email Automation</h3>
+                    <p class="feature-description">
+                        Send automated SMS reminders, email notifications, appointment confirmations, and follow-ups.
+                        Keep customers engaged and reduce no-shows with multi-channel communication.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="feature-card">
+                    <div class="feature-icon">📅</div>
+                    <h3 class="feature-title">Appointment Booking & Management</h3>
+                    <p class="feature-description">
+                        Automatically book, reschedule, and manage appointments through calls, SMS, or email. Sync with
+                        your calendar and send smart reminders to reduce no-shows.
+                    </p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="feature-card">
+                    <div class="feature-icon">🔔</div>
+                    <h3 class="feature-title">Automated Reminders & Notifications</h3>
+                    <p class="feature-description">
+                        Automatically send appointment reminders, payment due alerts, follow-up notifications via calls,
+                        SMS, or email. Keep customers informed and engaged without manual work.
+                    </p>
+                </div>
+
+                <!-- Feature 5 -->
+                <div class="feature-card">
+                    <div class="feature-icon">💳</div>
+                    <h3 class="feature-title">Automated Invoice Handling</h3>
+                    <p class="feature-description">
+                        Generate and send invoices automatically. Process payments, track outstanding balances, send
+                        payment reminders via SMS and email—all without manual work.
+                    </p>
+                </div>
+
+                <!-- Feature 6 -->
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3 class="feature-title">Low Costs, High Value</h3>
+                    <p class="feature-description">
+                        Starting at just $99/month with transparent pricing. No hidden fees, no surprise charges. Get
+                        more value than hiring staff—at a fraction of the cost.
+                    </p>
+                </div>
+
+                <!-- Feature 7 -->
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">Remove Admin Burden</h3>
+                    <p class="feature-description">
+                        Free up hours every day by automating repetitive tasks. Your staff can focus on growing your
+                        business instead of paperwork, calls, and emails.
+                    </p>
+                </div>
+
+                <!-- Feature 8 -->
+                <div class="feature-card">
+                    <div class="feature-icon">🏥</div>
+                    <h3 class="feature-title">Built for Small Business</h3>
+                    <p class="feature-description">
+                        Designed specifically for small healthcare practices. Affordable, easy to set up, and scales
+                        with your business. No enterprise complexity, no long-term contracts.
+                    </p>
+                </div>
+
+                <!-- Feature 9 -->
+                <div class="feature-card">
+                    <div class="feature-icon">🎁</div>
+                    <h3 class="feature-title">250 Free Minutes to Start</h3>
+                    <p class="feature-description">
+                        Get <strong>250 free minutes</strong> when you sign up. No credit card required. Test
+                        everything—calls, SMS, appointments, invoicing—and see how much time and money you'll save
+                        before committing.
+                    </p>
+                </div>
+
+                <!-- Duplicate for infinite scroll -->
+                <div class="feature-card">
+                    <div class="feature-icon">📞</div>
+                    <h3 class="feature-title">Handle Inbound & Outbound Calls</h3>
+                    <p class="feature-description">
+                        Answer calls 24/7, make outbound calls for follow-ups, schedule appointments, and answer
+                        questions. Never miss a call. Professional, friendly, and always available.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <h3 class="feature-title">SMS & Email Automation</h3>
+                    <p class="feature-description">
+                        Send automated SMS reminders, email notifications, appointment confirmations, and follow-ups.
+                        Keep customers engaged and reduce no-shows with multi-channel communication.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📅</div>
+                    <h3 class="feature-title">Appointment Booking & Management</h3>
+                    <p class="feature-description">
+                        Automatically book, reschedule, and manage appointments through calls, SMS, or email. Sync with
+                        your calendar and send smart reminders to reduce no-shows.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔔</div>
+                    <h3 class="feature-title">Automated Reminders & Notifications</h3>
+                    <p class="feature-description">
+                        Automatically send appointment reminders, payment due alerts, follow-up notifications via calls,
+                        SMS, or email. Keep customers informed and engaged without manual work.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">💳</div>
+                    <h3 class="feature-title">Automated Invoice Handling</h3>
+                    <p class="feature-description">
+                        Generate and send invoices automatically. Process payments, track outstanding balances, send
+                        payment reminders via SMS and email—all without manual work.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3 class="feature-title">Low Costs, High Value</h3>
+                    <p class="feature-description">
+                        Starting at just $99/month with transparent pricing. No hidden fees, no surprise charges. Get
+                        more value than hiring staff—at a fraction of the cost.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">Remove Admin Burden</h3>
+                    <p class="feature-description">
+                        Free up hours every day by automating repetitive tasks. Your staff can focus on growing your
+                        business instead of paperwork, calls, and emails.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🏥</div>
+                    <h3 class="feature-title">Built for Small Business</h3>
+                    <p class="feature-description">
+                        Designed specifically for small healthcare practices. Affordable, easy to set up, and scales
+                        with your business. No enterprise complexity, no long-term contracts.
+                    </p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎁</div>
+                    <h3 class="feature-title">250 Free Minutes to Start</h3>
+                    <p class="feature-description">
+                        Get <strong>250 free minutes</strong> when you sign up. No credit card required. Test
+                        everything—calls, SMS, appointments, invoicing—and see how much time and money you'll save
+                        before committing.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section" id="benefits">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-number">24/7</div>
+                <div class="stat-label">Always Available</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">80%</div>
+                <div class="stat-label">Time Saved</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">$99</div>
+                <div class="stat-label">Starting Price</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">250</div>
+                <div class="stat-label">Free Minutes</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="pricing-section" id="pricing">
+        <div class="section-header">
+            <h2 class="section-title">Simple, Transparent Pricing</h2>
+            <p class="section-subtitle">Choose the plan that fits your practice. All plans include <strong>250 free
+                    minutes</strong> when you sign up—no credit card required.</p>
+        </div>
+
+        <div class="pricing-credits-badge">
+            <span>🎁</span>
+            <span><strong>250 Free Minutes</strong> - Start Today, No Credit Card Required</span>
+        </div>
+
+        <div class="pricing-grid">
+            <!-- Starter Plan -->
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <div class="pricing-tier">Starter</div>
+                    <h3 class="pricing-title">Perfect for Small Practices</h3>
+                    <div class="pricing-price">
+                        <span class="currency">$</span>99<span class="period">/month</span>
+                    </div>
+                    <p class="pricing-description">
+                        Everything you need to get started with AI-powered patient communication.
+                    </p>
+                </div>
+                <ul class="pricing-features">
+                    <li>500 voice call minutes per month</li>
+                    <li>Additional minutes: $0.10/min</li>
+                    <li>Unlimited automated reminders</li>
+                    <li>Basic invoicing automation</li>
+                    <li>24/7 call answering</li>
+                    <li>Appointment scheduling</li>
+                    <li>Email support</li>
+                    <li><strong>250 free minutes</strong> included when you sign up</li>
+                    <li>Up to 2 phone numbers ($1/month each)</li>
+                </ul>
+                <a href="/signup?plan=starter" class="pricing-cta secondary">Get Started</a>
             </div>
 
-            <h2 class="main-headline">
-                Built on <span class="headline-highlight">Research</span>.<br>
-                Powered by <span class="headline-highlight">Intelligence</span>.<br>
-                Secured by <span class="headline-highlight">Technology</span>.
-            </h2>
+            <!-- Professional Plan (Featured) -->
+            <div class="pricing-card featured">
+                <div class="pricing-header">
+                    <div class="pricing-tier">Professional</div>
+                    <h3 class="pricing-title">For Growing Practices</h3>
+                    <div class="pricing-price">
+                        <span class="currency">$</span>199<span class="period">/month</span>
+                    </div>
+                    <p class="pricing-description">
+                        Advanced features for practices that need more automation and support.
+                    </p>
+                </div>
+                <ul class="pricing-features">
+                    <li>2,000 voice call minutes per month (inbound & outbound)</li>
+                    <li>Additional minutes: $0.08/min</li>
+                    <li>Unlimited SMS reminders & notifications</li>
+                    <li>Unlimited email automation</li>
+                    <li>Advanced appointment booking & management</li>
+                    <li>Advanced invoicing & payment processing</li>
+                    <li>24/7 call answering with custom prompts</li>
+                    <li>Priority email & phone support</li>
+                    <li><strong>250 free minutes</strong> included when you sign up</li>
+                    <li>Up to 5 phone numbers ($1/month each)</li>
+                    <li>Custom integrations</li>
+                    <li>Analytics dashboard</li>
+                </ul>
+                <a href="/signup?plan=professional" class="pricing-cta primary">Get Started</a>
+            </div>
 
-            <p class="subheadline">
-                White-label voice AI agent platform enabling healthcare providers to offer 
-                voice-powered commerce, patient services, and seamless EHR integration 
-                through natural language conversations.
+            <!-- Enterprise Plan -->
+            <div class="pricing-card">
+                <div class="pricing-header">
+                    <div class="pricing-tier">Enterprise</div>
+                    <h3 class="pricing-title">For Large Practices</h3>
+                    <div class="pricing-price">
+                        <span class="currency">$</span>449<span class="period">/month</span>
+                    </div>
+                    <p class="pricing-description">
+                        Complete solution for practices that need maximum automation and customization.
+                    </p>
+                </div>
+                <ul class="pricing-features">
+                    <li>5,000 voice call minutes per month (inbound & outbound)</li>
+                    <li>Additional minutes: $0.06/min</li>
+                    <li>Unlimited SMS reminders & notifications</li>
+                    <li>Unlimited email automation</li>
+                    <li>Advanced appointment booking & management</li>
+                    <li>Full invoicing & payment automation</li>
+                    <li>24/7 call answering with AI customization</li>
+                    <li>Dedicated account manager</li>
+                    <li><strong>250 free minutes</strong> included when you sign up</li>
+                    <li>Up to 10 phone numbers ($1/month each)</li>
+                    <li>Custom integrations & API access</li>
+                    <li>Advanced analytics & reporting</li>
+                    <li>EHR system integration</li>
+                    <li>White-label options</li>
+                </ul>
+                <a href="/signup?plan=enterprise" class="pricing-cta secondary">Contact Sales</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="cta-box">
+            <div class="free-credits-badge">
+                <span>🎁</span>
+                <span><strong>250 Free Minutes</strong> - Start Your Free Trial Today</span>
+            </div>
+            <h2>Ready to Boost Your Business Sales?</h2>
+            <p>Join hundreds of small healthcare businesses already saving time and money with Doctor Little. Get
+                <strong>250 free minutes</strong> to test everything—no credit card required. See how much time and
+                money you'll save before committing.
             </p>
-
-            <div class="cta-section">
-                <a href="/signup" class="btn btn-primary">
-                    Get Started
-                    <span>→</span>
-                </a>
-                <a href="/login" class="btn btn-secondary">
-                    Sign In
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <div class="value-props">
-        <div class="value-props-grid">
-            <div class="value-prop">
-                <div class="value-prop-icon">🔬</div>
-                <h3 class="value-prop-title">Research-Driven</h3>
-                <p class="value-prop-description">
-                    Built on the latest healthcare research and medical standards. 
-                    FHIR-compliant, evidence-based, and continuously updated.
-                </p>
-            </div>
-
-            <div class="value-prop">
-                <div class="value-prop-icon">🧠</div>
-                <h3 class="value-prop-title">Intelligent Automation</h3>
-                <p class="value-prop-description">
-                    AI-powered voice agents that understand context, learn from 
-                    interactions, and deliver personalized patient experiences.
-                </p>
-            </div>
-
-            <div class="value-prop">
-                <div class="value-prop-icon">🔒</div>
-                <h3 class="value-prop-title">Enterprise Security</h3>
-                <p class="value-prop-description">
-                    HIPAA-compliant infrastructure with end-to-end encryption, 
-                    audit trails, and rigorous security protocols.
-                </p>
-            </div>
-
-            <div class="value-prop">
-                <div class="value-prop-icon">⚡</div>
-                <h3 class="value-prop-title">Advanced Technology</h3>
-                <p class="value-prop-description">
-                    Modern APIs, real-time processing, and seamless integrations 
-                    with EHR systems, payment processors, and insurance networks.
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <div class="api-description">
-        <div class="blue-line"></div>
-        <p>
-            Doctor Little is a comprehensive <span class="highlight">healthcare intelligence platform</span> 
-            that enables healthcare providers to automate operations, enhance patient care, 
-            and streamline workflows through intelligent technology.
-        </p>
-        <p>
-            Our API integrates <span class="highlight">voice AI agents</span>, 
-            <span class="highlight">medical billing automation</span>, 
-            <span class="highlight">insurance processing</span>, 
-            and <span class="highlight">FHIR-compliant data management</span> into a single, 
-            secure, and scalable platform.
-        </p>
-        <div class="blue-line"></div>
-    </div>
-
-    <div class="features">
-        <h2 class="section-title">Platform Capabilities</h2>
-        <p class="section-subtitle">
-            Everything you need to modernize your healthcare operations
-        </p>
-
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">🎙️</div>
-                <h3 class="feature-title">Intelligent Voice Agents</h3>
-                <p class="feature-description">
-                    Natural language processing that handles patient calls, 
-                    schedules appointments, processes orders, and provides 
-                    24/7 multilingual support with context awareness.
-                </p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">💳</div>
-                <h3 class="feature-title">Automated Billing & Payments</h3>
-                <p class="feature-description">
-                    Intelligent claims processing, real-time eligibility verification, 
-                    and secure payment collection. Integrates with STEDI, Stripe, 
-                    Circle wallets, and major insurance networks.
-                </p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">🏥</div>
-                <h3 class="feature-title">FHIR-Compliant Integration</h3>
-                <p class="feature-description">
-                    HL7 FHIR R4-compliant patient records, encounters, and healthcare 
-                    data management. Seamlessly connects with Epic, 1upHealth, 
-                    and other leading EHR systems.
-                </p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">📅</div>
-                <h3 class="feature-title">Smart Scheduling</h3>
-                <p class="feature-description">
-                    AI-powered appointment management with calendar integration, 
-                    automated reminders, and intelligent conflict resolution. 
-                    Syncs with Google Calendar and major EHR systems.
-                </p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">🔐</div>
-                <h3 class="feature-title">Insurance Intelligence</h3>
-                <p class="feature-description">
-                    Real-time eligibility verification, automated claim submission, 
-                    status tracking, and EOB processing. X12 EDI transactions 
-                    for all major payers with intelligent error handling.
-                </p>
-            </div>
-
-            <div class="feature-card">
-                <div class="feature-icon">📱</div>
-                <h3 class="feature-title">Developer-First APIs</h3>
-                <p class="feature-description">
-                    RESTful APIs, webhooks, and comprehensive SDKs for Flutter, 
-                    iOS, and Android. White-label solutions that integrate 
-                    seamlessly into your existing applications.
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <div class="api-description">
-        <div class="blue-line"></div>
-        <p>
-            Start with <span class="highlight">100 free voice minutes</span> and 
-            <span class="highlight">1,000 free API requests</span> per month. 
-            Enterprise-grade security and reliability from day one.
-        </p>
-        <div style="margin-top: 40px;">
-            <a href="/signup" class="btn btn-primary">
-                Get Started Free
+            <a href="/signup" class="btn btn-primary" style="font-size: 20px; padding: 22px 56px;">
+                Start Your Free Trial
                 <span>→</span>
             </a>
         </div>
-        <div class="blue-line"></div>
-    </div>
+    </section>
 
-    <div class="footer">
+    <!-- Footer -->
+    <footer class="footer">
         <p>&copy; 2024 Doctor Little. All rights reserved.</p>
-        <p style="margin-top: 10px; font-size: 12px; opacity: 0.7;">
-            Research • Intelligence • Safety • Technology
-        </p>
-    </div>
+    </footer>
+
+    <script>
+        // Initialize Lenis Smooth Scroll (like Gentlerain)
+        let lenis;
+        if (typeof Lenis !== 'undefined') {
+            lenis = new Lenis({
+                lerp: 0.05,
+                wheelMultiplier: 0.5,
+                gestureOrientation: 'vertical',
+                normalizeWheel: false,
+                smoothTouch: false
+            });
+
+            function raf(time) {
+                lenis.raf(time);
+                requestAnimationFrame(raf);
+            }
+            requestAnimationFrame(raf);
+        }
+
+        // Register GSAP ScrollTrigger
+        if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+            gsap.registerPlugin(ScrollTrigger);
+        }
+
+        // Rotating Text Animation
+        const rotatingTextItems = document.querySelectorAll('.rotating-text-item');
+        let currentIndex = 0;
+
+        function rotateText() {
+            if (rotatingTextItems.length === 0) return;
+
+            // Remove active class from current item
+            rotatingTextItems[currentIndex].classList.remove('active');
+
+            // Move to next item
+            currentIndex = (currentIndex + 1) % rotatingTextItems.length;
+
+            // Add active class to next item
+            rotatingTextItems[currentIndex].classList.add('active');
+        }
+
+        // Start rotation after initial delay, then rotate every 3 seconds
+        setTimeout(() => {
+            if (rotatingTextItems.length > 1) {
+                setInterval(rotateText, 3000);
+            }
+        }, 2000);
+
+        // Modern Navigation Scroll Effect
+        const nav = document.getElementById('mainNav');
+        let lastScroll = 0;
+
+        window.addEventListener('scroll', () => {
+            const currentScroll = window.pageYOffset;
+
+            if (currentScroll > 50) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+
+            lastScroll = currentScroll;
+        });
+
+        // Smooth scroll for anchor links with Lenis
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    if (lenis) {
+                        lenis.scrollTo(target, {
+                            offset: -80,
+                            duration: 1.2,
+                            easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t))
+                        });
+                    } else {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                }
+            });
+        });
+
+        // GSAP Scroll Animations (like Gentlerain)
+        if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+            // Animate sections on scroll
+            gsap.utils.toArray('section').forEach((section, i) => {
+                gsap.from(section, {
+                    opacity: 0,
+                    y: 60,
+                    duration: 1,
+                    ease: 'power3.out',
+                    scrollTrigger: {
+                        trigger: section,
+                        start: 'top 80%',
+                        end: 'top 50%',
+                        toggleActions: 'play none none none'
+                    }
+                });
+            });
+
+            // Animate feature cards
+            gsap.utils.toArray('.feature-card').forEach((card, i) => {
+                gsap.from(card, {
+                    opacity: 0,
+                    y: 40,
+                    duration: 0.8,
+                    delay: i * 0.1,
+                    ease: 'power2.out',
+                    scrollTrigger: {
+                        trigger: card,
+                        start: 'top 85%',
+                        toggleActions: 'play none none none'
+                    }
+                });
+            });
+
+            // Animate pricing cards
+            gsap.utils.toArray('.pricing-card').forEach((card, i) => {
+                gsap.from(card, {
+                    opacity: 0,
+                    scale: 0.9,
+                    y: 50,
+                    duration: 0.8,
+                    delay: i * 0.15,
+                    ease: 'power3.out',
+                    scrollTrigger: {
+                        trigger: card,
+                        start: 'top 85%',
+                        toggleActions: 'play none none none'
+                    }
+                });
+            });
+        } else {
+            // Fallback: Intersection Observer for fade-in animations
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, observerOptions);
+
+            // Observe all sections for fade-in
+            document.querySelectorAll('section').forEach(section => {
+                section.style.opacity = '0';
+                section.style.transform = 'translateY(20px)';
+                section.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+                observer.observe(section);
+            });
+        }
+    </script>
 </body>
+
 </html>

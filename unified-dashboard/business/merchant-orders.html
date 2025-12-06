@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orders - Business Dashboard</title>
+    <link rel="stylesheet" href="../assets/css/global.css">
+    <script src="../assets/js/config.js"></script>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .sidebar-logo {
+            font-size: 32px;
+            line-height: 1;
+            letter-spacing: -3px;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-nav {
+            padding: 16px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: var(--gray-700);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--gray-50);
+            color: var(--primary);
+        }
+
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            padding: 32px;
+            background: var(--gray-50);
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin: 0 0 8px 0;
+        }
+
+        .page-subtitle {
+            color: var(--gray-600);
+            margin: 0;
+        }
+
+        .orders-grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .order-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+        }
+
+        .order-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .order-id {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .order-status {
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-confirmed {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-preparing {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .status-out_for_delivery {
+            background: #fce7f3;
+            color: #9f1239;
+        }
+
+        .status-delivered {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .order-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .detail-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .tracking-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--gray-200);
+        }
+
+        .tracking-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .tracking-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tracking-icon {
+            font-size: 20px;
+        }
+
+        .tracking-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .tracking-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-200);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 64px 24px;
+            background: white;
+            border-radius: 12px;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .tracking-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tracking-modal.active {
+            display: flex;
+        }
+
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            position: relative;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray-500);
+        }
+
+        .map-container {
+            width: 100%;
+            height: 300px;
+            background: var(--gray-100);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-600);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <span class="doc">Doc</span><span class="little">Little</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="business-dashboard.html" class="nav-item">📊 Dashboard</a>
+                <a href="products.html" class="nav-item">📦 Products</a>
+                <a href="merchant-orders.html" class="nav-item active">📦 Orders</a>
+                <a href="settings.html" class="nav-item">⚙️ Settings</a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">Orders</h1>
+                <p class="page-subtitle">Manage and track customer orders</p>
+            </div>
+
+            <div class="orders-grid" id="ordersList">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📦</div>
+                    <p>Loading orders...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Tracking Modal -->
+    <div class="tracking-modal" id="trackingModal">
+        <div class="modal-overlay" onclick="closeTrackingModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Order Tracking</h2>
+                <button class="modal-close" onclick="closeTrackingModal()">×</button>
+            </div>
+            <div id="trackingModalBody">
+                <!-- Tracking content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.API_BASE || 'http://localhost:4000';
+        const MERCHANT_API = `${API_BASE}/api`;
+
+        // Check authentication
+        if (sessionStorage.getItem('authenticated') !== 'true') {
+            window.location.href = '../login.html';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadOrders();
+            // Refresh every 30 seconds
+            setInterval(loadOrders, 30000);
+        });
+
+        async function loadOrders() {
+            try {
+                const response = await fetch(`${MERCHANT_API}/orders`, {
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '../login.html';
+                    return;
+                }
+
+                if (response.status === 403) {
+                    const errorData = await response.json();
+                    document.getElementById('ordersList').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">⚠️</div>
+                            <h3>Merchant Account Required</h3>
+                            <p>${errorData.message || 'Your account is not associated with a merchant.'}</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.orders) {
+                    displayOrders(data.orders);
+                } else {
+                    document.getElementById('ordersList').innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📦</div>
+                            <p>No orders yet</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                document.getElementById('ordersList').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">❌</div>
+                        <p>Failed to load orders</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayOrders(orders) {
+            const grid = document.getElementById('ordersList');
+
+            if (orders.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📦</div>
+                        <p>No orders yet</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = orders.map(order => createOrderCard(order)).join('');
+        }
+
+        function createOrderCard(order) {
+            const statusClass = `status-${order.status || order.delivery_status || 'pending'}`;
+            const statusText = (order.delivery_status || order.status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+            const trackingInfo = order.delivery_status ? `
+                <div class="tracking-section">
+                    <div class="tracking-header">
+                        <div class="tracking-status">
+                            <span class="tracking-icon">🚚</span>
+                            <span><strong>${statusText}</strong></span>
+                        </div>
+                    </div>
+                    ${order.driver_name ? `
+                        <div class="tracking-info">
+                            <div class="detail-item">
+                                <span class="detail-label">Driver</span>
+                                <span class="detail-value">${order.driver_name}</span>
+                            </div>
+                            ${order.driver_phone ? `
+                                <div class="detail-item">
+                                    <span class="detail-label">Phone</span>
+                                    <span class="detail-value">${order.driver_phone}</span>
+                                </div>
+                            ` : ''}
+                            ${order.estimated_arrival ? `
+                                <div class="detail-item">
+                                    <span class="detail-label">ETA</span>
+                                    <span class="detail-value">${new Date(order.estimated_arrival).toLocaleString()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+                    <div class="tracking-actions">
+                        <button class="btn btn-primary" onclick="viewTracking('${order.id}')">View Tracking</button>
+                        <button class="btn btn-secondary" onclick="updateTracking('${order.id}')">Update Tracking</button>
+                    </div>
+                </div>
+            ` : `
+                <div class="tracking-section">
+                    <p style="color: var(--gray-600); font-size: 14px;">No tracking information available</p>
+                    <button class="btn btn-secondary" onclick="updateTracking('${order.id}')" style="margin-top: 8px;">Add Tracking</button>
+                </div>
+            `;
+
+            return `
+                <div class="order-card">
+                    <div class="order-header">
+                        <div>
+                            <div class="order-id">Order #${order.id.substring(0, 8)}</div>
+                            <div style="font-size: 12px; color: var(--gray-600); margin-top: 4px;">
+                                ${new Date(order.created_at).toLocaleString()}
+                            </div>
+                        </div>
+                        <span class="order-status ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="order-details">
+                        <div class="detail-item">
+                            <span class="detail-label">Customer</span>
+                            <span class="detail-value">${order.customer_name || order.customer_email || 'N/A'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Email</span>
+                            <span class="detail-value">${order.customer_email || 'N/A'}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Total</span>
+                            <span class="detail-value">$${parseFloat(order.total_amount || 0).toFixed(2)}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Quantity</span>
+                            <span class="detail-value">${order.quantity || 0}</span>
+                        </div>
+                    </div>
+                    ${trackingInfo}
+                </div>
+            `;
+        }
+
+        async function viewTracking(orderId) {
+            try {
+                const response = await fetch(`${MERCHANT_API}/orders/${orderId}/tracking`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.tracking) {
+                        showTrackingModal(data.tracking, orderId);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading tracking:', error);
+                alert('Failed to load tracking information');
+            }
+        }
+
+        function showTrackingModal(tracking, orderId) {
+            const modal = document.getElementById('trackingModal');
+            const body = document.getElementById('trackingModalBody');
+
+            const mapHtml = tracking.current_location ? `
+                <div class="map-container">
+                    <div>
+                        <div style="font-size: 48px; margin-bottom: 8px;">📍</div>
+                        <div>Lat: ${tracking.current_location.latitude.toFixed(6)}</div>
+                        <div>Lng: ${tracking.current_location.longitude.toFixed(6)}</div>
+                        ${tracking.current_location.address ? `<div style="margin-top: 8px; color: var(--gray-700);">${tracking.current_location.address}</div>` : ''}
+                    </div>
+                </div>
+            ` : '<div class="map-container">No location data available</div>';
+
+            body.innerHTML = `
+                <div>
+                    <div style="margin-bottom: 16px;">
+                        <strong>Order ID:</strong> ${orderId.substring(0, 8)}
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <strong>Status:</strong> ${tracking.delivery_status || 'pending'}
+                    </div>
+                    ${tracking.driver_name ? `
+                        <div style="margin-bottom: 16px;">
+                            <strong>Driver:</strong> ${tracking.driver_name}
+                            ${tracking.driver_phone ? ` (${tracking.driver_phone})` : ''}
+                        </div>
+                    ` : ''}
+                    ${tracking.estimated_arrival ? `
+                        <div style="margin-bottom: 16px;">
+                            <strong>Estimated Arrival:</strong> ${new Date(tracking.estimated_arrival).toLocaleString()}
+                        </div>
+                    ` : ''}
+                    ${mapHtml}
+                    ${tracking.events && tracking.events.length > 0 ? `
+                        <div style="margin-top: 24px;">
+                            <strong>Tracking Events:</strong>
+                            <div style="margin-top: 12px;">
+                                ${tracking.events.map(event => `
+                                    <div style="padding: 8px; background: var(--gray-50); border-radius: 6px; margin-bottom: 8px;">
+                                        <div style="font-weight: 600;">${event.status || 'Update'}</div>
+                                        <div style="font-size: 12px; color: var(--gray-600);">${new Date(event.timestamp).toLocaleString()}</div>
+                                        ${event.message ? `<div style="margin-top: 4px;">${event.message}</div>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            modal.classList.add('active');
+        }
+
+        function closeTrackingModal() {
+            document.getElementById('trackingModal').classList.remove('active');
+        }
+
+        function updateTracking(orderId) {
+            const status = prompt('Enter delivery status (pending, confirmed, preparing, out_for_delivery, delivered):');
+            if (!status) return;
+
+            const driverName = prompt('Enter driver name (optional):') || '';
+            const driverPhone = prompt('Enter driver phone (optional):') || '';
+            const latitude = parseFloat(prompt('Enter latitude (optional):') || '0');
+            const longitude = parseFloat(prompt('Enter longitude (optional):') || '0');
+            const address = prompt('Enter address (optional):') || '';
+
+            const updateData = {
+                delivery_status: status
+            };
+
+            if (driverName) updateData.driver_name = driverName;
+            if (driverPhone) updateData.driver_phone = driverPhone;
+            if (latitude && longitude) {
+                updateData.latitude = latitude;
+                updateData.longitude = longitude;
+            }
+            if (address) updateData.address = address;
+
+            fetch(`${MERCHANT_API}/orders/${orderId}/tracking`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updateData)
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Tracking updated successfully!');
+                        loadOrders();
+                    } else {
+                        alert('Failed to update tracking: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating tracking:', error);
+                    alert('Failed to update tracking');
+                });
+        }
+    </script>
+</body>
+
+</html>

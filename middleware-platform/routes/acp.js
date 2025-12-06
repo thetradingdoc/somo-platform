@@ -314,14 +314,50 @@ router.post('/payments/authorize', async (req, res) => {
 
         // Forward to merchant
         const merchant = db.getMerchant(cart.merchant_id);
+        if (!merchant) {
+            return res.status(404).json(
+                AP2Adapter.createErrorResponse('merchant_not_found', 'Merchant not found')
+            );
+        }
+
         const merchantOrder = AP2Adapter.toMerchantOrderFormat(cart, cart_mandate, payment_mandate);
 
+        // SECURITY: Add error handling for merchant API calls
+        let merchantResult;
+        try {
         const orderResponse = await axios.post(
             `${merchant.api_url}/api/orders`,
-            merchantOrder
-        );
-
-        const merchantResult = orderResponse.data;
+                merchantOrder,
+                {
+                    timeout: 10000, // 10 second timeout
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+            merchantResult = orderResponse.data;
+        } catch (error) {
+            console.error('❌ Merchant API call failed:', error.message);
+            
+            // Determine error type
+            if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+                return res.status(503).json(
+                    AP2Adapter.createErrorResponse('merchant_unavailable', 'Merchant service is temporarily unavailable')
+                );
+            }
+            
+            if (error.response) {
+                // Merchant returned an error response
+                return res.status(error.response.status || 500).json(
+                    AP2Adapter.createErrorResponse('merchant_error', error.response.data?.error || 'Merchant rejected the order')
+                );
+            }
+            
+            // Unknown error
+            return res.status(500).json(
+                AP2Adapter.createErrorResponse('merchant_error', 'Failed to communicate with merchant service')
+            );
+        }
 
         // Create AP2 transaction record
         const transactionId = uuidv4();
@@ -345,7 +381,7 @@ router.post('/payments/authorize', async (req, res) => {
             platform: 'ap2',
             platform_order_id: transactionId,
             merchant_order_id: merchantResult.order.id,
-            product_id: cart.items[0].product_id,
+            product_id: cart.items && cart.items.length > 0 ? cart.items[0].product_id : null,
             amount: cart.total,
             status: 'completed',
             customer_email: cart_mandate.cart_details?.customer_email || 'ap2@customer.com'

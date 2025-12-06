@@ -5,6 +5,8 @@
  */
 
 const twilio = require('twilio');
+const UsageMonitor = require('./usage-monitor');
+const db = require('../database');
 
 class SMSService {
     /**
@@ -26,8 +28,13 @@ class SMSService {
     /**
      * Send payment link via SMS
      * Uses Twilio if configured, otherwise simulates
+     * @param {string} phoneNumber - Recipient phone number
+     * @param {string} paymentLink - Payment link URL
+     * @param {object} orderDetails - Order details (product_name, amount, merchant_name)
+     * @param {string} customerId - Optional customer ID for usage tracking
+     * @param {string} merchantId - Optional merchant ID for usage tracking
      */
-    static async sendPaymentLink(phoneNumber, paymentLink, orderDetails) {
+    static async sendPaymentLink(phoneNumber, paymentLink, orderDetails, customerId = null, merchantId = null) {
         try {
             const client = this.getTwilioClient();
             const fromNumber = process.env.TWILIO_PHONE_NUMBER;
@@ -40,6 +47,7 @@ class SMSService {
 
             // Format SMS message
             const message = this.formatPaymentMessage(paymentLink, orderDetails);
+            const messageSegments = Math.ceil(message.length / 160); // SMS segments (160 chars each)
 
             // If Twilio is configured, send real SMS
             if (client && fromNumber) {
@@ -48,6 +56,7 @@ class SMSService {
                 console.log(`From: ${fromNumber}`);
                 console.log(`To: ${formattedPhone}`);
                 console.log(`Message Length: ${message.length} characters`);
+                console.log(`Message Segments: ${messageSegments}`);
                 console.log(`Message:\n${message}`);
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
@@ -62,6 +71,23 @@ class SMSService {
                     console.log(`   Message SID: ${result.sid}`);
                     console.log(`   Status: ${result.status}`);
                     console.log(`   To: ${result.to}\n`);
+
+                    // Log SMS usage if customer/merchant info available
+                    if (customerId || merchantId) {
+                        try {
+                            UsageMonitor.logSMSUsage(
+                                customerId,
+                                merchantId,
+                                formattedPhone,
+                                'outbound',
+                                result.sid,
+                                messageSegments
+                            );
+                        } catch (logError) {
+                            console.warn('⚠️  Failed to log SMS usage:', logError.message);
+                            // Don't fail SMS send if logging fails
+                        }
+                    }
 
                     return {
                         success: true,

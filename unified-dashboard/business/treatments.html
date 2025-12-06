@@ -357,7 +357,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
+                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">VC</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Business Owner</div>
@@ -405,7 +405,7 @@
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
-        const MERCHANT_API = 'http://localhost:3000';
+        const MERCHANT_API = `${API_BASE}/api`; // Use API_BASE instead of hardcoded localhost
         let userData = null;
 
         // Check authentication
@@ -413,7 +413,14 @@
             window.location.href = '../login.html';
         }
 
-        userData = JSON.parse(sessionStorage.getItem('user'));
+        // Safe JSON.parse with error handling
+        try {
+            const userStr = sessionStorage.getItem('user');
+            userData = userStr ? JSON.parse(userStr) : null;
+        } catch (error) {
+            console.error('Error parsing user data from sessionStorage:', error);
+            userData = null;
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             loadUserInfo();
@@ -422,21 +429,83 @@
 
         function loadUserInfo() {
             if (userData) {
-                document.getElementById('userName').textContent = userData.name;
-                // Logo is now static HTML, no need to update
-                const initials = userData.name.split(' ').map(n => n[0]).join('');
-                document.getElementById('userAvatar').textContent = initials;
+                const userNameEl = document.getElementById('userName');
+                const userAvatarEl = document.getElementById('userAvatar');
+                if (userNameEl && userData.name) {
+                    userNameEl.textContent = userData.name;
+                }
+                if (userAvatarEl && userData.name) {
+                    const initials = userData.name.split(' ').map(n => n[0]).join('');
+                    userAvatarEl.textContent = initials;
+                }
             }
         }
 
         async function loadProducts() {
             try {
-                // Fetch wellness products from merchant shop
-                const response = await fetch(`${MERCHANT_API}/api/products`);
-                const data = await response.json();
+                // Fetch wellness products from merchant shop (authenticated)
+                const response = await fetch(`${MERCHANT_API}/products`, {
+                    credentials: 'include', // Send session cookie
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.status === 401) {
+                    // Session expired, redirect to login
+                    window.location.href = '../login.html';
+                    return;
+                }
+                
+                if (response.status === 403) {
+                    // No merchant associated
+                    let errorData = {};
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        console.warn('Could not parse error response:', e);
+                    }
+                    const productsGrid = document.getElementById('productsGrid');
+                    if (productsGrid) {
+                        productsGrid.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">⚠️</div>
+                                <h3>Merchant Account Required</h3>
+                                <p>${errorData.message || 'Your account is not associated with a merchant. Please complete onboarding.'}</p>
+                                <button class="btn btn-primary" onclick="window.navigateToBusinessPage('settings.html')">Go to Settings</button>
+                            </div>
+                        `;
+                    }
+                    return;
+                }
+                
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    console.error('Error parsing response JSON:', e);
+                    const productsGrid = document.getElementById('productsGrid');
+                    if (productsGrid) {
+                        productsGrid.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">❌</div>
+                                <h3>Error Loading Products</h3>
+                                <p>Failed to parse server response. Please try again.</p>
+                            </div>
+                        `;
+                    }
+                    return;
+                }
 
                 if (data.success && data.products) {
                     displayProducts(data.products);
+                    
+                    // If no products, show setup prompt
+                    if (data.products.length === 0) {
+                        showProductSetupPrompt();
+                    }
+                } else if (data.success && data.products.length === 0) {
+                    showProductSetupPrompt();
                 }
             } catch (error) {
                 console.error('Error loading treatments:', error);
@@ -447,6 +516,22 @@
                     </div>
                 `;
             }
+        }
+
+        function showProductSetupPrompt() {
+            const grid = document.getElementById('productsGrid');
+            grid.innerHTML = `
+                <div class="empty-state" style="text-align: center; padding: 48px 24px;">
+                    <div class="empty-state-icon" style="font-size: 64px; margin-bottom: 16px;">📦</div>
+                    <h3 style="font-size: 20px; margin-bottom: 8px; color: var(--gray-900);">No Products Yet</h3>
+                    <p style="color: var(--gray-600); margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto;">
+                        Add your first product to enable voice orders. Customers can call and order via your AI voice agent.
+                    </p>
+                    <button class="btn btn-primary" onclick="addProduct()" style="padding: 12px 24px; font-size: 16px;">
+                        ➕ Add Your First Product
+                    </button>
+                </div>
+            `;
         }
 
         function displayProducts(products) {
@@ -513,12 +598,109 @@
             `;
         }
 
-        function addProduct() {
-            alert('➕ Add Treatment\n\nIn production, this would open a form to:\n\n• Enter treatment details\n• Set pricing\n• Upload images\n• Configure inventory\n• Add to catalog\n• Configure for voice agent recommendations');
+        async function addProduct() {
+            const name = prompt('Enter product name:');
+            if (!name) return;
+            
+            const price = parseFloat(prompt('Enter price:'));
+            if (isNaN(price) || price < 0) {
+                alert('Invalid price');
+                return;
+            }
+            
+            const inventory = parseInt(prompt('Enter inventory (default: 0):') || '0');
+            const description = prompt('Enter description (optional):') || '';
+            const category = prompt('Enter category (optional):') || '';
+            
+            try {
+                const response = await fetch(`${MERCHANT_API}/products`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        description,
+                        price,
+                        inventory,
+                        category
+                    })
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '../login.html';
+                    return;
+                }
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ Product created successfully!');
+                    loadProducts();
+                } else {
+                    alert(`❌ Error: ${data.error || 'Failed to create product'}`);
+                }
+            } catch (error) {
+                console.error('Error creating product:', error);
+                alert('❌ Failed to create product. Please try again.');
+        }
         }
 
-        function editProduct(productId) {
-            alert(`✏️ Edit Treatment: ${productId}\n\nIn production, this would open a modal to edit:\n\n• Treatment name\n• Description\n• Price\n• Stock levels\n• Images\n• Health benefits`);
+        async function editProduct(productId) {
+            const product = await fetch(`${MERCHANT_API}/products/${productId}`, {
+                credentials: 'include'
+            }).then(r => r.json()).then(d => d.product);
+            
+            if (!product) {
+                alert('Product not found');
+                return;
+            }
+            
+            const name = prompt('Enter product name:', product.name);
+            if (!name) return;
+            
+            const price = parseFloat(prompt('Enter price:', product.price));
+            if (isNaN(price) || price < 0) {
+                alert('Invalid price');
+                return;
+            }
+            
+            const inventory = parseInt(prompt('Enter inventory:', product.inventory || 0));
+            const description = prompt('Enter description:', product.description || '') || '';
+            const category = prompt('Enter category:', product.category || '') || '';
+            
+            try {
+                const response = await fetch(`${MERCHANT_API}/products/${productId}`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        description,
+                        price,
+                        inventory,
+                        category
+                    })
+                });
+                
+                if (response.status === 401) {
+                    window.location.href = '../login.html';
+                    return;
+                }
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert('✅ Product updated successfully!');
+                    loadProducts();
+                } else {
+                    alert(`❌ Error: ${data.error || 'Failed to update product'}`);
+                }
+            } catch (error) {
+                console.error('Error updating product:', error);
+                alert('❌ Failed to update product. Please try again.');
+            }
         }
 
         function viewStats(productId) {

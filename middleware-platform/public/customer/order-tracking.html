@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Track Your Order</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .tracking-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 32px;
+        }
+
+        .tracking-header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .tracking-header h1 {
+            font-size: 28px;
+            color: #1e40af;
+            margin-bottom: 8px;
+        }
+
+        .tracking-header p {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .order-input-section {
+            margin-bottom: 24px;
+        }
+
+        .order-input-section label {
+            display: block;
+            margin-bottom: 8px;
+            color: #374151;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .order-input-section input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .order-input-section input:focus {
+            outline: none;
+            border-color: #1e40af;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: #1e40af;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #1e3a8a;
+        }
+
+        .btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .tracking-status {
+            margin-top: 32px;
+            padding: 24px;
+            background: #f9fafb;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .tracking-status.active {
+            display: block;
+        }
+
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .status-icon {
+            font-size: 32px;
+        }
+
+        .status-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .status-description {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 16px;
+            line-height: 1.6;
+        }
+
+        .status-details {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+
+        .status-detail-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .status-detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-detail-label {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .status-detail-value {
+            color: #111827;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 16px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 24px;
+            color: #6b7280;
+            display: none;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #1e40af;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .simple-map {
+            width: 100%;
+            height: 200px;
+            border-radius: 8px;
+            margin-top: 16px;
+            border: 2px solid #e5e7eb;
+            display: none;
+        }
+
+        .simple-map.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="tracking-container">
+        <div class="tracking-header">
+            <h1>📍 Track Your Order</h1>
+            <p>Enter your order ID or email to track delivery</p>
+        </div>
+
+        <div class="order-input-section">
+            <label for="orderId">Order ID or Email</label>
+            <input type="text" id="orderId" placeholder="Enter order ID or your email address">
+        </div>
+
+        <button class="btn" onclick="trackOrder()">Track Order</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Loading tracking information...</p>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="tracking-status" id="trackingStatus">
+            <div class="status-header">
+                <span class="status-icon" id="statusIcon">📦</span>
+                <span class="status-title" id="statusTitle">Order Status</span>
+            </div>
+            <div class="status-description" id="statusDescription"></div>
+            <div class="status-details" id="statusDetails"></div>
+            <div class="simple-map" id="simpleMap"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.API_BASE || 'https://api.doclittle.site';
+
+        async function trackOrder() {
+            const orderIdInput = document.getElementById('orderId');
+            const orderId = orderIdInput.value.trim();
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('errorMessage');
+            const trackingStatus = document.getElementById('trackingStatus');
+
+            if (!orderId) {
+                showError('Please enter an order ID or email address');
+                return;
+            }
+
+            // Show loading, hide error and status
+            loading.classList.add('active');
+            errorMessage.classList.remove('active');
+            trackingStatus.classList.remove('active');
+
+            try {
+                // Try to get order by ID first, then by email
+                let response = await fetch(`${API_BASE}/api/orders/${orderId}/tracking`, {
+                    credentials: 'include'
+                });
+
+                // If not found by ID, try searching by email (would need a search endpoint)
+                if (response.status === 404) {
+                    // For now, show error - in production, you'd have a search endpoint
+                    throw new Error('Order not found. Please check your order ID or email.');
+                }
+
+                if (!response.ok) {
+                    throw new Error('Failed to load tracking information');
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load tracking');
+                }
+
+                displayTrackingStatus(data.tracking, data.order || {});
+            } catch (error) {
+                showError(error.message || 'Failed to track order. Please try again.');
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.classList.add('active');
+        }
+
+        function displayTrackingStatus(tracking, order) {
+            const trackingStatus = document.getElementById('trackingStatus');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusDescription = document.getElementById('statusDescription');
+            const statusDetails = document.getElementById('statusDetails');
+
+            const status = tracking.delivery_status || 'pending';
+            const statusConfig = {
+                'pending': { icon: '📦', title: 'Order Pending', color: '#6b7280' },
+                'preparing': { icon: '👨‍🍳', title: 'Preparing Your Order', color: '#f59e0b' },
+                'ready': { icon: '✅', title: 'Order Ready', color: '#10b981' },
+                'out_for_delivery': { icon: '🚗', title: 'Out for Delivery', color: '#3b82f6' },
+                'in_transit': { icon: '🚚', title: 'On the Way', color: '#3b82f6' },
+                'delivered': { icon: '🎉', title: 'Delivered!', color: '#10b981' },
+                'exception': { icon: '⚠️', title: 'Delivery Issue', color: '#ef4444' }
+            };
+
+            const config = statusConfig[status] || statusConfig['pending'];
+
+            statusIcon.textContent = config.icon;
+            statusTitle.textContent = config.title;
+            statusTitle.style.color = config.color;
+
+            // Build description
+            let description = '';
+            if (status === 'out_for_delivery' || status === 'in_transit') {
+                if (tracking.driver_name) {
+                    description = `Your driver ${tracking.driver_name} is on the way`;
+                } else {
+                    description = 'Your order is on the way to you';
+                }
+
+                if (tracking.current_location) {
+                    const location = tracking.current_location;
+                    if (location.address) {
+                        description += `. Currently near ${location.address}`;
+                    }
+                }
+
+                if (tracking.estimated_arrival) {
+                    const eta = new Date(tracking.estimated_arrival);
+                    const now = new Date();
+                    const minutesAway = Math.round((eta - now) / (1000 * 60));
+                    if (minutesAway > 0 && minutesAway < 120) {
+                        description += `. Estimated arrival in ${minutesAway} minute${minutesAway !== 1 ? 's' : ''}`;
+                    } else if (minutesAway <= 0) {
+                        description += `. Should arrive very soon!`;
+                    }
+                }
+            } else if (status === 'delivered') {
+                description = 'Your order has been delivered successfully!';
+            } else if (status === 'preparing') {
+                description = 'Your order is being prepared. We\'ll notify you when it\'s on the way.';
+            } else {
+                description = 'Your order is being processed.';
+            }
+
+            statusDescription.textContent = description;
+
+            // Build details
+            let detailsHTML = '';
+            if (order.customer_name) {
+                detailsHTML += `<div class="status-detail-item">
+                    <span class="status-detail-label">Order For:</span>
+                    <span class="status-detail-value">${order.customer_name}</span>
+                </div>`;
+            }
+            if (order.product_name) {
+                detailsHTML += `<div class="status-detail-item">
+                    <span class="status-detail-label">Product:</span>
+                    <span class="status-detail-value">${order.product_name}</span>
+                </div>`;
+            }
+            if (order.total_amount) {
+                detailsHTML += `<div class="status-detail-item">
+                    <span class="status-detail-label">Total:</span>
+                    <span class="status-detail-value">$${parseFloat(order.total_amount).toFixed(2)}</span>
+                </div>`;
+            }
+            if (tracking.driver_name) {
+                detailsHTML += `<div class="status-detail-item">
+                    <span class="status-detail-label">Driver:</span>
+                    <span class="status-detail-value">${tracking.driver_name}${tracking.driver_phone ? ` (${tracking.driver_phone})` : ''}</span>
+                </div>`;
+            }
+
+            statusDetails.innerHTML = detailsHTML || '<div class="status-detail-item"><span class="status-detail-value">No additional details available</span></div>';
+
+            // Show status
+            trackingStatus.classList.add('active');
+            errorMessage.classList.remove('active');
+        }
+
+        // Allow Enter key to submit
+        document.getElementById('orderId').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                trackOrder();
+            }
+        });
+    </script>
+</body>
+</html>
+

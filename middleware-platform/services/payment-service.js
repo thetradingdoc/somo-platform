@@ -101,21 +101,54 @@ class PaymentService {
     /**
      * Process payment after Stripe confirmation
      * Called from payment page after Stripe processes card
+     * SECURITY: Uses atomic check-and-set to prevent race conditions
      */
     static async processPayment(token, paymentIntentId) {
-        const result = this.getCheckoutByToken(token);
+        // SECURITY: Atomic check-and-set - mark token as used only if still pending
+        const tokenRecord = db.getPaymentToken(token);
 
-        if (!result.success) {
-            return result;
+        if (!tokenRecord) {
+            return {
+                success: false,
+                error: 'Invalid payment link'
+            };
         }
 
-        const checkout = result.checkout;
+        // Check if token expired (1 hour)
+        const createdAt = new Date(tokenRecord.created_at);
+        const now = new Date();
+        const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
 
-        // Mark token as used
-        this.markTokenAsUsed(token);
+        if (hoursSinceCreated > 1) {
+            return {
+                success: false,
+                error: 'Payment link expired'
+            };
+        }
+
+        // ATOMIC: Update token to 'used' only if it's still 'pending' or 'verified'
+        // This prevents double payment processing
+        const updateResult = db.updatePaymentTokenAtomic(token, 'pending', 'used');
+        
+        if (!updateResult.success) {
+            // Token was already used or in wrong state
+            return {
+                success: false,
+                error: updateResult.error || 'Payment link already used or invalid state'
+            };
+        }
+
+        // Get checkout details
+        const checkout = await db.getVoiceCheckout(tokenRecord.checkout_id);
+        if (!checkout) {
+            return {
+                success: false,
+                error: 'Checkout not found'
+            };
+        }
 
         // Update checkout with payment intent
-        db.updateVoiceCheckout(checkout.id, {
+        await db.updateVoiceCheckout(checkout.id, {
             payment_intent_id: paymentIntentId,
             status: 'paid'
         });
@@ -129,11 +162,14 @@ class PaymentService {
 
     /**
      * Get Stripe publishable key
-     * In production, use environment variables
+     * SECURITY: No hardcoded fallback - must be set in environment
      */
     static getStripePublishableKey() {
-        return process.env.STRIPE_PUBLISHABLE_KEY ||
-            'pk_test_51RtwREC2lZ523LLRNZ1jMSHLyP3sxoclvVCojERau0LqaaVsjlePaOdEdQNajchoQnxBDVSZii8goVyrfIKK7BYP000E1APRhO';
+        const key = process.env.STRIPE_PUBLISHABLE_KEY;
+        if (!key) {
+            throw new Error('STRIPE_PUBLISHABLE_KEY environment variable is required');
+        }
+        return key;
     }
 
     /**

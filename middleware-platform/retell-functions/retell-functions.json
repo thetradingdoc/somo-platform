@@ -264,6 +264,29 @@
     },
     {
       "type": "function",
+      "name": "get_order_tracking",
+      "description": "Get tracking information for a customer's order. Use when caller asks about order status, delivery, or where their order is. For cannabis dispensary orders, this provides real-time GPS tracking and delivery status.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "Order ID or confirmation number (if customer provides it)"
+          },
+          "customer_email": {
+            "type": "string",
+            "description": "Customer's email address (use if order_id not provided)"
+          },
+          "customer_phone": {
+            "type": "string",
+            "description": "Customer's phone number (alternative to email, use if order_id not provided)"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "type": "function",
       "name": "end_call",
       "description": "End the call when the customer is done or when the conversation is complete."
     }

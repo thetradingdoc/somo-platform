@@ -1,0 +1,605 @@
+cd /home/site/wwwroot/middleware-platform && NODE_ENV=production DB_NAME=middleware-prod.db HOME=/home node << 'EOF'
+/**
+ * COMPREHENSIVE TEST SCRIPT FOR AKIN-DUNBAR TENANT - AZURE VERSION
+ * Tests: Email, Database, Products, Architecture
+ * 
+ * This script explicitly uses middleware-prod.db
+ */
+
+const fs = require('fs');
+
+// Check what database files exist
+console.log('🔍 Checking available database files in /home:');
+try {
+  const files = fs.readdirSync('/home');
+  const dbFiles = files.filter(f => f.endsWith('.db'));
+  console.log(`   Found ${dbFiles.length} database files:`);
+  dbFiles.forEach(f => {
+    const stats = fs.statSync(`/home/${f}`);
+    const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+    console.log(`      - ${f} (${sizeMB} MB)`);
+  });
+} catch (error) {
+  console.log(`   ⚠️  Could not list files: ${error.message}`);
+}
+console.log('');
+
+// CRITICAL: Force production database path
+process.env.DB_NAME = 'middleware-prod.db';
+process.env.DB_PATH = '/home/middleware-prod.db';
+
+console.log('🔧 Environment setup:');
+console.log(`   DB_NAME: ${process.env.DB_NAME}`);
+console.log(`   DB_PATH: ${process.env.DB_PATH}`);
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log('');
+
+// Check if database file exists
+if (!fs.existsSync('/home/middleware-prod.db')) {
+  console.log('⚠️  WARNING: /home/middleware-prod.db does not exist!');
+  console.log('   Checking for alternative database files...');
+  
+  // Check for middleware.db
+  if (fs.existsSync('/home/middleware.db')) {
+    console.log('   ✅ Found /home/middleware.db - will use this instead');
+    process.env.DB_NAME = 'middleware.db';
+    process.env.DB_PATH = '/home/middleware.db';
+  }
+}
+console.log('');
+
+const db = require('./database');
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🧪 COMPREHENSIVE TENANT TEST: AKIN-DUNBAR');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log(`📁 Testing database: ${process.env.DB_PATH || '/home/middleware-prod.db'}\n`);
+
+const subdomain = 'akin-dunbar';
+const testEmail = 'akin.dunbar@gmail.com';
+
+let allTestsPassed = true;
+const results = {
+  merchant: { passed: false, data: null, error: null },
+  customer: { passed: false, data: null, error: null },
+  products: { passed: false, count: 0, samples: [], error: null },
+  orders: { passed: false, count: 0, error: null },
+  architecture: { passed: false, checks: [], error: null }
+};
+
+// ============================================
+// TEST 1: MERCHANT (Architecture)
+// ============================================
+console.log('1️⃣  TESTING MERCHANT (Architecture)...');
+try {
+  let merchant = null;
+  
+  // Try to get merchant by subdomain first
+  try {
+    merchant = db.getMerchantBySubdomain(subdomain);
+    console.log(`   ✅ Found merchant via getMerchantBySubdomain`);
+  } catch (error) {
+    console.log(`   ⚠️  getMerchantBySubdomain error: ${error.message}`);
+    console.log(`   🔄 Trying alternative method...`);
+    
+    // Fallback: get all merchants and search
+    try {
+      const allMerchants = db.getAllMerchants();
+      console.log(`   📋 Found ${allMerchants.length} merchants total`);
+      
+      if (allMerchants.length > 0) {
+        console.log(`   📋 Listing all merchants:`);
+        allMerchants.slice(0, 10).forEach((m, i) => {
+          console.log(`      ${i + 1}. ${m.name || 'N/A'} (subdomain: ${m.subdomain || 'N/A'}, id: ${m.id})`);
+        });
+      }
+      
+      merchant = allMerchants.find(m => {
+        if (m.subdomain && m.subdomain === subdomain) return true;
+        if (m.subdomain && m.subdomain.toLowerCase() === subdomain.toLowerCase()) return true;
+        if (m.name && m.name.toLowerCase().includes(subdomain)) return true;
+        return false;
+      });
+    } catch (getAllError) {
+      console.log(`   ❌ getAllMerchants error: ${getAllError.message}`);
+      
+      // Last resort: direct database query
+      try {
+        const Database = require('better-sqlite3');
+        const dbPath = process.env.DB_PATH || '/home/middleware-prod.db';
+        console.log(`   🔍 Trying direct DB query to: ${dbPath}`);
+        const directDb = Database(dbPath, { readonly: true });
+        
+        const tableInfo = directDb.prepare("PRAGMA table_info(merchants)").all();
+        const hasSubdomain = tableInfo.some(col => col.name === 'subdomain');
+        console.log(`   📋 Merchants table has subdomain column: ${hasSubdomain}`);
+        console.log(`   📋 Table columns: ${tableInfo.map(c => c.name).join(', ')}`);
+        
+        if (hasSubdomain) {
+          merchant = directDb.prepare('SELECT * FROM merchants WHERE subdomain = ?').get(subdomain);
+          if (!merchant) {
+            // Try case-insensitive
+            const allMerchants = directDb.prepare('SELECT * FROM merchants').all();
+            console.log(`   📋 Found ${allMerchants.length} merchants in direct query`);
+            allMerchants.slice(0, 5).forEach(m => {
+              console.log(`      - ${m.name || 'N/A'} (subdomain: ${m.subdomain || 'N/A'})`);
+            });
+            merchant = allMerchants.find(m => m.subdomain && m.subdomain.toLowerCase() === subdomain.toLowerCase());
+          }
+        } else {
+          merchant = directDb.prepare('SELECT * FROM merchants WHERE name LIKE ?').get(`%${subdomain}%`);
+        }
+        
+        if (merchant) {
+          console.log(`   ✅ Found merchant via direct DB query`);
+        }
+        
+        directDb.close();
+      } catch (directError) {
+        console.log(`   ❌ Direct DB query error: ${directError.message}`);
+        console.log(`   📋 Stack: ${directError.stack}`);
+      }
+    }
+  }
+  
+  if (merchant) {
+    results.merchant.passed = true;
+    results.merchant.data = {
+      id: merchant.id,
+      name: merchant.name,
+      subdomain: merchant.subdomain || 'N/A',
+      api_url: merchant.api_url || 'N/A',
+      status: merchant.status || 'N/A'
+    };
+    results.architecture.checks.push({
+      check: 'Merchant exists',
+      status: '✅ PASS',
+      details: `Found merchant: ${merchant.name} (ID: ${merchant.id})`
+    });
+    console.log(`   ✅ Merchant found: ${merchant.name} (ID: ${merchant.id})`);
+    console.log(`   📋 Subdomain: ${merchant.subdomain || 'N/A'}`);
+    console.log(`   🌐 API URL: ${merchant.api_url || 'N/A'}`);
+    console.log(`   📊 Status: ${merchant.status || 'N/A'}`);
+  } else {
+    results.merchant.error = 'Merchant not found';
+    results.architecture.checks.push({
+      check: 'Merchant exists',
+      status: '❌ FAIL',
+      details: 'Merchant not found in database'
+    });
+    console.log(`   ❌ Merchant not found for subdomain: ${subdomain}`);
+    allTestsPassed = false;
+  }
+} catch (error) {
+  results.merchant.error = error.message;
+  results.architecture.checks.push({
+    check: 'Merchant exists',
+    status: '❌ ERROR',
+    details: error.message
+  });
+  console.log(`   ❌ Error: ${error.message}`);
+  console.log(`   📋 Stack: ${error.stack}`);
+  allTestsPassed = false;
+}
+
+console.log('');
+
+// ============================================
+// TEST 2: CUSTOMER (Email)
+// ============================================
+console.log('2️⃣  TESTING CUSTOMER (Email)...');
+try {
+  let customer = null;
+  
+  try {
+    customer = db.getCustomerByEmail(testEmail);
+  } catch (error) {
+    console.log(`   ⚠️  getCustomerByEmail error: ${error.message}`);
+    console.log(`   🔄 Trying direct database query...`);
+    
+    // Try direct database query
+    try {
+      const Database = require('better-sqlite3');
+      const dbPath = process.env.DB_PATH || '/home/middleware-prod.db';
+      const directDb = Database(dbPath, { readonly: true });
+      
+      // Try case-insensitive search
+      customer = directDb.prepare('SELECT * FROM customers WHERE LOWER(email) = LOWER(?)').get(testEmail);
+      
+      if (!customer) {
+        // Try exact match
+        customer = directDb.prepare('SELECT * FROM customers WHERE email = ?').get(testEmail);
+      }
+      
+      if (!customer) {
+        // List some customers to see what's there
+        const sampleCustomers = directDb.prepare('SELECT email, name FROM customers LIMIT 10').all();
+        console.log(`   📋 Sample customers in database:`);
+        sampleCustomers.forEach((c, i) => {
+          console.log(`      ${i + 1}. ${c.email} (${c.name || 'N/A'})`);
+        });
+        
+        // Try to find similar
+        const similar = sampleCustomers.filter(c => 
+          c.email && (c.email.toLowerCase().includes('akin') || c.email.toLowerCase().includes('dunbar'))
+        );
+        if (similar.length > 0) {
+          console.log(`   🔍 Similar emails found:`);
+          similar.forEach(c => console.log(`      - ${c.email}`));
+        }
+      }
+      
+      directDb.close();
+    } catch (directError) {
+      console.log(`   ❌ Direct DB query error: ${directError.message}`);
+    }
+  }
+  
+  if (customer) {
+    results.customer.passed = true;
+    results.customer.data = {
+      id: customer.id,
+      email: customer.email,
+      name: customer.name,
+      merchant_id: customer.merchant_id,
+      email_verified: customer.email_verified === 1 || customer.email_verified === true,
+      customer_type: customer.customer_type || 'N/A',
+      password_hash: customer.password_hash ? 'SET' : 'NOT SET'
+    };
+    
+    // Verify merchant association
+    if (customer.merchant_id && results.merchant.data) {
+      if (customer.merchant_id === results.merchant.data.id) {
+        results.architecture.checks.push({
+          check: 'Customer-Merchant association',
+          status: '✅ PASS',
+          details: 'Customer correctly associated with merchant'
+        });
+        console.log(`   ✅ Customer correctly associated with merchant`);
+      } else {
+        results.architecture.checks.push({
+          check: 'Customer-Merchant association',
+          status: '⚠️  WARNING',
+          details: `Customer merchant_id (${customer.merchant_id}) does not match found merchant (${results.merchant.data.id})`
+        });
+        console.log(`   ⚠️  Warning: Customer merchant_id doesn't match merchant`);
+      }
+    }
+    
+    console.log(`   ✅ Customer found: ${customer.name || customer.email}`);
+    console.log(`   📧 Email: ${customer.email}`);
+    console.log(`   ✅ Email verified: ${results.customer.data.email_verified ? 'Yes' : 'No'}`);
+    console.log(`   🔑 Password: ${results.customer.data.password_hash}`);
+    console.log(`   🏢 Merchant ID: ${customer.merchant_id || 'None'}`);
+    console.log(`   👤 Type: ${customer.customer_type || 'N/A'}`);
+    
+    if (!results.customer.data.email_verified) {
+      results.architecture.checks.push({
+        check: 'Email verification',
+        status: '⚠️  WARNING',
+        details: 'Customer email is not verified - will cause auth issues'
+      });
+      console.log(`   ⚠️  Warning: Email not verified - may cause auth issues`);
+    }
+    
+    if (results.customer.data.password_hash === 'NOT SET') {
+      results.architecture.checks.push({
+        check: 'Password setup',
+        status: '⚠️  WARNING',
+        details: 'Customer password not set - cannot login'
+      });
+      console.log(`   ⚠️  Warning: Password not set - user cannot login`);
+    }
+  } else {
+    results.customer.error = 'Customer not found';
+    results.architecture.checks.push({
+      check: 'Customer exists',
+      status: '❌ FAIL',
+      details: `Customer with email ${testEmail} not found`
+    });
+    console.log(`   ❌ Customer not found for email: ${testEmail}`);
+    allTestsPassed = false;
+  }
+} catch (error) {
+  results.customer.error = error.message;
+  results.architecture.checks.push({
+    check: 'Customer exists',
+    status: '❌ ERROR',
+    details: error.message
+  });
+  console.log(`   ❌ Error: ${error.message}`);
+  console.log(`   📋 Stack: ${error.stack}`);
+  allTestsPassed = false;
+}
+
+console.log('');
+
+// ============================================
+// TEST 3: PRODUCTS
+// ============================================
+console.log('3️⃣  TESTING PRODUCTS...');
+try {
+  let products = [];
+  if (results.merchant.data) {
+    const merchantId = results.merchant.data.id;
+    
+    try {
+      products = db.getProductsByMerchant(merchantId);
+    } catch (error) {
+      console.log(`   ⚠️  getProductsByMerchant error: ${error.message}`);
+      console.log(`   🔄 Trying direct database query...`);
+      
+      // Try direct database query
+      const Database = require('better-sqlite3');
+      const dbPath = process.env.DB_PATH || '/home/middleware-prod.db';
+      const directDb = Database(dbPath, { readonly: true });
+      
+      products = directDb.prepare(`
+        SELECT * FROM products 
+        WHERE merchant_id = ? OR merchant_id IS NULL
+        ORDER BY created_at DESC
+      `).all(merchantId);
+      
+      console.log(`   📋 Found ${products.length} products via direct query`);
+      directDb.close();
+    }
+    
+    results.products.count = products.length;
+    results.products.samples = products.slice(0, 5).map(p => ({
+      id: p.id,
+      name: p.name || p.Name || 'Unnamed',
+      price: p.price || p.Price || 0,
+      inventory: p.inventory || p.Inventory || 0
+    }));
+    
+    if (products.length > 0) {
+      results.products.passed = true;
+      results.architecture.checks.push({
+        check: 'Products exist',
+        status: '✅ PASS',
+        details: `Found ${products.length} products`
+      });
+      console.log(`   ✅ Found ${products.length} products`);
+      console.log(`   📦 Sample products:`);
+      products.slice(0, 10).forEach((p, i) => {
+        const name = p.name || p.Name || 'Unnamed';
+        const price = p.price || p.Price || 0;
+        const inventory = p.inventory || p.Inventory || 0;
+        console.log(`      ${i + 1}. ${name} - $${price} (Inventory: ${inventory})`);
+      });
+      
+      // Check product structure
+      const sampleProduct = products[0];
+      const name = sampleProduct.name || sampleProduct.Name;
+      const price = sampleProduct.price || sampleProduct.Price;
+      
+      if (name && price !== undefined) {
+        results.architecture.checks.push({
+          check: 'Product schema',
+          status: '✅ PASS',
+          details: 'All required fields present'
+        });
+        console.log(`   ✅ Product schema is correct`);
+      } else {
+        results.architecture.checks.push({
+          check: 'Product schema',
+          status: '⚠️  WARNING',
+          details: `Missing fields: ${!name ? 'name' : ''} ${!price ? 'price' : ''}`.trim()
+        });
+        console.log(`   ⚠️  Warning: Some product fields may be missing`);
+      }
+    } else {
+      results.products.error = 'No products found';
+      results.architecture.checks.push({
+        check: 'Products exist',
+        status: '❌ FAIL',
+        details: 'No products found for merchant'
+      });
+      console.log(`   ❌ No products found for merchant`);
+      allTestsPassed = false;
+    }
+  } else {
+    results.products.error = 'Merchant not found';
+    console.log(`   ❌ Cannot test products - merchant not found`);
+    allTestsPassed = false;
+  }
+} catch (error) {
+  results.products.error = error.message;
+  results.architecture.checks.push({
+    check: 'Products query',
+    status: '❌ ERROR',
+    details: error.message
+  });
+  console.log(`   ❌ Error: ${error.message}`);
+  console.log(`   📋 Stack: ${error.stack}`);
+  allTestsPassed = false;
+}
+
+console.log('');
+
+// ============================================
+// TEST 4: ORDERS
+// ============================================
+console.log('4️⃣  TESTING ORDERS...');
+try {
+  if (results.merchant.data) {
+    const merchantId = results.merchant.data.id;
+    
+    try {
+      const orders = db.getOrdersByMerchant(merchantId);
+      
+      results.orders.count = orders.length;
+      results.architecture.checks.push({
+        check: 'Orders table exists',
+        status: '✅ PASS',
+        details: `Found ${orders.length} orders for merchant`
+      });
+      
+      if (orders.length > 0) {
+        results.orders.passed = true;
+        console.log(`   ✅ Found ${orders.length} orders`);
+        console.log(`   📋 Sample orders:`);
+        orders.slice(0, 5).forEach((o, i) => {
+          console.log(`      ${i + 1}. Order ${o.id.substring(0, 8)} - $${o.total_amount || 0} - ${o.status || 'N/A'}`);
+        });
+      } else {
+        console.log(`   ℹ️  No orders yet (this is OK)`);
+        results.orders.passed = true; // No orders is OK
+      }
+    } catch (error) {
+      // Orders table might not exist yet
+      console.log(`   ℹ️  Orders: ${error.message}`);
+      results.orders.passed = true; // This is OK if orders table doesn't exist
+      results.architecture.checks.push({
+        check: 'Orders table exists',
+        status: 'ℹ️  INFO',
+        details: `Orders: ${error.message}`
+      });
+    }
+  } else {
+    results.orders.error = 'Merchant not found';
+    console.log(`   ❌ Cannot test orders - merchant not found`);
+    allTestsPassed = false;
+  }
+} catch (error) {
+  results.orders.error = error.message;
+  results.architecture.checks.push({
+    check: 'Orders query',
+    status: '❌ ERROR',
+    details: error.message
+  });
+  console.log(`   ❌ Error: ${error.message}`);
+  allTestsPassed = false;
+}
+
+console.log('');
+
+// ============================================
+// TEST 5: ARCHITECTURE CHECKS
+// ============================================
+console.log('5️⃣  TESTING ARCHITECTURE...');
+
+// Check database schema via direct DB access
+try {
+  const Database = require('better-sqlite3');
+  const dbPath = process.env.DB_PATH || '/home/middleware-prod.db';
+  console.log(`   📁 Checking schema at: ${dbPath}`);
+  const directDb = Database(dbPath, { readonly: true });
+  
+  const tables = ['merchants', 'customers', 'products', 'orders'].map(tableName => {
+    const exists = directDb.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name=?
+    `).get(tableName);
+    return { name: tableName, exists: !!exists };
+  });
+  
+  const missingTables = tables.filter(t => !t.exists);
+  if (missingTables.length === 0) {
+    results.architecture.checks.push({
+      check: 'Database schema',
+      status: '✅ PASS',
+      details: 'All required tables exist'
+    });
+    console.log(`   ✅ All required tables exist`);
+    tables.forEach(t => {
+      const count = directDb.prepare(`SELECT COUNT(*) as count FROM ${t.name}`).get();
+      console.log(`      - ${t.name}: ${count.count} records`);
+    });
+  } else {
+    results.architecture.checks.push({
+      check: 'Database schema',
+      status: '⚠️  WARNING',
+      details: `Some tables missing: ${missingTables.map(t => t.name).join(', ')}`
+    });
+    console.log(`   ⚠️  Some tables missing: ${missingTables.map(t => t.name).join(', ')}`);
+  }
+  
+  directDb.close();
+} catch (error) {
+  results.architecture.error = error.message;
+  console.log(`   ⚠️  Could not check schema directly: ${error.message}`);
+  // Don't fail on this - schema check is informational
+}
+
+// Check foreign key relationships
+if (results.customer.data && results.merchant.data) {
+  if (results.customer.data.merchant_id === results.merchant.data.id) {
+    results.architecture.checks.push({
+      check: 'Foreign key integrity',
+      status: '✅ PASS',
+      details: 'Customer-Merchant relationship is valid'
+    });
+    console.log(`   ✅ Customer-Merchant relationship is valid`);
+  } else {
+    results.architecture.checks.push({
+      check: 'Foreign key integrity',
+      status: '⚠️  WARNING',
+      details: `Customer merchant_id (${results.customer.data.merchant_id}) doesn't match merchant (${results.merchant.data.id})`
+    });
+    console.log(`   ⚠️  Warning: Customer-Merchant relationship mismatch`);
+  }
+}
+
+results.architecture.passed = results.architecture.checks.every(c => 
+  c.status === '✅ PASS' || c.status === '⚠️  WARNING' || c.status === 'ℹ️  INFO'
+);
+
+console.log('');
+
+// ============================================
+// SUMMARY
+// ============================================
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('📊 TEST SUMMARY');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+console.log('\n✅ MERCHANT (Architecture):');
+console.log(`   Status: ${results.merchant.passed ? '✅ PASS' : '❌ FAIL'}`);
+if (results.merchant.data) {
+  console.log(`   Name: ${results.merchant.data.name}`);
+  console.log(`   ID: ${results.merchant.data.id}`);
+  console.log(`   Subdomain: ${results.merchant.data.subdomain || 'N/A'}`);
+}
+
+console.log('\n✅ CUSTOMER (Email):');
+console.log(`   Status: ${results.customer.passed ? '✅ PASS' : '❌ FAIL'}`);
+if (results.customer.data) {
+  console.log(`   Email: ${results.customer.data.email}`);
+  console.log(`   Name: ${results.customer.data.name || 'N/A'}`);
+  console.log(`   Verified: ${results.customer.data.email_verified ? 'Yes' : 'No'}`);
+  console.log(`   Password: ${results.customer.data.password_hash}`);
+  console.log(`   Merchant ID: ${results.customer.data.merchant_id || 'None'}`);
+}
+
+console.log('\n✅ PRODUCTS:');
+console.log(`   Status: ${results.products.passed ? '✅ PASS' : '❌ FAIL'}`);
+console.log(`   Count: ${results.products.count}`);
+if (results.products.samples.length > 0) {
+  console.log(`   Sample: ${results.products.samples[0].name}`);
+}
+
+console.log('\n✅ ORDERS:');
+console.log(`   Status: ${results.orders.passed ? '✅ PASS' : '❌ FAIL'}`);
+console.log(`   Count: ${results.orders.count}`);
+
+console.log('\n✅ ARCHITECTURE CHECKS:');
+results.architecture.checks.forEach(check => {
+  console.log(`   ${check.status} ${check.check}: ${check.details}`);
+});
+
+console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+const criticalTestsPassed = results.merchant.passed && results.customer.passed && results.products.passed;
+if (criticalTestsPassed) {
+  console.log('🎉 ALL CRITICAL TESTS PASSED!');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+} else {
+  console.log('⚠️  SOME TESTS FAILED - CHECK RESULTS ABOVE');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('\n💡 TROUBLESHOOTING:');
+  console.log('   1. Check which database file exists: ls -lh /home/*.db');
+  console.log('   2. Verify database path in environment variables');
+  console.log('   3. Check if data exists in the correct database file');
+}
+
+EOF

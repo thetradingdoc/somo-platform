@@ -13,6 +13,28 @@ const router = express.Router();
 const retellService = new RetellService();
 
 /**
+ * Helper to determine tenant type (shop vs clinic)
+ */
+function getTenantType(customer) {
+    if (!customer || !customer.merchant_id) {
+        return 'clinic'; // Default to clinic
+    }
+
+    const merchant = db.getMerchant(customer.merchant_id);
+    if (!merchant) {
+        return 'clinic'; // Default to clinic if merchant not found
+    }
+
+    // Check if merchant subdomain is 'akin-dunbar' (current shop tenant)
+    // In the future, we can add a tenant_type field to merchants table
+    if (merchant.subdomain === 'akin-dunbar') {
+        return 'shop';
+    }
+
+    return 'clinic'; // Default to clinic
+}
+
+/**
  * Helper to get customer from session
  */
 function getCustomerFromSession(req) {
@@ -59,8 +81,15 @@ router.get('/prompt', authLimiter, async (req, res) => {
             }
         }
 
-        // If no custom prompt, generate default
+        // If no custom prompt, generate default based on tenant type
         if (!currentPrompt) {
+            const tenantType = getTenantType(customer);
+            
+            if (tenantType === 'shop') {
+                // Load shop prompt
+                currentPrompt = retellService.loadShopPrompt();
+            } else {
+                // Load clinic prompt
             currentPrompt = retellService.generateClinicPrompt({
                 name: customer.company_name || customer.name || 'Your Clinic',
                 description: 'a healthcare practice',
@@ -69,6 +98,9 @@ router.get('/prompt', authLimiter, async (req, res) => {
                 address: ''
             });
         }
+        }
+
+        const tenantType = getTenantType(customer);
 
         res.json({
             success: true,
@@ -76,6 +108,7 @@ router.get('/prompt', authLimiter, async (req, res) => {
             agent_id: customer.retell_agent_id,
             agent_name: agentData?.agent_name || null,
             has_custom_prompt: !!customer.custom_prompt,
+            tenant_type: tenantType, // 'shop' or 'clinic'
             can_edit: true // All customers can edit for now
         });
     } catch (error) {
@@ -118,8 +151,24 @@ router.put('/prompt', authLimiter, async (req, res) => {
             });
         }
 
-        // Basic validation - ensure critical functions are mentioned
+        // Basic validation - ensure critical functions are mentioned (tenant-aware)
+        const tenantType = getTenantType(customer);
         const promptLower = prompt.toLowerCase();
+
+        if (tenantType === 'shop') {
+            // Shop tenant validation: should have product/order related content
+            const hasProduct = promptLower.includes('product') || promptLower.includes('item');
+            const hasOrder = promptLower.includes('order') || promptLower.includes('checkout') || promptLower.includes('purchase');
+
+            if (!hasProduct && !hasOrder) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Prompt should include instructions for product search or order management. Please review your prompt.',
+                    warning: true
+                });
+            }
+        } else {
+            // Clinic tenant validation: should have appointment/insurance content
         const hasAppointment = promptLower.includes('appointment') || promptLower.includes('schedule');
         const hasInsurance = promptLower.includes('insurance') || promptLower.includes('eligibility');
 
@@ -129,6 +178,7 @@ router.put('/prompt', authLimiter, async (req, res) => {
                 error: 'Prompt should include instructions for appointment booking or insurance verification. Please review your prompt.',
                 warning: true
             });
+            }
         }
 
         // Update customer's custom prompt in database
@@ -140,9 +190,14 @@ router.put('/prompt', authLimiter, async (req, res) => {
         // Update Retell agent if exists
         if (customer.retell_agent_id) {
             try {
+                const tenantType = getTenantType(customer);
+                const agentName = tenantType === 'shop' 
+                    ? `${customer.company_name || customer.name || 'Shop'} Voice Commerce Assistant`
+                    : `${customer.company_name || customer.name || 'Clinic'} Voice Assistant`;
+
                 const updateResult = await retellService.updateAgent(customer.retell_agent_id, {
-                    system_prompt: prompt.trim(),
-                    agent_name: `${customer.company_name || customer.name || 'Clinic'} Voice Assistant`
+                    general_prompt: prompt.trim(), // Retell API v2 uses 'general_prompt'
+                    agent_name: agentName
                 });
 
                 if (!updateResult.success) {

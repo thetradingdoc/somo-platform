@@ -1,11 +1,4 @@
-#terminal 1 merchant-shop
-cd merchant-shop
-export NVM_DIR="$HOME/.nvm"
-[ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"
-npm start
-
-
-#term2: middleware
+#terminal 1: middleware (Products & Orders now integrated)
 cd middleware-platform
 export NVM_DIR="$HOME/.nvm"
 [ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"

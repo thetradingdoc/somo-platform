@@ -169,9 +169,28 @@
                 if (!data.success) throw new Error(data.error);
 
                 checkout = data.checkout;
-                document.getElementById('productName').textContent = checkout.product_name;
-                document.getElementById('totalAmount').textContent = `$${checkout.amount.toFixed(2)}`;
-                document.getElementById('submitButton').textContent = `Pay $${checkout.amount.toFixed(2)}`;
+                
+                // CRITICAL: Validate checkout data and DOM elements
+                if (!checkout) {
+                    throw new Error('Invalid checkout data');
+                }
+
+                const productNameEl = document.getElementById('productName');
+                const totalAmountEl = document.getElementById('totalAmount');
+                const submitButtonEl = document.getElementById('submitButton');
+                const cardErrorsEl = document.getElementById('card-errors');
+                const loadingStateEl = document.getElementById('loadingState');
+                const paymentFormEl = document.getElementById('paymentForm');
+
+                if (productNameEl) productNameEl.textContent = checkout.product_name || 'Product';
+                if (totalAmountEl) {
+                    const amount = parseFloat(checkout.amount) || 0;
+                    totalAmountEl.textContent = `$${amount.toFixed(2)}`;
+                }
+                if (submitButtonEl) {
+                    const amount = parseFloat(checkout.amount) || 0;
+                    submitButtonEl.textContent = `Pay $${amount.toFixed(2)}`;
+                }
 
                 stripe = Stripe(data.stripe_publishable_key);
                 const elements = stripe.elements();
@@ -180,13 +199,15 @@
                 });
                 cardElement.mount('#card-element');
                 cardElement.on('change', e => {
-                    document.getElementById('card-errors').textContent = e.error ? e.error.message : '';
+                    if (cardErrorsEl) {
+                        cardErrorsEl.textContent = e.error ? e.error.message : '';
+                    }
                 });
 
-                document.getElementById('loadingState').classList.add('hidden');
-                document.getElementById('paymentForm').classList.remove('hidden');
+                if (loadingStateEl) loadingStateEl.classList.add('hidden');
+                if (paymentFormEl) paymentFormEl.classList.remove('hidden');
 
-                document.getElementById('submitButton').onclick = handlePay;
+                if (submitButtonEl) submitButtonEl.onclick = handlePay;
             } catch (err) {
                 showError(err.message);
             }
@@ -211,7 +232,7 @@
                     body: JSON.stringify({
                         payment_token: token,
                         payment_method_id: paymentMethod.id,
-                        amount: Math.round(checkout.amount * 100),
+                        amount: checkout.amount, // Amount in dollars, backend converts to cents
                         currency: 'usd'
                     })
                 });

@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DocLittle Admin</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <script src="../assets/js/config.js"></script>
-    <style>
+  <style>
     :root {
       --bg: #05060a;
       --panel: #101422;
@@ -40,8 +40,8 @@
       padding: 0;
     }
 
-      body {
-        margin: 0;
+    body {
+      margin: 0;
       background: var(--bg);
       color: var(--text);
       font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -49,16 +49,16 @@
 
     .shell {
       display: flex;
-        min-height: 100vh;
+      min-height: 100vh;
     }
 
     aside {
       width: 72px;
       background: var(--panel-2);
       border-right: 1px solid var(--border);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       padding: 20px 0;
       gap: 16px;
     }
@@ -96,9 +96,9 @@
     .nav-icon:hover:not(.active) {
       background: var(--panel);
       color: var(--text);
-      }
+    }
 
-      main {
+    main {
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -166,7 +166,7 @@
     }
 
     .stat-grid {
-        display: grid;
+      display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 16px;
       margin-top: 16px;
@@ -175,7 +175,7 @@
     .stat-card {
       background: linear-gradient(135deg, var(--panel-2), var(--panel));
       border: 2px solid var(--border);
-        border-radius: 16px;
+      border-radius: 16px;
       padding: 28px;
       text-align: left;
       transition: all 0.2s;
@@ -212,7 +212,7 @@
       text-transform: uppercase;
       letter-spacing: 0.8px;
       font-weight: 600;
-        display: flex;
+      display: flex;
       align-items: center;
       gap: 6px;
     }
@@ -285,7 +285,7 @@
     .lead-meta {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 12px;
+      gap: 12px;
       font-size: 14px;
     }
 
@@ -331,7 +331,7 @@
     .search-input-group {
       display: flex;
       align-items: center;
-        flex: 1;
+      flex: 1;
       min-width: 200px;
     }
 
@@ -395,8 +395,8 @@
     }
 
     .state-tag-inline {
-        display: inline-flex;
-        align-items: center;
+      display: inline-flex;
+      align-items: center;
       gap: 4px;
       padding: 4px 8px;
       background: var(--accent-blue);
@@ -524,7 +524,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-        justify-content: center;
+      justify-content: center;
       flex: 1;
       box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
     }
@@ -539,9 +539,9 @@
       background: var(--accent-green);
       color: white;
       border: none;
-        border-radius: 12px;
+      border-radius: 12px;
       font-size: 15px;
-        font-weight: 600;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
@@ -562,7 +562,7 @@
       background: var(--panel);
       color: var(--text);
       border: 2px solid var(--border);
-        border-radius: 12px;
+      border-radius: 12px;
       font-size: 15px;
       font-weight: 500;
       cursor: pointer;
@@ -787,7 +787,7 @@
     }
 
     .login-form input::placeholder {
-        color: #94a3b8;
+      color: #94a3b8;
     }
 
     .login-form button {
@@ -969,11 +969,11 @@
         font-size: 11px !important;
         padding: 4px 8px !important;
       }
-      }
-    </style>
-  </head>
+    }
+  </style>
+</head>
 
-  <body>
+<body>
   <div class="shell">
     <aside>
       <div class="logo">
@@ -1055,6 +1055,7 @@
           <button class="tab active" data-tab="dashboard">Dashboard</button>
           <button class="tab" data-tab="leads">Leads</button>
           <button class="tab" data-tab="pipeline">Pipeline</button>
+          <button class="tab" data-tab="clients">Clients</button>
         </div>
 
         <div class="content">
@@ -1103,14 +1104,15 @@
                 <!-- Header Section -->
                 <div class="search-header-mobile"
                   style="padding:32px 32px 24px;background:linear-gradient(135deg, var(--panel-2), var(--panel));border-radius:16px 16px 0 0;border:2px solid var(--border);border-bottom:none;">
-                  <div class="search-header-content"
-                    style="display:flex;flex-direction:column;gap:16px;">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+                  <div class="search-header-content" style="display:flex;flex-direction:column;gap:16px;">
+                    <div
+                      style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
                       <div style="flex:1;min-width:200px;">
                         <h2
                           style="margin:0 0 8px;font-size:32px;font-weight:700;background:linear-gradient(135deg, var(--accent-blue), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
                           Find Leads</h2>
-                        <p style="margin:0;color:var(--muted);font-size:15px;">Discover medical receptionist job postings
+                        <p style="margin:0;color:var(--muted);font-size:15px;">Discover medical receptionist job
+                          postings
                           and extract clinic contact information</p>
                       </div>
                     </div>
@@ -1271,12 +1273,98 @@
               </div>
             </div>
           </div>
+
+          <!-- Clients Tab -->
+          <div class="tab-content" id="tab-clients">
+            <div class="panel">
+              <h2 style="margin:0 0 16px;">Clients & Credits Management</h2>
+              <div class="stat-grid" id="clientsStats">
+                <div class="stat-card">
+                  <div class="stat-label">Total Clients</div>
+                  <div class="stat-value" id="totalClients">0</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Active Credits</div>
+                  <div class="stat-value" id="totalCredits">0</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-label">Low Credits (< 50)</div>
+                      <div class="stat-value" id="lowCredits">0</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-label">Incomplete Signups</div>
+                    <div class="stat-value" id="incompleteSignups">0</div>
+                  </div>
+                </div>
+              </div>
+              <div class="panel" style="padding:0;overflow:hidden;">
+                <div style="overflow-x:auto;">
+                  <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                      <tr style="background:var(--panel-2);border-bottom:2px solid var(--border);">
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Customer</th>
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Email</th>
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Type</th>
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Credits</th>
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Free Used</th>
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Status</th>
+                        <th
+                          style="padding:16px;text-align:left;font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:600;">
+                          Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="clientsTable">
+                      <tr>
+                        <td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">Loading...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
     </main>
   </div>
 
-    <script>
+  <!-- Credit Allocation Modal -->
+  <div id="creditModal"
+    style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+    <div
+      style="background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:400px;width:90%;">
+      <h2 style="margin:0 0 24px;font-size:24px;font-weight:700;">Allocate Credits</h2>
+      <div style="margin-bottom:16px;">
+        <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--muted);">Customer</label>
+        <input type="text" id="modalCustomerName" readonly
+          style="width:100%;padding:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+      </div>
+      <div style="margin-bottom:24px;">
+        <label style="display:block;margin-bottom:8px;font-size:13px;color:var(--muted);">Credits to Allocate</label>
+        <input type="number" id="modalCredits" min="1" value="100"
+          style="width:100%;padding:12px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);">
+      </div>
+      <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <button onclick="closeCreditModal()"
+          style="padding:10px 20px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-weight:500;">Cancel</button>
+        <button onclick="allocateCredits()"
+          style="padding:10px 20px;background:var(--accent);border:none;border-radius:8px;color:white;cursor:pointer;font-weight:500;">Allocate</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
     const API_BASE = window.location.hostname === 'localhost'
       ? 'http://localhost:4000'
       : window.location.origin;
@@ -1312,6 +1400,7 @@
           switchLeadsSubtab('search'); // Default to search tab
         }
         if (tab.dataset.tab === 'pipeline') loadPipeline();
+        if (tab.dataset.tab === 'clients') loadClients();
       });
     });
 
@@ -1578,7 +1667,7 @@
     function addState() {
       const select = document.getElementById('searchLocation');
       const selectedValue = select.value;
-      
+
       if (!selectedValue || selectedValue === '') return;
 
       // Find the option text
@@ -1604,7 +1693,7 @@
 
       // Reset dropdown to placeholder
       select.value = '';
-      
+
       updateSelectedStates();
     }
 
@@ -1741,12 +1830,12 @@
     document.getElementById('searchForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const query = document.getElementById('searchQuery').value;
-      
+
       // Get location from selected states array
       const location = window.selectedStates.length > 0
         ? window.selectedStates.map(s => s.value).join(',')
         : 'US';
-      
+
       const days = document.getElementById('searchDays').value;
       const autoSave = e.submitter?.id === 'autoSaveBtn';
       window.autoSaveMode = autoSave;
@@ -1851,7 +1940,7 @@
             `;
             }).join('') + '</div>'
             : '<div class="empty">No leads found</div>';
-          
+
           // Initial render
           renderFilteredResults();
         }
@@ -1863,24 +1952,24 @@
     // Filter results function
     function filterResults(filterType) {
       window.currentFilter = filterType;
-      
+
       // Update button active states
       document.querySelectorAll('.result-filter-btn').forEach(btn => {
         btn.classList.remove('active');
       });
       event.target.classList.add('active');
-      
+
       renderFilteredResults();
     }
 
     // Render filtered results
     function renderFilteredResults() {
       if (!window.currentSearchResults) return;
-      
+
       const hasContact = (lead) => (lead.clinic_phone && lead.clinic_phone.trim()) || (lead.clinic_email && lead.clinic_email.trim());
-      
+
       let filtered = window.currentSearchResults;
-      
+
       if (window.currentFilter === 'contactable') {
         filtered = filtered.filter(hasContact);
       } else if (window.currentFilter === 'processed') {
@@ -1890,15 +1979,15 @@
         // Show all
         filtered = filtered;
       }
-      
+
       const container = document.getElementById('filteredResults');
       if (!container) return;
-      
+
       if (filtered.length === 0) {
         container.innerHTML = '<div class="empty">No leads match this filter</div>';
         return;
       }
-      
+
       container.innerHTML = filtered.map(lead => {
         const contactable = hasContact(lead);
         const hasPhone = lead.clinic_phone && lead.clinic_phone.trim() !== '';
@@ -2025,8 +2114,130 @@
       }
     }
 
+    // Clients management
+    let currentCustomerId = null;
+
+    async function loadClients() {
+      try {
+        // Fetch all customers
+        const customersRes = await fetch(`${API_BASE}/api/admin/customers`);
+        if (!customersRes.ok) throw new Error('Failed to load customers');
+        const customers = await customersRes.json();
+
+        // Fetch incomplete signups
+        const incompleteRes = await fetch(`${API_BASE}/api/admin/incomplete-signups`);
+        const incomplete = incompleteRes.ok ? await incompleteRes.json() : { incomplete_signups: [] };
+
+        // Update stats
+        document.getElementById('totalClients').textContent = customers.customers?.length || 0;
+        document.getElementById('incompleteSignups').textContent = incomplete.incomplete_signups?.length || 0;
+
+        // Load credit balances for each customer
+        const clientsWithCredits = await Promise.all(
+          (customers.customers || []).map(async (customer) => {
+            try {
+              const creditsRes = await fetch(`${API_BASE}/api/usage-monitor/credits?customer_id=${customer.id}`);
+              if (creditsRes.ok) {
+                const creditsData = await creditsRes.json();
+                return { ...customer, credits: creditsData.credits || { balance: 0 } };
+              }
+            } catch (e) {
+              console.error(`Failed to load credits for ${customer.id}:`, e);
+            }
+            return { ...customer, credits: { balance: 0 } };
+          })
+        );
+
+        // Calculate stats
+        const totalCredits = clientsWithCredits.reduce((sum, c) => sum + (c.credits.balance || 0), 0);
+        const lowCredits = clientsWithCredits.filter(c => (c.credits.balance || 0) < 50).length;
+
+        document.getElementById('totalCredits').textContent = totalCredits;
+        document.getElementById('lowCredits').textContent = lowCredits;
+
+        // Render table
+        const tbody = document.getElementById('clientsTable');
+        if (clientsWithCredits.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted);">No clients found</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = clientsWithCredits.map(customer => {
+          const credits = customer.credits || {};
+          const balance = credits.balance || 0;
+          const freeUsed = credits.free_used || 0;
+          const freeAllocated = credits.free_allocated || 0;
+          const statusBadge = balance < 50
+            ? '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#ef4444;color:white;">Low</span>'
+            : balance < 100
+              ? '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#fbbf24;color:white;">Medium</span>'
+              : '<span style="display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#22c55e;color:white;">Good</span>';
+
+          return `
+            <tr style="border-top:1px solid var(--border);">
+              <td style="padding:16px;">${customer.name || customer.company_name || 'N/A'}</td>
+              <td style="padding:16px;">${customer.email}</td>
+              <td style="padding:16px;">${customer.customer_type || 'saas'}</td>
+              <td style="padding:16px;"><strong>${balance}</strong> min</td>
+              <td style="padding:16px;">${freeUsed}/${freeAllocated}</td>
+              <td style="padding:16px;">${statusBadge}</td>
+              <td style="padding:16px;">
+                <button onclick="openCreditModal('${customer.id}', '${(customer.name || customer.company_name || '').replace(/'/g, "\\'")}')" style="padding:8px 16px;background:var(--accent);border:none;border-radius:6px;color:white;cursor:pointer;font-size:13px;font-weight:500;">
+                  Allocate Credits
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading clients:', error);
+        document.getElementById('clientsTable').innerHTML =
+          '<tr><td colspan="7" style="text-align:center;padding:40px;color:#ef4444;">Error loading clients</td></tr>';
+      }
+    }
+
+    function openCreditModal(customerId, customerName) {
+      currentCustomerId = customerId;
+      document.getElementById('modalCustomerName').value = customerName;
+      document.getElementById('modalCredits').value = 100;
+      document.getElementById('creditModal').style.display = 'flex';
+    }
+
+    function closeCreditModal() {
+      document.getElementById('creditModal').style.display = 'none';
+      currentCustomerId = null;
+    }
+
+    async function allocateCredits() {
+      if (!currentCustomerId) return;
+
+      const credits = parseInt(document.getElementById('modalCredits').value);
+      if (!credits || credits < 1) {
+        alert('Please enter a valid number of credits');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/customers/${currentCustomerId}/credits`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credits })
+        });
+
+        if (!res.ok) throw new Error('Failed to allocate credits');
+
+        const data = await res.json();
+        alert(`Successfully allocated ${credits} credits!`);
+        closeCreditModal();
+        loadClients();
+      } catch (error) {
+        console.error('Error allocating credits:', error);
+        alert('Failed to allocate credits: ' + error.message);
+      }
+    }
+
     checkSession();
-    </script>
-  </body>
+  </script>
+</body>
 
 </html>

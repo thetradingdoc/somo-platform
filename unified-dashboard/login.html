@@ -61,30 +61,13 @@
         }
 
         .tab-buttons {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 32px;
-            background: #f7fafc;
-            padding: 4px;
-            border-radius: 12px;
+            display: none;
+            /* Hide tabs - login only */
         }
 
         .tab-btn {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            background: transparent;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            color: #718096;
-        }
-
-        .tab-btn.active {
-            background: white;
-            color: #1e40af;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: none;
+            /* Hide tab buttons */
         }
 
         .auth-form {
@@ -321,15 +304,11 @@
                     style="font-family: 'Verdana', Geneva, sans-serif; font-weight: 700;">Little</span><span
                     style="font-weight: 700;">.</span>
             </div>
-            <p>Medical Coding Assistant</p>
+            <p>24/7 Medical Assistant</p>
         </div>
 
         <div class="auth-body">
-            <div class="tab-buttons">
-                <button class="tab-btn active" onclick="switchTab('login')">Login</button>
-                <button class="tab-btn" onclick="switchTab('signup')">Sign Up</button>
-            </div>
-
+            <!-- Tab buttons removed - login only, signup redirects to /signup -->
             <div class="error-message" id="errorMessage"></div>
             <div class="success-message" id="successMessage"></div>
 
@@ -349,61 +328,44 @@
                     </div>
                 </div>
 
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <label
+                        style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: #4a5568; font-weight: normal;">
+                        <input type="checkbox" id="rememberMe" style="width: auto; margin: 0;">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="#" onclick="showForgotPassword(); return false;"
+                        style="color: #1e40af; text-decoration: none; font-size: 14px;">Forgot password?</a>
+                </div>
+
                 <button type="submit" class="btn-primary" id="loginBtn">
                     Sign In
                 </button>
             </form>
 
-            <!-- Signup Form -->
-            <form id="signupForm" class="auth-form">
-                <div class="form-group">
-                    <label for="signupName">Your Full Name</label>
-                    <input type="text" id="signupName" placeholder="John Doe" required>
-                </div>
+            <!-- Forgot Password Form -->
+            <form id="forgotPasswordForm" class="auth-form" style="display: none;">
+                <h2 style="margin-bottom: 16px; color: #1e293b;">Reset Password</h2>
+                <p style="color: #64748b; margin-bottom: 24px; font-size: 14px;">
+                    Enter your email address and we'll send you a link to reset your password.
+                </p>
 
                 <div class="form-group">
-                    <label for="signupClinicName">Clinic Name</label>
-                    <input type="text" id="signupClinicName" placeholder="Acme Medical Center" required>
-                    <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
-                        This will be your clinic URL: doclittle.site/your-clinic-name
-                    </small>
+                    <label for="forgotEmail">Email Address</label>
+                    <input type="email" id="forgotEmail" placeholder="you@company.com" required>
                 </div>
 
-                <div class="form-group">
-                    <label for="signupClinicPhone">Clinic Phone Number</label>
-                    <input type="tel" id="signupClinicPhone" placeholder="+15555551234" required>
-                    <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
-                        This is the number patients will call (E.164 format: +1XXXXXXXXXX)
-                    </small>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupEmail">Email Address</label>
-                    <input type="email" id="signupEmail" placeholder="you@clinic.com" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupPassword">Password</label>
-                    <div class="password-toggle">
-                        <input type="password" id="signupPassword" placeholder="••••••••" required minlength="8">
-                        <button type="button" class="password-toggle-btn"
-                            onclick="togglePassword('signupPassword')">👁️</button>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="signupConfirmPassword">Confirm Password</label>
-                    <div class="password-toggle">
-                        <input type="password" id="signupConfirmPassword" placeholder="••••••••" required>
-                        <button type="button" class="password-toggle-btn"
-                            onclick="togglePassword('signupConfirmPassword')">👁️</button>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-primary" id="signupBtn">
-                    Create Account
+                <button type="submit" class="btn-primary" id="forgotBtn">
+                    Send Reset Link
                 </button>
+
+                <div style="text-align: center; margin-top: 16px;">
+                    <a href="#" onclick="showLogin(); return false;"
+                        style="color: #1e40af; text-decoration: none; font-size: 14px;">Back to login</a>
+                </div>
             </form>
+
+            <!-- Signup form removed - users must use /signup page -->
 
             <div class="divider">
                 <span>or continue with</span>
@@ -428,7 +390,8 @@
                 Sign in with Google
             </button>
 
-            <div class="demo-section">
+            <!-- Test accounts - hidden in production, accessible via ?test=true query param -->
+            <div class="demo-section" id="testAccountsSection" style="display: none;">
                 <h3>Quick Test Accounts</h3>
 
                 <button class="demo-btn" onclick="loginDemo('insurer@doclittle.com', 'demo123')">
@@ -454,6 +417,17 @@
                         <div class="demo-btn-email">patient@doclittle.com</div>
                     </div>
                 </button>
+            </div>
+
+            <!-- Sign up link - redirects to /signup -->
+            <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+                <p style="color: #718096; font-size: 14px; margin-bottom: 12px;">
+                    Don't have an account?
+                </p>
+                <a href="/signup"
+                    style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
+                    Create Account
+                </a>
             </div>
         </div>
     </div>
@@ -495,59 +469,27 @@
             await login(email, password);
         });
 
-        // Signup Form Handler
-        document.getElementById('signupForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const name = document.getElementById('signupName').value;
-            const clinicName = document.getElementById('signupClinicName').value;
-            const clinicPhone = document.getElementById('signupClinicPhone').value;
-            const email = document.getElementById('signupEmail').value;
-            const password = document.getElementById('signupPassword').value;
-            const confirmPassword = document.getElementById('signupConfirmPassword').value;
-
-            if (!clinicName || clinicName.trim().length === 0) {
-                showError('Clinic name is required');
-                return;
-            }
-
-            if (!clinicPhone || clinicPhone.trim().length === 0) {
-                showError('Clinic phone number is required');
-                return;
-            }
-
-            // Validate phone number format (basic E.164 check)
-            if (!/^\+?[1-9]\d{1,14}$/.test(clinicPhone.replace(/\s+/g, ''))) {
-                showError('Please enter a valid phone number in E.164 format (e.g., +15555551234)');
-                return;
-            }
-
-            if (password !== confirmPassword) {
-                showError('Passwords do not match');
-                return;
-            }
-
-            if (password.length < 8) {
-                showError('Password must be at least 8 characters');
-                return;
-            }
-
-            await signup(name, email, password, clinicName, clinicPhone);
-        });
+        // Signup form removed - redirect to /signup instead
+        // If someone tries to access signup from login page, redirect them
+        if (window.location.hash === '#signup' || window.location.search.includes('signup=true')) {
+            window.location.href = '/signup';
+        }
 
         async function login(email, password) {
             const errorMessage = document.getElementById('errorMessage');
             const loginBtn = document.getElementById('loginBtn');
+            const rememberMe = document.getElementById('rememberMe').checked;
 
             hideMessages();
             loginBtn.disabled = true;
             loginBtn.textContent = 'Signing in...';
 
             try {
-                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                const response = await fetch(`${API_BASE}/api/customers/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    credentials: 'include', // Important for cookies
+                    body: JSON.stringify({ email, password, remember_me: rememberMe })
                 });
 
                 // Check if response is OK before parsing JSON
@@ -555,7 +497,7 @@
                     // Try to parse error response
                     try {
                         const errorData = await response.json();
-                        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+                        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`);
                     } catch (parseError) {
                         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
@@ -564,28 +506,31 @@
                 const data = await response.json();
 
                 if (data.success) {
+                    // Store customer data
                     sessionStorage.setItem('authenticated', 'true');
-                    sessionStorage.setItem('user', JSON.stringify(data.user));
-                    
-                    // Debug logging
-                    console.log('Login successful. User data:', data.user);
-                    console.log('User role:', data.user.role);
-                    console.log('User email:', data.user.email);
-                    
-                    // Redirect based on user role and email (check email first for specific accounts)
-                    // Use absolute paths (starting with /) to work regardless of current URL
-                    if (data.user.email === 'insurer@doclittle.com' || data.user.role === 'insurer_admin' || data.user.role === 'insurer') {
-                        console.log('Redirecting to insurer dashboard...');
-                        window.location.href = '/insurer/insurer-dashboard.html';
-                    } else if (data.user.email === 'patient@doclittle.com' || data.user.role === 'patient') {
-                        console.log('Redirecting to patient dashboard...');
-                        window.location.href = '/patients/patient-dashboard.html';
+                    sessionStorage.setItem('customer', JSON.stringify(data.customer));
+
+                    console.log('Login successful. Customer data:', data.customer);
+
+                    // Redirect to business dashboard on current subdomain
+                    // If on tenant subdomain, stay on it; otherwise redirect to subdomain
+                    const currentHostname = window.location.hostname;
+                    const subdomain = data.customer.subdomain;
+
+                    // Check if we're already on the correct subdomain
+                    if (subdomain && currentHostname.includes(`${subdomain}.doclittle.site`)) {
+                        // Already on correct subdomain - just go to dashboard
+                        window.location.href = '/business/business-dashboard.html';
+                    } else if (subdomain) {
+                        // Need to redirect to tenant subdomain
+                        const baseDomain = currentHostname.includes('localhost') ? 'localhost:4000' : 'doclittle.site';
+                        window.location.href = `https://${subdomain}.${baseDomain}/business/business-dashboard.html`;
                     } else {
-                        console.log('Redirecting to business dashboard...');
+                        // No subdomain - use current domain
                         window.location.href = '/business/business-dashboard.html';
                     }
                 } else {
-                    throw new Error(data.error || 'Login failed');
+                    throw new Error(data.error || data.message || 'Login failed');
                 }
             } catch (error) {
                 console.error('Login error:', error);
@@ -595,51 +540,60 @@
             }
         }
 
-        async function signup(name, email, password, clinicName, clinicPhone) {
-            const signupBtn = document.getElementById('signupBtn');
+        // Forgot Password Form Handler
+        document.getElementById('forgotPasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('forgotEmail').value;
+            await forgotPassword(email);
+        });
+
+        async function forgotPassword(email) {
+            const errorMessage = document.getElementById('errorMessage');
+            const forgotBtn = document.getElementById('forgotBtn');
 
             hideMessages();
-            signupBtn.disabled = true;
-            signupBtn.textContent = 'Creating account...';
+            forgotBtn.disabled = true;
+            forgotBtn.textContent = 'Sending...';
 
             try {
-                const response = await fetch(`${API_BASE}/api/auth/signup`, {
+                const response = await fetch(`${API_BASE}/api/customers/forgot-password`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        name, 
-                        email, 
-                        password, 
-                        clinic_name: clinicName,
-                        clinic_phone: clinicPhone
-                    })
+                    body: JSON.stringify({ email })
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    showSuccess('Account created! Setting up your clinic...');
-                    
-                    // Store user data
-                    sessionStorage.setItem('authenticated', 'true');
-                    sessionStorage.setItem('user', JSON.stringify(data.user));
-                    
-                    // Redirect to clinic-specific URL
-                    // For now, redirect to business dashboard (clinic_id is stored in session)
-                    // TODO: Set up routing for doclittle.site/clinicname
+                    showSuccess('Password reset link sent to your email. Please check your inbox.');
                     setTimeout(() => {
-                        window.location.href = '/business/business-dashboard.html';
-                    }, 2000);
+                        showLogin();
+                    }, 3000);
                 } else {
-                    throw new Error(data.error || 'Signup failed');
+                    throw new Error(data.error || data.message || 'Failed to send reset link');
                 }
             } catch (error) {
-                console.error('Signup error:', error);
-                showError(error.message || 'Failed to create account');
-                signupBtn.disabled = false;
-                signupBtn.textContent = 'Create Account';
+                console.error('Forgot password error:', error);
+                showError(error.message || 'Failed to send reset link');
+            } finally {
+                forgotBtn.disabled = false;
+                forgotBtn.textContent = 'Send Reset Link';
             }
         }
+
+        function showForgotPassword() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('forgotPasswordForm').style.display = 'block';
+            hideMessages();
+        }
+
+        function showLogin() {
+            document.getElementById('forgotPasswordForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            hideMessages();
+        }
+
+        // Signup function removed - signup is handled on /signup page
 
         function loginDemo(email, password) {
             document.getElementById('loginEmail').value = email;
@@ -713,20 +667,24 @@
             }
         };
 
-        function switchTab(tab) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.auth-form').forEach(form => form.classList.remove('active'));
+        // Tab switching removed - login only
+        // Show test accounts only if ?test=true is in URL (for testing purposes)
+        window.addEventListener('DOMContentLoaded', function () {
+            const urlParams = new URLSearchParams(window.location.search);
+            const isTestMode = urlParams.get('test') === 'true';
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-            if (tab === 'login') {
-                document.querySelectorAll('.tab-btn')[0].classList.add('active');
-                document.getElementById('loginForm').classList.add('active');
-            } else {
-                document.querySelectorAll('.tab-btn')[1].classList.add('active');
-                document.getElementById('signupForm').classList.add('active');
+            // Show test accounts only in test mode or localhost (staging)
+            if (isTestMode || isLocalhost) {
+                const testSection = document.getElementById('testAccountsSection');
+                if (testSection) {
+                    testSection.style.display = 'block';
+                }
             }
 
-            hideMessages();
-        }
+            // Always show login form
+            document.getElementById('loginForm').classList.add('active');
+        });
 
         function togglePassword(inputId) {
             const input = document.getElementById(inputId);

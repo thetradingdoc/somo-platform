@@ -1,0 +1,123 @@
+cd /home/site/wwwroot/middleware-platform && NODE_ENV=production HOME=/home node << 'EOF'
+/**
+ * FIX CUSTOMER LOGIN FOR AKIN-DUNBAR TENANT
+ * Check customer and set/reset password
+ */
+
+const Database = require('better-sqlite3');
+const bcrypt = require('bcryptjs');
+
+const dbPath = '/home/middleware-prod.db';
+const db = new Database(dbPath);
+
+const EMAIL = 'akin.dunbar@gmail.com';
+const NEW_PASSWORD = 'AkinDunbar2024!'; // Set a known password
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🔧 FIXING CUSTOMER LOGIN');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+// Step 1: Find customer
+console.log('1️⃣  FINDING CUSTOMER...\n');
+const customer = db.prepare('SELECT * FROM customers WHERE email = ?').get(EMAIL);
+
+if (!customer) {
+  console.log('❌ Customer not found!');
+  console.log(`   Email: ${EMAIL}\n`);
+  
+  // List all customers
+  console.log('📋 All customers in database:');
+  const all = db.prepare('SELECT id, email, name, merchant_id, password_hash IS NOT NULL as has_password FROM customers LIMIT 10').all();
+  all.forEach((c, i) => {
+    console.log(`   ${i + 1}. ${c.name} (${c.email})`);
+    console.log(`      ID: ${c.id}`);
+    console.log(`      Merchant: ${c.merchant_id || 'N/A'}`);
+    console.log(`      Has Password: ${c.has_password ? '✅' : '❌'}\n`);
+  });
+  
+  db.close();
+  process.exit(1);
+}
+
+console.log('✅ Customer found!');
+console.log(`   ID: ${customer.id}`);
+console.log(`   Name: ${customer.name}`);
+console.log(`   Email: ${customer.email}`);
+console.log(`   Merchant ID: ${customer.merchant_id || 'N/A'}`);
+console.log(`   Email Verified: ${customer.email_verified ? '✅' : '❌'}`);
+console.log(`   Has Password: ${customer.password_hash ? '✅' : '❌'}\n`);
+
+// Step 2: Check merchant
+if (customer.merchant_id) {
+  console.log('2️⃣  CHECKING MERCHANT...\n');
+  const merchant = db.prepare('SELECT * FROM merchants WHERE id = ?').get(customer.merchant_id);
+  if (merchant) {
+    console.log('✅ Merchant found!');
+    console.log(`   Name: ${merchant.name}`);
+    console.log(`   Subdomain: ${merchant.subdomain || 'N/A'}\n`);
+  } else {
+    console.log('⚠️  Merchant not found!\n');
+  }
+}
+
+// Step 3: Check terms acceptance
+console.log('3️⃣  CHECKING TERMS ACCEPTANCE...\n');
+const terms = db.prepare('SELECT * FROM terms_acceptance WHERE customer_id = ?').get(customer.id);
+if (terms) {
+  console.log('✅ Terms accepted!');
+  console.log(`   Version: ${terms.terms_version}`);
+  console.log(`   Accepted: ${terms.accepted_at}\n`);
+} else {
+  console.log('❌ Terms NOT accepted!\n');
+}
+
+// Step 4: Set/Reset password
+console.log('4️⃣  SETTING/RESETTING PASSWORD...\n');
+(async () => {
+  try {
+    const passwordHash = await bcrypt.hash(NEW_PASSWORD, 10);
+    
+    db.prepare('UPDATE customers SET password_hash = ? WHERE id = ?').run(passwordHash, customer.id);
+    
+    console.log('✅ Password set successfully!');
+    console.log(`   New Password: ${NEW_PASSWORD}\n`);
+    
+    // Verify it was set
+    const updated = db.prepare('SELECT password_hash FROM customers WHERE id = ?').get(customer.id);
+    if (updated.password_hash) {
+      console.log('✅ Password hash verified in database\n');
+    } else {
+      console.log('❌ Password hash NOT found after update!\n');
+    }
+
+    // Step 5: Verify login would work
+    console.log('5️⃣  VERIFYING PASSWORD...\n');
+    const updatedCustomer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customer.id);
+    if (updatedCustomer.password_hash) {
+      const match = await bcrypt.compare(NEW_PASSWORD, updatedCustomer.password_hash);
+      if (match) {
+        console.log('✅ Password verification successful!\n');
+      } else {
+        console.log('❌ Password verification FAILED!\n');
+      }
+    } else {
+      console.log('❌ Password hash still missing!\n');
+    }
+
+    db.close();
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('✅ CUSTOMER LOGIN FIX COMPLETE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    console.log('📋 LOGIN CREDENTIALS:');
+    console.log(`   Email: ${EMAIL}`);
+    console.log(`   Password: ${NEW_PASSWORD}\n`);
+  } catch (error) {
+    console.log(`❌ Error: ${error.message}\n`);
+    console.log(error.stack);
+    db.close();
+  }
+})();
+
+EOF
+

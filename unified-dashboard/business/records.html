@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,53 +8,239 @@
   <link rel="stylesheet" href="../assets/css/global.css">
   <script src="../assets/js/config.js"></script>
   <style>
-    :root { --primary:#1e40af; --primary-dark:#1e3a8a; --primary-light:#3b82f6; }
-    .layout { display:flex; min-height:100vh; }
-    .sidebar { width:260px; background:#fff; box-shadow:2px 0 10px rgba(0,0,0,0.05); position:fixed; height:100vh; overflow-y:auto; }
-    .sidebar-header { padding:24px; border-bottom:1px solid var(--gray-200); }
-    .sidebar-logo { font-size:32px; line-height:1; letter-spacing:-3px; color:#2d3748; margin-bottom:4px; }
-    .sidebar-logo .doc { font-family:'Times New Roman', Times, serif; font-style:italic; }
-    .sidebar-logo .little { font-family:'Verdana', Geneva, sans-serif; font-weight:700; }
-    .sidebar-subtitle { font-size:12px; color:var(--gray-500); margin-top:4px; }
-    .sidebar-nav { padding:16px; }
-    .nav-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; color:var(--gray-700); font-weight:500; cursor:pointer; transition:all .2s; margin-bottom:4px; text-decoration:none; }
-    .nav-item:hover { background:var(--gray-50); color:var(--primary); }
-    .nav-item.active { background:var(--primary); color:#fff; }
-    .nav-icon { font-size:20px; }
-    .sidebar-footer { padding:16px; border-top:1px solid var(--gray-200); position:absolute; bottom:0; width:260px; background:#fff; }
-    .user-info {
-            cursor: pointer;
-            transition: all 0.2s;
-        }
+    :root {
+      --primary: #1e40af;
+      --primary-dark: #1e3a8a;
+      --primary-light: #3b82f6;
+    }
 
-        .user-info:hover {
-            background: var(--gray-100);
-            transform: translateY(-1px); display:flex; align-items:center; gap:12px; padding:12px; border-radius:8px; background:var(--gray-50); }
-    .user-avatar { width:40px; height:40px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
-    .user-details { flex:1; }
-    .user-name { font-weight:600; font-size:14px; color:var(--gray-900); }
-    .logout-btn { background:none; border:none; color:var(--gray-500); cursor:pointer; padding:8px; border-radius:4px; transition:all .2s; }
-    .logout-btn:hover { background:var(--danger-light); color:var(--danger); }
-    .main-content { margin-left:260px; flex:1; padding:32px; background:var(--gray-50); }
-    .page-header { background:#fff; border-radius:12px; padding:24px; margin-bottom:16px; box-shadow:var(--shadow-md); display:flex; justify-content:space-between; align-items:flex-start; }
-    .page-title { font-size:26px; margin:0; }
-    .record-no { font-size:12px; color:var(--gray-500); }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:24px; }
-    .card { background:#fff; border-radius:12px; padding:20px; box-shadow:var(--shadow-md); }
-    .card h3 { margin:0 0 12px 0; font-size:16px; }
-    .kv { display:grid; grid-template-columns: 160px 1fr; row-gap:8px; column-gap:12px; }
-    .kv div { font-size:14px; }
-    .badge { padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:700; display:inline-block; }
-    .appt { display:flex; justify-content:space-between; border-bottom:1px solid var(--gray-200); padding:8px 0; font-size:14px; }
-    .appt:last-child { border-bottom:none; }
-    .actions { display:flex; gap:8px; }
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 260px;
+      background: #fff;
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .sidebar-logo {
+      font-size: 32px;
+      line-height: 1;
+      letter-spacing: -3px;
+      color: #2d3748;
+      margin-bottom: 4px;
+    }
+
+    .sidebar-logo .doc {
+      font-family: 'Times New Roman', Times, serif;
+      font-style: italic;
+    }
+
+    .sidebar-logo .little {
+      font-family: 'Verdana', Geneva, sans-serif;
+      font-weight: 700;
+    }
+
+    .sidebar-subtitle {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-top: 4px;
+    }
+
+    .sidebar-nav {
+      padding: 16px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--gray-700);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .2s;
+      margin-bottom: 4px;
+      text-decoration: none;
+    }
+
+    .nav-item:hover {
+      background: var(--gray-50);
+      color: var(--primary);
+    }
+
+    .nav-item.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .nav-icon {
+      font-size: 20px;
+    }
+
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--gray-200);
+      position: absolute;
+      bottom: 0;
+      width: 260px;
+      background: #fff;
+    }
+
+    .user-info {
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .user-info:hover {
+      background: var(--gray-100);
+      transform: translateY(-1px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--gray-50);
+    }
+
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .user-details {
+      flex: 1;
+    }
+
+    .user-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--gray-900);
+    }
+
+    .logout-btn {
+      background: none;
+      border: none;
+      color: var(--gray-500);
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 4px;
+      transition: all .2s;
+    }
+
+    .logout-btn:hover {
+      background: var(--danger-light);
+      color: var(--danger);
+    }
+
+    .main-content {
+      margin-left: 260px;
+      flex: 1;
+      padding: 32px;
+      background: var(--gray-50);
+    }
+
+    .page-header {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-md);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .page-title {
+      font-size: 26px;
+      margin: 0;
+    }
+
+    .record-no {
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .card h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      row-gap: 8px;
+      column-gap: 12px;
+    }
+
+    .kv div {
+      font-size: 14px;
+    }
+
+    .badge {
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      display: inline-block;
+    }
+
+    .appt {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 8px 0;
+      font-size: 14px;
+    }
+
+    .appt:last-child {
+      border-bottom: none;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
   </style>
 </head>
+
 <body>
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-logo"><span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span></div>
+        <div class="sidebar-logo"><span class="doc">Doc</span><span class="little">Little</span><span
+            style="font-weight:700;">.</span></div>
         <div class="sidebar-subtitle">Medical Coding Assistant</div>
       </div>
       <nav class="sidebar-nav">
@@ -63,7 +250,7 @@
         <a href="records.html" class="nav-item active"><span class="nav-icon">📁</span><span>Records</span></a>
         <a href="billing.html" class="nav-item"><span class="nav-icon">💳</span><span>Billing</span></a>
         <a href="agent.html" class="nav-item"><span class="nav-icon">🎙️</span><span>Voice Agent</span></a>
-        <a href="treatments.html" class="nav-item"><span class="nav-icon">🏷️</span><span>Treatments</span></a>
+        <a href="products.html" class="nav-item"><span class="nav-icon">📦</span><span>Products</span></a>
         <a href="settings.html" class="nav-item"><span class="nav-icon">⚙️</span><span>Settings</span></a>
       </nav>
     </aside>
@@ -84,31 +271,44 @@
         <div class="card">
           <h3>Demographics</h3>
           <div class="kv">
-            <div>Full Name</div><div id="pName">—</div>
-            <div>Phone</div><div id="pPhone">—</div>
-            <div>Email</div><div id="pEmail">—</div>
-            <div>Birth Date</div><div id="pDOB">—</div>
-            <div>Address</div><div id="pAddr">—</div>
+            <div>Full Name</div>
+            <div id="pName">—</div>
+            <div>Phone</div>
+            <div id="pPhone">—</div>
+            <div>Email</div>
+            <div id="pEmail">—</div>
+            <div>Birth Date</div>
+            <div id="pDOB">—</div>
+            <div>Address</div>
+            <div id="pAddr">—</div>
           </div>
         </div>
 
         <div class="card">
           <h3>Identifiers</h3>
           <div class="kv">
-            <div>FHIR Patient ID</div><div id="pFhir">—</div>
-            <div>Record Number</div><div id="pMRN">—</div>
+            <div>FHIR Patient ID</div>
+            <div id="pFhir">—</div>
+            <div>Record Number</div>
+            <div id="pMRN">—</div>
           </div>
         </div>
 
         <div class="card" style="grid-column:1 / -1;">
           <h3>Insurance & Coverage</h3>
           <div class="kv">
-            <div>Provider</div><div id="insProvider">—</div>
-            <div>Member ID</div><div id="insMember">—</div>
-            <div>Eligibility</div><div id="insEligibility">—</div>
-            <div>Copay</div><div id="insCopay">—</div>
-            <div>Deductible</div><div id="insDeductible">—</div>
-            <div>Coinsurance</div><div id="insCoinsurance">—</div>
+            <div>Provider</div>
+            <div id="insProvider">—</div>
+            <div>Member ID</div>
+            <div id="insMember">—</div>
+            <div>Eligibility</div>
+            <div id="insEligibility">—</div>
+            <div>Copay</div>
+            <div id="insCopay">—</div>
+            <div>Deductible</div>
+            <div id="insDeductible">—</div>
+            <div>Coinsurance</div>
+            <div id="insCoinsurance">—</div>
           </div>
           <div style="margin-top:12px; font-size:14px;">
             <div style="color:var(--gray-600);">Plan Summary</div>
@@ -151,25 +351,25 @@
       try {
         const r = await fetch(`${API_BASE}/fhir/Patient/${id}`);
         if (r.ok) return await r.json();
-      } catch {}
+      } catch { }
       try {
         const r2 = await fetch(`${API_BASE}/fhir/Patient?id=${encodeURIComponent(id)}`);
         const b = await r2.json();
         if (b.resourceType === 'Bundle' && b.entry && b.entry[0]) return b.entry[0].resource;
-      } catch {}
+      } catch { }
       return null;
     }
 
     function extractTelecom(p) {
       const telecom = (p && p.telecom) || [];
-      const phone = (telecom.find(t => t.system==='phone')||{}).value || '';
-      const email = (telecom.find(t => t.system==='email')||{}).value || '';
+      const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
+      const email = (telecom.find(t => t.system === 'email') || {}).value || '';
       return { phone, email };
     }
 
     function fillDemographics(p) {
       const nameObj = (p.name && p.name[0]) || {};
-      const fullName = `${(nameObj.given||[''])[0]} ${nameObj.family||''}`.trim() || 'Unknown';
+      const fullName = `${(nameObj.given || [''])[0]} ${nameObj.family || ''}`.trim() || 'Unknown';
       const { phone, email } = extractTelecom(p);
       const addr = (p.address && p.address[0]) || {};
       const addrStr = [addr.line && addr.line[0], addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ');
@@ -183,11 +383,11 @@
     async function loadAppointments(phone, email) {
       try {
         const r = await fetch(`${API_BASE}/voice/appointments/search`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ args: { phone: phone || undefined, email: email || undefined } })
         });
         const data = await r.json();
-        const appts = data.success ? (data.appointments||[]) : [];
+        const appts = data.success ? (data.appointments || []) : [];
         const list = document.getElementById('apptList');
         if (appts.length === 0) { list.textContent = 'No appointments yet.'; return; }
         list.innerHTML = appts.map(a => {
@@ -202,12 +402,12 @@
     async function loadInsuranceAndEligibility(patientId) {
       try {
         const [insRes, eligRes] = await Promise.all([
-          fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(patientId)}/insurance`).then(r=>r.json()),
-          fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(patientId)}/eligibility`).then(r=>r.json())
+          fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(patientId)}/insurance`).then(r => r.json()),
+          fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(patientId)}/eligibility`).then(r => r.json())
         ]);
 
         if (insRes && insRes.success && Array.isArray(insRes.insurance) && insRes.insurance.length) {
-          const primary = insRes.insurance.find(i=>i.is_primary) || insRes.insurance[0];
+          const primary = insRes.insurance.find(i => i.is_primary) || insRes.insurance[0];
           document.getElementById('insProvider').textContent = primary.payer_name || primary.payer_id || '—';
           document.getElementById('insMember').textContent = primary.member_id || '—';
         }
@@ -215,11 +415,11 @@
         if (eligRes && eligRes.success && Array.isArray(eligRes.eligibility) && eligRes.eligibility.length) {
           const e = eligRes.eligibility[0];
           document.getElementById('insEligibility').textContent = e.eligible ? 'Active' : 'Inactive';
-          document.getElementById('insCopay').textContent = (e.copay_amount!=null) ? `$${e.copay_amount}` : '—';
-          const dTot = (e.deductible_total!=null) ? `$${e.deductible_total}` : '—';
-          const dRem = (e.deductible_remaining!=null) ? `$${e.deductible_remaining}` : '—';
+          document.getElementById('insCopay').textContent = (e.copay_amount != null) ? `$${e.copay_amount}` : '—';
+          const dTot = (e.deductible_total != null) ? `$${e.deductible_total}` : '—';
+          const dRem = (e.deductible_remaining != null) ? `$${e.deductible_remaining}` : '—';
           document.getElementById('insDeductible').textContent = `${dTot} / ${dRem}`;
-          document.getElementById('insCoinsurance').textContent = (e.coinsurance_percent!=null) ? `${e.coinsurance_percent}%` : '—';
+          document.getElementById('insCoinsurance').textContent = (e.coinsurance_percent != null) ? `${e.coinsurance_percent}%` : '—';
           document.getElementById('insPlanSummary').textContent = e.plan_summary || '—';
         }
       } catch (e) {
@@ -228,10 +428,9 @@
     }
 
     function openInCalendar() {
-      if (nextCalendarLink) window.open(nextCalendarLink, '_blank'); else window.location.href='calendar.html';
+      if (nextCalendarLink) window.open(nextCalendarLink, '_blank'); else window.location.href = 'calendar.html';
     }
   </script>
 </body>
+
 </html>
-
-

@@ -13,13 +13,24 @@ const db = require('../database');
 
 /**
  * Middleware to verify Retell webhook secret
+ * SECURITY: In production, webhook secret is REQUIRED
  */
 function verifyRetellSecret(req, res, next) {
   const secret = req.headers['x-retell-secret'];
   const expectedSecret = process.env.RETELL_WEBHOOK_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
 
+  // SECURITY: In production, webhook secret is REQUIRED
   if (!expectedSecret) {
-    console.warn('⚠️  RETELL_WEBHOOK_SECRET not configured - allowing request');
+    if (isProduction) {
+      console.error('❌ SECURITY ERROR: RETELL_WEBHOOK_SECRET is required in production');
+      return res.status(500).json({
+        success: false,
+        error: 'Webhook authentication is not configured. Server misconfiguration.'
+      });
+    }
+    // Development: warn but allow (for local testing only)
+    console.warn('⚠️  RETELL_WEBHOOK_SECRET not configured - allowing request (DEVELOPMENT ONLY)');
     return next();
   }
 

@@ -34,6 +34,84 @@ function safeParse(data) {
 }
 
 /**
+ * Get merchant details (customer-facing, requires auth)
+ * GET /api/merchant/me
+ */
+router.get('/me', async (req, res) => {
+  try {
+    // Get customer from session
+    const cookies = req.headers.cookie || '';
+    const sessionMatch = cookies.match(/customer_session=([^;]+)/);
+    
+    if (!sessionMatch) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+    
+    const sessionId = sessionMatch[1];
+    const session = require('../database').getCustomerSession(sessionId);
+    
+    if (!session) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session'
+      });
+    }
+    
+    const customer = require('../database').getCustomer(session.customer_id);
+    
+    if (!customer || !customer.merchant_id) {
+      return res.status(404).json({
+        success: false,
+        error: 'No merchant associated',
+        message: 'Your account is not associated with a merchant. Please complete onboarding.'
+      });
+    }
+    
+    const merchant = require('../database').getMerchant(customer.merchant_id);
+    
+    if (!merchant) {
+      return res.status(404).json({
+        success: false,
+        error: 'Merchant not found'
+      });
+    }
+    
+    // Parse enabled_platforms if it's a JSON string
+    let enabledPlatforms = merchant.enabled_platforms;
+    if (typeof enabledPlatforms === 'string') {
+      try {
+        enabledPlatforms = JSON.parse(enabledPlatforms);
+      } catch (e) {
+        enabledPlatforms = [];
+      }
+    }
+    
+    res.json({
+      success: true,
+      merchant: {
+        id: merchant.id,
+        name: merchant.name,
+        api_key: merchant.api_key, // Return full key for customer's own merchant
+        api_url: merchant.api_url,
+        webhook_url: merchant.webhook_url,
+        enabled_platforms: enabledPlatforms,
+        status: merchant.status,
+        created_at: merchant.created_at
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error getting merchant:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Register a new merchant
  * POST /api/merchant/register
  */

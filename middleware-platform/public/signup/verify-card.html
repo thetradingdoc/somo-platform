@@ -385,33 +385,14 @@
 
                         // Continue button - check customer_type for proper redirect
                         document.getElementById('continue-btn').addEventListener('click', async () => {
-                            let redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+                            let redirectUrl = null;
 
-                            // If no redirect in URL, check customer_type from API
-                            if (!redirectUrl) {
-                                try {
-                                    const customerRes = await fetch(`${API_BASE}/api/customers/me`, {
-                                        credentials: 'include'
-                                    });
-                                    if (customerRes.ok) {
-                                        const customerData = await customerRes.json();
-                                        if (customerData.success && customerData.customer) {
-                                            const customerType = customerData.customer.customer_type || 'saas';
-                                            redirectUrl = customerType === 'api'
-                                                ? '/docs'
-                                                : '/business/business-dashboard.html';
-                                        }
-                                    }
-                                } catch (error) {
-                                    console.error('Error fetching customer type:', error);
-                                }
-                            }
+                            // After payment, redirect to signup complete page
+                            // User will receive login details via email
+                            redirectUrl = '/signup-complete';
+                            console.log(`✅ Payment verified - redirecting to signup complete page`);
 
-                            // Default fallback
-                            if (!redirectUrl) {
-                                redirectUrl = '/business/business-dashboard.html';
-                            }
-
+                            console.log(`🚀 Redirecting to: ${redirectUrl}`);
                             window.location.href = redirectUrl;
                         });
                         return true;
@@ -519,33 +500,12 @@
                         : `<div class="alert alert-success">✓ ${result.message || 'Payment method saved successfully!'} Redirecting...</div>`;
                     alert.innerHTML = successMsg;
                     setTimeout(async () => {
-                        let redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+                        // After payment, redirect to signup complete page
+                        // User will receive login details via email
+                        redirectUrl = '/signup-complete';
+                        console.log(`✅ Payment verified - redirecting to signup complete page`);
 
-                        // If no redirect in URL, check customer_type from API
-                        if (!redirectUrl) {
-                            try {
-                                const customerRes = await fetch(`${API_BASE}/api/customers/me`, {
-                                    credentials: 'include'
-                                });
-                                if (customerRes.ok) {
-                                    const customerData = await customerRes.json();
-                                    if (customerData.success && customerData.customer) {
-                                        const customerType = customerData.customer.customer_type || 'saas';
-                                        redirectUrl = customerType === 'api'
-                                            ? '/docs'
-                                            : '/business/business-dashboard.html';
-                                    }
-                                }
-                            } catch (error) {
-                                console.error('Error fetching customer type:', error);
-                            }
-                        }
-
-                        // Default fallback to business dashboard (SaaS is most common)
-                        if (!redirectUrl) {
-                            redirectUrl = '/business/business-dashboard.html';
-                        }
-
+                        console.log(`🚀 Redirecting to: ${redirectUrl}`);
                         window.location.href = redirectUrl;
                     }, 2000);
                 } else {

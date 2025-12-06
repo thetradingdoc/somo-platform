@@ -69,23 +69,36 @@ class PaymentOrchestrator {
             // If items don't have full details, fetch them
             const enrichedItems = await this._enrichItems(paymentRequest.items, merchant);
 
+            // CRITICAL: Validate that we have at least one item
+            if (!enrichedItems || enrichedItems.length === 0) {
+                console.log('❌ No items to checkout');
+                return new PaymentResponse({
+                    success: false,
+                    error: 'No items in checkout. Please add at least one product.',
+                    transaction_id: paymentRequest.transaction_id
+                });
+            }
+
             // Calculate totals if not provided
             const totals = this._calculateTotals(enrichedItems, paymentRequest.totals);
 
             console.log('💰 Totals:', totals);
+
+            // Get first item (primary product)
+            const primaryItem = enrichedItems[0];
 
             // Create checkout record
             const checkoutId = uuidv4();
             const checkout = {
                 id: checkoutId,
                 merchant_id: paymentRequest.merchant_id,
-                product_id: enrichedItems[0].product_id, // Primary product
-                product_name: enrichedItems[0].name,
-                quantity: enrichedItems[0].quantity,
+                product_id: primaryItem.product_id,
+                product_name: primaryItem.name,
+                quantity: primaryItem.quantity || 1,
                 amount: totals.total,
-                customer_phone: paymentRequest.customer.phone,
-                customer_name: paymentRequest.customer.name,
-                customer_email: paymentRequest.customer.email,
+                customer_phone: paymentRequest.customer?.phone || null,
+                customer_name: paymentRequest.customer?.name || null,
+                customer_email: paymentRequest.customer?.email || null,
                 status: 'pending'
             };
 
@@ -211,6 +224,10 @@ class PaymentOrchestrator {
         // Send SMS if phone number provided
         let smsResult = { success: false };
         if (checkout.customer_phone) {
+            // Get customer_id from checkout if available
+            const customerId = checkout.customer_id || null;
+            const merchantId = merchant.id || null;
+            
             smsResult = await SMSService.sendPaymentLink(
                 checkout.customer_phone,
                 paymentLink,
@@ -218,7 +235,9 @@ class PaymentOrchestrator {
                     product_name: checkout.product_name,
                     amount: checkout.amount.toFixed(2),
                     merchant_name: merchant.name
-                }
+                },
+                customerId,
+                merchantId
             );
 
             console.log('📱 SMS Result:', smsResult.success ? '✅ Sent' : '❌ Failed');

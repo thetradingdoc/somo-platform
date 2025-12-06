@@ -58,9 +58,20 @@ function destroySessionToken(token) {
 
 function requireAdminAuth(req, res, next) {
   const adminSecret = process.env.ADMIN_PORTAL_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  
+  // SECURITY: In production, admin secret is REQUIRED
   if (!adminSecret) {
+    if (isProduction) {
+      console.error('❌ SECURITY ERROR: ADMIN_PORTAL_SECRET is required in production');
+      return res.status(500).json({
+        success: false,
+        error: 'Admin authentication is not configured. Server misconfiguration.'
+      });
+    }
+    // Development: warn but allow (for local testing only)
     if (!warnedAboutMissingSecret) {
-      console.warn('⚠️ ADMIN_PORTAL_SECRET not set. Admin endpoints are unprotected.');
+      console.warn('⚠️ ADMIN_PORTAL_SECRET not set. Admin endpoints are unprotected (DEVELOPMENT ONLY).');
       warnedAboutMissingSecret = true;
     }
     return next();
@@ -99,10 +110,18 @@ function handleAdminLogin(req, res) {
   }
 
   const session = createSessionRecord(req);
+  
+  // SECURITY: Always use secure cookies if HTTPS is detected or in production
+  // Check if request is over HTTPS (either directly or via proxy)
+  const isSecure = req.secure || 
+                   req.headers['x-forwarded-proto'] === 'https' ||
+                   process.env.NODE_ENV === 'production' ||
+                   process.env.NODE_ENV === 'prod';
+  
   res.cookie(COOKIE_NAME, session.id, {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure, // Use secure cookies when HTTPS is detected
     maxAge: SESSION_TTL_MS,
     path: '/'
   });
@@ -118,10 +137,17 @@ function handleAdminLogin(req, res) {
 function handleAdminLogout(req, res) {
   const token = getTokenFromRequest(req);
   destroySessionToken(token);
+  
+  // SECURITY: Always use secure cookies if HTTPS is detected or in production
+  const isSecure = req.secure || 
+                   req.headers['x-forwarded-proto'] === 'https' ||
+                   process.env.NODE_ENV === 'production' ||
+                   process.env.NODE_ENV === 'prod';
+  
   res.cookie(COOKIE_NAME, '', {
     httpOnly: true,
     sameSite: 'strict',
-    secure: process.env.NODE_ENV === 'production',
+    secure: isSecure,
     expires: new Date(0),
     path: '/'
   });

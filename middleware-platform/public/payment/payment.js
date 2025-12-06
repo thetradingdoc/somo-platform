@@ -69,12 +69,31 @@ async function loadCheckoutDetails() {
  * Display order details in the UI
  */
 function displayOrderDetails(checkout) {
-    document.getElementById('merchantName').textContent = checkout.merchant_name;
-    document.getElementById('productName').textContent = checkout.product_name;
-    document.getElementById('quantity').textContent = checkout.quantity || 1;
-    document.getElementById('itemPrice').textContent = `$${checkout.amount.toFixed(2)}`;
-    document.getElementById('totalAmount').textContent = `$${checkout.amount.toFixed(2)}`;
-    document.getElementById('button-amount').textContent = `$${checkout.amount.toFixed(2)}`;
+    // CRITICAL: Validate checkout data before displaying
+    if (!checkout) {
+        console.error('Checkout data is missing');
+        showError('Invalid checkout data');
+        return;
+    }
+
+    // Safe DOM manipulation with null checks
+    const merchantNameEl = document.getElementById('merchantName');
+    const productNameEl = document.getElementById('productName');
+    const quantityEl = document.getElementById('quantity');
+    const itemPriceEl = document.getElementById('itemPrice');
+    const totalAmountEl = document.getElementById('totalAmount');
+    const buttonAmountEl = document.getElementById('button-amount');
+
+    if (merchantNameEl) merchantNameEl.textContent = checkout.merchant_name || 'Merchant';
+    if (productNameEl) productNameEl.textContent = checkout.product_name || 'Product';
+    if (quantityEl) quantityEl.textContent = checkout.quantity || 1;
+    
+    const amount = parseFloat(checkout.amount) || 0;
+    const formattedAmount = `$${amount.toFixed(2)}`;
+    
+    if (itemPriceEl) itemPriceEl.textContent = formattedAmount;
+    if (totalAmountEl) totalAmountEl.textContent = formattedAmount;
+    if (buttonAmountEl) buttonAmountEl.textContent = formattedAmount;
 }
 
 /**
@@ -175,7 +194,7 @@ async function processPayment(paymentMethodId) {
             body: JSON.stringify({
                 payment_token: paymentToken,
                 payment_method_id: paymentMethodId,
-                amount: Math.round(checkoutData.amount * 100), // Convert to cents
+                amount: checkoutData.amount, // Amount is already in dollars, backend will convert to cents
                 currency: 'usd'
             })
         });

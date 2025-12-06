@@ -72,20 +72,21 @@ router.get('/stats', authLimiter, async (req, res) => {
             return startTime > new Date() && a.status !== 'cancelled';
         });
 
-        // Get revenue from voice checkouts (if any)
-        const checkouts = db.db.prepare(`
-            SELECT * FROM voice_checkouts 
-            WHERE clinic_id IN (
-                SELECT clinic_id FROM clinics WHERE merchant_id = (
-                    SELECT id FROM merchants WHERE id = ?
-                )
-            )
-            ORDER BY created_at DESC
-        `).all(customer.id);
+        // Get revenue from voice checkouts scoped to this customer's merchant
+        // Use merchant_id directly from voice_checkouts table (more efficient)
+        const merchantId = customer.merchant_id;
+        let checkouts = [];
+        if (merchantId) {
+            checkouts = db.db.prepare(`
+                SELECT * FROM voice_checkouts 
+                WHERE merchant_id = ?
+                ORDER BY created_at DESC
+            `).all(merchantId);
+        }
 
         const todayRevenue = checkouts
             .filter(c => c.created_at && c.created_at.startsWith(today) && c.status === 'completed')
-            .reduce((sum, c) => sum + (c.total || 0), 0);
+            .reduce((sum, c) => sum + (c.amount || 0), 0); // Use 'amount' not 'total'
 
         res.json({
             success: true,
@@ -133,8 +134,28 @@ router.get('/appointments', authLimiter, async (req, res) => {
 
         const { status, limit = 50 } = req.query;
 
-        let query = 'SELECT * FROM appointments WHERE customer_id = ?';
-        const params = [customer.id];
+        // Scope appointments by customer_id if column exists, otherwise by merchant_id via clinic
+        let query;
+        const params = [];
+
+        // Check if customer_id column exists in appointments table
+        const tableInfo = db.db.prepare("PRAGMA table_info(appointments)").all();
+        const hasCustomerId = tableInfo.some(col => col.name === 'customer_id');
+
+        if (hasCustomerId && customer.id) {
+            // Use customer_id if available
+            query = 'SELECT * FROM appointments WHERE customer_id = ?';
+            params.push(customer.id);
+        } else if (customer.merchant_id) {
+            // Fallback: scope via clinic_id -> merchant_id relationship
+            query = `SELECT a.* FROM appointments a
+                     LEFT JOIN clinics c ON a.clinic_id = c.clinic_id
+                     WHERE c.merchant_id = ?`;
+            params.push(customer.merchant_id);
+        } else {
+            // No merchant_id - return empty
+            query = 'SELECT * FROM appointments WHERE 1=0';
+        }
 
         if (status) {
             query += ' AND status = ?';
@@ -182,14 +203,35 @@ router.get('/appointments/upcoming', authLimiter, async (req, res) => {
         const { limit = 10 } = req.query;
         const now = new Date().toISOString();
 
-        const appointments = db.db.prepare(`
-            SELECT * FROM appointments 
-            WHERE customer_id = ? 
-            AND start_time > ? 
-            AND status != 'cancelled'
-            ORDER BY start_time ASC
-            LIMIT ?
-        `).all(customer.id, now, parseInt(limit, 10));
+        // Scope appointments by customer_id if column exists, otherwise by merchant_id via clinic
+        let appointments;
+        const tableInfo = db.db.prepare("PRAGMA table_info(appointments)").all();
+        const hasCustomerId = tableInfo.some(col => col.name === 'customer_id');
+
+        if (hasCustomerId && customer.id) {
+            // Use customer_id if available
+            appointments = db.db.prepare(`
+                SELECT * FROM appointments 
+                WHERE customer_id = ? 
+                AND start_time > ? 
+                AND status != 'cancelled'
+                ORDER BY start_time ASC
+                LIMIT ?
+            `).all(customer.id, now, parseInt(limit, 10));
+        } else if (customer.merchant_id) {
+            // Fallback: scope via clinic_id -> merchant_id relationship
+            appointments = db.db.prepare(`
+                SELECT a.* FROM appointments a
+                LEFT JOIN clinics c ON a.clinic_id = c.clinic_id
+                WHERE c.merchant_id = ?
+                AND a.start_time > ? 
+                AND a.status != 'cancelled'
+                ORDER BY a.start_time ASC
+                LIMIT ?
+            `).all(customer.merchant_id, now, parseInt(limit, 10));
+        } else {
+            appointments = [];
+        }
 
         res.json({
             success: true,

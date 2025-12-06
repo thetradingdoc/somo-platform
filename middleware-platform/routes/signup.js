@@ -11,7 +11,18 @@ const EmailService = require('../services/email-service');
 const RetellService = require('../services/retell-service');
 const TwilioPhoneService = require('../services/twilio-phone-service');
 const { v4: uuidv4 } = require('uuid');
-const rateLimiter = require('../middleware/rate-limiter').authLimiter;
+const { authLimiter: rateLimiter, lenientAuthLimiter } = require('../middleware/rate-limiter');
+const { generateSimplePassword } = require('../utils/password-generator');
+const { requireCustomerAuth } = require('../middleware/customer-auth');
+
+// Load bcryptjs for password hashing
+let bcrypt;
+try {
+  bcrypt = require('bcryptjs');
+} catch (e) {
+  console.error('❌ bcryptjs not installed - password hashing will fail');
+  bcrypt = null;
+}
 
 // Initialize Stripe with proper configuration
 const stripeConfig = require('../utils/stripe-config');
@@ -24,6 +35,27 @@ try {
 }
 
 const router = express.Router();
+
+/**
+ * Get cookie options for customer session
+ * Sets domain for cross-subdomain access in production
+ */
+function getSessionCookieOptions(req, maxAge = 30 * 24 * 60 * 60 * 1000) {
+  const isSecure = process.env.NODE_ENV === 'production' || req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const options = {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'lax',
+    maxAge: maxAge
+  };
+  
+  // Set domain for cross-subdomain cookie sharing in production
+  if (process.env.NODE_ENV === 'production' || req.headers.host?.includes('doclittle.site')) {
+    options.domain = '.doclittle.site';
+  }
+  
+  return options;
+}
 
 // Note: Root GET / is handled in server.js with domain-based routing
 // This router only handles API endpoints (POST /api/signup, etc.)
@@ -152,6 +184,33 @@ router.post('/signup', rateLimiter, async (req, res) => {
     };
     db.createCustomer(customerRecord);
 
+    // Track incomplete signup (Step 1: Started)
+    // This helps us follow up with businesses that don't complete signup
+    try {
+      const env = process.env.NODE_ENV || 'development';
+      db.createIncompleteSignup({
+        name,
+        email,
+        phone_number: phone_number || null,
+        company_name: company_name || null,
+        business_size: business_size || null,
+        use_case: use_case || null,
+        api_features: api_features || [],
+        customer_type: customerType,
+        signup_step: 'started',
+        source: 'signup_page',
+        metadata: JSON.stringify({
+          customer_id: customerId,
+          environment: env,
+          signup_started_at: new Date().toISOString()
+        })
+      });
+      console.log(`📝 Created incomplete signup record for ${email} (step: started, env: ${env})`);
+    } catch (incompleteError) {
+      console.warn('⚠️  Failed to create incomplete signup record:', incompleteError.message);
+      // Continue - this is tracking only, don't block signup
+    }
+
     // Create/Update lead in pipeline
     try {
       db.upsertLeadFromCustomer({
@@ -204,6 +263,100 @@ router.post('/signup', rateLimiter, async (req, res) => {
 });
 
 /**
+ * POST /api/signup/update-email
+ * Update email address before verification
+ */
+router.post('/signup/update-email', rateLimiter, async (req, res) => {
+  try {
+    const { customer_id, old_email, new_email } = req.body;
+
+    if (!customer_id || !old_email || !new_email) {
+      return res.status(400).json({
+        success: false,
+        error: 'customer_id, old_email, and new_email are required'
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(new_email)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format'
+      });
+    }
+
+    // Get customer
+    const customer = db.getCustomer(customer_id);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        error: 'Customer not found'
+      });
+    }
+
+    // Verify old email matches
+    if (customer.email.toLowerCase() !== old_email.toLowerCase()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Old email does not match customer record'
+      });
+    }
+
+    // Check if new email is already taken
+    const existingCustomer = db.getCustomerByEmail(new_email);
+    if (existingCustomer && existingCustomer.id !== customer_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'This email is already registered'
+      });
+    }
+
+    // Check if customer is already verified (prevent changing verified email)
+    if (customer.email_verified) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot change email after verification. Please contact support.'
+      });
+    }
+
+    // Update email
+    db.updateCustomer(customer_id, { email: new_email });
+
+    // Delete old verification codes
+    db.prepare('DELETE FROM email_verification_codes WHERE email = ?').run(old_email);
+
+    // Generate and send new verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Create verification code (same format as signup)
+    db.createEmailVerificationCode(new_email, code, customer_id);
+
+    // Send email
+    try {
+      await EmailService.sendVerificationCode(new_email, code);
+      console.log(`✅ Verification code sent to ${new_email} for customer ${customer_id}`);
+    } catch (emailError) {
+      console.error('⚠️  Failed to send verification email:', emailError);
+      // Continue - code is still saved in DB
+    }
+
+    res.json({
+      success: true,
+      message: 'Email updated successfully. New verification code sent.',
+      email: new_email
+    });
+  } catch (error) {
+    console.error('❌ Update email error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update email',
+      message: error.message
+    });
+  }
+});
+
+/**
  * POST /api/signup/verify-email
  * Verify email code and activate account
  */
@@ -247,6 +400,20 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
       console.warn('⚠️  Failed to qualify lead after verification:', leadError.message);
     }
 
+    // Update incomplete signup progress (Step 2: Email Verified)
+    try {
+      const incompleteSignup = db.getIncompleteSignupByEmail(email);
+      if (incompleteSignup) {
+        db.updateIncompleteSignup(incompleteSignup.id, {
+          signup_step: 'email_verified',
+          last_step_completed_at: new Date().toISOString()
+        });
+        console.log(`📝 Updated incomplete signup for ${email} (step: email_verified)`);
+      }
+    } catch (incompleteError) {
+      console.warn('⚠️  Failed to update incomplete signup:', incompleteError.message);
+    }
+
     // Create session
     const sessionId = db.createCustomerSession(
       customer.id,
@@ -255,12 +422,7 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
     );
 
     // Set session cookie
-    res.cookie('customer_session', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-    });
+    res.cookie('customer_session', sessionId, getSessionCookieOptions(req));
 
     // Check if customer_type is already set AND is valid
     // Always show integration selection if customer_type is not explicitly set or is invalid
@@ -268,6 +430,9 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
 
     // Log for debugging
     console.log(`✅ Email verified for customer ${customer.id}, customer_type: ${customer.customer_type || 'null'}, hasCustomerType: ${hasCustomerType}`);
+
+    // Log customer_type for debugging
+    console.log(`✅ Email verified for customer ${customer.id}, customer_type in DB: ${customer.customer_type || 'null'}`);
 
     res.json({
       success: true,
@@ -279,9 +444,9 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
         email_verified: true,
         customer_type: customer.customer_type || null // Return actual customer_type from DB
       },
-      // Always show integration selection to ensure user confirms their choice
-      // This prevents issues where default 'saas' was set but user wants 'api'
-      next_step: 'select_integration' // Always show integration selection after email verification
+      // ALWAYS show integration selection after email verification
+      // This ensures user confirms their choice and we have the correct customer_type
+      next_step: 'select_integration'
     });
   } catch (error) {
     console.error('❌ Email verification error:', error);
@@ -374,6 +539,382 @@ router.post('/signin', rateLimiter, async (req, res) => {
 });
 
 /**
+ * POST /api/customers/forgot-password
+ * Request password reset
+ */
+router.post('/customers/forgot-password', rateLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required'
+      });
+    }
+
+    // Get customer by email
+    const customer = db.getCustomerByEmail(email);
+    if (!customer) {
+      // Don't reveal if email exists (security best practice)
+      return res.json({
+        success: true,
+        message: 'If an account exists with this email, a password reset link has been sent.'
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Store reset token using email verification codes table (reusing existing infrastructure)
+    // The code field will store the reset token
+    db.createEmailVerificationCode(email, resetToken, customer.id);
+
+    // Get merchant for subdomain
+    let subdomain = null;
+    if (customer.merchant_id) {
+      const merchant = db.getMerchant(customer.merchant_id);
+      if (merchant && merchant.subdomain) {
+        subdomain = merchant.subdomain;
+      }
+    }
+
+    const baseDomain = process.env.BASE_DOMAIN || 'doclittle.site';
+    const resetUrl = subdomain
+      ? `https://${subdomain}.${baseDomain}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
+      : `${process.env.BASE_URL || 'http://localhost:4000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+    // Send password reset email
+    try {
+      await EmailService.sendPasswordResetEmail(email, customer.name || customer.company_name, resetUrl);
+    } catch (emailError) {
+      console.error('❌ Failed to send password reset email:', emailError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to send reset email',
+        message: 'Please try again later'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'If an account exists with this email, a password reset link has been sent.'
+    });
+  } catch (error) {
+    console.error('❌ Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process request',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/customers/change-password
+ * Change password (requires current password)
+ */
+router.post('/customers/change-password', rateLimiter, requireCustomerAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const customer = req.customer;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current password and new password are required'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'New password must be at least 8 characters'
+      });
+    }
+
+    // Verify current password
+    if (!bcrypt) {
+      return res.status(500).json({
+        success: false,
+        error: 'Password verification unavailable'
+      });
+    }
+
+    if (!customer.password_hash) {
+      return res.status(400).json({
+        success: false,
+        error: 'No password set. Please use password reset instead.'
+      });
+    }
+
+    const passwordMatch = await bcrypt.compare(currentPassword, customer.password_hash);
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        error: 'Current password is incorrect'
+      });
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    db.updateCustomer(customer.id, { password_hash: passwordHash });
+
+    console.log(`✅ Password changed for customer ${customer.id}`);
+
+    // TODO: Send confirmation email
+    // TODO: Optionally invalidate other sessions
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('❌ Change password error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to change password',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/customers/reset-password
+ * Reset password using token from email
+ */
+router.post('/customers/reset-password', rateLimiter, async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email, token, and new password are required'
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 8 characters'
+      });
+    }
+
+    // Verify reset token (stored in email_verification_codes table)
+    const verification = db.verifyEmailCode(email, token);
+    if (!verification) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired reset token',
+        message: 'The reset link is invalid or has expired. Please request a new password reset.'
+      });
+    }
+
+    // Get customer
+    const customer = db.getCustomerByEmail(email);
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        error: 'Customer not found'
+      });
+    }
+
+    // Hash new password
+    if (!bcrypt) {
+      return res.status(500).json({
+        success: false,
+        error: 'Password hashing unavailable',
+        message: 'Password hashing is not configured. Please contact support.'
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    db.updateCustomer(customer.id, { password_hash: passwordHash });
+
+    // Mark verification code as used (invalidate reset token)
+    db.prepare(`
+      UPDATE email_verification_codes 
+      SET verified = 1, verified_at = CURRENT_TIMESTAMP
+      WHERE email = ? AND code = ?
+    `).run(email, token);
+
+    console.log(`✅ Password reset successful for customer ${customer.id}`);
+
+    res.json({
+      success: true,
+      message: 'Password reset successfully. You can now log in with your new password.'
+    });
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset password',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/customers/login
+ * Password-based login for customers
+ */
+// Use a more lenient limiter here to avoid 429s during normal tenant logins
+router.post('/customers/login', lenientAuthLimiter || rateLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      console.log('[CUSTOMERS LOGIN] ❌ Missing email or password');
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required'
+      });
+    }
+
+    console.log('[CUSTOMERS LOGIN] 🔍 Login attempt', {
+      email,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+
+    // Get customer by email
+    const customer = db.getCustomerByEmail(email);
+    if (!customer) {
+      console.log('[CUSTOMERS LOGIN] ❌ Customer not found for email', email);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Check if customer has a password_hash
+    if (!customer.password_hash) {
+      return res.status(403).json({
+        success: false,
+        error: 'Password not set',
+        message: 'Your account does not have a password set. Please use the password from your welcome email or contact support.'
+      });
+    }
+
+    // Verify password
+    if (!bcrypt) {
+      console.error('[CUSTOMERS LOGIN] ❌ Bcrypt not available on server');
+      return res.status(500).json({
+        success: false,
+        error: 'Password verification unavailable',
+        message: 'Password hashing is not configured. Please contact support.'
+      });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, customer.password_hash);
+    if (!passwordMatch) {
+      console.log('[CUSTOMERS LOGIN] ❌ Password mismatch for customer', customer.id);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Check if email is verified
+    if (!customer.email_verified) {
+      console.log('[CUSTOMERS LOGIN] ❌ Email not verified for customer', customer.id);
+      return res.status(403).json({
+        success: false,
+        error: 'Email not verified',
+        message: 'Please verify your email address before logging in.'
+      });
+    }
+
+    // NOTE: Terms acceptance check removed - customers can login without accepting terms
+    // Auto-accept terms for tenant customers (they're already using the platform)
+    let termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+    
+    if (!termsAccepted && customer.merchant_id) {
+      // Auto-accept terms for tenant customers
+      try {
+        db.acceptTerms(
+          customer.id,
+          '1.0',
+          req.ip,
+          req.get('user-agent')
+        );
+        termsAccepted = true;
+        console.log('[CUSTOMERS LOGIN] ✅ Auto-accepted terms for tenant customer', customer.id);
+      } catch (termsError) {
+        console.warn('[CUSTOMERS LOGIN] ⚠️  Could not auto-accept terms:', termsError.message);
+      }
+    } else if (!termsAccepted) {
+      console.log('[CUSTOMERS LOGIN] ⚠️  Terms not accepted for customer', customer.id, '- allowing login anyway');
+    }
+
+    // Check for "Remember me" option
+    const rememberMe = req.body.remember_me === true || req.body.remember_me === 'true';
+    const sessionDuration = rememberMe
+      ? 90 * 24 * 60 * 60 * 1000  // 90 days if "Remember me" is checked
+      : 30 * 24 * 60 * 60 * 1000; // 30 days default
+
+    // Create session
+    const sessionId = `sess_${crypto.randomBytes(32).toString('hex')}`;
+    const expiresAt = new Date(Date.now() + sessionDuration);
+
+    db.createCustomerSession({
+      id: sessionId,
+      customer_id: customer.id,
+      expires_at: expiresAt.toISOString(),
+      ip_address: req.ip,
+      user_agent: req.get('user-agent')
+    });
+
+    console.log('[CUSTOMERS LOGIN] ✅ Login successful', {
+      customerId: customer.id,
+      email: customer.email,
+      merchantId: customer.merchant_id
+    });
+
+    // Set session cookie
+    res.cookie('customer_session', sessionId, getSessionCookieOptions(req, sessionDuration));
+
+    // Get merchant for subdomain
+    let merchant = null;
+    if (customer.merchant_id) {
+      merchant = db.getMerchant(customer.merchant_id);
+    }
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      customer: {
+        id: customer.id,
+        email: customer.email,
+        name: customer.name,
+        company_name: customer.company_name,
+        customer_type: customer.customer_type,
+        merchant_id: customer.merchant_id,
+        subdomain: merchant?.subdomain || null,
+        terms_accepted: termsAccepted || (customer.merchant_id ? true : false) // Auto-accepted for tenants
+      },
+      // Include redirect info for frontend
+      redirect: customer.merchant_id 
+        ? '/business/business-dashboard.html' 
+        : (customer.customer_type === 'api' ? '/docs' : '/business/business-dashboard.html')
+    });
+  } catch (error) {
+    console.error('❌ Customer login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Login failed',
+      message: error.message
+    });
+  }
+});
+
+/**
  * POST /api/signin/verify
  * Verify sign-in code and create session
  */
@@ -415,12 +956,7 @@ router.post('/signin/verify', rateLimiter, async (req, res) => {
     );
 
     // Set session cookie
-    res.cookie('customer_session', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
-    });
+    res.cookie('customer_session', sessionId, getSessionCookieOptions(req));
 
     // Check what the next step should be
     const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
@@ -577,11 +1113,22 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     const existingAcceptance = db.hasAcceptedTerms(customer.id, '1.0');
     if (existingAcceptance) {
       // Already accepted - redirect based on customer type
-      const customerType = customer.customer_type || 'api';
-      const defaultRedirect = customerType === 'saas'
-        ? '/business/business-dashboard.html'
-        : '/docs';
+      // CRITICAL: Use query param if provided (user just selected), otherwise use DB value
+      const customerTypeFromQuery = req.query.customer_type;
+      const customerType = customerTypeFromQuery || customer.customer_type || 'saas';
+
+      // CRITICAL: SaaS → Dashboard, API → Docs
+      let defaultRedirect;
+      if (customerType === 'saas') {
+        defaultRedirect = '/business/business-dashboard.html';
+      } else if (customerType === 'api') {
+        defaultRedirect = '/docs';
+      } else {
+        defaultRedirect = '/business/business-dashboard.html'; // Fallback
+      }
+
       const redirectUrl = req.query.redirect || defaultRedirect;
+      console.log(`✅ Terms already accepted - customer_type: ${customerType}, redirect: ${redirectUrl}`);
       return res.json({
         success: true,
         message: 'Terms already accepted',
@@ -597,19 +1144,86 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       req.get('user-agent')
     );
 
-    // Get customer type from query param or customer record (use saved value, default to 'saas')
-    // IMPORTANT: Use the customer_type from the database, not from query param
-    // Query param is only used if customer_type is not set in DB
+    // Update incomplete signup progress (Step 3: Terms Accepted)
+    try {
+      const incompleteSignup = db.getIncompleteSignupByEmail(customer.email);
+      if (incompleteSignup) {
+        db.updateIncompleteSignup(incompleteSignup.id, {
+          signup_step: 'terms_accepted',
+          last_step_completed_at: new Date().toISOString()
+        });
+        console.log(`📝 Updated incomplete signup for ${customer.email} (step: terms_accepted)`);
+      }
+    } catch (incompleteError) {
+      console.warn('⚠️  Failed to update incomplete signup:', incompleteError.message);
+    }
+
+    // Get customer type from query param or customer record
+    // CRITICAL: Query param takes priority if provided (user just selected it)
+    // Otherwise use DB value, default to 'saas'
     const customerTypeFromQuery = req.query.customer_type;
-    const customerType = customer.customer_type || customerTypeFromQuery || 'saas';
+    let customerType;
+
+    if (customerTypeFromQuery && (customerTypeFromQuery === 'api' || customerTypeFromQuery === 'saas')) {
+      // Query param provided - use it and update DB
+      customerType = customerTypeFromQuery;
+      if (customer.customer_type !== customerType) {
+        db.updateCustomer(customer.id, { customer_type: customerType });
+        customer.customer_type = customerType;
+        console.log(`✅ Updated customer_type to ${customerType} for customer ${customer.id}`);
+      }
+    } else {
+      // No query param - use DB value, default to 'saas'
+      customerType = customer.customer_type || 'saas';
+    }
 
     // Log for debugging
     console.log(`📝 Accept-terms: customer_type from DB: ${customer.customer_type || 'null'}, from query: ${customerTypeFromQuery || 'null'}, final: ${customerType}`);
 
-    // Update customer type if provided in query
-    if (customerTypeFromQuery && customerTypeFromQuery !== customer.customer_type) {
-      db.updateCustomer(customer.id, { customer_type: customerTypeFromQuery });
-      customer.customer_type = customerTypeFromQuery;
+    // CRITICAL: Create merchant record for customer (if doesn't exist)
+    let merchantId = customer.merchant_id;
+    if (!merchantId) {
+      try {
+        // Generate unique merchant ID and API key
+        merchantId = uuidv4();
+        const apiKey = `mk_${crypto.randomBytes(32).toString('hex')}`;
+
+        // Determine enabled platforms based on customer type
+        // SaaS customers use voice platform, API customers use ACP/AP2
+        const enabledPlatforms = customerType === 'saas'
+          ? ['voice']
+          : ['acp', 'ap2', 'voice'];
+
+        // Create merchant record
+        const merchant = {
+          id: merchantId,
+          name: customer.company_name || customer.name || 'Merchant',
+          api_key: apiKey,
+          api_url: '', // Customer can configure later
+          webhook_url: '', // Customer can configure later
+          enabled_platforms: enabledPlatforms,
+          status: 'active'
+        };
+
+        db.createMerchant(merchant);
+        console.log(`✅ Created merchant ${merchantId} for customer ${customer.id}`);
+
+        // Link customer to merchant
+        db.updateCustomer(customer.id, { merchant_id: merchantId });
+        console.log(`✅ Linked customer ${customer.id} to merchant ${merchantId}`);
+
+      } catch (merchantError) {
+        console.error('❌ Failed to create merchant:', merchantError);
+        // Continue - merchant can be created later, but this is critical
+        // In production, we might want to fail here
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+        if (isProduction) {
+          console.error('❌ CRITICAL: Merchant creation failed in production');
+          // Don't exit, but log the error
+        }
+      }
+    } else {
+      console.log(`✅ Customer ${customer.id} already has merchant ${merchantId}`);
     }
 
     // Allocate free credits based on customer type
@@ -733,20 +1347,16 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     let redirectUrl;
     const creditsAllocated = customerType === 'saas' ? 250 : 100;
 
+    // CRITICAL: After payment, redirect to signup complete page
+    // User will receive login details via email
     if (hasPaymentMethod) {
-      if (customerType === 'saas') {
-        // SaaS customers go to dashboard
-        redirectUrl = req.query.redirect || '/business/business-dashboard.html';
-      } else {
-        // API customers go to docs
-        redirectUrl = req.query.redirect || '/docs';
-      }
+      redirectUrl = '/signup-complete';
+      console.log(`✅ Payment verified - redirecting to signup complete page`);
     } else {
-      // Payment verification required - redirect to card verification with proper redirect
-      const cardVerifyRedirect = customerType === 'saas'
-        ? '/business/business-dashboard.html'
-        : '/docs';
-      redirectUrl = `/verify-card?redirect=${encodeURIComponent(cardVerifyRedirect)}&customer_type=${customerType}`;
+      // Payment verification required - redirect to card verification
+      // After payment, they'll be redirected to login
+      redirectUrl = `/verify-card?customer_type=${customerType}`;
+      console.log(`✅ Payment required - redirecting to verify-card`);
     }
 
     res.json({
@@ -759,6 +1369,7 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       customer_type: customerType,
       twilio_phone_number: twilioPhoneNumber,
       twilio_phone_sid: twilioPhoneSid,
+      merchant_id: merchantId, // Return merchant_id to frontend
       requires_card_verification: !hasPaymentMethod,
       payment_verification_required: !hasPaymentMethod // Explicit flag that payment verification is required
     });
@@ -1318,6 +1929,72 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
 
       console.log(`✅ Payment method placeholder saved for customer ${customer.id} (Stripe account under review)`);
 
+      // Mark incomplete signup as completed (Step 4: Payment Verified - COMPLETE)
+      try {
+        const incompleteSignup = db.getIncompleteSignupByEmail(customer.email);
+        if (incompleteSignup) {
+          db.markIncompleteSignupCompleted(incompleteSignup.id, customer.id);
+          console.log(`✅ Marked incomplete signup as completed for ${customer.email} → customer ${customer.id}`);
+        }
+      } catch (incompleteError) {
+        console.warn('⚠️  Failed to mark incomplete signup as completed:', incompleteError.message);
+      }
+
+      // Allocate free credits on signup completion
+      try {
+        const customerType = customer.customer_type || 'saas';
+        // SaaS customers get 250 free minutes, API customers get 100
+        const freeCredits = customerType === 'saas' ? 250 : 100;
+        db.allocateFreeCredits(customer.id, freeCredits);
+        console.log(`✅ Allocated ${freeCredits} free credits to customer ${customer.id} (${customerType})`);
+      } catch (creditError) {
+        console.error('❌ Failed to allocate free credits:', creditError);
+        // Don't fail the request - credits can be allocated manually later
+      }
+
+      // Generate and hash password for customer (if not already set)
+      let plainPassword = null;
+      if (bcrypt) {
+        const existingCustomer = db.getCustomer(customer.id);
+        if (!existingCustomer.password_hash) {
+          plainPassword = generateSimplePassword();
+          const passwordHash = await bcrypt.hash(plainPassword, 10);
+          db.updateCustomer(customer.id, { password_hash: passwordHash });
+          console.log(`✅ Generated password for customer ${customer.id}`);
+        } else {
+          console.log(`⚠️  Customer ${customer.id} already has a password - cannot retrieve plain password`);
+        }
+      } else {
+        console.error('❌ Cannot generate password - bcryptjs not available');
+      }
+
+      // Send welcome email with subdomain and password (async, don't block response)
+      setImmediate(async () => {
+        try {
+          // Get merchant to get subdomain
+          let subdomain = null;
+          if (customer.merchant_id) {
+            const merchant = db.getMerchant(customer.merchant_id);
+            if (merchant && merchant.subdomain) {
+              subdomain = merchant.subdomain;
+            }
+          }
+
+          await EmailService.sendWelcomeEmail(
+            customer.email,
+            customer.name || customer.company_name,
+            subdomain,
+            customer.customer_type || 'saas',
+            customer.merchant_id,
+            plainPassword // Pass plain password to email
+          );
+          console.log(`✅ Welcome email sent to ${customer.email}`);
+        } catch (emailError) {
+          console.error('❌ Failed to send welcome email:', emailError);
+          // Don't fail the request if email fails
+        }
+      });
+
       return res.json({
         success: true,
         message: 'Payment method saved successfully. You can now access the API.',
@@ -1325,6 +2002,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
           card_brand: card_details?.brand || 'card',
           card_last4: card_details?.last4 || '****'
         },
+        customer_type: customer.customer_type || 'saas', // Return customer_type for proper redirect
         note: 'Card details will be updated once your account is fully activated. No charges will be made until then.'
       });
     }
@@ -1360,6 +2038,49 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
 
         console.log(`✅ Payment method saved for customer ${customer.id} (Stripe account under review)`);
 
+        // Generate and hash password for customer (if not already set)
+        let plainPassword = null;
+        if (bcrypt) {
+          const existingCustomer = db.getCustomer(customer.id);
+          if (!existingCustomer.password_hash) {
+            plainPassword = generateSimplePassword();
+            const passwordHash = await bcrypt.hash(plainPassword, 10);
+            db.updateCustomer(customer.id, { password_hash: passwordHash });
+            console.log(`✅ Generated password for customer ${customer.id}`);
+          } else {
+            console.log(`⚠️  Customer ${customer.id} already has a password - cannot retrieve plain password`);
+          }
+        } else {
+          console.error('❌ Cannot generate password - bcryptjs not available');
+        }
+
+        // Send welcome email with subdomain and password (async, don't block response)
+        setImmediate(async () => {
+          try {
+            // Get merchant to get subdomain
+            let subdomain = null;
+            if (customer.merchant_id) {
+              const merchant = db.getMerchant(customer.merchant_id);
+              if (merchant && merchant.subdomain) {
+                subdomain = merchant.subdomain;
+              }
+            }
+
+            await EmailService.sendWelcomeEmail(
+              customer.email,
+              customer.name || customer.company_name,
+              subdomain,
+              customer.customer_type || 'saas',
+              customer.merchant_id,
+              plainPassword // Pass plain password to email
+            );
+            console.log(`✅ Welcome email sent to ${customer.email}`);
+          } catch (emailError) {
+            console.error('❌ Failed to send welcome email:', emailError);
+            // Don't fail the request if email fails
+          }
+        });
+
         return res.json({
           success: true,
           message: 'Payment method saved successfully. You can now access the API.',
@@ -1367,6 +2088,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
             card_brand: card_details?.brand || 'card',
             card_last4: card_details?.last4 || '****'
           },
+          customer_type: customer.customer_type || 'saas', // Return customer_type for proper redirect
           note: 'Card details will be updated once your account is fully activated'
         });
       }
@@ -1387,6 +2109,72 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
 
     console.log(`✅ Payment method saved for customer ${customer.id}: ${paymentMethod.card.brand} ****${paymentMethod.card.last4}`);
 
+    // Mark incomplete signup as completed (Step 4: Payment Verified - COMPLETE)
+    try {
+      const incompleteSignup = db.getIncompleteSignupByEmail(customer.email);
+      if (incompleteSignup) {
+        db.markIncompleteSignupCompleted(incompleteSignup.id, customer.id);
+        console.log(`✅ Marked incomplete signup as completed for ${customer.email} → customer ${customer.id}`);
+      }
+    } catch (incompleteError) {
+      console.warn('⚠️  Failed to mark incomplete signup as completed:', incompleteError.message);
+    }
+
+    // Allocate free credits on signup completion
+    try {
+      const customerType = customer.customer_type || 'saas';
+      // SaaS customers get 250 free minutes, API customers get 100
+      const freeCredits = customerType === 'saas' ? 250 : 100;
+      db.allocateFreeCredits(customer.id, freeCredits);
+      console.log(`✅ Allocated ${freeCredits} free credits to customer ${customer.id} (${customerType})`);
+    } catch (creditError) {
+      console.error('❌ Failed to allocate free credits:', creditError);
+      // Don't fail the request - credits can be allocated manually later
+    }
+
+    // Generate and hash password for customer (if not already set)
+    let plainPassword = null;
+    if (bcrypt) {
+      const existingCustomer = db.getCustomer(customer.id);
+      if (!existingCustomer.password_hash) {
+        plainPassword = generateSimplePassword();
+        const passwordHash = await bcrypt.hash(plainPassword, 10);
+        db.updateCustomer(customer.id, { password_hash: passwordHash });
+        console.log(`✅ Generated password for customer ${customer.id}`);
+      } else {
+        console.log(`⚠️  Customer ${customer.id} already has a password - cannot retrieve plain password`);
+      }
+    } else {
+      console.error('❌ Cannot generate password - bcryptjs not available');
+    }
+
+    // Send welcome email with subdomain and password (async, don't block response)
+    setImmediate(async () => {
+      try {
+        // Get merchant to get subdomain
+        let subdomain = null;
+        if (customer.merchant_id) {
+          const merchant = db.getMerchant(customer.merchant_id);
+          if (merchant && merchant.subdomain) {
+            subdomain = merchant.subdomain;
+          }
+        }
+
+        await EmailService.sendWelcomeEmail(
+          customer.email,
+          customer.name || customer.company_name,
+          subdomain,
+          customer.customer_type || 'saas',
+          customer.merchant_id,
+          plainPassword // Pass plain password to email
+        );
+        console.log(`✅ Welcome email sent to ${customer.email}`);
+      } catch (emailError) {
+        console.error('❌ Failed to send welcome email:', emailError);
+        // Don't fail the request if email fails
+      }
+    });
+
     res.json({
       success: true,
       message: 'Payment method saved successfully. You can now access the API.',
@@ -1394,6 +2182,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
         card_brand: paymentMethod.card.brand,
         card_last4: paymentMethod.card.last4
       },
+      customer_type: customer.customer_type || 'saas', // Return customer_type for proper redirect
       note: 'No charges will be made until your account is fully activated. We will invoice you monthly for usage beyond free credits.'
     });
   } catch (error) {
@@ -1426,6 +2215,7 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
                     card_brand: 'card',
                     card_last4: '****'
                   },
+                  customer_type: customer.customer_type || 'saas', // Return customer_type for proper redirect
                   note: 'Card details will be updated once your account is fully activated'
                 });
               }

@@ -69,6 +69,66 @@ Always be professional, respectful, and helpful. If they're not interested, than
   }
 
   /**
+   * Load shop-specific prompt from file
+   */
+  loadShopPrompt() {
+    try {
+      const possiblePaths = [
+        path.join(__dirname, '../../docs/voice-agent/shop-voice-agent-prompt.md'), // Local dev
+        path.join(__dirname, '../docs/voice-agent/shop-voice-agent-prompt.md'), // Azure (if docs copied)
+        path.join(process.cwd(), 'docs/voice-agent/shop-voice-agent-prompt.md') // Fallback
+      ];
+
+      for (const templatePath of possiblePaths) {
+        try {
+          if (fs.existsSync(templatePath)) {
+            const prompt = fs.readFileSync(templatePath, 'utf8');
+            console.log('✅ Loaded shop voice agent prompt');
+            return prompt;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+
+      console.warn('⚠️  Shop prompt file not found, using default shop prompt');
+      return this.getDefaultShopPrompt();
+    } catch (error) {
+      console.error('Error loading shop prompt:', error);
+      return this.getDefaultShopPrompt();
+    }
+  }
+
+  /**
+   * Get default shop prompt if file not found
+   */
+  getDefaultShopPrompt() {
+    return `You are a helpful and friendly voice commerce assistant for DocLittle.
+
+Goal: Help customers browse products, place orders, track shipments, and manage their purchases through voice calls.
+
+Keep it friendly, professional, and efficient—you're helping people shop and buy products.
+
+Always introduce yourself as: "Hi, I'm your shopping assistant. How can I help you today?"
+
+What You Can Do:
+- Search for products by name, category, or description
+- Provide product details (price, availability, description)
+- Create checkout sessions for purchases
+- Track order status and shipping information
+- Answer questions about products and orders
+- Process payments via secure email verification
+
+Rules:
+- Start with name only - Ask for full name first, then greet them personally
+- Collect information progressively - Don't ask for everything upfront
+- Email only when creating checkout or processing payment
+- Never collect card numbers or payment over the phone
+- Use natural phrasing, acknowledge the caller, and summarize next steps
+- Be friendly and efficient—shopping should be easy and enjoyable`;
+  }
+
+  /**
    * Generate clinic-specific prompt from template
    */
   generateClinicPrompt(clinicData) {

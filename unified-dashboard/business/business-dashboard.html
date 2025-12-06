@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Medical Coding Assistant</title>
+    <title>Dashboard - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
     <style>
@@ -191,53 +191,212 @@
 
         .stat-card {
             background: white;
-            border-radius: 12px;
+            border-radius: 16px;
             padding: 24px;
-            box-shadow: var(--shadow-md);
-            transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--primary-light));
+            opacity: 0;
+            transition: opacity 0.3s ease;
         }
 
         .stat-card:hover {
-            box-shadow: var(--shadow-xl);
-            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+            border-color: rgba(30, 64, 175, 0.2);
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
         }
 
         .stat-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
 
         .stat-title {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--gray-600);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .stat-icon {
-            font-size: 32px;
-        }
-
-        .stat-value {
-            font-size: 36px;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 8px;
-        }
-
-        .stat-change {
-            font-size: 14px;
+            letter-spacing: 0.8px;
             font-weight: 600;
         }
 
+        .stat-icon {
+            font-size: 28px;
+            opacity: 0.8;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 12px;
+            line-height: 1.2;
+        }
+
+        .stat-change {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-600);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .trend-indicator {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
         .stat-change.positive {
-            color: var(--success);
+            color: #10b981;
+        }
+
+        .stat-change.positive .trend-indicator {
+            color: #10b981;
         }
 
         .stat-change.negative {
-            color: var(--danger);
+            color: #ef4444;
+        }
+
+        .stat-change.negative .trend-indicator {
+            color: #ef4444;
+            transform: rotate(180deg);
+        }
+
+        /* Top Products Section */
+        .top-products-section {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin: 0 0 4px 0;
+        }
+
+        .section-subtitle {
+            font-size: 14px;
+            color: var(--gray-600);
+            margin: 0;
+        }
+
+        .products-table-container {
+            overflow-x: auto;
+        }
+
+        .products-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .products-table thead {
+            background: var(--gray-50);
+        }
+
+        .products-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--gray-700);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .products-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 14px;
+        }
+
+        .products-table tbody tr:hover {
+            background: var(--gray-50);
+        }
+
+        .product-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .product-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            background: var(--gray-100);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .product-name {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .product-price {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .product-stock {
+            font-weight: 500;
+        }
+
+        .product-stock.low {
+            color: #ef4444;
+        }
+
+        .product-stock.medium {
+            color: #f59e0b;
+        }
+
+        .product-stock.high {
+            color: #10b981;
+        }
+
+        .product-sales {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .product-revenue {
+            font-weight: 700;
+            color: var(--gray-900);
         }
 
         /* Helpline Status Banner - Enhanced with Demo Highlight */
@@ -541,24 +700,214 @@
             gap: 8px;
         }
 
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 10001 !important;
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            pointer-events: auto !important;
+            min-width: 44px;
+            min-height: 44px;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+
+        .mobile-menu-toggle:hover {
+            background: var(--primary-dark);
+            transform: scale(1.05);
+        }
+
+        .mobile-menu-toggle:active {
+            transform: scale(0.95);
+            background: var(--primary-dark);
+        }
+
+        .mobile-menu-toggle:focus {
+            outline: 2px solid var(--primary-light);
+            outline-offset: 2px;
+        }
+
+        /* Sidebar Overlay for Mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+            opacity: 1;
+        }
+
         @media (max-width: 768px) {
+            .mobile-menu-toggle {
+                display: block;
+            }
+
             .sidebar {
-                width: 100%;
-                position: relative;
-                height: auto;
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                width: 280px;
+                max-width: 85vw;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+                box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
             }
 
             .main-content {
                 margin-left: 0;
+                padding: 16px;
+                padding-top: 70px; /* Space for mobile menu button */
+            }
+
+            .page-header {
+                padding: 16px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .page-title {
+                font-size: 24px;
+            }
+
+            .page-subtitle {
+                font-size: 14px;
             }
 
             .stats-grid {
                 grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .stat-card {
+                padding: 20px;
+                min-height: auto;
+            }
+
+            .stat-icon {
+                font-size: 28px;
+            }
+
+            .stat-value {
+                font-size: 28px;
+            }
+
+            .stat-label {
+                font-size: 12px;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
+            }
+
+            .section-header .btn {
+                width: 100%;
+            }
+
+            .products-table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .products-table {
+                min-width: 600px;
             }
 
             .helpline-stats {
                 flex-direction: column;
                 gap: 16px;
+            }
+
+            .recent-patients-card,
+            .recent-orders-card {
+                padding: 16px;
+            }
+
+            .patient-item,
+            .order-item {
+                padding: 12px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            .patient-details,
+            .order-details {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            /* Touch-friendly buttons */
+            .btn {
+                min-height: 44px; /* iOS recommended touch target */
+                padding: 12px 20px;
+            }
+
+            .nav-item {
+                min-height: 48px;
+                padding: 14px 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 12px;
+                padding-top: 70px;
+            }
+
+            .page-header {
+                padding: 12px;
+            }
+
+            .page-title {
+                font-size: 20px;
+            }
+
+            .stat-card {
+                padding: 16px;
+            }
+
+            .stat-value {
+                font-size: 24px;
+            }
+
+            .mobile-menu-toggle {
+                top: 12px;
+                left: 12px;
+                padding: 10px 14px;
+                font-size: 18px;
             }
         }
 
@@ -829,6 +1178,7 @@
                 opacity: 0;
                 transform: translateY(20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -847,50 +1197,57 @@
 </head>
 
 <body>
+    <!-- Mobile Menu Toggle -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu" type="button">☰</button>
+    
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+    
     <div class="layout">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
                     <span class="doc">Doc</span><span class="little">Little</span><span
                         style="font-weight:700;">.</span>
                 </div>
-                <div class="sidebar-subtitle">Medical Coding Assistant</div>
+                <div class="sidebar-subtitle">24/7 Medical Assistant</div>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item" onclick="event.preventDefault(); openPdfCodingModal(); return false;">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
+                <a href="business-dashboard.html" class="nav-item active">
+                    <span class="nav-icon">📊</span>
+                    <span>Dashboard</span>
                 </a>
-                <a href="invoices.html" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
+                <a href="products.html" class="nav-item">
+                    <span class="nav-icon">📦</span>
+                    <span>Products</span>
+                </a>
+                <a href="orders.html" class="nav-item">
+                    <span class="nav-icon">🛒</span>
+                    <span>Orders</span>
                 </a>
                 <a href="patients.html" class="nav-item">
                     <span class="nav-icon">👥</span>
-                    <span>Patients</span>
+                    <span>Customer List</span>
+                </a>
+                <a href="agent.html" class="nav-item">
+                    <span class="nav-icon">🎙️</span>
+                    <span>Voice Agent</span>
                 </a>
                 <a href="billing.html" class="nav-item">
                     <span class="nav-icon">💳</span>
                     <span>Billing</span>
                 </a>
-                <a href="wallets.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info" onclick="window.location.href='settings.html'" title="Open Settings">
+                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
-                        <div class="user-name" id="userName">Healthcare Provider</div>
-                        <div class="user-role" id="userRole">Provider</div>
+                        <div class="user-name" id="userName">Business Owner</div>
+                        <div class="user-role" id="userRole">Owner</div>
                     </div>
                     <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
                         🚪
@@ -902,51 +1259,64 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
-                <h1 class="page-title">Patient Dashboard</h1>
-                <p class="page-subtitle">Overview of appointments and AI voice receptionist activity</p>
+                <h1 class="page-title" id="dashboardTitle">Business Dashboard</h1>
+                <p class="page-subtitle" id="dashboardSubtitle">Overview of sales, orders, and AI voice agent activity</p>
             </div>
 
             <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title"># of Calls</span>
-                        <span class="stat-icon">📞</span>
-                    </div>
-                    <div class="stat-value" id="totalCalls">0</div>
-                    <div class="stat-change" id="callsChange">Total calls received</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-title">Priority Cases</span>
-                        <span class="stat-icon">⚠️</span>
-                    </div>
-                    <div class="stat-value" id="priorityCases">0</div>
-                    <div class="stat-change" id="priorityChange">High-risk patients</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span class="stat-title">Revenue</span>
+                        <span class="stat-title">Total Revenue</span>
                         <span class="stat-icon">💰</span>
                     </div>
                     <div class="stat-value" id="totalRevenue">$0</div>
-                    <div class="stat-change" id="revenueChange">Orders today</div>
+                    <div class="stat-change positive" id="revenueChange">
+                        <span class="trend-indicator">↗</span> <span id="revenueTrend">0%</span> vs prev. period
+                    </div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Call Costs</span>
+                        <span class="stat-title">Orders Today</span>
+                        <span class="stat-icon">🛒</span>
+                    </div>
+                    <div class="stat-value" id="ordersToday">0</div>
+                    <div class="stat-change" id="ordersChange">Orders in progress</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Average Order Value</span>
                         <span class="stat-icon">📊</span>
                     </div>
-                    <div class="stat-value" id="callCosts">$0</div>
+                    <div class="stat-value" id="avgOrderValue">$0</div>
+                    <div class="stat-change positive" id="aovChange">
+                        <span class="trend-indicator">↗</span> <span id="aovTrend">0%</span> vs prev. period
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Conversion Rate</span>
+                        <span class="stat-icon">📈</span>
+                    </div>
+                    <div class="stat-value" id="conversionRate">0%</div>
+                    <div class="stat-change" id="conversionChange">Calls → Orders</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Voice Agent Costs</span>
+                        <span class="stat-icon">⚡</span>
+                    </div>
+                    <div class="stat-value" id="voiceCosts">$0</div>
                     <div class="stat-change" id="costsChange">Today's expenses</div>
                 </div>
             </div>
 
-            <!-- Next Appointment Banner - Enhanced with Demo Highlight -->
-            <div class="helpline-status-banner" id="nextApptCard">
+            <!-- Next Appointment Banner (Clinic) / Recent Orders (Shop) -->
+            <div class="helpline-status-banner" id="nextApptCard" style="display: none;">
                 <div class="demo-badge">⭐ UPCOMING</div>
                 <div class="helpline-status-header">
                     <div>
@@ -976,12 +1346,44 @@
                 </div>
             </div>
 
+            <!-- Top Products Section (Shop) -->
+            <div class="top-products-section" id="topProductsSection" style="display: none;">
+                <div class="section-header">
+                    <div>
+                        <h2 class="section-title">Top Selling Products</h2>
+                        <p class="section-subtitle">Best performing products this period</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="window.location.href='products.html'">View All Products</button>
+                </div>
+                
+                <div class="products-table-container">
+                    <table class="products-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Price</th>
+                                <th>Stock</th>
+                                <th>Sales</th>
+                                <th>Revenue</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topProductsList">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 40px; color: var(--gray-500);">
+                                    Loading top products...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Upcoming / Recents Tabs -->
             <div class="recent-patients-card" style="margin-top:24px;">
                 <div class="card-header" style="gap:12px; align-items:flex-end;">
                     <div>
-                        <h2 class="card-title">Calls</h2>
-                        <div style="font-size:12px;color:var(--gray-500);">Live data from the voice agent</div>
+                        <h2 class="card-title" id="callsSectionTitle">Calls</h2>
+                        <div style="font-size:12px;color:var(--gray-500);" id="callsSectionSubtitle">Live data from the voice agent</div>
                     </div>
                     <div style="margin-left:auto; display:flex; gap:8px;">
                         <button id="tabLive" class="btn btn-secondary btn-sm"
@@ -1028,7 +1430,8 @@
             </div>
             <div class="pdf-modal-body" id="pdfCodingContent">
                 <!-- PDF Coding interface will be loaded here via iframe -->
-                <iframe id="pdfCodingIframe" src="pdf-coding.html" style="width: 100%; height: 100%; border: none;"></iframe>
+                <iframe id="pdfCodingIframe" src="pdf-coding.html"
+                    style="width: 100%; height: 100%; border: none;"></iframe>
             </div>
         </div>
     </div>
@@ -1067,6 +1470,13 @@
                 </div>
 
                 <div class="onboarding-step" data-step="4">
+                    <div class="step-icon">📦</div>
+                    <h3>Add Your Products</h3>
+                    <p>Set up your product catalog so customers can order via voice. Add products, set prices, and
+                        manage inventory.</p>
+                </div>
+
+                <div class="onboarding-step" data-step="5">
                     <div class="step-icon">💳</div>
                     <h3>Billing & Usage</h3>
                     <p>Track your usage, view invoices, and manage your payment method. You have 250 free minutes per
@@ -1087,26 +1497,233 @@
         let statsInterval = null;
         let onboardingStep = 0;
 
-        // Check authentication
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
-        }
-
-        // Check if user is an insurer and redirect to insurer dashboard
-        try {
-            const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
-            if (userData.email === 'insurer@doclittle.com' || userData.role === 'insurer_admin' || userData.role === 'insurer') {
-                console.log('Insurer user detected, redirecting to insurer dashboard...');
-                window.location.href = '../insurer/insurer-dashboard.html';
+        // Mobile sidebar toggle functions - Make globally accessible
+        function toggleSidebar(e) {
+            // Prevent default and stop propagation only if event exists
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            
+            if (!sidebar || !overlay) {
+                console.error('Sidebar or overlay element not found');
                 return;
             }
-        } catch (e) {
-            console.warn('Error checking user role:', e);
+            
+            const isOpen = sidebar.classList.contains('open');
+            
+            if (isOpen) {
+                // Close sidebar
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            } else {
+                // Open sidebar
+                sidebar.classList.add('open');
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            if (sidebar && overlay) {
+                sidebar.classList.remove('open');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Close sidebar when clicking nav items on mobile
+        function setupMobileNavClose() {
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    if (window.innerWidth <= 768) {
+                        closeSidebar();
+                    }
+                });
+            });
+        }
+
+        // Render sidebar navigation based on tenant configuration
+        function renderSidebar(activeId) {
+            if (!window.TENANT_CONFIG) return;
+            const navEl = document.getElementById('sidebarNav');
+            if (!navEl) return;
+
+            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
+                <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
+                    <span class="nav-icon">${item.icon}</span>
+                    <span>${item.label}</span>
+                </a>
+            `).join('');
+
+            const subtitleEl = document.querySelector('.sidebar-subtitle');
+            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
+                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
+            }
+
+            // Setup mobile nav close after rendering
+            setTimeout(setupMobileNavClose, 100);
+        }
+
+        // Check authentication
+        // Check customer authentication via API (password-based login required)
+        async function checkAuth() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/me`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok || response.status === 401 || response.status === 403) {
+                    // Not authenticated - redirect to login
+                    const hostname = window.location.hostname;
+                    let loginUrl = '/login';
+
+                    // If on subdomain, use subdomain login
+                    if (hostname.includes('.') && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+                        const parts = hostname.split('.');
+                        if (parts.length >= 2) {
+                            const subdomain = parts[0];
+                            const baseDomain = parts.slice(1).join('.');
+                            loginUrl = `https://${subdomain}.${baseDomain}/login`;
+                        }
+                    }
+
+                    window.location.href = loginUrl;
+                    return false;
+                }
+
+                const data = await response.json();
+                if (data.success && data.customer) {
+                    // Authenticated - store customer data
+                    sessionStorage.setItem('authenticated', 'true');
+                    sessionStorage.setItem('customer', JSON.stringify(data.customer));
+                    return true;
+                } else {
+                    window.location.href = '/login';
+                    return false;
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                window.location.href = '/login';
+                return false;
+            }
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // Load userData AFTER DOM is ready
-            userData = JSON.parse(sessionStorage.getItem('user'));
+            // Check authentication on page load
+            const isAuthenticated = await checkAuth();
+            if (!isAuthenticated) {
+                // Redirect will happen in checkAuth
+                return;
+            }
+
+            // Legacy check (for backward compatibility)
+            if (sessionStorage.getItem('authenticated') !== 'true') {
+                // Already handled by checkAuth above
+            }
+
+            // Check if user is an insurer and redirect to insurer dashboard
+            try {
+                const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
+                if (userData.email === 'insurer@doclittle.com' || userData.role === 'insurer_admin' || userData.role === 'insurer') {
+                    console.log('Insurer user detected, redirecting to insurer dashboard...');
+                    window.location.href = '../insurer/insurer-dashboard.html';
+                    return;
+                }
+            } catch (e) {
+                console.warn('Error checking user role:', e);
+            }
+            // Build sidebar for this page
+            renderSidebar('dashboard');
+            setupMobileNavClose();
+            
+            // Add event listeners to mobile menu button - MATCHING WORKING PATTERN FROM products.html
+            const mobileMenuBtn = document.querySelector('.mobile-menu-toggle');
+            if (mobileMenuBtn) {
+                // Use a single handler that works for both touch and click
+                let touchStartTime = 0;
+                let touchStartPos = { x: 0, y: 0 };
+                
+                // Handle touch start - just record the touch
+                mobileMenuBtn.addEventListener('touchstart', function(e) {
+                    touchStartTime = Date.now();
+                    const touch = e.touches[0];
+                    touchStartPos = { x: touch.clientX, y: touch.clientY };
+                }, { passive: true });
+                
+                // Handle touch end - check if it was a tap (not a swipe)
+                mobileMenuBtn.addEventListener('touchend', function(e) {
+                    const touchEndTime = Date.now();
+                    const touchDuration = touchEndTime - touchStartTime;
+                    const touch = e.changedTouches[0];
+                    const touchEndPos = { x: touch.clientX, y: touch.clientY };
+                    
+                    // Calculate distance moved
+                    const deltaX = Math.abs(touchEndPos.x - touchStartPos.x);
+                    const deltaY = Math.abs(touchEndPos.y - touchStartPos.y);
+                    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    
+                    // If it was a quick tap (less than 300ms and less than 10px movement), toggle sidebar
+                    if (touchDuration < 300 && distance < 10) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleSidebar(e);
+                    }
+                }, { passive: false });
+                
+                // Handle click event for desktop/mouse users
+                mobileMenuBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleSidebar(e);
+                });
+            } else {
+                console.error('Mobile menu button not found');
+            }
+            
+            // Update page title/subtitle based on tenant type
+            const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
+            if (isShop) {
+                const titleEl = document.getElementById('dashboardTitle');
+                const subtitleEl = document.getElementById('dashboardSubtitle');
+                const callsTitleEl = document.getElementById('callsSectionTitle');
+                const callsSubtitleEl = document.getElementById('callsSectionSubtitle');
+                
+                if (titleEl) titleEl.textContent = 'Business Dashboard';
+                if (subtitleEl) subtitleEl.textContent = 'Overview of sales, orders, and voice commerce activity';
+                if (callsTitleEl) callsTitleEl.textContent = 'Voice Orders';
+                if (callsSubtitleEl) callsSubtitleEl.textContent = 'Orders placed via voice agent';
+            }
+
+            // Close sidebar on window resize if switching to desktop
+            window.addEventListener('resize', () => {
+                if (window.innerWidth > 768) {
+                    closeSidebar();
+                }
+            });
+
+            // Close sidebar on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeSidebar();
+                }
+            });
+
+            // Load userData AFTER DOM is ready - Safe JSON.parse with error handling
+            try {
+                const userStr = sessionStorage.getItem('user');
+                userData = userStr ? JSON.parse(userStr) : null;
+            } catch (error) {
+                console.error('Error parsing user data from sessionStorage:', error);
+                userData = null;
+            }
 
             loadUserInfo();
             loadDashboardData();
@@ -1123,6 +1740,8 @@
                 // Check if onboarding was already completed
                 const onboardingCompleted = localStorage.getItem('onboarding_completed');
                 if (onboardingCompleted === 'true') {
+                    // Still check if products need to be set up
+                    await checkProductSetup();
                     return; // Don't show onboarding if already completed
                 }
 
@@ -1149,6 +1768,83 @@
             } catch (error) {
                 console.error('Error checking onboarding:', error);
             }
+        }
+
+        async function checkProductSetup() {
+            try {
+                // Check onboarding status
+                const response = await fetch(`${API_BASE}/api/onboarding/status`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.onboarding) {
+                        // Show product setup if merchant exists but no products
+                        if (data.onboarding.merchant.exists && !data.onboarding.products.has_products) {
+                            // Show a banner or notification to set up products
+                            showProductSetupBanner();
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking product setup:', error);
+            }
+        }
+
+        function showProductSetupBanner() {
+            // Create a banner at the top of the page
+            const banner = document.createElement('div');
+            banner.id = 'productSetupBanner';
+            banner.style.cssText = `
+                background: linear-gradient(135deg, #7c5dfa 0%, #6d48f2 100%);
+                color: white;
+                padding: 16px 24px;
+                margin-bottom: 24px;
+                border-radius: 12px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                box-shadow: 0 4px 12px rgba(124, 93, 250, 0.3);
+            `;
+            banner.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 24px;">📦</span>
+                    <div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">Set Up Your Products</div>
+                        <div style="font-size: 14px; opacity: 0.9;">Add your product catalog to enable voice orders</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="openProductSetup()" style="
+                        background: white;
+                        color: #7c5dfa;
+                        border: none;
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        font-weight: 600;
+                        cursor: pointer;
+                    ">Add Products</button>
+                    <button onclick="this.parentElement.parentElement.remove()" style="
+                        background: transparent;
+                        color: white;
+                        border: 1px solid rgba(255,255,255,0.3);
+                        padding: 8px 16px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                    ">Later</button>
+                </div>
+            `;
+
+            const mainContent = document.querySelector('.main-content');
+            if (mainContent) {
+                mainContent.insertBefore(banner, mainContent.firstChild);
+            }
+        }
+
+        function openProductSetup() {
+            // Redirect to products page where products can be added
+            window.location.href = 'products.html';
         }
 
         function showOnboarding() {
@@ -1226,37 +1922,74 @@
 
         async function loadDashboardData() {
             try {
-                // Load general stats
-                const statsResponse = await fetch(`${API_BASE}/api/admin/stats`);
+                // Load tenant-scoped stats (NOT admin endpoints)
+                const statsResponse = await fetch(`${API_BASE}/api/customer/dashboard/stats`, {
+                    credentials: 'include'
+                });
+
+                if (statsResponse.status === 401) {
+                    window.location.href = '../login.html';
+                    return;
+                }
+
                 const statsData = await statsResponse.json();
 
                 if (statsData.success) {
                     updateStatsCards(statsData.stats);
                 }
 
-                // Load agent stats to ensure calls today reflect DB truth
+                // Load tenant-scoped agent stats
                 try {
-                    const agentRes = await fetch(`${API_BASE}/api/admin/agent/stats`);
+                    const agentRes = await fetch(`${API_BASE}/api/customer/dashboard/agent/stats`, {
+                        credentials: 'include'
+                    });
+
+                    if (agentRes.status === 401) {
+                        window.location.href = '../login.html';
+                        return;
+                    }
+
                     const agentData = await agentRes.json();
                     if (agentData.success) {
-                        document.getElementById('helplineCallsToday').textContent = agentData.stats.total_calls || 0;
-                        // Populate live panel from today's calls (approximate live view)
+                        document.getElementById('helplineCallsToday').textContent = agentData.stats.calls_today || 0;
+                        // Populate live panel from recent calls
                         populateLiveCalls(agentData.recent_calls || []);
                     }
-                } catch (e) { }
-
-                // Load FHIR patients data
-                const patientsResponse = await fetch(`${API_BASE}/fhir/Patient`);
-                const patientsData = await patientsResponse.json();
-
-                if (patientsData.resourceType === 'Bundle') {
-                    updatePatientStats(patientsData);
+                } catch (e) {
+                    console.error('Error loading agent stats:', e);
                 }
+
+                // Note: FHIR Patient endpoint is intentionally global (FHIR standard)
+                // If tenant scoping is needed, it should be added to the FHIR route handler
+                // For now, we'll skip this to avoid showing all patients across tenants
+                // const patientsResponse = await fetch(`${API_BASE}/fhir/Patient`);
+                // const patientsData = await patientsResponse.json();
+                // if (patientsData.resourceType === 'Bundle') {
+                //     updatePatientStats(patientsData);
+                // }
 
                 // Load recent calls (DB truth)
                 await loadRecentCalls();
-                // Load upcoming calls/appointments
-                await loadUpcomingCalls();
+                
+                // Load tenant-specific content
+                const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
+                if (isShop) {
+                    // Shop: Load top products and update shop metrics
+                    await loadTopProducts();
+                    await updateShopMetrics();
+                    // Show top products section, hide appointment card
+                    document.getElementById('topProductsSection').style.display = 'block';
+                    document.getElementById('nextApptCard').style.display = 'none';
+                } else {
+                    // Clinic: Load upcoming appointments
+                    await loadUpcomingCalls();
+                    // Show appointment card, hide top products section
+                    document.getElementById('nextApptCard').style.display = 'block';
+                    document.getElementById('topProductsSection').style.display = 'none';
+                }
+                
+                // Load credit balance
+                await loadCredits();
 
             } catch (error) {
                 console.error('Error loading dashboard data:', error);
@@ -1264,29 +1997,129 @@
             }
         }
 
+        async function loadCredits() {
+            try {
+                const res = await fetch(`${API_BASE}/api/usage-monitor/credits`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.credits) {
+                        const credits = data.credits;
+                        const balance = credits.balance || 0;
+                        const freeAllocated = credits.free_allocated || 0;
+                        const freeUsed = credits.free_used || 0;
+                        const freeRemaining = credits.free_remaining || 0;
+                        const paidRemaining = credits.paid_remaining || 0;
+
+                        // Update balance display with "min" suffix
+                        const balanceEl = document.getElementById('creditsBalance');
+                        balanceEl.innerHTML = `${balance.toLocaleString()} <span style="font-size: 20px; color: var(--gray-600); font-weight: 400;">min</span>`;
+
+                        // Update subtitle with detailed breakdown
+                        let subtitle = '';
+                        if (freeAllocated > 0) {
+                            subtitle = `${freeRemaining.toLocaleString()} free min remaining`;
+                            if (paidRemaining > 0) {
+                                subtitle += ` + ${paidRemaining.toLocaleString()} paid min`;
+                            }
+                        } else if (paidRemaining > 0) {
+                            subtitle = `${paidRemaining.toLocaleString()} paid minutes remaining`;
+                        } else {
+                            subtitle = 'No credits available';
+                        }
+
+                        document.getElementById('creditsChange').textContent = subtitle;
+
+                        // Add visual indicator if credits are low
+                        if (balance < 50) {
+                            balanceEl.style.color = '#ef4444'; // Red for low credits
+                        } else if (balance < 100) {
+                            balanceEl.style.color = '#f59e0b'; // Orange for medium credits
+                        } else {
+                            balanceEl.style.color = 'var(--gray-900)'; // Default color
+                        }
+                    } else {
+                        // No credits data - show 0
+                        document.getElementById('creditsBalance').innerHTML = '0 <span style="font-size: 20px; color: var(--gray-600); font-weight: 400;">min</span>';
+                        document.getElementById('creditsChange').textContent = 'No credits allocated';
+                    }
+                } else {
+                    console.warn('Failed to load credits:', res.status);
+                    document.getElementById('creditsChange').textContent = 'Unable to load credits';
+                }
+            } catch (error) {
+                console.error('Error loading credits:', error);
+                document.getElementById('creditsBalance').innerHTML = '0 <span style="font-size: 20px; color: var(--gray-600); font-weight: 400;">min</span>';
+                document.getElementById('creditsChange').textContent = 'Error loading credits';
+            }
+        }
+
         function updateStatsCards(stats) {
-            // Update total calls (all time)
-            document.getElementById('totalCalls').textContent = stats.total?.calls || 0;
-            document.getElementById('callsChange').textContent = `${stats.today?.calls || 0} calls today`;
+            const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
 
-            // Update priority cases (high-risk patients)
-            document.getElementById('priorityCases').textContent = stats.priority?.cases || 0;
-            document.getElementById('priorityChange').textContent = 'High-risk patients';
+            if (isShop) {
+                // SHOP TENANT METRICS - Updated to match new card structure
+                // Card 1: Total Revenue
+                const totalRevenue = stats.total?.revenue || stats.total?.orders * 100 || 0;
+                const revenueEl = document.getElementById('totalRevenue');
+                if (revenueEl) revenueEl.textContent = `$${totalRevenue.toFixed(2)}`;
+                
+                // Card 2: Orders Today
+                const ordersToday = stats.today?.orders || stats.active?.orders || 0;
+                const ordersTodayEl = document.getElementById('ordersToday');
+                if (ordersTodayEl) ordersTodayEl.textContent = ordersToday;
+                
+                // Card 3: Average Order Value
+                const totalOrders = stats.total?.orders || 0;
+                const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+                const aovEl = document.getElementById('avgOrderValue');
+                if (aovEl) aovEl.textContent = `$${avgOrderValue.toFixed(2)}`;
+                
+                // Card 4: Conversion Rate
+                const totalCalls = stats.total?.calls || 0;
+                const conversionRate = totalCalls > 0 ? (totalOrders / totalCalls * 100) : 0;
+                const conversionEl = document.getElementById('conversionRate');
+                if (conversionEl) conversionEl.textContent = `${conversionRate.toFixed(1)}%`;
+                
+                // Card 5: Voice Agent Costs
+                const avgCallDuration = 3; // 3 minutes average
+                const costPerMinute = 0.12; // $0.12 per minute (Retell AI pricing)
+                const todayCallCosts = (stats.today?.calls || 0) * avgCallDuration * costPerMinute;
+                document.getElementById('callCosts').textContent = `$${todayCallCosts.toFixed(2)}`;
+                document.getElementById('costsChange').textContent = 'Voice agent costs';
+                const costsCard = document.querySelector('.stat-card:nth-child(4) .stat-title');
+                if (costsCard) costsCard.textContent = 'Voice Costs';
+                const costsIcon = document.querySelector('.stat-card:nth-child(4) .stat-icon');
+                if (costsIcon) costsIcon.textContent = '🎙️';
+            } else {
+                // CLINIC TENANT METRICS (original)
+                // Update total calls (all time)
+                document.getElementById('totalCalls').textContent = stats.total?.calls || 0;
+                document.getElementById('callsChange').textContent = `${stats.today?.calls || 0} calls today`;
 
-            // Update total revenue from orders
-            const todayRevenue = stats.today?.revenue || 0;
-            document.getElementById('totalRevenue').textContent = `$${todayRevenue.toFixed(2)}`;
-            document.getElementById('revenueChange').textContent = `${stats.today?.orders || 0} orders today`;
+                // Update priority cases (high-risk patients)
+                document.getElementById('priorityCases').textContent = stats.priority?.cases || 0;
+                document.getElementById('priorityChange').textContent = 'High-risk patients';
 
-            // Update call costs (based on Retell AI pricing)
-            const avgCallDuration = 3; // 3 minutes average
-            const costPerMinute = 0.12; // $0.12 per minute (Retell AI pricing)
-            const todayCallCosts = (stats.today?.calls || 0) * avgCallDuration * costPerMinute;
-            document.getElementById('callCosts').textContent = `$${todayCallCosts.toFixed(2)}`;
-            document.getElementById('costsChange').textContent = `${stats.today?.calls || 0} calls today`;
+                // Update total revenue from orders
+                const todayRevenue = stats.today?.revenue || 0;
+                document.getElementById('totalRevenue').textContent = `$${todayRevenue.toFixed(2)}`;
+                document.getElementById('revenueChange').textContent = `${stats.today?.orders || 0} orders today`;
 
-            // Update helpline banner
-            document.getElementById('helplineCallsToday').textContent = stats.today?.calls || 0;
+                // Update call costs (based on Retell AI pricing)
+                const avgCallDuration = 3; // 3 minutes average
+                const costPerMinute = 0.12; // $0.12 per minute (Retell AI pricing)
+                const todayCallCosts = (stats.today?.calls || 0) * avgCallDuration * costPerMinute;
+                document.getElementById('callCosts').textContent = `$${todayCallCosts.toFixed(2)}`;
+                document.getElementById('costsChange').textContent = `${stats.today?.calls || 0} calls today`;
+            }
+
+            // Update helpline banner (if exists)
+            const helplineCallsToday = document.getElementById('helplineCallsToday');
+            if (helplineCallsToday) {
+                helplineCallsToday.textContent = stats.today?.calls || 0;
+            }
         }
 
         function updatePatientStats(bundle) {
@@ -1307,10 +2140,10 @@
                     const container = document.getElementById('recentCallsList');
                     if (data.calls && data.calls.length > 0) {
                         container.innerHTML = data.calls.map(call => {
-                        const time = new Date(call.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                            const time = new Date(call.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                             const statusText = (call.status || 'completed').charAt(0).toUpperCase() + (call.status || 'completed').slice(1);
                             const duration = call.call_duration_seconds ? `${Math.floor(call.call_duration_seconds / 60)}m ${call.call_duration_seconds % 60}s` : 'N/A';
-                        return `
+                            return `
                             <div class="patient-item">
                                 <div class="patient-info">
                                         <div class="patient-id">${call.call_id || call.id}</div>
@@ -1323,7 +2156,7 @@
                                 </div>
                             </div>
                         `;
-                    }).join('');
+                        }).join('');
                     } else {
                         container.innerHTML = `
                             <div class="empty-state">
@@ -1384,6 +2217,106 @@
                     </div>
                 `;
                 setNextAppt(null);
+            }
+        }
+
+        async function loadTopProducts() {
+            try {
+                const res = await fetch(`${API_BASE}/api/products?limit=10&sort=sales`, {
+                    credentials: 'include'
+                });
+                const data = await res.json();
+
+                const productsList = document.getElementById('topProductsList');
+                if (!productsList) return;
+
+                if (data.success && data.products && data.products.length > 0) {
+                    const products = data.products.slice(0, 8); // Show top 8
+                    
+                    productsList.innerHTML = products.map(product => {
+                        const stock = product.stock || 0;
+                        const sales = product.sales_count || 0;
+                        const revenue = (parseFloat(product.price || 0) * sales).toFixed(2);
+                        const stockClass = stock < 20 ? 'low' : stock < 50 ? 'medium' : 'high';
+                        
+                        return `
+                            <tr>
+                                <td>
+                                    <div class="product-info">
+                                        <div class="product-image">${product.emoji || '📦'}</div>
+                                        <div class="product-name">${product.name || 'Unnamed Product'}</div>
+                                    </div>
+                                </td>
+                                <td><span class="product-price">$${parseFloat(product.price || 0).toFixed(2)}</span></td>
+                                <td><span class="product-stock ${stockClass}">${stock}</span></td>
+                                <td><span class="product-sales">${sales}</span></td>
+                                <td><span class="product-revenue">$${revenue}</span></td>
+                            </tr>
+                        `;
+                    }).join('');
+                } else {
+                    productsList.innerHTML = `
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 40px; color: var(--gray-500);">
+                                No products found. <a href="products.html" style="color: var(--primary);">Add your first product</a>
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading top products:', error);
+                const productsList = document.getElementById('topProductsList');
+                if (productsList) {
+                    productsList.innerHTML = `
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 40px; color: var(--gray-500);">
+                                Error loading products. Please try again.
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+        }
+
+        async function updateShopMetrics() {
+            try {
+                // Load orders for metrics
+                const ordersRes = await fetch(`${API_BASE}/api/orders`, {
+                    credentials: 'include'
+                });
+                const ordersData = await ordersRes.json();
+
+                if (ordersData.success && ordersData.orders) {
+                    const orders = ordersData.orders;
+                    const today = new Date().toDateString();
+                    
+                    // Calculate metrics
+                    const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+                    const todayOrders = orders.filter(o => o.created_at && new Date(o.created_at).toDateString() === today);
+                    const ordersToday = todayOrders.length;
+                    const todayRevenue = todayOrders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+                    const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
+                    
+                    // Calculate conversion rate (simplified: orders / calls)
+                    const callsRes = await fetch(`${API_BASE}/api/voice/calls?limit=100`, {
+                        credentials: 'include'
+                    });
+                    const callsData = await callsRes.json();
+                    const totalCalls = callsData.success && callsData.calls ? callsData.calls.length : 0;
+                    const conversionRate = totalCalls > 0 ? (orders.length / totalCalls * 100) : 0;
+
+                    // Update stat cards
+                    document.getElementById('totalRevenue').textContent = `$${totalRevenue.toFixed(2)}`;
+                    document.getElementById('ordersToday').textContent = ordersToday;
+                    document.getElementById('avgOrderValue').textContent = `$${avgOrderValue.toFixed(2)}`;
+                    document.getElementById('conversionRate').textContent = `${conversionRate.toFixed(1)}%`;
+                    
+                    // Update trend indicators (mock data for now - can be calculated from historical data)
+                    document.getElementById('revenueTrend').textContent = '+11%';
+                    document.getElementById('aovTrend').textContent = '+2.7%';
+                }
+            } catch (error) {
+                console.error('Error updating shop metrics:', error);
             }
         }
 
@@ -1506,9 +2439,24 @@
             window.location.href = 'agent.html';
         }
 
-        function logout() {
+        async function logout() {
+            try {
+                // Call backend to delete session
+                await fetch(`${API_BASE}/api/customers/signout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+                // Continue with logout even if API call fails
+            }
+
+            // Clear frontend storage
             if (statsInterval) clearInterval(statsInterval);
             sessionStorage.clear();
+            localStorage.clear();
+
+            // Redirect to login
             window.location.href = '../login.html';
         }
 
@@ -1518,7 +2466,7 @@
             if (modal) {
                 modal.style.display = 'flex';
                 document.body.style.overflow = 'hidden'; // Prevent background scrolling
-                
+
                 // Mark Scan button as active
                 const scanButton = document.querySelector('a[onclick*="openPdfCodingModal"]');
                 if (scanButton) {
@@ -1532,7 +2480,7 @@
             if (modal) {
                 modal.style.display = 'none';
                 document.body.style.overflow = ''; // Restore scrolling
-                
+
                 // Remove active state from Scan button
                 const scanButton = document.querySelector('a[onclick*="openPdfCodingModal"]');
                 if (scanButton) {
@@ -1542,7 +2490,7 @@
         }
 
         // Close modal on Escape key
-        document.addEventListener('keydown', function(event) {
+        document.addEventListener('keydown', function (event) {
             if (event.key === 'Escape') {
                 closePdfCodingModal();
             }

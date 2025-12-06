@@ -17,28 +17,28 @@ const AGENT_ID = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63
 // Priority: API_BASE_URL > BASE_URL > Railway URL > localhost
 let API_BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL;
 if (!API_BASE_URL) {
-  // Check if running on Railway
-  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    API_BASE_URL = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-  } else if (process.env.NODE_ENV === 'production') {
-    // Production: use Railway URL (backend is on Railway)
-    API_BASE_URL = 'https://web-production-a783d.up.railway.app';
-  } else {
-    // Development: use localhost
-    API_BASE_URL = 'http://localhost:4000';
-  }
+    // Check if running on Railway
+    if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+        API_BASE_URL = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+    } else if (process.env.NODE_ENV === 'production') {
+        // Production: use Railway URL (backend is on Railway)
+        API_BASE_URL = 'https://web-production-a783d.up.railway.app';
+    } else {
+        // Development: use localhost
+        API_BASE_URL = 'http://localhost:4000';
+    }
 }
 
 // Remove trailing slash if present
 API_BASE_URL = API_BASE_URL.replace(/\/$/, '');
 
-const IS_PRODUCTION = process.env.NODE_ENV === 'production' || 
-  (API_BASE_URL && !API_BASE_URL.includes('localhost') && !API_BASE_URL.includes('127.0.0.1'));
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' ||
+    (API_BASE_URL && !API_BASE_URL.includes('localhost') && !API_BASE_URL.includes('127.0.0.1'));
 
 // WebSocket URL: use wss:// for production (HTTPS), ws:// for development
-const WEBSOCKET_URL = IS_PRODUCTION 
-  ? API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')
-  : 'ws://localhost:4000';
+const WEBSOCKET_URL = IS_PRODUCTION
+    ? API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://')
+    : 'ws://localhost:4000';
 
 // Load healthcare prompt and functions
 function loadHealthcarePrompt() {
@@ -46,10 +46,10 @@ function loadHealthcarePrompt() {
         // Load Kelly's prompt from docs/voice-agent/ folder
         const docsPath = path.join(__dirname, '..', 'docs', 'voice-agent');
         const kellyPromptPath = path.join(docsPath, 'kelly-voice-agent-prompt.md');
-        
+
         // Also check old location for backward compatibility
         const oldKellyPath = path.join(__dirname, 'retell-functions', 'kelly-voice-agent-prompt.md');
-        
+
         if (fs.existsSync(kellyPromptPath)) {
             const prompt = fs.readFileSync(kellyPromptPath, 'utf8');
             console.log('✅ Loaded Kelly voice agent prompt from docs/voice-agent/');
@@ -222,7 +222,7 @@ Keep responses short and natural for voice conversation.`;
             console.log('   ✓ Server running on port 4000');
             console.log('   ✓ For production: Set API_BASE_URL in .env');
         }
-        console.log('   ✓ Merchant shop running on port 3000 (if testing locally)');
+        console.log('   ✓ Products/Orders now integrated in middleware (no separate merchant-shop needed)');
         console.log('   ✓ Your phone has SMS enabled\n');
 
         return updateResponse.data;

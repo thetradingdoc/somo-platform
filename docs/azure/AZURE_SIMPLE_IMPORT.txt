@@ -1,0 +1,134 @@
+# Copy and paste this ENTIRE block into Azure Console:
+
+cd /home/site/wwwroot/middleware-platform && NODE_ENV=production HOME=/home node << 'EOF'
+// Directly open the production database file
+const Database = require('better-sqlite3');
+const dbPath = '/home/middleware-prod.db';
+const db = new Database(dbPath);
+
+console.log('📁 Database file:', dbPath);
+console.log('✅ Connected to production database\n');
+
+const subdomain = 'akin-dunbar';
+const PRODUCTS = [
+    {name:'MONA LISA',desc:'60% Indica / 40% Sativa, THC: 28%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:80},{s:'1/2',p:140},{s:'OZ',p:240}]},
+    {name:'ZLUSHIES',desc:'40% Sativa / 60% Indica, THC: 25%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:80},{s:'1/2',p:140},{s:'OZ',p:240}]},
+    {name:'CHERRY ZLUSHIES',desc:'60% Indica / 40% Sativa, THC: 30%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:90},{s:'1/2',p:165},{s:'OZ',p:350}]},
+    {name:'PINK PICASSO',desc:'50% Indica / 50% Sativa, THC: 30%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:90},{s:'1/2',p:165},{s:'OZ',p:350}]},
+    {name:'ZAFFYS',desc:'Premium exotic strain',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:90},{s:'1/2',p:165},{s:'OZ',p:350}]},
+    {name:'JUICY DROP\'Z',desc:'Indica Dominant, THC: 31%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:90},{s:'1/2',p:165},{s:'OZ',p:350}]},
+    {name:'BROOKLYN GUMBO',desc:'65% Indica / 35% Sativa, THC: 28%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:90},{s:'1/2',p:165},{s:'OZ',p:350}]},
+    {name:'PURPLE URKLE',desc:'70% Indica / 30% Sativa, THC: 26%',cat:'Exotics',prices:[{s:'1/8',p:45},{s:'1/4',p:90},{s:'1/2',p:165},{s:'OZ',p:350}]},
+    {name:'GMO',desc:'90% Sativa / 10% Indica, THC: 24%',cat:'Mids',prices:[{s:'1/8',p:30},{s:'1/4',p:55},{s:'1/2',p:105},{s:'OZ',p:130}]},
+    {name:'CHERRY PIE',desc:'80% Indica / 20% Sativa, THC: 24%',cat:'Mids',prices:[{s:'1/8',p:30},{s:'1/4',p:55},{s:'1/2',p:105},{s:'OZ',p:130}]},
+    {name:'GARY PAYTON',desc:'50% Sativa / 50% Indica, THC: 25%',cat:'Mids',prices:[{s:'1/8',p:30},{s:'1/4',p:55},{s:'1/2',p:110},{s:'OZ',p:150}]},
+    {name:'BLACK DIAMOND',desc:'70% Indica / 30% Sativa, THC: 24%',cat:'Mids',prices:[{s:'1/8',p:30},{s:'1/4',p:55},{s:'1/2',p:105},{s:'OZ',p:180}]},
+    {name:'PURPLE PESO',desc:'Indica Dominant, THC: 22%',cat:'Mids',prices:[{s:'1/8',p:30},{s:'1/4',p:55},{s:'1/2',p:105},{s:'OZ',p:180}]},
+    {name:'OREO',desc:'70% Indica / 30% Sativa, THC: 22%',cat:'Mids',prices:[{s:'1/8',p:30},{s:'1/4',p:55},{s:'1/2',p:105},{s:'OZ',p:180}]},
+    {name:'KANDY KRUSH',desc:'75% Indica / 25% Sativa, THC: 23%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'BLUE RUNTZ',desc:'65% Indica / 35% Sativa, THC: 26%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'GMO KUSH',desc:'60% Indica / 40% Sativa, THC: 25%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'ROCK CANDY',desc:'80% Indica / 20% Sativa, THC: 22%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'COOKIES',desc:'60% Indica / 40% Sativa, THC: 24%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'LEMON CHERRY',desc:'50% Indica / 50% Sativa, THC: 25%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'LAFFY TAFFY',desc:'60% Sativa / 40% Indica, THC: 24%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'BLUE NERDS',desc:'50% Sativa / 50% Indica, THC: 22%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'UNICORN PISS',desc:'50% Indica / 50% Sativa, THC: 24%',cat:'Mids',prices:[{s:'1/8',p:35},{s:'1/4',p:65},{s:'1/2',p:110},{s:'OZ',p:180}]},
+    {name:'GOLDEN TEACHER MUSHROOMS',desc:'Psilocybe Cubensis species. Contains psilocybin and psilocin. Provides unique healing qualities and euphoric experience.',cat:'Mushrooms',prices:[{s:'1g',p:50}]},
+    {name:'MYSTERY BAGS',desc:'3.5g mystery selection',cat:'Mystery',prices:[{s:'3.5g',p:25}]},
+    {name:'SHAKE BAGS',desc:'3.5g shake',cat:'Shake',prices:[{s:'3.5g',p:20}]},
+    {name:'MOON ROCK',desc:'Premium moon rock',cat:'Moon Rock',prices:[{s:'1g',p:40}]},
+    {name:'EDIBLES',desc:'Assorted edibles',cat:'Edibles',prices:[{s:'Each',p:40}]},
+    {name:'PRE-ROLLS',desc:'Any strain pre-rolled',cat:'Pre-Rolls',prices:[{s:'Each',p:20}]}
+];
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('📦 Bulk Import Products');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+// First, list all merchants to see what we have
+console.log('🔍 Checking for merchants...');
+const allMerchants = db.prepare('SELECT id, name FROM merchants').all();
+console.log(`Found ${allMerchants.length} merchant(s):`);
+allMerchants.forEach(m => console.log(`  - ${m.name || 'Unnamed'} (${m.id})`));
+console.log('');
+
+// Try to find merchant
+let merchant = null;
+try {
+    const tableInfo = db.prepare("PRAGMA table_info(merchants)").all();
+    const hasSubdomain = tableInfo.some(col => col.name === 'subdomain');
+    
+    if (hasSubdomain) {
+        merchant = db.prepare('SELECT * FROM merchants WHERE subdomain = ?').get(subdomain);
+    }
+    
+    // If not found by subdomain, try by name
+    if (!merchant) {
+        merchant = db.prepare('SELECT * FROM merchants WHERE name LIKE ?').get(`%${subdomain}%`);
+    }
+    
+    // If still not found, use first merchant
+    if (!merchant && allMerchants.length > 0) {
+        merchant = db.prepare('SELECT * FROM merchants LIMIT 1').get();
+        console.log(`⚠️  Using first merchant: ${merchant.name || merchant.id}`);
+    }
+    
+    // If no merchants exist, DO NOT CREATE - the merchant should already exist
+    if (!merchant) {
+        console.error(`❌ ERROR: Merchant "${subdomain}" not found in database!`);
+        console.error('');
+        console.error('The merchant should already exist. Possible issues:');
+        console.error('  1. Wrong database file (should be /home/middleware-prod.db)');
+        console.error('  2. Merchant was not created properly');
+        console.error('  3. Database path is incorrect');
+        console.error('');
+        console.error('Please check:');
+        console.error('  - Database file location');
+        console.error('  - Merchant creation script was run');
+        console.error('  - Correct database is being used');
+        process.exit(1);
+    }
+} catch (e) {
+    console.error(`❌ Error finding/creating merchant: ${e.message}`);
+    console.error(e.stack);
+    process.exit(1);
+}
+
+console.log(`✅ Merchant: ${merchant.name || merchant.id} (${merchant.id})\n`);
+
+let created = 0, skipped = 0, errors = 0;
+const { v4: uuidv4 } = require('uuid');
+
+for (const pt of PRODUCTS) {
+    for (const v of pt.prices) {
+        const name = `${pt.name} - ${v.s}`;
+        const desc = `${pt.desc} | Size: ${v.s}`;
+        const existing = db.prepare('SELECT * FROM products WHERE merchant_id = ? AND name = ?').all(merchant.id, name);
+        if (existing.length > 0) {
+            console.log(`⏭️  Skipped: ${name}`);
+            skipped++;
+            continue;
+        }
+        try {
+            const productId = uuidv4();
+            db.prepare(`
+                INSERT INTO products (id, merchant_id, name, description, price, inventory, category, image_url, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            `).run(productId, merchant.id, name, desc, v.p, 100, pt.cat, null);
+            console.log(`✅ Created: ${name} - $${v.p}`);
+            created++;
+        } catch (e) {
+            console.error(`❌ Error: ${name} - ${e.message}`);
+            errors++;
+        }
+    }
+}
+
+console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log(`✅ Created: ${created} | Skipped: ${skipped} | Errors: ${errors}`);
+const total = db.prepare('SELECT COUNT(*) as count FROM products WHERE merchant_id = ?').get(merchant.id);
+console.log(`📊 Total products: ${total.count}`);
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+EOF
+

@@ -1,0 +1,51 @@
+# Azure Cleanup Script: Remove Legacy middleware.db
+# This script backs up and removes the old middleware.db file
+# Only run this AFTER confirming middleware-prod.db has all the data
+
+cd /home && cat << 'EOF'
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🗑️  CLEANUP: Remove Legacy middleware.db
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This script will:
+1. Create a backup of middleware.db (just in case)
+2. Remove the legacy middleware.db file
+3. Verify middleware-prod.db is the only database
+
+⚠️  WARNING: Only run this if you're sure middleware-prod.db has all the data!
+
+EOF
+
+# Create backup directory
+mkdir -p /home/db-backups
+
+# Backup old database with timestamp
+BACKUP_NAME="middleware.db.backup.$(date +%Y%m%d_%H%M%S)"
+if [ -f /home/middleware.db ]; then
+    echo "📦 Creating backup: $BACKUP_NAME"
+    cp /home/middleware.db /home/db-backups/$BACKUP_NAME
+    echo "✅ Backup created: /home/db-backups/$BACKUP_NAME"
+    echo ""
+    
+    # Show backup size
+    ls -lh /home/db-backups/$BACKUP_NAME
+    echo ""
+    
+    # Remove old database
+    echo "🗑️  Removing legacy middleware.db..."
+    rm /home/middleware.db
+    echo "✅ Removed /home/middleware.db"
+else
+    echo "ℹ️  middleware.db not found (already removed?)"
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "📊 Current database files:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+ls -lh /home/*.db 2>/dev/null || echo "No .db files found"
+echo ""
+echo "✅ Cleanup complete!"
+echo "📁 Production database: /home/middleware-prod.db"
+echo "💾 Backup location: /home/db-backups/"
+

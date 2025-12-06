@@ -1,0 +1,259 @@
+cd /home/site/wwwroot/middleware-platform && NODE_ENV=production HOME=/home node << 'EOF'
+/**
+ * DATABASE ANALYSIS SCRIPT
+ * Analyzes both middleware.db and middleware-prod.db
+ * Shows schemas, table structures, and data counts side-by-side
+ */
+
+const Database = require('better-sqlite3');
+const fs = require('fs');
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('📊 DATABASE ANALYSIS: COMPARING BOTH DATABASES');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+const db1Path = '/home/middleware.db';
+const db2Path = '/home/middleware-prod.db';
+
+// Check file sizes
+const db1Size = fs.existsSync(db1Path) ? fs.statSync(db1Path).size : 0;
+const db2Size = fs.existsSync(db2Path) ? fs.statSync(db2Path).size : 0;
+
+console.log('📁 Database Files:');
+console.log(`   1. ${db1Path} (${(db1Size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`   2. ${db2Path} (${(db2Size / 1024 / 1024).toFixed(2)} MB)`);
+console.log('');
+
+// Open both databases
+const db1 = Database(db1Path, { readonly: true });
+const db2 = Database(db2Path, { readonly: true });
+
+// Get all tables from both databases
+const getTables = (db) => {
+  return db.prepare(`
+    SELECT name FROM sqlite_master 
+    WHERE type='table' AND name NOT LIKE 'sqlite_%'
+    ORDER BY name
+  `).all().map(row => row.name);
+};
+
+const db1Tables = getTables(db1);
+const db2Tables = getTables(db2);
+
+const allTables = [...new Set([...db1Tables, ...db2Tables])].sort();
+
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('📋 TABLE COMPARISON');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+console.log('TABLE NAME'.padEnd(30) + 'middleware.db'.padEnd(20) + 'middleware-prod.db');
+console.log('-'.repeat(70));
+
+allTables.forEach(tableName => {
+  const inDb1 = db1Tables.includes(tableName);
+  const inDb2 = db2Tables.includes(tableName);
+  
+  let db1Status = inDb1 ? '✅ EXISTS' : '❌ MISSING';
+  let db2Status = inDb2 ? '✅ EXISTS' : '❌ MISSING';
+  
+  if (inDb1) {
+    try {
+      const count = db1.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get().count;
+      db1Status = `✅ ${count} rows`.padEnd(15);
+    } catch (e) {
+      db1Status = '✅ (error)';
+    }
+  }
+  
+  if (inDb2) {
+    try {
+      const count = db2.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get().count;
+      db2Status = `✅ ${count} rows`.padEnd(15);
+    } catch (e) {
+      db2Status = '✅ (error)';
+    }
+  }
+  
+  console.log(tableName.padEnd(30) + db1Status.padEnd(20) + db2Status);
+});
+
+console.log('\n');
+
+// ============================================
+// DETAILED SCHEMA COMPARISON
+// ============================================
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🔍 DETAILED SCHEMA COMPARISON');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+const getTableSchema = (db, tableName) => {
+  try {
+    return db.prepare(`PRAGMA table_info(${tableName})`).all();
+  } catch (e) {
+    return [];
+  }
+};
+
+allTables.forEach(tableName => {
+  const inDb1 = db1Tables.includes(tableName);
+  const inDb2 = db2Tables.includes(tableName);
+  
+  if (!inDb1 && !inDb2) return;
+  
+  console.log(`\n📊 Table: ${tableName}`);
+  console.log('─'.repeat(70));
+  
+  if (inDb1) {
+    const schema1 = getTableSchema(db1, tableName);
+    const count1 = db1.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get().count;
+    console.log(`\n   middleware.db (${count1} rows):`);
+    console.log('   ' + 'Column'.padEnd(25) + 'Type'.padEnd(15) + 'Nullable'.padEnd(10) + 'Default');
+    console.log('   ' + '-'.repeat(65));
+    schema1.forEach(col => {
+      const nullable = col.notnull === 0 ? 'YES' : 'NO';
+      const defaultVal = col.dflt_value !== null ? col.dflt_value : '';
+      console.log(`   ${col.name.padEnd(25)}${col.type.padEnd(15)}${nullable.padEnd(10)}${defaultVal}`);
+    });
+  }
+  
+  if (inDb2) {
+    const schema2 = getTableSchema(db2, tableName);
+    const count2 = db2.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get().count;
+    console.log(`\n   middleware-prod.db (${count2} rows):`);
+    console.log('   ' + 'Column'.padEnd(25) + 'Type'.padEnd(15) + 'Nullable'.padEnd(10) + 'Default');
+    console.log('   ' + '-'.repeat(65));
+    schema2.forEach(col => {
+      const nullable = col.notnull === 0 ? 'YES' : 'NO';
+      const defaultVal = col.dflt_value !== null ? col.dflt_value : '';
+      console.log(`   ${col.name.padEnd(25)}${col.type.padEnd(15)}${nullable.padEnd(10)}${defaultVal}`);
+    });
+  }
+});
+
+// ============================================
+// KEY DATA COMPARISON
+// ============================================
+console.log('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('🔑 KEY DATA COMPARISON');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+// Merchants
+console.log('MERCHANTS:');
+console.log('─'.repeat(70));
+if (db1Tables.includes('merchants')) {
+  const merchants1 = db1.prepare('SELECT id, name, subdomain FROM merchants').all();
+  console.log(`\n   middleware.db (${merchants1.length} merchants):`);
+  merchants1.forEach((m, i) => {
+    console.log(`      ${i + 1}. ${m.name || 'N/A'} (subdomain: ${m.subdomain || 'N/A'}, id: ${m.id})`);
+  });
+}
+if (db2Tables.includes('merchants')) {
+  const merchants2 = db2.prepare('SELECT id, name, subdomain FROM merchants').all();
+  console.log(`\n   middleware-prod.db (${merchants2.length} merchants):`);
+  merchants2.forEach((m, i) => {
+    console.log(`      ${i + 1}. ${m.name || 'N/A'} (subdomain: ${m.subdomain || 'N/A'}, id: ${m.id})`);
+  });
+}
+
+// Customers
+console.log('\n\nCUSTOMERS:');
+console.log('─'.repeat(70));
+if (db1Tables.includes('customers')) {
+  const customers1 = db1.prepare('SELECT id, email, name, merchant_id, email_verified FROM customers LIMIT 10').all();
+  console.log(`\n   middleware.db (showing first 10 of ${db1.prepare('SELECT COUNT(*) as count FROM customers').get().count}):`);
+  customers1.forEach((c, i) => {
+    console.log(`      ${i + 1}. ${c.email} (${c.name || 'N/A'}, merchant: ${c.merchant_id || 'N/A'}, verified: ${c.email_verified || 0})`);
+  });
+}
+if (db2Tables.includes('customers')) {
+  const customers2 = db2.prepare('SELECT id, email, name, merchant_id, email_verified FROM customers LIMIT 10').all();
+  console.log(`\n   middleware-prod.db (showing first 10 of ${db2.prepare('SELECT COUNT(*) as count FROM customers').get().count}):`);
+  customers2.forEach((c, i) => {
+    console.log(`      ${i + 1}. ${c.email} (${c.name || 'N/A'}, merchant: ${c.merchant_id || 'N/A'}, verified: ${c.email_verified || 0})`);
+  });
+  
+  // Check for akin.dunbar@gmail.com specifically
+  const akinCustomer = db2.prepare('SELECT * FROM customers WHERE email LIKE ?').get('%akin%');
+  if (akinCustomer) {
+    console.log(`\n   ✅ Found akin customer in middleware-prod.db:`);
+    console.log(`      Email: ${akinCustomer.email}`);
+    console.log(`      Name: ${akinCustomer.name || 'N/A'}`);
+    console.log(`      Merchant ID: ${akinCustomer.merchant_id || 'N/A'}`);
+    console.log(`      Verified: ${akinCustomer.email_verified || 0}`);
+  } else {
+    console.log(`\n   ❌ akin.dunbar@gmail.com NOT found in middleware-prod.db`);
+  }
+}
+
+// Products
+console.log('\n\nPRODUCTS:');
+console.log('─'.repeat(70));
+if (db1Tables.includes('products')) {
+  const products1 = db1.prepare('SELECT COUNT(*) as count FROM products').get().count;
+  console.log(`\n   middleware.db: ${products1} products`);
+  if (products1 > 0) {
+    const sample1 = db1.prepare('SELECT name, price, inventory FROM products LIMIT 5').all();
+    sample1.forEach((p, i) => {
+      console.log(`      ${i + 1}. ${p.name || 'N/A'} - $${p.price || 0} (inventory: ${p.inventory || 0})`);
+    });
+  }
+}
+if (db2Tables.includes('products')) {
+  const products2 = db2.prepare('SELECT COUNT(*) as count FROM products').get().count;
+  console.log(`\n   middleware-prod.db: ${products2} products`);
+  if (products2 > 0) {
+    const sample2 = db2.prepare('SELECT name, price, inventory FROM products LIMIT 10').all();
+    sample2.forEach((p, i) => {
+      console.log(`      ${i + 1}. ${p.name || 'N/A'} - $${p.price || 0} (inventory: ${p.inventory || 0})`);
+    });
+  }
+}
+
+// Orders
+console.log('\n\nORDERS:');
+console.log('─'.repeat(70));
+if (db1Tables.includes('orders')) {
+  const orders1 = db1.prepare('SELECT COUNT(*) as count FROM orders').get().count;
+  console.log(`\n   middleware.db: ${orders1} orders`);
+} else {
+  console.log(`\n   middleware.db: ❌ orders table does not exist`);
+}
+if (db2Tables.includes('orders')) {
+  const orders2 = db2.prepare('SELECT COUNT(*) as count FROM orders').get().count;
+  console.log(`\n   middleware-prod.db: ${orders2} orders`);
+} else {
+  console.log(`\n   middleware-prod.db: ❌ orders table does not exist`);
+}
+
+// ============================================
+// SUMMARY
+// ============================================
+console.log('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log('📊 SUMMARY');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+console.log('WHY TWO DATABASES?');
+console.log('─'.repeat(70));
+console.log('The database module uses environment-based naming:');
+console.log('  - NODE_ENV=production → middleware-prod.db');
+console.log('  - NODE_ENV=development → middleware-dev.db');
+console.log('  - Default → middleware.db');
+console.log('');
+console.log('ISSUE: The database module may be loading before DB_NAME is set,');
+console.log('       causing it to use the default middleware.db instead of');
+console.log('       middleware-prod.db even when DB_NAME is specified.\n');
+
+console.log('RECOMMENDATION:');
+console.log('  1. Check which database has the actual tenant data');
+console.log('  2. Ensure the database module respects DB_NAME environment variable');
+console.log('  3. Consider consolidating to a single production database');
+console.log('  4. Update database.js to check DB_NAME before determining db path\n');
+
+// Close databases
+db1.close();
+db2.close();
+
+console.log('✅ Analysis complete!\n');
+
+EOF
+

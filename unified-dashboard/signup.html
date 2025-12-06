@@ -262,8 +262,8 @@
           <div>
             <div style="font-weight:700;color:var(--accent);font-size:1.1rem;margin-bottom:4px;">Free Credits Included
             </div>
-            <div style="color:var(--muted);font-size:0.95rem;">API: 100 min + 1,000 requests/month • SaaS: 250 min/month
-              (resets)</div>
+            <div style="color:var(--muted);font-size:0.95rem;">API: 100 min (one-time) + 1,000 requests/month • SaaS:
+              250 min (one-time signup credit)</div>
           </div>
         </div>
       </div>
@@ -272,8 +272,8 @@
         <div class="timeline-item">
           <div class="timeline-bullet"></div>
           <div class="timeline-body">
-            <h3>Step 1 · Tell us about your clinic</h3>
-            <p>Share your clinic details—we use this to personalize your AI agent.</p>
+            <h3>Step 1 · Tell us about your company</h3>
+            <p>Share your company details—we use this to personalize your AI agent.</p>
           </div>
         </div>
         <div class="timeline-item">
@@ -312,7 +312,7 @@
     </section>
 
     <section class="panel" id="step-intake">
-      <h2 style="margin-top:0;">Tell us about your clinic</h2>
+      <h2 style="margin-top:0;">Tell us about your company</h2>
       <p class="muted" style="margin-top:4px;">We use this to pre-build the billing agent and score your lead.</p>
 
       <form id="signupForm">
@@ -327,12 +327,12 @@
         </div>
 
         <div>
-          <label>Clinic / Company</label>
+          <label>Company</label>
           <input type="text" name="company_name" placeholder="Rivers Pediatrics" />
         </div>
 
         <div>
-          <label>Clinic Phone (optional)</label>
+          <label>Company Phone (optional)</label>
           <div style="display:flex;gap:8px;align-items:stretch;">
             <select name="country_code" id="countryCode"
               style="width:100px;padding:12px 14px;border-radius:12px;border:1px solid var(--card-border);background:#fdfdfd;font-size:1rem;color:var(--text);">
@@ -486,6 +486,10 @@
               <span style="color:var(--muted);font-size:0.85rem;">API requests:</span>
               <span style="font-weight:700;color:var(--text);">$0.001/request</span>
             </div>
+            <div
+              style="margin-top:8px;padding:8px;background:rgba(124, 93, 250, 0.05);border-radius:6px;font-size:0.8rem;color:var(--muted);text-align:center;">
+              Pay only for what you use
+            </div>
           </div>
         </div>
 
@@ -513,8 +517,8 @@
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
               <span style="font-size:1.5rem;">🎁</span>
               <div>
-                <div style="font-weight:700;color:var(--success);font-size:1rem;">FREE Every Month</div>
-                <div style="color:var(--muted);font-size:0.85rem;">250 voice minutes/month (resets monthly) + Dedicated
+                <div style="font-weight:700;color:var(--success);font-size:1rem;">FREE Signup Credit</div>
+                <div style="color:var(--muted);font-size:0.85rem;">250 voice minutes (one-time) + Dedicated
                   phone number</div>
               </div>
             </div>
@@ -545,9 +549,13 @@
 
           <!-- Pricing -->
           <div style="border-top:1px solid var(--card-border);padding-top:16px;margin-top:16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="color:var(--muted);font-size:0.85rem;">After free 250 min/month:</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="color:var(--muted);font-size:0.85rem;">After free 250 min (one-time):</span>
               <span style="font-weight:700;color:var(--text);">$0.05/min</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="color:var(--muted);font-size:0.85rem;">Monthly base fee:</span>
+              <span style="font-weight:700;color:var(--text);">$0/month</span>
             </div>
             <div
               style="margin-top:8px;padding:8px;background:rgba(124, 93, 250, 0.05);border-radius:6px;font-size:0.8rem;color:var(--muted);text-align:center;">
@@ -567,6 +575,22 @@
     <section class="panel hidden" id="step-code">
       <h2 style="margin-top:0;">Enter verification code</h2>
       <p class="muted" id="codeInstructions">We just sent a 6-digit code to your email.</p>
+
+      <!-- Change Email Option -->
+      <div style="margin-bottom: 16px;">
+        <button type="button" id="changeEmailBtn" style="
+            background: none;
+            border: none;
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: underline;
+            padding: 0;
+            font-weight: 500;
+          " onclick="changeEmail()">
+          ✏️ Change email address
+        </button>
+      </div>
 
       <div class="code-grid" id="codeGrid">
         <input type="text" maxlength="1" inputmode="numeric" />
@@ -611,6 +635,7 @@
     const codeInputs = Array.from(document.querySelectorAll('#codeGrid input'));
     let pendingEmail = '';
     let selectedIntegrationType = null;
+    let pendingCustomerId = null; // Store customer ID for email update
 
     function showPanel(panel) {
       [signupPanel, codePanel, integrationPanel].forEach(p => {
@@ -698,6 +723,7 @@
           throw new Error(data.message || data.error || 'Failed to submit form');
         }
         pendingEmail = data.email;
+        pendingCustomerId = data.customer_id; // Store customer ID for potential email update
         document.getElementById('codeInstructions').textContent =
           `We sent a 6-digit code to ${pendingEmail}. Check spam if you don't see it.`;
         codeInputs.forEach(input => input.value = '');
@@ -763,27 +789,60 @@
         // Check next step from API
         if (data.next_step === 'select_integration') {
           // Show integration selection panel
+          // Get customer_type from API response OR URL (URL is most reliable for initial selection)
+          const customerTypeFromApi = data.customer?.customer_type;
+          const customerTypeFromUrl = new URLSearchParams(window.location.search).get('customer_type');
+          // Prefer URL over API response because URL reflects user's initial choice
+          const customerType = customerTypeFromUrl || customerTypeFromApi;
+
+          console.log('🔍 Integration selection - customer_type from URL:', customerTypeFromUrl, 'from API:', customerTypeFromApi, 'using:', customerType);
+
+          if (customerType) {
+            // Ensure URL has customer_type for filtering
+            const url = new URL(window.location.href);
+            url.searchParams.set('customer_type', customerType);
+            window.history.replaceState({}, '', url);
+          }
           showPanel(integrationPanel);
           initializeIntegrationSelection();
         } else if (data.next_step === 'accept_terms') {
           // Get customer_type from API response (most reliable - comes from database)
-          const customerType = data.customer?.customer_type || 'saas';
-          console.log('Redirecting to terms with customer_type:', customerType);
+          // Also check URL as fallback
+          const customerTypeFromApi = data.customer?.customer_type;
+          const customerTypeFromUrl = new URLSearchParams(window.location.search).get('customer_type');
+          const customerType = customerTypeFromApi || customerTypeFromUrl || 'saas';
 
-          // Redirect to terms page with appropriate redirect based on customer type
-          const termsRedirect = customerType === 'api'
-            ? '/docs'
-            : '/business/business-dashboard.html';
+          console.log('✅ Redirecting to terms - customer_type from API:', customerTypeFromApi, 'from URL:', customerTypeFromUrl, 'final:', customerType);
+
+          // Ensure URL has customer_type
+          const url = new URL(window.location.href);
+          url.searchParams.set('customer_type', customerType);
+          window.history.replaceState({}, '', url);
+
+          // CRITICAL: Redirect to terms page with correct redirect based on customer type
+          // SaaS → Dashboard, API → Docs
+          const termsRedirect = customerType === 'saas'
+            ? '/business/business-dashboard.html'
+            : '/docs';
+          console.log(`✅ Redirecting to terms with customer_type=${customerType}, redirect=${termsRedirect}`);
           window.location.href = `/terms?redirect=${encodeURIComponent(termsRedirect)}&customer_type=${customerType}`;
         } else {
           // Terms already accepted - redirect based on customer type from database
           const customerType = data.customer?.customer_type || 'saas';
-          console.log('Terms already accepted, redirecting with customer_type:', customerType);
+          console.log('✅ Terms already accepted, redirecting with customer_type:', customerType);
 
-          if (customerType === 'api') {
-            window.location.href = 'https://api.doclittle.site';
-          } else {
+          // CRITICAL: SaaS → Dashboard, API → Docs
+          if (customerType === 'saas') {
             // SaaS customers go to business dashboard
+            console.log('✅ SaaS customer - redirecting to dashboard');
+            window.location.href = '/business/business-dashboard.html';
+          } else if (customerType === 'api') {
+            // API customers go to docs
+            console.log('✅ API customer - redirecting to docs');
+            window.location.href = '/docs';
+          } else {
+            // Fallback - default to dashboard
+            console.log('⚠️ Unknown customer_type - defaulting to dashboard');
             window.location.href = '/business/business-dashboard.html';
           }
         }
@@ -837,16 +896,131 @@
       }
     });
 
+    // Change Email Function
+    async function changeEmail() {
+      const newEmail = prompt('Enter your correct email address:', pendingEmail);
+      if (!newEmail || newEmail === pendingEmail) {
+        return; // User cancelled or didn't change
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmail)) {
+        showError(codeError, 'Please enter a valid email address.');
+        return;
+      }
+
+      const changeEmailBtn = document.getElementById('changeEmailBtn');
+      const codeLoading = document.getElementById('codeLoading');
+      const codeLoadingText = document.getElementById('codeLoadingText');
+
+      // Show loading state
+      changeEmailBtn.disabled = true;
+      changeEmailBtn.textContent = 'Updating...';
+      codeLoadingText.textContent = 'Updating email address and sending new verification code...';
+      codeLoading.classList.remove('hidden');
+      hideError(codeError);
+
+      try {
+        // Update email via API
+        const res = await fetch(`${SIGNUP_API_BASE}/api/signup/update-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer_id: pendingCustomerId,
+            old_email: pendingEmail,
+            new_email: newEmail
+          })
+        });
+
+        const data = await res.json();
+        if (!data.success) {
+          throw new Error(data.message || data.error || 'Failed to update email');
+        }
+
+        // Update pending email
+        pendingEmail = newEmail;
+        document.getElementById('codeInstructions').textContent =
+          `We sent a 6-digit code to ${pendingEmail}. Check spam if you don't see it.`;
+
+        // Clear code inputs
+        codeInputs.forEach(input => input.value = '');
+        codeInputs[0].focus();
+
+        // Show success
+        codeSuccess.textContent = 'Email updated! New verification code sent.';
+        codeSuccess.classList.remove('hidden');
+        codeLoading.classList.add('hidden');
+
+      } catch (err) {
+        showError(codeError, err.message);
+        codeLoading.classList.add('hidden');
+      } finally {
+        // Reset button state
+        changeEmailBtn.disabled = false;
+        changeEmailBtn.innerHTML = '✏️ Change email address';
+      }
+    }
+
     // Initialize integration selection after email verification
     function initializeIntegrationSelection() {
       const useCaseOptions = document.querySelectorAll('#step-integration .use-case-option');
       const continueBtn = document.getElementById('integrationContinue');
+      const integrationHeading = document.querySelector('#step-integration h2');
+      const integrationSubtitle = document.querySelector('#step-integration p.muted');
+
+      // Check if customer_type is already set from URL (user already chose at beginning)
+      const urlParams = new URLSearchParams(window.location.search);
+      const customerTypeFromUrl = urlParams.get('customer_type');
+
+      console.log('🔍 Integration Selection - customer_type from URL:', customerTypeFromUrl);
+
+      // ALWAYS show both options with pricing - don't hide them
+      // But pre-select the one from URL if available
+      if (customerTypeFromUrl && (customerTypeFromUrl === 'api' || customerTypeFromUrl === 'saas')) {
+        selectedIntegrationType = customerTypeFromUrl;
+        console.log('✅ Pre-selecting:', customerTypeFromUrl);
+
+        // Pre-select and highlight the chosen option (but don't hide the other)
+        useCaseOptions.forEach(option => {
+          if (option.dataset.type === customerTypeFromUrl) {
+            // Pre-select and highlight the chosen option
+            option.style.borderColor = 'var(--accent)';
+            option.style.borderWidth = '2px';
+            option.style.background = 'rgba(124, 93, 250, 0.08)';
+            option.style.boxShadow = '0 4px 12px rgba(124, 93, 250, 0.15)';
+            option.style.transform = 'translateY(-2px)';
+            const radio = option.querySelector('.radio-button > div');
+            if (radio) radio.style.display = 'block';
+
+            // Enable continue button immediately since choice is already made
+            if (continueBtn) {
+              continueBtn.disabled = false;
+              continueBtn.style.opacity = '1';
+              continueBtn.style.pointerEvents = 'auto';
+            }
+          } else {
+            // Reset other option to unselected state
+            option.style.borderColor = 'var(--card-border)';
+            option.style.borderWidth = '2px';
+            option.style.background = 'white';
+            option.style.boxShadow = 'none';
+            option.style.transform = 'translateY(0)';
+            const radio = option.querySelector('.radio-button > div');
+            if (radio) radio.style.display = 'none';
+          }
+        });
+      }
 
       if (useCaseOptions.length > 0) {
         useCaseOptions.forEach(option => {
+          // Skip if this option is hidden
+          if (option.style.display === 'none') return;
+
           option.addEventListener('click', () => {
             // Remove selected from all
             useCaseOptions.forEach(opt => {
+              if (opt.style.display === 'none') return; // Skip hidden options
               opt.style.borderColor = 'var(--card-border)';
               opt.style.borderWidth = '2px';
               opt.style.background = 'transparent';
@@ -897,10 +1071,12 @@
             const data = await response.json();
 
             if (data.success) {
-              // Redirect to terms page
-              const termsRedirect = selectedIntegrationType === 'api'
-                ? '/docs'
-                : '/business/business-dashboard.html';
+              // Redirect to terms page with correct redirect based on customer type
+              // CRITICAL: SaaS → Dashboard, API → Docs
+              const termsRedirect = selectedIntegrationType === 'saas'
+                ? '/business/business-dashboard.html'
+                : '/docs';
+              console.log(`✅ Integration selected: ${selectedIntegrationType}, redirecting to terms with redirect: ${termsRedirect}`);
               window.location.href = `/terms?redirect=${encodeURIComponent(termsRedirect)}&customer_type=${selectedIntegrationType}`;
             } else {
               throw new Error(data.error || 'Failed to update integration type');
@@ -918,8 +1094,6 @@
 </body>
 
 </html>
-<!DOCTYPE html>
-<html lang="en">
 
 <head>
   <meta charset="UTF-8">
@@ -949,6 +1123,11 @@
       max-width: 600px;
       width: 100%;
       padding: 40px;
+    }
+
+    /* Ensure integration selection container is visible by default */
+    #integrationSelection {
+      display: block;
     }
 
     .logo {
@@ -1401,94 +1580,166 @@
 
     let selectedType = null;
 
-    // Handle use case selection - auto-proceed when clicked
-    const useCaseOptions = document.querySelectorAll('.use-case-option');
+    // Check if customer_type is already in URL - if so, hide integration selection and show signup form
+    document.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const customerTypeFromUrl = urlParams.get('customer_type');
+      const integrationSelection = document.getElementById('integrationSelection');
+      const signupShell = document.querySelector('.shell');
 
-    if (useCaseOptions.length > 0) {
-      useCaseOptions.forEach(option => {
-        const selectAndProceed = (e) => {
-          if (e) {
+      console.log('🔍 Checking customer_type from URL:', customerTypeFromUrl);
+      console.log('🔍 integrationSelection element:', integrationSelection);
+      console.log('🔍 signupShell element:', signupShell);
+
+      if (customerTypeFromUrl && (customerTypeFromUrl === 'api' || customerTypeFromUrl === 'saas')) {
+        // User already selected - hide integration selection, show signup form
+        console.log('✅ customer_type found in URL, hiding integration selection');
+        if (integrationSelection) {
+          integrationSelection.style.display = 'none';
+          console.log('✅ Hidden integration selection');
+        }
+        if (signupShell) {
+          signupShell.style.display = 'grid';
+          console.log('✅ Showing signup form');
+          // Set customer type in hidden field
+          const customerTypeInput = document.getElementById('customerTypeInput');
+          if (customerTypeInput) {
+            customerTypeInput.value = customerTypeFromUrl;
+            console.log('✅ Set customerTypeInput to:', customerTypeFromUrl);
+          }
+        }
+      } else {
+        // No customer_type - show integration selection
+        console.log('ℹ️ No customer_type in URL, showing integration selection');
+        if (integrationSelection) {
+          integrationSelection.style.display = 'block';
+        }
+        if (signupShell) {
+          signupShell.style.display = 'none';
+        }
+      }
+    });
+
+    // Handle use case selection - auto-proceed when clicked
+    // Wait for DOM to be ready
+    function initializeIntegrationSelection() {
+      const useCaseOptions = document.querySelectorAll('.use-case-option');
+      console.log('🔍 Found', useCaseOptions.length, 'integration options');
+
+      if (useCaseOptions.length > 0) {
+        useCaseOptions.forEach((option, index) => {
+          console.log(`📌 Setting up click handler for option ${index}:`, option.dataset.type);
+
+          const selectAndProceed = (e) => {
+            console.log('🖱️ Click detected on:', option.dataset.type);
+            if (e) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+
+            // Remove selected class from all options
+            useCaseOptions.forEach(opt => {
+              opt.classList.remove('selected');
+            });
+
+            // Add selected class to clicked option
+            option.classList.add('selected');
+            selectedType = option.dataset.type;
+
+            console.log('✅ Selected type:', selectedType);
+
+            // Auto-proceed after a brief visual feedback
+            setTimeout(() => {
+              proceedWithSelection();
+            }, 200);
+          };
+
+          // Make the entire card area clickable
+          option.style.cursor = 'pointer';
+          option.style.webkitTapHighlightColor = 'transparent';
+          option.style.pointerEvents = 'auto'; // Ensure clicks work
+          option.style.userSelect = 'none'; // Prevent text selection
+
+          // Support both click and touch events
+          // Add in both capture and bubble phases to ensure it fires
+          option.addEventListener('click', selectAndProceed, true); // Capture phase
+          option.addEventListener('click', selectAndProceed, false); // Bubble phase
+          console.log('✅ Click handler attached to', option.dataset.type, '(both phases)');
+
+          // Prevent double-firing on mobile
+          let touchStartTime = 0;
+          option.addEventListener('touchstart', (e) => {
+            touchStartTime = Date.now();
+          }, { passive: true });
+
+          option.addEventListener('touchend', (e) => {
             e.preventDefault();
             e.stopPropagation();
-          }
+            const touchDuration = Date.now() - touchStartTime;
+            if (touchDuration < 300) { // Quick tap
+              selectAndProceed(e);
+            }
+          }, { passive: false });
 
-          // Remove selected class from all options
-          useCaseOptions.forEach(opt => {
-            opt.classList.remove('selected');
-          });
+          // Add hover effect
+          option.addEventListener('mouseenter', () => {
+            if (!option.classList.contains('selected')) {
+              option.style.transform = 'translateY(-2px)';
+              option.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+            }
+          }, { passive: true });
 
-          // Add selected class to clicked option
-          option.classList.add('selected');
-          selectedType = option.dataset.type;
+          option.addEventListener('mouseleave', () => {
+            if (!option.classList.contains('selected')) {
+              option.style.transform = 'translateY(0)';
+              option.style.boxShadow = 'none';
+            }
+          }, { passive: true });
 
-          console.log('Selected type:', selectedType);
-
-          // Auto-proceed after a brief visual feedback
-          setTimeout(() => {
-            proceedWithSelection();
-          }, 200);
-        };
-
-        // Support both click and touch events
-        option.addEventListener('click', selectAndProceed);
-
-        // Prevent double-firing on mobile
-        let touchStartTime = 0;
-        option.addEventListener('touchstart', (e) => {
-          touchStartTime = Date.now();
+          // Test click handler
+          console.log('🧪 Testing click on', option.dataset.type);
+          option.addEventListener('mousedown', () => {
+            console.log('🖱️ Mouse down on', option.dataset.type);
+          }, { passive: true });
         });
+      } else {
+        console.warn('⚠️ No integration options found!');
+      }
+    }
 
-        option.addEventListener('touchend', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const touchDuration = Date.now() - touchStartTime;
-          if (touchDuration < 300) { // Quick tap
-            selectAndProceed(e);
-          }
-        });
-
-        // Make the entire card area clickable
-        option.style.cursor = 'pointer';
-        option.style.webkitTapHighlightColor = 'transparent';
-      });
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initializeIntegrationSelection);
+    } else {
+      // DOM already loaded
+      initializeIntegrationSelection();
     }
 
     // Function to proceed with the selected integration type
     function proceedWithSelection() {
+      console.log('🚀 proceedWithSelection called, selectedType:', selectedType);
       if (!selectedType) {
+        console.warn('⚠️ No type selected!');
+        showAlert('Please select an option', 'info');
         return;
       }
 
       try {
+        console.log('✅ Proceeding with selection:', selectedType);
         if (selectedType === 'api') {
-          // Redirect to API signup page (api.doclittle.site)
-          window.location.href = 'https://api.doclittle.site';
+          // API Integration - redirect to signup with customer_type=api
+          console.log('📍 Redirecting to /signup?customer_type=api');
+          window.location.href = '/signup?customer_type=api';
         } else if (selectedType === 'saas') {
-          // SaaS Platform - show signup form with customer_type=saas
-          const integrationContainer = document.getElementById('integrationSelection');
-          const signupShell = document.querySelector('.shell');
-
-          if (integrationContainer && signupShell) {
-            // Hide integration selection
-            integrationContainer.style.display = 'none';
-            // Show signup form
-            signupShell.style.display = 'grid';
-            // Set customer type in hidden field
-            const customerTypeInput = document.getElementById('customerTypeInput');
-            if (customerTypeInput) {
-              customerTypeInput.value = 'saas';
-            }
-            // Update URL without reload
-            window.history.pushState({}, '', '/signup?customer_type=saas');
-            // Scroll to top
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          } else {
-            // Fallback: redirect with query param
-            window.location.href = '/signup?customer_type=saas';
-          }
+          // SaaS Platform - redirect to signup with customer_type=saas
+          console.log('📍 Redirecting to /signup?customer_type=saas');
+          window.location.href = '/signup?customer_type=saas';
+        } else {
+          console.error('❌ Unknown selectedType:', selectedType);
+          showAlert('Invalid selection. Please try again.', 'info');
         }
       } catch (error) {
-        console.error('Error:', error);
+        console.error('❌ Error in proceedWithSelection:', error);
         showAlert('An error occurred. Please try again.', 'info');
       }
     }

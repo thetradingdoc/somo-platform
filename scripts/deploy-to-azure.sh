@@ -83,8 +83,7 @@ zip -r "$DEPLOY_ZIP" . \
     -x ".DS_Store" \
     -x "middleware.db-journal" \
     -x "*.test.js" \
-    -x "tests/*" \
-    -x "package-lock.json" > /dev/null
+    -x "tests/*" > /dev/null
 
 # Clean up temp directory
 cd "$PROJECT_ROOT"
