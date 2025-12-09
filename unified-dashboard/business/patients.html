@@ -7,6 +7,7 @@
     <title>Customer List - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -559,10 +560,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-    
+
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
+
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -575,31 +576,7 @@
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
-                <a href="business-dashboard.html" class="nav-item">
-                    <span class="nav-icon">📊</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="products.html" class="nav-item">
-                    <span class="nav-icon">📦</span>
-                    <span>Products</span>
-                </a>
-                <a href="orders.html" class="nav-item">
-                    <span class="nav-icon">🛒</span>
-                    <span>Orders</span>
-                </a>
-                <a href="patients.html" class="nav-item active">
-                    <span class="nav-icon">👥</span>
-                    <span>Customer List</span>
-                </a>
-                <a href="agent.html" class="nav-item">
-                    <span class="nav-icon">🎙️</span>
-                    <span>Voice Agent</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
+                <!-- Will be populated by tenant config -->
             </nav>
 
             <div class="sidebar-footer">
@@ -627,39 +604,49 @@
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Total Clients</span>
+                        <span class="stat-title">Total Customers</span>
                         <span class="stat-icon">👥</span>
                     </div>
                     <div class="stat-value" id="totalCustomers">0</div>
-                    <div class="stat-change">Registered clients</div>
+                    <div class="stat-change">All customers</div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Eligible Clients</span>
+                        <span class="stat-title">Active Customers (30d)</span>
                         <span class="stat-icon">✅</span>
                     </div>
                     <div class="stat-value" id="newCustomers">0</div>
-                    <div class="stat-change">Eligible</div>
+                    <div class="stat-change">Recent orders</div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">With Coverage</span>
+                        <span class="stat-title">Has Therapist</span>
                         <span class="stat-icon">🏥</span>
                     </div>
                     <div class="stat-value" id="repeatCustomers">0</div>
-                    <div class="stat-change">With Coverage</div>
+                    <div class="stat-change">With therapist</div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Total Copays</span>
+                        <span class="stat-title">Total Revenue</span>
                         <span class="stat-icon">💰</span>
                     </div>
                     <div class="stat-value" id="avgOrderValue">$0.00</div>
-                    <div class="stat-change">Total Copays</div>
+                    <div class="stat-change">Lifetime spend</div>
                 </div>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="filter-buttons" style="display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap;">
+                <button class="btn btn-primary btn-sm" id="filterAll" onclick="filterCustomers('all')">All
+                    Customers</button>
+                <button class="btn btn-secondary btn-sm" id="filterTherapist" onclick="filterCustomers('therapist')">Has
+                    Therapist</button>
+                <button class="btn btn-secondary btn-sm" id="filterActive" onclick="filterCustomers('active')">Active
+                    (30d)</button>
             </div>
 
             <!-- Search Bar -->
@@ -761,26 +748,7 @@
             });
         }
 
-        function renderSidebar() {
-            if (!window.TENANT_CONFIG) return;
-            const navEl = document.getElementById('sidebarNav');
-            if (!navEl) return;
-
-            // Use 'customers' tab id for shop tenants, 'patients' for clinics
-            const activeId = window.TENANT_CONFIG.tenant_type === 'shop' ? 'customers' : 'patients';
-
-            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
-                    <span class="nav-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </a>
-            `).join('');
-
-            const subtitleEl = document.querySelector('.sidebar-subtitle');
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-        }
+        // renderSidebar function removed - now using shared navigation.js
 
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
@@ -789,7 +757,8 @@
         userData = JSON.parse(sessionStorage.getItem('user'));
 
         document.addEventListener('DOMContentLoaded', () => {
-            renderSidebar();
+            // Navigation is now handled by navigation.js
+            renderNavigation('patients');
             setupMobileNavClose();
             loadUserInfo();
             loadCustomers();
@@ -979,72 +948,80 @@
             }
         }
 
-        function updateStatsFromPatients(patients) {
-            const total = patients.length;
+        function updateStatsFromPatients(customers) {
+            const total = customers.length;
 
-            // For clinic tenants, keep insurance-focused stats
-            if (!window.TENANT_CONFIG || window.TENANT_CONFIG.tenant_type !== 'shop') {
-                const eligible = patients.filter(p => p.eligibility && p.eligibility.eligible).length;
-                const hasCoverage = patients.filter(p => p.eligibility).length;
-                const totalCopays = patients
-                    .filter(p => p.eligibility && p.eligibility.copay_amount)
-                    .reduce((sum, p) => sum + (p.eligibility.copay_amount || 0), 0);
-
-                document.getElementById('totalCustomers').textContent = total;
-                document.getElementById('newCustomers').textContent = eligible;
-                document.getElementById('repeatCustomers').textContent = hasCoverage;
-                document.getElementById('avgOrderValue').textContent = `$${totalCopays.toFixed(2)}`;
-                return;
-            }
-
-            // For shop tenants, compute simple commerce stats from orders-derived customers
+            // Calculate stats for cannabis e-commerce
             const now = new Date();
             const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-            let activeCount = 0;
-            let repeatCount = 0;
-            let totalOrders = 0;
-            let totalRevenue = 0;
+            // Active customers (orders in last 30 days)
+            const activeCustomers = customers.filter(c => {
+                if (!c.last_order_at) return false;
+                const lastOrder = new Date(c.last_order_at);
+                return (now - lastOrder) < THIRTY_DAYS;
+            }).length;
 
-            patients.forEach(c => {
-                const orders = c.total_orders || 0;
-                const spend = c.total_spend || 0;
-                totalOrders += orders;
-                totalRevenue += spend;
+            // Customers with therapist (have fhir_patient_id)
+            const hasTherapist = customers.filter(c => c.fhir_patient_id).length;
 
-                if (orders > 1) repeatCount += 1;
-
-                if (c.last_order_at) {
-                    const last = new Date(c.last_order_at);
-                    if (!isNaN(last.getTime()) && (now - last) <= THIRTY_DAYS) {
-                        activeCount += 1;
-                    }
-                }
-            });
-
-            const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
+            // Total revenue (lifetime spend)
+            const totalRevenue = customers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
 
             document.getElementById('totalCustomers').textContent = total;
-            document.getElementById('newCustomers').textContent = activeCount;
-            document.getElementById('repeatCustomers').textContent = repeatCount;
-            document.getElementById('avgOrderValue').textContent = `$${avgOrderValue.toFixed(2)}`;
-
-            // Also adjust labels to be commerce oriented
-            const statsTitles = document.querySelectorAll('.stat-title');
-            if (statsTitles.length >= 4) {
-                statsTitles[0].textContent = 'Total Customers';
-                statsTitles[1].textContent = 'Active Customers (30d)';
-                statsTitles[2].textContent = 'Repeat Buyers';
-                statsTitles[3].textContent = 'Avg Order Value';
-            }
-            const statChanges = document.querySelectorAll('.stat-change');
-            if (statChanges.length >= 4) {
-                statChanges[0].textContent = 'All-time';
-                statChanges[1].textContent = 'Last 30 days';
-                statChanges[2].textContent = 'Customers with >1 order';
-                statChanges[3].textContent = 'Revenue / Orders';
-            }
+            document.getElementById('newCustomers').textContent = activeCustomers;
+            document.getElementById('repeatCustomers').textContent = hasTherapist;
+            document.getElementById('avgOrderValue').textContent = `$${totalRevenue.toFixed(2)}`;
         }
+
+        // Filter customers function
+        let currentFilter = 'all';
+        function filterCustomers(filter) {
+            if (!allCustomers || allCustomers.length === 0) {
+                console.warn('No customers loaded yet');
+                return;
+            }
+
+            currentFilter = filter;
+
+            // Update button states
+            const filterAllBtn = document.getElementById('filterAll');
+            const filterTherapistBtn = document.getElementById('filterTherapist');
+            const filterActiveBtn = document.getElementById('filterActive');
+
+            if (filterAllBtn) {
+                filterAllBtn.classList.remove('btn-primary', 'btn-secondary');
+                filterAllBtn.classList.add(filter === 'all' ? 'btn-primary' : 'btn-secondary');
+            }
+            if (filterTherapistBtn) {
+                filterTherapistBtn.classList.remove('btn-primary', 'btn-secondary');
+                filterTherapistBtn.classList.add(filter === 'therapist' ? 'btn-primary' : 'btn-secondary');
+            }
+            if (filterActiveBtn) {
+                filterActiveBtn.classList.remove('btn-primary', 'btn-secondary');
+                filterActiveBtn.classList.add(filter === 'active' ? 'btn-primary' : 'btn-secondary');
+            }
+
+            // Filter customers
+            let filtered = [...allCustomers]; // Create a copy
+            if (filter === 'therapist') {
+                filtered = allCustomers.filter(c => c.fhir_patient_id);
+            } else if (filter === 'active') {
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                filtered = allCustomers.filter(c => {
+                    if (!c.last_order_at) return false;
+                    const lastOrder = new Date(c.last_order_at);
+                    return !isNaN(lastOrder.getTime()) && lastOrder >= thirtyDaysAgo;
+                });
+            }
+
+            displayCustomers(filtered);
+            // Update stats with filtered results
+            updateStatsFromPatients(filtered);
+        }
+
+        // Old function removed - using updateStatsFromPatients above
 
         function displayCustomers(customers) {
             const container = document.getElementById('customersList');
@@ -1053,7 +1030,7 @@
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">👥</div>
-                        <p>No clients yet. Clients will appear here after their first appointment.</p>
+                        <p>No customers yet. Customers will appear here after their first purchase.</p>
                     </div>
                 `;
                 return;
@@ -1069,23 +1046,24 @@
             const hasEhrData = patient.ehr_data && patient.ehr_data.encounters && patient.ehr_data.encounters.length > 0;
             const eligibility = patient.eligibility || null;
 
-            // If this is a shop tenant, render a commerce-style customer card
-            if (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop') {
-                const orders = patient.total_orders || 0;
-                const spend = patient.total_spend || 0;
-                const lastOrder = patient.last_order_at
-                    ? new Date(patient.last_order_at).toLocaleDateString()
-                    : '—';
-                const channels = (patient.channels && patient.channels.length)
-                    ? patient.channels.join(', ')
-                    : '—';
+            // For cannabis e-commerce (shop tenants), render commerce-style customer card
+            const hasTherapist = patient.fhir_patient_id || false;
+            const orders = patient.total_orders || 0;
+            const spend = patient.total_spend || 0;
+            const lastOrder = patient.last_order_at
+                ? new Date(patient.last_order_at).toLocaleDateString()
+                : '—';
 
-                return `
+            // Always render commerce-style card (cannabis e-commerce focus)
+            return `
                 <div class="customer-card">
                     <div class="customer-header">
                         <div class="customer-avatar">${initials}</div>
                         <div class="customer-info">
-                            <div class="customer-name">${patient.customer_name}</div>
+                            <div class="customer-name">
+                                ${patient.customer_name}
+                                ${hasTherapist ? '<span class="badge badge-success" style="margin-left: 8px; font-size: 10px;">Has Therapist</span>' : ''}
+                            </div>
                             <div class="customer-contact">${phone}${email ? ' · ' + email : ''}</div>
                         </div>
                     </div>
@@ -1103,19 +1081,15 @@
                             <div class="stat-value">${lastOrder}</div>
                             <div class="stat-label">Last Order</div>
                         </div>
-                        <div class="stat-item">
-                            <div class="stat-value">${channels}</div>
-                            <div class="stat-label">Channel</div>
-                        </div>
                     </div>
 
                     <div class="customer-actions">
-                        <button class="btn btn-secondary btn-sm" onclick="goToOrders()">View Orders</button>
-                        ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone}')">📞 Contact</button>` : ''}
+                        <button class="btn btn-secondary btn-sm" onclick="viewOrders('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">View Orders</button>
+                        ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone.replace(/'/g, "\\'")}')">📞 Contact</button>` : ''}
+                        ${!hasTherapist ? `<button class="btn btn-secondary btn-sm" onclick="bookTherapist('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">Book Therapist</button>` : ''}
                     </div>
                 </div>
-                `;
-            }
+            `;
 
             // Extract EHR data summary (clinic tenants only)
             let ehrSummary = '';
@@ -1264,7 +1238,7 @@
 
                     <div class="customer-actions">
                         <button class="btn btn-secondary btn-sm" onclick="viewPatientBilling('${patient.fhir_id}')">💰 View Bill</button>
-                        ${patient.customer_phone ? `<button class=\"btn btn-primary btn-sm\" onclick=\"contactCustomer('${patient.customer_phone}')\">📞 Contact</button>` : ''}
+                        ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone.replace(/'/g, "\\'")}')">📞 Contact</button>` : ''}
                     </div>
                 </div>
             `;
@@ -1391,11 +1365,28 @@
             document.body.appendChild(modal);
         }
 
+        function viewOrders(customerId) {
+            // Navigate to orders page with customer filter
+            if (customerId) {
+                window.location.href = `orders.html?customer=${encodeURIComponent(customerId)}`;
+            } else {
+                window.location.href = 'orders.html';
+            }
+        }
+
         function contactCustomer(phone) {
-            alert(`📞 Contact Client\n\nIn production, this would:\n\n` +
-                `1. Initiate an outbound call to ${phone}\n` +
-                `2. Or send an SMS message\n` +
-                `3. Or schedule a callback`);
+            if (phone) {
+                // Try to initiate call
+                window.location.href = `tel:${phone}`;
+            } else {
+                alert('No phone number available for this customer');
+            }
+        }
+
+        function bookTherapist(customerId) {
+            // Navigate to booking page or open booking modal
+            alert('Therapist booking feature coming soon. This will create a FHIR Patient record and link it to the customer.');
+            // Future: window.location.href = `book-therapist.html?customer=${encodeURIComponent(customerId)}`;
         }
 
         function logout() {

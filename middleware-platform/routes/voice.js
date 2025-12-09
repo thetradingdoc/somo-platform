@@ -11,6 +11,8 @@ const db = require('../database');
 const VoiceAdapter = require('../adapters/voice-adapter');
 const PaymentOrchestrator = require('../services/payment-orchestrator');
 const EmailVerificationService = require('../services/email-verification-service');
+const constants = require('../utils/constants');
+const { tenantContext } = require('../middleware/tenant-context');
 
 const router = express.Router();
 
@@ -46,38 +48,59 @@ router.post('/products/search', async (req, res) => {
         console.log('Merchant ID from args:', merchant_id);
         console.log('Query:', query || 'all products');
 
-        // Try to get merchant - if not found, try fallback methods
-        let merchant = merchant_id ? db.getMerchant(merchant_id) : null;
+        // Try to get merchant - use tenant context if available, otherwise use provided merchant_id
+        let merchant = null;
 
-        // FALLBACK: If merchant not found, try to determine from call context
-        if (!merchant) {
-            console.log('⚠️  Merchant not found by ID, trying fallback methods...');
-            
-            // Method 1: Try to find merchant by subdomain (akin-dunbar)
-            const fallbackMerchant = db.getMerchantBySubdomain('akin-dunbar');
-            if (fallbackMerchant) {
-                console.log('✅ Found merchant by subdomain (akin-dunbar):', fallbackMerchant.id);
-                merchant = fallbackMerchant;
+        // First, try to use tenant context from middleware (if available)
+        if (req.tenant && req.tenant.validated) {
+            if (req.tenant.merchant) {
+                merchant = req.tenant.merchant;
                 merchant_id = merchant.id;
-            } else {
-                // Method 2: Try to get first active merchant (last resort)
-                const allMerchants = db.getAllMerchants();
-                if (allMerchants && allMerchants.length > 0) {
-                    // Prefer merchants with subdomain 'akin-dunbar' or first active one
-                    const preferredMerchant = allMerchants.find(m => m.subdomain === 'akin-dunbar') || allMerchants[0];
-                    console.log('⚠️  Using fallback merchant:', preferredMerchant.id, preferredMerchant.name);
-                    merchant = preferredMerchant;
+                console.log('✅ Using merchant from tenant context:', merchant.name);
+            } else if (req.tenant.clinic && req.tenant.clinic.merchant_id) {
+                // Clinic has associated merchant
+                merchant = db.getMerchant(req.tenant.clinic.merchant_id);
+                if (merchant) {
                     merchant_id = merchant.id;
+                    console.log('✅ Using merchant from clinic association:', merchant.name);
                 }
             }
         }
 
-        // Final validation
+        // If still no merchant, try provided merchant_id (but validate it exists)
+        if (!merchant && merchant_id) {
+            merchant = db.getMerchant(merchant_id);
+            if (merchant) {
+                console.log('✅ Using merchant from request:', merchant.name);
+            } else {
+                console.warn(`⚠️  REJECTED invalid merchant_id from request: ${merchant_id} (not found in database)`);
+                console.warn(`   Ignoring invalid merchant_id and trying fallbacks...`);
+                // Don't use invalid merchant_id - clear it and try fallbacks
+                merchant_id = null;
+            }
+        }
+
+        // Fallback: Try default tenant if no merchant found yet
+        if (!merchant) {
+            const constants = require('../utils/constants');
+            const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
+            const defaultMerchant = db.getMerchantBySubdomain(defaultSubdomain);
+            if (defaultMerchant) {
+                merchant = defaultMerchant;
+                merchant_id = defaultMerchant.id;
+                console.log(`✅ Using default tenant merchant (${defaultSubdomain}): ${merchant_id}`);
+            }
+        }
+
+        // Final validation - return error instead of fallback (for security)
         if (!merchant) {
             console.log('❌ ERROR: Could not determine merchant');
+            console.log('   Provided merchant_id:', merchant_id);
+            console.log('   Tenant context:', req.tenant ? (req.tenant.validated ? 'validated' : 'not validated') : 'not available');
             return res.status(404).json({
                 success: false,
-                error: 'Merchant not found. Please ensure merchant is configured in the system.'
+                error: 'Merchant not found. Please ensure merchant is configured in the system.',
+                message: 'Could not determine merchant from request. Please provide merchant_id or ensure tenant context is available.'
             });
         }
 
@@ -196,7 +219,7 @@ router.post('/verify/send-code', async (req, res) => {
     try {
         console.log('\n📧 VOICE: Sending Email Verification Code');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
+
         const { email, customer_id, customer_name } = req.body;
 
         if (!email) {
@@ -244,7 +267,7 @@ router.post('/verify/verify-code', async (req, res) => {
     try {
         console.log('\n✅ VOICE: Verifying Email Code');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        
+
         const { email, code } = req.body;
 
         if (!email || !code) {
@@ -302,8 +325,56 @@ router.post('/checkout/create', async (req, res) => {
         console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
 
         // Extract email from request (multiple possible locations)
-        const email = req.body.customer_email || req.body.args?.customer_email || req.body.customer?.email;
-        
+        let email = req.body.customer_email || req.body.args?.customer_email || req.body.customer?.email;
+
+        // Extract phone number for lookup
+        const phone = req.body.customer_phone || req.body.args?.customer_phone || req.body.customer?.phone ||
+            req.body.call?.from_number || req.body.call?.custom_sip_headers?.['x-twilio-callsid'];
+
+        // If email is missing, try to look it up from phone number
+        if (!email && phone) {
+            console.log(`🔍 Email missing, looking up from phone: ${phone}`);
+
+            // Normalize phone number
+            const SMSService = require('../services/sms-service');
+            const normalizedPhone = SMSService.formatPhoneNumber(phone);
+
+            // Try to find FHIR patient by phone (primary lookup)
+            const patient = db.getFHIRPatientByPhone(normalizedPhone);
+            if (patient) {
+                const patientData = typeof patient.resource_data === 'string'
+                    ? JSON.parse(patient.resource_data)
+                    : patient.resource_data;
+                const emailContact = patientData.telecom?.find(t => t.system === 'email');
+                if (emailContact && emailContact.value) {
+                    email = emailContact.value;
+                    console.log(`✅ Found email from FHIR patient: ${email}`);
+                } else if (patient.email) {
+                    // Check direct email field
+                    email = patient.email;
+                    console.log(`✅ Found email from FHIR patient (direct field): ${email}`);
+                }
+            }
+
+            // If still no email, try customers table (for API customers)
+            if (!email) {
+                const customers = db.db.prepare('SELECT * FROM customers WHERE phone_number = ?').all(normalizedPhone);
+                if (customers.length > 0 && customers[0].email) {
+                    email = customers[0].email;
+                    console.log(`✅ Found email from customers table: ${email}`);
+                }
+            }
+
+            // If still no email, generate a placeholder (will need verification)
+            if (!email) {
+                // Generate placeholder email from phone: phone@voice-customer.doclittle.site
+                const phoneDigits = normalizedPhone.replace(/\D/g, '');
+                email = `voice-${phoneDigits}@doclittle.site`;
+                console.log(`⚠️  No email found, using placeholder: ${email}`);
+                console.log(`   Customer will need to verify this email before checkout`);
+            }
+        }
+
         // CRITICAL: Validate email is present
         if (!email) {
             console.error('❌ MISSING EMAIL IN CHECKOUT REQUEST');
@@ -317,13 +388,13 @@ router.post('/checkout/create', async (req, res) => {
                 message: 'Please provide your email address to complete the checkout.'
             });
         }
-        
+
         // Check if email verification is required and verified
         console.log(`\n🔍 CHECKING EMAIL VERIFICATION FOR CHECKOUT`);
         console.log(`   Email: ${email}`);
         const isVerified = EmailVerificationService.isEmailVerified(email);
         console.log(`   Is Verified: ${isVerified}`);
-        
+
         if (!isVerified) {
             console.log('⚠️  Email not verified, requiring verification');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -341,7 +412,7 @@ router.post('/checkout/create', async (req, res) => {
         // Convert to standard format
         const standardRequest = VoiceAdapter.toStandardPaymentRequest(req.body);
         console.log('📋 Standard request:', JSON.stringify(standardRequest, null, 2));
-        
+
         // CRITICAL: Verify email survived adapter conversion
         if (!standardRequest.customer?.email) {
             console.error('❌ EMAIL LOST IN ADAPTER CONVERSION');
@@ -357,8 +428,8 @@ router.post('/checkout/create', async (req, res) => {
         }
         console.log(`✅ Email preserved in adapter: ${standardRequest.customer.email}`);
 
-        // Use orchestrator to process payment
-        const result = await PaymentOrchestrator.createCheckout(standardRequest);
+        // Use orchestrator to process payment (pass tenant context if available)
+        const result = await PaymentOrchestrator.createCheckout(standardRequest, req.tenant);
         console.log('📤 Orchestrator result:', JSON.stringify({
             success: result.success,
             checkout_id: result.checkout_id,
@@ -444,21 +515,42 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
         }
 
         // Complete checkout (same logic as webhook handler)
-        // Get merchant - with fallback logic for invalid merchant_id
-        let merchant = db.getMerchant(checkout.merchant_id);
-        
-        if (!merchant) {
-            const fallbackMerchant = db.getMerchantBySubdomain('akin-dunbar');
-            merchant = fallbackMerchant || db.getAllMerchants()?.[0];
+        // Get merchant - use tenant context if available, otherwise use checkout.merchant_id
+        let merchant = null;
+
+        // First, try to use tenant context from middleware (if available)
+        if (req.tenant && req.tenant.validated) {
+            if (req.tenant.merchant) {
+                merchant = req.tenant.merchant;
+                console.log('✅ Using merchant from tenant context:', merchant.name);
+            } else if (req.tenant.clinic && req.tenant.clinic.merchant_id) {
+                merchant = db.getMerchant(req.tenant.clinic.merchant_id);
+                if (merchant) {
+                    console.log('✅ Using merchant from clinic association:', merchant.name);
+                }
+            }
         }
-        
+
+        // If still no merchant, try checkout.merchant_id
+        if (!merchant && checkout.merchant_id) {
+            merchant = db.getMerchant(checkout.merchant_id);
+            if (merchant) {
+                console.log('✅ Using merchant from checkout:', merchant.name);
+            }
+        }
+
+        // Final validation - return error instead of fallback (for security)
         if (!merchant) {
+            console.log('❌ ERROR: Could not determine merchant for checkout');
+            console.log('   Checkout merchant_id:', checkout.merchant_id);
+            console.log('   Tenant context:', req.tenant ? (req.tenant.validated ? 'validated' : 'not validated') : 'not available');
             return res.status(404).json({
                 success: false,
-                error: 'Merchant not found. Please ensure merchant is configured in the system.'
+                error: 'Merchant not found. Please ensure merchant is configured in the system.',
+                message: 'Could not determine merchant from checkout or tenant context.'
             });
         }
-        
+
         // CRITICAL: Decrement inventory BEFORE creating order
         if (checkout.product_id && checkout.quantity) {
             try {
@@ -470,11 +562,11 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
                 console.error('❌ Error decrementing inventory:', inventoryError);
             }
         }
-        
+
         // Create order - try external API first, fallback to internal
         const orderData = VoiceAdapter.toMerchantOrderFormat(checkout);
         let merchantOrder = null;
-        
+
         if (merchant.api_url) {
             try {
                 const orderResponse = await axios.post(`${merchant.api_url}/api/orders`, orderData, { timeout: 10000 });
@@ -483,13 +575,13 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
                 console.error('❌ Merchant API call failed:', apiError.message);
             }
         }
-        
+
         if (!merchantOrder) {
             const orderId = uuidv4();
             // Extract shipping address for drop_point
             const shippingAddress = checkout.shipping_address || checkout.customer_address || null;
             const dropPoint = shippingAddress; // Drop point is the delivery address
-            
+
             db.createOrder({
                 id: orderId,
                 merchant_id: checkout.merchant_id,
@@ -510,7 +602,7 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
             });
             merchantOrder = { id: orderId };
         }
-        
+
         // Update checkout status
         await db.updateVoiceCheckout(checkout_id, {
             status: 'completed',
@@ -518,7 +610,52 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
             merchant_order_id: merchantOrder.id,
             completed_at: new Date().toISOString()
         });
-        
+
+        // Create or get customer from checkout
+        let customer = null;
+        try {
+            const CustomerService = require('../services/customer-service');
+            customer = CustomerService.getOrCreateCustomerFromCheckout(checkout, merchant.id);
+            console.log(`✅ Customer ${customer.id} ready for wallet creation`);
+        } catch (customerError) {
+            console.warn(`⚠️  Customer creation/lookup error (non-fatal):`, customerError.message);
+        }
+
+        // Auto-create wallet for customer (preferred) or FHIR Patient (fallback)
+        if (merchant.id) {
+            try {
+                const CircleService = require('../services/circle-service');
+
+                // Priority 1: Create wallet for customer (cannabis e-commerce)
+                if (customer && customer.id) {
+                    const walletResult = await CircleService.getOrCreateCustomerWallet(customer.id, {
+                        createIfNotExists: true,
+                        merchantId: merchant.id
+                    });
+                    if (walletResult.success) {
+                        console.log(`✅ Auto-created wallet for customer ${customer.id} during checkout completion`);
+                    } else {
+                        console.warn(`⚠️  Customer wallet creation skipped: ${walletResult.error}`);
+                    }
+                }
+
+                // Priority 2: Fallback to FHIR Patient wallet (if customer doesn't exist but FHIR Patient does)
+                if (!customer && checkout.fhir_patient_id) {
+                    const walletResult = await CircleService.getOrCreatePatientWallet(checkout.fhir_patient_id, {
+                        createIfNotExists: true,
+                        merchantId: merchant.id
+                    });
+                    if (walletResult.success) {
+                        console.log(`✅ Auto-created wallet for patient ${checkout.fhir_patient_id} during checkout completion`);
+                    } else {
+                        console.warn(`⚠️  Patient wallet creation skipped: ${walletResult.error}`);
+                    }
+                }
+            } catch (walletError) {
+                console.warn(`⚠️  Wallet creation error during checkout completion (non-fatal):`, walletError.message);
+            }
+        }
+
         // Create transaction record for admin tracking
         db.createTransaction({
             id: uuidv4(),
@@ -691,4 +828,5 @@ router.get('/health', (req, res) => {
     });
 });
 
+module.exports = router;
 module.exports = router;

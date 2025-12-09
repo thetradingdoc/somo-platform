@@ -7,6 +7,7 @@
     <title>Products - Inventory Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -637,10 +638,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" aria-label="Toggle menu" type="button">☰</button>
-    
+
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
+
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -653,31 +654,7 @@
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
-                <a href="business-dashboard.html" class="nav-item">
-                    <span class="nav-icon">📊</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="products.html" class="nav-item active">
-                    <span class="nav-icon">📦</span>
-                    <span>Products</span>
-                </a>
-                <a href="orders.html" class="nav-item">
-                    <span class="nav-icon">🛒</span>
-                    <span>Orders</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Customer List</span>
-                </a>
-                <a href="agent.html" class="nav-item">
-                    <span class="nav-icon">🎙️</span>
-                    <span>Voice Agent</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
+                <!-- Will be populated by tenant config -->
             </nav>
 
             <div class="sidebar-footer">
@@ -779,26 +756,9 @@
 
         userData = JSON.parse(sessionStorage.getItem('user') || '{}');
 
-        function renderSidebar(activeId) {
-            if (!window.TENANT_CONFIG) return;
-            const navEl = document.getElementById('sidebarNav');
-            if (!navEl) return;
-
-            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
-                    <span class="nav-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </a>
-            `).join('');
-
-            const subtitleEl = document.querySelector('.sidebar-subtitle');
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-        }
-
         document.addEventListener('DOMContentLoaded', () => {
-            renderSidebar('products');
+            // Navigation is now handled by navigation.js
+            renderNavigation('products');
             setupMobileNavClose();
             loadUserInfo();
             loadProducts();
@@ -809,26 +769,26 @@
                 // Use a single handler that works for both touch and click
                 let touchStartTime = 0;
                 let touchStartPos = { x: 0, y: 0 };
-                
+
                 // Handle touch start - just record the touch
-                mobileMenuBtn.addEventListener('touchstart', function(e) {
+                mobileMenuBtn.addEventListener('touchstart', function (e) {
                     touchStartTime = Date.now();
                     const touch = e.touches[0];
                     touchStartPos = { x: touch.clientX, y: touch.clientY };
                 }, { passive: true });
-                
+
                 // Handle touch end - check if it was a tap (not a swipe)
-                mobileMenuBtn.addEventListener('touchend', function(e) {
+                mobileMenuBtn.addEventListener('touchend', function (e) {
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const touch = e.changedTouches[0];
                     const touchEndPos = { x: touch.clientX, y: touch.clientY };
-                    
+
                     // Calculate distance moved
                     const deltaX = Math.abs(touchEndPos.x - touchStartPos.x);
                     const deltaY = Math.abs(touchEndPos.y - touchStartPos.y);
                     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                    
+
                     // If it was a quick tap (less than 300ms and less than 10px movement), toggle sidebar
                     if (touchDuration < 300 && distance < 10) {
                         e.preventDefault();
@@ -836,9 +796,9 @@
                         toggleSidebar(e);
                     }
                 }, { passive: false });
-                
+
                 // Handle click event for desktop/mouse users
-                mobileMenuBtn.addEventListener('click', function(e) {
+                mobileMenuBtn.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopPropagation();
                     toggleSidebar(e);
@@ -868,17 +828,17 @@
                 e.preventDefault();
                 e.stopPropagation();
             }
-            
+
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-            
+
             if (!sidebar || !overlay) {
                 console.error('Sidebar or overlay element not found');
                 return;
             }
-            
+
             const isOpen = sidebar.classList.contains('open');
-            
+
             if (isOpen) {
                 // Close sidebar
                 sidebar.classList.remove('open');

@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Billing - Medical Coding Assistant</title>
+    <title>Billing - DocLittle</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -172,6 +173,7 @@
         .page-title {
             font-size: 28px;
             margin-bottom: 8px;
+            color: var(--gray-900);
         }
 
         .page-subtitle {
@@ -179,51 +181,152 @@
             font-size: 14px;
         }
 
-        /* Patient List View */
-        .patient-list {
+        /* Icon Navigation Cards */
+        .billing-nav-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .nav-card {
             background: white;
             border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 32px;
+            padding: 32px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: var(--shadow-md);
+            border: 2px solid transparent;
+        }
+
+        .nav-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            border-color: var(--primary-light);
+        }
+
+        .nav-card.active {
+            border-color: var(--primary);
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        }
+
+        .nav-card-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .nav-card-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .nav-card-desc {
+            font-size: 13px;
+            color: var(--gray-600);
+            line-height: 1.5;
+        }
+
+        /* Content Sections */
+        .content-section {
+            display: none;
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
             box-shadow: var(--shadow-md);
         }
 
-        .patient-list-header {
+        .content-section.active {
+            display: block;
+        }
+
+        .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--gray-200);
         }
 
-        .search-input-wrapper {
-            position: relative;
-            flex: 1;
-            max-width: 400px;
+        .section-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gray-900);
         }
 
-        .search-input {
-            width: 100%;
-            padding: 12px 16px 12px 48px;
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
-            font-size: 16px;
+        .back-to-cards-btn {
+            padding: 8px 16px;
+            background: var(--gray-200);
+            color: var(--gray-700);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
         }
 
-        .search-icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 20px;
-            color: var(--gray-400);
+        .back-to-cards-btn:hover {
+            background: var(--gray-300);
         }
 
-        .patient-table {
+        /* Credits Banner */
+        .credits-banner {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+        }
+
+        .credits-banner.low {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .credits-banner.warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+        }
+
+        /* Commerce Billing Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        /* Tables */
+        .data-table {
             width: 100%;
             border-collapse: collapse;
         }
 
-        .patient-table th {
+        .data-table th {
             text-align: left;
             padding: 12px;
             background: var(--gray-50);
@@ -235,227 +338,118 @@
             letter-spacing: 0.5px;
         }
 
-        .patient-table td {
+        .data-table td {
             padding: 16px 12px;
             border-bottom: 1px solid var(--gray-200);
-        }
-
-        .patient-table tr:hover {
-            background: var(--gray-50);
-        }
-
-        /* Table wrapper for horizontal scrolling on mobile */
-        .table-wrapper {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .patient-name {
-            font-weight: 600;
             color: var(--gray-900);
         }
 
-        .patient-contact {
-            font-size: 13px;
-            color: var(--gray-600);
+        .data-table tr:hover {
+            background: var(--gray-50);
         }
 
-        .view-eob-btn {
-            padding: 6px 16px;
+        /* PDF Upload Area */
+        .upload-area {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--gray-50);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary);
+            background: #f0f9ff;
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary);
+            background: #eff6ff;
+        }
+
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        /* Buttons */
+        .btn-primary {
             background: var(--primary);
             color: white;
             border: none;
-            border-radius: 6px;
-            cursor: pointer;
+            padding: 10px 20px;
+            border-radius: 8px;
             font-weight: 600;
-            font-size: 13px;
+            cursor: pointer;
             transition: background 0.2s;
-            min-height: 44px; /* Touch-friendly */
         }
 
-        .view-eob-btn:hover {
+        .btn-primary:hover {
             background: var(--primary-dark);
         }
 
-        /* EOB Detail View */
-        .eob-container {
-            background: white;
-            border-radius: 12px;
-            padding: 32px;
-            box-shadow: var(--shadow-md);
-            margin-bottom: 32px;
-        }
-
-        .eob-header {
-            border-bottom: 2px solid var(--gray-200);
-            padding-bottom: 24px;
-            margin-bottom: 24px;
-        }
-
-        .eob-header-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 16px;
-        }
-
-        .eob-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--gray-900);
-        }
-
-        .eob-notice {
-            background: #fff3cd;
-            border: 1px solid #ffc107;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            color: #856404;
-            margin-bottom: 16px;
-        }
-
-        .eob-subscriber-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-top: 16px;
-        }
-
-        .eob-info-item {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .eob-info-label {
-            font-size: 12px;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .eob-info-value {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--gray-900);
-        }
-
-        .eob-summary {
-            background: var(--gray-50);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 24px;
-        }
-
-        .eob-summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
-        }
-
-        .eob-summary-item {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .eob-summary-label {
-            font-size: 12px;
-            color: var(--gray-600);
-            text-transform: uppercase;
-        }
-
-        .eob-summary-value {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--gray-900);
-        }
-
-        .eob-table-wrapper {
-            overflow-x: auto;
-            margin-bottom: 24px;
-        }
-
-        .eob-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-
-        .eob-table th {
-            background: var(--gray-50);
-            padding: 12px 8px;
-            text-align: left;
-            font-weight: 600;
-            color: var(--gray-700);
-            border: 1px solid var(--gray-200);
-            font-size: 11px;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-
-        .eob-table td {
-            padding: 12px 8px;
-            border: 1px solid var(--gray-200);
-            color: var(--gray-700);
-        }
-
-        .eob-table tbody tr:hover {
-            background: var(--gray-50);
-        }
-
-        .eob-table .total-row {
-            background: var(--gray-100);
-            font-weight: 700;
-        }
-
-        .eob-table .total-row td {
-            border-top: 2px solid var(--gray-300);
-        }
-
-        .claim-detail-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-            background: var(--gray-200);
-            color: var(--gray-700);
-            margin: 2px;
-        }
-
-        .claim-detail-badge.approved {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .claim-detail-badge.denied {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .claim-detail-badge.pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .back-btn {
-            padding: 8px 16px;
+        .btn-secondary {
             background: var(--gray-200);
             color: var(--gray-700);
             border: none;
+            padding: 8px 16px;
             border-radius: 6px;
-            cursor: pointer;
             font-weight: 600;
-            margin-bottom: 16px;
+            cursor: pointer;
             transition: background 0.2s;
         }
 
-        .back-btn:hover {
+        .btn-secondary:hover {
             background: var(--gray-300);
         }
 
+        .btn-small {
+            padding: 6px 12px;
+            border: 1px solid var(--gray-300);
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .btn-small:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-400);
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-paid {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-sent {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-overdue {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-draft {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        /* Empty State */
         .empty-state {
             text-align: center;
             padding: 48px;
@@ -467,53 +461,65 @@
             margin-bottom: 16px;
         }
 
-        /* Mobile Menu Toggle */
-        .mobile-menu-toggle {
-            display: none;
-            position: fixed;
-            top: 16px;
-            left: 16px;
-            z-index: 1001;
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 12px 16px;
+        /* Filters */
+        .filters-section {
+            background: var(--gray-50);
+            padding: 16px;
             border-radius: 8px;
-            cursor: pointer;
-            font-size: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            transition: all 0.3s ease;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: flex-end;
         }
 
-        .mobile-menu-toggle:hover {
-            background: var(--primary-dark);
-            transform: scale(1.05);
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
-        /* Sidebar Overlay for Mobile */
-        .sidebar-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 999;
-            opacity: 0;
-            transition: opacity 0.3s ease;
+        .filter-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .sidebar-overlay.active {
-            display: block;
-            opacity: 1;
+        .filter-input,
+        .filter-select {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 14px;
+            min-width: 150px;
         }
 
+        .search-input-wrapper {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 40px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+        }
+
+        /* Mobile Responsive */
         @media (max-width: 768px) {
-            .mobile-menu-toggle {
-                display: block;
-            }
-
             .sidebar {
                 position: fixed;
                 left: 0;
@@ -524,7 +530,6 @@
                 transform: translateX(-100%);
                 transition: transform 0.3s ease;
                 z-index: 1000;
-                box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
             }
 
             .sidebar.open {
@@ -534,69 +539,20 @@
             .main-content {
                 margin-left: 0;
                 padding: 16px;
-                padding-top: 70px;
             }
 
-            .page-header {
-                padding: 16px;
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
+            .billing-nav-cards {
+                grid-template-columns: 1fr;
             }
 
-            .page-title {
-                font-size: 24px;
-            }
-
-            /* Horizontal scrolling for tables */
-            .table-wrapper {
-                margin: 0 -16px;
-                padding: 0 16px;
-            }
-
-            .patient-table {
-                min-width: 600px;
-            }
-
-            /* Touch-friendly buttons */
-            .btn {
-                min-height: 44px;
-                padding: 12px 20px;
-            }
-
-            .nav-item {
-                min-height: 48px;
-                padding: 14px 16px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .main-content {
-                padding: 12px;
-                padding-top: 70px;
-            }
-
-            .page-title {
-                font-size: 20px;
-            }
-
-            .mobile-menu-toggle {
-                top: 12px;
-                left: 12px;
-                padding: 10px 14px;
-                font-size: 18px;
+            .stats-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 
 <body>
-    <!-- Mobile Menu Toggle -->
-    <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-    
-    <!-- Sidebar Overlay -->
-    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -604,35 +560,11 @@
                 <div class="sidebar-logo">
                     <span class="doc">Doc</span><span class="little">Little</span>.
                 </div>
-                <div class="sidebar-subtitle">Medical Coding Assistant</div>
+                <div class="sidebar-subtitle" id="sidebarSubtitle">Medical Coding Assistant</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
-                <a href="business-dashboard.html" class="nav-item">
-                    <span class="nav-icon">📊</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="products.html" class="nav-item">
-                    <span class="nav-icon">📦</span>
-                    <span>Products</span>
-                </a>
-                <a href="orders.html" class="nav-item">
-                    <span class="nav-icon">🛒</span>
-                    <span>Orders</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Customer List</span>
-                </a>
-                <a href="agent.html" class="nav-item">
-                    <span class="nav-icon">🎙️</span>
-                    <span>Voice Agent</span>
-                </a>
-                <a href="billing.html" class="nav-item active">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
+                <!-- Will be populated by config.js -->
             </nav>
 
             <div class="sidebar-footer">
@@ -640,7 +572,7 @@
                     <div class="user-avatar" id="userAvatar">HP</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Healthcare Provider</div>
-                        <div class="user-role">Provider</div>
+                        <div class="user-role" id="userRole">Provider</div>
                     </div>
                     <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">🚪</button>
                 </div>
@@ -649,226 +581,194 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Patient List View -->
-            <div id="patientListView">
-                <div class="page-header">
-                    <h1 class="page-title">Billing & Claims</h1>
-                    <p class="page-subtitle">Explanation of Benefits (EOB) for all patients</p>
-                </div>
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title" id="pageTitle">Billing</h1>
+                <p class="page-subtitle" id="pageSubtitle">Manage all billing activities in one place</p>
+            </div>
 
-                <!-- Credits Balance Banner -->
-                <div class="credits-banner" id="creditsBanner" style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; margin-bottom: 8px;">Available Credits</div>
-                            <div style="font-size: 36px; font-weight: 700; margin-bottom: 4px;">
-                                <span id="billingCreditsBalance">0</span> <span style="font-size: 20px; font-weight: 400; opacity: 0.9;">minutes</span>
+            <!-- Credits Banner (always visible) -->
+            <div class="credits-banner" id="creditsBanner">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div
+                            style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; margin-bottom: 8px;">
+                            Available Credits</div>
+                        <div style="font-size: 36px; font-weight: 700; margin-bottom: 4px;">
+                            <span id="creditsBalance">0</span> <span
+                                style="font-size: 20px; font-weight: 400; opacity: 0.9;">minutes</span>
+                        </div>
+                        <div style="font-size: 14px; opacity: 0.9;" id="creditsDetails">Loading...</div>
+                    </div>
+                    <div style="font-size: 48px; opacity: 0.3;">⚡</div>
+                </div>
+            </div>
+
+            <!-- Navigation Cards -->
+            <div class="billing-nav-cards" id="navCards">
+                <!-- Cards will be populated by JavaScript based on tenant type -->
+            </div>
+
+            <!-- Content Sections -->
+
+            <!-- Overview Section -->
+            <div class="content-section" id="overviewSection">
+                <div class="section-header">
+                    <h2 class="section-title">Billing Overview</h2>
+                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                </div>
+                <div id="overviewContent">
+                    <!-- Content populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Scan Section -->
+            <div class="content-section" id="scanSection">
+                <div class="section-header">
+                    <h2 class="section-title">📄 Scan PDF</h2>
+                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                </div>
+                <div id="scanContent">
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📄</div>
+                        <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--gray-900);">Drop
+                            PDF file here or click to upload</div>
+                        <div style="font-size: 14px; color: var(--gray-600);">Supports PDF files up to 10MB</div>
+                        <input type="file" id="fileInput" accept=".pdf" style="display: none;" />
+                    </div>
+
+                    <div id="pdfPreviewContainer"
+                        style="display:none; margin-top:24px; background:white; border-radius:12px; padding:16px; box-shadow:var(--shadow-md);">
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                            <div style="font-weight:700; color:var(--gray-800);">PDF Preview</div>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <button class="btn-secondary" id="prevPageBtn">Prev</button>
+                                <span id="pageInfoText" style="font-size:13px; color:var(--gray-600);"></span>
+                                <button class="btn-secondary" id="nextPageBtn">Next</button>
                             </div>
-                            <div style="font-size: 14px; opacity: 0.9;" id="billingCreditsDetails">Loading...</div>
                         </div>
-                        <div style="font-size: 48px; opacity: 0.3;">⚡</div>
-                    </div>
-                </div>
-
-                <div class="patient-list">
-                    <div class="patient-list-header">
-                        <div class="search-input-wrapper">
-                            <span class="search-icon">🔍</span>
-                            <input type="text" id="searchInput" class="search-input"
-                                placeholder="Search patients by name, phone, or email..." oninput="filterPatients()">
+                        <div style="text-align:center;">
+                            <canvas id="pdfCanvas" style="max-width:100%;"></canvas>
                         </div>
                     </div>
 
-                    <div id="patientsTableContainer" class="table-wrapper">
-                        <table class="patient-table">
-                            <thead>
-                                <tr>
-                                    <th>Patient Name</th>
-                                    <th>Contact</th>
-                                    <th>Payer</th>
-                                    <th>Member ID</th>
-                                    <th>Claims</th>
-                                    <th>Total Billed</th>
-                                    <th>Plan Paid</th>
-                                    <th>You Owe</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="patientsTableBody">
-                                <tr>
-                                    <td colspan="9" style="text-align: center; padding: 48px;">
-                                        <div class="empty-state">
-                                            <div class="empty-state-icon">⏳</div>
-                                            <p>Loading billing data...</p>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div id="scanResults" style="display: none; margin-top: 24px;">
+                        <!-- PDF processing results will appear here -->
+                    </div>
+
+                    <div id="claimBuilder"
+                        style="display:none; margin-top:24px; background:white; border-radius:12px; padding:16px; box-shadow:var(--shadow-md);">
+                        <h3 style="margin-bottom:12px;">Create Claim</h3>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
+                            <div style="flex:1; min-width:240px;">
+                                <label
+                                    style="display:block; font-size:13px; font-weight:600; color:var(--gray-700); margin-bottom:6px;">Select
+                                    Patient</label>
+                                <select id="patientSelect"
+                                    style="width:100%; padding:10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px;">
+                                    <option value="">-- Loading patients... --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button class="btn-secondary" id="createPatientBtn">+ New Patient</button>
+                            </div>
+                            <div style="flex:1; min-width:200px; text-align:right;">
+                                <button class="btn-primary" id="createClaimBtn" disabled>Create Claim from PDF</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- EOB Detail View -->
-            <div id="eobDetailView" style="display: none;">
-                <button class="back-btn" onclick="showPatientList()">← Back to Patient List</button>
+            <!-- Claims Section -->
+            <div class="content-section" id="claimsSection">
+                <div class="section-header">
+                    <h2 class="section-title">Claims & EOB</h2>
+                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                </div>
+                <div id="claimsContent">
+                    <!-- Claims content populated by JavaScript -->
+                </div>
+            </div>
 
-                <div class="eob-container" id="eobContainer">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">⏳</div>
-                        <p>Loading EOB details...</p>
-                    </div>
+            <!-- Invoices Section -->
+            <div class="content-section" id="invoicesSection">
+                <div class="section-header">
+                    <h2 class="section-title">Invoices</h2>
+                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                </div>
+                <div id="invoicesContent">
+                    <!-- Invoices content populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Payments Section -->
+            <div class="content-section" id="paymentsSection">
+                <div class="section-header">
+                    <h2 class="section-title">Payments</h2>
+                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                </div>
+                <div id="paymentsContent">
+                    <!-- Payments content populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Commerce Billing Section (for shops) -->
+            <div class="content-section" id="commerceSection">
+                <div class="section-header">
+                    <h2 class="section-title">Commerce Billing</h2>
+                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                </div>
+                <div id="commerceContent">
+                    <!-- Commerce billing content populated by JavaScript -->
                 </div>
             </div>
         </main>
     </div>
 
+    <!-- PDF.js for PDF rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
-        let allPatients = [];
-        let currentPatientId = null;
+        let currentSection = null;
+        let tenantType = 'clinic';
+        let hasMedicalBilling = false;
+        // Scan/PDF state
+        let pdfDoc = null;
+        let pdfFile = null;
+        let currentPage = 1;
+        let lastScanResult = null;
+        let selectedCodes = { icd10: new Set(), cpt: new Set() };
+        let selectedPatientId = '';
 
-        // Mobile sidebar toggle functions
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            if (sidebar && overlay) {
-                sidebar.classList.toggle('open');
-                overlay.classList.toggle('active');
-                if (sidebar.classList.contains('open')) {
-                    document.body.style.overflow = 'hidden';
-                } else {
-                    document.body.style.overflow = '';
-                }
-            }
-        }
-
-        function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebarOverlay');
-            if (sidebar && overlay) {
-                sidebar.classList.remove('open');
-                overlay.classList.remove('active');
-                document.body.style.overflow = '';
-            }
-        }
-
-        function setupMobileNavClose() {
-            const navItems = document.querySelectorAll('.nav-item');
-            navItems.forEach(item => {
-                item.addEventListener('click', () => {
-                    if (window.innerWidth <= 768) {
-                        closeSidebar();
-                    }
-                });
-            });
-        }
-
-        function renderSidebar() {
-            if (!window.TENANT_CONFIG) return;
-            const navEl = document.getElementById('sidebarNav');
-            if (!navEl) return;
-
-            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                <a href="${item.href}" class="nav-item ${item.id === 'billing' ? 'active' : ''}">
-                    <span class="nav-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </a>
-            `).join('');
-
-            const subtitleEl = document.querySelector('.sidebar-subtitle');
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-
-            // For shop tenants, tweak header copy
-            if (window.TENANT_CONFIG.tenant_type === 'shop') {
-                const titleEl = document.querySelector('.page-title');
-                const subtitleEl2 = document.querySelector('.page-subtitle');
-                if (titleEl) titleEl.textContent = 'Billing & Usage';
-                if (subtitleEl2) subtitleEl2.textContent = 'Voice credits and commerce billing overview';
-            }
-        }
-
+        // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
         }
 
-        // Safe JSON.parse with error handling
-        let userData = null;
-        try {
-            const userStr = sessionStorage.getItem('user');
-            userData = userStr ? JSON.parse(userStr) : null;
-        } catch (error) {
-            console.error('Error parsing user data from sessionStorage:', error);
-            userData = null;
-        }
-        
-        if (userData) {
-            const userNameEl = document.getElementById('userName');
-            const userAvatarEl = document.getElementById('userAvatar');
-            if (userNameEl && userData.name) {
-                userNameEl.textContent = userData.name;
-            }
-            if (userAvatarEl && userData.name) {
-                const initials = userData.name.split(' ').map(n => n[0]).join('');
-                userAvatarEl.textContent = initials;
-            }
-        }
-
-        // Check if patient parameter in URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const patientParam = urlParams.get('patient');
-
-        document.addEventListener('DOMContentLoaded', () => {
-            renderSidebar();
-            setupMobileNavClose();
+        // Initialize (handle already-loaded DOM)
+        function startBillingApp() {
+            // Navigation is now handled by navigation.js
+            renderNavigation('billing');
             loadCredits();
+            initializeBilling();
+        }
 
-            // Close sidebar on window resize if switching to desktop
-            window.addEventListener('resize', () => {
-                if (window.innerWidth > 768) {
-                    closeSidebar();
-                }
-            });
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startBillingApp);
+        } else {
+            startBillingApp();
+        }
 
-            // Close sidebar on Escape key
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    closeSidebar();
-                }
-            });
+        // renderSidebar function removed - now using shared navigation.js
+        // Store tenant type from TENANT_CONFIG
+        if (window.TENANT_CONFIG) {
+            tenantType = window.TENANT_CONFIG.tenant_type || 'shop';
+        }
 
-            // For clinic tenants, show full EOB billing UI
-            if (!window.TENANT_CONFIG || window.TENANT_CONFIG.tenant_type !== 'shop') {
-                loadBillingData();
-                if (patientParam) {
-                    showEOBDetail(patientParam);
-                }
-                return;
-            }
-
-            // For shop tenants, show a simple commerce billing placeholder
-            const tbody = document.getElementById('patientsTableBody');
-            if (tbody) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="9" style="text-align: center; padding: 48px;">
-                            <div class="empty-state">
-                                <div class="empty-state-icon">🛒</div>
-                                <p>Commerce billing is handled through your orders and subscription usage.</p>
-                                <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
-                                    This medical billing & claims view is only used for clinics. For your shop, review:
-                                    <br/>• Orders tab for sales
-                                    <br/>• Credits banner above for voice minutes usage
-                                </p>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }
-        });
-
+        // Load credits
         async function loadCredits() {
             try {
                 const res = await fetch(`${API_BASE}/api/usage-monitor/credits`, {
@@ -879,22 +779,13 @@
                     if (data.success && data.credits) {
                         const credits = data.credits;
                         const balance = credits.balance || 0;
-                        const freeAllocated = credits.free_allocated || 0;
-                        const freeUsed = credits.free_used || 0;
                         const freeRemaining = credits.free_remaining || 0;
                         const paidRemaining = credits.paid_remaining || 0;
-                        
-                        // Update balance display with null checks
-                        const balanceEl = document.getElementById('billingCreditsBalance');
-                        const detailsEl = document.getElementById('billingCreditsDetails');
-                        
-                        if (balanceEl) {
-                            balanceEl.textContent = balance.toLocaleString();
-                        }
-                        
-                        // Update details
+
+                        document.getElementById('creditsBalance').textContent = balance.toLocaleString();
+
                         let details = '';
-                        if (freeAllocated > 0) {
+                        if (freeRemaining > 0) {
                             details = `${freeRemaining.toLocaleString()} free min remaining`;
                             if (paidRemaining > 0) {
                                 details += ` + ${paidRemaining.toLocaleString()} paid min`;
@@ -904,367 +795,1084 @@
                         } else {
                             details = 'No credits available';
                         }
-                        
-                        if (detailsEl) {
-                            detailsEl.textContent = details;
-                        }
-                        
-                        // Update banner color based on balance
+                        document.getElementById('creditsDetails').textContent = details;
+
+                        // Update banner color
                         const banner = document.getElementById('creditsBanner');
-                        if (banner) {
-                            if (balance < 50) {
-                                banner.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-                            } else if (balance < 100) {
-                                banner.style.background = 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)';
-                            }
+                        if (balance < 50) {
+                            banner.classList.add('low');
+                        } else if (balance < 100) {
+                            banner.classList.add('warning');
                         }
-                    } else {
-                        const balanceEl = document.getElementById('billingCreditsBalance');
-                        const detailsEl = document.getElementById('billingCreditsDetails');
-                        if (balanceEl) balanceEl.textContent = '0';
-                        if (detailsEl) detailsEl.textContent = 'No credits allocated';
                     }
-                } else {
-                    console.warn('Failed to load credits:', res.status);
-                    const detailsEl = document.getElementById('billingCreditsDetails');
-                    if (detailsEl) detailsEl.textContent = 'Unable to load credits';
                 }
             } catch (error) {
                 console.error('Error loading credits:', error);
-                const balanceEl = document.getElementById('billingCreditsBalance');
-                const detailsEl = document.getElementById('billingCreditsDetails');
-                if (balanceEl) balanceEl.textContent = '0';
-                if (detailsEl) detailsEl.textContent = 'Error loading credits';
             }
         }
 
-        async function loadBillingData() {
+        // Initialize billing navigation
+        async function initializeBilling() {
+            // Use config if present, otherwise fallback already set in renderSidebar
+            tenantType = (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type) || 'clinic';
+
+            // Check if shop has medical billing enabled (for hybrid shops)
+            await checkMedicalBillingAvailability();
+
+            renderNavCards();
+
+            // Check URL for section parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const section = urlParams.get('section');
+            if (section) {
+                showSection(section);
+            }
+        }
+
+        // Check if medical billing features are available
+        async function checkMedicalBillingAvailability() {
+            if (tenantType === 'shop') {
+                // For shops, check if they have any medical billing data
+                try {
+                    const res = await fetch(`${API_BASE}/api/invoices?limit=1`, {
+                        credentials: 'include'
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        hasMedicalBilling = data.success && data.invoices && data.invoices.length > 0;
+                    }
+                } catch (error) {
+                    console.error('Error checking medical billing:', error);
+                    // Fall back to showing medical cards to avoid hiding features on error
+                    hasMedicalBilling = true;
+                }
+            } else {
+                hasMedicalBilling = true; // Clinics always have medical billing
+            }
+        }
+
+        // Render navigation cards
+        function renderNavCards() {
+            const cardsContainer = document.getElementById('navCards');
+            const cards = [];
+
+            if (tenantType === 'shop') {
+                // Shop cards: Commerce first, then medical if available
+                cards.push({
+                    id: 'commerce',
+                    icon: '🛒',
+                    title: 'Commerce',
+                    desc: 'Orders, revenue, and voice checkouts'
+                });
+
+                if (hasMedicalBilling) {
+                    cards.push({
+                        id: 'overview',
+                        icon: '📊',
+                        title: 'Overview',
+                        desc: 'Billing summary and quick stats'
+                    });
+                    cards.push({
+                        id: 'scan',
+                        icon: '📄',
+                        title: 'Scan PDF',
+                        desc: 'Upload and extract medical codes'
+                    });
+                    cards.push({
+                        id: 'claims',
+                        icon: '📋',
+                        title: 'Claims',
+                        desc: 'View EOB and insurance claims'
+                    });
+                    cards.push({
+                        id: 'invoices',
+                        icon: '🧾',
+                        title: 'Invoices',
+                        desc: 'Manage patient invoices'
+                    });
+                    cards.push({
+                        id: 'payments',
+                        icon: '💰',
+                        title: 'Payments',
+                        desc: 'Track and record payments'
+                    });
+                } else {
+                    // Shop without medical billing - just commerce
+                    cards.push({
+                        id: 'overview',
+                        icon: '📊',
+                        title: 'Overview',
+                        desc: 'Billing summary and analytics'
+                    });
+                }
+            } else {
+                // Clinic cards: Medical billing focused
+                cards.push(
+                    {
+                        id: 'overview',
+                        icon: '📊',
+                        title: 'Overview',
+                        desc: 'Billing summary and quick stats'
+                    },
+                    {
+                        id: 'scan',
+                        icon: '📄',
+                        title: 'Scan PDF',
+                        desc: 'Upload and extract medical codes'
+                    },
+                    {
+                        id: 'claims',
+                        icon: '📋',
+                        title: 'Claims',
+                        desc: 'View EOB and insurance claims'
+                    },
+                    {
+                        id: 'invoices',
+                        icon: '🧾',
+                        title: 'Invoices',
+                        desc: 'Manage patient invoices'
+                    },
+                    {
+                        id: 'payments',
+                        icon: '💰',
+                        title: 'Payments',
+                        desc: 'Track and record payments'
+                    }
+                );
+            }
+
+            cardsContainer.innerHTML = cards.map(card => `
+                <div class="nav-card" onclick="showSection('${card.id}')">
+                    <span class="nav-card-icon">${card.icon}</span>
+                    <div class="nav-card-title">${card.title}</div>
+                    <div class="nav-card-desc">${card.desc}</div>
+                </div>
+            `).join('');
+        }
+
+        // Show navigation cards
+        function showNavCards() {
+            document.getElementById('navCards').style.display = 'grid';
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            currentSection = null;
+            window.history.pushState({}, '', 'billing.html');
+        }
+
+        // Show specific section
+        function showSection(sectionId) {
+            // Hide nav cards
+            document.getElementById('navCards').style.display = 'none';
+
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+
+            // Show selected section
+            const sectionMap = {
+                'overview': 'overviewSection',
+                'scan': 'scanSection',
+                'claims': 'claimsSection',
+                'invoices': 'invoicesSection',
+                'payments': 'paymentsSection',
+                'commerce': 'commerceSection'
+            };
+
+            const sectionEl = document.getElementById(sectionMap[sectionId]);
+            if (!sectionEl) {
+                showNavCards();
+                return;
+            }
+
+            sectionEl.classList.add('active');
+            currentSection = sectionId;
+
+            // Load section content
+            loadSectionContent(sectionId);
+
+            // Update URL
+            window.history.pushState({}, '', `billing.html?section=${sectionId}`);
+        }
+
+        // Load content for specific section
+        async function loadSectionContent(sectionId) {
+            switch (sectionId) {
+                case 'overview':
+                    await loadOverview();
+                    break;
+                case 'scan':
+                    initializeScan();
+                    break;
+                case 'claims':
+                    await loadClaims();
+                    break;
+                case 'invoices':
+                    await loadInvoices();
+                    break;
+                case 'payments':
+                    await loadPayments();
+                    break;
+                case 'commerce':
+                    await loadCommerce();
+                    break;
+            }
+        }
+
+        // Load overview content
+        async function loadOverview() {
+            const content = document.getElementById('overviewContent');
+
+            if (tenantType === 'shop') {
+                // Commerce overview
+                try {
+                    const [creditsRes, ordersRes] = await Promise.all([
+                        fetch(`${API_BASE}/api/usage-monitor/credits`, { credentials: 'include' }),
+                        fetch(`${API_BASE}/api/orders`, { credentials: 'include' })
+                    ]);
+
+                    let stats = {
+                        totalRevenue: 0,
+                        totalOrders: 0,
+                        voiceCheckouts: 0
+                    };
+
+                    if (ordersRes.ok) {
+                        const ordersData = await ordersRes.json();
+                        if (ordersData.success && ordersData.orders) {
+                            const orders = ordersData.orders;
+                            stats.totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+                            stats.totalOrders = orders.length;
+                            stats.voiceCheckouts = orders.filter(o => o.source === 'voice' || o.payment_method === 'voice').length;
+                        }
+                    }
+
+                    content.innerHTML = `
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Revenue</div>
+                                <div class="stat-value">$${stats.totalRevenue.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Total Orders</div>
+                                <div class="stat-value">${stats.totalOrders}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Voice Checkouts</div>
+                                <div class="stat-value">${stats.voiceCheckouts}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 24px;">
+                            <p style="color: var(--gray-600); margin-bottom: 16px;">
+                                Quick actions:
+                            </p>
+                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                <button class="btn-primary" onclick="showSection('commerce')">View Commerce Billing</button>
+                                ${hasMedicalBilling ? '<button class="btn-secondary" onclick="showSection(\'invoices\')">View Invoices</button>' : ''}
+                                <a href="orders.html" class="btn-secondary" style="text-decoration: none; display: inline-block;">View All Orders</a>
+                            </div>
+                        </div>
+                    `;
+                } catch (error) {
+                    content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading overview: ${error.message}</p></div>`;
+                }
+            } else {
+                // Clinic overview
+                try {
+                    const [invoicesRes, claimsRes] = await Promise.all([
+                        fetch(`${API_BASE}/api/invoices`, { credentials: 'include' }),
+                        fetch(`${API_BASE}/api/admin/billing/eob`, { credentials: 'include' })
+                    ]);
+
+                    let stats = {
+                        totalInvoices: 0,
+                        totalAmount: 0,
+                        paidAmount: 0,
+                        outstandingAmount: 0,
+                        totalPatients: 0
+                    };
+
+                    if (invoicesRes.ok) {
+                        const invoicesData = await invoicesRes.json();
+                        if (invoicesData.success && invoicesData.invoices) {
+                            const invoices = invoicesData.invoices;
+                            stats.totalInvoices = invoices.length;
+                            stats.totalAmount = invoices.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0);
+                            stats.paidAmount = invoices.reduce((sum, inv) => sum + parseFloat(inv.total_paid || 0), 0);
+                            stats.outstandingAmount = stats.totalAmount - stats.paidAmount;
+                        }
+                    }
+
+                    if (claimsRes.ok) {
+                        const claimsData = await claimsRes.json();
+                        if (claimsData.success && claimsData.patients) {
+                            stats.totalPatients = claimsData.patients.length;
+                        }
+                    }
+
+                    content.innerHTML = `
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Invoices</div>
+                                <div class="stat-value">${stats.totalInvoices}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Total Amount</div>
+                                <div class="stat-value">$${stats.totalAmount.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Paid</div>
+                                <div class="stat-value">$${stats.paidAmount.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Outstanding</div>
+                                <div class="stat-value">$${stats.outstandingAmount.toFixed(2)}</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Patients</div>
+                                <div class="stat-value">${stats.totalPatients}</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 24px;">
+                            <p style="color: var(--gray-600); margin-bottom: 16px;">
+                                Quick actions:
+                            </p>
+                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                <button class="btn-primary" onclick="showSection('scan')">Scan PDF</button>
+                                <button class="btn-secondary" onclick="showSection('invoices')">View Invoices</button>
+                                <button class="btn-secondary" onclick="showSection('claims')">View Claims</button>
+                            </div>
+                        </div>
+                    `;
+                } catch (error) {
+                    content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading overview: ${error.message}</p></div>`;
+                }
+            }
+        }
+
+        // Initialize scan section
+        function initializeScan() {
+            const uploadArea = document.getElementById('uploadArea');
+            const fileInput = document.getElementById('fileInput');
+
+            // Reset
+            document.getElementById('scanResults').style.display = 'none';
+            document.getElementById('claimBuilder').style.display = 'none';
+            document.getElementById('pdfPreviewContainer').style.display = 'none';
+            selectedCodes = { icd10: new Set(), cpt: new Set() };
+            selectedPatientId = '';
+
+            // Set up file input
+            uploadArea.onclick = () => fileInput.click();
+            fileInput.onchange = (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handleFileUpload(e.target.files[0]);
+                }
+            };
+
+            // Drag and drop
+            uploadArea.ondragover = (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            };
+            uploadArea.ondragleave = () => {
+                uploadArea.classList.remove('dragover');
+            };
+            uploadArea.ondrop = (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileUpload(e.dataTransfer.files[0]);
+                }
+            };
+        }
+
+        // Handle PDF file upload
+        async function handleFileUpload(file) {
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a PDF file');
+                return;
+            }
+
+            pdfFile = file;
+            // Render PDF preview immediately
+            await renderPDFPreview(file);
+
+            const formData = new FormData();
+            formData.append('pdf', file);
+
+            const resultsDiv = document.getElementById('scanResults');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏳</div><p>Processing PDF... This may take 30-60 seconds.</p></div>';
+
             try {
-                console.log(`Fetching billing data from: ${API_BASE}/api/admin/billing/eob`);
-                const response = await fetch(`${API_BASE}/api/admin/billing/eob`);
+                const response = await fetch(`${API_BASE}/api/pdf-coding/process`, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to process PDF');
+                }
+
+                // Display results
+                displayScanResults(result, file);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error: ${error.message}</p></div>`;
+            }
+        }
+
+        // PDF rendering preview
+        async function renderPDFPreview(file) {
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                pdfDoc = await loadingTask.promise;
+                currentPage = 1;
+                document.getElementById('pdfPreviewContainer').style.display = 'block';
+                renderPDFPage(currentPage);
+                const prevBtn = document.getElementById('prevPageBtn');
+                const nextBtn = document.getElementById('nextPageBtn');
+                if (prevBtn) prevBtn.onclick = () => changePage(-1);
+                if (nextBtn) nextBtn.onclick = () => changePage(1);
+            } catch (err) {
+                console.warn('PDF preview failed:', err);
+            }
+        }
+
+        async function renderPDFPage(pageNum) {
+            if (!pdfDoc) return;
+            pageNum = Math.min(Math.max(pageNum, 1), pdfDoc.numPages);
+            currentPage = pageNum;
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 1.2 });
+            const canvas = document.getElementById('pdfCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({ canvasContext: ctx, viewport }).promise;
+            const pageInfo = document.getElementById('pageInfoText');
+            if (pageInfo) pageInfo.textContent = `Page ${pageNum} of ${pdfDoc.numPages}`;
+            const prevBtn = document.getElementById('prevPageBtn');
+            const nextBtn = document.getElementById('nextPageBtn');
+            if (prevBtn) prevBtn.disabled = pageNum <= 1;
+            if (nextBtn) nextBtn.disabled = pageNum >= pdfDoc.numPages;
+        }
+
+        function changePage(delta) {
+            renderPDFPage(currentPage + delta);
+        }
+
+        // Display scan results with code selection and patient selection
+        function displayScanResults(result, file) {
+            const resultsDiv = document.getElementById('scanResults');
+            lastScanResult = result;
+
+            const icd10Codes = result.coding?.icd10 || [];
+            const cptCodes = result.pricing?.breakdown || [];
+
+            // Initialize selected codes (auto-selected)
+            selectedCodes = { icd10: new Set(), cpt: new Set() };
+            icd10Codes.forEach(icd => selectedCodes.icd10.add(icd.code || icd));
+            cptCodes.forEach(cpt => selectedCodes.cpt.add(cpt.code));
+
+            const renderCodeList = (items, typeLabel) => {
+                if (!items.length) {
+                    return '<p style="color: var(--gray-500);">No codes found</p>';
+                }
+                return items.map(codeObj => {
+                    const code = codeObj.code || codeObj;
+                    const desc = codeObj.description || 'No description';
+                    const isChecked = (typeLabel === 'icd10' ? selectedCodes.icd10.has(code) : selectedCodes.cpt.has(code));
+                    return `
+                        <label style="display:flex; align-items:flex-start; gap:10px; padding:10px; background: var(--gray-50); border-radius:8px; margin-bottom:8px; cursor:pointer;">
+                            <input type="checkbox" data-code="${code}" data-type="${typeLabel}" ${isChecked ? 'checked' : ''} onchange="toggleCodeSelection(this)" />
+                            <div>
+                                <div style="font-weight:700; color:var(--gray-900);">${code}</div>
+                                <div style="font-size:13px; color:var(--gray-600);">${desc}</div>
+                            </div>
+                        </label>
+                    `;
+                }).join('');
+            };
+
+            resultsDiv.innerHTML = `
+                <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: var(--shadow-md);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <h3 style="margin:0;">Extracted Codes</h3>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn-secondary" onclick="selectAllCodes(true)">Select all</button>
+                            <button class="btn-secondary" onclick="selectAllCodes(false)">Deselect all</button>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 16px;">
+                        <h4 style="font-size: 14px; color: var(--gray-600); margin-bottom: 8px; text-transform: uppercase;">Diagnoses (ICD-10)</h4>
+                        <div id="icdList">
+                            ${renderCodeList(icd10Codes, 'icd10')}
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 16px;">
+                        <h4 style="font-size: 14px; color: var(--gray-600); margin-bottom: 8px; text-transform: uppercase;">Procedures (CPT)</h4>
+                        <div id="cptList">
+                            ${renderCodeList(cptCodes, 'cpt')}
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px; display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end;">
+                        <div>
+                            <label style="display:block; font-size:12px; color:var(--gray-600); font-weight:600;">Add code</label>
+                            <input type="text" id="manualCodeInput" placeholder="e.g. I10" style="padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px; width:140px;">
+                        </div>
+                        <div>
+                            <select id="manualCodeType" style="padding:8px 10px; border:1px solid #d1d5db; border-radius:6px; font-size:13px;">
+                                <option value="icd10">ICD-10</option>
+                                <option value="cpt">CPT</option>
+                            </select>
+                        </div>
+                        <button class="btn-secondary" onclick="addManualCode()">Add</button>
+                        <div id="codeSelectionHint" style="font-size:12px; color:var(--gray-600); margin-left:auto;">Selected: <span id="selectedCount">0</span></div>
+                    </div>
+                </div>
+            `;
+
+            resultsDiv.style.display = 'block';
+            document.getElementById('claimBuilder').style.display = 'block';
+
+            // Load patients into dropdown
+            loadPatientsForClaim();
+            updateSelectedCount();
+            document.getElementById('createClaimBtn').onclick = () => createClaimFromScan(result, file);
+        }
+
+        function updateSelectedCount() {
+            const count = selectedCodes.icd10.size + selectedCodes.cpt.size;
+            const el = document.getElementById('selectedCount');
+            if (el) el.textContent = count;
+            const createBtn = document.getElementById('createClaimBtn');
+            if (createBtn) {
+                createBtn.disabled = !(count > 0 && selectedPatientId);
+            }
+        }
+
+        function toggleCodeSelection(input) {
+            const code = input.getAttribute('data-code');
+            const type = input.getAttribute('data-type');
+            if (!code || !type) return;
+            if (input.checked) {
+                selectedCodes[type].add(code);
+            } else {
+                selectedCodes[type].delete(code);
+            }
+            updateSelectedCount();
+        }
+
+        function selectAllCodes(selectAll) {
+            if (lastScanResult?.coding?.icd10) {
+                lastScanResult.coding.icd10.forEach(icd => {
+                    const code = icd.code || icd;
+                    if (selectAll) selectedCodes.icd10.add(code); else selectedCodes.icd10.delete(code);
+                });
+            }
+            if (lastScanResult?.pricing?.breakdown) {
+                lastScanResult.pricing.breakdown.forEach(cpt => {
+                    const code = cpt.code;
+                    if (selectAll) selectedCodes.cpt.add(code); else selectedCodes.cpt.delete(code);
+                });
+            }
+            // update checkboxes
+            document.querySelectorAll('#icdList input[type="checkbox"]').forEach(cb => cb.checked = selectAll);
+            document.querySelectorAll('#cptList input[type="checkbox"]').forEach(cb => cb.checked = selectAll);
+            updateSelectedCount();
+        }
+
+        function addManualCode() {
+            const val = (document.getElementById('manualCodeInput')?.value || '').trim();
+            const type = document.getElementById('manualCodeType')?.value || 'icd10';
+            if (!val) return;
+            selectedCodes[type].add(val);
+            updateSelectedCount();
+            // Append to list visually
+            const listId = type === 'icd10' ? 'icdList' : 'cptList';
+            const listEl = document.getElementById(listId);
+            if (listEl) {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `
+                    <label style="display:flex; align-items:flex-start; gap:10px; padding:10px; background: var(--gray-50); border-radius:8px; margin-bottom:8px; cursor:pointer;">
+                        <input type="checkbox" data-code="${val}" data-type="${type}" checked onchange="toggleCodeSelection(this)" />
+                        <div>
+                            <div style="font-weight:700; color:var(--gray-900);">${val}</div>
+                            <div style="font-size:13px; color:var(--gray-600);">Added manually</div>
+                        </div>
+                    </label>
+                `;
+                listEl.appendChild(wrapper.firstElementChild);
+            }
+            document.getElementById('manualCodeInput').value = '';
+        }
+
+        // Patient loading for claim creation
+        async function loadPatientsForClaim() {
+            const selectEl = document.getElementById('patientSelect');
+            if (!selectEl) return;
+            selectEl.innerHTML = '<option value="">-- Loading patients... --</option>';
+            try {
+                const res = await fetch(`${API_BASE}/fhir/Patient`, { credentials: 'include' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const bundle = await res.json();
+                let patients = [];
+                if (bundle.resourceType === 'Bundle' && bundle.entry) {
+                    patients = bundle.entry.map(e => e.resource).filter(r => r.resourceType === 'Patient');
+                } else if (Array.isArray(bundle)) {
+                    patients = bundle;
+                }
+                if (!patients.length) {
+                    selectEl.innerHTML = '<option value="">-- No patients available --</option>';
+                    return;
+                }
+                selectEl.innerHTML = '<option value="">-- Select a patient --</option>';
+                patients.forEach(p => {
+                    const id = p.id || p.resource_id;
+                    if (!id) return;
+                    const name = (p.name && p.name.length)
+                        ? `${(p.name[0].given || []).join(' ')} ${p.name[0].family || ''}`.trim()
+                        : 'Unknown Patient';
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = name;
+                    selectEl.appendChild(opt);
+                });
+            } catch (err) {
+                selectEl.innerHTML = `<option value=\"\">-- Error loading patients (${err.message}) --</option>`;
+            }
+            selectEl.onchange = (e) => {
+                selectedPatientId = e.target.value;
+                updateSelectedCount();
+            };
+
+            const createPatientBtn = document.getElementById('createPatientBtn');
+            if (createPatientBtn) {
+                createPatientBtn.onclick = async () => {
+                    const firstName = prompt('Enter patient first name:'); if (!firstName) return;
+                    const lastName = prompt('Enter patient last name:'); if (!lastName) return;
+                    const phone = prompt('Enter patient phone (optional):') || null;
+                    const email = prompt('Enter patient email (optional):') || null;
+                    try {
+                        createPatientBtn.disabled = true;
+                        createPatientBtn.textContent = 'Creating...';
+                        const payload = {
+                            name: { family: lastName, given: [firstName] },
+                            phone, email
+                        };
+                        const res = await fetch(`${API_BASE}/fhir/Patient`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(payload)
+                        });
+                        if (!res.ok) {
+                            const err = await res.json().catch(() => ({}));
+                            throw new Error(err.issue?.[0]?.diagnostics || res.statusText);
+                        }
+                        const newPatient = await res.json();
+                        await loadPatientsForClaim();
+                        const id = newPatient.id || newPatient.resource_id;
+                        if (id && selectEl) selectEl.value = id;
+                        selectedPatientId = id;
+                        updateSelectedCount();
+                        alert('Patient created.');
+                    } catch (err) {
+                        alert('Error creating patient: ' + err.message);
+                    } finally {
+                        createPatientBtn.disabled = false;
+                        createPatientBtn.textContent = '+ New Patient';
+                    }
+                };
+            }
+        }
+
+        // Create claim from scan
+        async function createClaimFromScan(scanData, file) {
+            const createBtn = document.getElementById('createClaimBtn');
+            if (!selectedPatientId) {
+                alert('Please select a patient first.');
+                return;
+            }
+            const codesSelected = selectedCodes.icd10.size + selectedCodes.cpt.size;
+            if (!codesSelected) {
+                alert('Please select at least one code.');
+                return;
+            }
+            if (createBtn) {
+                createBtn.disabled = true;
+                createBtn.textContent = 'Creating...';
+            }
+            try {
+                const payload = {
+                    patientId: selectedPatientId,
+                    coding: {
+                        icd10: Array.from(selectedCodes.icd10).map(code => ({ code })),
+                        cpt: Array.from(selectedCodes.cpt).map(code => ({ code }))
+                    },
+                    pdfText: scanData.extractedText || '',
+                    fileName: file?.name || 'uploaded.pdf',
+                    pricing: scanData.pricing
+                };
+                const res = await fetch(`${API_BASE}/api/claims/create-from-pdf`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || res.statusText);
+                }
+                const result = await res.json();
+                if (result.success && result.claimId) {
+                    const goInvoice = confirm('Claim created. Generate invoice now?');
+                    if (goInvoice) {
+                        const invRes = await fetch(`${API_BASE}/api/invoices/create-from-claim`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ claim_id: result.claimId })
+                        });
+                        const invData = await invRes.json();
+                        if (invData.success && invData.invoice) {
+                            alert(`Invoice ${invData.invoice.invoice_number} created.`);
+                            window.location.href = `invoice-detail.html?id=${invData.invoice.id}`;
+                            return;
+                        }
+                    }
+                    window.location.href = `claims.html?id=${result.claimId}`;
+                } else {
+                    throw new Error(result.error || 'Failed to create claim');
+                }
+            } catch (err) {
+                alert('Error creating claim: ' + err.message);
+            } finally {
+                if (createBtn) {
+                    createBtn.disabled = false;
+                    createBtn.textContent = 'Create Claim from PDF';
+                }
+            }
+        }
+
+        // Load claims section
+        async function loadClaims() {
+            const content = document.getElementById('claimsContent');
+            content.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏳</div><p>Loading claims...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/billing/eob`, {
+                    credentials: 'include'
+                });
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
                 const data = await response.json();
-                console.log('Billing data received:', data);
 
                 if (!data.success) {
-                    throw new Error(data.error || 'Failed to load billing data');
+                    throw new Error(data.error || 'Failed to load claims');
                 }
 
-                allPatients = data.patients || [];
-                console.log(`Loaded ${allPatients.length} patients`);
-                displayPatientList(allPatients);
-            } catch (error) {
-                console.error('Error loading billing data:', error);
-                const tbody = document.getElementById('patientsTableBody');
-                if (tbody) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="9" style="text-align: center; padding: 48px;">
-                                <div class="empty-state">
-                                    <div class="empty-state-icon">❌</div>
-                                    <p>Failed to load billing data: ${error.message}</p>
-                                    <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Make sure middleware is running at ${API_BASE}</p>
-                                    <button class="view-eob-btn" onclick="loadBillingData()" style="margin-top: 16px;">Retry</button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                }
-            }
-        }
+                const patients = data.patients || [];
 
-        function displayPatientList(patients) {
-            const tbody = document.getElementById('patientsTableBody');
-
-            if (!patients || patients.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="9" style="text-align: center; padding: 48px;">
-                            <div class="empty-state">
-                                <div class="empty-state-icon">📋</div>
-                                <p>No billing data available</p>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-
-            tbody.innerHTML = patients.map(patient => {
-                const patientName = (patient.patient_name || 'Unknown').replace(/'/g, "\\'");
-                const patientId = (patient.patient_id || '').replace(/'/g, "\\'");
-                return `
-                <tr>
-                    <td>
-                        <div class="patient-name">${patientName}</div>
-                    </td>
-                    <td>
-                        <div class="patient-contact">
-                            ${patient.patient_phone || 'No phone'}<br>
-                            ${patient.patient_email || 'No email'}
+                if (patients.length === 0) {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>No claims found</p>
+                            <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
+                                Scan a PDF to create your first claim.
+                            </p>
+                            <button class="btn-primary" onclick="showSection('scan')" style="margin-top: 16px;">Scan PDF</button>
                         </div>
-                    </td>
-                    <td>${patient.payer || '—'}</td>
-                    <td>${patient.member_id || '—'}</td>
-                    <td><strong>${patient.claim_count || 0}</strong></td>
-                    <td>$${(patient.total_billed || 0).toFixed(2)}</td>
-                    <td>$${(patient.total_paid || 0).toFixed(2)}</td>
-                    <td><strong>$${(patient.total_owed || 0).toFixed(2)}</strong></td>
-                    <td>
-                        <button class="view-eob-btn" onclick="showEOBDetail('${patientId}')">View EOB</button>
-                    </td>
-                </tr>
-            `;
-            }).join('');
-        }
+                    `;
+                    return;
+                }
 
-        function filterPatients() {
-            const searchInput = document.getElementById('searchInput');
-            if (!searchInput) return;
-            const searchTerm = searchInput.value.toLowerCase();
-
-            if (!searchTerm) {
-                displayPatientList(allPatients);
-                return;
+                content.innerHTML = `
+                    <div style="margin-bottom: 24px;">
+                        <div class="search-input-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="claimsSearch" class="search-input" placeholder="Search patients..." oninput="filterClaims()">
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Patient Name</th>
+                                <th>Contact</th>
+                                <th>Payer</th>
+                                <th>Claims</th>
+                                <th>Total Billed</th>
+                                <th>Plan Paid</th>
+                                <th>You Owe</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="claimsTableBody">
+                            ${patients.map(patient => `
+                                <tr>
+                                    <td><strong>${patient.patient_name || 'Unknown'}</strong></td>
+                                    <td>${patient.patient_phone || '—'}<br>${patient.patient_email || '—'}</td>
+                                    <td>${patient.payer || '—'}</td>
+                                    <td><strong>${patient.claim_count || 0}</strong></td>
+                                    <td>$${(patient.total_billed || 0).toFixed(2)}</td>
+                                    <td>$${(patient.total_paid || 0).toFixed(2)}</td>
+                                    <td><strong>$${(patient.total_owed || 0).toFixed(2)}</strong></td>
+                                    <td>
+                                        <button class="btn-small" onclick="viewEOB('${patient.patient_id}')">View EOB</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error: ${error.message}</p></div>`;
             }
-
-            const filtered = allPatients.filter(patient =>
-                (patient.patient_name && patient.patient_name.toLowerCase().includes(searchTerm)) ||
-                (patient.patient_phone && patient.patient_phone.includes(searchTerm)) ||
-                (patient.patient_email && patient.patient_email.toLowerCase().includes(searchTerm)) ||
-                (patient.member_id && patient.member_id.toLowerCase().includes(searchTerm)) ||
-                (patient.payer && patient.payer.toLowerCase().includes(searchTerm))
-            );
-
-            displayPatientList(filtered);
         }
 
-        async function showEOBDetail(patientId) {
-            currentPatientId = patientId;
-            document.getElementById('patientListView').style.display = 'none';
-            document.getElementById('eobDetailView').style.display = 'block';
+        // View EOB (simplified)
+        function viewEOB(patientId) {
+            window.location.href = `claims.html?patient=${patientId}`;
+        }
 
-            const container = document.getElementById('eobContainer');
-            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏳</div><p>Loading EOB details...</p></div>';
+        // Load invoices section
+        async function loadInvoices() {
+            const content = document.getElementById('invoicesContent');
+            content.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏳</div><p>Loading invoices...</p></div>';
 
             try {
-                const response = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(patientId)}/eob`);
+                const response = await fetch(`${API_BASE}/api/invoices`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const data = await response.json();
 
                 if (!data.success) {
-                    throw new Error(data.error || 'Failed to load EOB data');
+                    throw new Error(data.error || 'Failed to load invoices');
                 }
 
-                displayEOBDetail(data);
-            } catch (error) {
-                console.error('Error loading EOB details:', error);
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">❌</div>
-                        <p>Failed to load EOB details: ${error.message}</p>
-                        <button class="view-eob-btn" onclick="showEOBDetail('${patientId}')" style="margin-top: 16px;">Retry</button>
+                const invoices = data.invoices || [];
+
+                if (invoices.length === 0) {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🧾</div>
+                            <p>No invoices found</p>
+                            <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
+                                Create invoices from claims or scan a PDF.
+                            </p>
+                            <div style="margin-top: 16px; display: flex; gap: 12px; justify-content: center;">
+                                <button class="btn-primary" onclick="showSection('scan')">Scan PDF</button>
+                                <button class="btn-secondary" onclick="showSection('claims')">View Claims</button>
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                content.innerHTML = `
+                    <div class="filters-section">
+                        <div class="search-input-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="invoiceSearch" class="search-input" placeholder="Search invoices..." oninput="filterInvoices()">
+                        </div>
+                        <div class="filter-group">
+                            <label class="filter-label">Status</label>
+                            <select id="statusFilter" class="filter-select" onchange="filterInvoices()">
+                                <option value="">All Status</option>
+                                <option value="draft">Draft</option>
+                                <option value="sent">Sent</option>
+                                <option value="paid">Paid</option>
+                                <option value="overdue">Overdue</option>
+                            </select>
+                        </div>
                     </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Patient</th>
+                                <th>Date</th>
+                                <th>Due Date</th>
+                                <th>Amount</th>
+                                <th>Balance</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoicesTableBody">
+                            ${invoices.map(inv => {
+                    const statusClass = `status-${inv.status}`;
+                    const balance = inv.balance || (inv.amount - (inv.total_paid || 0));
+                    return `
+                                    <tr>
+                                        <td><strong>${inv.invoice_number}</strong></td>
+                                        <td>${inv.patient_name || 'Unknown'}</td>
+                                        <td>${inv.created_at ? new Date(inv.created_at).toLocaleDateString() : '—'}</td>
+                                        <td>${inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '—'}</td>
+                                        <td>$${inv.amount.toFixed(2)}</td>
+                                        <td>$${balance.toFixed(2)}</td>
+                                        <td><span class="status-badge ${statusClass}">${inv.status.toUpperCase()}</span></td>
+                                        <td>
+                                            <button class="btn-small" onclick="viewInvoice('${inv.id}')">View</button>
+                                        </td>
+                                    </tr>
+                                `;
+                }).join('')}
+                        </tbody>
+                    </table>
                 `;
+            } catch (error) {
+                content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error: ${error.message}</p></div>`;
             }
         }
 
-        function displayEOBDetail(eobData) {
-            const container = document.getElementById('eobContainer');
-            const patient = eobData.patient;
-            const services = eobData.services || [];
-            const totals = eobData.totals || {};
-            const eligibility = eobData.eligibility;
+        // View invoice
+        function viewInvoice(invoiceId) {
+            window.location.href = `invoice-detail.html?id=${invoiceId}`;
+        }
 
-            // Format currency
-            const formatCurrency = (amount) => {
-                if (amount === null || amount === undefined) return '—';
-                return `$${Number(amount).toFixed(2)}`;
-            };
-
-            // Format date
-            const formatDate = (dateStr) => {
-                if (!dateStr) return '—';
-                try {
-                    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' });
-                } catch {
-                    return dateStr;
-                }
-            };
-
-            // Get claim detail badge class
-            const getClaimDetailClass = (codes) => {
-                if (!codes || codes.length === 0) return '';
-                const code = codes[0].toUpperCase();
-                if (code.includes('APPROVED') || code.includes('PAID')) return 'approved';
-                if (code.includes('DENIED') || code.includes('REJECT')) return 'denied';
-                if (code.includes('PENDING') || code.includes('SUBMITTED')) return 'pending';
-                return '';
-            };
-
-            container.innerHTML = `
-                <div class="eob-header">
-                    <div class="eob-header-top">
-                        <div>
-                            <h1 class="eob-title">Explanation of Benefits</h1>
-                            <div class="eob-notice">⚠️ THIS IS NOT A BILL</div>
-                        </div>
-                    </div>
-                    
-                    <div class="eob-subscriber-info">
-                        <div class="eob-info-item">
-                            <div class="eob-info-label">Subscriber Name</div>
-                            <div class="eob-info-value">${patient.name}</div>
-                        </div>
-                        <div class="eob-info-item">
-                            <div class="eob-info-label">Subscriber ID</div>
-                            <div class="eob-info-value">${patient.subscriber_id}</div>
-                        </div>
-                        <div class="eob-info-item">
-                            <div class="eob-info-label">Group Number</div>
-                            <div class="eob-info-value">${patient.group_number || 'N/A'}</div>
-                        </div>
-                        <div class="eob-info-item">
-                            <div class="eob-info-label">Payer</div>
-                            <div class="eob-info-value">${patient.payer}</div>
-                        </div>
-                    </div>
-
-                    ${eligibility ? `
-                        <div style="margin-top: 24px; padding: 20px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); border-radius: 12px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            <div style="font-size: 18px; font-weight: 700; margin-bottom: 16px; color: white;">📋 Plan Information</div>
-                            <div style="font-size: 16px; font-weight: 600; margin-bottom: 12px; color: white;">
-                                ${eligibility.plan_summary || 'N/A'}
-                            </div>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px;">
-                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
-                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Deductible (Total)</div>
-                                    <div style="font-size: 20px; font-weight: 700; color: white;">
-                                        ${eligibility.deductible_total !== null && eligibility.deductible_total !== undefined ? `$${eligibility.deductible_total.toFixed(2)}` : 'N/A'}
-                                    </div>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
-                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Deductible (Remaining)</div>
-                                    <div style="font-size: 20px; font-weight: 700; color: ${eligibility.deductible_remaining === 0 ? '#10b981' : '#fbbf24'};">
-                                        ${eligibility.deductible_remaining !== null && eligibility.deductible_remaining !== undefined ? `$${eligibility.deductible_remaining.toFixed(2)}` : 'N/A'}
-                                    </div>
-                                    ${eligibility.deductible_remaining === 0 ? '<div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">✅ Deductible Met</div>' : ''}
-                                </div>
-                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
-                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Copay (Per Visit)</div>
-                                    <div style="font-size: 20px; font-weight: 700; color: white;">
-                                        ${eligibility.copay_amount !== null && eligibility.copay_amount !== undefined ? `$${eligibility.copay_amount.toFixed(2)}` : 'N/A'}
-                                    </div>
-                                </div>
-                                <div style="background: rgba(255,255,255,0.15); padding: 12px; border-radius: 8px; backdrop-filter: blur(10px);">
-                                    <div style="font-size: 12px; opacity: 0.9; margin-bottom: 4px;">Coinsurance</div>
-                                    <div style="font-size: 20px; font-weight: 700; color: white;">
-                                        ${eligibility.coinsurance_percent !== null && eligibility.coinsurance_percent !== undefined ? `${eligibility.coinsurance_percent}%` : 'N/A'}
-                                    </div>
-                                    ${eligibility.coinsurance_percent ? `<div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">You pay ${eligibility.coinsurance_percent}% after deductible</div>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    ` : ''}
+        // Load payments section
+        async function loadPayments() {
+            const content = document.getElementById('paymentsContent');
+            content.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">💰</div>
+                    <p>Payment tracking coming soon</p>
+                    <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
+                        View payment history from individual invoices.
+                    </p>
+                    <button class="btn-primary" onclick="showSection('invoices')" style="margin-top: 16px;">View Invoices</button>
                 </div>
-
-                <div class="eob-summary">
-                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">Summary</div>
-                    <div class="eob-summary-grid">
-                        <div class="eob-summary-item">
-                            <div class="eob-summary-label">Amount Billed</div>
-                            <div class="eob-summary-value">${formatCurrency(totals.amount_billed)}</div>
-                        </div>
-                        <div class="eob-summary-item">
-                            <div class="eob-summary-label">Your Plan Paid</div>
-                            <div class="eob-summary-value" style="color: #10b981;">${formatCurrency(totals.plan_paid)}</div>
-                        </div>
-                        <div class="eob-summary-item">
-                            <div class="eob-summary-label">What You Owe</div>
-                            <div class="eob-summary-value" style="color: #ef4444;">${formatCurrency(totals.what_you_owe)}</div>
-                        </div>
-                    </div>
-                </div>
-
-                ${services.length > 0 ? `
-                    <div class="eob-table-wrapper">
-                        <table class="eob-table">
-                            <thead>
-                                <tr>
-                                    <th>Date of Service</th>
-                                    <th>Type of Service</th>
-                                    <th>Amount Billed</th>
-                                    <th>Allowed Amount</th>
-                                    <th>Your Plan Paid</th>
-                                    <th>Other Insurance Paid</th>
-                                    <th>Copay</th>
-                                    <th>Coinsurance</th>
-                                    <th>Deductible</th>
-                                    <th>Amount Not Covered</th>
-                                    <th>What You Owe</th>
-                                    <th>Claim Detail</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${services.map(service => `
-                                    <tr>
-                                        <td>${formatDate(service.date_of_service)}</td>
-                                        <td>${service.type_of_service || '—'}</td>
-                                        <td>${formatCurrency(service.amount_billed)}</td>
-                                        <td>${formatCurrency(service.allowed_amount)}</td>
-                                        <td>${formatCurrency(service.plan_paid)}</td>
-                                        <td>${formatCurrency(service.other_insurance_paid)}</td>
-                                        <td>${formatCurrency(service.copay)}</td>
-                                        <td>${formatCurrency(service.coinsurance)}</td>
-                                        <td>${formatCurrency(service.deductible)}</td>
-                                        <td>${formatCurrency(service.amount_not_covered)}</td>
-                                        <td><strong>${formatCurrency(service.what_you_owe)}</strong></td>
-                                        <td>
-                                            ${(service.claim_detail || []).map(code => `
-                                                <span class="claim-detail-badge ${getClaimDetailClass([code])}">${code}</span>
-                                            `).join('')}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                                <tr class="total-row">
-                                    <td colspan="2"><strong>TOTAL</strong></td>
-                                    <td><strong>${formatCurrency(totals.amount_billed)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.allowed_amount)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.plan_paid)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.other_insurance_paid)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.copay)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.coinsurance)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.deductible)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.amount_not_covered)}</strong></td>
-                                    <td><strong>${formatCurrency(totals.what_you_owe)}</strong></td>
-                                    <td></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                ` : `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📋</div>
-                        <p>No claims or services found for this patient</p>
-                    </div>
-                `}
             `;
         }
 
-        function showPatientList() {
-            document.getElementById('patientListView').style.display = 'block';
-            document.getElementById('eobDetailView').style.display = 'none';
-            currentPatientId = null;
-            // Update URL
-            window.history.pushState({}, '', 'billing.html');
+        // Load commerce section
+        async function loadCommerce() {
+            const content = document.getElementById('commerceContent');
+
+            try {
+                const [creditsRes, ordersRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/usage-monitor/credits`, { credentials: 'include' }),
+                    fetch(`${API_BASE}/api/orders`, { credentials: 'include' })
+                ]);
+
+                let stats = {
+                    totalRevenue: 0,
+                    totalOrders: 0,
+                    avgOrderValue: 0,
+                    voiceCheckouts: 0
+                };
+
+                if (ordersRes.ok) {
+                    const ordersData = await ordersRes.json();
+                    if (ordersData.success && ordersData.orders) {
+                        const orders = ordersData.orders;
+                        stats.totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+                        stats.totalOrders = orders.length;
+                        stats.avgOrderValue = stats.totalOrders > 0 ? stats.totalRevenue / stats.totalOrders : 0;
+                        stats.voiceCheckouts = orders.filter(o => o.source === 'voice' || o.payment_method === 'voice').length;
+                    }
+                }
+
+                content.innerHTML = `
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Revenue</div>
+                            <div class="stat-value">$${stats.totalRevenue.toFixed(2)}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Total Orders</div>
+                            <div class="stat-value">${stats.totalOrders}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Average Order Value</div>
+                            <div class="stat-value">$${stats.avgOrderValue.toFixed(2)}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Voice Checkouts</div>
+                            <div class="stat-value">${stats.voiceCheckouts}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 24px; background: white; border-radius: 12px; padding: 24px; box-shadow: var(--shadow-md);">
+                        <h3 style="margin-bottom: 16px;">📊 Commerce Billing Overview</h3>
+                        <p style="color: var(--gray-600); margin-bottom: 16px;">
+                            Your commerce billing is managed through:
+                        </p>
+                        <ul style="color: var(--gray-700); line-height: 2; margin-bottom: 24px;">
+                            <li><strong>Orders Tab:</strong> View all sales and order details</li>
+                            <li><strong>Voice Agent:</strong> Track voice checkout transactions</li>
+                            <li><strong>Credits Banner:</strong> Monitor voice minutes usage</li>
+                            <li><strong>Dashboard:</strong> Revenue analytics and trends</li>
+                        </ul>
+                        <div>
+                            <a href="orders.html" class="btn-primary" style="text-decoration: none; display: inline-block; margin-right: 12px;">View Orders</a>
+                            <a href="business-dashboard.html" class="btn-secondary" style="text-decoration: none; display: inline-block;">View Dashboard</a>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error: ${error.message}</p></div>`;
+            }
         }
 
+        // Filter functions (simplified)
+        function filterClaims() {
+            // Implementation would filter claims table
+        }
+
+        function filterInvoices() {
+            // Implementation would filter invoices table
+        }
+
+        // Logout
         function logout() {
             sessionStorage.clear();
             window.location.href = '../login.html';
+        }
+
+        // Load user info
+        const userData = (() => {
+            try {
+                const userStr = sessionStorage.getItem('user');
+                return userStr ? JSON.parse(userStr) : null;
+            } catch {
+                return null;
+            }
+        })();
+
+        if (userData) {
+            const userNameEl = document.getElementById('userName');
+            const userAvatarEl = document.getElementById('userAvatar');
+            if (userNameEl && userData.name) {
+                userNameEl.textContent = userData.name;
+            }
+            if (userAvatarEl && userData.name) {
+                const initials = userData.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                userAvatarEl.textContent = initials || 'HP';
+            }
         }
     </script>
 </body>

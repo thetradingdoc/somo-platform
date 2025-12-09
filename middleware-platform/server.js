@@ -62,6 +62,7 @@ try {
 
 // Import database and services
 const db = require('./database');
+const constants = require('./utils/constants');
 const PaymentOrchestrator = require('./services/payment-orchestrator');
 const SMSService = require('./services/sms-service');
 const FHIRService = require('./services/fhir-service');
@@ -684,6 +685,32 @@ app.use('/business', express.static(getUnifiedDashboardPath('business'), {
   extensions: ['html']
 }));
 
+// Redirect business HTML files to /business/ prefix
+// This handles cases where links use relative paths that resolve to root
+const businessPages = [
+  'products.html',
+  'orders.html',
+  'patients.html',
+  'agent.html',
+  'billing.html',
+  'settings.html',
+  'invoices.html',
+  'wallets.html',
+  'claims.html',
+  'treatments.html',
+  'records.html',
+  'merchant-orders.html',
+  'calendar.html',
+  'pdf-coding.html',
+  'business-dashboard.html'
+];
+
+businessPages.forEach(page => {
+  app.get(`/${page}`, (req, res) => {
+    res.redirect(`/business/${page}`);
+  });
+});
+
 app.use('/patients', express.static(getUnifiedDashboardPath('patients'), {
   index: false,
   extensions: ['html']
@@ -736,6 +763,11 @@ app.use('/api/credits', creditsRoutes);
 const invoiceRoutes = require('./routes/invoices');
 app.use('/api', invoiceRoutes);
 
+// Clinic Invoice Routes (Patient Billing)
+// ============================================
+const clinicInvoiceRoutes = require('./routes/invoices-clinic');
+app.use('/api/invoices', clinicInvoiceRoutes);
+
 // Products and Orders routes (merged from merchant-shop)
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
@@ -750,13 +782,23 @@ app.use('/api/onboarding', onboardingRoutes);
 const adminLeadsRoutes = require('./routes/admin-leads');
 app.use('/api/admin/leads', adminLeadsRoutes);
 
+// Admin tenant monitoring routes
+const adminTenantsRoutes = require('./routes/admin-tenants');
+app.use('/api/admin/tenants', adminTenantsRoutes);
+
+// Tenant config routes
+const tenantConfigRoutes = require('./routes/tenant-config');
+app.use('/api/tenant', tenantConfigRoutes);
+
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
 
 // Voice routes (product search, checkout, etc.)
+// Apply tenant context middleware to resolve merchant from subdomain
+const { tenantContext } = require('./middleware/tenant-context');
 const voiceRoutes = require('./routes/voice');
-app.use('/voice', voiceRoutes);
+app.use('/voice', tenantContext({ requireTenant: false }), voiceRoutes);
 
 // Payment routes (payment page and processing)
 const paymentRoutes = require('./routes/payment');
@@ -1202,8 +1244,94 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       }
     }
 
+    // Use merchant_id from metadata if available, otherwise try to resolve from clinic
+    let merchantId = metadata.merchant_id;
+    if (!merchantId && customerId) {
+      // Try to get merchant from customer's clinic
+      const customer = db.getCustomer(customerId);
+      if (customer && customer.merchant_id) {
+        merchantId = customer.merchant_id;
+      }
+    }
+    if (!merchantId && clinicId) {
+      // Try to get merchant from clinic
+      const clinic = await db.getClinicById(clinicId);
+      if (clinic && clinic.merchant_id) {
+        merchantId = clinic.merchant_id;
+      }
+    }
+
+    // If still no merchant_id, resolve from Retell agent_id (PRIMARY METHOD - agent should be associated with tenant)
+    if (!merchantId && retellAgentId) {
+      // CRITICAL: Explicit mapping for known agents to ensure correct tenant resolution
+      // This ensures the agent ALWAYS connects to the correct tenant
+      const agentToSubdomainMap = {
+        'agent_9151f738c705a56f4a0d8df63a': 'akin-dunbar' // Explicit mapping for akin-dunbar agent
+      };
+
+      // Check explicit mapping first (highest priority)
+      if (agentToSubdomainMap[retellAgentId]) {
+        const mappedSubdomain = agentToSubdomainMap[retellAgentId];
+        const mappedMerchant = db.getMerchantBySubdomain(mappedSubdomain);
+        if (mappedMerchant) {
+          merchantId = mappedMerchant.id;
+          console.log(`✅ Resolved merchant_id from explicit agent mapping: ${merchantId} (${mappedMerchant.name || 'unknown'}) for subdomain ${mappedSubdomain}`);
+        }
+      }
+
+      // Method 1: Find merchant directly by agent_id (if merchants table has retell_agent_id column)
+      if (!merchantId) {
+        try {
+          const merchantByAgent = db.db.prepare('SELECT id FROM merchants WHERE retell_agent_id = ? LIMIT 1').get(retellAgentId);
+          if (merchantByAgent && merchantByAgent.id) {
+            merchantId = merchantByAgent.id;
+            const merchant = db.getMerchant(merchantId);
+            console.log(`✅ Resolved merchant_id directly from merchant agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
+          }
+        } catch (e) {
+          // Column might not exist, continue to other methods
+        }
+      }
+
+      // Method 2: Find customer by agent_id (SaaS customers have agent_id)
+      if (!merchantId) {
+        const customerByAgent = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(retellAgentId);
+        if (customerByAgent && customerByAgent.merchant_id) {
+          merchantId = customerByAgent.merchant_id;
+          const merchant = db.getMerchant(merchantId);
+          console.log(`✅ Resolved merchant_id from customer agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
+        }
+      }
+
+      // Method 3: Find clinic by agent_id (legacy clinics have agent_id)
+      if (!merchantId) {
+        const clinicWithAgent = db.db.prepare('SELECT merchant_id FROM clinics WHERE retell_agent_id = ? AND merchant_id IS NOT NULL LIMIT 1').get(retellAgentId);
+        if (clinicWithAgent && clinicWithAgent.merchant_id) {
+          merchantId = clinicWithAgent.merchant_id;
+          const merchant = db.getMerchant(merchantId);
+          console.log(`✅ Resolved merchant_id from clinic agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
+        }
+      }
+
+      // Last resort: Use default tenant (akin-dunbar) - this ensures the agent always has a merchant
+      if (!merchantId) {
+        const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
+        const defaultMerchant = db.getMerchantBySubdomain(defaultSubdomain);
+        if (defaultMerchant) {
+          merchantId = defaultMerchant.id;
+          console.log(`✅ Resolved merchant_id from default tenant (${defaultSubdomain}): ${merchantId} (${defaultMerchant.name || 'unknown'})`);
+        } else {
+          console.error(`❌ CRITICAL: Default tenant (${defaultSubdomain}) not found in database!`);
+        }
+      }
+    }
+
+    if (!merchantId) {
+      console.warn(`⚠️  No merchant_id found for customer ${customerId || 'unknown'} / clinic ${clinicId || 'unknown'}. Voice product/order functions may not work.`);
+    }
+
     const dynamicVariables = {
-      merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
+      merchant_id: merchantId || null
     };
 
     // For outbound sales calls, add lead-specific variables
@@ -1360,13 +1488,39 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
             return;
           }
 
+          // Resolve merchant_id from phone number or clinic_id
+          let merchantId = null;
+          if (clinicId) {
+            const clinic = await db.getClinicById(clinicId);
+            if (clinic && clinic.merchant_id) {
+              merchantId = clinic.merchant_id;
+            }
+          }
+          if (!merchantId && req.body.To) {
+            // Try to resolve from phone number
+            const clinicPhone = db.getClinicPhoneNumber(req.body.To);
+            if (clinicPhone) {
+              const clinic = await db.getClinicById(clinicPhone.clinic_id);
+              if (clinic && clinic.merchant_id) {
+                merchantId = clinic.merchant_id;
+              }
+            }
+          }
+          if (!merchantId && customerId) {
+            // Try to get from customer
+            const customer = db.getCustomer(customerId);
+            if (customer && customer.merchant_id) {
+              merchantId = customer.merchant_id;
+            }
+          }
+
           const callData = FHIRAdapter.retellCallToFHIR({
             call_id: callId,
             from_number: req.body.From,
             to_number: req.body.To,
             metadata: {
               twilio_call_sid: req.body.CallSid,
-              merchant_id: process.env.MERCHANT_ID || 'd10794ff-ca11-4e6f-93e9-560162b4f884'
+              merchant_id: merchantId // Use resolved merchant_id, null if not found
             }
           });
 
@@ -1661,20 +1815,44 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
       }
     }
 
-    // Ensure merchant exists (create if missing to avoid foreign key constraint issues)
-    const merchantId = args.merchant_id || 'd10794ff-ca11-4e6f-93e9-560162b4f884';
+    // Resolve merchant_id from clinic_id or args
+    let merchantId = args.merchant_id;
+    if (!merchantId && clinicId) {
+      const clinic = await db.getClinicById(clinicId);
+      if (clinic && clinic.merchant_id) {
+        merchantId = clinic.merchant_id;
+      }
+    }
+    if (!merchantId && appointmentId) {
+      // Try to get from appointment
+      const appointment = await db.getAppointment(appointmentId);
+      if (appointment && appointment.clinic_id) {
+        const clinic = await db.getClinicById(appointment.clinic_id);
+        if (clinic && clinic.merchant_id) {
+          merchantId = clinic.merchant_id;
+        }
+      }
+    }
+
+    // If still no merchant_id, return error instead of creating default
+    if (!merchantId) {
+      console.error('❌ ERROR: Could not determine merchant_id for appointment booking');
+      return {
+        success: false,
+        error: 'Merchant not found. Please ensure clinic is properly configured with a merchant.',
+        appointment_id: null
+      };
+    }
+
+    // Verify merchant exists
     const existingMerchant = db.getMerchant(merchantId);
     if (!existingMerchant) {
-      console.log(`📦 Creating default merchant: ${merchantId}`);
-      db.createMerchant({
-        id: merchantId,
-        name: 'DocLittle Default Merchant',
-        api_key: 'default-api-key',
-        api_url: 'https://api.example.com',
-        webhook_url: null,
-        enabled_platforms: JSON.stringify(['voice']),
-        status: 'active'
-      });
+      console.error(`❌ ERROR: Merchant ${merchantId} not found in database`);
+      return {
+        success: false,
+        error: `Merchant ${merchantId} not found. Please ensure merchant is configured.`,
+        appointment_id: null
+      };
     }
 
     if (!clinicId && appointmentId) {
@@ -2199,15 +2377,47 @@ app.post('/voice/checkout/create', async (req, res) => {
       sms_sent: response.metadata?.sms_sent
     });
 
-    // ========== FHIR INTEGRATION ==========
-    // Link checkout to FHIR Patient and create MedicationRequest if applicable
+    // ========== CUSTOMER CREATION ==========
+    // Create or get customer from checkout (for cannabis e-commerce)
     if (response.isSuccess() && args.customer_phone) {
       try {
-        // Find or create FHIR patient
+        const CustomerService = require('./services/customer-service');
+        const merchantId = args.tenantContext?.merchant?.id ||
+          args.tenantContext?.clinic?.merchant_id ||
+          response.metadata?.merchant_id ||
+          merchant_id ||
+          null;
+
+        // Get checkout record to pass to customer service
+        const checkout = await db.getVoiceCheckout(response.checkout_id);
+        if (checkout) {
+          const customer = CustomerService.getOrCreateCustomerFromCheckout(checkout, merchantId);
+          console.log(`[CUSTOMER] ✅ Customer ${customer.id} ready for checkout ${response.checkout_id}`);
+        }
+      } catch (customerError) {
+        console.warn('[CUSTOMER] ⚠️ Error creating customer from checkout (non-fatal):', customerError.message);
+        // Continue with checkout even if customer creation fails
+      }
+    }
+
+    // ========== FHIR INTEGRATION (OPTIONAL - Only if therapy booked) ==========
+    // Only create FHIR Patient if customer explicitly books a therapy appointment
+    // For cannabis e-commerce, most customers won't need FHIR Patient records
+    if (response.isSuccess() && args.customer_phone && args.book_therapy === true) {
+      try {
+        // Get merchant_id from tenant context or checkout
+        const merchantId = args.tenantContext?.merchant?.id ||
+          args.tenantContext?.clinic?.merchant_id ||
+          response.metadata?.merchant_id ||
+          merchant_id ||
+          null;
+
+        // Find or create FHIR patient with merchant_id (only if therapy is booked)
         const patient = await FHIRService.getOrCreatePatient({
           phone: args.customer_phone,
           email: args.customer_email,
-          name: args.customer_name
+          name: args.customer_name,
+          merchant_id: merchantId
         });
 
         // Update checkout with FHIR patient ID
@@ -2215,7 +2425,36 @@ app.post('/voice/checkout/create', async (req, res) => {
           fhir_patient_id: patient.id
         });
 
-        console.log(`[FHIR] ✅ Linked checkout ${response.checkout_id} to Patient ${patient.id}`);
+        // Link customer to FHIR Patient
+        const CustomerService = require('./services/customer-service');
+        const checkoutForLink = await db.getVoiceCheckout(response.checkout_id);
+        if (checkoutForLink) {
+          const customer = CustomerService.getOrCreateCustomerFromCheckout(checkoutForLink, merchantId);
+          if (customer && customer.id) {
+            db.updateCustomer(customer.id, { fhir_patient_id: patient.id });
+            console.log(`[FHIR] ✅ Linked customer ${customer.id} to FHIR Patient ${patient.id}`);
+          }
+        }
+
+        console.log(`[FHIR] ✅ Linked checkout ${response.checkout_id} to Patient ${patient.id}${merchantId ? ` (merchant: ${merchantId})` : ''} (therapy booked)`);
+
+        // Auto-create wallet for patient (if Circle is available)
+        if (patient.id && merchantId) {
+          try {
+            const CircleService = require('./services/circle-service');
+            const walletResult = await CircleService.getOrCreatePatientWallet(patient.id, {
+              createIfNotExists: true,
+              merchantId: merchantId
+            });
+            if (walletResult.success) {
+              console.log(`[FHIR] ✅ Auto-created wallet for patient ${patient.id}`);
+            } else {
+              console.log(`[FHIR] ⚠️  Wallet creation skipped: ${walletResult.error}`);
+            }
+          } catch (walletError) {
+            console.warn(`[FHIR] ⚠️  Wallet creation error (non-fatal):`, walletError.message);
+          }
+        }
 
         // If this is a medication/supplement product, create MedicationRequest
         if (response.metadata?.product) {
@@ -3073,12 +3312,12 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       sameSite: 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     };
-    
+
     // Set domain for cross-subdomain cookie sharing in production
     if (process.env.NODE_ENV === 'production' || req.headers.host?.includes('doclittle.site')) {
       cookieOptions.domain = '.doclittle.site';
     }
-    
+
     res.cookie('customer_session', sessionId, cookieOptions);
 
     // STEP 9: Get merchant to retrieve subdomain
@@ -3101,6 +3340,36 @@ app.post('/api/auth/signup', authLimiter, async (req, res) => {
       } catch (emailError) {
         console.error('❌ Failed to send welcome email:', emailError);
         // Don't fail the request if email fails
+      }
+
+      // STEP 11: Automatically set up Azure custom domain and SSL for new tenant subdomain
+      if (subdomain) {
+        try {
+          const AzureDomainService = require('./services/azure-domain-service');
+          console.log(`🌐 Starting automated Azure domain setup for subdomain: ${subdomain}`);
+
+          const azureResult = await AzureDomainService.setupTenantDomain(subdomain, {
+            rootDomain: process.env.AZURE_ROOT_DOMAIN || 'doclittle.site',
+            appName: process.env.AZURE_APP_NAME || 'doclittle',
+            resourceGroup: process.env.AZURE_RESOURCE_GROUP || 'doclittle',
+            skipSSL: process.env.AZURE_SKIP_SSL === 'true', // Allow skipping in dev
+            maxRetries: 3,
+            retryDelayMs: 60000 // 1 minute between retries
+          });
+
+          if (azureResult.success) {
+            console.log(`✅ Azure domain setup completed for ${subdomain}.${azureResult.domain}`);
+          } else if (azureResult.skipped) {
+            console.log(`⏭️  Azure domain setup skipped: ${azureResult.reason}`);
+          } else {
+            console.warn(`⚠️  Azure domain setup partially completed for ${subdomain}: ${azureResult.error || azureResult.warning}`);
+          }
+        } catch (azureError) {
+          console.error(`❌ Failed to set up Azure domain for ${subdomain}:`, azureError.message);
+          // Don't fail the request - domain setup can be done manually later
+        }
+      } else {
+        console.warn(`⚠️  No subdomain available for Azure domain setup`);
       }
     });
 
@@ -3240,13 +3509,16 @@ app.post('/api/auth/google', async (req, res) => {
       // Create new user from Google account
       const userId = `user-${uuidv4()}`;
 
+      // For Google OAuth users, merchant_id should be determined from user's clinic association
+      // For now, set to null - user can be associated with clinic/merchant later
+      // This prevents hardcoding and allows proper multi-tenant association
       db.createUser({
         id: userId,
         email,
         password_hash: null, // Google users don't have password
         name,
         role: 'healthcare_provider',
-        merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884',
+        merchant_id: null, // Will be set when user is associated with a clinic/merchant
         picture,
         auth_method: 'google',
         google_id: credential // Store Google ID for future reference
@@ -3680,6 +3952,14 @@ app.get('/api/admin/session', adminSessionStatus);
 
 // Seed test patients endpoint (public for initial setup)
 app.post('/api/admin/patients/seed-test', async (req, res) => {
+  // Only allow in development/staging environments
+  if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod') {
+    return res.status(403).json({
+      success: false,
+      error: 'Test patient seeding is not allowed in production environment'
+    });
+  }
+
   try {
     const { v4: uuidv4 } = require('uuid');
 
@@ -6455,12 +6735,27 @@ app.get('/api/circle/wallets/:walletId/balance', async (req, res) => {
 app.get('/api/circle/accounts/:entityType/:entityId', async (req, res) => {
   try {
     const { entityType, entityId } = req.params;
+
+    // Get merchant_id from tenant context if available
+    const merchantId = req.tenant?.merchant?.id ||
+      req.tenant?.clinic?.merchant_id ||
+      req.query?.merchant_id ||
+      null;
+
     const account = db.getCircleAccountByEntity(entityType, entityId);
 
     if (!account) {
       return res.status(404).json({
         success: false,
         error: 'Circle account not found'
+      });
+    }
+
+    // Filter by merchant_id if provided (tenant-scoped wallets)
+    if (merchantId && account.merchant_id && account.merchant_id !== merchantId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Wallet does not belong to this tenant'
       });
     }
 
@@ -6546,8 +6841,15 @@ app.post('/api/patient/wallet/deposit', async (req, res) => {
         });
       }
 
+      // Get merchant_id from tenant context if available
+      const merchantId = req.tenant?.merchant?.id ||
+        req.tenant?.clinic?.merchant_id ||
+        req.body?.merchant_id ||
+        null;
+
       const walletResult = await CircleService.getOrCreatePatientWallet(fhirPatientId, {
-        createIfNotExists: true
+        createIfNotExists: true,
+        merchantId: merchantId
       });
 
       if (!walletResult.success) {
@@ -9664,23 +9966,23 @@ app.post('/webhook/stripe', async (req, res) => {
           // VOICE CHECKOUT PAYMENT - Complete checkout automatically
           console.log(`💳 Processing voice checkout payment: ${paymentIntent.id}`);
           console.log(`   Checkout ID: ${paymentIntent.metadata.checkout_id}`);
-          
+
           try {
             const checkoutId = paymentIntent.metadata.checkout_id;
             const checkout = await db.getVoiceCheckout(checkoutId);
-            
+
             if (!checkout) {
               console.error(`❌ Checkout not found: ${checkoutId}`);
               // Return 200 to prevent Stripe retries, but log error
               return res.json({ received: true, error: 'Checkout not found' });
             }
-            
+
             // IDEMPOTENCY: Check if already completed
             if (checkout.status === 'completed') {
               console.log(`✅ Checkout ${checkoutId} already completed - skipping`);
               return res.json({ received: true, message: 'Already completed' });
             }
-            
+
             // Process payment token if provided
             if (paymentIntent.metadata.payment_token) {
               const PaymentService = require('./services/payment-service');
@@ -9688,29 +9990,27 @@ app.post('/webhook/stripe', async (req, res) => {
                 paymentIntent.metadata.payment_token,
                 paymentIntent.id
               );
-              
+
               if (!tokenResult.success) {
                 console.warn(`⚠️  Token processing failed: ${tokenResult.error}`);
                 // Continue anyway - payment succeeded in Stripe
               }
             }
-            
+
             // Complete checkout (inline implementation - same logic as /voice/checkout/complete route)
             const { v4: uuidv4 } = require('uuid');
             const axios = require('axios');
             const VoiceAdapter = require('./adapters/voice-adapter');
-            
-            // Get merchant - with fallback logic
+
+            // Get merchant - return error if not found (no fallback for security)
             let merchant = db.getMerchant(checkout.merchant_id);
+
             if (!merchant) {
-              const fallbackMerchant = db.getMerchantBySubdomain('akin-dunbar');
-              merchant = fallbackMerchant || db.getAllMerchants()?.[0];
+              console.error('❌ ERROR: Merchant not found for checkout:', checkout.id);
+              console.error('   Checkout merchant_id:', checkout.merchant_id);
+              throw new Error('Merchant not found. Please ensure merchant is configured in the system.');
             }
-            
-            if (!merchant) {
-              throw new Error('Merchant not found');
-            }
-            
+
             // Decrement inventory
             if (checkout.product_id && checkout.quantity) {
               try {
@@ -9722,11 +10022,11 @@ app.post('/webhook/stripe', async (req, res) => {
                 console.error('❌ Error decrementing inventory:', inventoryError);
               }
             }
-            
+
             // Create order
             const orderData = VoiceAdapter.toMerchantOrderFormat(checkout);
             let merchantOrder = null;
-            
+
             if (merchant.api_url) {
               try {
                 const orderResponse = await axios.post(`${merchant.api_url}/api/orders`, orderData, { timeout: 10000 });
@@ -9735,7 +10035,7 @@ app.post('/webhook/stripe', async (req, res) => {
                 console.error('❌ Merchant API call failed:', apiError.message);
               }
             }
-            
+
             if (!merchantOrder) {
               const orderId = uuidv4();
               db.createOrder({
@@ -9753,7 +10053,7 @@ app.post('/webhook/stripe', async (req, res) => {
               });
               merchantOrder = { id: orderId };
             }
-            
+
             // Update checkout status
             await db.updateVoiceCheckout(checkoutId, {
               status: 'completed',
@@ -9761,7 +10061,7 @@ app.post('/webhook/stripe', async (req, res) => {
               merchant_order_id: merchantOrder.id,
               completed_at: new Date().toISOString()
             });
-            
+
             // Create transaction record for admin tracking
             db.createTransaction({
               id: uuidv4(),
@@ -9775,7 +10075,7 @@ app.post('/webhook/stripe', async (req, res) => {
               customer_email: checkout.customer_email || checkout.customer_phone,
               completed_at: new Date().toISOString()
             });
-            
+
             console.log(`✅ Voice checkout ${checkoutId} completed via webhook`);
           } catch (error) {
             console.error(`❌ Error completing voice checkout from webhook:`, error);
@@ -9783,13 +10083,13 @@ app.post('/webhook/stripe', async (req, res) => {
             console.error(`   Payment Intent: ${paymentIntent.id}`);
             console.error(`   Error: ${error.message}`);
             console.error(`   Stack: ${error.stack}`);
-            
+
             // Log error but return 200 to prevent Stripe retries
             // Admin can manually retry failed checkouts
             // Return 200 so Stripe doesn't retry (we'll handle manually)
-            return res.json({ 
-              received: true, 
-              error: 'Checkout completion failed - logged for manual review' 
+            return res.json({
+              received: true,
+              error: 'Checkout completion failed - logged for manual review'
             });
           }
         } else {
@@ -9858,13 +10158,13 @@ app.post('/webhook/stripe', async (req, res) => {
           // VOICE CHECKOUT PAYMENT FAILED - Update checkout status
           const checkoutId = failedPayment.metadata.checkout_id;
           console.log(`❌ Voice checkout payment failed: ${checkoutId}`);
-          
+
           try {
             await db.updateVoiceCheckout(checkoutId, {
               status: 'failed',
               payment_intent_id: failedPayment.id
             });
-            
+
             // Create failed transaction record for admin tracking
             const { v4: uuidv4 } = require('uuid');
             const checkout = await db.getVoiceCheckout(checkoutId);
@@ -9881,7 +10181,7 @@ app.post('/webhook/stripe', async (req, res) => {
                 completed_at: null
               });
             }
-            
+
             console.log(`✅ Checkout ${checkoutId} marked as failed`);
           } catch (error) {
             console.error(`❌ Error updating failed checkout:`, error);
@@ -9897,13 +10197,13 @@ app.post('/webhook/stripe', async (req, res) => {
           // VOICE CHECKOUT PAYMENT CANCELED - Update checkout status
           const checkoutId = canceledPayment.metadata.checkout_id;
           console.log(`🚫 Voice checkout payment canceled: ${checkoutId}`);
-          
+
           try {
             await db.updateVoiceCheckout(checkoutId, {
               status: 'cancelled',
               payment_intent_id: canceledPayment.id
             });
-            
+
             // Create cancelled transaction record for admin tracking
             const { v4: uuidv4 } = require('uuid');
             const checkout = await db.getVoiceCheckout(checkoutId);
@@ -9920,7 +10220,7 @@ app.post('/webhook/stripe', async (req, res) => {
                 completed_at: null
               });
             }
-            
+
             console.log(`✅ Checkout ${checkoutId} marked as cancelled`);
           } catch (error) {
             console.error(`❌ Error updating cancelled checkout:`, error);
@@ -9939,12 +10239,12 @@ app.post('/webhook/stripe', async (req, res) => {
     console.error('   Event type:', event?.type);
     console.error('   Payment Intent:', event?.data?.object?.id);
     console.error('   Stack:', error.stack);
-    
+
     // CRITICAL: Always return 200 to Stripe to prevent retries
     // We log errors for manual review instead of retrying
     // This prevents infinite retry loops if there's a persistent issue
-    res.status(200).json({ 
-      received: true, 
+    res.status(200).json({
+      received: true,
       error: 'Webhook processing failed - logged for review',
       error_message: error.message
     });
@@ -11323,11 +11623,13 @@ app.get('/api/test/uhc-fhir/patient/:patientId/all', async (req, res) => {
 // Use comprehensive error handler - must be last middleware
 app.use(errorHandler);
 
-const server = app.listen(PORT, () => {
+// Azure App Service requires binding to 0.0.0.0, not localhost
+const HOST = process.env.WEBSITE_SITE_NAME ? '0.0.0.0' : '0.0.0.0';
+const server = app.listen(PORT, HOST, () => {
   console.log('\n' + '='.repeat(60));
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));
-  console.log(`\n📍 Server running on: http://localhost:${PORT}`);
+  console.log(`\n📍 Server running on: http://${HOST}:${PORT}`);
   console.log('\n📊 Available Endpoints:');
   console.log('\n📞 Voice (Custom Telephony with SIP):');
   console.log(`   POST   http://localhost:${PORT}/voice/incoming`);

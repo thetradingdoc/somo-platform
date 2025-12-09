@@ -32,7 +32,8 @@ class RetellWebSocketHandler {
             customerPhone: null,
             customerName: null, // Will be stored when first provided
             initialName: null, // Store the FIRST name provided by the caller (for fraud detection)
-            nameProvidedAt: null // Timestamp when name was first provided
+            nameProvidedAt: null, // Timestamp when name was first provided
+            clinic_id: null // Clinic/tenant identifier (primary)
         };
         this.activeConnections.set(callId, connection);
 
@@ -75,19 +76,24 @@ class RetellWebSocketHandler {
 
             // Deduct credits when call ends
             const connection = this.activeConnections.get(callId);
-            if (connection && connection.customer_id) {
+            if (connection && connection.clinic_id) {
                 try {
                     const callDuration = Date.now() - connection.startTime;
                     const callDurationSeconds = Math.floor(callDuration / 1000);
                     const callDurationMinutes = Math.ceil(callDurationSeconds / 60); // Round up to nearest minute
 
-                    // Get customer credits
-                    const credits = this.db.getCustomerCredits(connection.customer_id);
+                    // NOTE: For now, we use clinic_id as customer_id for credits (database schema uses customer_id)
+                    // TODO: Create clinic_credits table or map clinic to customer properly
+                    const customerIdForCredits = connection.clinic_id;
+                    
+                    // Get customer credits (using clinic_id as customer_id for now)
+                    const credits = this.db.getCustomerCredits(customerIdForCredits);
                     if (credits && credits.credits_balance_minutes >= callDurationMinutes) {
                         // Deduct credits
-                        this.db.deductCredits(connection.customer_id, callDurationMinutes);
+                        this.db.deductCredits(customerIdForCredits, callDurationMinutes);
 
                         // Update voice call log with duration and credits deducted
+                        // NOTE: voice_call_log table uses customer_id, so we use clinic_id here
                         const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
                         if (callLog) {
                             this.db.db.prepare(`
@@ -108,7 +114,7 @@ class RetellWebSocketHandler {
                                 ) VALUES (?, ?, ?, ?, ?, ?, 'completed')
                             `).run(
                                 uuidv4(),
-                                connection.customer_id,
+                                customerIdForCredits, // Using clinic_id as customer_id (database schema limitation)
                                 callId,
                                 callDurationSeconds,
                                 callDurationMinutes,
@@ -116,10 +122,10 @@ class RetellWebSocketHandler {
                             );
                         }
 
-                        console.log(`✅ Deducted ${callDurationMinutes} minutes from customer ${connection.customer_id}`);
+                        console.log(`✅ Deducted ${callDurationMinutes} minutes from clinic ${connection.clinic_id}`);
                     } else {
                         // Insufficient credits - log warning
-                        console.warn(`⚠️  Insufficient credits for customer ${connection.customer_id} (needed: ${callDurationMinutes}, available: ${credits ? credits.credits_balance_minutes : 0})`);
+                        console.warn(`⚠️  Insufficient credits for clinic ${connection.clinic_id} (needed: ${callDurationMinutes}, available: ${credits ? credits.credits_balance_minutes : 0})`);
 
                         // Still log the call
                         const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
@@ -205,39 +211,49 @@ class RetellWebSocketHandler {
                 connection.twilio_call_sid = message.call.metadata.twilio_call_sid;
             }
 
-            // Extract customer_id from various sources
+            // Extract clinic_id from various sources
             // Priority: dynamic_variables > metadata > agent_id lookup > phone number lookup
-            if (message.call.dynamic_variables && message.call.dynamic_variables.customer_id) {
-                connection.customer_id = message.call.dynamic_variables.customer_id;
-                console.log(`✅ Extracted customer_id from dynamic variables: ${connection.customer_id}`);
-            } else if (message.call.metadata && message.call.metadata.customer_id) {
-                connection.customer_id = message.call.metadata.customer_id;
-                console.log(`✅ Extracted customer_id from metadata: ${connection.customer_id}`);
-            } else if (message.call.dynamic_variables && message.call.dynamic_variables.clinic_id) {
-                // Legacy: clinic_id support
-                connection.customer_id = message.call.dynamic_variables.clinic_id;
-                console.log(`✅ Extracted clinic_id from dynamic variables: ${connection.customer_id}`);
+            // NOTE: We use clinic_id as the primary tenant identifier
+            if (message.call.dynamic_variables && message.call.dynamic_variables.clinic_id) {
+                connection.clinic_id = message.call.dynamic_variables.clinic_id;
+                console.log(`✅ Extracted clinic_id from dynamic variables: ${connection.clinic_id}`);
             } else if (message.call.metadata && message.call.metadata.clinic_id) {
-                // Legacy: clinic_id support
-                connection.customer_id = message.call.metadata.clinic_id;
-                console.log(`✅ Extracted clinic_id from metadata: ${connection.customer_id}`);
+                connection.clinic_id = message.call.metadata.clinic_id;
+                console.log(`✅ Extracted clinic_id from metadata: ${connection.clinic_id}`);
+            } else if (message.call.dynamic_variables && message.call.dynamic_variables.customer_id) {
+                // Legacy: customer_id support (may be clinic_id in disguise)
+                connection.clinic_id = message.call.dynamic_variables.customer_id;
+                console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
+            } else if (message.call.metadata && message.call.metadata.customer_id) {
+                // Legacy: customer_id support (may be clinic_id in disguise)
+                connection.clinic_id = message.call.metadata.customer_id;
+                console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
             } else if (message.call.agent_id) {
-                // Look up customer by Retell agent_id
+                // Look up clinic by Retell agent_id (check clinics table first, then customers for backward compatibility)
+                const clinic = this.db.db.prepare('SELECT * FROM clinics WHERE retell_agent_id = ?').get(message.call.agent_id);
+                if (clinic) {
+                    connection.clinic_id = clinic.clinic_id;
+                    console.log(`✅ Looked up clinic_id from agent_id: ${connection.clinic_id}`);
+                } else {
+                    // Fallback: check customers table (legacy support)
                 const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(message.call.agent_id);
                 if (customer) {
-                    connection.customer_id = customer.id;
-                    console.log(`✅ Looked up customer_id from agent_id: ${connection.customer_id}`);
+                        // For backward compatibility, use customer.id as clinic_id
+                        // TODO: Map customer to clinic properly when relationship is clarified
+                        connection.clinic_id = customer.id;
+                        console.log(`⚠️  Looked up clinic_id from customer agent_id (legacy): ${connection.clinic_id}`);
+                    }
                 }
             }
 
-            // Fallback: Try to lookup by phone number (legacy clinic support)
-            if (!connection.customer_id) {
+            // Fallback: Try to lookup by phone number
+            if (!connection.clinic_id) {
                 const toNumber = message.call.to_number;
                 if (toNumber) {
                     const clinicPhone = this.db.getClinicPhoneNumber(toNumber);
                     if (clinicPhone && clinicPhone.clinic_id) {
-                        connection.customer_id = clinicPhone.clinic_id;
-                        console.log(`✅ Looked up clinic_id from phone number: ${connection.customer_id}`);
+                        connection.clinic_id = clinicPhone.clinic_id;
+                        console.log(`✅ Looked up clinic_id from phone number: ${connection.clinic_id}`);
                     }
                 }
             }
@@ -302,18 +318,23 @@ class RetellWebSocketHandler {
         console.log(`\n🔧 FUNCTION CALL: ${functionName}`);
         console.log('   Args:', JSON.stringify(functionArgs, null, 2));
 
-        // Get clinic_id from connection metadata (if available)
-        // Also check function args for clinic_id (passed via dynamic variables)
-        let customerId = connection.customer_id || null;
+        // Get clinic_id from connection metadata (primary tenant identifier)
+        let clinicId = connection.clinic_id || null;
 
         // Try to extract from function args if available
-        if (!customerId && functionArgs.clinic_id) {
-            customerId = functionArgs.clinic_id;
+        if (!clinicId && functionArgs.clinic_id) {
+            clinicId = functionArgs.clinic_id;
         }
 
         // Try to extract from dynamic variables in message
-        if (!customerId && message.dynamic_variables && message.dynamic_variables.clinic_id) {
-            customerId = message.dynamic_variables.clinic_id;
+        if (!clinicId && message.dynamic_variables && message.dynamic_variables.clinic_id) {
+            clinicId = message.dynamic_variables.clinic_id;
+        }
+        
+        // Legacy: Also check customer_id (may be clinic_id in disguise)
+        if (!clinicId && functionArgs.customer_id) {
+            clinicId = functionArgs.customer_id;
+            console.log(`⚠️  Using customer_id as clinic_id (legacy): ${clinicId}`);
         }
 
         try {
@@ -408,9 +429,10 @@ class RetellWebSocketHandler {
             const success = result.success !== false && !result.error;
 
             // Log function call to database
+            // NOTE: Using clinic_id as customer_id for database (schema limitation)
             await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: customerId,
+                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
                 call_id: callId,
                 function_name: functionName,
                 parameters: functionArgs,
@@ -432,9 +454,10 @@ class RetellWebSocketHandler {
             const responseTime = Date.now() - startTime;
 
             // Log error
+            // NOTE: Using clinic_id as customer_id for database (schema limitation)
             this.db.logError({
                 id: `error-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: customerId,
+                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
                 error_type: 'FunctionCallError',
                 error_message: error.message,
                 stack_trace: error.stack,
@@ -447,7 +470,7 @@ class RetellWebSocketHandler {
             // Log failed function call
             await this.db.logFunctionCall({
                 id: `func-${require('crypto').randomBytes(16).toString('hex')}`,
-                customer_id: customerId,
+                customer_id: clinicId, // Using clinic_id as customer_id (database schema limitation)
                 call_id: callId,
                 function_name: functionName,
                 parameters: functionArgs,
@@ -489,11 +512,96 @@ class RetellWebSocketHandler {
         try {
             console.log(`🔍 Searching products: ${query}`);
 
+            // Resolve merchant_id from dynamic variables first (from Retell call setup), then function args, then clinic
+            let merchantId = null;
+            
+            // Priority 1: Check dynamic variables (set during call registration)
+            // Retell sends dynamic variables as "dynamic_variables" in the call message
+            if (connection.callMetadata) {
+                // Check all possible locations (Retell may use different keys)
+                const dynamicVars = connection.callMetadata.dynamic_variables || 
+                                   connection.callMetadata.retell_llm_dynamic_variables ||
+                                   (connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables);
+                
+                // Debug logging
+                console.log(`🔍 Checking dynamic variables for merchant_id...`);
+                console.log(`   callMetadata exists: ${!!connection.callMetadata}`);
+                console.log(`   dynamic_variables: ${!!connection.callMetadata.dynamic_variables}`);
+                console.log(`   retell_llm_dynamic_variables: ${!!connection.callMetadata.retell_llm_dynamic_variables}`);
+                console.log(`   metadata.dynamic_variables: ${!!(connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables)}`);
+                if (dynamicVars) {
+                    console.log(`   Found dynamicVars: ${JSON.stringify(dynamicVars)}`);
+                }
+                
+                if (dynamicVars && dynamicVars.merchant_id) {
+                    // CRITICAL: Validate that the merchant_id exists before using it
+                    const merchant = this.db.getMerchant(dynamicVars.merchant_id);
+                    if (merchant) {
+                        merchantId = dynamicVars.merchant_id;
+                        console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
+                    } else {
+                        console.warn(`⚠️  REJECTED invalid merchant_id from dynamic variables: ${dynamicVars.merchant_id} (not found in database)`);
+                        console.warn(`   This is likely a hardcoded wrong merchant_id. Ignoring it.`);
+                        // Don't use it - continue to next priority
+                    }
+                } else {
+                    console.warn(`⚠️  Dynamic variables found but no merchant_id: ${JSON.stringify(dynamicVars)}`);
+                }
+            } else {
+                console.warn(`⚠️  No callMetadata found in connection`);
+            }
+            
+            // Priority 2: Use function args (but ONLY if they're valid - reject wrong merchant_id)
+            if (!merchantId && functionArgs.merchant_id) {
+                // CRITICAL: Validate that the merchant_id exists before using it
+                const merchant = this.db.getMerchant(functionArgs.merchant_id);
+                if (merchant) {
+                    merchantId = functionArgs.merchant_id;
+                    console.log(`✅ Using merchant_id from function args: ${merchantId}`);
+                } else {
+                    console.warn(`⚠️  REJECTED invalid merchant_id from function args: ${functionArgs.merchant_id} (not found in database)`);
+                    console.warn(`   This is likely the hardcoded wrong merchant_id. Ignoring it.`);
+                    // Don't use it - continue to next priority
+                }
+            }
+            
+            // Priority 3: Fallback to clinic_id resolution
+            if (!merchantId && connection.clinic_id) {
+                const clinic = await this.db.getClinicById(connection.clinic_id);
+                if (clinic && clinic.merchant_id) {
+                    merchantId = clinic.merchant_id;
+                    console.log(`✅ Using merchant_id from clinic: ${merchantId}`);
+                }
+            }
+            
+            // Priority 4: ALWAYS use default tenant (akin-dunbar) as final fallback
+            // This ensures the agent ALWAYS connects to akin-dunbar
+            if (!merchantId) {
+                const constants = require('../utils/constants');
+                const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
+                const defaultMerchant = this.db.getMerchantBySubdomain(defaultSubdomain);
+                if (defaultMerchant) {
+                    merchantId = defaultMerchant.id;
+                    console.log(`✅ Using default tenant merchant (${defaultSubdomain}): ${merchantId}`);
+                    console.log(`   This ensures the agent always connects to ${defaultSubdomain}`);
+                } else {
+                    console.error(`❌ CRITICAL: Default tenant (${defaultSubdomain}) not found in database!`);
+                    console.error(`   Product search will fail. Please check database configuration.`);
+                }
+            }
+            
+            // Final validation - merchant_id should NEVER be null at this point
+            if (!merchantId) {
+                console.error(`❌ CRITICAL: No merchant_id resolved after all fallbacks!`);
+                console.error(`   This should never happen. Product search will fail.`);
+            } else {
+                console.log(`✅ Final merchant_id resolved: ${merchantId}`);
+            }
+
             // Call your middleware API
-            // Note: merchant_id will be determined by fallback logic if invalid
             const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
             const response = await axios.post(`${apiBaseUrl}/voice/products/search`, {
-                merchant_id: functionArgs.merchant_id || 'd10794ff-ca11-4e6f-93e9-560162b4f884', // Will use fallback if invalid
+                merchant_id: merchantId, // Use resolved merchant_id, should never be null now
                 query: query
             });
 
@@ -525,11 +633,22 @@ class RetellWebSocketHandler {
         try {
             console.log(`🔍 Searching products: ${query}`);
 
+            // Resolve merchant_id from clinic_id
+            let merchantId = null;
+            if (connection.clinic_id) {
+                const clinic = await this.db.getClinicById(connection.clinic_id);
+                if (clinic && clinic.merchant_id) {
+                    merchantId = clinic.merchant_id;
+                }
+            }
+            if (!merchantId) {
+                console.warn(`⚠️  No merchant_id found for clinic ${connection.clinic_id || 'unknown'}. Product search may fail.`);
+            }
+
             // Call your middleware API
-            // Note: merchant_id will be determined by fallback logic if invalid
             const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
             const response = await axios.post(`${apiBaseUrl}/voice/products/search`, {
-                merchant_id: 'd10794ff-ca11-4e6f-93e9-560162b4f884', // Will use fallback if invalid
+                merchant_id: merchantId, // Use resolved merchant_id, null if not found
                 query: query
             });
 
@@ -595,27 +714,44 @@ class RetellWebSocketHandler {
 
     // Handle create_checkout function call
     async handleCreateCheckout(callId, functionArgs) {
+        console.log('\n🔍 DEBUG: handleCreateCheckout START');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`📞 Call ID: ${callId}`);
+        console.log(`📋 Function Args (RAW):`, JSON.stringify(functionArgs, null, 2));
+        console.log(`📋 Function Args Keys:`, Object.keys(functionArgs || {}));
+        
         const connection = this.activeConnections.get(callId);
         if (!connection) {
+            console.error('❌ Connection not found for callId:', callId);
             return {
                 success: false,
                 error: 'Connection not found'
             };
         }
+        console.log(`✅ Connection found for callId: ${callId}`);
 
         // CRITICAL: Extract and store email from function arguments OR connection state
+        console.log('\n🔍 STEP 1: Extract email from function args');
         let customerEmail = functionArgs.customer_email || functionArgs.email;
+        console.log(`   functionArgs.customer_email: ${functionArgs.customer_email || 'NOT FOUND'}`);
+        console.log(`   functionArgs.email: ${functionArgs.email || 'NOT FOUND'}`);
+        console.log(`   Extracted email: ${customerEmail || 'NOT FOUND'}`);
         
         // FALLBACK: If not in function args, try to get from connection state (where it might have been stored earlier)
         if (!customerEmail) {
-            customerEmail = this.getCustomerEmail(callId);
-            console.log(`⚠️  Email not in function args, checking connection state: ${customerEmail || 'not found'}`);
+            console.log('\n🔍 STEP 2: Email not in function args, checking connection state');
+            const connectionEmail = this.getCustomerEmail(callId);
+            console.log(`   connection.customerEmail: ${connectionEmail || 'NOT FOUND'}`);
+            customerEmail = connectionEmail;
+            console.log(`   Final email from connection: ${customerEmail || 'NOT FOUND'}`);
         }
         
         // Store email in connection for future use
         if (customerEmail) {
             connection.customerEmail = customerEmail;
             console.log(`✅ Stored customer email in connection: ${customerEmail}`);
+        } else {
+            console.error('❌ NO EMAIL FOUND IN FUNCTION ARGS OR CONNECTION STATE');
         }
 
         // Extract other required parameters
@@ -632,6 +768,9 @@ class RetellWebSocketHandler {
         }
 
         if (!customerEmail) {
+            console.error('\n❌ DEBUG: NO EMAIL - Returning error to agent');
+            console.error('   This means agent must ask for email again');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
             return {
                 success: false,
                 error: 'customer_email is required. Please provide your email address.',
@@ -640,18 +779,43 @@ class RetellWebSocketHandler {
         }
 
         try {
+            console.log('\n🔍 STEP 3: Email found, proceeding with checkout');
             console.log(`💳 Creating checkout via function call: ${productId}`);
-            console.log(`📧 Email being sent: ${customerEmail || 'MISSING!'}`);
-            console.log(`📋 Function args:`, JSON.stringify(functionArgs, null, 2));
+            console.log(`📧 Email being sent: ${customerEmail}`);
+            console.log(`📋 Full function args:`, JSON.stringify(functionArgs, null, 2));
 
-            // Get merchant ID
-            let merchantId = functionArgs.merchant_id || 'd10794ff-ca11-4e6f-93e9-560162b4f884';
+            // Resolve merchant ID from clinic_id, function args, or dynamic variables
+            let merchantId = functionArgs.merchant_id;
             
-            if (connection.callMetadata && connection.callMetadata.retell_llm_dynamic_variables) {
-                const dynamicVars = connection.callMetadata.retell_llm_dynamic_variables;
-                if (dynamicVars.merchant_id) {
-                    merchantId = dynamicVars.merchant_id;
+            // Try dynamic variables first (from Retell call setup)
+            // Retell sends dynamic variables as "dynamic_variables" in the call message
+            if (!merchantId && connection.callMetadata) {
+                const dynamicVars = connection.callMetadata.dynamic_variables || 
+                                   connection.callMetadata.retell_llm_dynamic_variables ||
+                                   (connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables);
+                if (dynamicVars && dynamicVars.merchant_id) {
+                    // CRITICAL: Validate that the merchant_id exists before using it
+                    const merchant = this.db.getMerchant(dynamicVars.merchant_id);
+                    if (merchant) {
+                        merchantId = dynamicVars.merchant_id;
+                        console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
+                    } else {
+                        console.warn(`⚠️  REJECTED invalid merchant_id from dynamic variables: ${dynamicVars.merchant_id} (not found in database)`);
+                        // Don't use it - continue to next priority
+                    }
                 }
+            }
+            
+            // Fallback to clinic_id resolution
+            if (!merchantId && connection.clinic_id) {
+                const clinic = await this.db.getClinicById(connection.clinic_id);
+                if (clinic && clinic.merchant_id) {
+                    merchantId = clinic.merchant_id;
+                }
+            }
+            
+            if (!merchantId) {
+                console.warn(`⚠️  No merchant_id found for clinic ${connection.clinic_id || 'unknown'}. Checkout may fail.`);
             }
             
             const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
@@ -701,10 +865,47 @@ class RetellWebSocketHandler {
             }
 
         } catch (error) {
-            console.error('❌ Create checkout error:', error);
+            console.error('\n❌ Create checkout error:', error);
+            console.error('   Error type:', error.constructor.name);
+            console.error('   Error message:', error.message);
+            
+            // Handle axios errors specifically
+            if (error.response) {
+                console.error('   Response status:', error.response.status);
+                console.error('   Response data type:', typeof error.response.data);
+                console.error('   Response data:', JSON.stringify(error.response.data, null, 2));
+                
+                // Extract error message from response
+                let errorMessage = 'Failed to create checkout';
+                
+                // Handle different response formats
+                if (Array.isArray(error.response.data)) {
+                    // If response is an array, extract the first error object or message
+                    console.error('   ⚠️  Response is an array - extracting error message');
+                    const firstItem = error.response.data[0];
+                    if (typeof firstItem === 'object' && firstItem.error) {
+                        errorMessage = firstItem.error;
+                    } else if (typeof firstItem === 'string') {
+                        errorMessage = firstItem;
+                    } else {
+                        errorMessage = error.response.data.find(item => typeof item === 'string') || errorMessage;
+                    }
+                } else if (typeof error.response.data === 'object' && error.response.data.error) {
+                    errorMessage = error.response.data.error;
+                } else if (typeof error.response.data === 'string') {
+                    errorMessage = error.response.data;
+                }
+                
+                return {
+                    success: false,
+                    error: errorMessage,
+                    requires_email: error.response.data?.requires_email || false
+                };
+            }
+            
             return {
                 success: false,
-                error: error.response?.data?.error || error.message || 'Failed to create checkout'
+                error: error.message || 'Failed to create checkout'
             };
         }
     }
@@ -721,14 +922,38 @@ class RetellWebSocketHandler {
         try {
             console.log(`💳 Creating checkout for: ${productInfo.product_id}`);
 
-            // Get merchant ID
-            let merchantId = 'd10794ff-ca11-4e6f-93e9-560162b4f884'; // Default, will use fallback if invalid
+            // Resolve merchant ID from clinic_id or dynamic variables
+            let merchantId = null;
             
-            if (connection.callMetadata && connection.callMetadata.retell_llm_dynamic_variables) {
-                const dynamicVars = connection.callMetadata.retell_llm_dynamic_variables;
-                if (dynamicVars.merchant_id) {
-                    merchantId = dynamicVars.merchant_id;
+            // Try dynamic variables first (from Retell call setup)
+            // Retell sends dynamic variables as "dynamic_variables" in the call message
+            if (connection.callMetadata) {
+                const dynamicVars = connection.callMetadata.dynamic_variables || 
+                                   connection.callMetadata.retell_llm_dynamic_variables ||
+                                   (connection.callMetadata.metadata && connection.callMetadata.metadata.dynamic_variables);
+                if (dynamicVars && dynamicVars.merchant_id) {
+                    // CRITICAL: Validate that the merchant_id exists before using it
+                    const merchant = this.db.getMerchant(dynamicVars.merchant_id);
+                    if (merchant) {
+                        merchantId = dynamicVars.merchant_id;
+                        console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
+                    } else {
+                        console.warn(`⚠️  REJECTED invalid merchant_id from dynamic variables: ${dynamicVars.merchant_id} (not found in database)`);
+                        // Don't use it - continue to next priority
+                    }
                 }
+            }
+            
+            // Fallback to clinic_id resolution
+            if (!merchantId && connection.clinic_id) {
+                const clinic = await this.db.getClinicById(connection.clinic_id);
+                if (clinic && clinic.merchant_id) {
+                    merchantId = clinic.merchant_id;
+                }
+            }
+            
+            if (!merchantId) {
+                console.warn(`⚠️  No merchant_id found for clinic ${connection.clinic_id || 'unknown'}. Checkout may fail.`);
             }
             
             const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
@@ -753,7 +978,7 @@ class RetellWebSocketHandler {
                 console.log(`📧 Sending verification code to: ${customerEmail}`);
                 const sendCodeResponse = await axios.post(`${apiBaseUrl}/voice/verify/send-code`, {
                     email: customerEmail,
-                    customer_id: connection.customer_id,
+                    customer_id: connection.clinic_id, // Using clinic_id as customer_id (legacy support)
                     customer_name: customerName
                 });
 
@@ -1032,8 +1257,8 @@ class RetellWebSocketHandler {
             return null;
         }
 
-        if (connection.customer_id) {
-            return connection.customer_id;
+        if (connection.clinic_id) {
+            return connection.clinic_id;
         }
 
         const metadataClinic =

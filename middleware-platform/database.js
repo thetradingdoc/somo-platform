@@ -1334,6 +1334,62 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_patient_insurance_member_id ON patient_insurance(member_id);
 
   -- ============================================
+  -- INVOICE TABLES - Patient Billing
+  -- ============================================
+
+  CREATE TABLE IF NOT EXISTS invoices (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT,
+    patient_id TEXT NOT NULL,
+    invoice_number TEXT UNIQUE NOT NULL,
+    status TEXT DEFAULT 'draft', -- draft, sent, paid, overdue, cancelled
+    amount REAL NOT NULL,
+    due_date DATE,
+    notes TEXT,
+    sent_at DATETIME,
+    paid_at DATETIME,
+    cancelled_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (claim_id) REFERENCES insurance_claims(id),
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS invoice_items (
+    id TEXT PRIMARY KEY,
+    invoice_id TEXT NOT NULL,
+    service_date DATE,
+    description TEXT NOT NULL,
+    cpt_code TEXT,
+    icd_code TEXT,
+    quantity INTEGER DEFAULT 1,
+    unit_price REAL NOT NULL,
+    total_price REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS invoice_payments (
+    id TEXT PRIMARY KEY,
+    invoice_id TEXT NOT NULL,
+    payment_date DATE NOT NULL,
+    amount REAL NOT NULL,
+    payment_method TEXT, -- cash, check, credit_card, bank_transfer, etc.
+    reference_number TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_invoices_claim_id ON invoices(claim_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_patient_id ON invoices(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+  CREATE INDEX IF NOT EXISTS idx_invoices_invoice_number ON invoices(invoice_number);
+  CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
+  CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+  CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice_id ON invoice_payments(invoice_id);
+
+  -- ============================================
   -- CIRCLE PAYMENT INTEGRATION TABLES
   -- ============================================
 
@@ -2037,6 +2093,25 @@ function migrateMerchantsSubdomain() {
       }
     }
 
+    // Migration: Add tenant_type column to merchants table
+    if (!columnNames.includes('tenant_type')) {
+      console.log('🔄 Migrating: Adding tenant_type column to merchants table');
+      db.prepare("ALTER TABLE merchants ADD COLUMN tenant_type TEXT DEFAULT 'clinic'").run();
+
+      // Set 'shop' for akin-dunbar (backward compatibility)
+      const constants = require('./utils/constants');
+      const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN;
+      const akinDunbarMerchant = db.prepare('SELECT id FROM merchants WHERE subdomain = ?').get(defaultSubdomain);
+      if (akinDunbarMerchant) {
+        db.prepare('UPDATE merchants SET tenant_type = ? WHERE subdomain = ?').run('shop', defaultSubdomain);
+        console.log(`   Set tenant_type='shop' for merchant with subdomain '${defaultSubdomain}'`);
+      }
+
+      console.log('✅ Migration complete: tenant_type column added to merchants table');
+    } else {
+      console.log('✅ Migration skipped: tenant_type column already exists in merchants table');
+    }
+
     db.pragma('foreign_keys = ON');
   } catch (error) {
     console.error('❌ Merchants subdomain migration failed:', error.message);
@@ -2250,7 +2325,8 @@ function migrateCustomersTable() {
       twilio_phone_sid: 'TEXT',
       pricing_tier: "TEXT DEFAULT 'starter'",
       custom_prompt: 'TEXT',
-      prompt_updated_at: 'DATETIME'
+      prompt_updated_at: 'DATETIME',
+      fhir_patient_id: 'TEXT'
     };
 
     Object.keys(newColumns).forEach(colName => {
@@ -2259,6 +2335,12 @@ function migrateCustomersTable() {
         db.prepare(`ALTER TABLE customers ADD COLUMN ${colName} ${newColumns[colName]}`).run();
       }
     });
+
+    // Create index for fhir_patient_id if it was just added
+    if (!columnNames.includes('fhir_patient_id')) {
+      console.log('📦 Creating index on customers.fhir_patient_id...');
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_customers_fhir_patient_id ON customers(fhir_patient_id)").run();
+    }
 
     db.pragma('foreign_keys = ON');
     console.log('✅ Migration complete: customers table updated');
@@ -2305,6 +2387,62 @@ function migrateVoiceCallLogCosts() {
   }
 }
 
+// Migration: Add merchant_id column to fhir_patients table
+function migrateFHIRPatientsMerchantId() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(fhir_patients)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('merchant_id')) {
+      console.log('🔄 Migrating: Adding merchant_id column to fhir_patients table');
+      db.prepare("ALTER TABLE fhir_patients ADD COLUMN merchant_id TEXT").run();
+
+      // Create index for performance
+      console.log('🔄 Migrating: Creating index on fhir_patients.merchant_id');
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_fhir_patients_merchant ON fhir_patients(merchant_id)").run();
+
+      console.log('✅ Migration complete: merchant_id column added to fhir_patients table');
+    } else {
+      console.log('✅ Migration skipped: merchant_id column already exists in fhir_patients table');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ FHIR patients merchant_id migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add merchant_id column to circle_accounts table
+function migrateCircleAccountsMerchantId() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(circle_accounts)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('merchant_id')) {
+      console.log('🔄 Migrating: Adding merchant_id column to circle_accounts table');
+      db.prepare("ALTER TABLE circle_accounts ADD COLUMN merchant_id TEXT").run();
+
+      // Create index for performance
+      console.log('🔄 Migrating: Creating index on circle_accounts.merchant_id');
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_circle_accounts_merchant ON circle_accounts(merchant_id)").run();
+
+      console.log('✅ Migration complete: merchant_id column added to circle_accounts table');
+    } else {
+      console.log('✅ Migration skipped: merchant_id column already exists in circle_accounts table');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ Circle accounts merchant_id migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Run migrations on startup
 migrateInsuranceClaimsTable();
 migratePatientPortalSessionsEmail();
@@ -2318,6 +2456,8 @@ migrateCustomerMerchantId(); // CRITICAL: Link customers to merchants
 migrateMerchantsSubdomain(); // Add subdomain support for tenant isolation
 migrateCustomersPasswordHash(); // Add password_hash for password-based authentication
 migrateCustomerCreditsExpiration(); // Add expiration and alert tracking for credits
+migrateFHIRPatientsMerchantId(); // Link FHIR patients to merchants (tenants)
+migrateCircleAccountsMerchantId(); // Link wallets to merchants (tenants)
 
 /**
  * Helper to safely stringify data
@@ -3223,10 +3363,13 @@ module.exports = {
       throw new Error(`Patient with ID ${patientResource.id} already exists (Name: ${existingById.name || 'Unknown'}, Phone: ${existingById.phone || 'N/A'}). Patient IDs must be unique.`);
     }
 
+    // Extract merchant_id from patientResource if provided (for tenant linking)
+    const merchantId = patientResource.merchant_id || null;
+
     const stmt = db.prepare(`
       INSERT INTO fhir_patients (
-        resource_id, resource_data, phone, email, name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        resource_id, resource_data, phone, email, name, merchant_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `);
 
     try {
@@ -3235,7 +3378,8 @@ module.exports = {
         JSON.stringify(patientResource),
         phone,
         email,
-        name
+        name,
+        merchantId
       );
     } catch (error) {
       // Check if error is due to unique constraint violation
@@ -4684,6 +4828,254 @@ module.exports = {
   },
 
   // ============================================
+  // INVOICE METHODS
+  // ============================================
+
+  // Create invoice
+  createInvoice(invoice) {
+    const { v4: uuidv4 } = require('uuid');
+    const invoiceId = invoice.id || uuidv4();
+    const stmt = db.prepare(`
+      INSERT INTO invoices (
+        id, claim_id, patient_id, invoice_number, status, amount, due_date, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `);
+    stmt.run(
+      invoiceId,
+      invoice.claim_id || null,
+      invoice.patient_id,
+      invoice.invoice_number,
+      invoice.status || 'draft',
+      invoice.amount,
+      invoice.due_date || null,
+      invoice.notes || null
+    );
+    return { id: invoiceId, lastInsertRowid: invoiceId };
+  },
+
+  // Get invoice by ID
+  getInvoice(id) {
+    const stmt = db.prepare('SELECT * FROM invoices WHERE id = ?');
+    return stmt.get(id);
+  },
+
+  // Get invoice by invoice number
+  getInvoiceByNumber(invoiceNumber) {
+    const stmt = db.prepare('SELECT * FROM invoices WHERE invoice_number = ?');
+    return stmt.get(invoiceNumber);
+  },
+
+  // Get all invoices with filters
+  getInvoices(filters = {}) {
+    let query = 'SELECT * FROM invoices WHERE 1=1';
+    const params = [];
+
+    if (filters.patient_id) {
+      query += ' AND patient_id = ?';
+      params.push(filters.patient_id);
+    }
+
+    if (filters.claim_id) {
+      query += ' AND claim_id = ?';
+      params.push(filters.claim_id);
+    }
+
+    if (filters.status) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
+
+    if (filters.start_date) {
+      query += ' AND created_at >= ?';
+      params.push(filters.start_date);
+    }
+
+    if (filters.end_date) {
+      query += ' AND created_at <= ?';
+      params.push(filters.end_date);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    const stmt = db.prepare(query);
+    return params.length > 0 ? stmt.all(...params) : stmt.all();
+  },
+
+  // Get invoices for a patient
+  getInvoicesByPatient(patientId) {
+    const stmt = db.prepare(`
+      SELECT * FROM invoices
+      WHERE patient_id = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(patientId);
+  },
+
+  // Get invoices for a claim
+  getInvoicesByClaim(claimId) {
+    const stmt = db.prepare(`
+      SELECT * FROM invoices
+      WHERE claim_id = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(claimId);
+  },
+
+  // Update invoice
+  updateInvoice(id, updates) {
+    const fields = [];
+    const values = [];
+
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+      if (updates.status === 'sent' && !updates.sent_at) {
+        fields.push('sent_at = datetime(\'now\')');
+      }
+      if (updates.status === 'paid' && !updates.paid_at) {
+        fields.push('paid_at = datetime(\'now\')');
+      }
+    }
+
+    if (updates.due_date !== undefined) {
+      fields.push('due_date = ?');
+      values.push(updates.due_date);
+    }
+
+    if (updates.notes !== undefined) {
+      fields.push('notes = ?');
+      values.push(updates.notes);
+    }
+
+    if (updates.sent_at !== undefined) {
+      fields.push('sent_at = ?');
+      values.push(updates.sent_at);
+    }
+
+    if (updates.paid_at !== undefined) {
+      fields.push('paid_at = ?');
+      values.push(updates.paid_at);
+    }
+
+    if (updates.cancelled_at !== undefined) {
+      fields.push('cancelled_at = ?');
+      values.push(updates.cancelled_at);
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = datetime(\'now\')');
+    values.push(id);
+
+    const query = `UPDATE invoices SET ${fields.join(', ')} WHERE id = ?`;
+    const stmt = db.prepare(query);
+    return stmt.run(...values);
+  },
+
+  // Add invoice item
+  addInvoiceItem(item) {
+    const { v4: uuidv4 } = require('uuid');
+    const itemId = item.id || uuidv4();
+    const stmt = db.prepare(`
+      INSERT INTO invoice_items (
+        id, invoice_id, service_date, description, cpt_code, icd_code, quantity, unit_price, total_price
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      itemId,
+      item.invoice_id,
+      item.service_date || null,
+      item.description,
+      item.cpt_code || null,
+      item.icd_code || null,
+      item.quantity || 1,
+      item.unit_price,
+      item.total_price
+    );
+    return { id: itemId };
+  },
+
+  // Get invoice items
+  getInvoiceItems(invoiceId) {
+    const stmt = db.prepare(`
+      SELECT * FROM invoice_items
+      WHERE invoice_id = ?
+      ORDER BY service_date DESC, created_at ASC
+    `);
+    return stmt.all(invoiceId);
+  },
+
+  // Add invoice payment
+  addInvoicePayment(payment) {
+    const { v4: uuidv4 } = require('uuid');
+    const paymentId = payment.id || uuidv4();
+    const stmt = db.prepare(`
+      INSERT INTO invoice_payments (
+        id, invoice_id, payment_date, amount, payment_method, reference_number, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      paymentId,
+      payment.invoice_id,
+      payment.payment_date,
+      payment.amount,
+      payment.payment_method || null,
+      payment.reference_number || null,
+      payment.notes || null
+    );
+
+    // Update invoice status if fully paid
+    const invoice = this.getInvoice(payment.invoice_id);
+    if (invoice) {
+      const totalPaid = this.getInvoicePaymentsTotal(payment.invoice_id);
+      if (totalPaid >= invoice.amount) {
+        this.updateInvoice(payment.invoice_id, { status: 'paid', paid_at: new Date().toISOString() });
+      }
+    }
+
+    return { id: paymentId };
+  },
+
+  // Get invoice payments
+  getInvoicePayments(invoiceId) {
+    const stmt = db.prepare(`
+      SELECT * FROM invoice_payments
+      WHERE invoice_id = ?
+      ORDER BY payment_date DESC, created_at DESC
+    `);
+    return stmt.all(invoiceId);
+  },
+
+  // Get total payments for an invoice
+  getInvoicePaymentsTotal(invoiceId) {
+    const stmt = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM invoice_payments
+      WHERE invoice_id = ?
+    `);
+    const result = stmt.get(invoiceId);
+    return result ? result.total : 0;
+  },
+
+  // Generate next invoice number
+  generateInvoiceNumber() {
+    const year = new Date().getFullYear();
+    const stmt = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM invoices
+      WHERE invoice_number LIKE ?
+    `);
+    const result = stmt.get(`INV-${year}-%`);
+    const sequence = (result.count || 0) + 1;
+    return `INV-${year}-${String(sequence).padStart(6, '0')}`;
+  },
+
+  // ============================================
   // CIRCLE PAYMENT METHODS
   // ============================================
 
@@ -4692,8 +5084,8 @@ module.exports = {
     const stmt = db.prepare(`
       INSERT INTO circle_accounts (
         id, entity_type, entity_id, circle_wallet_id, circle_account_id,
-        currency, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        currency, status, merchant_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       account.id,
@@ -4703,6 +5095,7 @@ module.exports = {
       account.circle_account_id || null,
       account.currency || 'USDC',
       account.status || 'active',
+      account.merchant_id || null,
       account.created_at || new Date().toISOString(),
       account.updated_at || new Date().toISOString()
     );
@@ -5615,6 +6008,12 @@ module.exports = {
 
   getCustomerByEmail(email) {
     return db.prepare('SELECT * FROM customers WHERE email = ?').get(email);
+  },
+
+  getCustomerByPhone(phoneNumber) {
+    if (!phoneNumber) return null;
+    const normalized = normalizePhoneNumber(phoneNumber);
+    return db.prepare('SELECT * FROM customers WHERE phone_number = ?').get(normalized);
   },
 
   getCustomerByTwilioNumber(phoneNumber) {
@@ -7246,10 +7645,10 @@ module.exports = {
     // "pre rolls" will match "PRE-ROLLS" and "pre-rolls"
     const normalizedQuery = query.toLowerCase().replace(/[\s-]/g, '');
     const searchTerm = `%${normalizedQuery}%`;
-    
+
     // Also search with original query for exact matches
     const originalSearchTerm = `%${query.toLowerCase()}%`;
-    
+
     if (merchantId) {
       return db.prepare(`
         SELECT * FROM products 
@@ -7369,14 +7768,14 @@ module.exports = {
     const id = orderData.id || uuidv4();
 
     // Handle address fields (can be string or object)
-    const shippingAddress = typeof orderData.shipping_address === 'object' 
-      ? JSON.stringify(orderData.shipping_address) 
+    const shippingAddress = typeof orderData.shipping_address === 'object'
+      ? JSON.stringify(orderData.shipping_address)
       : (orderData.shipping_address || null);
-    
+
     const pickupAddress = typeof orderData.pickup_address === 'object'
       ? JSON.stringify(orderData.pickup_address)
       : (orderData.pickup_address || null);
-    
+
     const dropPoint = typeof orderData.drop_point === 'object'
       ? JSON.stringify(orderData.drop_point)
       : (orderData.drop_point || orderData.shipping_address || null);

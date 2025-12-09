@@ -26,10 +26,10 @@ class CircleService {
         this.entitySecret = process.env.CIRCLE_ENTITY_SECRET || process.env.ENTITY_SECRET || null;
         this.baseURL = process.env.CIRCLE_BASE_URL || 'https://api-sandbox.circle.com';
         this.environment = process.env.CIRCLE_ENVIRONMENT || 'sandbox';
-        
+
         // Initialize Circle SDK client if available
         this.client = null;
-        
+
         // Check if Circle is configured
         if (!this.apiKey) {
             console.warn('⚠️  CIRCLE_API_KEY not set. Circle wallet features will be disabled.');
@@ -37,7 +37,7 @@ class CircleService {
             console.warn('   Get your key from: https://console.circle.com/');
             return; // Exit early - service will be unavailable
         }
-        
+
         // Check if API key is in correct format (3 parts: ENV:ID:SECRET)
         const keyParts = this.apiKey.split(':');
         if (keyParts.length === 2) {
@@ -49,10 +49,10 @@ class CircleService {
             console.warn('⚠️  Circle service will be unavailable due to invalid API key format.');
             return; // Exit early - service will be unavailable
         }
-        
+
         console.log(`🔑 Using Circle API Key format: ${this.apiKey.split(':').length} parts`);
         console.log(`🌐 Circle API Base URL: ${this.baseURL}`);
-        
+
         // Initialize Circle SDK client if available
         if (CircleSDK) {
             try {
@@ -105,10 +105,10 @@ class CircleService {
 
         try {
             const { name, description } = params;
-            
+
             // Generate idempotency key (must be UUID format)
             const idempotencyKey = uuidv4();
-            
+
             // Create wallet set using Circle SDK
             const response = await this.client.createWalletSet({
                 idempotencyKey: idempotencyKey,
@@ -247,7 +247,7 @@ class CircleService {
 
                 // Extract balance information
                 const walletWithBalance = walletsWithBalances.data?.wallets?.[0] || walletsWithBalances.wallets?.[0];
-                
+
                 if (walletWithBalance && walletWithBalance.balances) {
                     return {
                         success: true,
@@ -329,7 +329,7 @@ class CircleService {
             // First, get the destination wallet to get its address
             const toWallet = await this.client.getWallet({ id: toWalletId });
             const toWalletAddress = toWallet.data?.address || toWallet.address;
-            
+
             if (!toWalletAddress) {
                 throw new Error('Could not get destination wallet address');
             }
@@ -509,20 +509,20 @@ class CircleService {
             // In sandbox, we'll use a system wallet that we manually fund via Circle Console
             // or use Circle's testnet faucet
             const systemWalletId = process.env.CIRCLE_SYSTEM_WALLET_ID;
-            
+
             if (!systemWalletId) {
                 // Try to find existing system wallet in wallet set
                 const walletsResult = await this.listWallets(walletSetId);
-                const systemWallet = walletsResult.wallets?.find(w => 
-                    w.metadata?.description?.includes('system') || 
+                const systemWallet = walletsResult.wallets?.find(w =>
+                    w.metadata?.description?.includes('system') ||
                     w.metadata?.description?.includes('funding')
                 );
-                
+
                 if (systemWallet) {
                     // Use existing system wallet
                     const foundSystemWalletId = systemWallet.walletId || systemWallet.id;
                     console.log(`✅ Found system wallet: ${foundSystemWalletId}`);
-                    
+
                     // Transfer from system wallet to target wallet
                     return await this.createTransfer({
                         fromWalletId: foundSystemWalletId,
@@ -567,7 +567,7 @@ class CircleService {
      */
     verifyWebhookSignature(signature, payload) {
         const webhookSecret = process.env.CIRCLE_WEBHOOK_SECRET;
-        
+
         if (!webhookSecret) {
             if (process.env.NODE_ENV === 'production') {
                 console.error('❌ CIRCLE_WEBHOOK_SECRET not configured in production!');
@@ -584,7 +584,7 @@ class CircleService {
 
         try {
             const crypto = require('crypto');
-            
+
             // Circle sends signature as: "v1=signature" format
             // Extract the signature value
             const signatureMatch = signature.match(/v1=([a-f0-9]+)/);
@@ -592,31 +592,31 @@ class CircleService {
                 console.error('❌ Invalid signature format');
                 return false;
             }
-            
+
             const receivedSignature = signatureMatch[1];
-            
+
             // Calculate expected signature
             const expectedSignature = crypto
                 .createHmac('sha256', webhookSecret)
                 .update(payload)
                 .digest('hex');
-            
+
             // Use timing-safe comparison to prevent timing attacks
             const isValid = crypto.timingSafeEqual(
                 Buffer.from(receivedSignature, 'hex'),
                 Buffer.from(expectedSignature, 'hex')
             );
-            
+
             if (!isValid) {
                 console.error('❌ Webhook signature verification failed');
             }
-            
+
             return isValid;
         } catch (error) {
             console.error('❌ Error verifying webhook signature:', error.message);
             return false;
         }
-        }
+    }
 
     /**
      * Get or create a patient wallet linked to FHIR Patient resource_id
@@ -693,13 +693,16 @@ class CircleService {
 
             // Store wallet in database
             const accountId = `circle-account-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            // Use merchant_id from FHIR Patient if not provided in options
+            const finalMerchantId = merchantId || fhirPatient.merchant_id || null;
             db.createCircleAccount({
                 id: accountId,
                 entity_type: 'patient',
                 entity_id: fhirPatientResourceId, // Link to FHIR Patient resource_id
                 circle_wallet_id: walletResult.walletId,
                 currency: 'USDC',
-                status: 'active'
+                status: 'active',
+                merchant_id: finalMerchantId
             });
 
             const account = db.getCircleAccountByEntity('patient', fhirPatientResourceId);
@@ -751,6 +754,112 @@ class CircleService {
             return {
                 success: false,
                 error: error.message || 'Failed to get patient wallet by contact'
+            };
+        }
+    }
+
+    /**
+     * Get or create wallet for a customer (creates FHIR Patient if needed)
+     * This handles the case where we have a customer but no FHIR Patient
+     * @param {string} customerId - Customer ID from customers table
+     * @param {Object} options - Options for wallet creation
+     * @param {string} options.merchantId - Merchant ID (optional)
+     * @param {boolean} options.createIfNotExists - Create wallet if it doesn't exist (default: true)
+     * @returns {Promise<Object>} Wallet account information
+     */
+    async getOrCreateCustomerWallet(customerId, options = {}) {
+        const { merchantId, createIfNotExists = true } = options;
+
+        try {
+            // Get customer from database
+            const customer = db.getCustomer(customerId);
+            if (!customer) {
+                return {
+                    success: false,
+                    error: `Customer with id ${customerId} not found`
+                };
+            }
+
+            // Check if wallet already exists for this customer
+            const existingAccount = db.getCircleAccountByEntity('customer', customerId);
+            if (existingAccount) {
+                return {
+                    success: true,
+                    account: existingAccount,
+                    walletId: existingAccount.circle_wallet_id,
+                    message: 'Wallet already exists'
+                };
+            }
+
+            // If wallet doesn't exist and we shouldn't create it, return error
+            if (!createIfNotExists) {
+                return {
+                    success: false,
+                    error: 'Customer wallet does not exist'
+                };
+            }
+
+            // Get or create wallet set
+            let walletSetId = process.env.CIRCLE_WALLET_SET_ID;
+            if (!walletSetId) {
+                const walletSetResult = await this.createWalletSet({
+                    name: 'Healthcare Billing Wallets',
+                    description: 'Wallet set for Provider, Insurer, and Customer accounts'
+                });
+
+                if (!walletSetResult.success) {
+                    return {
+                        success: false,
+                        error: `Failed to create wallet set: ${walletSetResult.error}`
+                    };
+                }
+
+                walletSetId = walletSetResult.walletSetId;
+                process.env.CIRCLE_WALLET_SET_ID = walletSetId;
+            }
+
+            // Create wallet using customer_id as entity_id
+            const walletResult = await this.createWallet({
+                walletSetId: walletSetId,
+                entityType: 'customer',
+                entityId: customerId, // Use customer_id as entity_id
+                description: `Customer wallet for ${customer.name || customerId}`
+            });
+
+            if (!walletResult.success) {
+                return {
+                    success: false,
+                    error: walletResult.error || 'Failed to create wallet'
+                };
+            }
+
+            // Store wallet in database
+            const accountId = `circle-account-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const finalMerchantId = merchantId || customer.merchant_id || null;
+            db.createCircleAccount({
+                id: accountId,
+                entity_type: 'customer',
+                entity_id: customerId, // Link to customer_id
+                circle_wallet_id: walletResult.walletId,
+                currency: 'USDC',
+                status: 'active',
+                merchant_id: finalMerchantId
+            });
+
+            const account = db.getCircleAccountByEntity('customer', customerId);
+
+            return {
+                success: true,
+                account: account,
+                walletId: walletResult.walletId,
+                walletData: walletResult.walletData,
+                message: 'Wallet created successfully'
+            };
+        } catch (error) {
+            console.error('❌ Error in getOrCreateCustomerWallet:', error);
+            return {
+                success: false,
+                error: error.message || 'Failed to get or create customer wallet'
             };
         }
     }
