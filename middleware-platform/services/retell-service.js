@@ -635,6 +635,66 @@ Always be polite, patient, and professional. If you don't know something, ask fo
       throw new Error(`Failed to create outbound call: ${error.message}`);
     }
   }
+
+  /**
+   * Apply agent settings (best-effort placeholder)
+   * @param {Object} options
+   * @param {string} options.agentId
+   * @param {boolean} options.enabled
+   * @param {string} [options.greeting]
+   * @param {Object} [options.business_hours]
+   * @param {string} [options.after_hours_message]
+   */
+  async applyAgentSettings(options = {}) {
+    const agentId = options.agentId || options.retell_agent_id;
+    if (!agentId) {
+      throw new Error('agentId is required to apply settings');
+    }
+
+    if (!this.apiKey) {
+      console.warn('[RetellService] applyAgentSettings: RETELL_API_KEY not set; skipping Retell update.');
+      return { success: false, warning: 'RETELL_API_KEY missing, skipped Retell update' };
+    }
+
+    // Build payload conservatively; Retell API may ignore unknown fields
+    const payload = {};
+    if (options.enabled !== undefined) {
+      payload.enabled = !!options.enabled;
+    }
+    if (options.greeting !== undefined) {
+      payload.greeting = options.greeting;
+    }
+    if (options.after_hours_message !== undefined) {
+      payload.after_hours_message = options.after_hours_message;
+    }
+    if (options.business_hours !== undefined) {
+      payload.business_hours = options.business_hours;
+    }
+
+    try {
+      const resp = await axios.patch(
+        `${this.apiBaseUrl}/v2/agents/${agentId}`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+
+      console.log('[RetellService] applyAgentSettings: updated Retell agent', agentId);
+      return { success: true, data: resp.data };
+    } catch (error) {
+      console.warn('[RetellService] applyAgentSettings: Retell update failed:', error.message);
+      if (error.response) {
+        console.warn(' Status:', error.response.status);
+        console.warn(' Response:', JSON.stringify(error.response.data));
+      }
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = RetellService;

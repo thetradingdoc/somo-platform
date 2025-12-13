@@ -732,7 +732,8 @@ app.use('/admin', (req, res, next) => {
   }
 
   // Serve admin portal from unified-dashboard/admin
-  const adminFile = req.path === '/admin' ? 'index.html' : req.path.replace('/admin/', '');
+  // When using app.use('/admin', ...), req.path is already stripped of '/admin' prefix
+  const adminFile = req.path === '/' || req.path === '' ? 'index.html' : req.path.replace(/^\//, '');
   const adminPath = getUnifiedDashboardPath('admin', adminFile);
 
   if (require('fs').existsSync(adminPath) && adminPath.includes('unified-dashboard')) {
@@ -782,6 +783,26 @@ app.use('/api/onboarding', onboardingRoutes);
 const adminLeadsRoutes = require('./routes/admin-leads');
 app.use('/api/admin/leads', adminLeadsRoutes);
 
+// Sequences (Phase 2)
+const sequencesRoutes = require('./routes/sequences');
+app.use('/api/sequences', sequencesRoutes);
+
+// Workflows (Enhanced workflow builder with AI actions)
+const workflowsRoutes = require('./routes/workflows');
+app.use('/api/admin/workflows', workflowsRoutes);
+
+// AI Template Generator (Phase 2)
+const aiTemplatesRoutes = require('./routes/ai-templates');
+app.use('/api/ai/templates', aiTemplatesRoutes);
+
+// Qualification Rules (Phase 2)
+const qualificationRulesRoutes = require('./routes/qualification-rules');
+app.use('/api/qualification-rules', qualificationRulesRoutes);
+
+// Admin AI Assistant
+const adminAIAssistantRoutes = require('./routes/admin-ai-assistant');
+app.use('/api/admin/ai', adminAIAssistantRoutes);
+
 // Admin tenant monitoring routes
 const adminTenantsRoutes = require('./routes/admin-tenants');
 app.use('/api/admin/tenants', adminTenantsRoutes);
@@ -800,9 +821,25 @@ const { tenantContext } = require('./middleware/tenant-context');
 const voiceRoutes = require('./routes/voice');
 app.use('/voice', tenantContext({ requireTenant: false }), voiceRoutes);
 
+// Voice agent settings (UI-configurable settings)
+const voiceAgentSettingsRoutes = require('./routes/voice-agent-settings');
+app.use('/api/voice-agent', tenantContext({ requireTenant: false }), voiceAgentSettingsRoutes);
+
 // Payment routes (payment page and processing)
 const paymentRoutes = require('./routes/payment');
 app.use('/api/payment', paymentRoutes);
+
+// Customer wallet routes
+const customerWalletRoutes = require('./routes/customer-wallet');
+app.use('/api/customer/wallet', customerWalletRoutes);
+
+// Public products (read-only)
+const publicProductsRoutes = require('./routes/public-products');
+app.use('/api/public/products', publicProductsRoutes);
+
+// Public checkout (unauthenticated ensure customer)
+const publicCheckoutRoutes = require('./routes/public-checkout');
+app.use('/api/public/checkout', publicCheckoutRoutes);
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -819,6 +856,18 @@ app.use('/api/customer/billing', customerBillingRoutes);
 // Customer Dashboard (Tenant-scoped data)
 const customerDashboardRoutes = require('./routes/customer-dashboard');
 app.use('/api/customer/dashboard', customerDashboardRoutes);
+
+// Chat Commands (Quick Actions)
+const chatCommandsRoutes = require('./routes/chat-commands');
+app.use('/api/chat', chatCommandsRoutes);
+
+// Automation (Rules, Templates, Message History)
+const automationRoutes = require('./routes/automation');
+app.use('/api/automation', automationRoutes);
+
+// Outbound Calls
+const outboundCallRoutes = require('./routes/outbound-call');
+app.use('/api/voice/outbound', outboundCallRoutes);
 // Register /terms route (MANDATORY - requires session and email verification)
 app.get('/terms', (req, res) => {
   const sessionId = req.cookies?.customer_session;
@@ -893,6 +942,32 @@ app.get('/verify-card', (req, res) => {
   }
 
   res.sendFile(path.join(__dirname, 'public', 'signup', 'verify-card.html'));
+});
+
+// Register /wallet route (Customer Wallet UI)
+app.get('/wallet', (req, res) => {
+  const sessionId = req.cookies?.customer_session;
+  if (!sessionId) {
+    return res.redirect('/?redirect=/wallet');
+  }
+
+  const session = db.getCustomerSession(sessionId);
+  if (!session) {
+    return res.redirect('/?redirect=/wallet');
+  }
+
+  const customer = db.getCustomer(session.customer_id);
+  if (!customer || !customer.email_verified) {
+    return res.redirect('/?redirect=/wallet');
+  }
+
+  // Check if terms accepted
+  const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+  if (!termsAccepted) {
+    return res.redirect('/terms?redirect=/wallet');
+  }
+
+  res.sendFile(path.join(__dirname, 'public', 'customer', 'wallet.html'));
 });
 
 // Favicon route (prevent 404 errors)
@@ -1268,7 +1343,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       const agentToSubdomainMap = {
         'agent_9151f738c705a56f4a0d8df63a': 'akin-dunbar' // Explicit mapping for akin-dunbar agent
       };
-
+      
       // Check explicit mapping first (highest priority)
       if (agentToSubdomainMap[retellAgentId]) {
         const mappedSubdomain = agentToSubdomainMap[retellAgentId];
@@ -1278,7 +1353,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
           console.log(`✅ Resolved merchant_id from explicit agent mapping: ${merchantId} (${mappedMerchant.name || 'unknown'}) for subdomain ${mappedSubdomain}`);
         }
       }
-
+      
       // Method 1: Find merchant directly by agent_id (if merchants table has retell_agent_id column)
       if (!merchantId) {
         try {
@@ -1292,7 +1367,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
           // Column might not exist, continue to other methods
         }
       }
-
+      
       // Method 2: Find customer by agent_id (SaaS customers have agent_id)
       if (!merchantId) {
         const customerByAgent = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(retellAgentId);
@@ -1302,7 +1377,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
           console.log(`✅ Resolved merchant_id from customer agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
         }
       }
-
+      
       // Method 3: Find clinic by agent_id (legacy clinics have agent_id)
       if (!merchantId) {
         const clinicWithAgent = db.db.prepare('SELECT merchant_id FROM clinics WHERE retell_agent_id = ? AND merchant_id IS NOT NULL LIMIT 1').get(retellAgentId);
@@ -1312,7 +1387,7 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
           console.log(`✅ Resolved merchant_id from clinic agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
         }
       }
-
+      
       // Last resort: Use default tenant (akin-dunbar) - this ensures the agent always has a merchant
       if (!merchantId) {
         const defaultSubdomain = constants.TENANTS.DEFAULT_SUBDOMAIN || 'akin-dunbar';
@@ -11714,6 +11789,7 @@ const server = app.listen(PORT, HOST, () => {
   // Start reminder scheduler (with error handling)
   try {
     ReminderScheduler.start();
+    ReminderScheduler.startScheduledActivities(); // Start email follow-up scheduler
   } catch (error) {
     console.error('⚠️  Failed to start reminder scheduler:', error.message);
     console.log('   Reminders will be disabled, but server will continue');

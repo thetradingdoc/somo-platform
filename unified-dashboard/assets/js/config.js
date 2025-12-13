@@ -67,8 +67,8 @@
 
   /**
    * Per-tenant configuration
-   * - Determines tenant_type and navigation tabs based on hostname
-   * - Focus: make the akin-dunbar tenant behave like an e‑commerce shop
+   * - Fetches tenant_type and navigation tabs from API (database-driven)
+   * - Falls back to default if API call fails
    */
 
   // Extract subdomain if present (e.g. akin-dunbar.doclittle.site)
@@ -81,51 +81,57 @@
     subdomain = parts[0];
   }
 
-  // Default: clinic-style dashboard
-  let tenantType = 'clinic';
-
-  // Special-case: current production shop tenant (akin-dunbar)
-  if (subdomain === 'akin-dunbar') {
-    tenantType = 'shop';
-  }
-
-  /**
-   * Navigation definitions
-   * NOTE: hrefs are kept compatible with existing pages – we can later
-   *       introduce dedicated shop pages (e.g. customers.html, billing-shop.html).
-   */
-
-  const clinicNavItems = [
+  // Default config (fallback)
+  const defaultConfig = {
+    hostname,
+    subdomain,
+    tenant_type: 'clinic',
+    navItems: [
     { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
     { id: 'products', label: 'Products', icon: '📦', href: 'products.html' },
     { id: 'orders', label: 'Orders', icon: '🛒', href: 'orders.html' },
     { id: 'patients', label: 'Clients', icon: '👥', href: 'patients.html' },
     { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' },
     { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
-  ];
-
-  const shopNavItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
-    { id: 'products', label: 'Products', icon: '📦', href: 'products.html' },
-    { id: 'orders', label: 'Orders', icon: '🛒', href: 'orders.html' },
-    // For now, reuse patients.html as the customer list page
-    { id: 'customers', label: 'Customers', icon: '👥', href: 'patients.html' },
-    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' },
-    { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' }
-  ];
-
-  window.TENANT_CONFIG = {
-    hostname,
-    subdomain,
-    tenant_type: tenantType,
-    navItems: tenantType === 'shop' ? shopNavItems : clinicNavItems,
-    sidebarSubtitle:
-      tenantType === 'shop'
-        ? '24/7 Medical Assistant'
-        : 'Medical Coding Assistant'
+    ],
+    sidebarSubtitle: 'Medical Coding Assistant'
   };
 
-  console.log('🧩 Tenant config:', window.TENANT_CONFIG);
+  // Try to fetch tenant config from API
+  // Use async IIFE to fetch config without blocking page load
+  (async function() {
+    try {
+      const response = await fetch(`${window.API_BASE}/api/tenant/config`, {
+        credentials: 'include'
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+  window.TENANT_CONFIG = {
+            hostname: data.hostname,
+            subdomain: data.subdomain,
+            tenant_type: data.tenant_type,
+            navItems: data.navItems,
+            sidebarSubtitle: data.sidebarSubtitle,
+            merchant_id: data.merchant_id,
+            clinic_id: data.clinic_id
+          };
+          console.log('🧩 Tenant config (from API):', window.TENANT_CONFIG);
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️  Could not fetch tenant config from API, using defaults:', error.message);
+    }
+    
+    // Fallback to default config
+    window.TENANT_CONFIG = defaultConfig;
+    console.log('🧩 Tenant config (fallback):', window.TENANT_CONFIG);
+  })();
+  
+  // Set initial config to default (will be updated async if API call succeeds)
+  window.TENANT_CONFIG = defaultConfig;
 
   /**
    * Path Utility Functions

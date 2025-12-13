@@ -87,9 +87,10 @@ class PatientPortalService {
    * Verify code and create authenticated session
    * @param {string} email - Patient email address
    * @param {string} code - Verification code
+   * @param {string} merchantId - Optional merchant_id for tenant-scoped login
    * @returns {Object} Session info and patient data
    */
-  verifyCode(email, code) {
+  verifyCode(email, code, merchantId = null) {
     if (!email || !code) {
       return { success: false, error: 'Email and code required' };
     }
@@ -123,14 +124,26 @@ class PatientPortalService {
         WHERE id = ?
       `).run(session.id);
 
-      // Find patient by email
-      const patient = db.getFHIRPatientByEmail(normalizedEmail);
+      // Find patient by email (filter by merchant_id if provided)
+      let patient = db.getFHIRPatientByEmail(normalizedEmail);
+
+      // If merchantId provided, ensure patient belongs to that tenant
+      if (patient && merchantId && patient.merchant_id && patient.merchant_id !== merchantId) {
+        // Patient exists but belongs to different tenant
+        // For multi-tenant, we might want to create a new patient record
+        // For now, return error
+        return {
+          success: false,
+          error: 'Patient not found for this tenant. Please contact support.'
+        };
+      }
 
       return {
         success: true,
         session_id: session.id,
         patient_id: patient ? patient.resource_id : null,
-        email: normalizedEmail
+        email: normalizedEmail,
+        merchant_id: merchantId || (patient ? patient.merchant_id : null)
       };
     } catch (error) {
       console.error('Error verifying code:', error);

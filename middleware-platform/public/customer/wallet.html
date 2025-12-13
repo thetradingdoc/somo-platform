@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Wallet</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-dark: #1e3a8a;
+      --success: #10b981;
+      --danger: #ef4444;
+      --gray-700: #374151;
+      --gray-500: #6b7280;
+      --gray-200: #e5e7eb;
+      --gray-50: #f9fafb;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #f5f7fb;
+      margin: 0;
+      color: #111827;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 960px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0 0 16px; font-size: 24px; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    .balance {
+      font-size: 42px;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 8px 0;
+    }
+    .muted { color: var(--gray-500); font-size: 14px; }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .error {
+      color: var(--danger);
+      background: #fef2f2;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #fecaca;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+    th, td {
+      padding: 12px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--gray-200);
+      font-size: 14px;
+    }
+    th {
+      font-weight: 600;
+      color: var(--gray-700);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    tr:hover {
+      background: var(--gray-50);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge.debit {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .badge.credit {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    .badge.refund {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+    .badge.default {
+      background: var(--gray-50);
+      color: var(--gray-700);
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    button:hover:not(:disabled) {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: #fff;
+      color: var(--gray-700);
+      border: 1px solid var(--gray-200);
+    }
+    button.secondary:hover:not(:disabled) {
+      background: var(--gray-50);
+      border-color: var(--gray-300);
+    }
+    .tx-meta {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-top: 4px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--gray-500);
+    }
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    @media (max-width: 768px) {
+      .container {
+        margin: 16px auto;
+        padding: 0 12px;
+      }
+      .card {
+        padding: 16px;
+      }
+      .balance {
+        font-size: 32px;
+      }
+      table {
+        font-size: 12px;
+      }
+      th, td {
+        padding: 8px 4px;
+      }
+      .actions {
+        flex-direction: column;
+      }
+      button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>My Wallet</h1>
+      <div id="walletSummary">
+        <div class="loading"></div> <span class="muted">Loading wallet...</span>
+      </div>
+      <div class="actions">
+        <button onclick="refreshWallet()" id="refreshBtn">🔄 Refresh</button>
+        <button class="secondary" onclick="fundWallet()" id="fundBtn">💰 Fund Wallet</button>
+        <button class="secondary" onclick="alert('Payouts feature coming soon. Contact support for withdrawals.')">💸 Payouts</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h2>Transactions</h2>
+        <span class="badge default" id="txCount">0</span>
+      </div>
+      <div id="txTableWrap"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+    async function fetchWallet() {
+      const res = await fetch(`${API_BASE}/api/customer/wallet`, {
+        credentials: 'include'
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Wallet load failed (${res.status})`);
+      }
+      return res.json();
+    }
+
+    function parseMetadata(metadata) {
+      if (!metadata) return null;
+      try {
+        return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function renderWallet(data) {
+      const summaryEl = document.getElementById('walletSummary');
+      if (!data.success) {
+        summaryEl.innerHTML = `<div class="error">❌ ${data.message || 'Failed to load wallet'}</div>`;
+        return;
+      }
+      const w = data.wallet || {};
+      const bal = typeof data.balance === 'number' ? data.balance : 0;
+      summaryEl.innerHTML = `
+        <div class="balance">$${Math.abs(bal).toFixed(2)} USDC</div>
+        <div class="muted">Wallet ID: ${w.walletId ? w.walletId.substring(0, 8) + '...' : '—'}</div>
+      `;
+
+      const txWrap = document.getElementById('txTableWrap');
+      const txs = data.transactions || [];
+      document.getElementById('txCount').textContent = txs.length;
+      
+      if (txs.length === 0) {
+        txWrap.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">💳</div>
+            <div>No transactions yet</div>
+            <div class="muted" style="margin-top:8px;">Your transaction history will appear here</div>
+          </div>
+        `;
+        return;
+      }
+      
+      function formatDate(dateStr) {
+        if (!dateStr) return '—';
+        try {
+          const date = new Date(dateStr);
+          const now = new Date();
+          const diffMs = now - date;
+          const diffMins = Math.floor(diffMs / 60000);
+          const diffHours = Math.floor(diffMs / 3600000);
+          const diffDays = Math.floor(diffMs / 86400000);
+          
+          if (diffMins < 1) return 'Just now';
+          if (diffMins < 60) return `${diffMins}m ago`;
+          if (diffHours < 24) return `${diffHours}h ago`;
+          if (diffDays < 7) return `${diffDays}d ago`;
+          
+          return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+          return dateStr;
+        }
+      }
+      
+      function formatAmount(amount, type) {
+        if (amount == null) return '—';
+        const num = Number(amount);
+        if (isNaN(num)) return '—';
+        const sign = type === 'debit' ? '-' : '+';
+        const color = type === 'debit' ? 'var(--danger)' : 'var(--success)';
+        return `<span style="color:${color}">${sign}$${Math.abs(num).toFixed(2)}</span>`;
+      }
+      
+      function getBadgeClass(type) {
+        if (type === 'debit') return 'debit';
+        if (type === 'credit') return 'credit';
+        if (type === 'refund') return 'refund';
+        return 'default';
+      }
+      
+      function getTransactionDescription(tx) {
+        const meta = parseMetadata(tx.metadata);
+        if (meta) {
+          if (meta.source === 'checkout') {
+            return `Purchase - Order ${meta.order_id ? meta.order_id.substring(0, 8) + '...' : 'N/A'}`;
+          }
+          if (meta.source === 'manual_fund') return 'Manual deposit';
+          if (meta.source === 'wallet_pay') return 'Wallet payment';
+          if (meta.source === 'wallet_refund') return 'Refund';
+        }
+        return tx.type === 'debit' ? 'Payment' : tx.type === 'credit' ? 'Deposit' : 'Transaction';
+      }
+      
+      const rows = txs.map(tx => {
+        const meta = parseMetadata(tx.metadata);
+        const description = getTransactionDescription(tx);
+        return `
+        <tr>
+          <td>
+            <span class="badge ${getBadgeClass(tx.type)}">${(tx.type || '').toUpperCase()}</span>
+            <div class="tx-meta">${description}</div>
+          </td>
+          <td><strong>${formatAmount(tx.amount, tx.type)}</strong></td>
+          <td>${tx.currency || 'USDC'}</td>
+          <td><span class="badge default">${tx.status || 'completed'}</span></td>
+          <td>${formatDate(tx.created_at)}</td>
+        </tr>
+      `;
+      }).join('');
+      
+      txWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Type</th><th>Amount</th><th>Currency</th><th>Status</th><th>Date</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    async function refreshWallet() {
+      const summaryEl = document.getElementById('walletSummary');
+      const refreshBtn = document.getElementById('refreshBtn');
+      summaryEl.innerHTML = '<div class="loading"></div> <span class="muted">Loading wallet...</span>';
+      refreshBtn.disabled = true;
+      
+      try {
+        const data = await fetchWallet();
+        renderWallet(data);
+      } catch (e) {
+        summaryEl.innerHTML = `<div class="error">❌ ${e.message}</div>`;
+        console.error(e);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    }
+
+    async function fundWallet() {
+      const amount = prompt('Enter amount to fund (max $1000):');
+      if (!amount) return;
+      
+      const numAmount = parseFloat(amount);
+      if (isNaN(numAmount) || numAmount <= 0 || numAmount > 1000) {
+        alert('Please enter a valid amount between $0.01 and $1000');
+        return;
+      }
+      
+      const fundBtn = document.getElementById('fundBtn');
+      fundBtn.disabled = true;
+      fundBtn.textContent = 'Processing...';
+      
+      try {
+        const res = await fetch(`${API_BASE}/api/customer/wallet/fund`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ amount: numAmount })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+          alert(`✅ Successfully funded wallet with $${numAmount.toFixed(2)}`);
+          refreshWallet();
+        } else {
+          alert(`❌ ${data.message || 'Failed to fund wallet'}`);
+        }
+      } catch (e) {
+        alert(`❌ Error: ${e.message}`);
+      } finally {
+        fundBtn.disabled = false;
+        fundBtn.textContent = '💰 Fund Wallet';
+      }
+    }
+
+    refreshWallet();
+  </script>
+</body>
+</html>
+

@@ -581,6 +581,114 @@ db.exec(`
     FOREIGN KEY (fhir_encounter_id) REFERENCES fhir_encounters(resource_id)
   );
 
+  CREATE TABLE IF NOT EXISTS voice_agent_settings (
+    merchant_id TEXT PRIMARY KEY,
+    retell_agent_id TEXT,
+    enabled INTEGER DEFAULT 1,
+    greeting TEXT,
+    after_hours_message TEXT,
+    business_hours TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    merchant_id TEXT NOT NULL,
+    type TEXT NOT NULL, -- credit | debit | refund
+    amount REAL NOT NULL,
+    currency TEXT DEFAULT 'USDC',
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  -- ============================================
+  -- AUTOMATION TABLES
+  -- ============================================
+
+  CREATE TABLE IF NOT EXISTS templates (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- email | sms
+    subject TEXT,
+    content TEXT NOT NULL,
+    variables TEXT, -- JSON array of available variables
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS automation_rules (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT NOT NULL,
+    trigger TEXT NOT NULL, -- order_completed | customer_created | etc.
+    action TEXT NOT NULL, -- send_email | send_sms | call_customer
+    template_id TEXT,
+    enabled BOOLEAN DEFAULT 1,
+    conditions TEXT, -- JSON object for conditional logic
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+    FOREIGN KEY (template_id) REFERENCES templates(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS message_history (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT NOT NULL,
+    customer_id TEXT,
+    type TEXT NOT NULL, -- email | sms
+    recipient TEXT NOT NULL, -- email address or phone number
+    content TEXT NOT NULL,
+    subject TEXT,
+    status TEXT DEFAULT 'pending', -- pending | sent | delivered | failed | bounced
+    provider_id TEXT, -- External provider message ID (e.g., Twilio SID, SendGrid ID)
+    sent_at DATETIME,
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_templates_merchant_id ON templates(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_templates_type ON templates(type);
+  CREATE INDEX IF NOT EXISTS idx_automation_rules_merchant_id ON automation_rules(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_automation_rules_trigger ON automation_rules(trigger);
+  CREATE INDEX IF NOT EXISTS idx_automation_rules_enabled ON automation_rules(enabled);
+  CREATE INDEX IF NOT EXISTS idx_message_history_merchant_id ON message_history(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_message_history_customer_id ON message_history(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_message_history_type ON message_history(type);
+  CREATE INDEX IF NOT EXISTS idx_message_history_status ON message_history(status);
+  CREATE INDEX IF NOT EXISTS idx_message_history_created_at ON message_history(created_at);
+
+  CREATE TABLE IF NOT EXISTS promotions (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    discount_type TEXT NOT NULL, -- percentage | fixed_amount
+    discount_value REAL NOT NULL,
+    code TEXT UNIQUE, -- Optional promotion code
+    product_ids TEXT, -- JSON array of product IDs (null = all products)
+    customer_segment TEXT DEFAULT 'all', -- all | new | returning | vip
+    start_date DATETIME,
+    end_date DATETIME,
+    enabled INTEGER DEFAULT 1,
+    max_uses INTEGER, -- null = unlimited
+    current_uses INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_promotions_merchant_id ON promotions(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_promotions_code ON promotions(code);
+  CREATE INDEX IF NOT EXISTS idx_promotions_enabled ON promotions(enabled);
+  CREATE INDEX IF NOT EXISTS idx_promotions_dates ON promotions(start_date, end_date);
+
   CREATE TABLE IF NOT EXISTS payment_tokens (
     token TEXT PRIMARY KEY,
     checkout_id TEXT NOT NULL,
@@ -1758,8 +1866,11 @@ db.exec(`
     status TEXT DEFAULT 'new',
     pipeline_stage TEXT DEFAULT 'new',
     is_qualified INTEGER DEFAULT 0,
+    auto_qualified INTEGER DEFAULT 0,
+    qualified_at DATETIME,
     priority INTEGER DEFAULT 5,
     lead_score INTEGER DEFAULT 0,
+    last_score_update DATETIME,
     source TEXT DEFAULT 'google_search',
     posted_at TEXT,
     notes TEXT,
@@ -1832,6 +1943,82 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_lead_activities_type ON lead_activities(activity_type);
   CREATE INDEX IF NOT EXISTS idx_lead_activities_date ON lead_activities(activity_date);
   CREATE INDEX IF NOT EXISTS idx_monthly_call_usage_month ON monthly_call_usage(billing_month);
+
+  -- ============================================
+  -- SEQUENCES - Multi-Step Automation
+  -- ============================================
+
+  CREATE TABLE IF NOT EXISTS sequences (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT,
+    name TEXT NOT NULL,
+    description TEXT,
+    steps_json TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS sequence_executions (
+    id TEXT PRIMARY KEY,
+    sequence_id TEXT NOT NULL,
+    lead_id TEXT NOT NULL,
+    current_step INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    paused_at DATETIME,
+    metadata TEXT,
+    FOREIGN KEY (sequence_id) REFERENCES sequences(id),
+    FOREIGN KEY (lead_id) REFERENCES leads(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sequences_merchant_id ON sequences(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_sequences_enabled ON sequences(enabled);
+  CREATE INDEX IF NOT EXISTS idx_sequence_executions_sequence_id ON sequence_executions(sequence_id);
+  CREATE INDEX IF NOT EXISTS idx_sequence_executions_lead_id ON sequence_executions(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_sequence_executions_status ON sequence_executions(status);
+
+  -- ============================================
+  -- QUALIFICATION RULES (Phase 2)
+  -- ============================================
+
+  CREATE TABLE IF NOT EXISTS qualification_rules (
+    id TEXT PRIMARY KEY,
+    merchant_id TEXT,
+    name TEXT NOT NULL,
+    description TEXT,
+    rules_json TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    priority INTEGER DEFAULT 5,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_qualification_rules_merchant_id ON qualification_rules(merchant_id);
+  CREATE INDEX IF NOT EXISTS idx_qualification_rules_enabled ON qualification_rules(enabled);
+  CREATE INDEX IF NOT EXISTS idx_qualification_rules_priority ON qualification_rules(priority);
+
+  CREATE TABLE IF NOT EXISTS lead_labels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    color TEXT DEFAULT '#3b82f6',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS lead_label_assignments (
+    lead_id TEXT NOT NULL,
+    label_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (lead_id, label_id),
+    FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+    FOREIGN KEY (label_id) REFERENCES lead_labels(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_lead_label_assignments_lead_id ON lead_label_assignments(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_lead_label_assignments_label_id ON lead_label_assignments(label_id);
 
   -- ============================================
   -- INCOMPLETE SIGNUPS TABLE (Separate from admin leads)
@@ -2240,6 +2427,130 @@ function migrateLeadsPipeline() {
   }
 }
 
+// Migration: Add Phase 2 qualification rules table
+function migrateQualificationRules() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    // Check if qualification_rules table exists
+    const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qualification_rules'").get();
+    if (!table) {
+      console.log('🔄 Migrating: Creating qualification_rules table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS qualification_rules (
+          id TEXT PRIMARY KEY,
+          merchant_id TEXT,
+          name TEXT NOT NULL,
+          description TEXT,
+          rules_json TEXT NOT NULL,
+          enabled INTEGER DEFAULT 1,
+          priority INTEGER DEFAULT 5,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_qualification_rules_merchant_id ON qualification_rules(merchant_id);
+        CREATE INDEX IF NOT EXISTS idx_qualification_rules_enabled ON qualification_rules(enabled);
+        CREATE INDEX IF NOT EXISTS idx_qualification_rules_priority ON qualification_rules(priority);
+      `);
+      console.log('✅ Migration complete: qualification_rules table created');
+    } else {
+      console.log('✅ Migration skipped: qualification_rules table already exists');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.warn('⚠️  Qualification rules migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add Phase 2 sequences tables
+function migrateSequences() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    // Check if sequences table exists
+    const sequencesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sequences'").get();
+    if (!sequencesTable) {
+      console.log('🔄 Migrating: Creating sequences and sequence_executions tables');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sequences (
+          id TEXT PRIMARY KEY,
+          merchant_id TEXT,
+          name TEXT NOT NULL,
+          description TEXT,
+          steps_json TEXT NOT NULL,
+          enabled INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sequence_executions (
+          id TEXT PRIMARY KEY,
+          sequence_id TEXT NOT NULL,
+          lead_id TEXT NOT NULL,
+          current_step INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'active',
+          started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          completed_at DATETIME,
+          paused_at DATETIME,
+          metadata TEXT,
+          FOREIGN KEY (sequence_id) REFERENCES sequences(id),
+          FOREIGN KEY (lead_id) REFERENCES leads(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sequences_merchant_id ON sequences(merchant_id);
+        CREATE INDEX IF NOT EXISTS idx_sequences_enabled ON sequences(enabled);
+        CREATE INDEX IF NOT EXISTS idx_sequence_executions_sequence_id ON sequence_executions(sequence_id);
+        CREATE INDEX IF NOT EXISTS idx_sequence_executions_lead_id ON sequence_executions(lead_id);
+        CREATE INDEX IF NOT EXISTS idx_sequence_executions_status ON sequence_executions(status);
+      `);
+      console.log('✅ Migration complete: sequences tables created');
+    } else {
+      console.log('✅ Migration skipped: sequences tables already exist');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.warn('⚠️  Sequences migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add Phase 1 admin portal columns to leads table
+function migrateLeadsPhase1() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(leads)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('auto_qualified')) {
+      console.log('🔄 Migrating: Adding auto_qualified column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN auto_qualified INTEGER DEFAULT 0").run();
+    }
+
+    if (!columnNames.includes('qualified_at')) {
+      console.log('🔄 Migrating: Adding qualified_at column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN qualified_at DATETIME").run();
+    }
+
+    if (!columnNames.includes('last_score_update')) {
+      console.log('🔄 Migrating: Adding last_score_update column to leads table');
+      db.prepare("ALTER TABLE leads ADD COLUMN last_score_update DATETIME").run();
+    }
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: Phase 1 columns added to leads');
+  } catch (error) {
+    console.warn('⚠️  Leads Phase 1 migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Migration: Add password_hash column to customers table
 function migrateCustomersPasswordHash() {
   try {
@@ -2443,12 +2754,81 @@ function migrateCircleAccountsMerchantId() {
   }
 }
 
+// Migration: Create lead labels tables
+function migrateLeadLabels() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    // Check if lead_labels table exists
+    const tableExists = db.prepare(`
+      SELECT name FROM sqlite_master 
+      WHERE type='table' AND name='lead_labels'
+    `).get();
+
+    if (!tableExists) {
+      console.log('🔄 Migrating: Creating lead_labels and lead_label_assignments tables');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS lead_labels (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          color TEXT DEFAULT '#3b82f6',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS lead_label_assignments (
+          lead_id TEXT NOT NULL,
+          label_id TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (lead_id, label_id),
+          FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+          FOREIGN KEY (label_id) REFERENCES lead_labels(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_lead_label_assignments_lead_id ON lead_label_assignments(lead_id);
+        CREATE INDEX IF NOT EXISTS idx_lead_label_assignments_label_id ON lead_label_assignments(label_id);
+      `);
+
+      // Create default labels
+      const defaultLabels = [
+        { id: require('crypto').randomBytes(16).toString('hex'), name: 'HOT', color: '#ef4444' },
+        { id: require('crypto').randomBytes(16).toString('hex'), name: 'WARM', color: '#f59e0b' },
+        { id: require('crypto').randomBytes(16).toString('hex'), name: 'COLD', color: '#6b7280' },
+        { id: require('crypto').randomBytes(16).toString('hex'), name: 'WEBSITE LEADS', color: '#10b981' }
+      ];
+
+      for (const label of defaultLabels) {
+        try {
+          db.prepare(`
+            INSERT INTO lead_labels (id, name, color)
+            VALUES (?, ?, ?)
+          `).run(label.id, label.name, label.color);
+        } catch (e) {
+          // Label might already exist, skip
+        }
+      }
+
+      console.log('✅ Migration complete: lead_labels tables created');
+    } else {
+      console.log('✅ Migration skipped: lead_labels tables already exist');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.warn('⚠️  Lead labels migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Run migrations on startup
 migrateInsuranceClaimsTable();
 migratePatientPortalSessionsEmail();
 migrateMonthlyInvoicesJobCalls();
 migrateOrderTracking();
 migrateLeadsPipeline();
+migrateLeadsPhase1(); // Phase 1: Admin portal agentic capabilities
+migrateSequences(); // Phase 2: Sequences for automation
+migrateQualificationRules(); // Phase 2: Configurable qualification rules
 migrateCustomersTable();
 migrateVoiceCallLogCosts();
 migrateAppointmentsCustomerId();
@@ -2458,6 +2838,7 @@ migrateCustomersPasswordHash(); // Add password_hash for password-based authenti
 migrateCustomerCreditsExpiration(); // Add expiration and alert tracking for credits
 migrateFHIRPatientsMerchantId(); // Link FHIR patients to merchants (tenants)
 migrateCircleAccountsMerchantId(); // Link wallets to merchants (tenants)
+migrateLeadLabels(); // Create lead labels system
 
 /**
  * Helper to safely stringify data
@@ -2914,7 +3295,7 @@ module.exports = {
       // SECURITY: Whitelist allowed fields to prevent SQL injection
       const allowedFields = [
         'status', 'payment_intent_id', 'merchant_order_id', 'payment_token',
-        'fhir_patient_id', 'fhir_encounter_id', 'appointment_id', 'payment_method'
+        'fhir_patient_id', 'fhir_encounter_id', 'appointment_id', 'payment_method', 'customer_id'
       ];
 
       // Build dynamic update using parameterized query (safe)
@@ -2954,6 +3335,10 @@ module.exports = {
       if (updates.payment_method !== undefined) {
         setParts.push(`payment_method = $${paramIndex++}`);
         values.push(updates.payment_method);
+      }
+      if (updates.customer_id !== undefined) {
+        setParts.push(`customer_id = $${paramIndex++}`);
+        values.push(updates.customer_id);
       }
       if (updates.status === 'completed') {
         setParts.push('completed_at = NOW()');
@@ -3004,6 +3389,10 @@ module.exports = {
         fields.push('payment_method = ?');
         values.push(updates.payment_method);
       }
+      if (updates.customer_id !== undefined) {
+        fields.push('customer_id = ?');
+        values.push(updates.customer_id);
+      }
       if (updates.status === 'completed') {
         fields.push('completed_at = CURRENT_TIMESTAMP');
       }
@@ -3030,6 +3419,133 @@ module.exports = {
     } else {
       return db.prepare('SELECT * FROM voice_checkouts WHERE merchant_id = ? ORDER BY created_at DESC').all(merchantId);
     }
+  },
+
+  // Wallet transactions
+  async createWalletTransaction(tx) {
+    const id = tx.id || require('uuid').v4();
+    const payload = {
+      id,
+      customer_id: tx.customer_id,
+      merchant_id: tx.merchant_id,
+      type: tx.type,
+      amount: tx.amount,
+      currency: tx.currency || 'USDC',
+      metadata: tx.metadata ? JSON.stringify(tx.metadata) : null
+    };
+    if (usePostgres && pgPool) {
+      await pgPool`
+        INSERT INTO wallet_transactions (id, customer_id, merchant_id, type, amount, currency, metadata, created_at)
+        VALUES (${payload.id}, ${payload.customer_id}, ${payload.merchant_id}, ${payload.type}, ${payload.amount},
+                ${payload.currency}, ${payload.metadata}, NOW())
+      `;
+      return { changes: 1, lastInsertRowid: id };
+    }
+    return db.prepare(`
+      INSERT INTO wallet_transactions (id, customer_id, merchant_id, type, amount, currency, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      payload.id,
+      payload.customer_id,
+      payload.merchant_id,
+      payload.type,
+      payload.amount,
+      payload.currency,
+      payload.metadata
+    );
+  },
+
+  async getWalletTransactions(customerId, merchantId, limit = 50) {
+    if (!customerId || !merchantId) return [];
+    if (usePostgres && pgPool) {
+      const rows = await pgPool`
+        SELECT * FROM wallet_transactions
+        WHERE customer_id = ${customerId} AND merchant_id = ${merchantId}
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+      return rows;
+    }
+    return db.prepare(`
+      SELECT * FROM wallet_transactions
+      WHERE customer_id = ? AND merchant_id = ?
+      ORDER BY datetime(created_at) DESC
+      LIMIT ?
+    `).all(customerId, merchantId, limit);
+  },
+
+  async getWalletBalance(customerId, merchantId) {
+    const txs = await db.getWalletTransactions(customerId, merchantId, 1000);
+    let balance = 0;
+    txs.forEach(tx => {
+      if (tx.type === 'credit' || tx.type === 'refund') balance += tx.amount;
+      if (tx.type === 'debit') balance -= tx.amount;
+    });
+    return balance;
+  },
+
+  // Voice Agent Settings
+  getVoiceAgentSettings: (merchantId) => {
+    if (!merchantId) return null;
+    if (usePostgres && pgPool) {
+      return pgPool`SELECT * FROM voice_agent_settings WHERE merchant_id = ${merchantId}`.then(res => res[0] || null);
+    }
+    return db.prepare('SELECT * FROM voice_agent_settings WHERE merchant_id = ?').get(merchantId);
+  },
+
+  upsertVoiceAgentSettings: (merchantId, settings = {}) => {
+    if (!merchantId) throw new Error('merchantId is required');
+
+    const payload = {
+      retell_agent_id: settings.retell_agent_id || null,
+      enabled: settings.enabled !== undefined ? (settings.enabled ? 1 : 0) : 1,
+      greeting: settings.greeting || null,
+      after_hours_message: settings.after_hours_message || null,
+      business_hours: settings.business_hours ? JSON.stringify(settings.business_hours) : null
+    };
+
+    if (usePostgres && pgPool) {
+      return pgPool`
+        INSERT INTO voice_agent_settings (
+          merchant_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
+        ) VALUES (
+          ${merchantId},
+          ${payload.retell_agent_id},
+          ${payload.enabled},
+          ${payload.greeting},
+          ${payload.after_hours_message},
+          ${payload.business_hours},
+          NOW()
+        )
+        ON CONFLICT (merchant_id) DO UPDATE SET
+          retell_agent_id = EXCLUDED.retell_agent_id,
+          enabled = EXCLUDED.enabled,
+          greeting = EXCLUDED.greeting,
+          after_hours_message = EXCLUDED.after_hours_message,
+          business_hours = EXCLUDED.business_hours,
+          updated_at = NOW()
+      `;
+    }
+
+    return db.prepare(`
+      INSERT INTO voice_agent_settings (
+        merchant_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(merchant_id) DO UPDATE SET
+        retell_agent_id = excluded.retell_agent_id,
+        enabled = excluded.enabled,
+        greeting = excluded.greeting,
+        after_hours_message = excluded.after_hours_message,
+        business_hours = excluded.business_hours,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      merchantId,
+      payload.retell_agent_id,
+      payload.enabled,
+      payload.greeting,
+      payload.after_hours_message,
+      payload.business_hours
+    );
   },
 
   // ============================================
@@ -7862,6 +8378,662 @@ module.exports = {
     }
 
     return db.prepare(query).all(...params);
+  },
+
+  // ============================================
+  // LEAD LABELS
+  // ============================================
+  getAllLabels() {
+    return db.prepare('SELECT * FROM lead_labels ORDER BY name').all();
+  },
+
+  getLabel(id) {
+    return db.prepare('SELECT * FROM lead_labels WHERE id = ?').get(id);
+  },
+
+  createLabel(labelData) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = labelData.id || uuidv4();
+    return db.prepare(`
+      INSERT INTO lead_labels (id, name, color)
+      VALUES (?, ?, ?)
+    `).run(id, labelData.name, labelData.color || '#3b82f6');
+  },
+
+  getLabelsForLead(leadId) {
+    return db.prepare(`
+      SELECT ll.*
+      FROM lead_labels ll
+      INNER JOIN lead_label_assignments lla ON ll.id = lla.label_id
+      WHERE lla.lead_id = ?
+      ORDER BY ll.name
+    `).all(leadId);
+  },
+
+  assignLabelToLead(leadId, labelId) {
+    try {
+      return db.prepare(`
+        INSERT INTO lead_label_assignments (lead_id, label_id)
+        VALUES (?, ?)
+      `).run(leadId, labelId);
+    } catch (error) {
+      // Ignore duplicate assignment errors
+      if (error.message && error.message.includes('UNIQUE constraint')) {
+        return { changes: 0 };
+      }
+      throw error;
+    }
+  },
+
+  removeLabelFromLead(leadId, labelId) {
+    return db.prepare(`
+      DELETE FROM lead_label_assignments
+      WHERE lead_id = ? AND label_id = ?
+    `).run(leadId, labelId);
+  },
+
+  getLeadsByLabel(labelId) {
+    return db.prepare(`
+      SELECT l.*
+      FROM leads l
+      INNER JOIN lead_label_assignments lla ON l.id = lla.lead_id
+      WHERE lla.label_id = ?
+      ORDER BY l.created_at DESC
+    `).all(labelId);
+  },
+
+  // ============================================
+  // AUTOMATION FUNCTIONS
+  // ============================================
+
+  // Customer search by name
+  getCustomerByName(name, merchantId) {
+    if (!name) return null;
+    const searchTerm = `%${name.toLowerCase()}%`;
+    if (merchantId) {
+      return db.prepare(`
+        SELECT * FROM customers 
+        WHERE (LOWER(name) LIKE ? OR LOWER(email) LIKE ?)
+        AND merchant_id = ?
+        ORDER BY created_at DESC
+        LIMIT 10
+      `).all(searchTerm, searchTerm, merchantId);
+    }
+    return db.prepare(`
+      SELECT * FROM customers 
+      WHERE LOWER(name) LIKE ? OR LOWER(email) LIKE ?
+      ORDER BY created_at DESC
+      LIMIT 10
+    `).all(searchTerm, searchTerm);
+  },
+
+  // Get orders by customer
+  getOrdersByCustomer(customerId) {
+    return db.prepare(`
+      SELECT o.*, p.name as product_name, p.price as product_price
+      FROM merchant_orders o
+      LEFT JOIN products p ON o.product_id = p.id
+      WHERE o.customer_id = ?
+      ORDER BY o.created_at DESC
+    `).all(customerId);
+  },
+
+  // Template functions
+  getTemplate(id) {
+    return db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
+  },
+
+  getTemplates(merchantId, type = null) {
+    let query = 'SELECT * FROM templates WHERE merchant_id = ?';
+    const params = [merchantId];
+    if (type) {
+      query += ' AND type = ?';
+      params.push(type);
+    }
+    query += ' ORDER BY created_at DESC';
+    return db.prepare(query).all(...params);
+  },
+
+  createTemplate(template) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = template.id || uuidv4();
+    return db.prepare(`
+      INSERT INTO templates (id, merchant_id, name, type, subject, content, variables)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      template.merchant_id,
+      template.name,
+      template.type,
+      template.subject || null,
+      template.content,
+      template.variables ? JSON.stringify(template.variables) : null
+    );
+  },
+
+  updateTemplate(id, merchantId, updates) {
+    const fields = [];
+    const values = [];
+    const allowedFields = ['name', 'type', 'subject', 'content', 'variables'];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        if (key === 'variables' && typeof updates[key] === 'object') {
+          values.push(JSON.stringify(updates[key]));
+        } else {
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, merchantId);
+
+    return db.prepare(`UPDATE templates SET ${fields.join(', ')} WHERE id = ? AND merchant_id = ?`).run(...values);
+  },
+
+  deleteTemplate(id, merchantId) {
+    return db.prepare('DELETE FROM templates WHERE id = ? AND merchant_id = ?').run(id, merchantId);
+  },
+
+  // Automation rule functions
+  getAutomationRules(merchantId) {
+    return db.prepare(`
+      SELECT ar.*, t.name as template_name, t.type as template_type
+      FROM automation_rules ar
+      LEFT JOIN templates t ON ar.template_id = t.id
+      WHERE ar.merchant_id = ?
+      ORDER BY ar.created_at DESC
+    `).all(merchantId);
+  },
+
+  createAutomationRule(rule) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = rule.id || uuidv4();
+    return db.prepare(`
+      INSERT INTO automation_rules (id, merchant_id, trigger, action, template_id, enabled, conditions)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      rule.merchant_id,
+      rule.trigger,
+      rule.action,
+      rule.template_id || null,
+      rule.enabled !== undefined ? (rule.enabled ? 1 : 0) : 1,
+      rule.conditions ? JSON.stringify(rule.conditions) : null
+    );
+  },
+
+  updateAutomationRule(id, merchantId, updates) {
+    const fields = [];
+    const values = [];
+    const allowedFields = ['trigger', 'action', 'template_id', 'enabled', 'conditions'];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        if (key === 'conditions' && typeof updates[key] === 'object') {
+          values.push(JSON.stringify(updates[key]));
+        } else if (key === 'enabled') {
+          values.push(updates[key] ? 1 : 0);
+        } else {
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, merchantId);
+
+    return db.prepare(`UPDATE automation_rules SET ${fields.join(', ')} WHERE id = ? AND merchant_id = ?`).run(...values);
+  },
+
+  deleteAutomationRule(id, merchantId) {
+    return db.prepare('DELETE FROM automation_rules WHERE id = ? AND merchant_id = ?').run(id, merchantId);
+  },
+
+  // Sequence functions (Phase 2)
+  getSequence(id) {
+    const result = db.prepare('SELECT * FROM sequences WHERE id = ?').get(id);
+    if (result && result.steps_json) {
+      result.steps = typeof result.steps_json === 'string' ? JSON.parse(result.steps_json) : result.steps_json;
+    }
+    return result;
+  },
+
+  getSequences(merchantId = null, enabled = null) {
+    let query = 'SELECT * FROM sequences WHERE 1=1';
+    const params = [];
+
+    if (merchantId) {
+      query += ' AND merchant_id = ?';
+      params.push(merchantId);
+    }
+
+    if (enabled !== null) {
+      query += ' AND enabled = ?';
+      params.push(enabled ? 1 : 0);
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const results = db.prepare(query).all(...params);
+    
+    // Parse steps_json for each sequence
+    return results.map(seq => {
+      if (seq.steps_json) {
+        seq.steps = typeof seq.steps_json === 'string' ? JSON.parse(seq.steps_json) : seq.steps_json;
+      }
+      return seq;
+    });
+  },
+
+  createSequence(sequence) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = sequence.id || uuidv4();
+    const stepsJson = JSON.stringify(sequence.steps || sequence.steps_json || []);
+    
+    db.prepare(`
+      INSERT INTO sequences (id, merchant_id, name, description, steps_json, enabled)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      sequence.merchant_id || null,
+      sequence.name,
+      sequence.description || null,
+      stepsJson,
+      sequence.enabled !== undefined ? (sequence.enabled ? 1 : 0) : 1
+    );
+    
+    // Return object with id for consistency
+    return { id, changes: 1 };
+  },
+
+  updateSequence(id, merchantId, updates) {
+    const fields = [];
+    const values = [];
+    const allowedFields = ['name', 'description', 'steps', 'steps_json', 'enabled'];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        fields.push(`${key === 'steps' ? 'steps_json' : key} = ?`);
+        if (key === 'steps' || key === 'steps_json') {
+          const stepsJson = typeof updates[key] === 'string' ? updates[key] : JSON.stringify(updates[key]);
+          values.push(stepsJson);
+        } else if (key === 'enabled') {
+          values.push(updates[key] ? 1 : 0);
+        } else {
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, merchantId || null);
+
+    const merchantClause = merchantId ? ' AND merchant_id = ?' : ' AND (merchant_id = ? OR merchant_id IS NULL)';
+    return db.prepare(`UPDATE sequences SET ${fields.join(', ')} WHERE id = ?${merchantClause}`).run(...values);
+  },
+
+  deleteSequence(id, merchantId = null) {
+    if (merchantId) {
+      return db.prepare('DELETE FROM sequences WHERE id = ? AND merchant_id = ?').run(id, merchantId);
+    }
+    return db.prepare('DELETE FROM sequences WHERE id = ?').run(id);
+  },
+
+  // Sequence execution functions
+  getSequenceExecution(id) {
+    const result = db.prepare('SELECT * FROM sequence_executions WHERE id = ?').get(id);
+    if (result && result.metadata) {
+      result.metadata = typeof result.metadata === 'string' ? JSON.parse(result.metadata) : result.metadata;
+    }
+    return result;
+  },
+
+  getSequenceExecutions(sequenceId = null, leadId = null, status = null) {
+    let query = 'SELECT * FROM sequence_executions WHERE 1=1';
+    const params = [];
+
+    if (sequenceId) {
+      query += ' AND sequence_id = ?';
+      params.push(sequenceId);
+    }
+
+    if (leadId) {
+      query += ' AND lead_id = ?';
+      params.push(leadId);
+    }
+
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY started_at DESC';
+    const results = db.prepare(query).all(...params);
+    
+    // Parse metadata for each execution
+    return results.map(exec => {
+      if (exec.metadata) {
+        exec.metadata = typeof exec.metadata === 'string' ? JSON.parse(exec.metadata) : exec.metadata;
+      }
+      return exec;
+    });
+  },
+
+  createSequenceExecution(execution) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = execution.id || uuidv4();
+    const metadataJson = execution.metadata ? JSON.stringify(execution.metadata) : null;
+    
+    db.prepare(`
+      INSERT INTO sequence_executions (id, sequence_id, lead_id, current_step, status, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      execution.sequence_id,
+      execution.lead_id,
+      execution.current_step || 0,
+      execution.status || 'active',
+      metadataJson
+    );
+    
+    // Return object with id for consistency
+    return { id, changes: 1 };
+  },
+
+  updateSequenceExecution(id, updates) {
+    const fields = [];
+    const values = [];
+    const allowedFields = ['current_step', 'status', 'metadata', 'completed_at', 'paused_at'];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        if (key === 'metadata') {
+          fields.push('metadata = ?');
+          values.push(typeof updates[key] === 'string' ? updates[key] : JSON.stringify(updates[key]));
+        } else {
+          fields.push(`${key} = ?`);
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    values.push(id);
+    return db.prepare(`UPDATE sequence_executions SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  },
+
+  deleteSequenceExecution(id) {
+    return db.prepare('DELETE FROM sequence_executions WHERE id = ?').run(id);
+  },
+
+  // Qualification rules functions (Phase 2)
+  getQualificationRule(id) {
+    const result = db.prepare('SELECT * FROM qualification_rules WHERE id = ?').get(id);
+    if (result && result.rules_json) {
+      result.rules = typeof result.rules_json === 'string' ? JSON.parse(result.rules_json) : result.rules_json;
+    }
+    return result;
+  },
+
+  getQualificationRules(merchantId = null, enabled = null) {
+    let query = 'SELECT * FROM qualification_rules WHERE 1=1';
+    const params = [];
+
+    if (merchantId) {
+      query += ' AND (merchant_id = ? OR merchant_id IS NULL)';
+      params.push(merchantId);
+    }
+
+    if (enabled !== null) {
+      query += ' AND enabled = ?';
+      params.push(enabled ? 1 : 0);
+    }
+
+    query += ' ORDER BY priority DESC, created_at DESC';
+    const results = db.prepare(query).all(...params);
+    
+    // Parse rules_json for each rule
+    return results.map(rule => {
+      if (rule.rules_json) {
+        rule.rules = typeof rule.rules_json === 'string' ? JSON.parse(rule.rules_json) : rule.rules_json;
+      }
+      return rule;
+    });
+  },
+
+  createQualificationRule(rule) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = rule.id || uuidv4();
+    const rulesJson = JSON.stringify(rule.rules || rule.rules_json || []);
+    
+    db.prepare(`
+      INSERT INTO qualification_rules (id, merchant_id, name, description, rules_json, enabled, priority)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      rule.merchant_id || null,
+      rule.name,
+      rule.description || null,
+      rulesJson,
+      rule.enabled !== undefined ? (rule.enabled ? 1 : 0) : 1,
+      rule.priority || 5
+    );
+    
+    // Return object with id for consistency
+    return { id, changes: 1 };
+  },
+
+  updateQualificationRule(id, merchantId, updates) {
+    const fields = [];
+    const values = [];
+    const allowedFields = ['name', 'description', 'rules', 'rules_json', 'enabled', 'priority'];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        fields.push(`${key === 'rules' ? 'rules_json' : key} = ?`);
+        if (key === 'rules' || key === 'rules_json') {
+          const rulesJson = typeof updates[key] === 'string' ? updates[key] : JSON.stringify(updates[key]);
+          values.push(rulesJson);
+        } else if (key === 'enabled') {
+          values.push(updates[key] ? 1 : 0);
+        } else {
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, merchantId || null);
+
+    const merchantClause = merchantId ? ' AND merchant_id = ?' : ' AND (merchant_id = ? OR merchant_id IS NULL)';
+    return db.prepare(`UPDATE qualification_rules SET ${fields.join(', ')} WHERE id = ?${merchantClause}`).run(...values);
+  },
+
+  deleteQualificationRule(id, merchantId = null) {
+    if (merchantId) {
+      return db.prepare('DELETE FROM qualification_rules WHERE id = ? AND merchant_id = ?').run(id, merchantId);
+    }
+    return db.prepare('DELETE FROM qualification_rules WHERE id = ?').run(id);
+  },
+
+  // Message history functions
+  createMessageHistory(message) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = message.id || uuidv4();
+    return db.prepare(`
+      INSERT INTO message_history (
+        id, merchant_id, customer_id, type, recipient, content, subject,
+        status, provider_id, sent_at, error_message
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      message.merchant_id,
+      message.customer_id || null,
+      message.type,
+      message.recipient,
+      message.content,
+      message.subject || null,
+      message.status || 'pending',
+      message.provider_id || null,
+      message.sent_at || null,
+      message.error_message || null
+    );
+  },
+
+  getMessageHistory(merchantId, filters = {}) {
+    let query = 'SELECT * FROM message_history WHERE merchant_id = ?';
+    const params = [merchantId];
+
+    if (filters.customer_id) {
+      query += ' AND customer_id = ?';
+      params.push(filters.customer_id);
+    }
+
+    if (filters.type) {
+      query += ' AND type = ?';
+      params.push(filters.type);
+    }
+
+    if (filters.status) {
+      query += ' AND status = ?';
+      params.push(filters.status);
+    }
+
+    if (filters.start_date) {
+      query += ' AND created_at >= ?';
+      params.push(filters.start_date);
+    }
+
+    if (filters.end_date) {
+      query += ' AND created_at <= ?';
+      params.push(filters.end_date);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return db.prepare(query).all(...params);
+  },
+
+  // ============================================
+  // PROMOTIONS FUNCTIONS
+  // ============================================
+
+  getPromotion(id) {
+    return db.prepare('SELECT * FROM promotions WHERE id = ?').get(id);
+  },
+
+  getPromotions(merchantId, filters = {}) {
+    let query = 'SELECT * FROM promotions WHERE merchant_id = ?';
+    const params = [merchantId];
+
+    if (filters.enabled !== undefined) {
+      query += ' AND enabled = ?';
+      params.push(filters.enabled ? 1 : 0);
+    }
+
+    if (filters.code) {
+      query += ' AND code = ?';
+      params.push(filters.code);
+    }
+
+    // Active promotions (current date between start and end, or no dates)
+    if (filters.active === true) {
+      query += ' AND enabled = 1 AND (start_date IS NULL OR start_date <= datetime(\'now\')) AND (end_date IS NULL OR end_date >= datetime(\'now\'))';
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    if (filters.limit) {
+      query += ' LIMIT ?';
+      params.push(filters.limit);
+    }
+
+    return db.prepare(query).all(...params);
+  },
+
+  createPromotion(promotion) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = promotion.id || uuidv4();
+
+    return db.prepare(`
+      INSERT INTO promotions (
+        id, merchant_id, name, description, discount_type, discount_value,
+        code, product_ids, customer_segment, start_date, end_date,
+        enabled, max_uses, current_uses
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      promotion.merchant_id,
+      promotion.name,
+      promotion.description || null,
+      promotion.discount_type,
+      promotion.discount_value,
+      promotion.code || null,
+      promotion.product_ids ? JSON.stringify(promotion.product_ids) : null,
+      promotion.customer_segment || 'all',
+      promotion.start_date || null,
+      promotion.end_date || null,
+      promotion.enabled !== undefined ? (promotion.enabled ? 1 : 0) : 1,
+      promotion.max_uses || null,
+      promotion.current_uses || 0
+    );
+  },
+
+  updatePromotion(id, merchantId, updates) {
+    const fields = [];
+    const values = [];
+    const allowedFields = [
+      'name', 'description', 'discount_type', 'discount_value', 'code',
+      'product_ids', 'customer_segment', 'start_date', 'end_date',
+      'enabled', 'max_uses', 'current_uses'
+    ];
+
+    for (const key of allowedFields) {
+      if (updates[key] !== undefined) {
+        fields.push(`${key} = ?`);
+        if (key === 'product_ids' && typeof updates[key] === 'object') {
+          values.push(JSON.stringify(updates[key]));
+        } else if (key === 'enabled') {
+          values.push(updates[key] ? 1 : 0);
+        } else {
+          values.push(updates[key]);
+        }
+      }
+    }
+
+    if (fields.length === 0) return { changes: 0 };
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id, merchantId);
+
+    return db.prepare(`UPDATE promotions SET ${fields.join(', ')} WHERE id = ? AND merchant_id = ?`).run(...values);
+  },
+
+  deletePromotion(id, merchantId) {
+    return db.prepare('DELETE FROM promotions WHERE id = ? AND merchant_id = ?').run(id, merchantId);
+  },
+
+  incrementPromotionUses(id) {
+    return db.prepare('UPDATE promotions SET current_uses = current_uses + 1 WHERE id = ?').run(id);
   },
 
   // Database reference for direct access

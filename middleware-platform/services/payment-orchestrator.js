@@ -7,15 +7,21 @@ const PaymentResponse = require('../models/payment-response');
 const PaymentService = require('./payment-service');
 const SMSService = require('./sms-service');
 const EmailService = require('./email-service');
+const constants = require('../utils/constants');
 
 class PaymentOrchestrator {
-    static async createCheckout(requestData) {
+    static async createCheckout(requestData, tenantContext = null) {
         console.log('\n💳 PAYMENT ORCHESTRATOR: Creating Checkout');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         try {
             // Convert to standard format
             const paymentRequest = new PaymentRequest(requestData);
+            
+            // Attach tenant context if provided (for merchant resolution)
+            if (tenantContext) {
+                requestData.tenantContext = tenantContext;
+            }
 
             console.log('📋 Request Summary:', paymentRequest.getSummary());
 
@@ -36,40 +42,36 @@ class PaymentOrchestrator {
                 console.log('⚠️  merchant_id missing - will use fallback logic');
             }
 
-            // Get merchant - with fallback logic for invalid or missing merchant_id
+            // Get merchant - try provided merchant_id first
             let merchant = paymentRequest.merchant_id ? db.getMerchant(paymentRequest.merchant_id) : null;
 
-            // FALLBACK: If merchant not found, try to determine from context
-            if (!merchant) {
-                console.log('⚠️  Merchant not found by ID, trying fallback methods...');
-                console.log('   Provided merchant_id:', paymentRequest.merchant_id);
-                
-                // Method 1: Try to find merchant by subdomain (akin-dunbar)
-                const fallbackMerchant = db.getMerchantBySubdomain('akin-dunbar');
-                if (fallbackMerchant) {
-                    console.log('✅ Found merchant by subdomain (akin-dunbar):', fallbackMerchant.id);
-                    merchant = fallbackMerchant;
-                    // Update paymentRequest with correct merchant_id
-                    paymentRequest.merchant_id = merchant.id;
-                } else {
-                    // Method 2: Try to get first active merchant (last resort)
-                    const allMerchants = db.getAllMerchants();
-                    if (allMerchants && allMerchants.length > 0) {
-                        // Prefer merchants with subdomain 'akin-dunbar' or first active one
-                        const preferredMerchant = allMerchants.find(m => m.subdomain === 'akin-dunbar') || allMerchants[0];
-                        console.log('⚠️  Using fallback merchant:', preferredMerchant.id, preferredMerchant.name);
-                        merchant = preferredMerchant;
+            // If merchant not found, check if tenant context is available (from middleware)
+            // Note: This requires the route to use tenantContext middleware
+            if (!merchant && requestData.tenantContext) {
+                const tenant = requestData.tenantContext;
+                if (tenant.validated) {
+                    if (tenant.merchant) {
+                        merchant = tenant.merchant;
                         paymentRequest.merchant_id = merchant.id;
+                        console.log('✅ Using merchant from tenant context:', merchant.name);
+                    } else if (tenant.clinic && tenant.clinic.merchant_id) {
+                        merchant = db.getMerchant(tenant.clinic.merchant_id);
+                        if (merchant) {
+                            paymentRequest.merchant_id = merchant.id;
+                            console.log('✅ Using merchant from clinic association:', merchant.name);
+                        }
                     }
                 }
             }
 
-            // Final validation
+            // Final validation - return error instead of fallback (for security)
             if (!merchant) {
                 console.log('❌ ERROR: Could not determine merchant');
+                console.log('   Provided merchant_id:', paymentRequest.merchant_id);
                 return new PaymentResponse({
                     success: false,
                     error: 'Merchant not found. Please ensure merchant is configured in the system.',
+                    message: 'Could not determine merchant from request. Please provide merchant_id or ensure tenant context is available.',
                     transaction_id: paymentRequest.transaction_id
                 });
             }

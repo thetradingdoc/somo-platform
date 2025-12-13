@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Medical Coding Assistant</title>
+    <title>Settings - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -423,45 +424,21 @@
                     <span class="doc">Doc</span><span class="little">Little</span><span
                         style="font-weight:700;">.</span>
                 </div>
-                <div class="sidebar-subtitle">Medical Coding Assistant</div>
+                <div class="sidebar-subtitle">Business</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
-                <a href="business-dashboard.html" class="nav-item">
-                    <span class="nav-icon">📊</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="products.html" class="nav-item">
-                    <span class="nav-icon">📦</span>
-                    <span>Products</span>
-                </a>
-                <a href="orders.html" class="nav-item">
-                    <span class="nav-icon">🛒</span>
-                    <span>Orders</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Customer List</span>
-                </a>
-                <a href="agent.html" class="nav-item">
-                    <span class="nav-icon">🎙️</span>
-                    <span>Voice Agent</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
+                <!-- Populated by navigation.js -->
             </nav>
 
             <div class="sidebar-footer">
-                <div class="user-info">
+                <div class="user-info" onclick="navigateToBusinessPage('settings.html')" style="cursor:pointer;">
                     <div class="user-avatar" id="userAvatar">VC</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Business Owner</div>
                         <div class="user-role">Owner</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">
+                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
                         🚪
                     </button>
                 </div>
@@ -602,6 +579,78 @@
                     <div class="setting-action">
                         <input type="checkbox" checked onchange="toggleNotification('reports')">
                     </div>
+                </div>
+            </div>
+
+            <!-- Voice Agent Settings -->
+            <div class="settings-section">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+                    <div>
+                        <h3>🎛️ Voice Agent Settings</h3>
+                        <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 0;">
+                            Control your voice agent availability and messaging. These settings are stored per merchant and can be pushed to your Retell agent.
+                        </p>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="window.location.href='agent.html'">Open Voice Agent</button>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>Agent Status</h4>
+                        <p class="setting-description">Enable or disable the voice agent for this tenant.</p>
+                    </div>
+                    <div class="setting-action">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="vaEnabled">
+                            <span id="vaEnabledLabel">Enabled</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>Retell Agent ID</h4>
+                        <p class="setting-description">Agent ID configured in Retell.</p>
+                    </div>
+                    <div class="setting-action">
+                        <input type="text" id="vaAgentId" class="form-input" style="min-width:220px;" placeholder="agent_xxx">
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>Greeting</h4>
+                        <p class="setting-description">Opening greeting used by the agent.</p>
+                    </div>
+                    <div class="setting-action" style="flex:1; max-width:100%;">
+                        <textarea id="vaGreeting" rows="3" class="form-input" style="width:100%;"></textarea>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>After-hours Message</h4>
+                        <p class="setting-description">Message used when outside business hours.</p>
+                    </div>
+                    <div class="setting-action" style="flex:1; max-width:100%;">
+                        <textarea id="vaAfterHours" rows="2" class="form-input" style="width:100%;"></textarea>
+                    </div>
+                </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>Business Hours (JSON)</h4>
+                        <p class="setting-description">Optional hours object, e.g. {"mon":"9-5","tue":"9-5"}.</p>
+                    </div>
+                    <div class="setting-action" style="flex:1; max-width:100%;">
+                        <textarea id="vaBusinessHours" rows="2" class="form-input" style="width:100%;"></textarea>
+                    </div>
+                </div>
+
+                <div class="setting-row" style="justify-content:flex-end;">
+                    <button class="btn btn-secondary" onclick="loadVoiceAgentSettings()">Reload</button>
+                    <button class="btn btn-primary" onclick="saveVoiceAgentSettings()">Save Settings</button>
+                    <div id="vaStatus" style="font-size:12px;color:var(--gray-600);margin-left:12px;"></div>
                 </div>
             </div>
 
@@ -951,25 +1000,6 @@
             });
         }
 
-        function renderSidebar(activeId) {
-            if (!window.TENANT_CONFIG) return;
-            const navEl = document.getElementById('sidebarNav');
-            if (!navEl) return;
-
-            // Settings page doesn't have an active nav item (accessed via Business Owner click)
-            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                <a href="${item.href}" class="nav-item">
-                    <span class="nav-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </a>
-            `).join('');
-
-            const subtitleEl = document.querySelector('.sidebar-subtitle');
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-        }
-
         // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
@@ -985,7 +1015,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            renderSidebar(null); // Settings page has no active nav item
+            renderNavigation('settings');
             setupMobileNavClose();
 
             // Close sidebar on window resize if switching to desktop
@@ -1004,14 +1034,14 @@
             loadUserInfo();
             loadCalendarStatus();
             loadMerchantInfo();
+            loadVoiceAgentSettings();
         });
 
         async function loadUserInfo() {
             if (userData) {
-                document.getElementById('userName').textContent = userData.name;
-                // Logo is now static HTML, no need to update
-                document.getElementById('businessNameSetting').textContent = 'doclittle';
-                const initials = userData.name.split(' ').map(n => n[0]).join('');
+                const baseName = userData.business_name || userData.name || userData.email || 'Business';
+                document.getElementById('userName').textContent = baseName;
+                const initials = baseName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
                 document.getElementById('userAvatar').textContent = initials;
             }
 
@@ -1024,6 +1054,10 @@
                     const data = await response.json();
                     if (data.success && data.customer) {
                         userData = { ...userData, ...data.customer };
+                        const name = data.customer.business_name || data.customer.merchant_name || data.customer.name || data.customer.email || 'Business';
+                        document.getElementById('userName').textContent = name;
+                        const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                        document.getElementById('userAvatar').textContent = initials;
                     }
                 }
             } catch (error) {
@@ -1063,7 +1097,8 @@
                     const merchantData = await merchantResponse.json();
                     if (merchantData.success && merchantData.merchant) {
                         const m = merchantData.merchant;
-                        document.getElementById('merchantNameDisplay').textContent = m.name || 'Unnamed Merchant';
+                        const displayName = m.name || 'Unnamed Merchant';
+                        document.getElementById('merchantNameDisplay').textContent = displayName;
                         document.getElementById('merchantApiKeyDisplay').textContent = m.api_key ?
                             `${m.api_key.substring(0, 12)}...${m.api_key.substring(m.api_key.length - 4)}` :
                             'Not available';
@@ -1072,6 +1107,11 @@
                             (m.enabled_platforms && Array.isArray(m.enabled_platforms))
                                 ? m.enabled_platforms.join(', ')
                                 : (m.enabled_platforms || 'Not configured');
+
+                        // Sync footer name/avatar to merchant name
+                        document.getElementById('userName').textContent = displayName;
+                        const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                        document.getElementById('userAvatar').textContent = initials;
                     }
                 }
 
@@ -1086,6 +1126,90 @@
                 console.error('Error loading merchant info:', error);
                 document.getElementById('merchantIdDisplay').textContent = 'Error loading merchant info';
             }
+        }
+
+        // Voice Agent Settings (UI → backend)
+        async function loadVoiceAgentSettings() {
+            const statusEl = document.getElementById('vaStatus');
+            if (statusEl) statusEl.textContent = 'Loading...';
+            try {
+                const response = await fetch(`${API_BASE}/api/voice-agent/settings`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.success && data.settings) {
+                    const s = data.settings;
+                    document.getElementById('vaEnabled').checked = !!s.enabled;
+                    document.getElementById('vaEnabledLabel').textContent = s.enabled ? 'Enabled' : 'Disabled';
+                    document.getElementById('vaAgentId').value = s.retell_agent_id || '';
+                    document.getElementById('vaGreeting').value = s.greeting || '';
+                    document.getElementById('vaAfterHours').value = s.after_hours_message || '';
+                    document.getElementById('vaBusinessHours').value = s.business_hours
+                        ? (typeof s.business_hours === 'string' ? s.business_hours : JSON.stringify(s.business_hours))
+                        : '';
+                    if (statusEl) statusEl.textContent = 'Settings loaded';
+                } else {
+                    if (statusEl) statusEl.textContent = 'No settings found';
+                }
+            } catch (error) {
+                console.error('Error loading voice agent settings:', error);
+                if (statusEl) statusEl.textContent = 'Failed to load settings';
+            }
+        }
+
+        async function saveVoiceAgentSettings() {
+            const statusEl = document.getElementById('vaStatus');
+            if (statusEl) statusEl.textContent = 'Saving...';
+            try {
+                let businessHours = document.getElementById('vaBusinessHours').value.trim();
+                if (businessHours) {
+                    try {
+                        businessHours = JSON.parse(businessHours);
+                    } catch (e) {
+                        alert('Business hours must be valid JSON, e.g. {"mon":"9-5","tue":"9-5"}');
+                        if (statusEl) statusEl.textContent = 'Invalid business hours JSON';
+                        return;
+                    }
+                } else {
+                    businessHours = null;
+                }
+
+                const payload = {
+                    retell_agent_id: document.getElementById('vaAgentId').value.trim() || null,
+                    enabled: document.getElementById('vaEnabled').checked,
+                    greeting: document.getElementById('vaGreeting').value.trim() || null,
+                    after_hours_message: document.getElementById('vaAfterHours').value.trim() || null,
+                    business_hours: businessHours
+                };
+
+                const response = await fetch(`${API_BASE}/api/voice-agent/settings`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    if (statusEl) statusEl.textContent = 'Saved';
+                    alert('Voice agent settings saved.');
+                } else {
+                    if (statusEl) statusEl.textContent = data.message || 'Save failed';
+                    alert(data.error || 'Failed to save settings');
+                }
+            } catch (error) {
+                console.error('Error saving voice agent settings:', error);
+                if (statusEl) statusEl.textContent = 'Error saving';
+                alert('Failed to save voice agent settings');
+            }
+        }
+
+        // Sync label when toggling enabled checkbox
+        const vaEnabledEl = document.getElementById('vaEnabled');
+        if (vaEnabledEl) {
+            vaEnabledEl.addEventListener('change', () => {
+                const label = document.getElementById('vaEnabledLabel');
+                if (label) label.textContent = vaEnabledEl.checked ? 'Enabled' : 'Disabled';
+            });
         }
 
         // Business Information

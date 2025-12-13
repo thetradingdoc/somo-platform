@@ -8,6 +8,7 @@ const express = require('express');
 const db = require('../database');
 const RetellService = require('../services/retell-service');
 const { authLimiter } = require('../middleware/rate-limiter');
+const constants = require('../utils/constants');
 
 const router = express.Router();
 const retellService = new RetellService();
@@ -25,9 +26,13 @@ function getTenantType(customer) {
         return 'clinic'; // Default to clinic if merchant not found
     }
 
-    // Check if merchant subdomain is 'akin-dunbar' (current shop tenant)
-    // In the future, we can add a tenant_type field to merchants table
-    if (merchant.subdomain === 'akin-dunbar') {
+    // Use tenant_type field if available (preferred)
+    if (merchant.tenant_type) {
+        return merchant.tenant_type;
+    }
+    
+    // Backward compatibility: check subdomain
+    if (merchant.subdomain === constants.TENANTS.DEFAULT_SUBDOMAIN) {
         return 'shop';
     }
 

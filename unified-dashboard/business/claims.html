@@ -572,12 +572,28 @@
                         style="padding: 10px 20px; background: #1e40af; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 12px;">
                         Submit for Payment
                     </button>
+                    <button onclick="generateInvoice('${claim.id}')" 
+                        style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 12px;">
+                        🧾 Generate Invoice
+                    </button>
                 `;
-            } else if (claim.status === 'submitted') {
+            } else if (claim.status === 'submitted' || claim.status === 'approved') {
                 paymentActions = `
+                    <button onclick="generateInvoice('${claim.id}')" 
+                        style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 12px;">
+                        🧾 Generate Invoice
+                    </button>
                     <div style="padding: 8px 16px; background: #e5e7eb; border: 1px solid #9ca3af; border-radius: 6px; color: #374151; font-size: 14px; font-weight: 600; margin-left: 12px;">
                         🔒 Locked
                     </div>
+                `;
+            } else {
+                // For other statuses, still allow invoice generation
+                paymentActions = `
+                    <button onclick="generateInvoice('${claim.id}')" 
+                        style="padding: 10px 20px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 12px;">
+                        🧾 Generate Invoice
+                    </button>
                 `;
             }
 
@@ -804,6 +820,37 @@
             } catch (error) {
                 console.error('Error approving claim payment:', error);
                 alert('Error approving claim: ' + error.message);
+            }
+        }
+
+        // Generate invoice from claim
+        async function generateInvoice(claimId) {
+            if (!confirm('Generate an invoice from this claim? The invoice will calculate patient responsibility from the EOB.')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/invoices/create-from-claim`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        claim_id: claimId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert(`Invoice ${result.invoice.invoice_number} created successfully!`);
+                    // Redirect to invoice detail page
+                    window.location.href = `invoice-detail.html?id=${result.invoice.id}`;
+                } else {
+                    alert('Error: ' + (result.error || 'Failed to create invoice'));
+                }
+            } catch (error) {
+                console.error('Error generating invoice:', error);
+                alert('Error generating invoice: ' + error.message);
             }
         }
     </script>

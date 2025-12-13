@@ -537,8 +537,8 @@ class RetellWebSocketHandler {
                     // CRITICAL: Validate that the merchant_id exists before using it
                     const merchant = this.db.getMerchant(dynamicVars.merchant_id);
                     if (merchant) {
-                        merchantId = dynamicVars.merchant_id;
-                        console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
+                    merchantId = dynamicVars.merchant_id;
+                    console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
                     } else {
                         console.warn(`⚠️  REJECTED invalid merchant_id from dynamic variables: ${dynamicVars.merchant_id} (not found in database)`);
                         console.warn(`   This is likely a hardcoded wrong merchant_id. Ignoring it.`);
@@ -797,7 +797,7 @@ class RetellWebSocketHandler {
                     // CRITICAL: Validate that the merchant_id exists before using it
                     const merchant = this.db.getMerchant(dynamicVars.merchant_id);
                     if (merchant) {
-                        merchantId = dynamicVars.merchant_id;
+                    merchantId = dynamicVars.merchant_id;
                         console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
                     } else {
                         console.warn(`⚠️  REJECTED invalid merchant_id from dynamic variables: ${dynamicVars.merchant_id} (not found in database)`);
@@ -935,7 +935,7 @@ class RetellWebSocketHandler {
                     // CRITICAL: Validate that the merchant_id exists before using it
                     const merchant = this.db.getMerchant(dynamicVars.merchant_id);
                     if (merchant) {
-                        merchantId = dynamicVars.merchant_id;
+                    merchantId = dynamicVars.merchant_id;
                         console.log(`✅ Using merchant_id from dynamic variables: ${merchantId}`);
                     } else {
                         console.warn(`⚠️  REJECTED invalid merchant_id from dynamic variables: ${dynamicVars.merchant_id} (not found in database)`);

@@ -110,12 +110,19 @@ class EmailService {
   /**
    * Send email via Azure Communication Services
    * @private
+   * Note: Azure Communication Services Email API doesn't support attachments in the current SDK
+   * Attachments will be skipped when using Azure
    */
-  static async _sendViaAzure({ to, subject, html, text }) {
+  static async _sendViaAzure({ to, subject, html, text, attachments }) {
     try {
       const client = this.getAzureClient();
       if (!client) {
         return null;
+      }
+
+      if (attachments && attachments.length > 0) {
+        console.warn('⚠️  Azure Communication Services Email API does not support attachments. Falling back to SMTP.');
+        return null; // Fall back to SMTP for attachments
       }
 
       const senderAddress = process.env.AZURE_EMAIL_SENDER || process.env.SMTP_FROM || 'DoNotReply@azurecomm.net';
@@ -152,12 +159,13 @@ class EmailService {
    * @param {string} options.subject - Email subject
    * @param {string} options.html - HTML body
    * @param {string} options.text - Plain text body (optional)
+   * @param {Array} options.attachments - Email attachments (optional)
    */
-  static async sendEmail({ to, subject, html, text }) {
+  static async sendEmail({ to, subject, html, text, attachments }) {
     try {
       // Try Azure first if configured
       if (this.isAzureConfigured()) {
-        const azureResult = await this._sendViaAzure({ to, subject, html, text });
+        const azureResult = await this._sendViaAzure({ to, subject, html, text, attachments });
         if (azureResult && azureResult.success) {
           return azureResult;
         }
@@ -170,15 +178,25 @@ class EmailService {
       const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'noreply@doclittle.health';
 
       if (transporter) {
-        const info = await transporter.sendMail({
+        const mailOptions = {
           from: from,
           to: to,
           subject: subject,
           html: html,
           text: text || html.replace(/<[^>]*>/g, '')
-        });
+        };
+
+        // Add attachments if provided
+        if (attachments && attachments.length > 0) {
+          mailOptions.attachments = attachments;
+        }
+
+        const info = await transporter.sendMail(mailOptions);
 
         console.log('📧 Email sent via SMTP:', info.messageId);
+        if (attachments && attachments.length > 0) {
+          console.log(`   Attachments: ${attachments.length} file(s)`);
+        }
         return { success: true, message_id: info.messageId, provider: 'smtp' };
       }
 
@@ -189,6 +207,12 @@ class EmailService {
       console.log(`To: ${to}`);
       console.log(`Subject: ${subject}`);
       console.log(`Body:\n${text || html}`);
+      if (attachments && attachments.length > 0) {
+        console.log(`Attachments: ${attachments.length} file(s)`);
+        attachments.forEach(att => {
+          console.log(`  - ${att.filename || 'attachment'} (${att.content ? att.content.length : 0} bytes)`);
+        });
+      }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return { success: true, message_id: 'simulated', provider: 'console' };
 
@@ -520,6 +544,10 @@ class EmailService {
             </p>
             <p>If the button doesn't work, copy and paste this URL into your browser:</p>
             <p>${paymentLink}</p>
+            <p style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+              <strong>💳 Manage Your Wallet:</strong> After payment, you can view your wallet balance and transaction history at: 
+              <a href="${process.env.BASE_URL || 'https://api.doclittle.site'}/wallet" style="color: #16a34a;">View Wallet</a>
+            </p>
             <p>Thank you for choosing DocLittle.</p>
           </div>
           <div class="footer">
@@ -863,6 +891,271 @@ class EmailService {
     return await this.sendEmail({
       to: email,
       subject: 'DocLittle API - Verify Your Email',
+      html: html
+    });
+  }
+
+  /**
+   * Send promotional email to customers
+   * @param {string} email - Recipient email
+   * @param {string} customerName - Customer name
+   * @param {object} promotion - Promotion details
+   * @param {string} promotion.name - Promotion name
+   * @param {string} promotion.discount_type - "percentage" or "fixed_amount"
+   * @param {number} promotion.discount_value - Discount value
+   * @param {string} promotion.code - Promotion code (optional)
+   * @param {string} promotion.description - Promotion description
+   * @param {string} promotion.end_date - End date (optional)
+   * @param {string} merchantName - Merchant/business name
+   */
+  static async sendPromotionalEmail(email, customerName, promotion, merchantName = 'DocLittle') {
+    const discountText = promotion.discount_type === 'percentage'
+      ? `${promotion.discount_value}% OFF`
+      : `$${promotion.discount_value} OFF`;
+
+    const endDateText = promotion.end_date
+      ? new Date(promotion.end_date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+      : null;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            line-height: 1.6; 
+            color: #333; 
+            margin: 0; 
+            padding: 0; 
+            background-color: #f8fafc;
+          }
+          .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+          }
+          .email-wrapper {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            background: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%); 
+            color: white; 
+            padding: 40px 30px; 
+            text-align: center; 
+          }
+          .logo-brand {
+            font-size: 48px;
+            font-weight: 300;
+            line-height: 1;
+            margin-bottom: 15px;
+            letter-spacing: -2px;
+          }
+          .logo-brand .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+            font-weight: 400;
+          }
+          .logo-brand .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+          }
+          .header h1 {
+            margin: 15px 0 5px 0;
+            font-size: 28px;
+            font-weight: 700;
+          }
+          .header .subtitle {
+            margin: 0;
+            opacity: 0.95;
+            font-size: 16px;
+          }
+          .content { 
+            background: #f9f9f9; 
+            padding: 40px 30px; 
+          }
+          .promotion-box {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 25px 0;
+            border-left: 4px solid #f59e0b;
+            text-align: center;
+          }
+          .discount-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #f59e0b 0%, #fb923c 100%);
+            color: white;
+            font-size: 48px;
+            font-weight: 700;
+            padding: 20px 40px;
+            border-radius: 12px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+          }
+          .promotion-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 20px 0 10px 0;
+          }
+          .promotion-description {
+            color: #64748b;
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 15px 0;
+          }
+          .promotion-code {
+            background: #f8fafc;
+            border: 2px dashed #f59e0b;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            display: inline-block;
+          }
+          .promotion-code-label {
+            color: #64748b;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+          }
+          .promotion-code-value {
+            color: #1e293b;
+            font-size: 24px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+          }
+          .promotion-details {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #f59e0b;
+          }
+          .detail-row {
+            margin: 12px 0;
+            display: flex;
+            justify-content: space-between;
+          }
+          .detail-label {
+            font-weight: 600;
+            color: #666;
+          }
+          .detail-value {
+            color: #1e293b;
+            font-weight: 500;
+          }
+          .button { 
+            display: inline-block; 
+            padding: 14px 32px; 
+            background: #f59e0b; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            margin: 20px 0;
+            font-weight: 600;
+            font-size: 16px;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+          }
+          .button:hover { 
+            background: #d97706; 
+          }
+          .footer { 
+            text-align: center; 
+            margin-top: 30px; 
+            padding-top: 30px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b; 
+            font-size: 14px; 
+          }
+          .footer a {
+            color: #1e40af;
+            text-decoration: none;
+          }
+          .footer a:hover {
+            text-decoration: underline;
+          }
+          .urgency-text {
+            color: #dc2626;
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 15px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="email-wrapper">
+            <div class="header">
+              <div class="logo-brand">
+                <span class="doc">Doc</span><span class="little">Little</span>
+              </div>
+              <h1>🎉 Special Promotion!</h1>
+              <p class="subtitle">${merchantName}</p>
+            </div>
+            <div class="content">
+              <p>Hi ${customerName || 'there'},</p>
+              <p>We have an exciting promotion just for you!</p>
+              
+              <div class="promotion-box">
+                <div class="discount-badge">${discountText}</div>
+                <div class="promotion-name">${promotion.name || 'Special Offer'}</div>
+                ${promotion.description ? `
+                <div class="promotion-description">${promotion.description}</div>
+                ` : ''}
+                ${promotion.code ? `
+                <div class="promotion-code">
+                  <div class="promotion-code-label">Use Code</div>
+                  <div class="promotion-code-value">${promotion.code}</div>
+                </div>
+                ` : ''}
+              </div>
+
+              ${promotion.end_date ? `
+              <div class="promotion-details">
+                <div class="detail-row">
+                  <span class="detail-label">Valid Until:</span>
+                  <span class="detail-value">${endDateText}</span>
+                </div>
+              </div>
+              <div class="urgency-text">⏰ Don't miss out! This offer expires soon.</div>
+              ` : ''}
+
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${process.env.BASE_URL || 'https://api.doclittle.site'}/storefront" class="button">Shop Now</a>
+              </p>
+
+              <p>Call us or visit our store to take advantage of this special offer!</p>
+              
+              <p>Thank you for being a valued customer!</p>
+              <p>Best regards,<br>${merchantName} Team</p>
+              
+              <div class="footer">
+                <p>This is a promotional email from ${merchantName}.</p>
+                <p>Visit us at <a href="${process.env.BASE_URL || 'https://api.doclittle.site'}">${process.env.BASE_URL || 'api.doclittle.site'}</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">You're receiving this because you're a customer. <a href="#" style="color: #94a3b8;">Unsubscribe</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: email,
+      subject: `🎉 ${discountText} - ${promotion.name || 'Special Promotion'} - ${merchantName}`,
       html: html
     });
   }

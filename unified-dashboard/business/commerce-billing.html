@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commerce Billing - DocLittle</title>
+    <link rel="stylesheet" href="../assets/css/global.css">
+    <script src="../assets/js/config.js"></script>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .sidebar-logo {
+            font-size: 32px;
+            line-height: 1;
+            letter-spacing: -3px;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-logo .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+        }
+
+        .sidebar-logo .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
+        .sidebar-subtitle {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+
+        .sidebar-nav {
+            padding: 16px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: var(--gray-700);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--gray-50);
+            color: var(--primary);
+        }
+
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
+
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            padding: 32px;
+            background: var(--gray-50);
+        }
+
+        .page-header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .page-title {
+            font-size: 28px;
+            margin-bottom: 8px;
+            color: var(--gray-900);
+        }
+
+        .page-subtitle {
+            color: var(--gray-600);
+            font-size: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .credits-banner {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: var(--gray-600);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span>
+                </div>
+                <div class="sidebar-subtitle" id="sidebarSubtitle">24/7 Medical Assistant</div>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Populated by tenant config -->
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">Commerce Billing</h1>
+                <p class="page-subtitle">Voice credits, orders, and revenue analytics</p>
+            </div>
+
+            <!-- Credits Banner -->
+            <div class="credits-banner" id="creditsBanner">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; margin-bottom: 8px;">Available Credits</div>
+                        <div style="font-size: 36px; font-weight: 700; margin-bottom: 4px;">
+                            <span id="creditsBalance">0</span> <span style="font-size: 20px; font-weight: 400; opacity: 0.9;">minutes</span>
+                        </div>
+                        <div style="font-size: 14px; opacity: 0.9;" id="creditsDetails">Loading...</div>
+                    </div>
+                    <div style="font-size: 48px; opacity: 0.3;">⚡</div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Revenue</div>
+                    <div class="stat-value" id="totalRevenue">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Orders</div>
+                    <div class="stat-value" id="totalOrders">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average Order Value</div>
+                    <div class="stat-value" id="avgOrderValue">$0.00</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Voice Checkouts</div>
+                    <div class="stat-value" id="voiceCheckouts">0</div>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="stat-card">
+                <h3 style="margin-bottom: 16px;">📊 Billing Overview</h3>
+                <p style="color: var(--gray-600); margin-bottom: 12px;">
+                    Your commerce billing is managed through:
+                </p>
+                <ul style="color: var(--gray-700); line-height: 2;">
+                    <li><strong>Orders Tab:</strong> View all sales and order details</li>
+                    <li><strong>Voice Agent:</strong> Track voice checkout transactions</li>
+                    <li><strong>Credits Banner:</strong> Monitor voice minutes usage</li>
+                    <li><strong>Dashboard:</strong> Revenue analytics and trends</li>
+                </ul>
+                <div style="margin-top: 24px;">
+                    <a href="orders.html" class="btn-primary" style="text-decoration: none; display: inline-block; margin-right: 12px;">View Orders</a>
+                    <a href="business-dashboard.html" class="btn-secondary" style="text-decoration: none; display: inline-block;">View Dashboard</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+        if (sessionStorage.getItem('authenticated') !== 'true') {
+            window.location.href = '../login.html';
+        }
+
+        function renderSidebar() {
+            if (!window.TENANT_CONFIG) {
+                window.TENANT_CONFIG = {
+                    tenant_type: 'shop',
+                    navItems: [
+                        { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+                        { id: 'products', label: 'Products', icon: '📦', href: 'products.html' },
+                        { id: 'orders', label: 'Orders', icon: '🛒', href: 'orders.html' },
+                        { id: 'customers', label: 'Customers', icon: '👥', href: 'patients.html' },
+                        { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' },
+                        { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' }
+                    ],
+                    sidebarSubtitle: '24/7 Medical Assistant'
+                };
+            }
+            const navEl = document.getElementById('sidebarNav');
+            const subtitleEl = document.getElementById('sidebarSubtitle');
+            
+            if (!navEl) {
+                console.warn('⚠️ Sidebar nav element not found');
+                return;
+            }
+
+            // Ensure navItems exists and is an array
+            if (!window.TENANT_CONFIG.navItems || !Array.isArray(window.TENANT_CONFIG.navItems)) {
+                console.warn('⚠️ navItems missing or invalid, using defaults');
+                window.TENANT_CONFIG.navItems = [
+                    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+                    { id: 'products', label: 'Products', icon: '📦', href: 'products.html' },
+                    { id: 'orders', label: 'Orders', icon: '🛒', href: 'orders.html' },
+                    { id: 'customers', label: 'Customers', icon: '👥', href: 'patients.html' },
+                    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' },
+                    { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' }
+                ];
+            }
+            
+            if (navEl && window.TENANT_CONFIG.navItems) {
+                navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
+                    <a href="${item.href}" class="nav-item ${item.id === 'billing' ? 'active' : ''}">
+                        <span class="nav-icon">${item.icon}</span>
+                        <span>${item.label}</span>
+                    </a>
+                `).join('');
+            }
+            
+            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
+                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
+            }
+        }
+
+        async function loadCredits() {
+            try {
+                const res = await fetch(`${API_BASE}/api/usage-monitor/credits`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.credits) {
+                        const credits = data.credits;
+                        document.getElementById('creditsBalance').textContent = credits.balance || 0;
+                        const details = `Free: ${credits.free_remaining || 0} min | Paid: ${credits.paid_remaining || 0} min`;
+                        document.getElementById('creditsDetails').textContent = details;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading credits:', error);
+            }
+        }
+
+        async function loadOrderStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/orders`, {
+                    credentials: 'include'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.orders) {
+                        const orders = data.orders;
+                        const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+                        const totalOrders = orders.length;
+                        const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+                        const voiceCheckouts = orders.filter(o => o.source === 'voice' || o.payment_method === 'voice').length;
+
+                        document.getElementById('totalRevenue').textContent = `$${totalRevenue.toFixed(2)}`;
+                        document.getElementById('totalOrders').textContent = totalOrders;
+                        document.getElementById('avgOrderValue').textContent = `$${avgOrderValue.toFixed(2)}`;
+                        document.getElementById('voiceCheckouts').textContent = voiceCheckouts;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading order stats:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
+            loadCredits();
+            loadOrderStats();
+        });
+    </script>
+</body>
+
+</html>
+
+
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
+            loadCredits();
+            loadOrderStats();
+        });
+    </script>
+</body>
+
+</html>
+

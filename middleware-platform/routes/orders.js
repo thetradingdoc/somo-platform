@@ -8,7 +8,38 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const { requireCustomerAuth, requireMerchant } = require('../middleware/customer-auth');
+const { apiLimiter } = require('../middleware/rate-limiter');
 const router = express.Router();
+
+/**
+ * Validate coordinates
+ * @param {number} latitude - Latitude
+ * @param {number} longitude - Longitude
+ * @returns {Object} { valid: boolean, error: string|null }
+ */
+function validateCoordinates(latitude, longitude) {
+  if (latitude === undefined || longitude === undefined) {
+    return { valid: true }; // Optional fields, skip validation if not provided
+  }
+
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+    return { valid: false, error: 'Latitude and longitude must be numbers' };
+  }
+
+  if (isNaN(latitude) || isNaN(longitude)) {
+    return { valid: false, error: 'Latitude and longitude must be valid numbers' };
+  }
+
+  if (latitude < -90 || latitude > 90) {
+    return { valid: false, error: 'Latitude must be between -90 and 90' };
+  }
+
+  if (longitude < -180 || longitude > 180) {
+    return { valid: false, error: 'Longitude must be between -180 and 180' };
+  }
+
+  return { valid: true };
+}
 
 /**
  * Get all orders
@@ -79,6 +110,17 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
         success: false, 
         error: 'product_id, quantity, and customer_email are required' 
       });
+    }
+
+    // Validate coordinates if provided
+    if (pickup_latitude !== undefined || pickup_longitude !== undefined) {
+      const coordValidation = validateCoordinates(pickup_latitude, pickup_longitude);
+      if (!coordValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid pickup coordinates: ${coordValidation.error || 'Invalid coordinates'}`
+        });
+      }
     }
 
     // Use merchant_id from authenticated customer (not from request body)
@@ -202,7 +244,21 @@ router.put('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
     }
 
     // Remove merchant_id from update body (cannot change merchant)
-    const { merchant_id, ...updateData } = req.body;
+    const { merchant_id, pickup_latitude, pickup_longitude, ...updateData } = req.body;
+
+    // Validate coordinates if provided
+    if (pickup_latitude !== undefined || pickup_longitude !== undefined) {
+      const coordValidation = validateCoordinates(pickup_latitude, pickup_longitude);
+      if (!coordValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid pickup coordinates: ${coordValidation.error || 'Invalid coordinates'}`
+        });
+      }
+      // Add validated coordinates to updateData
+      if (pickup_latitude !== undefined) updateData.pickup_latitude = pickup_latitude;
+      if (pickup_longitude !== undefined) updateData.pickup_longitude = pickup_longitude;
+    }
 
     const result = db.updateOrder(req.params.id, updateData);
     if (result.changes === 0) {
@@ -300,7 +356,7 @@ router.get('/:id/tracking', requireCustomerAuth, requireMerchant, (req, res) => 
  *   }
  * }
  */
-router.post('/:id/tracking', requireCustomerAuth, requireMerchant, async (req, res) => {
+router.post('/:id/tracking', apiLimiter, requireCustomerAuth, requireMerchant, async (req, res) => {
   try {
     const { id } = req.params;
     const order = db.getOrder(id);
@@ -328,6 +384,26 @@ router.post('/:id/tracking', requireCustomerAuth, requireMerchant, async (req, r
       estimated_arrival,
       event
     } = req.body;
+
+    // Validate coordinates if provided
+    if (latitude !== undefined || longitude !== undefined) {
+      const coordValidation = validateCoordinates(latitude, longitude);
+      if (!coordValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          error: coordValidation.error || 'Invalid coordinates'
+        });
+      }
+    }
+
+    // Validate delivery_status if provided
+    const validStatuses = ['pending', 'out_for_delivery', 'in_transit', 'delivered', 'exception', 'cancelled'];
+    if (delivery_status && !validStatuses.includes(delivery_status)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid delivery_status. Must be one of: ${validStatuses.join(', ')}`
+      });
+    }
 
     // Build update object
     const updates = {};

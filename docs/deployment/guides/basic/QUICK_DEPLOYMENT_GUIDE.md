@@ -1,4 +1,9 @@
-# Quick Deployment Guide - doclittle.site
+# Quick Deployment Guide - Azure App Service
+
+**Last Updated**: December 2024  
+**Status**: Production Ready
+
+> **Note**: This is a quick reference. For complete deployment guide, see [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)
 
 ## 🚀 Deploy doclittle.site to Azure (Demo Ready)
 

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storefront</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --gray-700: #374151;
+      --gray-500: #6b7280;
+      --gray-200: #e5e7eb;
+      --gray-50: #f9fafb;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      margin: 0;
+      background: #f5f7fb;
+      color: #111827;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .price { font-weight: 700; color: var(--primary); }
+    .muted { color: var(--gray-500); font-size: 13px; }
+    button {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .actions { display: flex; gap: 8px; }
+    .secondary { background: #fff; color: var(--gray-700); border: 1px solid var(--gray-200); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1 id="storeTitle">Storefront</h1>
+        <div class="muted" id="storeSubtitle">Browse products</div>
+      </div>
+      <div class="actions">
+        <button class="secondary" onclick="window.location.href='/wallet'">💳 Wallet</button>
+        <button class="secondary" onclick="window.location.href='order-tracking.html'">📦 Orders</button>
+      </div>
+    </header>
+
+    <div id="productsWrap" class="muted">Loading products...</div>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+    function resolveMerchantIdFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('merchant_id')) return params.get('merchant_id');
+      return null; // will use subdomain/default on API side
+    }
+
+    async function loadProducts() {
+      const merchantId = resolveMerchantIdFromUrl();
+      const url = merchantId
+        ? `${API_BASE}/api/public/products?merchant_id=${encodeURIComponent(merchantId)}`
+        : `${API_BASE}/api/public/products`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to load products (${res.status})`);
+      }
+      return res.json();
+    }
+
+    function renderProducts(data) {
+      const wrap = document.getElementById('productsWrap');
+      if (!data.success) {
+        wrap.textContent = data.message || 'Failed to load products';
+        return;
+      }
+      const products = data.products || [];
+      document.getElementById('storeSubtitle').textContent = `Products · ${products.length} items`;
+      if (products.length === 0) {
+        wrap.textContent = 'No products available.';
+        return;
+      }
+      wrap.classList.remove('muted');
+      wrap.classList.add('grid');
+      wrap.innerHTML = products.map(p => {
+        const price = parseFloat(p.price || 0).toFixed(2);
+        const inv = p.inventory !== undefined ? p.inventory : '—';
+        return `
+          <div class="card">
+            <div><strong>${p.name || 'Untitled'}</strong></div>
+            <div class="muted">${p.description || ''}</div>
+            <div class="price">$${price}</div>
+            <div class="muted">Stock: ${inv}</div>
+            <button onclick="startCheckout('${p.id}')">Buy</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function startCheckout(productId) {
+      const email = prompt('Enter your email for checkout:');
+      if (!email) return;
+      try {
+        const body = { email, product_id: productId };
+        const res = await fetch(`${API_BASE}/api/public/checkout/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.error || 'Failed to start checkout');
+          return;
+        }
+        alert(`Checkout started for ${email}. Customer ID: ${data.customer.id}. You can now proceed to pay with wallet or card.`);
+      } catch (e) {
+        console.error(e);
+        alert('Failed to start checkout');
+      }
+    }
+
+    async function init() {
+      const wrap = document.getElementById('productsWrap');
+      wrap.textContent = 'Loading products...';
+      try {
+        const data = await loadProducts();
+        renderProducts(data);
+      } catch (e) {
+        wrap.textContent = e.message;
+        console.error(e);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
+

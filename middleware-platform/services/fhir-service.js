@@ -276,45 +276,50 @@ class FHIRService {
         timezone: patientData.timezone
       });
 
+      // Add merchant_id if provided (for tenant linking)
+      if (patientData.merchant_id) {
+        patientResource.merchant_id = patientData.merchant_id;
+      }
+
       // Validate
       const validation = FHIRResources.validate(patientResource);
       if (!validation.valid) {
         throw new Error(`Patient validation failed: ${validation.errors.join(', ')}`);
       }
 
-        // Save to database (will throw error if phone number already exists)
-        try {
-          db.createFHIRPatient(patientResource);
-          console.log(`[FHIR] ✅ Created new patient: ${patientResource.id}`);
-        } catch (createError) {
-          // If error is due to duplicate phone, try to find existing patient
-          if (createError.message && createError.message.includes('phone') && createError.message.includes('already exists')) {
-            console.warn(`[FHIR] ⚠️  Duplicate phone detected during creation: ${createError.message}`);
-            if (patientData.phone) {
-              const existingByPhone = db.getFHIRPatientByPhone(patientData.phone);
-              if (existingByPhone) {
-                return {
-                  patient: existingByPhone.resource_data,
-                  duplicate: false,
-                  foundBy: 'phone'
-                };
-              }
+      // Save to database (will throw error if phone number already exists)
+      try {
+        db.createFHIRPatient(patientResource);
+        console.log(`[FHIR] ✅ Created new patient: ${patientResource.id}${patientResource.merchant_id ? ` (merchant: ${patientResource.merchant_id})` : ''}`);
+      } catch (createError) {
+        // If error is due to duplicate phone, try to find existing patient
+        if (createError.message && createError.message.includes('phone') && createError.message.includes('already exists')) {
+          console.warn(`[FHIR] ⚠️  Duplicate phone detected during creation: ${createError.message}`);
+          if (patientData.phone) {
+            const existingByPhone = db.getFHIRPatientByPhone(patientData.phone);
+            if (existingByPhone) {
+              return {
+                patient: existingByPhone.resource_data,
+                duplicate: false,
+                foundBy: 'phone'
+              };
             }
           }
-          throw createError;
         }
+        throw createError;
+      }
 
-        // NOTE: Cards are NOT auto-created at patient signup
-        // Cards are created on-demand when:
-        // 1. Patient has insurance AND a bill/copay is created
-        // 2. Patient requests a payment card
-        // See: createCardForBill() or createCardForCopay() methods
-        
-        return {
-          patient: patientResource,
-          duplicate: false,
-          foundBy: 'created'
-        };
+      // NOTE: Cards are NOT auto-created at patient signup
+      // Cards are created on-demand when:
+      // 1. Patient has insurance AND a bill/copay is created
+      // 2. Patient requests a payment card
+      // See: createCardForBill() or createCardForCopay() methods
+
+      return {
+        patient: patientResource,
+        duplicate: false,
+        foundBy: 'created'
+      };
     } catch (error) {
       console.error('[FHIR] Error in getOrCreatePatient:', error);
       throw error;
@@ -553,9 +558,9 @@ class FHIRService {
   static async fetchTestPatientsFromStedi() {
     try {
       console.log('[FHIR] 🔄 Fetching test patients from Stedi sandbox...');
-      
+
       const InsuranceService = require('./insurance-service');
-      
+
       // Test patient data for Stedi sandbox
       // These are common test member IDs used in healthcare sandboxes
       const testPatients = [
@@ -591,9 +596,9 @@ class FHIRService {
       for (const testPatient of testPatients) {
         try {
           // Check if patient already exists
-          const existingPatient = db.getFHIRPatientByPhone(testPatient.phone) || 
-                                 db.getFHIRPatientByEmail(testPatient.email);
-          
+          const existingPatient = db.getFHIRPatientByPhone(testPatient.phone) ||
+            db.getFHIRPatientByEmail(testPatient.email);
+
           if (existingPatient) {
             console.log(`[FHIR] ⏭️  Patient ${testPatient.patientName} already exists, skipping`);
             continue;
@@ -601,7 +606,7 @@ class FHIRService {
 
           // Call Stedi API to check eligibility (this will create an eligibility check)
           console.log(`[FHIR] 📞 Checking eligibility for ${testPatient.patientName} (${testPatient.memberId})...`);
-          
+
           const eligibilityData = {
             patientName: testPatient.patientName,
             dateOfBirth: testPatient.dateOfBirth,
@@ -639,7 +644,7 @@ class FHIRService {
           // Now check eligibility with patient ID
           eligibilityData.patientId = patientId;
           const eligibilityResult = await InsuranceService.checkEligibility(eligibilityData);
-          
+
           if (eligibilityResult) {
             eligibilityChecksCreated++;
             console.log(`[FHIR] ✅ Eligibility check created for ${testPatient.patientName}`);
@@ -698,7 +703,7 @@ class FHIRService {
   static async syncPatientsFromStedi() {
     try {
       console.log('[FHIR] 🔄 Syncing patients from Stedi eligibility checks...');
-      
+
       // First, try to fetch test patients from Stedi if no eligibility checks exist
       const eligibilityCount = db.prepare(`
         SELECT COUNT(*) as count FROM eligibility_checks
@@ -711,7 +716,7 @@ class FHIRService {
           return fetchResult;
         }
       }
-      
+
       // Find eligibility_checks without linked patients
       const orphanedChecks = db.prepare(`
         SELECT DISTINCT 
@@ -1177,7 +1182,7 @@ class FHIRService {
 
     try {
       const patientId = patientResource.id || patientResource.resource_id;
-      
+
       // Check if cardholder already exists for this patient
       const existingCardholder = db.getCardholderByPatientId(patientId);
       if (existingCardholder) {
@@ -1199,7 +1204,7 @@ class FHIRService {
       const patientData = {
         id: patientId,
         resource_id: patientId,
-        name: patientResource.name?.[0] 
+        name: patientResource.name?.[0]
           ? `${(patientResource.name[0].given || []).join(' ')} ${patientResource.name[0].family || ''}`.trim()
           : 'Unknown Patient',
         firstName: patientResource.name?.[0]?.given?.[0] || '',
@@ -1317,7 +1322,7 @@ class FHIRService {
         };
       }
 
-      const patientResource = typeof patient.resource_data === 'string' 
+      const patientResource = typeof patient.resource_data === 'string'
         ? JSON.parse(patient.resource_data)
         : patient.resource_data;
 
@@ -1335,7 +1340,7 @@ class FHIRService {
       });
 
       if (result.success) {
-        console.log(`[FHIR] ✅ Created card for bill: $${billAmount} (limit: $${(spendingLimit/100).toFixed(2)})`);
+        console.log(`[FHIR] ✅ Created card for bill: $${billAmount} (limit: $${(spendingLimit / 100).toFixed(2)})`);
       }
 
       return result;
@@ -1377,7 +1382,7 @@ class FHIRService {
         };
       }
 
-      const patientResource = typeof patient.resource_data === 'string' 
+      const patientResource = typeof patient.resource_data === 'string'
         ? JSON.parse(patient.resource_data)
         : patient.resource_data;
 
@@ -1395,7 +1400,7 @@ class FHIRService {
       });
 
       if (result.success) {
-        console.log(`[FHIR] ✅ Created card for copay: $${copayAmount} (limit: $${(spendingLimit/100).toFixed(2)})`);
+        console.log(`[FHIR] ✅ Created card for copay: $${copayAmount} (limit: $${(spendingLimit / 100).toFixed(2)})`);
       }
 
       return result;

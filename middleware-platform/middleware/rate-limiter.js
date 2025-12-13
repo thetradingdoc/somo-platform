@@ -157,6 +157,24 @@ const voiceLimiter = rateLimit({
   skip: shouldSkipInternalJob
 });
 
+// Chat commands - moderate (allows quick actions but prevents abuse)
+const chatLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20, // Limit each IP to 20 commands per minute
+  message: {
+    error: 'Too many chat commands, please try again later.',
+    retryAfter: '1 minute'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: {
+    trustProxy: false,
+    ip: false
+  },
+  skip: shouldSkipInternalJob
+});
+
 module.exports = {
   apiLimiter,
   strictLimiter,
@@ -164,6 +182,7 @@ module.exports = {
   lenientAuthLimiter,
   adminLimiter,
   paymentLimiter,
-  voiceLimiter
+  voiceLimiter,
+  chatLimiter
 };
 

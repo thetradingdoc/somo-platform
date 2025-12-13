@@ -358,9 +358,9 @@ router.post('/checkout/create', async (req, res) => {
 
             // If still no email, try customers table (for API customers)
             if (!email) {
-                const customers = db.db.prepare('SELECT * FROM customers WHERE phone_number = ?').all(normalizedPhone);
-                if (customers.length > 0 && customers[0].email) {
-                    email = customers[0].email;
+                const customer = db.getCustomerByPhone(normalizedPhone);
+                if (customer && customer.email) {
+                    email = customer.email;
                     console.log(`✅ Found email from customers table: ${email}`);
                 }
             }
@@ -603,14 +603,6 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
             merchantOrder = { id: orderId };
         }
 
-        // Update checkout status
-        await db.updateVoiceCheckout(checkout_id, {
-            status: 'completed',
-            payment_intent_id,
-            merchant_order_id: merchantOrder.id,
-            completed_at: new Date().toISOString()
-        });
-
         // Create or get customer from checkout
         let customer = null;
         try {
@@ -620,6 +612,15 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
         } catch (customerError) {
             console.warn(`⚠️  Customer creation/lookup error (non-fatal):`, customerError.message);
         }
+
+        // Update checkout status (include customer_id if available)
+        await db.updateVoiceCheckout(checkout_id, {
+            status: 'completed',
+            payment_intent_id,
+            merchant_order_id: merchantOrder.id,
+            customer_id: customer?.id || null,
+            completed_at: new Date().toISOString()
+        });
 
         // Auto-create wallet for customer (preferred) or FHIR Patient (fallback)
         if (merchant.id) {
@@ -634,6 +635,28 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
                     });
                     if (walletResult.success) {
                         console.log(`✅ Auto-created wallet for customer ${customer.id} during checkout completion`);
+                        
+                        // If payment_method is "wallet", create debit transaction
+                        if (checkout.payment_method === 'wallet' && checkout.amount) {
+                            try {
+                                await db.createWalletTransaction({
+                                    customer_id: customer.id,
+                                    merchant_id: merchant.id,
+                                    type: 'debit',
+                                    amount: checkout.amount,
+                                    currency: 'USDC',
+                                    metadata: {
+                                        source: 'checkout',
+                                        checkout_id: checkout_id,
+                                        order_id: merchantOrder.id,
+                                        product_id: checkout.product_id
+                                    }
+                                });
+                                console.log(`✅ Created wallet debit transaction for checkout ${checkout_id}`);
+                            } catch (txError) {
+                                console.warn(`⚠️  Wallet transaction creation error (non-fatal):`, txError.message);
+                            }
+                        }
                     } else {
                         console.warn(`⚠️  Customer wallet creation skipped: ${walletResult.error}`);
                     }
@@ -641,12 +664,12 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
 
                 // Priority 2: Fallback to FHIR Patient wallet (if customer doesn't exist but FHIR Patient does)
                 if (!customer && checkout.fhir_patient_id) {
-                    const walletResult = await CircleService.getOrCreatePatientWallet(checkout.fhir_patient_id, {
-                        createIfNotExists: true,
-                        merchantId: merchant.id
-                    });
-                    if (walletResult.success) {
-                        console.log(`✅ Auto-created wallet for patient ${checkout.fhir_patient_id} during checkout completion`);
+                const walletResult = await CircleService.getOrCreatePatientWallet(checkout.fhir_patient_id, {
+                    createIfNotExists: true,
+                    merchantId: merchant.id
+                });
+                if (walletResult.success) {
+                    console.log(`✅ Auto-created wallet for patient ${checkout.fhir_patient_id} during checkout completion`);
                     } else {
                         console.warn(`⚠️  Patient wallet creation skipped: ${walletResult.error}`);
                     }
@@ -669,6 +692,23 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
             customer_email: checkout.customer_email || checkout.customer_phone,
             completed_at: new Date().toISOString()
         });
+
+        // Trigger automation rules for order_completed
+        if (customer && merchant.id) {
+            try {
+                const AutomationService = require('../services/automation-service');
+                const order = db.getOrder(merchantOrder.id);
+                await AutomationService.checkAndExecuteRules('order_completed', {
+                    merchant_id: merchant.id,
+                    customer_id: customer.id,
+                    customer,
+                    order: order || merchantOrder,
+                    checkout
+                });
+            } catch (automationError) {
+                console.warn('⚠️  Automation trigger error (non-fatal):', automationError.message);
+            }
+        }
 
         res.json({
             success: true,
@@ -828,5 +868,4 @@ router.get('/health', (req, res) => {
     });
 });
 
-module.exports = router;
 module.exports = router;

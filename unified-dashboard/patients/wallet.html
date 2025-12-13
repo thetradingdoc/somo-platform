@@ -2216,8 +2216,17 @@
 
         async function loadWallet() {
             try {
-                // Get or create wallet for patient
-                const response = await fetch(`${API_BASE}/api/circle/accounts/patient/${patientId}`);
+                // Get subdomain from hostname for tenant context
+                const hostname = window.location.hostname;
+                const subdomain = hostname.split('.')[0];
+                const merchantId = window.TENANT_CONFIG?.merchant_id || null;
+
+                // Get or create wallet for patient (with tenant context)
+                const url = merchantId
+                    ? `${API_BASE}/api/circle/accounts/patient/${patientId}?merchant_id=${merchantId}`
+                    : `${API_BASE}/api/circle/accounts/patient/${patientId}`;
+
+                const response = await fetch(url);
                 if (!response.ok) {
                     // Create wallet if it doesn't exist
                     const createResponse = await fetch(`${API_BASE}/api/circle/wallets`, {
@@ -2226,7 +2235,8 @@
                         body: JSON.stringify({
                             entityType: 'patient',
                             entityId: patientId,
-                            description: `Patient wallet for ${patientId}`
+                            description: `Patient wallet for ${patientId}`,
+                            merchant_id: merchantId
                         })
                     });
 
@@ -2313,20 +2323,20 @@
                 if (!nameToUse && patient && patient.name) {
                     nameToUse = `${(patient.name[0].given || []).join(' ')} ${patient.name[0].family || ''}`.trim();
                 }
-                
+
                 if (nameToUse || patientId) {
                     // Try by patientId first (more reliable)
-                    const url = patientId 
+                    const url = patientId
                         ? `${API_BASE}/api/patient/benefits?patientId=${encodeURIComponent(patientId)}`
                         : `${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(nameToUse)}`;
-                    
+
                     const response = await fetch(url);
                     if (response.ok) {
                         const data = await response.json();
                         if (data.success && (data.insurance || data.eligibility)) {
                             const insurance = data.insurance || {};
                             const eligibility = data.eligibility || {};
-                            
+
                             document.getElementById('insuranceInfo').innerHTML = `
                             <div class="insurance-item">
                                 <span class="insurance-label">Insurer</span>
@@ -3059,7 +3069,7 @@
 
         // Initialize on page load
         initWallet();
-        
+
         // Auto-refresh transactions and insurance every 30 seconds to catch provider/insurer updates
         setInterval(() => {
             if (patientId) {

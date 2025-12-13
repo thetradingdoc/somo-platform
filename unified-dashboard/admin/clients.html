@@ -190,12 +190,19 @@
 <body>
     <div class="app-container">
         <aside class="sidebar">
-            <div class="sidebar-icon" onclick="window.location.href='index.html'">🏠</div>
-            <div class="sidebar-icon active" onclick="window.location.href='clients.html'">👥</div>
-            <div class="sidebar-icon" onclick="window.location.href='crm.html'">📊</div>
-            <div class="sidebar-icon" onclick="window.location.href='leads.html'">🎯</div>
+            <div class="sidebar-icon" onclick="window.location.href='index.html'" title="Dashboard">📊</div>
+            <div class="sidebar-icon" onclick="window.location.href='index.html?tab=tenants'" title="Tenants">🏥</div>
+            <div class="sidebar-icon" onclick="window.location.href='index.html?tab=leads'" title="Leads">👥</div>
+            <div class="sidebar-icon" onclick="window.location.href='pipeline.html'" title="Pipeline">📈</div>
+            <div class="sidebar-icon" onclick="window.location.href='workflows.html'" title="Workflows">⚡</div>
+            <div class="sidebar-icon" onclick="window.location.href='index.html?tab=clients'" title="Clients">💼</div>
         </aside>
         <main class="main-content">
+            <div style="margin-bottom: 16px;">
+              <a href="index.html" style="color: var(--muted); text-decoration: none; font-size: 13px;">Dashboard</a>
+              <span style="color: var(--muted); margin: 0 8px;">/</span>
+              <span style="color: var(--text); font-size: 13px;">Clients</span>
+            </div>
             <div class="dashboard-header">
                 <h1>Clients & Credits Management</h1>
             </div>
@@ -260,6 +267,15 @@
     </div>
 
     <script>
+        // Redirect to main dashboard clients tab if accessed directly
+        // (clients.html is identical to the clients tab in index.html)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.has('standalone')) {
+          // Check if we should redirect to tab version
+          // For now, keep standalone accessible but add note
+          console.log('Note: Clients page is also available as a tab in the main dashboard at /admin?tab=clients');
+        }
+
         const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:4000' : '';
         let currentCustomerId = null;
 
@@ -380,6 +396,26 @@
                 alert('Failed to allocate credits: ' + error.message);
             }
         }
+
+        // Set active state for current page
+        window.addEventListener('DOMContentLoaded', () => {
+          const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+          document.querySelectorAll('.sidebar-icon').forEach(icon => {
+            icon.classList.remove('active');
+            const onclick = icon.getAttribute('onclick');
+            if (onclick && onclick.includes(currentPage)) {
+              icon.classList.add('active');
+            }
+          });
+          // If no link matches, set clients as active (current page)
+          if (currentPage === 'clients.html') {
+            document.querySelectorAll('.sidebar-icon').forEach(icon => {
+              if (icon.textContent.includes('💼')) {
+                icon.classList.add('active');
+              }
+            });
+          }
+        });
 
         // Load on page load
         loadClients();

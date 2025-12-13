@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/chat-widget.css">
+    <link rel="stylesheet" href="../assets/css/email-composer.css">
+    <link rel="stylesheet" href="../assets/css/sms-composer.css">
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/navigation.js"></script>
     <style>
@@ -1202,10 +1205,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu" type="button">☰</button>
-
+    
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
+    
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -1336,7 +1339,7 @@
                     <button class="btn btn-primary" onclick="window.location.href='products.html'">View All
                         Products</button>
                 </div>
-
+                
                 <div class="products-table-container">
                     <table class="products-table">
                         <thead>
@@ -1505,17 +1508,17 @@
                 e.preventDefault();
                 e.stopPropagation();
             }
-
+            
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-
+            
             if (!sidebar || !overlay) {
                 console.error('Sidebar or overlay element not found');
                 return;
             }
-
+            
             const isOpen = sidebar.classList.contains('open');
-
+            
             if (isOpen) {
                 // Close sidebar
                 sidebar.classList.remove('open');
@@ -1625,33 +1628,33 @@
             // Navigation is now handled by navigation.js
             renderNavigation('dashboard');
             setupMobileNavClose();
-
+            
             // Add event listeners to mobile menu button - MATCHING WORKING PATTERN FROM products.html
             const mobileMenuBtn = document.querySelector('.mobile-menu-toggle');
             if (mobileMenuBtn) {
                 // Use a single handler that works for both touch and click
                 let touchStartTime = 0;
                 let touchStartPos = { x: 0, y: 0 };
-
+                
                 // Handle touch start - just record the touch
                 mobileMenuBtn.addEventListener('touchstart', function (e) {
                     touchStartTime = Date.now();
                     const touch = e.touches[0];
                     touchStartPos = { x: touch.clientX, y: touch.clientY };
                 }, { passive: true });
-
+                
                 // Handle touch end - check if it was a tap (not a swipe)
                 mobileMenuBtn.addEventListener('touchend', function (e) {
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const touch = e.changedTouches[0];
                     const touchEndPos = { x: touch.clientX, y: touch.clientY };
-
+                    
                     // Calculate distance moved
                     const deltaX = Math.abs(touchEndPos.x - touchStartPos.x);
                     const deltaY = Math.abs(touchEndPos.y - touchStartPos.y);
                     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
+                    
                     // If it was a quick tap (less than 300ms and less than 10px movement), toggle sidebar
                     if (touchDuration < 300 && distance < 10) {
                         e.preventDefault();
@@ -1659,7 +1662,7 @@
                         toggleSidebar(e);
                     }
                 }, { passive: false });
-
+                
                 // Handle click event for desktop/mouse users
                 mobileMenuBtn.addEventListener('click', function (e) {
                     e.preventDefault();
@@ -1669,7 +1672,7 @@
             } else {
                 console.error('Mobile menu button not found');
             }
-
+            
             // Update page title/subtitle based on tenant type
             const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
             if (isShop) {
@@ -1677,7 +1680,7 @@
                 const subtitleEl = document.getElementById('dashboardSubtitle');
                 const callsTitleEl = document.getElementById('callsSectionTitle');
                 const callsSubtitleEl = document.getElementById('callsSectionSubtitle');
-
+                
                 if (titleEl) titleEl.textContent = 'Business Dashboard';
                 if (subtitleEl) subtitleEl.textContent = 'Overview of sales, orders, and voice commerce activity';
                 if (callsTitleEl) callsTitleEl.textContent = 'Voice Orders';
@@ -1955,7 +1958,7 @@
 
                 // Load recent calls (DB truth)
                 await loadRecentCalls();
-
+                
                 // Load tenant-specific content
                 const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
                 if (isShop) {
@@ -1973,7 +1976,7 @@
                     document.getElementById('nextApptCard').style.display = 'block';
                     document.getElementById('topProductsSection').style.display = 'none';
                 }
-
+                
                 // Load credit balance
                 await loadCredits();
 
@@ -2001,10 +2004,10 @@
                         // Update balance display with "min" suffix
                         const balanceEl = document.getElementById('creditsBalance');
                         const creditsChangeEl = document.getElementById('creditsChange');
-
+                        
                         if (balanceEl) {
                             balanceEl.innerHTML = `${balance.toLocaleString()} <span style="font-size: 20px; color: var(--gray-600); font-weight: 400;">min</span>`;
-
+                            
                             // Add visual indicator if credits are low
                             if (balance < 50) {
                                 balanceEl.style.color = '#ef4444'; // Red for low credits
@@ -2070,24 +2073,24 @@
                 const totalRevenue = stats.total?.revenue || stats.total?.orders * 100 || 0;
                 const revenueEl = document.getElementById('totalRevenue');
                 if (revenueEl) revenueEl.textContent = `$${totalRevenue.toFixed(2)}`;
-
+                
                 // Card 2: Orders Today
                 const ordersToday = stats.today?.orders || stats.active?.orders || 0;
                 const ordersTodayEl = document.getElementById('ordersToday');
                 if (ordersTodayEl) ordersTodayEl.textContent = ordersToday;
-
+                
                 // Card 3: Average Order Value
                 const totalOrders = stats.total?.orders || 0;
                 const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
                 const aovEl = document.getElementById('avgOrderValue');
                 if (aovEl) aovEl.textContent = `$${avgOrderValue.toFixed(2)}`;
-
+                
                 // Card 4: Conversion Rate
                 const totalCalls = stats.total?.calls || 0;
                 const conversionRate = totalCalls > 0 ? (totalOrders / totalCalls * 100) : 0;
                 const conversionEl = document.getElementById('conversionRate');
                 if (conversionEl) conversionEl.textContent = `${conversionRate.toFixed(1)}%`;
-
+                
                 // Card 5: Voice Agent Costs - check if elements exist first
                 const avgCallDuration = 3; // 3 minutes average
                 const costPerMinute = 0.12; // $0.12 per minute (Retell AI pricing)
@@ -2268,13 +2271,13 @@
 
                 if (data.success && data.products && data.products.length > 0) {
                     const products = data.products.slice(0, 8); // Show top 8
-
+                    
                     productsList.innerHTML = products.map(product => {
                         const stock = product.stock || 0;
                         const sales = product.sales_count || 0;
                         const revenue = (parseFloat(product.price || 0) * sales).toFixed(2);
                         const stockClass = stock < 20 ? 'low' : stock < 50 ? 'medium' : 'high';
-
+                        
                         return `
                             <tr>
                                 <td>
@@ -2423,14 +2426,14 @@
                 if (ordersData.success && ordersData.orders) {
                     const orders = ordersData.orders;
                     const today = new Date().toDateString();
-
+                    
                     // Calculate metrics
                     const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
                     const todayOrders = orders.filter(o => o.created_at && new Date(o.created_at).toDateString() === today);
                     const ordersToday = todayOrders.length;
                     const todayRevenue = todayOrders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
                     const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
-
+                    
                     // Calculate conversion rate (simplified: orders / calls)
                     const callsRes = await fetch(`${API_BASE}/api/voice/calls?limit=100`, {
                         credentials: 'include'
@@ -2444,13 +2447,13 @@
                     document.getElementById('ordersToday').textContent = ordersToday;
                     document.getElementById('avgOrderValue').textContent = `$${avgOrderValue.toFixed(2)}`;
                     document.getElementById('conversionRate').textContent = `${conversionRate.toFixed(1)}%`;
-
+                    
                     // Calculate trend indicators from historical data
                     // Compare current period (last 7 days) vs previous period (7 days before that)
                     const now = new Date();
                     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
                     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-
+                    
                     // Current period revenue (last 7 days)
                     const currentPeriodOrders = orders.filter(o => {
                         const orderDate = new Date(o.created_at);
@@ -2458,7 +2461,7 @@
                     });
                     const currentPeriodRevenue = currentPeriodOrders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
                     const currentPeriodAOV = currentPeriodOrders.length > 0 ? currentPeriodRevenue / currentPeriodOrders.length : 0;
-
+                    
                     // Previous period revenue (7-14 days ago)
                     const previousPeriodOrders = orders.filter(o => {
                         const orderDate = new Date(o.created_at);
@@ -2466,25 +2469,25 @@
                     });
                     const previousPeriodRevenue = previousPeriodOrders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
                     const previousPeriodAOV = previousPeriodOrders.length > 0 ? previousPeriodRevenue / previousPeriodOrders.length : 0;
-
+                    
                     // Calculate percentage change
                     let revenueTrend = '0%';
                     let aovTrend = '0%';
-
+                    
                     if (previousPeriodRevenue > 0) {
                         const revenueChange = ((currentPeriodRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100;
                         revenueTrend = (revenueChange >= 0 ? '+' : '') + revenueChange.toFixed(1) + '%';
                     } else if (currentPeriodRevenue > 0) {
                         revenueTrend = '+100%'; // New revenue
                     }
-
+                    
                     if (previousPeriodAOV > 0) {
                         const aovChange = ((currentPeriodAOV - previousPeriodAOV) / previousPeriodAOV) * 100;
                         aovTrend = (aovChange >= 0 ? '+' : '') + aovChange.toFixed(1) + '%';
                     } else if (currentPeriodAOV > 0) {
                         aovTrend = '+100%'; // New AOV
                     }
-
+                    
                     document.getElementById('revenueTrend').textContent = revenueTrend;
                     document.getElementById('aovTrend').textContent = aovTrend;
                 }
@@ -2669,6 +2672,9 @@
             }
         });
     </script>
+    <script src="../assets/js/chat-widget.js"></script>
+    <script src="../assets/js/email-composer.js"></script>
+    <script src="../assets/js/sms-composer.js"></script>
 </body>
 
 </html>

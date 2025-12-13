@@ -7,6 +7,15 @@
     <title>Invoices - Medical Coding Assistant</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script>
+        // Redirect to unified billing page
+        (function() {
+            const target = 'billing.html?section=invoices';
+            if (!window.location.href.endsWith(target)) {
+                window.location.replace(target);
+            }
+        })();
+    </script>
     <style>
         :root {
             --primary: #1e40af;
@@ -309,6 +318,115 @@
             font-size: 64px;
             margin-bottom: 16px;
         }
+
+        .status-sent {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .filters-section {
+            background: var(--gray-50);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-input {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        .filter-select {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            min-width: 150px;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 12px 8px 40px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+        }
+
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-700);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-300);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .invoice-balance {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .invoice-balance.overdue {
+            color: #ef4444;
+            font-weight: 600;
+        }
     </style>
 </head>
 
@@ -320,34 +438,11 @@
                 <div class="sidebar-logo">
                     <span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span>
                 </div>
-                <div class="sidebar-subtitle">Medical Coding Assistant</div>
+                <div class="sidebar-subtitle" id="sidebarSubtitle">Medical Coding Assistant</div>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="pdf-coding.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
-                </a>
-                <a href="invoices.html" class="nav-item active">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Patients</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
-                <a href="wallets.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Populated by tenant config -->
             </nav>
 
             <div class="sidebar-footer">
@@ -374,27 +469,54 @@
             <div class="invoices-list">
                 <div class="invoices-header">
                     <h2 class="invoices-title">All Invoices</h2>
-                    <button class="btn-primary" onclick="createInvoice()">+ New Invoice</button>
+                </div>
+
+                <!-- Filters Section -->
+                <div class="filters-section">
+                    <div class="search-input-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchInput" class="search-input" placeholder="Search by invoice number, patient name, or claim ID..." oninput="filterInvoices()">
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Status</label>
+                        <select id="statusFilter" class="filter-select" onchange="filterInvoices()">
+                            <option value="">All Status</option>
+                            <option value="draft">Draft</option>
+                            <option value="sent">Sent</option>
+                            <option value="paid">Paid</option>
+                            <option value="overdue">Overdue</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">From Date</label>
+                        <input type="date" id="startDateFilter" class="filter-input" onchange="filterInvoices()">
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">To Date</label>
+                        <input type="date" id="endDateFilter" class="filter-input" onchange="filterInvoices()">
+                    </div>
+                    <button class="btn-secondary" onclick="clearFilters()">Clear Filters</button>
                 </div>
 
                 <table class="invoices-table">
                     <thead>
                         <tr>
                             <th>Invoice #</th>
-                            <th>Client</th>
+                            <th>Patient</th>
                             <th>Date</th>
                             <th>Due Date</th>
                             <th>Amount</th>
+                            <th>Balance</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="invoicesTableBody">
                         <tr>
-                            <td colspan="7">
+                            <td colspan="8">
                                 <div class="empty-state">
-                                    <div class="empty-state-icon">🧾</div>
-                                    <p>No invoices found. Create your first invoice to get started.</p>
+                                    <div class="empty-state-icon">⏳</div>
+                                    <p>Loading invoices...</p>
                                 </div>
                             </td>
                         </tr>
@@ -405,6 +527,9 @@
     </div>
 
     <script>
+        const API_BASE = window.API_BASE || 'http://localhost:4000';
+        let allInvoices = [];
+
         // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
@@ -416,6 +541,50 @@
         document.getElementById('userName').textContent = userName;
         document.getElementById('userRole').textContent = userRole;
 
+        // Render sidebar from tenant config (fallback if missing)
+        function renderSidebar() {
+            if (!window.TENANT_CONFIG) {
+                window.TENANT_CONFIG = {
+                    navItems: [
+                        { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+                        { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
+                        { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
+                    ],
+                    sidebarSubtitle: 'Medical Coding Assistant'
+                };
+            }
+            const navEl = document.getElementById('sidebarNav');
+            const subtitleEl = document.getElementById('sidebarSubtitle');
+            
+            if (!navEl) {
+                console.warn('⚠️ Sidebar nav element not found');
+                return;
+            }
+
+            // Ensure navItems exists and is an array
+            if (!window.TENANT_CONFIG.navItems || !Array.isArray(window.TENANT_CONFIG.navItems)) {
+                console.warn('⚠️ navItems missing or invalid, using defaults');
+                window.TENANT_CONFIG.navItems = [
+                    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+                    { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
+                    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
+                ];
+            }
+            
+            if (navEl && window.TENANT_CONFIG.navItems) {
+                navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
+                    <a href="${item.href}" class="nav-item ${item.id === 'invoices' ? 'active' : ''}">
+                        <span class="nav-icon">${item.icon}</span>
+                        <span>${item.label}</span>
+                    </a>
+                `).join('');
+            }
+            
+            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
+                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
+            }
+        }
+
         // Logout function
         function logout() {
             sessionStorage.removeItem('authenticated');
@@ -424,29 +593,237 @@
             window.location.href = '../login.html';
         }
 
-        // Load invoices
+        // Load invoices from API
         async function loadInvoices() {
             try {
-                // TODO: Replace with actual API call
-                // const response = await fetch('/api/invoices');
-                // const invoices = await response.json();
+                const tbody = document.getElementById('invoicesTableBody');
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">⏳</div>
+                                <p>Loading invoices...</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+
+                const response = await fetch(`${API_BASE}/api/invoices`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
                 
-                // For now, show empty state
-                // This will be replaced with actual data loading
-                console.log('Loading invoices...');
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load invoices');
+                }
+
+                allInvoices = data.invoices || [];
+                displayInvoices(allInvoices);
             } catch (error) {
                 console.error('Error loading invoices:', error);
+                const tbody = document.getElementById('invoicesTableBody');
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">❌</div>
+                                <p>Failed to load invoices: ${error.message}</p>
+                                <button class="btn-primary" onclick="loadInvoices()" style="margin-top: 16px;">Retry</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
             }
         }
 
-        // Create new invoice
-        function createInvoice() {
-            // TODO: Implement invoice creation
-            alert('Invoice creation feature coming soon!');
+        // Display invoices in table
+        function displayInvoices(invoices) {
+            const tbody = document.getElementById('invoicesTableBody');
+
+            if (!invoices || invoices.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">🧾</div>
+                                <p>No invoices found.</p>
+                                <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
+                                    Create invoices from claims on the Claims page or PDF Coding page.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = invoices.map(invoice => {
+                const statusClass = `status-${invoice.status}`;
+                const dueDate = invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '—';
+                const createdDate = invoice.created_at ? new Date(invoice.created_at).toLocaleDateString() : '—';
+                const balance = invoice.balance || (invoice.amount - (invoice.total_paid || 0));
+                const isOverdue = invoice.is_overdue || (invoice.status === 'overdue');
+                const balanceClass = balance > 0 && isOverdue ? 'overdue' : '';
+
+                return `
+                    <tr>
+                        <td>
+                            <span class="invoice-number">${invoice.invoice_number}</span>
+                        </td>
+                        <td>${invoice.patient_name || 'Unknown Patient'}</td>
+                        <td>${createdDate}</td>
+                        <td>${dueDate}</td>
+                        <td class="invoice-amount">$${invoice.amount.toFixed(2)}</td>
+                        <td>
+                            <span class="invoice-balance ${balanceClass}">
+                                $${balance.toFixed(2)}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="invoice-status ${statusClass}">${invoice.status.toUpperCase()}</span>
+                        </td>
+                        <td>
+                            <div class="invoice-actions">
+                                <button class="btn-small" onclick="viewInvoice('${invoice.id}')" title="View Details">View</button>
+                                ${invoice.status === 'draft' ? `
+                                    <button class="btn-small" onclick="sendInvoice('${invoice.id}')" title="Send Invoice">Send</button>
+                                ` : ''}
+                                ${invoice.status === 'sent' || invoice.status === 'overdue' ? `
+                                    <button class="btn-success" onclick="recordPayment('${invoice.id}')" title="Record Payment">Pay</button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Filter invoices
+        function filterInvoices() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            const startDate = document.getElementById('startDateFilter').value;
+            const endDate = document.getElementById('endDateFilter').value;
+
+            let filtered = allInvoices;
+
+            // Search filter
+            if (searchTerm) {
+                filtered = filtered.filter(inv => 
+                    inv.invoice_number.toLowerCase().includes(searchTerm) ||
+                    (inv.patient_name && inv.patient_name.toLowerCase().includes(searchTerm)) ||
+                    (inv.claim_id && inv.claim_id.toLowerCase().includes(searchTerm))
+                );
+            }
+
+            // Status filter
+            if (statusFilter) {
+                filtered = filtered.filter(inv => inv.status === statusFilter);
+            }
+
+            // Date range filter
+            if (startDate) {
+                filtered = filtered.filter(inv => {
+                    const invDate = new Date(inv.created_at);
+                    return invDate >= new Date(startDate);
+                });
+            }
+
+            if (endDate) {
+                filtered = filtered.filter(inv => {
+                    const invDate = new Date(inv.created_at);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    return invDate <= end;
+                });
+            }
+
+            displayInvoices(filtered);
+        }
+
+        // Clear filters
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('startDateFilter').value = '';
+            document.getElementById('endDateFilter').value = '';
+            displayInvoices(allInvoices);
+        }
+
+        // View invoice details
+        function viewInvoice(invoiceId) {
+            window.location.href = `invoice-detail.html?id=${invoiceId}`;
+        }
+
+        // Send invoice
+        async function sendInvoice(invoiceId) {
+            if (!confirm('Send this invoice to the patient via email?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/invoices/${invoiceId}/send`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Invoice sent successfully!');
+                    loadInvoices(); // Reload to update status
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to send invoice'));
+                }
+            } catch (error) {
+                console.error('Error sending invoice:', error);
+                alert('Error sending invoice: ' + error.message);
+            }
+        }
+
+        // Record payment
+        function recordPayment(invoiceId) {
+            const amount = prompt('Enter payment amount:');
+            if (!amount || parseFloat(amount) <= 0) return;
+
+            const paymentMethod = prompt('Payment method (cash, check, credit_card, bank_transfer):') || 'cash';
+            const referenceNumber = prompt('Reference number (optional):') || null;
+
+            if (!confirm(`Record payment of $${amount}?`)) return;
+
+            fetch(`${API_BASE}/api/invoices/${invoiceId}/payments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    amount: parseFloat(amount),
+                    payment_method: paymentMethod,
+                    reference_number: referenceNumber
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Payment recorded successfully!');
+                    loadInvoices();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to record payment'));
+                }
+            })
+            .catch(error => {
+                console.error('Error recording payment:', error);
+                alert('Error recording payment: ' + error.message);
+            });
         }
 
         // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
         loadInvoices();
+        });
     </script>
 </body>
 

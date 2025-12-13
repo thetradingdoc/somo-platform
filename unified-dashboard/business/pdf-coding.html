@@ -5,6 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Medical Coding - Medical Coding Assistant</title>
+    <script>
+        // Redirect to unified billing page (scan section)
+        (function() {
+            const target = 'billing.html?section=scan';
+            if (!window.location.href.endsWith(target)) {
+                window.location.replace(target);
+            }
+        })();
+    </script>
     <style>
         * {
             margin: 0;
@@ -1122,8 +1131,47 @@
                         const result = await response.json();
 
                         if (result.success && result.claimId) {
-                            // Redirect to claims page
-                            window.location.href = `claims.html?id=${result.claimId}`;
+                            // Show success message with options
+                            const generateInvoice = confirm(
+                                'Claim created successfully!\n\n' +
+                                'Would you like to generate an invoice from this claim now?\n\n' +
+                                'Click OK to generate invoice, or Cancel to view the claim.'
+                            );
+
+                            if (generateInvoice) {
+                                // Generate invoice from claim
+                                try {
+                                    const invoiceResponse = await fetch(`${API_BASE}/api/invoices/create-from-claim`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        credentials: 'include',
+                                        body: JSON.stringify({
+                                            claim_id: result.claimId
+                                        })
+                                    });
+
+                                    const invoiceData = await invoiceResponse.json();
+
+                                    if (invoiceData.success) {
+                                        alert(`Invoice ${invoiceData.invoice.invoice_number} created successfully!`);
+                                        // Redirect to invoice detail page
+                                        window.location.href = `invoice-detail.html?id=${invoiceData.invoice.id}`;
+                                    } else {
+                                        alert('Claim created, but failed to generate invoice: ' + (invoiceData.error || 'Unknown error'));
+                                        // Fallback to claim page
+                                        window.location.href = `claims.html?id=${result.claimId}`;
+                                    }
+                                } catch (invoiceError) {
+                                    console.error('Error generating invoice:', invoiceError);
+                                    alert('Claim created, but failed to generate invoice. Redirecting to claim page...');
+                                    window.location.href = `claims.html?id=${result.claimId}`;
+                                }
+                            } else {
+                                // Redirect to claims page
+                                window.location.href = `claims.html?id=${result.claimId}`;
+                            }
                         } else {
                             throw new Error(result.error || 'Failed to create claim');
                         }
@@ -1594,6 +1642,15 @@
             error.style.display = 'block';
         }
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+
+</html>
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;

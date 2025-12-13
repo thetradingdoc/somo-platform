@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Customer List - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/navigation.js"></script>
     <style>
@@ -560,10 +561,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-
+    
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
+    
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -1048,14 +1049,14 @@
 
             // For cannabis e-commerce (shop tenants), render commerce-style customer card
             const hasTherapist = patient.fhir_patient_id || false;
-            const orders = patient.total_orders || 0;
-            const spend = patient.total_spend || 0;
-            const lastOrder = patient.last_order_at
-                ? new Date(patient.last_order_at).toLocaleDateString()
-                : '—';
+                const orders = patient.total_orders || 0;
+                const spend = patient.total_spend || 0;
+                const lastOrder = patient.last_order_at
+                    ? new Date(patient.last_order_at).toLocaleDateString()
+                    : '—';
 
             // Always render commerce-style card (cannabis e-commerce focus)
-            return `
+                return `
                 <div class="customer-card">
                     <div class="customer-header">
                         <div class="customer-avatar">${initials}</div>
@@ -1089,7 +1090,7 @@
                         ${!hasTherapist ? `<button class="btn btn-secondary btn-sm" onclick="bookTherapist('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">Book Therapist</button>` : ''}
                     </div>
                 </div>
-            `;
+                `;
 
             // Extract EHR data summary (clinic tenants only)
             let ehrSummary = '';
@@ -1424,6 +1425,7 @@
             } catch (_) { }
         })();
     </script>
+    <script src="../assets/js/chat-widget.js"></script>
 </body>
 
 </html>

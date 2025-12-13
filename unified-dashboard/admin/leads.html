@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Search & Calling - DocLittle Admin</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/email-composer.css">
     <script src="../assets/js/config.js"></script>
     <style>
         :root {
@@ -25,11 +27,80 @@
             --gray-900: #111827;
         }
 
+        :root {
+            --bg: #05060a;
+            --panel: #101422;
+            --panel-2: #0b0f19;
+            --text: #f8fafc;
+            --muted: #8b94a7;
+            --border: #21283a;
+            --accent: #7c5dfa;
+            --accent-blue: #38bdf8;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--gray-50);
+            background: var(--bg);
+            color: var(--text);
             margin: 0;
             padding: 0;
+        }
+
+        .shell {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        aside {
+            width: 72px;
+            background: var(--panel-2);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            gap: 16px;
+        }
+
+        .logo {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent));
+            border-radius: 12px;
+            color: white;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .nav-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 18px;
+        }
+
+        .nav-icon.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-blue));
+            color: white;
+        }
+
+        .nav-icon:hover:not(.active) {
+            background: var(--panel);
+            color: var(--text);
+        }
+
+        main {
+            flex: 1;
+            overflow-y: auto;
         }
 
         .container {
@@ -43,7 +114,7 @@
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .header h1 {
@@ -62,7 +133,7 @@
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .search-form {
@@ -135,7 +206,7 @@
             background: white;
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             border: 1px solid var(--gray-200);
         }
 
@@ -278,7 +349,7 @@
             border-radius: 12px;
             padding: 24px;
             margin-top: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .saved-jobs-section h2 {
@@ -286,15 +357,244 @@
             font-size: 20px;
             color: var(--gray-900);
         }
+
+        /* Leads Inbox Table Styles */
+        .leads-inbox-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .inbox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .inbox-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: var(--gray-900);
+        }
+
+        .inbox-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .bulk-action-toolbar {
+            display: none;
+            background: var(--primary);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bulk-action-toolbar.active {
+            display: flex;
+        }
+
+        .bulk-action-toolbar .selected-count {
+            font-weight: 600;
+        }
+
+        .bulk-action-toolbar .btn {
+            padding: 6px 12px;
+            font-size: 14px;
+            background: white;
+            color: var(--primary);
+        }
+
+        .bulk-action-toolbar .btn:hover {
+            background: var(--gray-100);
+        }
+
+        .leads-table-container {
+            overflow-x: auto;
+        }
+
+        .leads-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .leads-table thead {
+            background: var(--gray-50);
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .leads-table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--gray-700);
+            white-space: nowrap;
+        }
+
+        .leads-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--gray-200);
+            vertical-align: middle;
+        }
+
+        .leads-table tbody tr {
+            transition: background 0.2s;
+        }
+
+        .leads-table tbody tr:hover {
+            background: var(--gray-50);
+        }
+
+        .leads-table tbody tr.selected {
+            background: #eff6ff;
+        }
+
+        .lead-title {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .activity-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        .activity-indicator.today {
+            color: var(--success);
+        }
+
+        .activity-indicator.future {
+            color: var(--gray-600);
+        }
+
+        .activity-indicator.overdue {
+            color: var(--danger);
+        }
+
+        .activity-indicator.no-activity {
+            color: var(--gray-400);
+        }
+
+        .label-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .label-hot {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .label-warm {
+            background: #fed7aa;
+            color: #9a3412;
+        }
+
+        .label-cold {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .label-qualified {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .label-new {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .source-badge {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .owner-badge {
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .action-menu-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            color: var(--gray-500);
+            font-size: 18px;
+        }
+
+        .action-menu-btn:hover {
+            color: var(--gray-700);
+        }
+
+        .filter-dropdown {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .filter-dropdown:hover {
+            border-color: var(--primary);
+        }
+
+        @media (max-width: 1200px) {
+            .leads-table {
+                font-size: 12px;
+            }
+
+            .leads-table th,
+            .leads-table td {
+                padding: 8px;
+            }
+        }
     </style>
 </head>
+
 <body>
+    <div class="shell">
+        <aside>
+            <div class="logo">DL</div>
+            <div class="nav-icon" onclick="window.location.href='index.html'" title="Dashboard">📊</div>
+            <div class="nav-icon" onclick="window.location.href='index.html?tab=tenants'" title="Tenants">🏥</div>
+            <div class="nav-icon" title="Leads">👥</div>
+            <div class="nav-icon" onclick="window.location.href='pipeline.html'" title="Pipeline">📈</div>
+            <div class="nav-icon" onclick="window.location.href='workflows.html'" title="Workflows">⚡</div>
+            <div class="nav-icon" onclick="window.location.href='index.html?tab=clients'" title="Clients">💼</div>
+        </aside>
+        <main>
     <div class="container">
+        <div style="margin-bottom: 16px;">
+          <a href="index.html" style="color: var(--muted); text-decoration: none; font-size: 13px;">Dashboard</a>
+          <span style="color: var(--muted); margin: 0 8px;">/</span>
+          <span style="color: var(--text); font-size: 13px;">Leads</span>
+        </div>
         <div class="header">
             <h1>Clinic Lead Generation & Sales</h1>
             <p>Find medical clinics and have our AI agent call them to sell our medical billing software</p>
             <p style="margin-top:12px;color:var(--gray-600);font-size:15px;">
-                Tip: search for <strong>“medical receptionist”</strong> in <strong>US,NY</strong> to mirror the curated API insight.
+                Tip: search for <strong>“medical receptionist”</strong> in <strong>US,NY</strong> to mirror the curated
+                API insight.
             </p>
         </div>
 
@@ -302,7 +602,8 @@
             <form class="search-form" id="searchForm">
                 <div class="form-group">
                     <label>Search Query</label>
-                    <input type="text" id="searchQuery" value="medical clinics" placeholder="e.g., medical clinics, healthcare facilities">
+                    <input type="text" id="searchQuery" value="medical clinics"
+                        placeholder="e.g., medical clinics, healthcare facilities">
                 </div>
                 <div class="form-group">
                     <label>Location</label>
@@ -324,9 +625,155 @@
         <div id="loadingMessage" class="loading" style="display: none;">Searching for clinic leads...</div>
         <div id="leadsResults"></div>
 
-        <div class="saved-jobs-section">
-            <h2>Saved Clinic Leads</h2>
-            <div id="savedLeads"></div>
+        <div class="leads-inbox-section">
+            <div class="inbox-header">
+                <h2>Leads Inbox</h2>
+                <div class="inbox-controls">
+                    <select class="filter-dropdown" id="filterSource">
+                        <option value="all">All Sources</option>
+                        <option value="google_search">Google Search</option>
+                        <option value="job_search">Job Search</option>
+                        <option value="self_signup">Self Signup</option>
+                        <option value="import">Import</option>
+                    </select>
+                    <select class="filter-dropdown" id="filterLabels">
+                        <option value="all">All Labels</option>
+                        <option value="hot">HOT</option>
+                        <option value="warm">WARM</option>
+                        <option value="cold">COLD</option>
+                        <option value="qualified">Qualified</option>
+                    </select>
+                    <select class="filter-dropdown" id="filterOwner">
+                        <option value="all">Everyone</option>
+                    </select>
+                    <button class="btn btn-sm" onclick="showAdvancedFilters()"
+                        style="padding: 8px 12px; border: 1px solid var(--gray-300); background: white;">
+                        <span style="font-size: 16px;">☰</span> Filter
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="showTemplatesSection()"
+                        style="padding: 8px 12px;">
+                        📧 Templates
+                    </button>
+                    <button class="btn btn-sm" onclick="showActivityTimeline()"
+                        style="padding: 8px 12px; border: 1px solid var(--gray-300); background: white;">
+                        📊 Activity Timeline
+                    </button>
+                </div>
+            </div>
+
+            <div class="bulk-action-toolbar" id="bulkActionToolbar">
+                <span class="selected-count" id="selectedCount">0 selected</span>
+                <button class="btn" onclick="bulkSendEmail()">📧 Send Email</button>
+                <button class="btn" onclick="bulkScheduleCall()">📞 Schedule Call</button>
+                <button class="btn" onclick="bulkAddLabel()">🏷️ Add Label</button>
+                <button class="btn" onclick="bulkChangeOwner()">👤 Change Owner</button>
+                <button class="btn" onclick="clearSelection()" style="margin-left: auto;">✕ Clear</button>
+            </div>
+
+            <div class="leads-table-container">
+                <table class="leads-table" id="leadsTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">
+                                <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)">
+                            </th>
+                            <th>Title</th>
+                            <th>Next Activity</th>
+                            <th>Source</th>
+                            <th>Labels</th>
+                            <th>Lead Created</th>
+                            <th>Owner</th>
+                            <th style="width: 50px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leadsTableBody">
+                        <tr>
+                            <td colspan="8" class="loading">Loading leads...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Activity Timeline Section -->
+        <div class="leads-inbox-section" id="activityTimelineSection" style="display: none;">
+            <div class="inbox-header">
+                <h2>📊 Activity Timeline</h2>
+                <div class="inbox-controls">
+                    <select class="filter-dropdown" id="timelineFilterType">
+                        <option value="all">All Activities</option>
+                        <option value="email">📧 Email</option>
+                        <option value="call">📞 Calls</option>
+                        <option value="sms">💬 SMS</option>
+                        <option value="note">📝 Notes</option>
+                    </select>
+                    <select class="filter-dropdown" id="timelineFilterLead">
+                        <option value="all">All Leads</option>
+                    </select>
+                </div>
+            </div>
+            <div id="activityTimelineList" style="max-height: 600px; overflow-y: auto;">
+                <div class="loading">Loading activities...</div>
+            </div>
+        </div>
+
+        <!-- Email Templates Section -->
+        <div class="leads-inbox-section" id="templatesSection" style="display: none;">
+            <div class="inbox-header">
+                <h2>📧 Email Templates</h2>
+                <button class="btn btn-primary" onclick="showCreateTemplateModal()">➕ Create Template</button>
+            </div>
+            <div id="templatesList" class="leads-table-container">
+                <table class="leads-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Subject</th>
+                            <th>Preview</th>
+                            <th>Variables</th>
+                            <th>Created</th>
+                            <th style="width: 100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="templatesTableBody">
+                        <tr><td colspan="6" class="loading">Loading templates...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Editor Modal -->
+    <div id="templateModal" class="email-composer-modal hidden">
+        <div class="email-composer-overlay"></div>
+        <div class="email-composer-container" style="max-width: 800px;">
+            <div class="email-composer-header">
+                <h2 id="templateModalTitle">Create Email Template</h2>
+                <button class="email-composer-close" onclick="closeTemplateModal()">×</button>
+            </div>
+            <div class="email-composer-body">
+                <div class="email-composer-field">
+                    <label>Template Name:</label>
+                    <input type="text" id="templateName" class="email-composer-input" placeholder="e.g., Initial Outreach" required>
+                </div>
+                <div class="email-composer-field">
+                    <label>Subject:</label>
+                    <input type="text" id="templateSubject" class="email-composer-input" placeholder="Email subject line" required>
+                </div>
+                <div class="email-composer-field">
+                    <label>Content:</label>
+                    <textarea id="templateContent" class="email-composer-textarea" rows="15" placeholder="Email content (HTML supported)" required></textarea>
+                </div>
+                <div class="email-composer-variables">
+                    <strong>Available variables:</strong><br>
+                    <code>{{clinic_name}}</code>, <code>{{location}}</code>, <code>{{clinic_phone}}</code>, 
+                    <code>{{clinic_email}}</code>, <code>{{pipeline_stage}}</code>, <code>{{lead_score}}</code>, <code>{{source}}</code>
+                </div>
+            </div>
+            <div class="email-composer-footer">
+                <button class="email-composer-cancel" onclick="closeTemplateModal()">Cancel</button>
+                <button class="email-composer-send" onclick="saveTemplate()">Save Template</button>
+            </div>
         </div>
     </div>
 
@@ -376,7 +823,7 @@
         // Display search results
         function displaySearchResults(leads) {
             const container = document.getElementById('leadsResults');
-            
+
             if (!leads || leads.length === 0) {
                 container.innerHTML = '<p class="loading">No clinics found</p>';
                 return;
@@ -401,7 +848,7 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (data.success) {
                     let message = 'Lead saved successfully!';
                     if (data.extracted_contacts) {
@@ -426,18 +873,18 @@
         function createLeadCard(lead, isSearchResult = false) {
             const card = document.createElement('div');
             card.className = 'lead-card';
-            
-            const statusClass = lead.status === 'new' ? 'status-open' : 
-                              lead.status === 'contacted' ? 'status-calling' : 
-                              lead.status === 'closed' ? 'status-closed' : 'status-open';
-            
+
+            const statusClass = lead.status === 'new' ? 'status-open' :
+                lead.status === 'contacted' ? 'status-calling' :
+                    lead.status === 'closed' ? 'status-closed' : 'status-open';
+
             const hasPhone = lead.clinic_phone && lead.clinic_phone !== 'null';
             const hasEmail = lead.clinic_email && lead.clinic_email !== 'null';
             const hasSourceUrl = lead.source_url && lead.source_url !== 'null';
-            
+
             // Qualification: Must have phone + email + be clinic
             const isQualified = hasPhone && hasEmail && lead.clinic_name;
-            
+
             let contactStatus = '';
             if (isQualified) {
                 contactStatus = '<div class="contact-status has-phone">✅ QUALIFIED (Phone + Email + Clinic)</div>';
@@ -452,7 +899,7 @@
             } else {
                 contactStatus = '<div class="contact-status missing">❌ Not Qualified (needs phone + email)</div>';
             }
-            
+
             card.innerHTML = `
                 <h3>${lead.clinic_name || lead.title || 'Medical Clinic'}</h3>
                 <div class="clinic-name">${lead.location || 'Location not specified'}</div>
@@ -484,7 +931,7 @@
                     <span class="loading-activity">Loading activity...</span>
                 </div>` : ''}
             `;
-            
+
             return card;
         }
 
@@ -492,7 +939,7 @@
         // Call clinic (agent sales call) - instant or scheduled
         async function callClinic(leadId, scheduleType = 'instant') {
             if (scheduleType === 'instant') {
-            if (!confirm('Have our AI agent call this clinic to sell our medical billing software?')) return;
+                if (!confirm('Have our AI agent call this clinic to sell our medical billing software?')) return;
             }
 
             try {
@@ -508,10 +955,10 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (data.success) {
                     if (scheduleType === 'instant') {
-                    alert(`✅ Agent call initiated!\n\nCall ID: ${data.call.call_id}\nRemaining calls this month: ${data.call_usage.calls_remaining}`);
+                        alert(`✅ Agent call initiated!\n\nCall ID: ${data.call.call_id}\nRemaining calls this month: ${data.call_usage.calls_remaining}`);
                     } else {
                         alert(`✅ Call scheduled successfully!\n\nSchedule: ${data.schedule || 'Scheduled'}\nRemaining calls this month: ${data.call_usage.calls_remaining}`);
                     }
@@ -529,7 +976,7 @@
         // Schedule call with options
         async function scheduleCall(leadId) {
             const scheduleType = prompt('Schedule call:\n\nEnter "weekly" for weekly calls\nEnter "monthly" for monthly calls\nOr enter a date (YYYY-MM-DD):');
-            
+
             if (!scheduleType) return;
 
             let schedule = scheduleType.toLowerCase();
@@ -553,7 +1000,7 @@
                     headers: getAuthHeaders()
                 });
                 const data = await response.json();
-                
+
                 if (data.success && data.activities) {
                     const container = document.getElementById(`activity-${leadId}`);
                     if (container) {
@@ -561,7 +1008,7 @@
                         const emails = data.activities.filter(a => a.activity_type === 'email').length;
                         const sms = data.activities.filter(a => a.activity_type === 'sms').length;
                         const lastActivity = data.activities.length > 0 ? new Date(data.activities[0].activity_date).toLocaleDateString() : 'Never';
-                        
+
                         let activityText = '';
                         if (calls > 0 || emails > 0 || sms > 0) {
                             const parts = [];
@@ -572,7 +1019,7 @@
                         } else {
                             activityText = 'No activity yet';
                         }
-                        
+
                         container.innerHTML = activityText;
                     }
                 }
@@ -596,7 +1043,7 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (data.success) {
                     if (data.extracted.phone || data.extracted.email) {
                         alert(`Contact info extracted!\nPhone: ${data.extracted.phone || 'Not found'}\nEmail: ${data.extracted.email || 'Not found'}`);
@@ -612,15 +1059,51 @@
             }
         }
 
-        // Email clinic
+        // Email clinic - opens email composer modal
         async function emailClinic(leadId) {
             const lead = await getLeadDetails(leadId);
-            if (lead && lead.clinic_email) {
-                const subject = encodeURIComponent(`DocLittle Medical Billing Software - Quick Demo Request`);
-                const body = encodeURIComponent(`Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`);
-                window.location.href = `mailto:${lead.clinic_email}?subject=${subject}&body=${body}`;
-            } else {
+            if (!lead || !lead.clinic_email) {
                 alert('Email not available for this lead');
+                return;
+            }
+
+            // Open lead email composer
+            if (window.LeadEmailComposer) {
+                window.LeadEmailComposer.open({
+                    leadId: leadId,
+                    lead: lead,
+                    recipient: lead.clinic_email
+                });
+            } else {
+                // Fallback to simple prompt if composer not loaded
+                const subject = prompt(`Send email to ${lead.clinic_name || 'lead'}\n\nEnter email subject:`, 'DocLittle Medical Billing Software - Quick Demo Request');
+                if (!subject) return;
+
+                const content = prompt(`Enter email content (HTML supported):`,
+                    `Hi ${lead.clinic_name || 'there'},\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`);
+                if (!content) return;
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/send-email`, {
+                        method: 'POST',
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ subject, content })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(`✅ Email sent successfully to ${lead.clinic_email}`);
+                        loadSavedLeads();
+                    } else {
+                        alert(`❌ Failed to send email: ${data.message || data.error}`);
+                    }
+                } catch (error) {
+                    alert(`❌ Error sending email: ${error.message}`);
+                }
             }
         }
 
@@ -642,7 +1125,10 @@
             window.location.href = `/admin/crm-lead.html?id=${leadId}`;
         }
 
-        // Load saved jobs
+        // Selected leads for bulk actions
+        let selectedLeads = new Set();
+
+        // Load saved leads in table format
         async function loadSavedLeads() {
             try {
                 const response = await fetch(`${API_BASE}/api/admin/leads`, {
@@ -650,41 +1136,1162 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (data.success) {
-                    const container = document.getElementById('savedLeads');
-                    
+                    const tbody = document.getElementById('leadsTableBody');
+
                     if (data.leads.length === 0) {
-                        container.innerHTML = '<p class="loading">No saved clinic leads yet. Search for clinics and save them to start calling!</p>';
+                        tbody.innerHTML = '<tr><td colspan="8" class="loading">No saved clinic leads yet. Search for clinics and save them to start calling!</td></tr>';
                         return;
                     }
 
-                    // Show call usage stats
-                    const statsHtml = data.call_usage ? `
-                        <div style="background: #f3f4f6; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-                            <strong>Monthly Call Usage:</strong> ${data.call_usage.calls_used} / ${data.call_usage.limit} calls used
-                            (${data.call_usage.calls_remaining} remaining)
-                        </div>
-                    ` : '';
+                    // Clear existing rows
+                    tbody.innerHTML = '';
 
-                    container.innerHTML = statsHtml + '<div class="leads-grid"></div>';
-                    const grid = container.querySelector('.leads-grid');
+                    // Render each lead as a table row
+                    for (const lead of data.leads) {
+                        const row = createLeadTableRow(lead);
+                        tbody.appendChild(row);
+                        // Load next activity for this lead (async, updates indicator)
+                        loadNextActivity(lead.id);
+                    }
 
-                    data.leads.forEach(lead => {
-                        const card = createLeadCard(lead, false);
-                        grid.appendChild(card);
-                        // Load activity for each lead
-                        loadLeadActivity(lead.id);
-                    });
+                    // Update call usage stats in header if available
+                    if (data.call_usage) {
+                        const header = document.querySelector('.inbox-header h2');
+                        if (header) {
+                            header.innerHTML = `Leads Inbox <span style="font-size: 14px; font-weight: normal; color: var(--gray-600);">(${data.leads.length} leads • ${data.call_usage.calls_remaining} calls remaining)</span>`;
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error loading saved leads:', error);
+                const tbody = document.getElementById('leadsTableBody');
+                tbody.innerHTML = '<tr><td colspan="8" class="error">Error loading leads: ' + error.message + '</td></tr>';
             }
         }
+
+        // Create a table row for a lead
+        function createLeadTableRow(lead) {
+            const row = document.createElement('tr');
+            row.dataset.leadId = lead.id;
+
+            // Get labels for this lead
+            const labels = getLeadLabels(lead);
+            const labelsHtml = labels.map(label =>
+                `<span class="label-badge label-${label.class}">${label.text}</span>`
+            ).join('');
+
+            // Get next activity indicator
+            const nextActivity = getNextActivityIndicator(lead);
+
+            // Get source badge
+            const sourceText = formatSource(lead.source || 'google_search');
+
+            // Get owner
+            const ownerText = lead.owner_id || 'Unassigned';
+
+            // Get created date
+            const createdText = formatRelativeDate(lead.created_at);
+
+            row.innerHTML = `
+                <td>
+                    <input type="checkbox" class="lead-checkbox" value="${lead.id}" onchange="toggleLeadSelection('${lead.id}', this.checked)">
+                </td>
+                <td>
+                    <div class="lead-title">${lead.clinic_name || lead.title || 'Medical Clinic'}</div>
+                    <div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">
+                        ${lead.location || 'No location'}
+                        </div>
+                </td>
+                <td>
+                    <div class="activity-indicator ${nextActivity.class}" id="activity-${lead.id}" title="${lead.next_action || 'No scheduled activity'}">
+                        ${nextActivity.icon} ${nextActivity.text}
+                    </div>
+                </td>
+                <td>
+                    <span class="source-badge">${sourceText}</span>
+                </td>
+                <td>
+                    ${labelsHtml || '<span style="color: var(--gray-400);">No labels</span>'}
+                </td>
+                <td>
+                    <span style="color: var(--gray-600);">${createdText}</span>
+                </td>
+                <td>
+                    <span class="owner-badge">${ownerText}</span>
+                </td>
+                <td>
+                    <button class="action-menu-btn" onclick="showLeadActionMenu('${lead.id}', event)">⋯</button>
+                </td>
+            `;
+
+            return row;
+        }
+
+        // Get labels for a lead based on score and qualification
+        function getLeadLabels(lead) {
+            const labels = [];
+
+            // Score-based labels
+            const score = lead.lead_score || 0;
+            if (score >= 70) {
+                labels.push({ text: 'HOT', class: 'hot' });
+            } else if (score >= 40) {
+                labels.push({ text: 'WARM', class: 'warm' });
+            } else if (score > 0) {
+                labels.push({ text: 'COLD', class: 'cold' });
+            }
+
+            // Qualification label
+            if (lead.is_qualified) {
+                labels.push({ text: 'QUALIFIED', class: 'qualified' });
+            }
+
+            // Pipeline stage label
+            if (lead.pipeline_stage && lead.pipeline_stage !== 'new') {
+                labels.push({ text: lead.pipeline_stage.toUpperCase(), class: 'new' });
+            }
+
+            return labels;
+        }
+
+        // Get next activity indicator
+        function getNextActivityIndicator(lead) {
+            const now = new Date();
+            // Use next_activity_date if available (from API), otherwise fall back to follow_up_date
+            const activityDate = lead.next_activity_date ? new Date(lead.next_activity_date) :
+                (lead.follow_up_date ? new Date(lead.follow_up_date) : null);
+            const nextAction = lead.next_action;
+
+            if (activityDate && !isNaN(activityDate.getTime())) {
+                const diffMs = activityDate - now;
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+
+                if (diffDays < 0) {
+                    return { icon: '⚠️', text: 'Overdue', class: 'overdue' };
+                } else if (diffDays === 0) {
+                    if (diffHours < 0) {
+                        return { icon: '⚠️', text: 'Overdue', class: 'overdue' };
+                    } else if (diffHours < 1) {
+                        return { icon: '📞', text: 'Now', class: 'today' };
+                    } else {
+                        const time = activityDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                        return { icon: '📞', text: `Today at ${time}`, class: 'today' };
+                    }
+                } else if (diffDays === 1) {
+                    const time = activityDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                    return { icon: '📞', text: `Tomorrow at ${time}`, class: 'future' };
+                } else if (diffDays <= 7) {
+                    return { icon: '📞', text: activityDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), class: 'future' };
+                } else {
+                    return { icon: '📞', text: activityDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), class: 'future' };
+                }
+            }
+
+            if (nextAction) {
+                return { icon: '📋', text: nextAction, class: 'future' };
+            }
+
+            return { icon: '⚠️', text: 'No activity', class: 'no-activity' };
+        }
+
+        // Load next activity for a lead (async, updates the indicator)
+        async function loadNextActivity(leadId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/activities`, {
+                    headers: getAuthHeaders()
+                });
+                const data = await response.json();
+
+                if (data.success && data.activities && data.activities.length > 0) {
+                    // Find the next scheduled activity
+                    const scheduledActivity = data.activities.find(a => {
+                        try {
+                            const metadata = a.metadata ? JSON.parse(a.metadata) : {};
+                            return metadata.status === 'scheduled' && metadata.scheduled_date;
+                        } catch {
+                            return false;
+                        }
+                    });
+
+                    if (scheduledActivity) {
+                        const metadata = JSON.parse(scheduledActivity.metadata || '{}');
+                        const scheduledDate = metadata.scheduled_date ? new Date(metadata.scheduled_date) : null;
+                        const activityType = scheduledActivity.activity_type || 'call';
+
+                        if (scheduledDate) {
+                            // Determine icon based on activity type
+                            let icon = '📞';
+                            if (activityType === 'email') icon = '📧';
+                            else if (activityType === 'sms') icon = '💬';
+
+                            const indicator = getNextActivityIndicator({
+                                follow_up_date: scheduledDate.toISOString(),
+                                next_action: scheduledActivity.activity_subject || null
+                            });
+
+                            const activityEl = document.getElementById(`activity-${leadId}`);
+                            if (activityEl) {
+                                activityEl.className = `activity-indicator ${indicator.class}`;
+                                activityEl.innerHTML = `${icon} ${indicator.text}`;
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading next activity:', error);
+            }
+        }
+
+        // Update activity indicator for a specific lead row
+        function updateActivityIndicator(leadId, lead) {
+            const activityEl = document.getElementById(`activity-${leadId}`);
+            if (activityEl) {
+                const indicator = getNextActivityIndicator(lead);
+                activityEl.className = `activity-indicator ${indicator.class}`;
+                activityEl.innerHTML = `${indicator.icon} ${indicator.text}`;
+            }
+        }
+
+        // Format source text
+        function formatSource(source) {
+            const sourceMap = {
+                'google_search': 'Google Search',
+                'job_search': 'Job Search',
+                'self_signup': 'Self Signup',
+                'import': 'Import',
+                'manual': 'Manual'
+            };
+            return sourceMap[source] || source || 'Unknown';
+        }
+
+        // Format relative date
+        function formatRelativeDate(dateString) {
+            if (!dateString) return 'Unknown';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            if (diffDays < 7) return `${diffDays} days ago`;
+            if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+            if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+            return `${Math.floor(diffDays / 365)} years ago`;
+        }
+
+        // Bulk selection functions
+        function toggleSelectAll(checkbox) {
+            const checkboxes = document.querySelectorAll('.lead-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = checkbox.checked;
+                toggleLeadSelection(cb.value, checkbox.checked);
+            });
+        }
+
+        function toggleLeadSelection(leadId, isSelected) {
+            if (isSelected) {
+                selectedLeads.add(leadId);
+            } else {
+                selectedLeads.delete(leadId);
+            }
+
+            // Update row styling
+            const row = document.querySelector(`tr[data-lead-id="${leadId}"]`);
+            if (row) {
+                row.classList.toggle('selected', isSelected);
+            }
+
+            // Update bulk action toolbar
+            updateBulkActionToolbar();
+        }
+
+        function updateBulkActionToolbar() {
+            const toolbar = document.getElementById('bulkActionToolbar');
+            const countEl = document.getElementById('selectedCount');
+
+            if (selectedLeads.size > 0) {
+                toolbar.classList.add('active');
+                countEl.textContent = `${selectedLeads.size} selected`;
+            } else {
+                toolbar.classList.remove('active');
+            }
+        }
+
+        function clearSelection() {
+            selectedLeads.clear();
+            document.querySelectorAll('.lead-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('tr.selected').forEach(row => row.classList.remove('selected'));
+            document.getElementById('selectAll').checked = false;
+            updateBulkActionToolbar();
+        }
+
+        // Bulk action functions
+        async function bulkSendEmail() {
+            if (selectedLeads.size === 0) return;
+
+            // Get first lead for template
+            const leadIds = Array.from(selectedLeads);
+            const firstLeadId = leadIds[0];
+            const firstLead = await getLeadDetails(firstLeadId);
+
+            if (!firstLead) {
+                alert('Could not load lead details');
+                return;
+            }
+
+            // Open composer with bulk mode
+            if (window.LeadEmailComposer) {
+                // Create a bulk email composer instance or modify existing one
+                window.LeadEmailComposer.openBulk({
+                    leadIds: leadIds,
+                    lead: firstLead, // Use first lead for template variables
+                    recipient: `${selectedLeads.size} leads`
+                });
+            } else {
+                // Fallback to simple prompt
+                const subject = prompt(`Send email to ${selectedLeads.size} leads\n\nEnter email subject:`, 'DocLittle Medical Billing Software - Quick Demo Request');
+                if (!subject) return;
+
+                const content = prompt(`Enter email content (HTML supported):`,
+                    `Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`);
+                if (!content) return;
+
+                // Send emails to all selected leads
+                let successCount = 0;
+                let failCount = 0;
+
+                for (const leadId of leadIds) {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/send-email`, {
+                            method: 'POST',
+                            headers: {
+                                ...getAuthHeaders(),
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ subject, content })
+                        });
+
+                        const data = await response.json();
+                        if (data.success) {
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } catch (error) {
+                        failCount++;
+                        console.error(`Error sending email to lead ${leadId}:`, error);
+                    }
+                }
+
+                alert(`Email sent!\n\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
+                clearSelection();
+                loadSavedLeads();
+            }
+        }
+
+        function bulkScheduleCall() {
+            if (selectedLeads.size === 0) return;
+            alert(`Schedule call for ${selectedLeads.size} leads - Coming soon!`);
+        }
+
+        function bulkAddLabel() {
+            if (selectedLeads.size === 0) return;
+            alert(`Add label to ${selectedLeads.size} leads - Coming soon!`);
+        }
+
+        function bulkChangeOwner() {
+            if (selectedLeads.size === 0) return;
+            alert(`Change owner for ${selectedLeads.size} leads - Coming soon!`);
+        }
+
+        // Lead action menu
+        function showLeadActionMenu(leadId, event) {
+            event.stopPropagation();
+            // TODO: Implement dropdown menu
+            const actions = [
+                { label: 'View Details', action: () => viewLead(leadId) },
+                { label: 'Send Email', action: () => emailClinic(leadId) },
+                { label: 'Schedule Call', action: () => scheduleCall(leadId) },
+                { label: 'Add Label', action: () => alert('Add label - Coming soon!') },
+                { label: 'Change Owner', action: () => alert('Change owner - Coming soon!') },
+                { label: 'Move Pipeline', action: () => window.location.href = `/admin/pipeline.html?lead=${leadId}` }
+            ];
+
+            // Simple implementation - show actions in prompt for now
+            const actionText = actions.map((a, i) => `${i + 1}. ${a.label}`).join('\n');
+            const choice = prompt(`Actions for lead:\n\n${actionText}\n\nEnter number:`);
+            const index = parseInt(choice) - 1;
+            if (index >= 0 && index < actions.length) {
+                actions[index].action();
+            }
+        }
+
+        // Filter functions
+        let currentFilters = {
+            source: 'all',
+            labels: 'all',
+            owner: 'all'
+        };
+
+        document.getElementById('filterSource').addEventListener('change', (e) => {
+            currentFilters.source = e.target.value;
+            applyFilters();
+        });
+
+        document.getElementById('filterLabels').addEventListener('change', (e) => {
+            currentFilters.labels = e.target.value;
+            applyFilters();
+        });
+
+        document.getElementById('filterOwner').addEventListener('change', (e) => {
+            currentFilters.owner = e.target.value;
+            applyFilters();
+        });
+
+        function applyFilters() {
+            const rows = document.querySelectorAll('#leadsTableBody tr');
+            rows.forEach(row => {
+                const leadId = row.dataset.leadId;
+                if (!leadId) return; // Skip loading/error rows
+
+                let show = true;
+
+                // Source filter
+                if (currentFilters.source !== 'all') {
+                    const sourceBadge = row.querySelector('.source-badge');
+                    const sourceText = sourceBadge ? sourceBadge.textContent.toLowerCase() : '';
+                    const filterSource = currentFilters.source.replace('_', ' ');
+                    if (!sourceText.includes(filterSource)) {
+                        show = false;
+                    }
+                }
+
+                // Labels filter
+                if (currentFilters.labels !== 'all' && show) {
+                    const labels = row.querySelectorAll('.label-badge');
+                    let hasLabel = false;
+                    labels.forEach(label => {
+                        if (label.textContent.includes(currentFilters.labels.toUpperCase())) {
+                            hasLabel = true;
+                        }
+                    });
+                    if (!hasLabel) {
+                        show = false;
+                    }
+                }
+
+                // Owner filter
+                if (currentFilters.owner !== 'all' && show) {
+                    const ownerBadge = row.querySelector('.owner-badge');
+                    const ownerText = ownerBadge ? ownerBadge.textContent : '';
+                    if (ownerText !== currentFilters.owner) {
+                        show = false;
+                    }
+                }
+
+                row.style.display = show ? '' : 'none';
+            });
+        }
+
+        function showAdvancedFilters() {
+            alert('Advanced filters - Coming soon!\n\nYou can use the dropdown filters above for quick filtering.');
+        }
+
+        // Lead Email Composer Class
+        class LeadEmailComposer {
+            constructor() {
+                this.modal = null;
+                this.templates = [];
+                this.currentLead = null;
+                this.init();
+            }
+
+            init() {
+                this.createModal();
+                this.loadTemplates();
+            }
+
+            createModal() {
+                const modal = document.createElement('div');
+                modal.id = 'lead-email-composer-modal';
+                modal.className = 'email-composer-modal hidden';
+                modal.innerHTML = `
+                    <div class="email-composer-overlay"></div>
+                    <div class="email-composer-container" style="max-width: 700px;">
+                        <div class="email-composer-header">
+                            <h2>📧 Compose Email to Lead</h2>
+                            <button class="email-composer-close" aria-label="Close">×</button>
+                        </div>
+                        <div class="email-composer-body">
+                            <div class="email-composer-field">
+                                <label>To:</label>
+                                <input type="email" id="lead-email-to" class="email-composer-input" readonly>
+                            </div>
+                            <div class="email-composer-field">
+                                <label>Template:</label>
+                                <select id="lead-email-template" class="email-composer-select">
+                                    <option value="">-- Select Template (Optional) --</option>
+                                </select>
+                            </div>
+                            <div class="email-composer-field">
+                                <label>Subject:</label>
+                                <input type="text" id="lead-email-subject" class="email-composer-input" placeholder="Email subject" required>
+                            </div>
+                            <div class="email-composer-field">
+                                <label>Message:</label>
+                                <textarea id="lead-email-content" class="email-composer-textarea" rows="12" placeholder="Email content (HTML supported)" required></textarea>
+                            </div>
+                            <div class="email-composer-variables">
+                                <strong>Available variables:</strong><br>
+                                <code>{{clinic_name}}</code>, <code>{{location}}</code>, <code>{{clinic_phone}}</code>, 
+                                <code>{{clinic_email}}</code>, <code>{{pipeline_stage}}</code>, <code>{{lead_score}}</code>
+                            </div>
+                            <div class="email-composer-field" style="margin-top: 20px;">
+                                <label style="display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="lead-email-schedule">
+                                    <span>Schedule for later</span>
+                                </label>
+                                <input type="datetime-local" id="lead-email-schedule-date" class="email-composer-input" style="margin-top: 8px; display: none;">
+                            </div>
+                        </div>
+                        <div class="email-composer-footer">
+                            <button class="email-composer-cancel">Cancel</button>
+                            <button class="email-composer-send">Send Email</button>
+                        </div>
+                    </div>
+                `;
+
+                document.body.appendChild(modal);
+                this.modal = modal;
+
+                // Event listeners
+                modal.querySelector('.email-composer-overlay').addEventListener('click', () => this.close());
+                modal.querySelector('.email-composer-close').addEventListener('click', () => this.close());
+                modal.querySelector('.email-composer-cancel').addEventListener('click', () => this.close());
+                modal.querySelector('.email-composer-send').addEventListener('click', () => this.sendEmail());
+                modal.querySelector('#lead-email-template').addEventListener('change', (e) => this.loadTemplate(e.target.value));
+                modal.querySelector('#lead-email-schedule').addEventListener('change', (e) => {
+                    const dateInput = modal.querySelector('#lead-email-schedule-date');
+                    dateInput.style.display = e.target.checked ? 'block' : 'none';
+                    if (e.target.checked) {
+                        // Set default to tomorrow at 9 AM
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        tomorrow.setHours(9, 0, 0, 0);
+                        dateInput.value = tomorrow.toISOString().slice(0, 16);
+                    }
+                });
+
+                // Close on Escape
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
+                        this.close();
+                    }
+                });
+            }
+
+            async loadTemplates() {
+                try {
+                    // Use admin templates endpoint
+                    const response = await fetch(`${API_BASE}/api/admin/leads/templates?type=email`, {
+                        headers: getAuthHeaders()
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.templates = data.templates || [];
+                        this.populateTemplateSelect();
+                    } else {
+                        // Fallback to automation templates if admin endpoint fails
+                        try {
+                            const fallbackResponse = await fetch(`${API_BASE}/api/automation/templates?type=email`, {
+                                headers: getAuthHeaders()
+                            });
+                            if (fallbackResponse.ok) {
+                                const fallbackData = await fallbackResponse.json();
+                                this.templates = fallbackData.templates || [];
+                                this.populateTemplateSelect();
+                            }
+                        } catch (fallbackError) {
+                            console.error('Failed to load templates from fallback:', fallbackError);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to load templates:', error);
+                }
+            }
+
+            populateTemplateSelect() {
+                const select = this.modal.querySelector('#lead-email-template');
+                select.innerHTML = '<option value="">-- Select Template (Optional) --</option>';
+                this.templates.forEach(template => {
+                    const option = document.createElement('option');
+                    option.value = template.id;
+                    option.textContent = template.name;
+                    select.appendChild(option);
+                });
+            }
+
+            loadTemplate(templateId) {
+                const template = this.templates.find(t => t.id === templateId);
+                if (!template) return;
+
+                const subjectInput = this.modal.querySelector('#lead-email-subject');
+                const contentInput = this.modal.querySelector('#lead-email-content');
+
+                // Replace variables in template
+                const subject = this.replaceVariables(template.subject || '', this.currentLead);
+                const content = this.replaceVariables(template.content || '', this.currentLead);
+
+                subjectInput.value = subject;
+                contentInput.value = content;
+            }
+
+            replaceVariables(text, lead) {
+                if (!text || !lead) return text;
+
+                const variables = {
+                    '{{clinic_name}}': lead.clinic_name || 'Clinic',
+                    '{{location}}': lead.location || 'Location',
+                    '{{clinic_phone}}': lead.clinic_phone || 'Phone',
+                    '{{clinic_email}}': lead.clinic_email || 'Email',
+                    '{{pipeline_stage}}': lead.pipeline_stage || 'new',
+                    '{{lead_score}}': lead.lead_score || 0,
+                    '{{source}}': lead.source || 'unknown'
+                };
+
+                let result = text;
+                Object.keys(variables).forEach(key => {
+                    result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), variables[key]);
+                });
+
+                return result;
+            }
+
+            open(options = {}) {
+                this.currentLead = options.lead;
+                this.isBulkMode = false;
+                this.bulkLeadIds = null;
+
+                const toInput = this.modal.querySelector('#lead-email-to');
+                const subjectInput = this.modal.querySelector('#lead-email-subject');
+                const contentInput = this.modal.querySelector('#lead-email-content');
+                const templateSelect = this.modal.querySelector('#lead-email-template');
+                const scheduleCheckbox = this.modal.querySelector('#lead-email-schedule');
+                const scheduleDateInput = this.modal.querySelector('#lead-email-schedule-date');
+
+                // Set recipient
+                toInput.value = options.recipient || '';
+                toInput.readOnly = false;
+
+                // Reset form
+                templateSelect.value = '';
+                subjectInput.value = '';
+                contentInput.value = '';
+                scheduleCheckbox.checked = false;
+                scheduleDateInput.style.display = 'none';
+
+                // Set default subject and content
+                if (options.lead) {
+                    subjectInput.value = `DocLittle Medical Billing Software - Quick Demo Request`;
+                    contentInput.value = `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`;
+                }
+
+                // Store lead ID
+                this.leadId = options.leadId;
+
+                this.modal.classList.remove('hidden');
+                subjectInput.focus();
+            }
+
+            openBulk(options = {}) {
+                this.currentLead = options.lead;
+                this.isBulkMode = true;
+                this.bulkLeadIds = options.leadIds || [];
+
+                const toInput = this.modal.querySelector('#lead-email-to');
+                const subjectInput = this.modal.querySelector('#lead-email-subject');
+                const contentInput = this.modal.querySelector('#lead-email-content');
+                const templateSelect = this.modal.querySelector('#lead-email-template');
+                const scheduleCheckbox = this.modal.querySelector('#lead-email-schedule');
+                const scheduleDateInput = this.modal.querySelector('#lead-email-schedule-date');
+                const header = this.modal.querySelector('.email-composer-header h2');
+
+                // Update header
+                header.textContent = `📧 Compose Email to ${this.bulkLeadIds.length} Leads`;
+
+                // Set recipient (read-only for bulk)
+                toInput.value = options.recipient || `${this.bulkLeadIds.length} leads`;
+                toInput.readOnly = true;
+
+                // Reset form
+                templateSelect.value = '';
+                subjectInput.value = '';
+                contentInput.value = '';
+                scheduleCheckbox.checked = false;
+                scheduleDateInput.style.display = 'none';
+
+                // Set default subject and content
+                subjectInput.value = `DocLittle Medical Billing Software - Quick Demo Request`;
+                contentInput.value = `Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`;
+
+                this.leadId = null; // No single lead ID in bulk mode
+
+                this.modal.classList.remove('hidden');
+                subjectInput.focus();
+            }
+
+            close() {
+                this.modal.classList.add('hidden');
+                this.currentLead = null;
+                this.leadId = null;
+            }
+
+            async sendEmail() {
+                const toInput = this.modal.querySelector('#lead-email-to');
+                const subjectInput = this.modal.querySelector('#lead-email-subject');
+                const contentInput = this.modal.querySelector('#lead-email-content');
+                const templateSelect = this.modal.querySelector('#lead-email-template');
+                const scheduleCheckbox = this.modal.querySelector('#lead-email-schedule');
+                const scheduleDateInput = this.modal.querySelector('#lead-email-schedule-date');
+
+                const subject = subjectInput.value.trim();
+                const content = contentInput.value.trim();
+                const templateId = templateSelect.value || null;
+                const isScheduled = scheduleCheckbox.checked;
+                const scheduleDate = isScheduled ? scheduleDateInput.value : null;
+
+                if (!subject || !content) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+
+                if (isScheduled && !scheduleDate) {
+                    alert('Please select a date and time for scheduling');
+                    return;
+                }
+
+                // Bulk mode: send to multiple leads
+                if (this.isBulkMode && this.bulkLeadIds && this.bulkLeadIds.length > 0) {
+                    let successCount = 0;
+                    let failCount = 0;
+
+                    for (const leadId of this.bulkLeadIds) {
+                        try {
+                            // Get lead details for variable replacement
+                            const lead = await getLeadDetails(leadId);
+                            if (!lead || !lead.clinic_email) {
+                                failCount++;
+                                continue;
+                            }
+
+                            // Replace variables for this specific lead
+                            const leadSubject = this.replaceVariables(subject, lead);
+                            const leadContent = this.replaceVariables(content, lead);
+
+                            const response = await fetch(`${API_BASE}/api/admin/leads/${leadId}/send-email`, {
+                                method: 'POST',
+                                headers: {
+                                    ...getAuthHeaders(),
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    subject: leadSubject,
+                                    content: leadContent,
+                                    template_id: templateId,
+                                    schedule_date: scheduleDate
+                                })
+                            });
+
+                            const data = await response.json();
+                            if (data.success) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                            }
+                        } catch (error) {
+                            failCount++;
+                            console.error(`Error sending email to lead ${leadId}:`, error);
+                        }
+                    }
+
+                    if (isScheduled) {
+                        alert(`✅ Email scheduled for ${successCount} leads!\n\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
+                    } else {
+                        alert(`✅ Email sent!\n\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`);
+                    }
+
+                    this.close();
+                    clearSelection();
+                    loadSavedLeads();
+                    return;
+                }
+
+                // Single lead mode
+                if (!this.leadId) {
+                    alert('No lead selected');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/admin/leads/${this.leadId}/send-email`, {
+                        method: 'POST',
+                        headers: {
+                            ...getAuthHeaders(),
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            subject,
+                            content,
+                            template_id: templateId,
+                            schedule_date: scheduleDate
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.message || data.error || 'Failed to send email');
+                    }
+
+                    if (isScheduled) {
+                        alert(`✅ Email scheduled successfully for ${new Date(scheduleDate).toLocaleString()}`);
+                    } else {
+                        alert('✅ Email sent successfully!');
+                    }
+
+                    this.close();
+                    loadSavedLeads();
+                } catch (error) {
+                    console.error('Send email error:', error);
+                    alert(`❌ Failed to send email: ${error.message}`);
+                }
+            }
+        }
+
+        // Initialize lead email composer
+        window.LeadEmailComposer = new LeadEmailComposer();
+
+        // Templates Management
+        let currentEditingTemplateId = null;
+
+        function showTemplatesSection() {
+            const templatesSection = document.getElementById('templatesSection');
+            const leadsInbox = document.querySelector('.leads-inbox-section');
+            const activityTimeline = document.getElementById('activityTimelineSection');
+            
+            activityTimeline.style.display = 'none';
+            if (templatesSection.style.display === 'none') {
+                templatesSection.style.display = 'block';
+                leadsInbox.style.display = 'none';
+                loadTemplates();
+            } else {
+                templatesSection.style.display = 'none';
+                leadsInbox.style.display = 'block';
+            }
+        }
+
+        async function showActivityTimeline() {
+            const activityTimeline = document.getElementById('activityTimelineSection');
+            const leadsInbox = document.querySelector('.leads-inbox-section');
+            const templatesSection = document.getElementById('templatesSection');
+            
+            templatesSection.style.display = 'none';
+            if (activityTimeline.style.display === 'none') {
+                activityTimeline.style.display = 'block';
+                leadsInbox.style.display = 'none';
+                await loadActivityTimeline();
+            } else {
+                activityTimeline.style.display = 'none';
+                leadsInbox.style.display = 'block';
+            }
+        }
+
+        async function loadActivityTimeline() {
+            try {
+                // Get all leads first
+                const leadsResponse = await fetch(`${API_BASE}/api/admin/leads`, {
+                    headers: getAuthHeaders()
+                });
+                const leadsData = await leadsResponse.json();
+                
+                if (!leadsData.success) {
+                    throw new Error('Failed to load leads');
+                }
+
+                // Get activities for all leads
+                const allActivities = [];
+                for (const lead of leadsData.leads.slice(0, 50)) { // Limit to first 50 leads for performance
+                    try {
+                        const activitiesResponse = await fetch(`${API_BASE}/api/admin/leads/${lead.id}/activities`, {
+                            headers: getAuthHeaders()
+                        });
+                        const activitiesData = await activitiesResponse.json();
+                        
+                        if (activitiesData.success && activitiesData.activities) {
+                            activitiesData.activities.forEach(activity => {
+                                allActivities.push({
+                                    ...activity,
+                                    lead: lead
+                                });
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`Error loading activities for lead ${lead.id}:`, error);
+                    }
+                }
+
+                // Sort by date (most recent first)
+                allActivities.sort((a, b) => {
+                    const dateA = new Date(a.activity_date || a.created_at);
+                    const dateB = new Date(b.activity_date || b.created_at);
+                    return dateB - dateA;
+                });
+
+                // Render timeline
+                renderActivityTimeline(allActivities);
+
+            } catch (error) {
+                console.error('Error loading activity timeline:', error);
+                document.getElementById('activityTimelineList').innerHTML = '<div class="error">Error loading activities: ' + error.message + '</div>';
+            }
+        }
+
+        function renderActivityTimeline(activities) {
+            const container = document.getElementById('activityTimelineList');
+            
+            if (activities.length === 0) {
+                container.innerHTML = '<div class="loading">No activities found</div>';
+                return;
+            }
+
+            // Group by date
+            const groupedByDate = {};
+            activities.forEach(activity => {
+                const date = new Date(activity.activity_date || activity.created_at);
+                const dateKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                
+                if (!groupedByDate[dateKey]) {
+                    groupedByDate[dateKey] = [];
+                }
+                groupedByDate[dateKey].push(activity);
+            });
+
+            let html = '';
+            Object.keys(groupedByDate).sort((a, b) => new Date(b) - new Date(a)).forEach(dateKey => {
+                html += `<div style="margin-bottom: 32px;">
+                    <h3 style="font-size: 16px; font-weight: 600; color: var(--gray-700); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--gray-200);">${dateKey}</h3>
+                `;
+
+                groupedByDate[dateKey].forEach(activity => {
+                    const icon = activity.activity_type === 'email' ? '📧' : 
+                                activity.activity_type === 'call' ? '📞' : 
+                                activity.activity_type === 'sms' ? '💬' : '📝';
+                    
+                    const time = new Date(activity.activity_date || activity.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                    
+                    let metadata = {};
+                    try {
+                        metadata = activity.metadata ? JSON.parse(activity.metadata) : {};
+                    } catch {}
+
+                    html += `
+                        <div style="display: flex; gap: 12px; padding: 12px; background: white; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid var(--primary);">
+                            <div style="font-size: 24px;">${icon}</div>
+                            <div style="flex: 1;">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 4px;">
+                                    <div>
+                                        <strong style="color: var(--gray-900);">${activity.lead?.clinic_name || 'Unknown Lead'}</strong>
+                                        <span style="color: var(--gray-500); font-size: 12px; margin-left: 8px;">${activity.activity_subject || activity.activity_type}</span>
+                                    </div>
+                                    <span style="color: var(--gray-500); font-size: 12px;">${time}</span>
+                                </div>
+                                <div style="color: var(--gray-600); font-size: 14px; margin-top: 4px;">
+                                    ${activity.activity_description || 'No description'}
+                                </div>
+                                ${metadata.status ? `<div style="margin-top: 8px;"><span style="background: ${metadata.status === 'sent' ? '#d1fae5' : metadata.status === 'scheduled' ? '#dbeafe' : '#fee2e2'}; color: ${metadata.status === 'sent' ? '#065f46' : metadata.status === 'scheduled' ? '#1e40af' : '#991b1b'}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${metadata.status.toUpperCase()}</span></div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function loadTemplates() {
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/templates?type=email`, {
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+                const tbody = document.getElementById('templatesTableBody');
+
+                if (!data.success || !data.templates || data.templates.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="loading">No templates found. Create your first template!</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                data.templates.forEach(template => {
+                    const row = document.createElement('tr');
+                    const preview = template.content ? template.content.substring(0, 100).replace(/<[^>]*>/g, '') + '...' : '';
+                    const variables = template.variables && Array.isArray(template.variables) ? template.variables.join(', ') : '';
+                    
+                    row.innerHTML = `
+                        <td><strong>${template.name || 'Untitled'}</strong></td>
+                        <td>${template.subject || 'No subject'}</td>
+                        <td style="font-size: 12px; color: var(--gray-600);">${preview || 'No content'}</td>
+                        <td style="font-size: 11px;"><code>${variables || 'None'}</code></td>
+                        <td>${formatRelativeDate(template.created_at)}</td>
+                        <td>
+                            <button class="btn btn-sm" onclick="editTemplate('${template.id}')" title="Edit">✏️</button>
+                            <button class="btn btn-sm" onclick="deleteTemplate('${template.id}')" title="Delete" style="color: var(--danger);">🗑️</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                document.getElementById('templatesTableBody').innerHTML = '<tr><td colspan="6" class="error">Error loading templates: ' + error.message + '</td></tr>';
+            }
+        }
+
+        function showCreateTemplateModal() {
+            currentEditingTemplateId = null;
+            document.getElementById('templateModalTitle').textContent = 'Create Email Template';
+            document.getElementById('templateName').value = '';
+            document.getElementById('templateSubject').value = '';
+            document.getElementById('templateContent').value = '';
+            document.getElementById('templateModal').classList.remove('hidden');
+        }
+
+        function editTemplate(templateId) {
+            currentEditingTemplateId = templateId;
+            // Load template data
+            fetch(`${API_BASE}/api/admin/leads/templates?type=email`, {
+                headers: getAuthHeaders()
+            })
+            .then(res => res.json())
+            .then(data => {
+                const template = data.templates.find(t => t.id === templateId);
+                if (template) {
+                    document.getElementById('templateModalTitle').textContent = 'Edit Email Template';
+                    document.getElementById('templateName').value = template.name || '';
+                    document.getElementById('templateSubject').value = template.subject || '';
+                    document.getElementById('templateContent').value = template.content || '';
+                    document.getElementById('templateModal').classList.remove('hidden');
+                }
+            })
+            .catch(error => {
+                alert('Error loading template: ' + error.message);
+            });
+        }
+
+        function closeTemplateModal() {
+            document.getElementById('templateModal').classList.add('hidden');
+            currentEditingTemplateId = null;
+        }
+
+        async function saveTemplate() {
+            const name = document.getElementById('templateName').value.trim();
+            const subject = document.getElementById('templateSubject').value.trim();
+            const content = document.getElementById('templateContent').value.trim();
+
+            if (!name || !subject || !content) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                const url = currentEditingTemplateId 
+                    ? `${API_BASE}/api/admin/leads/templates/${currentEditingTemplateId}`
+                    : `${API_BASE}/api/admin/leads/templates`;
+                
+                const method = currentEditingTemplateId ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        subject,
+                        content,
+                        type: 'email',
+                        variables: ['clinic_name', 'location', 'clinic_phone', 'clinic_email', 'pipeline_stage', 'lead_score', 'source']
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✅ Template ${currentEditingTemplateId ? 'updated' : 'created'} successfully!`);
+                    closeTemplateModal();
+                    loadTemplates();
+                } else {
+                    alert(`❌ Failed to save template: ${data.error || data.message}`);
+                }
+            } catch (error) {
+                alert(`❌ Error saving template: ${error.message}`);
+            }
+        }
+
+        async function deleteTemplate(templateId) {
+            if (!confirm('Are you sure you want to delete this template?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/leads/templates/${templateId}`, {
+                    method: 'DELETE',
+                    headers: getAuthHeaders()
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('✅ Template deleted successfully!');
+                    loadTemplates();
+                } else {
+                    alert(`❌ Failed to delete template: ${data.error || data.message}`);
+                }
+            } catch (error) {
+                alert(`❌ Error deleting template: ${error.message}`);
+            }
+        }
+
+        // Add PUT and DELETE endpoints for templates
+        // Set active state for current page
+        window.addEventListener('DOMContentLoaded', () => {
+          const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+          document.querySelectorAll('.nav-icon').forEach(icon => {
+            icon.classList.remove('active');
+            const onclick = icon.getAttribute('onclick');
+            if (onclick && onclick.includes(currentPage)) {
+              icon.classList.add('active');
+            }
+          });
+          // If no link matches, set leads as active (current page)
+          if (currentPage === 'leads.html') {
+            document.querySelectorAll('.nav-icon').forEach(icon => {
+              if (icon.textContent.includes('👥')) {
+                icon.classList.add('active');
+              }
+            });
+          }
+        });
 
         // Load saved leads on page load
         loadSavedLeads();
     </script>
+        </main>
+    </div>
 </body>
 </html>
-

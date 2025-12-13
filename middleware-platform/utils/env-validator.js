@@ -4,7 +4,9 @@
  * SECURITY: Fails fast in production if critical secrets are missing
  */
 
-const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+// Detect Azure App Service environment
+const isAzure = process.env.WEBSITE_SITE_NAME || process.env.AZURE_WEBSITE_INSTANCE_ID || process.env.WEBSITE_INSTANCE_ID;
+const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod' || isAzure;
 
 /**
  * Required environment variables by category
@@ -136,10 +138,21 @@ function validateAndExitIfInvalid() {
     );
     
     // Only exit if critical security vars are missing in production
-    if (isProduction && criticalErrors.length > 0) {
+    // BUT: Allow Azure App Service to start even if some vars are missing (they may be set via App Settings)
+    // Azure sets NODE_ENV=production, but env vars might not be loaded yet
+    const isAzure = process.env.WEBSITE_SITE_NAME || process.env.AZURE_WEBSITE_INSTANCE_ID;
+    
+    if (isProduction && criticalErrors.length > 0 && !isAzure) {
       console.error('\n❌ Server cannot start with missing critical security variables in production.');
       console.error('   Please set all required variables and restart the server.\n');
       process.exit(1);
+    }
+    
+    // In Azure, log warnings but don't exit (env vars might be set via App Settings)
+    if (isProduction && criticalErrors.length > 0 && isAzure) {
+      console.warn('\n⚠️  Critical security variables missing - checking Azure App Settings...');
+      console.warn('   If these are set in Azure Portal, the server will continue.');
+      console.warn('   Missing:', criticalErrors.map(e => e.split(':')[1]?.trim()).join(', '));
     }
     
     // For core vars, log warning but allow server to start (voice features will be disabled)

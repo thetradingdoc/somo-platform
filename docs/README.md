@@ -1,110 +1,207 @@
 # DocLittle Platform Documentation
 
-Welcome to the DocLittle Medical Coding Assistant documentation.
+**Last Updated**: December 2024
 
-## 📚 Documentation Structure
+> **Quick Summary**: See [SUMMARY.md](./SUMMARY.md) for overview
 
-### [Patient Journey](./patient-journey/)
-Complete patient workflow documentation including:
-- Test scenarios and demos
-- Appointment setup
-- Patient data management
-- Full user journey flows
+---
 
-### [Integrations](./integrations/)
-Third-party API integrations:
-- **STEDI API** - Healthcare insurance operations (X12 EDI)
-- **UHC FHIR API** - UnitedHealthcare FHIR integration
-- Insurance eligibility, claims, and EOB processing
+## 📚 Quick Navigation
 
-### [Voice Agent](./voice-agent/)
-Retell AI voice agent documentation:
-- 11 core voice agent functions
-- Production test results
-- Agent capabilities and configuration
-- Voice booking workflows
+### 🚀 Getting Started
+- **[Setup Guide](./setup/SETUP.md)** - Initial platform setup
+- **[Deployment Guide](./deployment/DEPLOYMENT_GUIDE.md)** - Production deployment
+- **[API Documentation](./api/API_DOCUMENTATION.md)** - API reference
 
-### [Deployment](./deployment/)
-Production deployment documentation:
-- Azure deployment guides
-- DNS and SSL configuration
-- Deployment checklists
-- Recent deployment notes
+### 📖 Core Documentation
 
-### [Architecture](./architecture/)
-System architecture and design:
-- Multi-tenant voice agent architecture
-- Real-time language switching
-- System components and data flow
+#### Architecture
+- **[Platform Vision](./architecture/VISION.md)** - Platform goals and roadmap
+- **[Healthcare Assessment](./architecture/HEALTHCARE_ASSESSMENT.md)** - Healthcare platform analysis
+- **[Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)** - Payment system design
+- **[Multi-Tenant Architecture](./architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md)** - Multi-tenant design
+- **[Database Schema](./architecture/database/DATABASE_SCHEMA_APPROACH.md)** - Database design
 
-### [Testing](./testing/)
-Testing documentation:
-- Test suites and scenarios
-- Voice agent flow tests
-- Tenant isolation tests
-- API testing guides
+#### Development
+- **[Invoice Billing System](./development/invoice-billing/IMPLEMENTATION_SUMMARY.md)** - Invoice system implementation
+- **[Code Reviews](./development/code-reviews/CODE_REVIEW_AND_CLEANUP.md)** - Code review findings
+- **[Improvement Plan](./development/IMPROVEMENT_PLAN.md)** - Codebase improvements
+- **[Code Structure](./development/guides/CODE_STRUCTURE.md)** - Code organization
+- **[Reliability Guide](./development/guides/RELIABILITY.md)** - Reliability patterns
 
-### [Middleware Platform](./middleware-platform/)
-Backend platform documentation:
-- SIP authentication troubleshooting
-- Retell configuration guides
-- Platform-specific setup and configuration
+#### API & Integrations
+- **[API Reference](./api/API_DOCUMENTATION.md)** - Complete API documentation
+- **[Invoice API](./api/INVOICE_API.md)** - Invoice endpoints
+- **[Stedi Integration](./integrations/stedi/api/STEDI_API_ENDPOINTS.md)** - Stedi API
+- **[UHC FHIR Integration](./integrations/uhc/fhir/UHC_FHIR_SERVICE_USAGE.md)** - UHC FHIR
+- **[Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING_STATUS.md)** - Stripe cards
 
-### [API Design](./api/design/)
-API architecture and design documentation:
-- API architecture overview
-- Authentication design
-- Azure integration strategy
-- Customer configuration system
+#### Setup & Configuration
+- **[Main Setup](./setup/SETUP.md)** - Platform setup
+- **[Stripe Issuing Setup](./setup/STRIPE_ISSUING_COMPLETE_GUIDE.md)** - Stripe configuration
+- **[Google OAuth](./setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md)** - Google Calendar OAuth
+- **[Azure Configuration](./azure/AZURE_AUTOMATION.md)** - Azure setup
 
-### [Reports](./reports/)
-Historical system reviews and reports:
-- System status reports
-- Comprehensive test results
-- Historical snapshots
+#### Deployment
+- **[Deployment Guide](./deployment/DEPLOYMENT_GUIDE.md)** - Main deployment guide
+- **[Azure Deployment](./deployment/guides/basic/QUICK_DEPLOYMENT_GUIDE.md)** - Quick Azure deploy
+- **[DNS Configuration](./deployment/dns/ionos/IONOS_DNS_CONFIGURATION.md)** - DNS setup
+- **[SSL Setup](./deployment/dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md)** - SSL certificates
+- **[Security](./deployment/security/PRODUCTION_DEPLOYMENT_API_KEYS.md)** - Security setup
+- **[Database Migration](./deployment/database/POSTGRES_MIGRATION.md)** - Postgres migration
 
-## 🚀 Quick Links
+#### User Guides
+- **[Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)** - Invoice generation workflow
+- **[Clinic Onboarding](./onboarding/CLINIC_ONBOARDING_CHECKLIST.md)** - Clinic setup
 
-- **API Reference**: See [API documentation](../middleware-platform/routes/README.md)
-- **Setup Guide**: See [Setup documentation](./setup/README.md)
-- **Recent Deployments**: See [Deployment Notes](./deployment/DEPLOYMENT_NOTES_2025_11_20.md)
+#### Voice Agent
+- **[Voice Agent Config](./voice-agent/README.md)** - Voice agent setup
+- **[Prompts](./voice-agent/prompts/)** - Agent prompts
 
-## 📋 Recent Updates
+---
 
-### November 20, 2025
-- ✅ Patient dashboard "Hi OJ" greeting implementation
-- ✅ Business hours extended to 7pm for 6pm appointments
-- ✅ Patient name update endpoint added
-- ✅ Documentation organized into structured directories
-- ✅ STEDI API endpoints documented
-- ✅ Voice agent capabilities documented
+## 📁 Documentation Structure
 
-## 🔍 Key Features
+```
+docs/
+├── README.md                          # This file
+│
+├── api/                               # API Documentation
+│   ├── API_DOCUMENTATION.md          # Main API reference
+│   └── INVOICE_API.md                # Invoice API endpoints
+│
+├── architecture/                      # System Architecture
+│   ├── VISION.md                     # Platform vision
+│   ├── HEALTHCARE_ASSESSMENT.md      # Healthcare analysis
+│   ├── database/                     # Database design
+│   ├── multi-tenant/                 # Multi-tenant architecture
+│   ├── payments/                     # Payment architecture
+│   └── voice-agent/                  # Voice agent architecture
+│
+├── development/                       # Development Guides
+│   ├── invoice-billing/              # Invoice system docs
+│   ├── code-reviews/                 # Code review findings
+│   ├── guides/                       # Development guides
+│   └── IMPROVEMENT_PLAN.md           # Improvement roadmap
+│
+├── deployment/                        # Deployment Guides
+│   ├── DEPLOYMENT_GUIDE.md           # Main deployment guide
+│   ├── database/                     # Database deployment
+│   ├── dns/                          # DNS configuration
+│   ├── guides/                       # Deployment guides
+│   └── security/                     # Security setup
+│
+├── setup/                            # Setup & Configuration
+│   ├── SETUP.md                      # Main setup guide
+│   ├── STRIPE_ISSUING_COMPLETE_GUIDE.md
+│   └── google/                       # Google OAuth setup
+│
+├── integrations/                      # Third-Party Integrations
+│   ├── stedi/                        # Stedi integration
+│   ├── stripe/                       # Stripe integration
+│   └── uhc/                          # UHC integration
+│
+├── user-guides/                       # User Documentation
+│   └── INVOICE_WORKFLOW.md           # Invoice workflow
+│
+├── voice-agent/                       # Voice Agent
+│   └── prompts/                      # Agent prompts
+│
+├── onboarding/                        # Onboarding
+│   └── CLINIC_ONBOARDING_CHECKLIST.md
+│
+├── azure/                            # Azure-Specific
+│   └── AZURE_AUTOMATION.md
+│
+├── middleware-platform/              # Platform Config
+│   └── RETELL_CONFIG_QUICK_REFERENCE.md
+│
+└── archive/                          # Archived Files
+    └── azure-debug-scripts/          # Old debug scripts
+```
 
-### Medical Bill Sorting Agent
-An intelligent agent that automates the entire medical billing workflow:
-1. Receives bills from providers, patients, insurers
-2. Sorts and categorizes by patient, provider, insurer
-3. Matches bills to appointments and EOBs
-4. Automates claim submission via STEDI
-5. Processes EOBs and calculates patient responsibility
-6. Deducts from patient wallet automatically
+---
 
-### Voice Agent (Kelly)
-11 core functions for healthcare voice interactions:
-- Insurance collection and verification
-- Appointment scheduling and management
-- Payment checkout creation
-- Claim history retrieval
-- Multilingual support
+## 🎯 Documentation by Use Case
 
-### Insurance Integration (STEDI)
-X12 EDI transactions for healthcare:
-- Eligibility checks (270/271)
-- Claim submission (837)
-- Claim status (276/277)
-- Payer directory
+### I want to...
+- **Deploy the platform** → [Deployment Guide](./deployment/DEPLOYMENT_GUIDE.md)
+- **Set up Stripe** → [Stripe Issuing Guide](./setup/STRIPE_ISSUING_COMPLETE_GUIDE.md)
+- **Configure Google Calendar** → [Google OAuth Guide](./setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md)
+- **Understand the architecture** → [Architecture Overview](./architecture/VISION.md)
+- **Use the API** → [API Documentation](./api/API_DOCUMENTATION.md)
+- **Generate invoices** → [Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)
+- **Set up Azure** → [Azure Automation](./azure/AZURE_AUTOMATION.md)
+- **Configure DNS** → [DNS Configuration](./deployment/dns/ionos/IONOS_DNS_CONFIGURATION.md)
 
-## 📞 Support
+---
 
-For questions or issues, refer to the specific documentation section or check the deployment notes for recent changes.
+## 📝 Documentation Standards
+
+### File Naming
+- Use `UPPERCASE_WITH_UNDERSCORES.md` for main documents
+- Use `README.md` for folder indexes
+- Use descriptive names that indicate content
+
+### Structure
+- Start with overview/description
+- Include "Last Updated" date
+- Use clear headings and sections
+- Include code examples where relevant
+- Add troubleshooting sections
+
+### Maintenance
+- Update "Last Updated" when modifying
+- Keep related docs in sync
+- Archive outdated docs to `archive/`
+- Update this README when adding new docs
+
+---
+
+## 🔍 Search by Topic
+
+### Payments
+- [Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)
+- [Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING_STATUS.md)
+- [Invoice System](./development/invoice-billing/IMPLEMENTATION_SUMMARY.md)
+
+### Multi-Tenancy
+- [Multi-Tenant Architecture](./architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md)
+- [Tenant Subdomain Setup](./deployment/TENANT_SUBDOMAIN_SETUP.md)
+- [Automated Domain Setup](./deployment/AUTOMATED_TENANT_DOMAIN_SETUP.md)
+
+### Healthcare
+- [Healthcare Assessment](./architecture/HEALTHCARE_ASSESSMENT.md)
+- [UHC FHIR Integration](./integrations/uhc/fhir/UHC_FHIR_SERVICE_USAGE.md)
+- [Stedi Integration](./integrations/stedi/api/STEDI_API_ENDPOINTS.md)
+
+### Voice Agent
+- [Voice Agent Config](./voice-agent/README.md)
+- [Retell Configuration](./middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md)
+- [Agent Prompts](./voice-agent/prompts/)
+
+---
+
+## 📊 Documentation Status
+
+- ✅ **Architecture**: Complete
+- ✅ **API**: Complete (with Invoice API)
+- ✅ **Deployment**: Complete
+- ✅ **Setup**: Complete
+- ✅ **User Guides**: Complete
+- ✅ **Integrations**: Complete
+
+---
+
+## 🤝 Contributing
+
+When adding new documentation:
+1. Place in appropriate subfolder
+2. Use consistent naming convention
+3. Update this README
+4. Include "Last Updated" date
+5. Follow documentation standards above
+
+---
+
+**Questions?** Check the relevant section above or search the docs folder.

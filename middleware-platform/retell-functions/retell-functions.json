@@ -287,6 +287,60 @@
     },
     {
       "type": "function",
+      "name": "search_products",
+      "description": "Search for products by name, category, or description. Use when caller asks about products, wants to browse, or is looking for something specific.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query - product name, category, or description (e.g., 'pre rolls', 'CBD oil', 'edibles')"
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Merchant ID (optional, will use default if not provided)"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "create_checkout",
+      "description": "Create a checkout session for a product purchase. Use ONLY after you have collected the customer's email address and they have confirmed their purchase. This function REQUIRES customer_email to be included in the function call arguments.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "description": "Product ID (required)"
+          },
+          "quantity": {
+            "type": "number",
+            "description": "Quantity to purchase (required, default: 1)"
+          },
+          "customer_name": {
+            "type": "string",
+            "description": "Customer's full name (required)"
+          },
+          "customer_email": {
+            "type": "string",
+            "description": "Customer's email address (REQUIRED - MUST be included in function call arguments. Use the email you collected and confirmed with the customer)"
+          },
+          "customer_phone": {
+            "type": "string",
+            "description": "Customer's phone number (optional - from caller ID or ask if needed)"
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Merchant ID (optional, will use default if not provided)"
+          }
+        },
+        "required": ["product_id", "quantity", "customer_name", "customer_email"]
+      }
+    },
+    {
+      "type": "function",
       "name": "end_call",
       "description": "End the call when the customer is done or when the conversation is complete."
     }

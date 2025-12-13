@@ -123,6 +123,20 @@ router.post('/save', requireAdminAuth, adminLimiter, async (req, res) => {
     const result = db.createLead(leadData);
     const lead = db.getLead(result.lastInsertRowid || leadData.id);
 
+    // Auto-score the new lead
+    try {
+      const LeadIntelligenceService = require('../services/lead-intelligence-service');
+      LeadIntelligenceService.updateLeadScore(lead.id);
+      // Refresh lead to get updated score
+      const updatedLead = db.getLead(lead.id);
+      if (updatedLead) {
+        Object.assign(lead, updatedLead);
+      }
+    } catch (scoreError) {
+      console.warn('⚠️  Auto-scoring failed for new lead:', scoreError.message);
+      // Continue anyway - scoring is not critical
+    }
+
     res.json({
       success: true,
       message: 'Lead saved successfully',
@@ -173,13 +187,45 @@ router.get('/', requireAdminAuth, adminLimiter, async (req, res) => {
 
     const leads = db.getAllLeads(filters);
 
-    // Get call counts for each lead
+    // Get call counts and next activity for each lead
     const leadsWithCalls = leads.map(lead => {
       const calls = db.getLeadCallsByLeadId(lead.id);
+
+      // Get next activity (scheduled activities from lead_activities)
+      const activities = db.getLeadActivities(lead.id, { limit: 10 });
+      const scheduledActivity = activities.find(a => {
+        try {
+          const metadata = a.metadata ? JSON.parse(a.metadata) : {};
+          return metadata.status === 'scheduled' && metadata.scheduled_date;
+        } catch {
+          return false;
+        }
+      });
+
+      // Determine next activity date (prioritize follow_up_date, then scheduled activity)
+      let nextActivityDate = lead.follow_up_date || null;
+      if (scheduledActivity) {
+        try {
+          const metadata = JSON.parse(scheduledActivity.metadata || '{}');
+          if (metadata.scheduled_date) {
+            const scheduledDate = new Date(metadata.scheduled_date);
+            if (!nextActivityDate || scheduledDate < new Date(nextActivityDate)) {
+              nextActivityDate = scheduledDate.toISOString();
+            }
+          }
+        } catch { }
+      }
+
+      // Get labels for this lead
+      const labels = db.getLabelsForLead(lead.id);
+
       return {
         ...lead,
         call_count: calls.length,
-        last_call_at: calls.length > 0 ? calls[0].created_at : null
+        last_call_at: calls.length > 0 ? calls[0].created_at : null,
+        next_activity_date: nextActivityDate,
+        next_action: lead.next_action || null,
+        labels: labels || []
       };
     });
 
@@ -395,7 +441,7 @@ router.post('/:id/call', requireAdminAuth, adminLimiter, express.json(), async (
         console.error(`   Status: ${retellError.response.status}`);
         console.error(`   Data:`, JSON.stringify(retellError.response.data, null, 2));
       }
-      
+
       // Fallback: Try Twilio direct approach if Retell fails
       console.log('⚠️  Retell outbound failed, trying Twilio direct fallback...');
       try {
@@ -794,6 +840,61 @@ router.put('/:id/pipeline-stage', requireAdminAuth, adminLimiter, async (req, re
     res.status(500).json({
       success: false,
       error: 'Failed to update pipeline stage',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/admin/leads/activities/all
+ * Get all activities across all leads (for activity feed)
+ */
+router.get('/activities/all', requireAdminAuth, adminLimiter, async (req, res) => {
+  try {
+    const { limit = 100, type } = req.query;
+
+    // Get all leads first
+    const allLeads = db.getAllLeads({ limit: 1000 });
+
+    // Get activities for all leads
+    const allActivities = [];
+    for (const lead of allLeads.slice(0, 200)) { // Limit to 200 leads to avoid timeout
+      try {
+        const filters = { limit: 10 }; // Get last 10 activities per lead
+        if (type) filters.activity_type = type;
+
+        const activities = db.getLeadActivities(lead.id, filters);
+        activities.forEach(act => {
+          allActivities.push({
+            ...act,
+            lead_name: lead.clinic_name,
+            lead_id: lead.id,
+            lead_location: lead.location
+          });
+        });
+      } catch (e) {
+        // Skip if error
+        console.warn(`Failed to get activities for lead ${lead.id}:`, e.message);
+      }
+    }
+
+    // Sort by date (newest first) and limit
+    const sorted = allActivities.sort((a, b) => {
+      const dateA = new Date(a.activity_date || a.created_at || 0);
+      const dateB = new Date(b.activity_date || b.created_at || 0);
+      return dateB - dateA;
+    }).slice(0, parseInt(limit, 10));
+
+    res.json({
+      success: true,
+      activities: sorted,
+      total: sorted.length
+    });
+  } catch (error) {
+    console.error('❌ Get all activities error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get activities',
       message: error.message
     });
   }
@@ -1664,6 +1765,518 @@ router.delete('/test/bulk', requireAdminAuth, adminLimiter, async (req, res) => 
     res.status(500).json({
       success: false,
       error: 'Failed to delete test leads',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/admin/leads/:id/send-email
+ * Send an email to a lead
+ * Supports templates and custom content
+ */
+router.post('/:id/send-email', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { subject, content, template_id, schedule_date } = req.body;
+
+    const lead = db.getLead(id);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        error: 'Lead not found'
+      });
+    }
+
+    if (!lead.clinic_email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Lead does not have an email address'
+      });
+    }
+
+    // If template_id is provided, load template
+    let emailSubject = subject;
+    let emailContent = content;
+
+    if (template_id) {
+      const template = db.getTemplate(template_id);
+      if (!template || template.type !== 'email') {
+        return res.status(400).json({
+          success: false,
+          error: 'Template not found or not an email template'
+        });
+      }
+
+      emailSubject = template.subject || emailSubject;
+      emailContent = template.content || emailContent;
+
+      // Replace template variables
+      emailSubject = replaceTemplateVariables(emailSubject, lead);
+      emailContent = replaceTemplateVariables(emailContent, lead);
+    } else {
+      // Replace variables in custom content
+      if (emailSubject) emailSubject = replaceTemplateVariables(emailSubject, lead);
+      if (emailContent) emailContent = replaceTemplateVariables(emailContent, lead);
+    }
+
+    if (!emailSubject || !emailContent) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email subject and content are required'
+      });
+    }
+
+    // If schedule_date is provided, create scheduled activity instead of sending immediately
+    if (schedule_date) {
+      const { v4: uuidv4 } = require('uuid');
+      const activityId = uuidv4();
+
+      db.createLeadActivity({
+        id: activityId,
+        lead_id: id,
+        activity_type: 'email',
+        activity_subject: emailSubject,
+        activity_description: `Scheduled email: ${emailSubject}`,
+        activity_date: schedule_date,
+        created_by: req.user?.id || 'admin',
+        metadata: JSON.stringify({
+          status: 'scheduled',
+          scheduled_date: schedule_date,
+          subject: emailSubject,
+          content: emailContent,
+          template_id: template_id || null
+        })
+      });
+
+      // Update lead follow_up_date if not set or if scheduled date is earlier
+      if (!lead.follow_up_date || new Date(schedule_date) < new Date(lead.follow_up_date)) {
+        db.updateLead(id, {
+          follow_up_date: schedule_date,
+          next_action: `Send email: ${emailSubject}`
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'Email scheduled successfully',
+        scheduled_date: schedule_date,
+        activity_id: activityId
+      });
+    }
+
+    // Send email immediately
+    const EmailService = require('../services/email-service');
+    const emailResult = await EmailService.sendEmail({
+      to: lead.clinic_email,
+      subject: emailSubject,
+      html: emailContent,
+      text: emailContent.replace(/<[^>]*>/g, '') // Strip HTML for text version
+    });
+
+    if (!emailResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to send email',
+        message: emailResult.error || 'Email service error'
+      });
+    }
+
+    // Create activity record
+    const { v4: uuidv4 } = require('uuid');
+    db.createLeadActivity({
+      id: uuidv4(),
+      lead_id: id,
+      activity_type: 'email',
+      activity_subject: emailSubject,
+      activity_description: `Email sent to ${lead.clinic_email}`,
+      created_by: req.user?.id || 'admin',
+      metadata: JSON.stringify({
+        email_provider: emailResult.provider,
+        message_id: emailResult.message_id,
+        template_id: template_id || null
+      })
+    });
+
+    // Update lead status
+    if (lead.status === 'new') {
+      db.updateLead(id, {
+        status: 'contacted',
+        pipeline_stage: lead.pipeline_stage === 'new' ? 'contacted' : lead.pipeline_stage
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Email sent successfully',
+      email_result: {
+        provider: emailResult.provider,
+        message_id: emailResult.message_id
+      }
+    });
+  } catch (error) {
+    console.error('❌ Send email error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send email',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/admin/leads/templates
+ * Get email templates for admin leads (global templates without merchant requirement)
+ */
+router.get('/templates', requireAdminAuth, adminLimiter, (req, res) => {
+  try {
+    const { type } = req.query;
+
+    // Get templates for admin (merchant_id = 'admin-global' or NULL)
+    const templates = db.db.prepare(`
+      SELECT * FROM templates 
+      WHERE type = ? AND (merchant_id = 'admin-global' OR merchant_id IS NULL)
+      ORDER BY created_at DESC
+    `).all(type || 'email');
+
+    // Parse variables JSON
+    const parsedTemplates = templates.map(t => ({
+      ...t,
+      variables: t.variables ? JSON.parse(t.variables) : []
+    }));
+
+    res.json({
+      success: true,
+      templates: parsedTemplates
+    });
+  } catch (error) {
+    console.error('Get admin templates error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get templates',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/admin/leads/templates
+ * Create a template for admin leads
+ */
+router.post('/templates', requireAdminAuth, adminLimiter, express.json(), (req, res) => {
+  try {
+    const { name, type, subject, content, variables } = req.body;
+
+    if (!name || !type || !content) {
+      return res.status(400).json({
+        success: false,
+        error: 'Name, type, and content are required'
+      });
+    }
+
+    if (!['email', 'sms'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Type must be "email" or "sms"'
+      });
+    }
+
+    // Use null merchant_id for admin templates, or a special admin merchant_id
+    // For now, we'll require a merchant_id but allow admin to specify
+    // Actually, let's check if we can create templates without merchant_id
+    // Since the table requires merchant_id, we'll need to handle this
+    // For now, let's use a special admin merchant_id or modify the schema
+    // For simplicity, let's just allow merchant_id to be optional in the query
+
+    const { v4: uuidv4 } = require('uuid');
+    const templateId = uuidv4();
+
+    // Use a special admin merchant_id 'admin-global' or NULL if schema allows
+    try {
+      db.db.prepare(`
+        INSERT INTO templates (id, merchant_id, name, type, subject, content, variables)
+        VALUES (?, 'admin-global', ?, ?, ?, ?, ?)
+      `).run(
+        templateId,
+        name,
+        type,
+        subject || null,
+        content,
+        variables ? JSON.stringify(variables) : null
+      );
+    } catch (schemaError) {
+      // If that fails, try with NULL
+      try {
+        db.db.prepare(`
+          INSERT INTO templates (id, merchant_id, name, type, subject, content, variables)
+          VALUES (?, NULL, ?, ?, ?, ?, ?)
+        `).run(
+          templateId,
+          name,
+          type,
+          subject || null,
+          content,
+          variables ? JSON.stringify(variables) : null
+        );
+      } catch (nullError) {
+        return res.status(400).json({
+          success: false,
+          error: 'Failed to create template. Database schema may require merchant_id.'
+        });
+      }
+    }
+
+    const template = db.getTemplate(templateId);
+
+    res.json({
+      success: true,
+      template: {
+        ...template,
+        variables: template.variables ? JSON.parse(template.variables) : []
+      }
+    });
+  } catch (error) {
+    console.error('Create admin template error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create template',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/admin/leads/:id/send-sms
+ * Send an SMS to a lead
+ */
+router.post('/:id/send-sms', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message, schedule_date } = req.body;
+
+    const lead = db.getLead(id);
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        error: 'Lead not found'
+      });
+    }
+
+    if (!lead.clinic_phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Lead does not have a phone number'
+      });
+    }
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Message is required'
+      });
+    }
+
+    // Replace variables
+    const smsMessage = replaceTemplateVariables(message, lead);
+
+    // If schedule_date is provided, create scheduled activity
+    if (schedule_date) {
+      const { v4: uuidv4 } = require('uuid');
+      const activityId = uuidv4();
+
+      db.createLeadActivity({
+        id: activityId,
+        lead_id: id,
+        activity_type: 'sms',
+        activity_subject: 'Scheduled SMS',
+        activity_description: smsMessage,
+        activity_date: schedule_date,
+        created_by: req.user?.id || 'admin',
+        metadata: JSON.stringify({
+          status: 'scheduled',
+          scheduled_date: schedule_date,
+          message: smsMessage
+        })
+      });
+
+      if (!lead.follow_up_date || new Date(schedule_date) < new Date(lead.follow_up_date)) {
+        db.updateLead(id, {
+          follow_up_date: schedule_date,
+          next_action: 'Send SMS'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'SMS scheduled successfully',
+        scheduled_date: schedule_date,
+        activity_id: activityId
+      });
+    }
+
+    // Send SMS immediately
+    const SMSService = require('../services/sms-service');
+    const smsResult = await SMSService.sendSMS(lead.clinic_phone, smsMessage);
+
+    // Normalize response format
+    const normalizedResult = {
+      success: smsResult.success || false,
+      provider: smsResult.provider || 'twilio',
+      message_id: smsResult.message_sid || smsResult.message_id || null,
+      error: smsResult.error || null
+    };
+
+    if (!normalizedResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to send SMS',
+        message: normalizedResult.error || 'SMS service error'
+      });
+    }
+
+    // Create activity record
+    const { v4: uuidv4 } = require('uuid');
+    db.createLeadActivity({
+      id: uuidv4(),
+      lead_id: id,
+      activity_type: 'sms',
+      activity_subject: 'SMS sent',
+      activity_description: smsMessage,
+      created_by: req.user?.id || 'admin',
+      metadata: JSON.stringify({
+        provider: normalizedResult.provider,
+        message_id: normalizedResult.message_id
+      })
+    });
+
+    if (lead.status === 'new') {
+      db.updateLead(id, {
+        status: 'contacted',
+        pipeline_stage: lead.pipeline_stage === 'new' ? 'contacted' : lead.pipeline_stage
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'SMS sent successfully',
+      sms_result: normalizedResult
+    });
+  } catch (error) {
+    console.error('❌ Send SMS error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send SMS',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * Helper function to replace template variables
+ */
+function replaceTemplateVariables(text, lead) {
+  if (!text) return text;
+
+  const variables = {
+    '{{clinic_name}}': lead.clinic_name || 'Clinic',
+    '{{location}}': lead.location || 'Location',
+    '{{clinic_phone}}': lead.clinic_phone || 'Phone',
+    '{{clinic_email}}': lead.clinic_email || 'Email',
+    '{{pipeline_stage}}': lead.pipeline_stage || 'new',
+    '{{lead_score}}': lead.lead_score || 0,
+    '{{source}}': lead.source || 'unknown'
+  };
+
+  let result = text;
+  Object.keys(variables).forEach(key => {
+    result = result.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), variables[key]);
+  });
+
+  return result;
+}
+
+/**
+ * POST /api/admin/leads/:id/recalculate-score
+ * Recalculate lead score
+ */
+router.post('/:id/recalculate-score', requireAdminAuth, adminLimiter, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const LeadIntelligenceService = require('../services/lead-intelligence-service');
+
+    const score = LeadIntelligenceService.updateLeadScore(id);
+
+    res.json({
+      success: true,
+      lead_id: id,
+      score
+    });
+  } catch (error) {
+    console.error('Recalculate lead score error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to recalculate score',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/admin/leads/:id/qualify
+ * Qualify/unqualify lead
+ */
+router.post('/:id/qualify', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { qualified = true } = req.body;
+
+    const now = new Date().toISOString();
+    db.updateLead(id, {
+      is_qualified: qualified ? 1 : 0,
+      qualified_at: qualified ? now : null,
+      auto_qualified: 0 // Manual qualification, not auto
+    });
+
+    // Update score as well
+    const LeadIntelligenceService = require('../services/lead-intelligence-service');
+    LeadIntelligenceService.updateLeadScore(id);
+
+    const lead = db.getLead(id);
+
+    res.json({
+      success: true,
+      lead
+    });
+  } catch (error) {
+    console.error('Qualify lead error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to qualify lead',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/admin/leads/batch/update-scores
+ * Batch update scores for multiple leads
+ */
+router.post('/batch/update-scores', requireAdminAuth, adminLimiter, express.json(), async (req, res) => {
+  try {
+    const { lead_ids } = req.body; // Optional: if not provided, update all leads
+    const LeadIntelligenceService = require('../services/lead-intelligence-service');
+
+    const result = LeadIntelligenceService.batchUpdateScores(lead_ids);
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error('Batch update scores error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to batch update scores',
       message: error.message
     });
   }

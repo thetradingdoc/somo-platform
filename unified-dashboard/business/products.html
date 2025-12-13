@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Products - Inventory Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/navigation.js"></script>
     <style>
@@ -617,6 +618,37 @@
             grid-column: 1 / -1;
         }
 
+        /* Category filters */
+        .filters-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .filter-chip {
+            border: 1px solid var(--gray-200);
+            background: white;
+            color: var(--gray-700);
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .filter-chip:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .filter-chip.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
         .empty-state-icon {
             font-size: 64px;
             margin-bottom: 16px;
@@ -638,10 +670,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" aria-label="Toggle menu" type="button">☰</button>
-
+    
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
+    
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -681,6 +713,11 @@
                 <button class="btn btn-primary" onclick="openAddProductModal()">
                     ➕ Add Product
                 </button>
+            </div>
+
+            <!-- Category Filters -->
+            <div class="filters-bar" id="categoryFilters">
+                <button class="filter-chip active" data-category="all" onclick="applyCategoryFilter('all')">All</button>
             </div>
 
             <!-- Products Grid -->
@@ -748,6 +785,8 @@
         const MERCHANT_API = `${API_BASE}/api`;
         let userData = null;
         let currentProductId = null;
+        let allProducts = [];
+        let activeCategory = 'all';
 
         // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
@@ -769,26 +808,26 @@
                 // Use a single handler that works for both touch and click
                 let touchStartTime = 0;
                 let touchStartPos = { x: 0, y: 0 };
-
+                
                 // Handle touch start - just record the touch
                 mobileMenuBtn.addEventListener('touchstart', function (e) {
                     touchStartTime = Date.now();
                     const touch = e.touches[0];
                     touchStartPos = { x: touch.clientX, y: touch.clientY };
                 }, { passive: true });
-
+                
                 // Handle touch end - check if it was a tap (not a swipe)
                 mobileMenuBtn.addEventListener('touchend', function (e) {
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const touch = e.changedTouches[0];
                     const touchEndPos = { x: touch.clientX, y: touch.clientY };
-
+                    
                     // Calculate distance moved
                     const deltaX = Math.abs(touchEndPos.x - touchStartPos.x);
                     const deltaY = Math.abs(touchEndPos.y - touchStartPos.y);
                     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
+                    
                     // If it was a quick tap (less than 300ms and less than 10px movement), toggle sidebar
                     if (touchDuration < 300 && distance < 10) {
                         e.preventDefault();
@@ -796,7 +835,7 @@
                         toggleSidebar(e);
                     }
                 }, { passive: false });
-
+                
                 // Handle click event for desktop/mouse users
                 mobileMenuBtn.addEventListener('click', function (e) {
                     e.preventDefault();
@@ -828,17 +867,17 @@
                 e.preventDefault();
                 e.stopPropagation();
             }
-
+            
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-
+            
             if (!sidebar || !overlay) {
                 console.error('Sidebar or overlay element not found');
                 return;
             }
-
+            
             const isOpen = sidebar.classList.contains('open');
-
+            
             if (isOpen) {
                 // Close sidebar
                 sidebar.classList.remove('open');
@@ -911,7 +950,9 @@
                 const data = await response.json();
 
                 if (data.success && data.products) {
-                    displayProducts(data.products);
+                    allProducts = data.products;
+                    renderCategoryFilters(allProducts);
+                    applyCategoryFilter(activeCategory);
 
                     if (data.products.length === 0) {
                         showProductSetupPrompt();
@@ -944,6 +985,43 @@
                     </button>
                 </div>
             `;
+        }
+
+        function renderCategoryFilters(products = []) {
+            const filtersEl = document.getElementById('categoryFilters');
+            if (!filtersEl) return;
+
+            const categories = Array.from(new Set(
+                products
+                    .map(p => (p.category || '').trim())
+                    .filter(c => c.length > 0)
+            )).sort((a, b) => a.localeCompare(b));
+
+            const chips = [
+                `<button class="filter-chip ${activeCategory === 'all' ? 'active' : ''}" data-category="all" onclick="applyCategoryFilter('all')">All</button>`
+            ];
+
+            categories.forEach(cat => {
+                chips.push(`<button class="filter-chip ${activeCategory === cat ? 'active' : ''}" data-category="${escapeHtml(cat)}" onclick="applyCategoryFilter('${escapeHtml(cat)}')">${escapeHtml(cat)}</button>`);
+            });
+
+            filtersEl.innerHTML = chips.join('');
+        }
+
+        function applyCategoryFilter(category = 'all') {
+            activeCategory = category;
+            const filtered = category === 'all'
+                ? allProducts
+                : allProducts.filter(p => (p.category || '').trim().toLowerCase() === category.toLowerCase());
+
+            // Update chip active state
+            const chips = document.querySelectorAll('.filter-chip');
+            chips.forEach(chip => {
+                const cat = chip.getAttribute('data-category');
+                chip.classList.toggle('active', cat === category);
+            });
+
+            displayProducts(filtered);
         }
 
         function displayProducts(products) {
@@ -1012,6 +1090,9 @@
                         </button>
                         <button class="btn btn-secondary btn-sm" onclick="viewStats('${product.id}')">
                             📊 Stats
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteProduct('${product.id}')">
+                            🗑️ Delete
                         </button>
                     </div>
                 </div>
@@ -1125,6 +1206,25 @@
             alert(`📊 Product Stats: ${productId}\n\nIn production, this would show:\n\n• Total sales\n• Revenue generated\n• Popular products\n• Voice agent recommendation rate\n• Customer satisfaction`);
         }
 
+        async function deleteProduct(productId) {
+            if (!confirm('Delete this product? This cannot be undone.')) return;
+            try {
+                const response = await fetch(`${MERCHANT_API}/products/${productId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.success) {
+                    loadProducts();
+                } else {
+                    alert(data.error || 'Failed to delete product');
+                }
+            } catch (error) {
+                console.error('Error deleting product:', error);
+                alert('Failed to delete product');
+            }
+        }
+
         function logout() {
             sessionStorage.clear();
             window.location.href = '../login.html';
@@ -1138,6 +1238,7 @@
             }
         }
     </script>
+    <script src="../assets/js/chat-widget.js"></script>
 </body>
 
 </html>

@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Details - Medical Coding Assistant</title>
+    <link rel="stylesheet" href="../assets/css/global.css">
+    <script src="../assets/js/config.js"></script>
+    <style>
+        :root {
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
+        }
+
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 260px;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .sidebar-logo {
+            font-size: 32px;
+            line-height: 1;
+            letter-spacing: -3px;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-logo .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+        }
+
+        .sidebar-logo .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
+        .sidebar-subtitle {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+
+        .sidebar-nav {
+            padding: 16px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: var(--gray-700);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--gray-50);
+            color: var(--primary);
+        }
+
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--gray-200);
+            position: absolute;
+            bottom: 0;
+            width: 260px;
+            background: white;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--gray-50);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+            transform: translateY(-1px);
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .user-role {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: var(--gray-200);
+        }
+
+        .main-content {
+            margin-left: 260px;
+            flex: 1;
+            padding: 32px;
+            background: var(--gray-50);
+        }
+
+        .back-btn {
+            padding: 8px 16px;
+            background: var(--gray-200);
+            color: var(--gray-700);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 16px;
+            transition: background 0.2s;
+        }
+
+        .back-btn:hover {
+            background: var(--gray-300);
+        }
+
+        .invoice-container {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: var(--shadow-md);
+            margin-bottom: 32px;
+        }
+
+        .invoice-header {
+            border-bottom: 2px solid var(--gray-200);
+            padding-bottom: 24px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .invoice-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .invoice-number {
+            font-size: 16px;
+            color: var(--gray-600);
+        }
+
+        .invoice-actions-header {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-700);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-300);
+        }
+
+        .invoice-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .invoice-status {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .status-draft {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .status-sent {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-paid {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-overdue {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .invoice-summary {
+            background: var(--gray-50);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 24px;
+        }
+
+        .summary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .summary-label {
+            font-size: 12px;
+            color: var(--gray-600);
+            text-transform: uppercase;
+        }
+
+        .summary-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .summary-value.paid {
+            color: #10b981;
+        }
+
+        .summary-value.balance {
+            color: #ef4444;
+        }
+
+        .items-section, .payments-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 16px;
+        }
+
+        .items-table, .payments-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .items-table th, .payments-table th {
+            background: var(--gray-50);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--gray-700);
+            border-bottom: 2px solid var(--gray-200);
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .items-table td, .payments-table td {
+            padding: 16px 12px;
+            border-bottom: 1px solid var(--gray-200);
+            color: var(--gray-900);
+        }
+
+        .items-table tr:hover, .payments-table tr:hover {
+            background: var(--gray-50);
+        }
+
+        .total-row {
+            background: var(--gray-100);
+            font-weight: 700;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px;
+            color: var(--gray-600);
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <span class="doc">Doc</span><span class="little">Little</span><span style="font-weight:700;">.</span>
+                </div>
+                <div class="sidebar-subtitle" id="sidebarSubtitle">Medical Coding Assistant</div>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebarNav">
+                <!-- Populated by tenant config -->
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
+                    <div class="user-avatar" id="userAvatar">HP</div>
+                    <div class="user-details">
+                        <div class="user-name" id="userName">Healthcare Provider</div>
+                        <div class="user-role" id="userRole">Provider</div>
+                    </div>
+                    <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
+                        🚪
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <button class="back-btn" onclick="window.location.href='billing.html?section=invoices'">← Back to Invoices</button>
+
+            <div class="invoice-container" id="invoiceContainer">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <p>Loading invoice details...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+        // Check authentication
+        if (sessionStorage.getItem('authenticated') !== 'true') {
+            window.location.href = '../login.html';
+        }
+
+        // Load user info
+        const userName = sessionStorage.getItem('userName') || 'Healthcare Provider';
+        const userRole = sessionStorage.getItem('userRole') || 'Provider';
+        document.getElementById('userName').textContent = userName;
+        document.getElementById('userRole').textContent = userRole;
+
+        // Render sidebar from tenant config (fallback if missing)
+        function renderSidebar() {
+            if (!window.TENANT_CONFIG) {
+                window.TENANT_CONFIG = {
+                    navItems: [
+                        { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+                        { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
+                        { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
+                    ],
+                    sidebarSubtitle: 'Medical Coding Assistant'
+                };
+            }
+            const navEl = document.getElementById('sidebarNav');
+            const subtitleEl = document.getElementById('sidebarSubtitle');
+            
+            if (!navEl) {
+                console.warn('⚠️ Sidebar nav element not found');
+                return;
+            }
+
+            // Ensure navItems exists and is an array
+            if (!window.TENANT_CONFIG.navItems || !Array.isArray(window.TENANT_CONFIG.navItems)) {
+                console.warn('⚠️ navItems missing or invalid, using defaults');
+                window.TENANT_CONFIG.navItems = [
+                    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+                    { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
+                    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
+                ];
+            }
+            
+            if (navEl && window.TENANT_CONFIG.navItems) {
+                navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
+                    <a href="${item.href}" class="nav-item ${item.id === 'invoices' ? 'active' : ''}">
+                        <span class="nav-icon">${item.icon}</span>
+                        <span>${item.label}</span>
+                    </a>
+                `).join('');
+            }
+            
+            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
+                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
+            }
+        }
+
+        // Logout function
+        function logout() {
+            sessionStorage.removeItem('authenticated');
+            sessionStorage.removeItem('userName');
+            sessionStorage.removeItem('userRole');
+            window.location.href = '../login.html';
+        }
+
+        // Get invoice ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const invoiceId = urlParams.get('id');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
+            if (invoiceId) {
+                loadInvoice(invoiceId);
+            } else {
+                showError('No invoice ID provided');
+            }
+        });
+
+        async function loadInvoice(invoiceId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/invoices/${invoiceId}`, {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.error || 'Failed to load invoice');
+                }
+
+                displayInvoice(data);
+            } catch (error) {
+                console.error('Error loading invoice:', error);
+                showError(error.message || 'Failed to load invoice');
+            }
+        }
+
+        function displayInvoice(data) {
+            const container = document.getElementById('invoiceContainer');
+            const invoice = data.invoice;
+            const items = data.items || [];
+            const payments = data.payments || [];
+            const totals = data.totals || {};
+            const patient = data.patient;
+
+            // Get patient name
+            let patientName = 'Unknown Patient';
+            let patientEmail = null;
+            if (patient) {
+                const name = patient.name?.[0];
+                if (name) {
+                    patientName = `${(name.given || []).join(' ')} ${name.family || ''}`.trim();
+                }
+                const telecom = patient.telecom || [];
+                const emailTelecom = telecom.find(t => t.system === 'email');
+                patientEmail = emailTelecom?.value || null;
+            }
+
+            // Format dates
+            const formatDate = (dateStr) => {
+                if (!dateStr) return '—';
+                return new Date(dateStr).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+            };
+
+            const statusClass = `status-${invoice.status}`;
+            const statusText = invoice.status.toUpperCase();
+
+            // Action buttons based on status
+            let actionButtons = '';
+            if (invoice.status === 'draft') {
+                actionButtons = `
+                    <button class="btn-primary" onclick="sendInvoice('${invoice.id}')">📧 Send Invoice</button>
+                `;
+            } else if (invoice.status === 'sent' || invoice.status === 'overdue') {
+                actionButtons = `
+                    <button class="btn-success" onclick="recordPayment('${invoice.id}')">💰 Record Payment</button>
+                    <button class="btn-secondary" onclick="sendInvoice('${invoice.id}')">📧 Resend</button>
+                `;
+            } else if (invoice.status === 'paid') {
+                actionButtons = `
+                    <span style="padding: 10px 20px; background: #dcfce7; color: #166534; border-radius: 8px; font-weight: 600;">
+                        ✅ Paid in Full
+                    </span>
+                `;
+            }
+
+            container.innerHTML = `
+                <div class="invoice-header">
+                    <div>
+                        <h1 class="invoice-title">Invoice ${invoice.invoice_number}</h1>
+                        <div class="invoice-number">Invoice ID: ${invoice.id}</div>
+                    </div>
+                    <div>
+                        <div style="margin-bottom: 12px;">
+                            <span class="invoice-status ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="invoice-actions-header">
+                            ${actionButtons}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="invoice-info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Patient</div>
+                        <div class="info-value">${patientName}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Invoice Date</div>
+                        <div class="info-value">${formatDate(invoice.created_at)}</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Due Date</div>
+                        <div class="info-value">${formatDate(invoice.due_date)}</div>
+                    </div>
+                    ${invoice.claim_id ? `
+                        <div class="info-item">
+                            <div class="info-label">Claim ID</div>
+                            <div class="info-value">
+                                <a href="claims.html?id=${invoice.claim_id}" style="color: var(--primary); text-decoration: none;">
+                                    ${invoice.claim_id}
+                                </a>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="invoice-summary">
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-label">Total Amount</div>
+                            <div class="summary-value">$${invoice.amount.toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Total Paid</div>
+                            <div class="summary-value paid">$${totals.paid.toFixed(2)}</div>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-label">Balance</div>
+                            <div class="summary-value balance">$${totals.balance.toFixed(2)}</div>
+                        </div>
+                    </div>
+                </div>
+
+                ${items.length > 0 ? `
+                    <div class="items-section">
+                        <h2 class="section-title">Line Items</h2>
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th>Service Date</th>
+                                    <th>Description</th>
+                                    <th>CPT Code</th>
+                                    <th>ICD Code</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => `
+                                    <tr>
+                                        <td>${item.service_date ? formatDate(item.service_date) : '—'}</td>
+                                        <td>${item.description}</td>
+                                        <td>${item.cpt_code || '—'}</td>
+                                        <td>${item.icd_code || '—'}</td>
+                                        <td>${item.quantity || 1}</td>
+                                        <td>$${((item.amount || item.total_price || 0) / (item.quantity || 1)).toFixed(2)}</td>
+                                        <td>$${(item.amount || item.total_price || 0).toFixed(2)}</td>
+                                    </tr>
+                                `).join('')}
+                                <tr class="total-row">
+                                    <td colspan="6">TOTAL</td>
+                                    <td>$${invoice.amount.toFixed(2)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                ` : ''}
+
+                <div class="payments-section">
+                    <h2 class="section-title">Payment History</h2>
+                    ${payments.length > 0 ? `
+                        <table class="payments-table">
+                            <thead>
+                                <tr>
+                                    <th>Payment Date</th>
+                                    <th>Amount</th>
+                                    <th>Method</th>
+                                    <th>Reference</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${payments.map(payment => `
+                                    <tr>
+                                        <td>${formatDate(payment.payment_date)}</td>
+                                        <td>$${payment.amount.toFixed(2)}</td>
+                                        <td>${payment.payment_method || '—'}</td>
+                                        <td>${payment.reference_number || '—'}</td>
+                                        <td>${payment.notes || '—'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    ` : `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💰</div>
+                            <p>No payments recorded yet</p>
+                        </div>
+                    `}
+                </div>
+
+                ${invoice.notes ? `
+                    <div style="margin-top: 32px; padding: 16px; background: var(--gray-50); border-radius: 8px;">
+                        <div class="info-label" style="margin-bottom: 8px;">Notes</div>
+                        <div style="color: var(--gray-700); white-space: pre-wrap;">${invoice.notes}</div>
+                    </div>
+                ` : ''}
+            `;
+        }
+
+        function showError(message) {
+            const container = document.getElementById('invoiceContainer');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">❌</div>
+                    <p>${message}</p>
+                    <button class="btn-primary" onclick="window.location.href='billing.html?section=invoices'" style="margin-top: 16px;">
+                        Back to Invoices
+                    </button>
+                </div>
+            `;
+        }
+
+        async function sendInvoice(invoiceId) {
+            if (!confirm('Send this invoice to the patient via email?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/invoices/${invoiceId}/send`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Invoice sent successfully!');
+                    loadInvoice(invoiceId); // Reload to update status
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to send invoice'));
+                }
+            } catch (error) {
+                console.error('Error sending invoice:', error);
+                alert('Error sending invoice: ' + error.message);
+            }
+        }
+
+        function recordPayment(invoiceId) {
+            const amount = prompt('Enter payment amount:');
+            if (!amount || parseFloat(amount) <= 0) return;
+
+            const paymentMethod = prompt('Payment method (cash, check, credit_card, bank_transfer):') || 'cash';
+            const referenceNumber = prompt('Reference number (optional):') || null;
+            const notes = prompt('Notes (optional):') || null;
+
+            if (!confirm(`Record payment of $${amount}?`)) return;
+
+            fetch(`${API_BASE}/api/invoices/${invoiceId}/payments`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    amount: parseFloat(amount),
+                    payment_method: paymentMethod,
+                    reference_number: referenceNumber,
+                    notes: notes
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Payment recorded successfully!');
+                    loadInvoice(invoiceId); // Reload to show updated payment
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to record payment'));
+                }
+            })
+            .catch(error => {
+                console.error('Error recording payment:', error);
+                alert('Error recording payment: ' + error.message);
+            });
+        }
+    </script>
+</body>
+
+</html>
+

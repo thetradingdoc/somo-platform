@@ -6,7 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Agent - Medical Coding Assistant</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/chat-widget.css">
+    <link rel="stylesheet" href="../assets/css/email-composer.css">
+    <link rel="stylesheet" href="../assets/css/sms-composer.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -27,6 +31,8 @@
             position: fixed;
             height: 100vh;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .sidebar-header {
@@ -62,6 +68,8 @@
 
         .sidebar-nav {
             padding: 16px;
+            flex: 1;
+            overflow-y: auto;
         }
 
         .nav-item {
@@ -94,10 +102,8 @@
         .sidebar-footer {
             padding: 16px;
             border-top: 1px solid var(--gray-200);
-            position: absolute;
-            bottom: 0;
-            width: 260px;
             background: white;
+            flex-shrink: 0;
         }
 
         .user-info {
@@ -598,6 +604,204 @@
                 padding: 10px 14px;
                 font-size: 18px;
             }
+
+            /* Automation mobile styles */
+            .rule-item,
+            .template-item,
+            .message-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .rule-actions,
+            .template-actions,
+            .message-status {
+                width: 100%;
+                justify-content: flex-start;
+            }
+
+            .automation-section {
+                padding: 16px;
+            }
+
+            .automation-section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .tabs {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .tab {
+                padding: 10px 16px;
+                font-size: 14px;
+                white-space: nowrap;
+            }
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            color: #718096;
+            transition: all 0.2s;
+            position: relative;
+            top: 2px;
+        }
+
+        .tab:hover {
+            color: var(--primary);
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Automation Styles */
+        .automation-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .automation-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .automation-section h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .rule-item,
+        .template-item,
+        .message-item {
+            padding: 16px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 4px solid var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .rule-item.disabled {
+            opacity: 0.6;
+            border-left-color: #cbd5e0;
+        }
+
+        .rule-info,
+        .template-info,
+        .message-info {
+            flex: 1;
+        }
+
+        .rule-title,
+        .template-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .rule-description,
+        .template-type {
+            font-size: 14px;
+            color: #718096;
+        }
+
+        .rule-actions,
+        .template-actions,
+        .message-status {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 24px;
+            background: #cbd5e0;
+            border-radius: 24px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #48bb78;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch.active .toggle-slider {
+            transform: translateX(24px);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .message-status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .message-status-badge.sent {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .message-status-badge.failed {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .message-status-badge.pending {
+            background: #feebc8;
+            color: #7c2d12;
         }
     </style>
 </head>
@@ -605,10 +809,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
-    
+
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
+
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -621,31 +825,7 @@
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
-                <a href="business-dashboard.html" class="nav-item">
-                    <span class="nav-icon">📊</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="products.html" class="nav-item">
-                    <span class="nav-icon">📦</span>
-                    <span>Products</span>
-                </a>
-                <a href="orders.html" class="nav-item">
-                    <span class="nav-icon">🛒</span>
-                    <span>Orders</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Customer List</span>
-                </a>
-                <a href="agent.html" class="nav-item active">
-                    <span class="nav-icon">🎙️</span>
-                    <span>Voice Agent</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
+                <!-- Populated by navigation.js -->
             </nav>
 
             <div class="sidebar-footer">
@@ -665,146 +845,203 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
-                <h1 class="page-title">Medical Coding Assistant</h1>
-                <p class="page-subtitle">Manage your AI-powered voice receptionist and appointment booking</p>
+                <h1 class="page-title">Voice Agent</h1>
+                <p class="page-subtitle">Manage your AI-powered voice agent, automation, and performance</p>
             </div>
 
-            <!-- Agent Control Panel -->
-            <div class="agent-control-panel">
-                <div class="agent-status-header">
-                    <div class="agent-status-info">
-                        <h2>🎙️ Medical Coding Assistant</h2>
-                        <div class="agent-phone-display" id="agentPhone">(585)620-2445</div>
-                        <div class="agent-status-indicator">
-                            <span class="status-dot-large" id="statusDot"></span>
-                            <span id="statusText">Online & Taking Calls</span>
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('performance', event)">📊 Performance</button>
+                <button class="tab" onclick="switchTab('automation', event)">🤖 Automation</button>
+            </div>
+
+            <!-- Performance Tab -->
+            <div id="performanceTab" class="tab-content active">
+                <!-- Agent Control Panel -->
+                <div class="agent-control-panel">
+                    <div class="agent-status-header">
+                        <div class="agent-status-info">
+                            <h2>🎙️ Medical Coding Assistant</h2>
+                            <div class="agent-phone-display" id="agentPhone">(585)620-2445</div>
+                            <div class="agent-status-indicator">
+                                <span class="status-dot-large" id="statusDot"></span>
+                                <span id="statusText">Online & Taking Calls</span>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="toggle-switch-large active" id="agentToggle" onclick="toggleAgent()">
+                                <div class="toggle-slider-large"></div>
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <div class="toggle-switch-large active" id="agentToggle" onclick="toggleAgent()">
-                            <div class="toggle-slider-large"></div>
+
+                    <div class="agent-actions-grid">
+                        <button class="agent-action-btn" onclick="testCall()">
+                            <span style="font-size: 24px;">📞</span>
+                            <span>Test Call</span>
+                        </button>
+                        <button class="agent-action-btn" onclick="editGreeting()">
+                            <span style="font-size: 24px;">🎤</span>
+                            <span>Edit Greeting</span>
+                        </button>
+                        <button class="agent-action-btn" onclick="editHours()">
+                            <span style="font-size: 24px;">⏰</span>
+                            <span>Business Hours</span>
+                        </button>
+                        <button class="agent-action-btn" onclick="viewTranscripts()">
+                            <span style="font-size: 24px;">📝</span>
+                            <span>Call Transcripts</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Performance Stats -->
+                <div class="performance-grid">
+                    <div class="performance-card">
+                        <h3>📞 Total Calls (24h)</h3>
+                        <div class="performance-value" id="totalCalls">0</div>
+                        <div class="performance-change positive" id="callsChange">+0 from yesterday</div>
+                    </div>
+
+                    <div class="performance-card">
+                        <h3>✅ Successful Calls</h3>
+                        <div class="performance-value" id="successfulCalls">0</div>
+                        <div class="performance-change" id="successRate">0% success rate</div>
+                    </div>
+
+                    <div class="performance-card">
+                        <h3>💰 Sales from Calls</h3>
+                        <div class="performance-value" id="callRevenue">$0</div>
+                        <div class="performance-change positive" id="revenueChange">+$0 today</div>
+                    </div>
+
+                    <div class="performance-card">
+                        <h3>⚡ Conversion Rate</h3>
+                        <div class="performance-value" id="conversionRate">0%</div>
+                        <div class="performance-change" id="conversionChange">0 purchases / 0 calls</div>
+                    </div>
+
+                    <div class="performance-card">
+                        <h3>⏱️ Avg Call Duration</h3>
+                        <div class="performance-value" id="avgDuration">0m</div>
+                        <div class="performance-change" id="durationChange">0s avg</div>
+                    </div>
+
+                    <div class="performance-card">
+                        <h3>💵 Avg Order Value</h3>
+                        <div class="performance-value" id="avgOrder">$0</div>
+                        <div class="performance-change" id="orderChange">Per call purchase</div>
+                    </div>
+                </div>
+
+                <!-- Business Hours -->
+                <div class="business-hours-card">
+                    <div class="call-log-header">
+                        <h3>⏰ Business Hours</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="editHours()">
+                            Edit Hours
+                        </button>
+                    </div>
+
+                    <div class="hours-row">
+                        <span class="day-name">Monday - Friday</span>
+                        <span class="hours-time">9:00 AM - 6:00 PM</span>
+                    </div>
+                    <div class="hours-row">
+                        <span class="day-name">Saturday</span>
+                        <span class="hours-time">10:00 AM - 4:00 PM</span>
+                    </div>
+                    <div class="hours-row">
+                        <span class="day-name">Sunday</span>
+                        <span class="hours-time">Closed</span>
+                    </div>
+                </div>
+
+                <!-- Call Costs -->
+                <div class="cost-card">
+                    <h3>💰 Call Costs</h3>
+                    <div class="cost-breakdown">
+                        <div class="cost-item">
+                            <div class="cost-label">Today</div>
+                            <div class="cost-value" id="costToday">$0.00</div>
+                        </div>
+                        <div class="cost-item">
+                            <div class="cost-label">This Month</div>
+                            <div class="cost-value" id="costMonth">$0.00</div>
+                        </div>
+                        <div class="cost-item">
+                            <div class="cost-label">Avg Cost per Call</div>
+                            <div class="cost-value" id="costPerCall">$0.00</div>
+                        </div>
+                        <div class="cost-item">
+                            <div class="cost-label">ROI</div>
+                            <div class="cost-value" id="roi">0x</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="agent-actions-grid">
-                    <button class="agent-action-btn" onclick="testCall()">
-                        <span style="font-size: 24px;">📞</span>
-                        <span>Test Call</span>
-                    </button>
-                    <button class="agent-action-btn" onclick="editGreeting()">
-                        <span style="font-size: 24px;">🎤</span>
-                        <span>Edit Greeting</span>
-                    </button>
-                    <button class="agent-action-btn" onclick="editHours()">
-                        <span style="font-size: 24px;">⏰</span>
-                        <span>Business Hours</span>
-                    </button>
-                    <button class="agent-action-btn" onclick="viewTranscripts()">
-                        <span style="font-size: 24px;">📝</span>
-                        <span>Call Transcripts</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Performance Stats -->
-            <div class="performance-grid">
-                <div class="performance-card">
-                    <h3>📞 Total Calls (24h)</h3>
-                    <div class="performance-value" id="totalCalls">0</div>
-                    <div class="performance-change positive" id="callsChange">+0 from yesterday</div>
-                </div>
-
-                <div class="performance-card">
-                    <h3>✅ Successful Calls</h3>
-                    <div class="performance-value" id="successfulCalls">0</div>
-                    <div class="performance-change" id="successRate">0% success rate</div>
-                </div>
-
-                <div class="performance-card">
-                    <h3>💰 Sales from Calls</h3>
-                    <div class="performance-value" id="callRevenue">$0</div>
-                    <div class="performance-change positive" id="revenueChange">+$0 today</div>
-                </div>
-
-                <div class="performance-card">
-                    <h3>⚡ Conversion Rate</h3>
-                    <div class="performance-value" id="conversionRate">0%</div>
-                    <div class="performance-change" id="conversionChange">0 purchases / 0 calls</div>
-                </div>
-
-                <div class="performance-card">
-                    <h3>⏱️ Avg Call Duration</h3>
-                    <div class="performance-value" id="avgDuration">0m</div>
-                    <div class="performance-change" id="durationChange">0s avg</div>
-                </div>
-
-                <div class="performance-card">
-                    <h3>💵 Avg Order Value</h3>
-                    <div class="performance-value" id="avgOrder">$0</div>
-                    <div class="performance-change" id="orderChange">Per call purchase</div>
-                </div>
-            </div>
-
-            <!-- Business Hours -->
-            <div class="business-hours-card">
-                <div class="call-log-header">
-                    <h3>⏰ Business Hours</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="editHours()">
-                        Edit Hours
-                    </button>
-                </div>
-
-                <div class="hours-row">
-                    <span class="day-name">Monday - Friday</span>
-                    <span class="hours-time">9:00 AM - 6:00 PM</span>
-                </div>
-                <div class="hours-row">
-                    <span class="day-name">Saturday</span>
-                    <span class="hours-time">10:00 AM - 4:00 PM</span>
-                </div>
-                <div class="hours-row">
-                    <span class="day-name">Sunday</span>
-                    <span class="hours-time">Closed</span>
-                </div>
-            </div>
-
-            <!-- Call Costs -->
-            <div class="cost-card">
-                <h3>💰 Call Costs</h3>
-                <div class="cost-breakdown">
-                    <div class="cost-item">
-                        <div class="cost-label">Today</div>
-                        <div class="cost-value" id="costToday">$0.00</div>
+                <!-- Recent Calls -->
+                <div class="call-log-card">
+                    <div class="call-log-header">
+                        <h3>📞 Recent Calls</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="viewAllCalls()">
+                            View All Calls
+                        </button>
                     </div>
-                    <div class="cost-item">
-                        <div class="cost-label">This Month</div>
-                        <div class="cost-value" id="costMonth">$0.00</div>
-                    </div>
-                    <div class="cost-item">
-                        <div class="cost-label">Avg Cost per Call</div>
-                        <div class="cost-value" id="costPerCall">$0.00</div>
-                    </div>
-                    <div class="cost-item">
-                        <div class="cost-label">ROI</div>
-                        <div class="cost-value" id="roi">0x</div>
+
+                    <div id="callLogList">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📞</div>
+                            <p>No calls yet. Call history will appear here.</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Recent Calls -->
-            <div class="call-log-card">
-                <div class="call-log-header">
-                    <h3>📞 Recent Calls</h3>
-                    <button class="btn btn-secondary btn-sm" onclick="viewAllCalls()">
-                        View All Calls
-                    </button>
+            <!-- Automation Tab -->
+            <div id="automationTab" class="tab-content">
+                <!-- Automation Rules -->
+                <div class="automation-section">
+                    <div class="automation-section-header">
+                        <h3>🤖 Automation Rules</h3>
+                        <button class="btn btn-primary btn-sm" onclick="openRuleModal()">+ New Rule</button>
+                    </div>
+                    <div id="rulesList">
+                        <div class="empty-state">
+                            <p>No automation rules yet. Create one to get started.</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div id="callLogList">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📞</div>
-                        <p>No calls yet. Call history will appear here.</p>
+                <!-- Templates -->
+                <div class="automation-section">
+                    <div class="automation-section-header">
+                        <h3>📝 Message Templates</h3>
+                        <div>
+                            <button class="btn btn-secondary btn-sm" onclick="loadTemplates('email')"
+                                style="margin-right: 8px;">Email</button>
+                            <button class="btn btn-secondary btn-sm" onclick="loadTemplates('sms')"
+                                style="margin-right: 8px;">SMS</button>
+                            <button class="btn btn-primary btn-sm" onclick="openTemplateModal()">+ New Template</button>
+                        </div>
+                    </div>
+                    <div id="templatesList">
+                        <div class="empty-state">
+                            <p>No templates yet. Create one to get started.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Message History -->
+                <div class="automation-section">
+                    <div class="automation-section-header">
+                        <h3>📨 Message History</h3>
+                        <button class="btn btn-secondary btn-sm" onclick="loadMessageHistory()">Refresh</button>
+                    </div>
+                    <div id="messageHistoryList">
+                        <div class="empty-state">
+                            <p>No messages sent yet.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -853,29 +1090,6 @@
             });
         }
 
-        function renderSidebar(activeId) {
-            if (!window.TENANT_CONFIG) return;
-            const navEl = document.getElementById('sidebarNav');
-            if (!navEl) return;
-
-            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
-                    <span class="nav-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </a>
-            `).join('');
-
-            const subtitleEl = document.querySelector('.sidebar-subtitle');
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-
-            // Adjust page title for shop tenants
-            if (window.TENANT_CONFIG.tenant_type === 'shop') {
-                const titleEl = document.querySelector('.page-title');
-                if (titleEl) titleEl.textContent = 'Voice Commerce Agent';
-            }
-        }
 
         // Check authentication
         if (sessionStorage.getItem('authenticated') !== 'true') {
@@ -892,7 +1106,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            renderSidebar('agent');
             setupMobileNavClose();
 
             // Close sidebar on window resize if switching to desktop
@@ -910,10 +1123,186 @@
             });
             loadUserInfo();
             loadAgentData();
+            loadAutomationData();
 
             // Refresh every 30 seconds
             setInterval(loadAgentData, 30000);
         });
+
+        // Tab switching
+        function switchTab(tabName, event) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            if (event && event.target) {
+                event.target.classList.add('active');
+            } else {
+                // Find the tab button and activate it
+                document.querySelectorAll('.tab').forEach(tab => {
+                    if (tab.textContent.includes(tabName === 'performance' ? 'Performance' : 'Automation')) {
+                        tab.classList.add('active');
+                    }
+                });
+            }
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}Tab`).classList.add('active');
+
+            // Load data if switching to automation
+            if (tabName === 'automation') {
+                loadAutomationData();
+            }
+        }
+
+        // Automation functions
+        async function loadAutomationData() {
+            await Promise.all([
+                loadRules(),
+                loadTemplates(),
+                loadMessageHistory()
+            ]);
+        }
+
+        async function loadRules() {
+            try {
+                const response = await fetch(`${API_BASE}/api/automation/rules`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                const container = document.getElementById('rulesList');
+                if (!data.rules || data.rules.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>No automation rules yet. Create one to get started.</p></div>';
+                    return;
+                }
+
+                container.innerHTML = data.rules.map(rule => `
+                    <div class="rule-item ${rule.enabled ? '' : 'disabled'}">
+                        <div class="rule-info">
+                            <div class="rule-title">When: ${rule.trigger} → ${rule.action}</div>
+                            <div class="rule-description">Template: ${rule.template_id ? 'Yes' : 'No'}</div>
+                        </div>
+                        <div class="rule-actions">
+                            <div class="toggle-switch ${rule.enabled ? 'active' : ''}" onclick="toggleRule('${rule.id}', ${!rule.enabled})">
+                                <div class="toggle-slider"></div>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="editRule('${rule.id}')">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteRule('${rule.id}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading rules:', error);
+            }
+        }
+
+        async function loadTemplates(type = null) {
+            try {
+                const url = type ? `${API_BASE}/api/automation/templates?type=${type}` : `${API_BASE}/api/automation/templates`;
+                const response = await fetch(url, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                const container = document.getElementById('templatesList');
+                if (!data.templates || data.templates.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>No templates yet. Create one to get started.</p></div>';
+                    return;
+                }
+
+                container.innerHTML = data.templates.map(template => `
+                    <div class="template-item">
+                        <div class="template-info">
+                            <div class="template-title">${template.name}</div>
+                            <div class="template-type">${template.type.toUpperCase()}</div>
+                        </div>
+                        <div class="template-actions">
+                            <button class="btn btn-secondary btn-sm" onclick="editTemplate('${template.id}')">Edit</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteTemplate('${template.id}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading templates:', error);
+            }
+        }
+
+        async function loadMessageHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/api/automation/messages/history?limit=20`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+
+                const container = document.getElementById('messageHistoryList');
+                if (!data.messages || data.messages.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><p>No messages sent yet.</p></div>';
+                    return;
+                }
+
+                container.innerHTML = data.messages.map(msg => {
+                    const date = new Date(msg.sent_at).toLocaleString();
+                    return `
+                        <div class="message-item">
+                            <div class="message-info">
+                                <div class="rule-title">${msg.type.toUpperCase()} to ${msg.recipient}</div>
+                                <div class="rule-description">${date}</div>
+                            </div>
+                            <div class="message-status">
+                                <span class="message-status-badge ${msg.status}">${msg.status}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading message history:', error);
+            }
+        }
+
+        function toggleRule(ruleId, enabled) {
+            fetch(`${API_BASE}/api/automation/rules/${ruleId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ enabled })
+            }).then(() => loadRules());
+        }
+
+        function deleteRule(ruleId) {
+            if (!confirm('Delete this automation rule?')) return;
+            fetch(`${API_BASE}/api/automation/rules/${ruleId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            }).then(() => loadRules());
+        }
+
+        function deleteTemplate(templateId) {
+            if (!confirm('Delete this template?')) return;
+            fetch(`${API_BASE}/api/automation/templates/${templateId}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            }).then(() => loadTemplates());
+        }
+
+        function openRuleModal() {
+            alert('Create Rule Modal\n\nIn production, this would open a modal to:\n• Select trigger (order_completed, customer_created, etc.)\n• Select action (send_email, send_sms, call_customer)\n• Choose template\n• Set conditions');
+        }
+
+        function openTemplateModal() {
+            alert('Create Template Modal\n\nIn production, this would open a modal to:\n• Enter template name\n• Choose type (email/SMS)\n• Write content with variables\n• Preview rendered template');
+        }
+
+        function editRule(ruleId) {
+            alert(`Edit Rule ${ruleId}\n\nIn production, this would open the rule editor.`);
+        }
+
+        function editTemplate(templateId) {
+            alert(`Edit Template ${templateId}\n\nIn production, this would open the template editor.`);
+        }
 
         function loadUserInfo() {
             if (userData) {
@@ -1073,6 +1462,9 @@
             window.location.href = '../login.html';
         }
     </script>
+    <script src="../assets/js/chat-widget.js"></script>
+    <script src="../assets/js/email-composer.js"></script>
+    <script src="../assets/js/sms-composer.js"></script>
 </body>
 
 </html>

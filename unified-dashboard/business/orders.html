@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orders - Order Tracking</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -101,7 +103,7 @@
             background: white;
         }
 
-                .user-info {
+        .user-info {
             display: flex;
             align-items: center;
             gap: 12px;
@@ -584,7 +586,7 @@
             .sidebar {
                 position: fixed;
                 left: 0;
-            top: 0;
+                top: 0;
                 height: 100vh;
                 width: 280px;
                 max-width: 85vw;
@@ -668,10 +670,10 @@
 <body>
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu" type="button">☰</button>
-    
+
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-    
+
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -680,35 +682,11 @@
                     <span class="doc">Doc</span><span class="little">Little</span><span
                         style="font-weight:700;">.</span>
                 </div>
-                <div class="sidebar-subtitle">24/7 Medical Assistant</div>
+                <div class="sidebar-subtitle">Cannabis E-Commerce</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Static fallback nav (will be replaced by JS when TENANT_CONFIG is available) -->
-                <a href="business-dashboard.html" class="nav-item">
-                    <span class="nav-icon">📊</span>
-                    <span>Dashboard</span>
-                </a>
-                <a href="products.html" class="nav-item">
-                    <span class="nav-icon">📦</span>
-                    <span>Products</span>
-                </a>
-                <a href="orders.html" class="nav-item active">
-                    <span class="nav-icon">🛒</span>
-                    <span>Orders</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Customer List</span>
-                </a>
-                <a href="agent.html" class="nav-item">
-                    <span class="nav-icon">🎙️</span>
-                    <span>Voice Agent</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
+                <!-- Will be populated by tenant config -->
             </nav>
 
             <div class="sidebar-footer">
@@ -821,17 +799,17 @@
                 e.preventDefault();
                 e.stopPropagation();
             }
-            
+
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebarOverlay');
-            
+
             if (!sidebar || !overlay) {
                 console.error('Sidebar or overlay element not found');
                 return;
             }
-            
+
             const isOpen = sidebar.classList.contains('open');
-            
+
             if (isOpen) {
                 // Close sidebar
                 sidebar.classList.remove('open');
@@ -866,32 +844,28 @@
             });
         }
 
-        function renderSidebar(activeId) {
-            if (!window.TENANT_CONFIG) return;
-            const navEl = document.getElementById('sidebarNav');
-            if (!navEl) return;
-
-            navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                <a href="${item.href}" class="nav-item ${item.id === activeId ? 'active' : ''}">
-                    <span class="nav-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </a>
-            `).join('');
-
-            const subtitleEl = document.querySelector('.sidebar-subtitle');
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-        }
 
         document.addEventListener('DOMContentLoaded', () => {
             userData = JSON.parse(sessionStorage.getItem('user') || '{}');
-            renderSidebar('orders');
+            // Navigation is handled by navigation.js
+            setTimeout(() => renderNavigation('orders'), 200);
             setupMobileNavClose();
             loadUserInfo();
             loadOrders();
-            // Refresh every 30 seconds
-            setInterval(loadOrders, 30000);
+            // Refresh every 30 seconds (store interval for cleanup)
+            ordersRefreshInterval = setInterval(loadOrders, 30000);
+
+            // Cleanup on page unload/navigation
+            window.addEventListener('beforeunload', cleanupAllPolling);
+            window.addEventListener('pagehide', cleanupAllPolling);
+
+            // Cleanup when page becomes hidden (mobile browser tab switch)
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    // Optionally pause polling when tab is hidden
+                    // For now, we'll keep it running but could optimize later
+                }
+            });
 
             // Add event listeners to mobile menu button - MATCHING WORKING PATTERN FROM products.html
             const mobileMenuBtn = document.querySelector('.mobile-menu-toggle');
@@ -899,26 +873,26 @@
                 // Use a single handler that works for both touch and click
                 let touchStartTime = 0;
                 let touchStartPos = { x: 0, y: 0 };
-                
+
                 // Handle touch start - just record the touch
-                mobileMenuBtn.addEventListener('touchstart', function(e) {
+                mobileMenuBtn.addEventListener('touchstart', function (e) {
                     touchStartTime = Date.now();
                     const touch = e.touches[0];
                     touchStartPos = { x: touch.clientX, y: touch.clientY };
                 }, { passive: true });
-                
+
                 // Handle touch end - check if it was a tap (not a swipe)
-                mobileMenuBtn.addEventListener('touchend', function(e) {
+                mobileMenuBtn.addEventListener('touchend', function (e) {
                     const touchEndTime = Date.now();
                     const touchDuration = touchEndTime - touchStartTime;
                     const touch = e.changedTouches[0];
                     const touchEndPos = { x: touch.clientX, y: touch.clientY };
-                    
+
                     // Calculate distance moved
                     const deltaX = Math.abs(touchEndPos.x - touchStartPos.x);
                     const deltaY = Math.abs(touchEndPos.y - touchStartPos.y);
                     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                    
+
                     // If it was a quick tap (less than 300ms and less than 10px movement), toggle sidebar
                     if (touchDuration < 300 && distance < 10) {
                         e.preventDefault();
@@ -926,9 +900,9 @@
                         toggleSidebar(e);
                     }
                 }, { passive: false });
-                
+
                 // Handle click event for desktop/mouse users
-                mobileMenuBtn.addEventListener('click', function(e) {
+                mobileMenuBtn.addEventListener('click', function (e) {
                     e.preventDefault();
                     e.stopPropagation();
                     toggleSidebar(e);
@@ -1581,6 +1555,8 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
 
         // Poll for location updates
         let pollingIntervals = {};
+        let ordersRefreshInterval = null; // Main orders refresh interval
+
         function startLocationPolling(orderId) {
             // Clear existing interval
             if (pollingIntervals[orderId]) {
@@ -1602,6 +1578,20 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
                     console.error('Error polling location:', error);
                 }
             }, 15000); // 15 seconds
+        }
+
+        // Cleanup all polling intervals
+        function cleanupAllPolling() {
+            // Stop all location polling
+            Object.keys(pollingIntervals).forEach(orderId => {
+                stopLocationPolling(orderId);
+            });
+
+            // Stop main orders refresh
+            if (ordersRefreshInterval) {
+                clearInterval(ordersRefreshInterval);
+                ordersRefreshInterval = null;
+            }
         }
 
         // Update map with new location (works with both Google Maps and Leaflet)
@@ -1627,7 +1617,7 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
                                 const shippingAddress = typeof order.shipping_address === 'string'
                                     ? JSON.parse(order.shipping_address)
                                     : order.shipping_address;
-                                
+
                                 if (shippingAddress && shippingAddress.latitude && shippingAddress.longitude) {
                                     trackingPolylines[orderId].setPath([
                                         newPosition,
@@ -1651,7 +1641,7 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
                                 const shippingAddress = typeof order.shipping_address === 'string'
                                     ? JSON.parse(order.shipping_address)
                                     : order.shipping_address;
-                                
+
                                 if (shippingAddress && shippingAddress.latitude && shippingAddress.longitude) {
                                     trackingPolylines[orderId].setLatLngs([
                                         [driverLat, driverLng],
@@ -1684,7 +1674,7 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
         function closeTrackingModal() {
             const modal = document.getElementById('trackingModal');
             if (modal) {
-                // Stop all polling
+                // Stop all location polling (but keep main orders refresh)
                 Object.keys(pollingIntervals).forEach(orderId => {
                     stopLocationPolling(orderId);
                 });
@@ -1731,6 +1721,7 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
             window.location.href = '../login.html';
         }
     </script>
+    <script src="../assets/js/chat-widget.js"></script>
 </body>
 
 </html>
