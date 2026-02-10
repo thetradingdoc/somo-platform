@@ -125,12 +125,31 @@ function toJsonValue(value) {
   }
 }
 
-function syncClinicToPostgres(clinic) {
-  if (!pgPool || !clinic) return;
+/**
+ * Enqueue failed Postgres sync for retry (Section 2.2).
+ * @param {string} entityType - clinic|clinic_phone|appointment|appointment_delete|voice_checkout|voice_call_log|function_call_log
+ * @param {object} payload - Serializable payload for the sync operation
+ * @param {number} priority - 1=high, 2=medium, 3=low
+ * @param {string} errorMessage - Last error message
+ */
+function enqueuePostgresSyncRetry(entityType, payload, priority = 2, errorMessage = null) {
+  try {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const payloadJson = typeof payload === 'string' ? payload : JSON.stringify(payload || {});
+    db.prepare(`
+      INSERT INTO postgres_sync_retry (id, entity_type, payload_json, priority, last_error, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(id, entityType, payloadJson, Math.min(3, Math.max(1, priority)), errorMessage || null);
+    console.log(`📥 Postgres sync queued for retry: ${entityType} (priority ${priority})`);
+  } catch (e) {
+    console.error('❌ Failed to enqueue postgres sync retry:', e.message);
+  }
+}
 
-  // SECURITY: Better error handling for Postgres sync
-  // Log errors but don't block SQLite operations
-  pgPool`
+/** Internal: returns Promise for worker retries. Public sync uses .catch(enqueue). */
+function _syncClinicToPostgres(clinic) {
+  if (!pgPool || !clinic) return Promise.resolve();
+  return pgPool`
     INSERT INTO clinics (
       clinic_id, name, slug, phone_number, email, address, business_hours, services,
       retell_agent_id, retell_agent_status, merchant_id, is_active, created_at, updated_at
@@ -163,17 +182,20 @@ function syncClinicToPostgres(clinic) {
       merchant_id = EXCLUDED.merchant_id,
       is_active = EXCLUDED.is_active,
       updated_at = COALESCE(EXCLUDED.updated_at, NOW());
-  `.catch(err => {
+  `;
+}
+function syncClinicToPostgres(clinic) {
+  _syncClinicToPostgres(clinic).catch(err => {
     console.error('❌ Postgres sync [clinics] failed:', err.message);
     console.error('   Clinic ID:', clinic.clinic_id);
-    // TODO: Consider adding to a retry queue for critical data
-    // For now, SQLite remains the source of truth
+    enqueuePostgresSyncRetry('clinic', clinic, 1, err.message);
   });
 }
 
-function syncClinicPhoneToPostgres(phoneRow) {
-  if (!pgPool || !phoneRow) return;
-  pgPool`
+/** Internal: returns Promise for worker retries. */
+function _syncClinicPhoneToPostgres(phoneRow) {
+  if (!pgPool || !phoneRow) return Promise.resolve();
+  return pgPool`
     INSERT INTO clinic_phone_numbers (phone_number, clinic_id, is_primary, created_at)
     VALUES (
       ${phoneRow.phone_number},
@@ -185,16 +207,20 @@ function syncClinicPhoneToPostgres(phoneRow) {
       clinic_id = EXCLUDED.clinic_id,
       is_primary = EXCLUDED.is_primary,
       created_at = EXCLUDED.created_at;
-  `.catch(err => {
+  `;
+}
+function syncClinicPhoneToPostgres(phoneRow) {
+  _syncClinicPhoneToPostgres(phoneRow).catch(err => {
     console.error('❌ Postgres sync [clinic_phone_numbers] failed:', err.message);
     console.error('   Phone:', phoneRow.phone_number, 'Clinic:', phoneRow.clinic_id);
-    // TODO: Consider adding to a retry queue for critical data
+    enqueuePostgresSyncRetry('clinic_phone', phoneRow, 1, err.message);
   });
 }
 
-function syncAppointmentToPostgres(appointment) {
-  if (!pgPool || !appointment) return;
-  pgPool`
+/** Internal: returns Promise for worker retries. */
+function _syncAppointmentToPostgres(appointment) {
+  if (!pgPool || !appointment) return Promise.resolve();
+  return pgPool`
     INSERT INTO appointments (
       id, clinic_id, patient_name, patient_phone, patient_email, patient_id,
       appointment_type, date, time, start_time, end_time, duration_minutes,
@@ -243,27 +269,32 @@ function syncAppointmentToPostgres(appointment) {
       calendar_link = EXCLUDED.calendar_link,
       cancellation_reason = EXCLUDED.cancellation_reason,
       updated_at = COALESCE(EXCLUDED.updated_at, NOW());
-  `.catch(err => {
+  `;
+}
+function syncAppointmentToPostgres(appointment) {
+  _syncAppointmentToPostgres(appointment).catch(err => {
     console.error('❌ Postgres sync [appointments] failed:', err.message);
     console.error('   Appointment ID:', appointment.id, 'Patient:', appointment.patient_name);
-    // TODO: Consider adding to a retry queue for critical data
+    enqueuePostgresSyncRetry('appointment', appointment, 1, err.message);
   });
 }
 
+/** Internal: returns Promise for worker retries. */
+function _deleteAppointmentFromPostgres(appointmentId) {
+  if (!pgPool || !appointmentId) return Promise.resolve();
+  return pgPool`DELETE FROM appointments WHERE id = ${appointmentId};`;
+}
 function deleteAppointmentFromPostgres(appointmentId) {
-  if (!pgPool || !appointmentId) return;
-  pgPool`
-    DELETE FROM appointments WHERE id = ${appointmentId};
-  `.catch(err => {
+  _deleteAppointmentFromPostgres(appointmentId).catch(err => {
     console.error('❌ Postgres sync [appointments-delete] failed:', err.message);
     console.error('   Appointment ID:', appointmentId);
-    // TODO: Consider adding to a retry queue for critical data
+    enqueuePostgresSyncRetry('appointment_delete', { appointmentId }, 2, err.message);
   });
 }
 
-function syncVoiceCheckoutToPostgres(checkout) {
-  if (!pgPool || !checkout) return;
-  pgPool`
+function _syncVoiceCheckoutToPostgres(checkout) {
+  if (!pgPool || !checkout) return Promise.resolve();
+  return pgPool`
     INSERT INTO voice_checkouts (
       id, clinic_id, merchant_id, product_id, product_name, quantity, amount,
       customer_phone, customer_name, customer_email, appointment_id, payment_method,
@@ -310,16 +341,20 @@ function syncVoiceCheckoutToPostgres(checkout) {
       fhir_patient_id = EXCLUDED.fhir_patient_id,
       fhir_encounter_id = EXCLUDED.fhir_encounter_id,
       completed_at = EXCLUDED.completed_at;
-  `.catch(err => {
+  `;
+}
+function syncVoiceCheckoutToPostgres(checkout) {
+  _syncVoiceCheckoutToPostgres(checkout).catch(err => {
     console.error('❌ Postgres sync [voice_checkouts] failed:', err.message);
     console.error('   Checkout ID:', checkout.id, 'Amount:', checkout.amount);
-    // TODO: Consider adding to a retry queue for critical data
+    enqueuePostgresSyncRetry('voice_checkout', checkout, 2, err.message);
   });
 }
 
-function syncVoiceCallToPostgres(call) {
-  if (!pgPool || !call) return;
-  pgPool`
+/** Internal: returns Promise for worker retries. */
+function _syncVoiceCallToPostgres(call) {
+  if (!pgPool || !call) return Promise.resolve();
+  return pgPool`
     INSERT INTO voice_call_log (
       id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes,
       credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd,
@@ -361,16 +396,20 @@ function syncVoiceCallToPostgres(call) {
       cost_source = EXCLUDED.cost_source,
       cost_updated_at = COALESCE(EXCLUDED.cost_updated_at, voice_call_log.cost_updated_at),
       created_at = COALESCE(EXCLUDED.created_at, voice_call_log.created_at);
-  `.catch(err => {
+  `;
+}
+function syncVoiceCallToPostgres(call) {
+  _syncVoiceCallToPostgres(call).catch(err => {
     console.error('❌ Postgres sync [voice_call_log] failed:', err.message);
     console.error('   Call ID:', call.call_id, 'Customer:', call.customer_id);
-    // TODO: Consider adding to a retry queue for critical data
+    enqueuePostgresSyncRetry('voice_call_log', call, 2, err.message);
   });
 }
 
-function syncFunctionCallToPostgres(funcLog) {
-  if (!pgPool || !funcLog) return;
-  pgPool`
+/** Internal: returns Promise for worker retries. */
+function _syncFunctionCallToPostgres(funcLog) {
+  if (!pgPool || !funcLog) return Promise.resolve();
+  return pgPool`
     INSERT INTO function_call_log (
       id, customer_id, call_id, function_name, parameters,
       response_time_ms, success, error_message, created_at
@@ -394,11 +433,33 @@ function syncFunctionCallToPostgres(funcLog) {
       success = EXCLUDED.success,
       error_message = EXCLUDED.error_message,
       created_at = COALESCE(EXCLUDED.created_at, function_call_log.created_at);
-  `.catch(err => {
+  `;
+}
+function syncFunctionCallToPostgres(funcLog) {
+  _syncFunctionCallToPostgres(funcLog).catch(err => {
     console.error('❌ Postgres sync [function_call_log] failed:', err.message);
     console.error('   Function:', funcLog.function_name, 'Call ID:', funcLog.call_id);
-    // TODO: Consider adding to a retry queue for critical data
+    enqueuePostgresSyncRetry('function_call_log', funcLog, 3, err.message);
   });
+}
+
+/**
+ * Execute Postgres sync by entity type (for retry worker). Returns Promise.
+ * @param {string} entityType - clinic|clinic_phone|appointment|appointment_delete|voice_checkout|voice_call_log|function_call_log
+ * @param {object|string} payload - JSON payload or string
+ */
+async function executePostgresSync(entityType, payload) {
+  const p = typeof payload === 'string' ? JSON.parse(payload || '{}') : (payload || {});
+  switch (entityType) {
+    case 'clinic': return _syncClinicToPostgres(p);
+    case 'clinic_phone': return _syncClinicPhoneToPostgres(p);
+    case 'appointment': return _syncAppointmentToPostgres(p);
+    case 'appointment_delete': return _deleteAppointmentFromPostgres(p.appointmentId);
+    case 'voice_checkout': return _syncVoiceCheckoutToPostgres(p);
+    case 'voice_call_log': return _syncVoiceCallToPostgres(p);
+    case 'function_call_log': return _syncFunctionCallToPostgres(p);
+    default: throw new Error('Unknown entity_type: ' + entityType);
+  }
 }
 
 // Initialize tables
@@ -1026,13 +1087,93 @@ try {
     const needDeductRemain = !info.some(c => c.name === 'deductible_remaining');
     const needCoins = !info.some(c => c.name === 'coinsurance_percent');
     const needPlan = !info.some(c => c.name === 'plan_summary');
+    const needOopMax = !info.some(c => c.name === 'oop_max');
+    const needOopMet = !info.some(c => c.name === 'oop_met');
     if (needDeductTotal) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN deductible_total REAL;`);
     if (needDeductRemain) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN deductible_remaining REAL;`);
     if (needCoins) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN coinsurance_percent REAL;`);
     if (needPlan) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN plan_summary TEXT;`);
+    if (needOopMax) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN oop_max REAL;`);
+    if (needOopMet) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN oop_met REAL;`);
   }
 } catch (migrationError) {
   console.warn('⚠️  Eligibility checks migration failed:', migrationError.message);
+}
+
+// Migration: code_acceptance_rates table (Tiba Phase 4 - φ^historical_i)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS code_acceptance_rates (
+      payer_id TEXT NOT NULL,
+      cpt_code TEXT NOT NULL,
+      acceptance_count INTEGER DEFAULT 0,
+      denial_count INTEGER DEFAULT 0,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (payer_id, cpt_code)
+    );
+    CREATE INDEX IF NOT EXISTS idx_code_acceptance_payer ON code_acceptance_rates(payer_id);
+    CREATE INDEX IF NOT EXISTS idx_code_acceptance_cpt ON code_acceptance_rates(cpt_code);
+  `);
+} catch (migrationError) {
+  console.warn('⚠️  code_acceptance_rates migration failed:', migrationError.message);
+}
+
+// Migration: real_time_plan_paid for Tiba reconciliation (Phase 5)
+try {
+  const icExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='insurance_claims'`).get();
+  if (icExists) {
+    const info = db.prepare(`PRAGMA table_info(insurance_claims)`).all();
+    if (!info.some(c => c.name === 'real_time_plan_paid')) {
+      db.exec(`ALTER TABLE insurance_claims ADD COLUMN real_time_plan_paid REAL;`);
+    }
+  }
+} catch (migrationError) {
+  console.warn('⚠️  real_time_plan_paid migration failed:', migrationError.message);
+}
+
+// Migration: settlement state columns (Tiba Phase 3.8)
+try {
+  const ic2 = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='insurance_claims'`).get();
+  if (ic2) {
+    const info2 = db.prepare(`PRAGMA table_info(insurance_claims)`).all();
+    const cols = ['settlement_state', 'settlement_aggregate_confidence', 'settlement_amount_released', 'settlement_escrow_remainder', 'settlement_decision'];
+    for (const col of cols) {
+      if (!info2.some(c => c.name === col)) {
+        db.exec(`ALTER TABLE insurance_claims ADD COLUMN ${col} ${col.includes('decision') ? 'TEXT' : 'REAL'};`);
+      }
+    }
+  }
+} catch (migrationError) {
+  console.warn('⚠️  settlement state migration failed:', migrationError.message);
+}
+
+// Migration: provider_npi on insurance_claims (Tiba Phase 3.7)
+try {
+  const ic3 = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='insurance_claims'`).get();
+  if (ic3) {
+    const info3 = db.prepare(`PRAGMA table_info(insurance_claims)`).all();
+    if (!info3.some(c => c.name === 'provider_npi')) {
+      db.exec(`ALTER TABLE insurance_claims ADD COLUMN provider_npi TEXT;`);
+    }
+  }
+} catch (migrationError) {
+  console.warn('⚠️  provider_npi migration failed:', migrationError.message);
+}
+
+// Migration: provider_trust_metrics (Tiba Phase 3.7)
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS provider_trust_metrics (
+      provider_npi TEXT PRIMARY KEY,
+      trust_score REAL DEFAULT 1.0,
+      denial_rate REAL DEFAULT 0,
+      coding_variance REAL DEFAULT 0,
+      volume_anomaly_score REAL DEFAULT 0,
+      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+} catch (migrationError) {
+  console.warn('⚠️  provider_trust_metrics migration failed:', migrationError.message);
 }
 
 // Migration: Add EHR sync columns to appointments table
@@ -1534,6 +1675,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_circle_transfers_status ON circle_transfers(status);
   CREATE INDEX IF NOT EXISTS idx_circle_transfers_circle_transfer_id ON circle_transfers(circle_transfer_id);
 
+  -- EOB Calculation Audit - full transparency of inputs/outputs for each calculation
+  CREATE TABLE IF NOT EXISTS eob_calculation_audit (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT NOT NULL,
+    calculation_inputs TEXT,
+    calculation_outputs TEXT,
+    triggered_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (claim_id) REFERENCES insurance_claims(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_eob_audit_claim_id ON eob_calculation_audit(claim_id);
+
   CREATE TABLE IF NOT EXISTS patient_portal_sessions (
     id TEXT PRIMARY KEY,
     patient_id TEXT,
@@ -1562,6 +1715,56 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_cpt_codes_description ON cpt_codes(description);
+
+  CREATE TABLE IF NOT EXISTS icd10_codes (
+    code TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    category TEXT,
+    billable INTEGER DEFAULT 1,
+    source_file TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_icd10_codes_description ON icd10_codes(description);
+
+  CREATE TABLE IF NOT EXISTS hcpcs_codes (
+    code TEXT PRIMARY KEY,
+    long_desc TEXT NOT NULL,
+    short_desc TEXT,
+    pricing_ind TEXT,
+    coverage_cd TEXT,
+    type TEXT,
+    source_file TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_long_desc ON hcpcs_codes(long_desc);
+  CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_short_desc ON hcpcs_codes(short_desc);
+
+  CREATE TABLE IF NOT EXISTS code_embeddings (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    code_type TEXT NOT NULL,
+    description_text TEXT,
+    embedding_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_code_embeddings_code_type ON code_embeddings(code_type);
+
+  -- Fee schedules: payer-specific allowed amounts per CPT (enables real-time adjudication)
+  CREATE TABLE IF NOT EXISTS fee_schedules (
+    id TEXT PRIMARY KEY,
+    payer_id TEXT NOT NULL,
+    cpt_code TEXT NOT NULL,
+    allowed_amount REAL NOT NULL,
+    in_network BOOLEAN DEFAULT 1,
+    effective_date DATE,
+    end_date DATE,
+    source TEXT DEFAULT 'manual',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_fee_schedules_payer ON fee_schedules(payer_id);
+  CREATE INDEX IF NOT EXISTS idx_fee_schedules_cpt ON fee_schedules(cpt_code);
+  CREATE INDEX IF NOT EXISTS idx_fee_schedules_payer_cpt ON fee_schedules(payer_id, cpt_code);
 
   -- ============================================
   -- USAGE TRACKING & LOGGING TABLES
@@ -1617,6 +1820,38 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id)
   );
+
+  -- Voice call state management (medical coding agent)
+  CREATE TABLE IF NOT EXISTS voice_call_states (
+    id TEXT PRIMARY KEY,
+    call_id TEXT NOT NULL UNIQUE,
+    clinic_id TEXT,
+    current_stage TEXT DEFAULT 'INTAKE',
+    state_data TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_voice_call_states_call_id ON voice_call_states(call_id);
+
+  CREATE TABLE IF NOT EXISTS voice_conversation_memory (
+    id TEXT PRIMARY KEY,
+    call_id TEXT NOT NULL,
+    clinic_id TEXT,
+    turn_number INTEGER DEFAULT 0,
+    role TEXT NOT NULL,
+    content TEXT,
+    extracted_entities TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_voice_conversation_memory_call_id ON voice_conversation_memory(call_id);
+
+  CREATE TABLE IF NOT EXISTS agent_state_snapshots (
+    id TEXT PRIMARY KEY,
+    call_id TEXT NOT NULL,
+    state_name TEXT NOT NULL,
+    state_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_state_snapshots_call_id ON agent_state_snapshots(call_id);
 
   CREATE TABLE IF NOT EXISTS sms_usage_log (
     id TEXT PRIMARY KEY,
@@ -2698,6 +2933,452 @@ function migrateVoiceCallLogCosts() {
   }
 }
 
+// ============================================
+// MIGRATION: Voice call state tables (medical coding agent)
+// ============================================
+function migrateVoiceCallStateTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS voice_call_states (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL UNIQUE,
+        clinic_id TEXT,
+        current_stage TEXT DEFAULT 'INTAKE',
+        state_data TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_voice_call_states_call_id ON voice_call_states(call_id);
+
+      CREATE TABLE IF NOT EXISTS voice_conversation_memory (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL,
+        clinic_id TEXT,
+        turn_number INTEGER DEFAULT 0,
+        role TEXT NOT NULL,
+        content TEXT,
+        extracted_entities TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_voice_conversation_memory_call_id ON voice_conversation_memory(call_id);
+
+      CREATE TABLE IF NOT EXISTS agent_state_snapshots (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL,
+        state_name TEXT NOT NULL,
+        state_data TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_state_snapshots_call_id ON agent_state_snapshots(call_id);
+    `);
+    console.log('✅ Migration complete: voice call state tables ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  Voice call state tables migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: icd10_codes table (Phase 2.1)
+// ============================================
+function migrateIcd10CodesTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS icd10_codes (
+        code TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        category TEXT,
+        billable INTEGER DEFAULT 1,
+        source_file TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_icd10_codes_description ON icd10_codes(description);
+    `);
+    console.log('✅ Migration complete: icd10_codes table ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  icd10_codes table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: hcpcs_codes table (Phase 2.2)
+// ============================================
+function migrateHcpcsCodesTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS hcpcs_codes (
+        code TEXT PRIMARY KEY,
+        long_desc TEXT NOT NULL,
+        short_desc TEXT,
+        pricing_ind TEXT,
+        coverage_cd TEXT,
+        type TEXT,
+        source_file TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_long_desc ON hcpcs_codes(long_desc);
+      CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_short_desc ON hcpcs_codes(short_desc);
+    `);
+    console.log('✅ Migration complete: hcpcs_codes table ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  hcpcs_codes table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: coding_decisions table (Phase 5.2 - audit trail)
+// ============================================
+function migrateCodingDecisionsTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS coding_decisions (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL,
+        clinic_id TEXT,
+        patient_id TEXT,
+        clinical_note TEXT,
+        proposed_icd10 TEXT NOT NULL,
+        proposed_cpt TEXT NOT NULL,
+        reasoning TEXT,
+        confidence_score REAL,
+        validation_status TEXT NOT NULL,
+        validation_reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_coding_decisions_call_id ON coding_decisions(call_id);
+      CREATE INDEX IF NOT EXISTS idx_coding_decisions_clinic_id ON coding_decisions(clinic_id);
+      CREATE INDEX IF NOT EXISTS idx_coding_decisions_created_at ON coding_decisions(created_at);
+    `);
+    console.log('✅ Migration complete: coding_decisions table ensured');
+    // Tiba Phase 5.4: rule_version, rule_hash for audit
+    try {
+      const cdInfo = db.prepare('PRAGMA table_info(coding_decisions)').all();
+      if (!cdInfo.some(c => c.name === 'rule_version')) {
+        db.exec('ALTER TABLE coding_decisions ADD COLUMN rule_version TEXT');
+      }
+      if (!cdInfo.some(c => c.name === 'rule_hash')) {
+        db.exec('ALTER TABLE coding_decisions ADD COLUMN rule_hash TEXT');
+      }
+    } catch (_) {}
+  } catch (migrationError) {
+    console.warn('⚠️  coding_decisions table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: llm_usage_log table (Phase 8.2 - our LLM token/cost tracking)
+// ============================================
+function migrateLlmUsageLogTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS llm_usage_log (
+        id TEXT PRIMARY KEY,
+        call_id TEXT,
+        operation TEXT NOT NULL,
+        model TEXT NOT NULL,
+        tokens_in INTEGER,
+        tokens_out INTEGER,
+        cost_usd REAL,
+        latency_ms INTEGER,
+        confidence_score REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_llm_usage_log_call_id ON llm_usage_log(call_id);
+      CREATE INDEX IF NOT EXISTS idx_llm_usage_log_operation ON llm_usage_log(operation);
+      CREATE INDEX IF NOT EXISTS idx_llm_usage_log_created_at ON llm_usage_log(created_at);
+    `);
+    // Add confidence_score if table existed without it
+    try {
+      const info = db.prepare("PRAGMA table_info(llm_usage_log)").all();
+      if (!info.some(c => c.name === 'confidence_score')) {
+        db.exec('ALTER TABLE llm_usage_log ADD COLUMN confidence_score REAL');
+        console.log('✅ Migration: llm_usage_log confidence_score column added');
+      }
+    } catch (_) { /* column may already exist */ }
+    console.log('✅ Migration complete: llm_usage_log table ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  llm_usage_log table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: clinic_monthly_llm_cost (Section 10 - cost caps)
+// ============================================
+function migrateClinicMonthlyLlmCostTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS clinic_monthly_llm_cost (
+        clinic_id TEXT NOT NULL,
+        year_month TEXT NOT NULL,
+        cost_usd REAL DEFAULT 0,
+        tokens_in INTEGER DEFAULT 0,
+        tokens_out INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (clinic_id, year_month)
+      );
+      CREATE INDEX IF NOT EXISTS idx_clinic_monthly_llm_cost_ym ON clinic_monthly_llm_cost(year_month);
+    `);
+    const info = db.prepare('PRAGMA table_info(llm_usage_log)').all();
+    if (!info.some(c => c.name === 'clinic_id')) {
+      db.exec('ALTER TABLE llm_usage_log ADD COLUMN clinic_id TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_log_clinic_id ON llm_usage_log(clinic_id)');
+    }
+    console.log('✅ Migration complete: clinic_monthly_llm_cost + llm_usage_log.clinic_id');
+  } catch (e) {
+    console.warn('⚠️  clinic_monthly_llm_cost migration failed:', e.message);
+  }
+}
+
+function migrateClinicsMonthlyCostCap() {
+  try {
+    const info = db.prepare('PRAGMA table_info(clinics)').all();
+    if (!info.some(c => c.name === 'monthly_cost_cap')) {
+      db.exec('ALTER TABLE clinics ADD COLUMN monthly_cost_cap REAL');
+      console.log('✅ Migration: clinics.monthly_cost_cap added');
+    }
+  } catch (e) {
+    console.warn('⚠️  clinics monthly_cost_cap migration failed:', e.message);
+  }
+}
+
+// ============================================
+// MIGRATION: patient_coding_history + provider_preferences (Section 8 - long-term memory)
+// ============================================
+function migrateLongTermMemoryTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS patient_coding_history (
+        id TEXT PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        encounter_id TEXT,
+        clinic_id TEXT,
+        icd10 TEXT,
+        cpt TEXT,
+        confidence REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_patient_coding_history_patient ON patient_coding_history(patient_id);
+      CREATE INDEX IF NOT EXISTS idx_patient_coding_history_clinic ON patient_coding_history(clinic_id);
+
+      CREATE TABLE IF NOT EXISTS provider_preferences (
+        provider_id TEXT NOT NULL,
+        preference_key TEXT NOT NULL,
+        value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (provider_id, preference_key)
+      );
+    `);
+    console.log('✅ Migration complete: patient_coding_history + provider_preferences');
+  } catch (e) {
+    console.warn('⚠️  Long-term memory tables migration failed:', e.message);
+  }
+}
+
+// ============================================
+// MIGRATION: clinic_settings (Section 14 - per-tenant config)
+// ============================================
+function migrateHipaaAccessLogTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS hipaa_access_log (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        resource_type TEXT NOT NULL,
+        resource_id TEXT,
+        action TEXT NOT NULL,
+        ip_address TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_hipaa_access_log_user ON hipaa_access_log(user_id);
+      CREATE INDEX IF NOT EXISTS idx_hipaa_access_log_resource ON hipaa_access_log(resource_type, resource_id);
+      CREATE INDEX IF NOT EXISTS idx_hipaa_access_log_created ON hipaa_access_log(created_at);
+    `);
+    // Gap Analysis: add patient_id for HIPAA audit (which patient's PHI was accessed)
+    const info = db.prepare('PRAGMA table_info(hipaa_access_log)').all();
+    if (!info.some(c => c.name === 'patient_id')) {
+      db.exec('ALTER TABLE hipaa_access_log ADD COLUMN patient_id TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_hipaa_access_log_patient ON hipaa_access_log(patient_id)');
+      console.log('✅ Migration: hipaa_access_log patient_id column added');
+    }
+    console.log('✅ Migration complete: hipaa_access_log table');
+  } catch (e) {
+    console.warn('⚠️  hipaa_access_log migration failed:', e.message);
+  }
+}
+
+// ============================================
+function migrateClinicSettingsTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS clinic_settings (
+        clinic_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (clinic_id, key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_clinic_settings_clinic ON clinic_settings(clinic_id);
+    `);
+    console.log('✅ Migration complete: clinic_settings');
+  } catch (e) {
+    console.warn('⚠️  clinic_settings migration failed:', e.message);
+  }
+}
+
+// ============================================
+// MIGRATION: postgres_sync_retry + postgres_sync_dlq (Section 2.2 - retry queue)
+// ============================================
+function migratePostgresSyncRetryTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS postgres_sync_retry (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        priority INTEGER DEFAULT 2,
+        attempt_count INTEGER DEFAULT 0,
+        last_error TEXT,
+        last_attempt_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_postgres_sync_retry_priority ON postgres_sync_retry(priority);
+      CREATE INDEX IF NOT EXISTS idx_postgres_sync_retry_created ON postgres_sync_retry(created_at);
+
+      CREATE TABLE IF NOT EXISTS postgres_sync_dlq (
+        id TEXT PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        attempt_count INTEGER DEFAULT 0,
+        last_error TEXT,
+        moved_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_postgres_sync_dlq_entity ON postgres_sync_dlq(entity_type);
+    `);
+    console.log('✅ Migration complete: postgres_sync_retry + postgres_sync_dlq tables ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  postgres_sync_retry table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: dlq_tool_calls table (Section 2 - dead letter queue for failed tool calls)
+// ============================================
+function migrateDlqToolCallsTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dlq_tool_calls (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL,
+        clinic_id TEXT,
+        function_name TEXT NOT NULL,
+        parameters_json TEXT,
+        error_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_dlq_tool_calls_call_id ON dlq_tool_calls(call_id);
+      CREATE INDEX IF NOT EXISTS idx_dlq_tool_calls_function ON dlq_tool_calls(function_name);
+      CREATE INDEX IF NOT EXISTS idx_dlq_tool_calls_created ON dlq_tool_calls(created_at);
+    `);
+    console.log('✅ Migration complete: dlq_tool_calls table ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  dlq_tool_calls table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: feature_flags table (Section 15)
+// ============================================
+function migrateFeatureFlagsTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS feature_flags (
+        flag_name TEXT PRIMARY KEY,
+        enabled_globally INTEGER DEFAULT 0,
+        enabled_for_clinic_ids TEXT,
+        rollout_pct INTEGER DEFAULT 100,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Migration complete: feature_flags table ensured');
+  } catch (e) {
+    console.warn('⚠️  feature_flags migration failed:', e.message);
+  }
+}
+
+// ============================================
+// MIGRATION: voice_call_log.clinic_id (Section 14)
+// ============================================
+function migrateVoiceCallLogClinicId() {
+  try {
+    const info = db.prepare('PRAGMA table_info(voice_call_log)').all();
+    if (!info.some(c => c.name === 'clinic_id')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN clinic_id TEXT');
+      db.exec('UPDATE voice_call_log SET clinic_id = customer_id WHERE clinic_id IS NULL AND customer_id IS NOT NULL');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_voice_call_log_clinic_id ON voice_call_log(clinic_id)');
+      console.log('✅ Migration complete: voice_call_log.clinic_id added');
+    }
+  } catch (e) {
+    console.warn('⚠️  voice_call_log clinic_id migration failed:', e.message);
+  }
+}
+
+// ============================================
+// MIGRATION: idempotency_keys table (Section 22 - prevent double-billing)
+// ============================================
+function migrateIdempotencyKeysTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS idempotency_keys (
+        id TEXT PRIMARY KEY,
+        operation_type TEXT NOT NULL,
+        result_json TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys(created_at);
+      CREATE INDEX IF NOT EXISTS idx_idempotency_keys_operation ON idempotency_keys(operation_type);
+    `);
+    try {
+      const info = db.prepare("PRAGMA table_info(idempotency_keys)").all();
+      if (!info.some(c => c.name === 'status')) {
+        db.exec('ALTER TABLE idempotency_keys ADD COLUMN status TEXT DEFAULT \'pending\'');
+      }
+    } catch (_) { /* column may exist */ }
+    console.log('✅ Migration complete: idempotency_keys table ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  idempotency_keys table migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
+// MIGRATION: code_embeddings table (Phase 2.3 - optional semantic search)
+// ============================================
+function migrateCodeEmbeddingsTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS code_embeddings (
+        id TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        code_type TEXT NOT NULL,
+        description_text TEXT,
+        embedding_json TEXT,
+        specialty TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_code_embeddings_code_type ON code_embeddings(code_type);
+      CREATE INDEX IF NOT EXISTS idx_code_embeddings_specialty ON code_embeddings(specialty);
+    `);
+    const tableInfo = db.prepare('PRAGMA table_info(code_embeddings)').all();
+    const hasSpecialty = tableInfo.some(c => c.name === 'specialty');
+    if (!hasSpecialty) {
+      db.prepare('ALTER TABLE code_embeddings ADD COLUMN specialty TEXT').run();
+      console.log('✅ Migration complete: code_embeddings.specialty column added');
+    } else {
+      console.log('✅ Migration complete: code_embeddings table ensured');
+    }
+  } catch (migrationError) {
+    console.warn('⚠️  code_embeddings table migration failed:', migrationError.message);
+  }
+}
+
 // Migration: Add merchant_id column to fhir_patients table
 function migrateFHIRPatientsMerchantId() {
   try {
@@ -2831,6 +3512,22 @@ migrateSequences(); // Phase 2: Sequences for automation
 migrateQualificationRules(); // Phase 2: Configurable qualification rules
 migrateCustomersTable();
 migrateVoiceCallLogCosts();
+migrateVoiceCallStateTables();
+migrateIcd10CodesTable();
+migrateHcpcsCodesTable();
+migrateCodeEmbeddingsTable();
+    migrateCodingDecisionsTable();
+    migrateLlmUsageLogTable();
+    migratePostgresSyncRetryTable();
+    migrateDlqToolCallsTable();
+    migrateFeatureFlagsTable();
+    migrateVoiceCallLogClinicId();
+    migrateClinicMonthlyLlmCostTable();
+    migrateClinicsMonthlyCostCap();
+    migrateLongTermMemoryTables();
+    migrateClinicSettingsTable();
+    migrateHipaaAccessLogTable();
+    migrateIdempotencyKeysTable();
 migrateAppointmentsCustomerId();
 migrateCustomerMerchantId(); // CRITICAL: Link customers to merchants
 migrateMerchantsSubdomain(); // Add subdomain support for tenant isolation
@@ -2853,6 +3550,182 @@ function safeStringify(data) {
 module.exports = {
   // Expose the database instance for direct access when needed
   db: db,
+
+  // ============================================
+  // POSTGRES SYNC RETRY QUEUE (Section 2.2)
+  // ============================================
+  executePostgresSync,
+  getPendingSyncRetries: () => {
+    try {
+      const rows = db.prepare(`
+        SELECT * FROM postgres_sync_retry
+        ORDER BY priority ASC, created_at ASC
+        LIMIT 10
+      `).all();
+    return rows.filter(r => {
+      if (r.last_attempt_at == null) return true;
+      const backoffSeconds = Math.pow(2, Math.min(r.attempt_count, 4));
+      const lastAttempt = new Date(r.last_attempt_at).getTime();
+      return Date.now() - lastAttempt >= backoffSeconds * 1000;
+    });
+    } catch (_) { return []; }
+  },
+  updateSyncRetry: (id, attemptCount, lastError) => {
+    db.prepare(`
+      UPDATE postgres_sync_retry
+      SET attempt_count = ?, last_error = ?, last_attempt_at = datetime('now')
+      WHERE id = ?
+    `).run(attemptCount, lastError || null, id);
+  },
+  deleteSyncRetry: (id) => {
+    db.prepare('DELETE FROM postgres_sync_retry WHERE id = ?').run(id);
+  },
+  moveToDLQ: (id) => {
+    const row = db.prepare('SELECT * FROM postgres_sync_retry WHERE id = ?').get(id);
+    if (!row) return;
+    db.prepare(`
+      INSERT INTO postgres_sync_dlq (id, entity_type, payload_json, attempt_count, last_error)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(row.id, row.entity_type, row.payload_json, row.attempt_count, row.last_error);
+    db.prepare('DELETE FROM postgres_sync_retry WHERE id = ?').run(id);
+    console.log(`📤 Postgres sync moved to DLQ: ${row.entity_type} (id=${id})`);
+  },
+  getRetryQueueDepth: () => {
+    try {
+      return db.prepare('SELECT COUNT(*) as n FROM postgres_sync_retry').get()?.n ?? 0;
+    } catch (_) { return 0; }
+  },
+  getDLQSize: () => {
+    try {
+      return db.prepare('SELECT COUNT(*) as n FROM postgres_sync_dlq').get()?.n ?? 0;
+    } catch (_) { return 0; }
+  },
+
+  // ============================================
+  // DLQ TOOL CALLS (Section 2 - failed function calls)
+  // ============================================
+  enqueueToolCallDLQ: (payload) => {
+    try {
+      const id = `dlq_${require('crypto').randomBytes(12).toString('hex')}`;
+      db.prepare(`
+        INSERT INTO dlq_tool_calls (id, call_id, clinic_id, function_name, parameters_json, error_message)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        payload.call_id || '',
+        payload.clinic_id || null,
+        payload.function_name || 'unknown',
+        typeof payload.parameters === 'string' ? payload.parameters : JSON.stringify(payload.parameters || {}),
+        payload.error_message || null
+      );
+      console.log(`📥 Tool call moved to DLQ: ${payload.function_name} (call_id=${payload.call_id})`);
+      return id;
+    } catch (e) {
+      console.error('❌ Failed to enqueue tool call DLQ:', e.message);
+      return null;
+    }
+  },
+  getDlqToolCallsSize: () => {
+    try {
+      return db.prepare('SELECT COUNT(*) as n FROM dlq_tool_calls').get()?.n ?? 0;
+    } catch (_) { return 0; }
+  },
+  getDlqToolCalls: (limit = 50) => {
+    try {
+      return db.prepare(`
+        SELECT * FROM dlq_tool_calls ORDER BY created_at DESC LIMIT ?
+      `).all(limit);
+    } catch (_) { return []; }
+  },
+
+  // ============================================
+  // IDEMPOTENCY (Section 22 - prevent double-billing)
+  // ============================================
+  /** Get cached result for idempotency key. Returns { result, idempotent: true } or null. */
+  getIdempotentResult: (key, operationType) => {
+    if (!key || !operationType) return null;
+    try {
+      const row = db.prepare(`
+        SELECT result_json, status FROM idempotency_keys
+        WHERE id = ? AND operation_type = ?
+          AND datetime(created_at) > datetime('now', '-24 hours')
+      `).get(key, operationType);
+      if (!row || row.status !== 'completed' || !row.result_json) return null;
+      return { result: JSON.parse(row.result_json), idempotent: true };
+    } catch (_) { return null; }
+  },
+  /**
+   * Reserve idempotency key (call before operation). Returns: 'reserved' | 'completed' | 'in_progress'
+   * - 'reserved': caller should proceed, then call completeIdempotentResult
+   * - 'completed': cached result available via getIdempotentResult
+   * - 'in_progress': another request is processing, return 409
+   */
+  reserveIdempotencyKey: (key, operationType) => {
+    if (!key || !operationType) return 'reserved';
+    try {
+      const existing = db.prepare(`
+        SELECT status, result_json FROM idempotency_keys
+        WHERE id = ? AND operation_type = ?
+          AND datetime(created_at) > datetime('now', '-24 hours')
+      `).get(key, operationType);
+      if (existing) {
+        if (existing.status === 'completed') return 'completed';
+        return 'in_progress';
+      }
+      db.prepare(`
+        INSERT INTO idempotency_keys (id, operation_type, status, created_at)
+        VALUES (?, ?, 'pending', datetime('now'))
+      `).run(key, operationType);
+      return 'reserved';
+    } catch (e) {
+      if (e.message && e.message.includes('UNIQUE constraint')) return 'in_progress';
+      console.warn('⚠️  Idempotency reserve failed:', e.message);
+      return 'reserved'; // allow operation on error
+    }
+  },
+  /** Release idempotency key on operation failure so retries can proceed. */
+  releaseIdempotencyKey: (key, operationType) => {
+    if (!key || !operationType) return;
+    try {
+      db.prepare('DELETE FROM idempotency_keys WHERE id = ? AND operation_type = ? AND status = ?')
+        .run(key, operationType, 'pending');
+    } catch (_) { /* ignore */ }
+  },
+  /** Complete idempotency: store result and mark completed. Call after successful operation. */
+  completeIdempotentResult: (key, operationType, result) => {
+    if (!key || !operationType) return;
+    try {
+      const resultJson = typeof result === 'string' ? result : JSON.stringify(result || {});
+      db.prepare(`
+        UPDATE idempotency_keys SET result_json = ?, status = 'completed'
+        WHERE id = ? AND operation_type = ?
+      `).run(resultJson, key, operationType);
+    } catch (e) {
+      console.warn('⚠️  Failed to complete idempotency result:', e.message);
+    }
+  },
+  /** Legacy: store idempotency result (for simple flow without reserve). Prefer reserveIdempotencyKey + completeIdempotentResult. */
+  setIdempotentResult: (key, operationType, result) => {
+    if (!key || !operationType) return;
+    try {
+      const resultJson = typeof result === 'string' ? result : JSON.stringify(result || {});
+      db.prepare(`
+        INSERT OR REPLACE INTO idempotency_keys (id, operation_type, result_json, status, created_at)
+        VALUES (?, ?, ?, 'completed', datetime('now'))
+      `).run(key, operationType, resultJson);
+    } catch (e) {
+      console.warn('⚠️  Failed to store idempotency result:', e.message);
+    }
+  },
+  /** Delete expired idempotency keys (older than 24h). Returns count deleted. */
+  cleanupIdempotencyKeys: () => {
+    try {
+      const r = db.prepare(`
+        DELETE FROM idempotency_keys WHERE datetime(created_at) <= datetime('now', '-24 hours')
+      `).run();
+      return r.changes;
+    } catch (_) { return 0; }
+  },
 
   // ============================================
   // MERCHANTS
@@ -2978,6 +3851,38 @@ module.exports = {
           revoked_by = ?
       WHERE merchant_id = ? AND status = 'active'
     `).run(revokedBy, merchantId);
+  },
+
+  /**
+   * Rotate merchant API key (Gap Analysis - zero-downtime rotation).
+   * Creates new key, revokes old active key(s), returns new plain key.
+   * Caller must store the returned key securely; only hash is persisted.
+   */
+  rotateMerchantApiKey: (merchantId, revokedBy = 'system') => {
+    const { generateApiKey, hashApiKey } = require('./utils/api-keys');
+    const crypto = require('crypto');
+    const activeKeys = db.prepare(`
+      SELECT * FROM merchant_api_keys WHERE merchant_id = ? AND status = 'active'
+    `).all(merchantId);
+    if (activeKeys.length === 0) {
+      throw new Error('No active API key to rotate for merchant ' + merchantId);
+    }
+    const newKey = generateApiKey('sk');
+    const keyHash = hashApiKey(newKey);
+    const keyPrefix = newKey.substring(0, 10);
+    const keySuffix = newKey.substring(newKey.length - 4);
+    const id = crypto.randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO merchant_api_keys (id, merchant_id, key_hash, key_prefix, key_suffix, label, status, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, merchantId, keyHash, keyPrefix, keySuffix, 'rotated', 'active', revokedBy);
+    for (const k of activeKeys) {
+      db.prepare(`
+        UPDATE merchant_api_keys SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP, revoked_by = ?
+        WHERE id = ? AND status = 'active'
+      `).run(revokedBy, k.id);
+    }
+    return { apiKey: newKey, keyId: id };
   },
 
   // ============================================
@@ -4223,8 +5128,26 @@ module.exports = {
         action, resource_type, resource_id, user_id, ip_address, user_agent, timestamp
       ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
+    const result = stmt.run(action, resourceType, resourceId, userId, ipAddress, userAgent);
+    // Section 12: Also log to HIPAA access log for PHI access audit (patient_id when resource is Patient)
+    try {
+      this.logHipaaAccess({ user_id: userId, resource_type: resourceType, resource_id: resourceId, patient_id: resourceType === 'Patient' ? resourceId : null, action, ip_address: ipAddress });
+    } catch (_) {}
+    return result;
+  },
 
-    return stmt.run(action, resourceType, resourceId, userId, ipAddress, userAgent);
+  logHipaaAccess({ user_id, resource_type, resource_id, patient_id, action, ip_address }) {
+    try {
+      const id = require('crypto').randomBytes(16).toString('hex');
+      const cols = ['id', 'user_id', 'resource_type', 'resource_id', 'action', 'ip_address'];
+      const vals = [id, user_id || null, resource_type || 'unknown', resource_id || null, action || 'unknown', ip_address || null];
+      const hasPatientId = db.prepare('PRAGMA table_info(hipaa_access_log)').all().some(c => c.name === 'patient_id');
+      if (hasPatientId) {
+        cols.push('patient_id');
+        vals.push(patient_id || (resource_type === 'Patient' ? resource_id : null));
+      }
+      db.prepare(`INSERT INTO hipaa_access_log (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...vals);
+    } catch (_) {}
   },
 
   // Get Audit Logs
@@ -5225,8 +6148,9 @@ module.exports = {
         id, patient_id, member_id, payer_id, service_code,
         date_of_service, eligible, copay_amount, allowed_amount,
         insurance_pays, deductible_total, deductible_remaining,
-        coinsurance_percent, plan_summary, response_data, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        coinsurance_percent, plan_summary, oop_max, oop_met,
+        response_data, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       eligibility.id,
@@ -5243,6 +6167,8 @@ module.exports = {
       eligibility.deductible_remaining !== undefined ? eligibility.deductible_remaining : null,
       eligibility.coinsurance_percent !== undefined ? eligibility.coinsurance_percent : null,
       eligibility.plan_summary || null,
+      eligibility.oop_max !== undefined ? eligibility.oop_max : null,
+      eligibility.oop_met !== undefined ? eligibility.oop_met : null,
       eligibility.response_data || null,
       eligibility.created_at || new Date().toISOString()
     );
@@ -5272,8 +6198,9 @@ module.exports = {
           id, appointment_id, patient_id, member_id, payer_id,
           service_code, diagnosis_code, total_amount, copay_amount,
           insurance_amount, status, x12_claim_id, blockchain_proof,
-          submitted_at, response_data, circle_transfer_id, payment_status, payment_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          submitted_at, response_data, circle_transfer_id, payment_status, payment_amount,
+          provider_npi
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = stmt.run(
         claim.id,
@@ -5293,7 +6220,8 @@ module.exports = {
         claim.response_data || null,
         claim.circle_transfer_id || null,
         claim.payment_status || 'pending',
-        claim.payment_amount || null
+        claim.payment_amount || null,
+        claim.provider_npi || null
       );
       return result;
     } catch (error) {
@@ -5341,6 +6269,91 @@ module.exports = {
       WHERE id = ?
     `);
     return stmt.get(claimId);
+  },
+
+  // Code acceptance rates (Tiba Phase 4 - φ^historical_i)
+  upsertCodeAcceptance(payerId, cptCode, accepted) {
+    const tableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='code_acceptance_rates'`).get();
+    if (!tableExists) return;
+    const p = String(payerId || '').trim().toUpperCase();
+    const c = String(cptCode || '').trim();
+    if (!p || !c) return;
+    const existing = db.prepare('SELECT acceptance_count, denial_count FROM code_acceptance_rates WHERE payer_id = ? AND cpt_code = ?').get(p, c);
+    if (existing) {
+      if (accepted) {
+        db.prepare('UPDATE code_acceptance_rates SET acceptance_count = acceptance_count + 1, last_updated = datetime("now") WHERE payer_id = ? AND cpt_code = ?').run(p, c);
+      } else {
+        db.prepare('UPDATE code_acceptance_rates SET denial_count = denial_count + 1, last_updated = datetime("now") WHERE payer_id = ? AND cpt_code = ?').run(p, c);
+      }
+    } else {
+      db.prepare(`
+        INSERT INTO code_acceptance_rates (payer_id, cpt_code, acceptance_count, denial_count, last_updated)
+        VALUES (?, ?, ?, ?, datetime("now"))
+      `).run(p, c, accepted ? 1 : 0, accepted ? 0 : 1);
+    }
+  },
+
+  getCodeAcceptanceRate(payerId, cptCode) {
+    const tableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='code_acceptance_rates'`).get();
+    if (!tableExists) return null;
+    const p = String(payerId || '').trim().toUpperCase();
+    const c = String(cptCode || '').trim();
+    if (!p || !c) return null;
+    const row = db.prepare('SELECT acceptance_count, denial_count FROM code_acceptance_rates WHERE payer_id = ? AND cpt_code = ?').get(p, c);
+    return row;
+  },
+
+  // Provider trust metrics (Tiba Phase 3.7 - τ_provider)
+  upsertProviderTrustMetric(providerNpi, updates) {
+    const tableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='provider_trust_metrics'`).get();
+    if (!tableExists) return;
+    const npi = String(providerNpi || '').trim();
+    if (!npi) return;
+    const existing = db.prepare('SELECT trust_score FROM provider_trust_metrics WHERE provider_npi = ?').get(npi);
+    const tau = updates.trust_score != null ? updates.trust_score : (existing?.trust_score ?? 1.0);
+    const deny = updates.denial_rate != null ? updates.denial_rate : (existing ? db.prepare('SELECT denial_rate FROM provider_trust_metrics WHERE provider_npi = ?').get(npi)?.denial_rate : 0);
+    if (existing) {
+      db.prepare('UPDATE provider_trust_metrics SET trust_score = ?, denial_rate = ?, last_updated = datetime("now") WHERE provider_npi = ?').run(tau, deny, npi);
+    } else {
+      db.prepare('INSERT OR REPLACE INTO provider_trust_metrics (provider_npi, trust_score, denial_rate, last_updated) VALUES (?, ?, ?, datetime("now"))').run(npi, tau, deny);
+    }
+  },
+
+  getProviderTrustScore(providerNpi) {
+    const tableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='provider_trust_metrics'`).get();
+    if (!tableExists) return null;
+    const npi = String(providerNpi || '').trim();
+    if (!npi) return null;
+    const row = db.prepare('SELECT trust_score FROM provider_trust_metrics WHERE provider_npi = ?').get(npi);
+    return row?.trust_score;
+  },
+
+  // Record EOB calculation audit (full transparency of inputs/outputs)
+  recordEOBCalculationAudit({ claimId, calculationInputs, calculationOutputs, triggeredBy }) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = `eob_audit_${uuidv4()}`;
+    const stmt = db.prepare(`
+      INSERT INTO eob_calculation_audit (id, claim_id, calculation_inputs, calculation_outputs, triggered_by, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `);
+    stmt.run(
+      id,
+      claimId,
+      typeof calculationInputs === 'string' ? calculationInputs : JSON.stringify(calculationInputs || {}),
+      typeof calculationOutputs === 'string' ? calculationOutputs : JSON.stringify(calculationOutputs || {}),
+      triggeredBy || null
+    );
+    return id;
+  },
+
+  getEOBCalculationAuditsByClaim(claimId, limit = 20) {
+    const stmt = db.prepare(`
+      SELECT * FROM eob_calculation_audit
+      WHERE claim_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+    return stmt.all(claimId, limit);
   },
 
   // ============================================
@@ -5760,9 +6773,37 @@ module.exports = {
       fields.push('payment_amount = ?');
       values.push(updates.payment_amount);
     }
+    if (updates.real_time_plan_paid !== undefined) {
+      fields.push('real_time_plan_paid = ?');
+      values.push(updates.real_time_plan_paid);
+    }
+    if (updates.settlement_state !== undefined) {
+      fields.push('settlement_state = ?');
+      values.push(updates.settlement_state);
+    }
+    if (updates.settlement_aggregate_confidence !== undefined) {
+      fields.push('settlement_aggregate_confidence = ?');
+      values.push(updates.settlement_aggregate_confidence);
+    }
+    if (updates.settlement_amount_released !== undefined) {
+      fields.push('settlement_amount_released = ?');
+      values.push(updates.settlement_amount_released);
+    }
+    if (updates.settlement_escrow_remainder !== undefined) {
+      fields.push('settlement_escrow_remainder = ?');
+      values.push(updates.settlement_escrow_remainder);
+    }
+    if (updates.settlement_decision !== undefined) {
+      fields.push('settlement_decision = ?');
+      values.push(updates.settlement_decision);
+    }
     if (updates.insurance_amount !== undefined) {
       fields.push('insurance_amount = ?');
       values.push(updates.insurance_amount);
+    }
+    if (updates.provider_npi !== undefined) {
+      fields.push('provider_npi = ?');
+      values.push(updates.provider_npi);
     }
 
     if (fields.length === 0) {
@@ -6293,6 +7334,315 @@ module.exports = {
       ORDER BY created_at DESC 
       LIMIT ?
     `).all(customerId, limit);
+  },
+
+  // Voice call state (medical coding agent)
+  getCallState(callId) {
+    const row = db.prepare(`
+      SELECT * FROM voice_call_states WHERE call_id = ?
+    `).get(callId);
+    if (!row) return null;
+    return {
+      call_id: row.call_id,
+      clinic_id: row.clinic_id,
+      current_stage: row.current_stage || 'INTAKE',
+      state_data: row.state_data ? JSON.parse(row.state_data) : {},
+      updated_at: row.updated_at
+    };
+  },
+
+  upsertCallState(callId, { clinic_id, current_stage, state_data }) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const stateJson = state_data != null ? JSON.stringify(state_data) : null;
+    const cid = clinic_id ?? null;
+    const stage = current_stage ?? null;
+    db.prepare(`
+      INSERT INTO voice_call_states (id, call_id, clinic_id, current_stage, state_data, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(call_id) DO UPDATE SET
+        clinic_id = COALESCE(excluded.clinic_id, voice_call_states.clinic_id),
+        current_stage = COALESCE(excluded.current_stage, voice_call_states.current_stage),
+        state_data = COALESCE(excluded.state_data, voice_call_states.state_data),
+        updated_at = datetime('now')
+    `).run(id, callId, cid, stage, stateJson);
+    return this.getCallState(callId);
+  },
+
+  appendConversationMemory(callId, clinic_id, role, content, extracted_entities) {
+    let redactedContent = content;
+    try {
+      const piiRedactor = require('./utils/pii-redactor');
+      if (typeof content === 'string' && piiRedactor.redact) {
+        redactedContent = piiRedactor.redact(content);
+      }
+    } catch (_) { /* pii-redactor optional */ }
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const turnNumber = db.prepare(`
+      SELECT COALESCE(MAX(turn_number), 0) + 1 AS next FROM voice_conversation_memory WHERE call_id = ?
+    `).get(callId).next;
+    const entitiesJson = extracted_entities ? JSON.stringify(extracted_entities) : null;
+    db.prepare(`
+      INSERT INTO voice_conversation_memory (id, call_id, clinic_id, turn_number, role, content, extracted_entities)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, callId, clinic_id || null, turnNumber, role, redactedContent ?? content ?? null, entitiesJson);
+  },
+
+  getConversationHistory(callId, limit = 50) {
+    return db.prepare(`
+      SELECT turn_number, role, content, extracted_entities, created_at
+      FROM voice_conversation_memory
+      WHERE call_id = ?
+      ORDER BY turn_number ASC
+      LIMIT ?
+    `).all(callId, limit).map(r => ({
+      turn_number: r.turn_number,
+      role: r.role,
+      content: r.content,
+      extracted_entities: r.extracted_entities ? JSON.parse(r.extracted_entities) : null,
+      created_at: r.created_at
+    }));
+  },
+
+  saveAgentStateSnapshot(callId, stateName, stateData) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const dataJson = stateData ? JSON.stringify(stateData) : null;
+    db.prepare(`
+      INSERT INTO agent_state_snapshots (id, call_id, state_name, state_data)
+      VALUES (?, ?, ?, ?)
+    `).run(id, callId, stateName, dataJson);
+  },
+
+  cleanupVoiceCallStateData(retentionDays = 30) {
+    const d = new Date();
+    d.setDate(d.getDate() - Math.max(1, retentionDays));
+    const cutoffStr = d.toISOString().slice(0, 19).replace('T', ' ');
+    let total = 0;
+    const r1 = db.prepare('DELETE FROM voice_call_states WHERE updated_at < ?').run(cutoffStr);
+    total += r1.changes;
+    const r2 = db.prepare('DELETE FROM voice_conversation_memory WHERE created_at < ?').run(cutoffStr);
+    total += r2.changes;
+    const r3 = db.prepare('DELETE FROM agent_state_snapshots WHERE created_at < ?').run(cutoffStr);
+    total += r3.changes;
+    const r4 = db.prepare('DELETE FROM coding_decisions WHERE created_at < ?').run(cutoffStr);
+    total += r4.changes;
+    if (total > 0) {
+      console.log(`🧹 Cleaned ${total} voice call state records (older than ${retentionDays} days)`);
+    }
+    return { deleted: total, retentionDays, cutoff: cutoffStr };
+  },
+
+  insertCodingDecision({ call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash }) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const cdInfo = db.prepare('PRAGMA table_info(coding_decisions)').all();
+    const hasRuleVersion = cdInfo.some(c => c.name === 'rule_version');
+    const hasRuleHash = cdInfo.some(c => c.name === 'rule_hash');
+    if (hasRuleVersion && hasRuleHash) {
+      db.prepare(`
+        INSERT INTO coding_decisions (id, call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, call_id || null, clinic_id || null, patient_id || null, clinical_note || null,
+        proposed_icd10 || '', proposed_cpt || '', reasoning || null, confidence_score ?? null,
+        validation_status || 'unknown', validation_reason || null, rule_version || null, rule_hash || null
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO coding_decisions (id, call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, call_id || null, clinic_id || null, patient_id || null, clinical_note || null,
+        proposed_icd10 || '', proposed_cpt || '', reasoning || null, confidence_score ?? null,
+        validation_status || 'unknown', validation_reason || null
+      );
+    }
+    if (patient_id && (proposed_icd10 || proposed_cpt)) {
+      try {
+        const histId = require('crypto').randomBytes(12).toString('hex');
+        db.prepare(`
+          INSERT INTO patient_coding_history (id, patient_id, encounter_id, clinic_id, icd10, cpt, confidence, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(
+          histId, patient_id, call_id || null, clinic_id || null,
+          typeof proposed_icd10 === 'string' ? proposed_icd10 : JSON.stringify(proposed_icd10 || []),
+          typeof proposed_cpt === 'string' ? proposed_cpt : JSON.stringify(proposed_cpt || []),
+          confidence_score ?? null
+        );
+      } catch (_) {}
+    }
+    return id;
+  },
+
+  insertLlmUsageLog({ call_id, clinic_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score }) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    try {
+      const info = db.prepare('PRAGMA table_info(llm_usage_log)').all();
+      const hasClinicId = info.some(c => c.name === 'clinic_id');
+      const hasConfidence = info.some(c => c.name === 'confidence_score');
+      if (hasClinicId && hasConfidence) {
+        db.prepare(`
+          INSERT INTO llm_usage_log (id, call_id, clinic_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, call_id || null, clinic_id || null, operation || 'unknown', model || '',
+          tokens_in ?? null, tokens_out ?? null, cost_usd ?? null, latency_ms ?? null, confidence_score ?? null
+        );
+      } else if (hasConfidence) {
+        db.prepare(`
+          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms, confidence_score)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
+          cost_usd ?? null, latency_ms ?? null, confidence_score ?? null
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
+          cost_usd ?? null, latency_ms ?? null
+        );
+      }
+      if (clinic_id && (cost_usd > 0 || tokens_in > 0 || tokens_out > 0)) {
+        try {
+          const ym = new Date().toISOString().slice(0, 7);
+          db.prepare(`
+            INSERT INTO clinic_monthly_llm_cost (clinic_id, year_month, cost_usd, tokens_in, tokens_out, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(clinic_id, year_month) DO UPDATE SET
+              cost_usd = clinic_monthly_llm_cost.cost_usd + excluded.cost_usd,
+              tokens_in = clinic_monthly_llm_cost.tokens_in + excluded.tokens_in,
+              tokens_out = clinic_monthly_llm_cost.tokens_out + excluded.tokens_out,
+              updated_at = datetime('now')
+          `).run(clinic_id, ym, cost_usd || 0, tokens_in || 0, tokens_out || 0);
+        } catch (_) {}
+      }
+    } catch (e) {
+      try {
+        db.prepare(`
+          INSERT INTO llm_usage_log (id, call_id, operation, model, tokens_in, tokens_out, cost_usd, latency_ms)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, call_id || null, operation || 'unknown', model || '', tokens_in ?? null, tokens_out ?? null,
+          cost_usd ?? null, latency_ms ?? null
+        );
+      } catch (e2) {
+        throw e;
+      }
+    }
+    return id;
+  },
+
+  getLlmUsageAggregates(days = 7) {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const since = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+    const rows = db.prepare(`
+      SELECT operation, model,
+             COUNT(*) as calls,
+             SUM(tokens_in) as total_tokens_in,
+             SUM(tokens_out) as total_tokens_out,
+             SUM(cost_usd) as total_cost_usd,
+             AVG(latency_ms) as avg_latency_ms
+      FROM llm_usage_log
+      WHERE created_at >= ?
+      GROUP BY operation, model
+    `).all(since);
+    const confRows = db.prepare(`
+      SELECT
+        CASE
+          WHEN confidence_score IS NULL THEN 'unknown'
+          WHEN confidence_score >= 0.9 THEN '0.9-1.0'
+          WHEN confidence_score >= 0.8 THEN '0.8-0.9'
+          WHEN confidence_score >= 0.7 THEN '0.7-0.8'
+          WHEN confidence_score >= 0.5 THEN '0.5-0.7'
+          ELSE '0-0.5'
+        END as bucket,
+        COUNT(*) as count
+      FROM llm_usage_log
+      WHERE created_at >= ?
+      GROUP BY bucket
+    `).all(since);
+    // P95/P99 latency (Section 3)
+    const latencies = db.prepare(`
+      SELECT latency_ms FROM llm_usage_log
+      WHERE created_at >= ? AND latency_ms IS NOT NULL
+      ORDER BY latency_ms
+    `).all(since).map(r => r.latency_ms);
+    let p95_latency_ms = null, p99_latency_ms = null;
+    if (latencies.length > 0) {
+      const p95Idx = Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95));
+      const p99Idx = Math.min(latencies.length - 1, Math.floor(latencies.length * 0.99));
+      p95_latency_ms = Math.round(latencies[p95Idx]);
+      p99_latency_ms = Math.round(latencies[p99Idx]);
+    }
+    // Cost by model (Section 10 - groq_cost_7d, openai_cost_7d)
+    const costByModel = db.prepare(`
+      SELECT model, SUM(cost_usd) as total_cost
+      FROM llm_usage_log WHERE created_at >= ? AND cost_usd > 0
+      GROUP BY model
+    `).all(since);
+    const groq_cost_7d = costByModel.filter(r => /groq|llama/i.test(r.model)).reduce((s, r) => s + (r.total_cost || 0), 0);
+    const openai_cost_7d = costByModel.filter(r => /openai|gpt|embedding/i.test(r.model)).reduce((s, r) => s + (r.total_cost || 0), 0);
+
+    return {
+      byOperation: rows,
+      confidenceDistribution: confRows,
+      p95_latency_ms,
+      p99_latency_ms,
+      groq_cost_7d: Math.round(groq_cost_7d * 10000) / 10000,
+      openai_cost_7d: Math.round(openai_cost_7d * 10000) / 10000
+    };
+  },
+
+  getClinicMonthlyLlmCost(clinicId, yearMonth = null) {
+    const ym = yearMonth || new Date().toISOString().slice(0, 7);
+    try {
+      return db.prepare(`
+        SELECT clinic_id, year_month, cost_usd, tokens_in, tokens_out
+        FROM clinic_monthly_llm_cost WHERE clinic_id = ? AND year_month = ?
+      `).get(clinicId, ym);
+    } catch (_) { return null; }
+  },
+  getClinicMonthlyCostCap(clinicId) {
+    try {
+      const r = db.prepare('SELECT monthly_cost_cap FROM clinics WHERE clinic_id = ?').get(clinicId);
+      return r?.monthly_cost_cap;
+    } catch (_) { return null; }
+  },
+
+  getPatientCodingHistory(patientId, limit = 20) {
+    try {
+      return db.prepare(`
+        SELECT * FROM patient_coding_history
+        WHERE patient_id = ? ORDER BY created_at DESC LIMIT ?
+      `).all(patientId, limit);
+    } catch (_) { return []; }
+  },
+
+  getPatientIdForCall(callId) {
+    try {
+      const r = db.prepare('SELECT patient_id FROM fhir_encounters WHERE call_id = ? AND is_deleted = 0 LIMIT 1').get(callId);
+      return r?.patient_id || null;
+    } catch (_) { return null; }
+  },
+
+  getClinicSetting(clinicId, key) {
+    try {
+      const r = db.prepare('SELECT value FROM clinic_settings WHERE clinic_id = ? AND key = ?').get(clinicId, key);
+      return r?.value;
+    } catch (_) { return null; }
+  },
+  setClinicSetting(clinicId, key, value) {
+    try {
+      db.prepare(`
+        INSERT INTO clinic_settings (clinic_id, key, value, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(clinic_id, key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+      `).run(clinicId, key, value);
+    } catch (e) {
+      console.warn('setClinicSetting failed:', e.message);
+    }
   },
 
   // Function Call Logging
@@ -9090,6 +10440,210 @@ module.exports.searchCptCodes = function searchCptCodes(query, limit = 10) {
   `).all(term, term, term, limit);
 };
 
+// ICD-10 codes (Phase 2.1)
+module.exports.bulkUpsertIcd10Codes = function bulkUpsertIcd10Codes(items = []) {
+  if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+  const stmt = db.prepare(`
+    INSERT INTO icd10_codes (code, description, category, billable, source_file)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      description = excluded.description,
+      category = excluded.category,
+      billable = excluded.billable,
+      source_file = excluded.source_file
+  `);
+  let count = 0;
+  for (const item of items) {
+    if (!item || !item.code || !item.description) continue;
+    stmt.run(
+      String(item.code).trim().toUpperCase(),
+      String(item.description).trim(),
+      item.category || null,
+      item.billable != null ? (item.billable ? 1 : 0) : 1,
+      item.source_file || null
+    );
+    count++;
+  }
+  return { inserted: count };
+};
+
+module.exports.searchIcd10Codes = function searchIcd10Codes(query, limit = 15) {
+  const q = (query || '').toString().trim();
+  if (!q) return [];
+  const term = `%${q.toLowerCase()}%`;
+  return db.prepare(`
+    SELECT code, description, category, billable
+    FROM icd10_codes
+    WHERE LOWER(code) LIKE ? OR LOWER(description) LIKE ?
+    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
+             CASE WHEN LOWER(code) = LOWER(?) THEN 0 ELSE 1 END,
+             description
+    LIMIT ?
+  `).all(term, term, term, q, limit);
+};
+
+module.exports.getIcd10CodesCount = function getIcd10CodesCount() {
+  const row = db.prepare('SELECT COUNT(*) as n FROM icd10_codes').get();
+  return row ? row.n : 0;
+};
+
+// HCPCS codes (Phase 2.2)
+module.exports.bulkUpsertHcpcsCodes = function bulkUpsertHcpcsCodes(items = []) {
+  if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+  const stmt = db.prepare(`
+    INSERT INTO hcpcs_codes (code, long_desc, short_desc, pricing_ind, coverage_cd, type, source_file)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(code) DO UPDATE SET
+      long_desc = excluded.long_desc,
+      short_desc = excluded.short_desc,
+      pricing_ind = excluded.pricing_ind,
+      coverage_cd = excluded.coverage_cd,
+      type = excluded.type,
+      source_file = excluded.source_file
+  `);
+  let count = 0;
+  for (const item of items) {
+    if (!item || !item.code || !item.long_desc) continue;
+    stmt.run(
+      String(item.code).trim().toUpperCase(),
+      String(item.long_desc).trim(),
+      item.short_desc ? String(item.short_desc).trim() : null,
+      item.pricing_ind || null,
+      item.coverage_cd || null,
+      item.type || null,
+      item.source_file || null
+    );
+    count++;
+  }
+  return { inserted: count };
+};
+
+module.exports.searchHcpcsCodes = function searchHcpcsCodes(query, limit = 15) {
+  const q = (query || '').toString().trim();
+  if (!q) return [];
+  const term = `%${q.toLowerCase()}%`;
+  return db.prepare(`
+    SELECT code, long_desc, short_desc, pricing_ind, coverage_cd, type
+    FROM hcpcs_codes
+    WHERE LOWER(code) LIKE ? OR LOWER(long_desc) LIKE ? OR LOWER(short_desc) LIKE ?
+    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
+             CASE WHEN LOWER(code) = LOWER(?) THEN 0 ELSE 1 END,
+             long_desc
+    LIMIT ?
+  `).all(term, term, term, term, q, limit);
+};
+
+module.exports.getHcpcsCodesCount = function getHcpcsCodesCount() {
+  const row = db.prepare('SELECT COUNT(*) as n FROM hcpcs_codes').get();
+  return row ? row.n : 0;
+};
+
+// Code existence validation (Phase 6.1 - prevent hallucinated codes)
+module.exports.codeExists = function codeExists(code, codeType) {
+  if (!code || !codeType) return false;
+  const raw = String(code).trim().toUpperCase();
+  const noDots = raw.replace(/\./g, '');
+  if (codeType === 'icd10') {
+    const r = db.prepare('SELECT 1 FROM icd10_codes WHERE UPPER(TRIM(code)) = ? OR UPPER(TRIM(code)) = ?').get(raw, noDots);
+    if (r) return true;
+    const r2 = db.prepare("SELECT 1 FROM icd10_codes WHERE UPPER(REPLACE(TRIM(code), '.', '')) = ?").get(noDots);
+    return r2 != null;
+  }
+  if (codeType === 'cpt') {
+    return db.prepare('SELECT 1 FROM cpt_codes WHERE UPPER(TRIM(code)) = ?').get(raw) != null;
+  }
+  if (codeType === 'hcpcs') {
+    return db.prepare('SELECT 1 FROM hcpcs_codes WHERE UPPER(TRIM(code)) = ?').get(raw) != null;
+  }
+  return false;
+};
+
+// Code embeddings (Phase 2.3 - optional semantic search, Layer 2 specialty filter)
+function deriveSpecialtyFromCode(code, codeType) {
+  if (!code || !codeType) return 'general';
+  const c = String(code).toUpperCase().trim();
+  if (codeType === 'icd10') {
+    if (/^[ST]\d/.test(c)) return 'orthopedics';
+    if (/^I\d/.test(c)) return 'cardiology';
+    if (/^J\d/.test(c)) return 'pulmonology';
+    if (/^G\d/.test(c)) return 'neurology';
+    if (/^L\d/.test(c)) return 'dermatology';
+    if (/^K\d/.test(c)) return 'gastroenterology';
+    if (/^R\d/.test(c)) return 'emergency';
+  }
+  if (codeType === 'cpt') {
+    if (/^(2[0-4]\d{3}|2[5-9]\d{3})/.test(c)) return 'orthopedics';
+    if (/^(93\d{3})/.test(c)) return 'cardiology';
+    if (/^(94\d{3})/.test(c)) return 'pulmonology';
+  }
+  return 'general';
+}
+
+module.exports.getAllCodeEmbeddings = function getAllCodeEmbeddings(codeType = null, specialty = null) {
+  let rows;
+  try {
+    const hasSpecialty = db.prepare('PRAGMA table_info(code_embeddings)').all().some(col => col.name === 'specialty');
+    if (codeType && specialty && hasSpecialty) {
+      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings WHERE code_type = ? AND (specialty = ? OR specialty IS NULL OR specialty = \'\')').all(codeType, specialty);
+    } else if (codeType) {
+      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings WHERE code_type = ?').all(codeType);
+    } else if (specialty && hasSpecialty) {
+      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings WHERE specialty = ? OR specialty IS NULL OR specialty = \'\'').all(specialty);
+    } else {
+      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings').all();
+    }
+  } catch (_) {
+    rows = db.prepare('SELECT code, code_type, description_text, embedding_json FROM code_embeddings').all();
+  }
+  return rows.filter(r => r.embedding_json).map(r => ({
+    code: r.code,
+    code_type: r.code_type,
+    description_text: r.description_text,
+    embedding: JSON.parse(r.embedding_json),
+    specialty: r.specialty || null
+  }));
+};
+
+module.exports.upsertCodeEmbedding = function upsertCodeEmbedding(record) {
+  const id = record.id || `${record.code_type}_${record.code}`;
+  const specialty = record.specialty || deriveSpecialtyFromCode(record.code, record.code_type);
+  try {
+    const hasSpecialty = db.prepare('PRAGMA table_info(code_embeddings)').all().some(col => col.name === 'specialty');
+    if (hasSpecialty) {
+      db.prepare(`
+        INSERT INTO code_embeddings (id, code, code_type, description_text, embedding_json, specialty)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          description_text = excluded.description_text,
+          embedding_json = excluded.embedding_json,
+          specialty = excluded.specialty
+      `).run(id, record.code, record.code_type, record.description_text || null, record.embedding_json || null, specialty);
+    } else {
+      db.prepare(`
+        INSERT INTO code_embeddings (id, code, code_type, description_text, embedding_json)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          description_text = excluded.description_text,
+          embedding_json = excluded.embedding_json
+      `).run(id, record.code, record.code_type, record.description_text || null, record.embedding_json || null);
+    }
+  } catch (_) {
+    db.prepare(`
+      INSERT INTO code_embeddings (id, code, code_type, description_text, embedding_json)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        description_text = excluded.description_text,
+        embedding_json = excluded.embedding_json
+    `).run(id, record.code, record.code_type, record.description_text || null, record.embedding_json || null);
+  }
+  return id;
+};
+
+module.exports.getCodeEmbeddingsCount = function getCodeEmbeddingsCount() {
+  const row = db.prepare('SELECT COUNT(*) as n FROM code_embeddings WHERE embedding_json IS NOT NULL').get();
+  return row ? row.n : 0;
+};
+
 module.exports.getCptCodesByCodes = function getCptCodesByCodes(codes = []) {
   if (!Array.isArray(codes) || codes.length === 0) return [];
   const normalized = codes
@@ -9102,4 +10656,76 @@ module.exports.getCptCodesByCodes = function getCptCodesByCodes(codes = []) {
   return db.prepare(
     `SELECT code, description, category, subcategory FROM cpt_codes WHERE code IN (${placeholders})`
   ).all(...normalized);
+};
+
+// Fee schedule methods (real-time adjudication)
+module.exports.getFeeScheduleRate = function getFeeScheduleRate(payerId, cptCode, dateOfService = null) {
+  if (!payerId || !cptCode) return null;
+  const payer = String(payerId).trim().toUpperCase();
+  const cpt = String(cptCode).trim().toUpperCase();
+  const date = dateOfService || new Date().toISOString().split('T')[0];
+
+  const row = db.prepare(`
+    SELECT id, payer_id, cpt_code, allowed_amount, in_network, source
+    FROM fee_schedules
+    WHERE payer_id = ? AND cpt_code = ?
+      AND (effective_date IS NULL OR effective_date <= ?)
+      AND (end_date IS NULL OR end_date >= ?)
+    ORDER BY effective_date DESC
+    LIMIT 1
+  `).get(payer, cpt, date, date);
+
+  return row;
+};
+
+module.exports.upsertFeeSchedule = function upsertFeeSchedule(record) {
+  const { v4: uuidv4 } = require('uuid');
+  const id = record.id || `fs_${uuidv4()}`;
+  const payerId = String(record.payer_id || '').trim().toUpperCase();
+  const cptCode = String(record.cpt_code || '').trim().toUpperCase();
+  const allowedAmount = parseFloat(record.allowed_amount);
+  const inNetwork = record.in_network !== false ? 1 : 0;
+  const source = record.source || 'manual';
+
+  db.prepare(`
+    INSERT INTO fee_schedules (id, payer_id, cpt_code, allowed_amount, in_network, effective_date, end_date, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(id, payerId, cptCode, allowedAmount, inNetwork, record.effective_date || null, record.end_date || null, source);
+
+  return id;
+};
+
+module.exports.bulkUpsertFeeSchedules = function bulkUpsertFeeSchedules(items = []) {
+  if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
+  const { v4: uuidv4 } = require('uuid');
+  let count = 0;
+  const stmt = db.prepare(`
+    INSERT INTO fee_schedules (id, payer_id, cpt_code, allowed_amount, in_network, effective_date, source, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `);
+  for (const r of items) {
+    if (!r.payer_id || !r.cpt_code || r.allowed_amount == null) continue;
+    const id = `fs_${uuidv4()}`;
+    stmt.run(
+      id,
+      String(r.payer_id).trim().toUpperCase(),
+      String(r.cpt_code).trim().toUpperCase(),
+      parseFloat(r.allowed_amount),
+      r.in_network !== false ? 1 : 0,
+      r.effective_date || null,
+      r.source || 'bulk'
+    );
+    count++;
+  }
+  return { inserted: count };
+};
+
+module.exports.getFeeSchedulesByPayer = function getFeeSchedulesByPayer(payerId, limit = 500) {
+  if (!payerId) return [];
+  return db.prepare(`
+    SELECT * FROM fee_schedules
+    WHERE payer_id = ?
+    ORDER BY cpt_code
+    LIMIT ?
+  `).all(String(payerId).trim().toUpperCase(), limit);
 };

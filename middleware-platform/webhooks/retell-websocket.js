@@ -8,7 +8,11 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 const { fetchCallCosts } = require('../utils/cost-tracker');
+const { check: clinicRateLimitCheck } = require('../utils/clinic-rate-limiter');
 const SMSService = require('../services/sms-service');
+const { processTurn: processCodingStateTurn } = require('../services/coding-state-service');
+const CodingGraph = require('../services/coding-graph');
+const { detectRedFlags, checkBeforeScheduling } = require('../services/triage-service');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -22,18 +26,33 @@ class RetellWebSocketHandler {
         const callId = this.extractCallId(req);
         console.log(`\n📞 NEW RETELL CALL: ${callId}`);
 
+        // Load existing state if resuming (conversation resumption)
+        let existingState = null;
+        if (typeof this.db.getCallState === 'function') {
+            try {
+                existingState = this.db.getCallState(callId);
+                if (existingState) {
+                    console.log(`📂 Resuming call state: stage=${existingState.current_stage}`);
+                }
+            } catch (e) {
+                console.warn('⚠️  Failed to load call state for resumption:', e.message);
+            }
+        }
+
         // Store connection
         const connection = {
             ws,
             callId,
             startTime: Date.now(),
-            conversationHistory: [],
+            conversationHistory: existingState ? [] : [], // History loaded from DB per-turn
             callMetadata: {},
             customerPhone: null,
             customerName: null, // Will be stored when first provided
             initialName: null, // Store the FIRST name provided by the caller (for fraud detection)
             nameProvidedAt: null, // Timestamp when name was first provided
-            clinic_id: null // Clinic/tenant identifier (primary)
+            clinic_id: existingState?.clinic_id || null, // Restore from persisted state
+            _codingState: existingState?.current_stage || 'INTAKE',
+            _codingStateData: existingState?.state_data || {}
         };
         this.activeConnections.set(callId, connection);
 
@@ -184,6 +203,26 @@ class RetellWebSocketHandler {
                 }
             }
 
+            // Save final state snapshot (medical coding agent)
+            if (typeof this.db.saveAgentStateSnapshot === 'function') {
+                try {
+                    const callDuration = connection ? Date.now() - connection.startTime : 0;
+                    this.db.saveAgentStateSnapshot(callId, 'call_ended', {
+                        clinic_id: connection?.clinic_id || null,
+                        duration_ms: callDuration,
+                        ended_at: new Date().toISOString()
+                    });
+                } catch (e) {
+                    console.warn('⚠️  Failed to save call-end snapshot:', e.message);
+                }
+            }
+
+            // Token budget: reset per-call usage when call ends (Section 10)
+            try {
+                const tokenBudget = require('../utils/token-budget');
+                tokenBudget.reset(callId);
+            } catch (_) { /* ignore */ }
+
             this.activeConnections.delete(callId);
         });
 
@@ -257,6 +296,31 @@ class RetellWebSocketHandler {
                     }
                 }
             }
+
+            // Persist call state once clinic_id is available (medical coding agent)
+            if (connection.clinic_id && typeof this.db.upsertCallState === 'function') {
+                try {
+                    this.db.upsertCallState(callId, { clinic_id: connection.clinic_id });
+                } catch (e) {
+                    console.warn('⚠️  Failed to upsert call state:', e.message);
+                }
+            }
+        }
+
+        // Per-clinic rate limit (Section 17)
+        const tenantKey = connection.clinic_id || message.call?.agent_id || 'unknown';
+        const rateLimit = clinicRateLimitCheck(tenantKey);
+        if (!rateLimit.allowed) {
+            console.warn(`⚠️  Clinic rate limit exceeded for ${tenantKey} (${rateLimit.limit}/min)`);
+            if (message.type === 'function_call') {
+                const functionCall = message.function_call || message;
+                this.sendToRetell(connection.ws, {
+                    type: 'function_call_response',
+                    function_call_id: functionCall.id || functionCall.function_call_id,
+                    result: { success: false, error: 'Rate limit exceeded. Please try again shortly.' }
+                });
+            }
+            return;
         }
 
         console.log(`\n📨 Message from ${callId}:`, message.type);
@@ -300,6 +364,56 @@ class RetellWebSocketHandler {
             content: userSaid,
             timestamp: Date.now()
         });
+
+        // Persist to voice_conversation_memory (medical coding agent)
+        if (typeof this.db.appendConversationMemory === 'function') {
+            try {
+                this.db.appendConversationMemory(callId, connection?.clinic_id || null, 'user', userSaid, null);
+            } catch (e) {
+                console.warn('⚠️  Failed to append conversation memory:', e.message);
+            }
+        }
+
+        // State machine: single path - LangGraph when enabled, fallback to coding-state-service
+        const transcriptPayload = { transcript: userSaid };
+        const clinicContext = { clinic_id: connection?.clinic_id || null };
+        const useLangGraph = (CodingGraph.shouldUseLangGraph(callId, connection?.clinic_id) || CodingGraph.isShadowMode());
+
+        try {
+            if (useLangGraph) {
+                const lgResult = await CodingGraph.processTurn(
+                    this.db, callId, 'transcript', transcriptPayload, clinicContext
+                );
+                if (lgResult?.transition) {
+                    console.log(`🔄 [${callId}] LangGraph: ${lgResult.fromStage} → ${lgResult.toStage}`);
+                }
+                if (!lgResult || lgResult === null) {
+                    // LangGraph unavailable - fallback to old state service
+                    processCodingStateTurn(this.db, callId, 'transcript', transcriptPayload, clinicContext);
+                }
+            } else {
+                processCodingStateTurn(this.db, callId, 'transcript', transcriptPayload, clinicContext);
+            }
+        } catch (e) {
+            console.warn('⚠️  State machine failed:', e.message);
+            if (useLangGraph) {
+                try {
+                    processCodingStateTurn(this.db, callId, 'transcript', transcriptPayload, clinicContext);
+                } catch (fb) {
+                    console.warn('⚠️  Fallback state service also failed:', fb.message);
+                }
+            }
+            if (typeof this.db.enqueueToolCallDLQ === 'function') {
+                try {
+                    this.db.enqueueToolCallDLQ({
+                        call_id: callId,
+                        clinic_id: connection?.clinic_id,
+                        function_name: 'state_machine_transcript',
+                        error_message: e.message
+                    });
+                } catch (_) {}
+            }
+        }
 
         // For healthcare, we let Retell LLM handle the conversation
         // and call functions as needed. No intent detection here.
@@ -418,6 +532,42 @@ class RetellWebSocketHandler {
                     result = await this.handleCreateCheckout(callId, functionArgs);
                     break;
 
+                case 'search_icd10_codes':
+                    result = await this.handleSearchIcd10Codes(callId, functionArgs);
+                    break;
+
+                case 'search_cpt_codes':
+                    result = await this.handleSearchCptCodes(callId, functionArgs);
+                    break;
+
+                case 'search_hcpcs_codes':
+                    result = await this.handleSearchHcpcsCodes(callId, functionArgs);
+                    break;
+
+                case 'extract_medical_text':
+                    result = await this.handleExtractMedicalText(callId, functionArgs);
+                    break;
+
+                case 'assess_urgency':
+                    result = await this.handleAssessUrgency(callId, functionArgs);
+                    break;
+
+                case 'suggest_codes_from_symptoms':
+                    result = await this.handleSuggestCodesFromSymptoms(callId, functionArgs);
+                    break;
+
+                case 'validate_code_pair':
+                    result = await this.handleValidateCodePair(callId, functionArgs);
+                    break;
+
+                case 'check_payer_guidelines':
+                    result = await this.handleCheckPayerGuidelines(callId, functionArgs);
+                    break;
+
+                case 'get_code_pricing':
+                    result = await this.handleGetCodePricing(callId, functionArgs);
+                    break;
+
                 default:
                     result = {
                         success: false,
@@ -427,6 +577,56 @@ class RetellWebSocketHandler {
 
             const responseTime = Date.now() - startTime;
             const success = result.success !== false && !result.error;
+
+            // Latency budget (Section 3): log if over budget
+            try {
+                const latencyBudget = require('../config/latency-budget');
+                const budget = latencyBudget.getBudget(functionName);
+                if (responseTime > budget && latencyBudget.recordViolation) {
+                    latencyBudget.recordViolation();
+                    console.warn(`⚠️  ${functionName} over budget: ${responseTime}ms > ${budget}ms`);
+                }
+            } catch (_) { /* ignore */ }
+
+            // State machine: single path - LangGraph when enabled, fallback to coding-state-service
+            const fnPayload = { function_name: functionName, result };
+            const fnClinicContext = { clinic_id: clinicId };
+            const useLangGraphFn = CodingGraph.shouldUseLangGraph(callId, clinicId) || CodingGraph.isShadowMode();
+            try {
+                if (useLangGraphFn) {
+                    const lgResult = await CodingGraph.processTurn(
+                        this.db, callId, 'function_call', fnPayload, fnClinicContext
+                    );
+                    if (lgResult?.transition) {
+                        console.log(`🔄 [${callId}] LangGraph: ${lgResult.fromStage} → ${lgResult.toStage}`);
+                    }
+                    if (!lgResult || lgResult === null) {
+                        processCodingStateTurn(this.db, callId, 'function_call', fnPayload, fnClinicContext);
+                    }
+                } else {
+                    processCodingStateTurn(this.db, callId, 'function_call', fnPayload, fnClinicContext);
+                }
+            } catch (e) {
+                console.warn('⚠️  State machine (function_call) failed:', e.message);
+                if (useLangGraphFn) {
+                    try {
+                        processCodingStateTurn(this.db, callId, 'function_call', fnPayload, fnClinicContext);
+                    } catch (_) {}
+                }
+            }
+
+            // Snapshot function results for coding tools (debug/audit)
+            if (['search_icd10_codes', 'search_cpt_codes', 'search_hcpcs_codes', 'suggest_codes_from_symptoms'].includes(functionName) && typeof this.db.saveAgentStateSnapshot === 'function') {
+                try {
+                    this.db.saveAgentStateSnapshot(callId, `function_${functionName}`, {
+                        args: functionArgs,
+                        result,
+                        response_time_ms: responseTime
+                    });
+                } catch (e) {
+                    console.warn('⚠️  Failed to save function snapshot:', e.message);
+                }
+            }
 
             // Log function call to database
             // NOTE: Using clinic_id as customer_id for database (schema limitation)
@@ -452,6 +652,21 @@ class RetellWebSocketHandler {
 
         } catch (error) {
             const responseTime = Date.now() - startTime;
+
+            // DLQ for failed tool calls (Section 2)
+            if (typeof this.db.enqueueToolCallDLQ === 'function') {
+                try {
+                    this.db.enqueueToolCallDLQ({
+                        call_id: callId,
+                        clinic_id: clinicId,
+                        function_name: functionName,
+                        parameters: functionArgs,
+                        error_message: error.message
+                    });
+                } catch (dlqErr) {
+                    console.warn('⚠️  Failed to enqueue tool call to DLQ:', dlqErr.message);
+                }
+            }
 
             // Log error
             // NOTE: Using clinic_id as customer_id for database (schema limitation)
@@ -709,6 +924,351 @@ class RetellWebSocketHandler {
                     end_call: false
                 }
             });
+        }
+    }
+
+    // Handle search_icd10_codes - real-time ICD-10 lookup during voice calls
+    async handleSearchIcd10Codes(callId, functionArgs) {
+        const query = functionArgs.query || '';
+        const limit = Math.min(20, Math.max(1, parseInt(functionArgs.limit, 10) || 10));
+        if (!query || !query.trim()) {
+            return { success: false, error: 'Query is required for ICD-10 search', codes: [] };
+        }
+        try {
+            const knowledgeService = require('../services/knowledge-service');
+            const codes = knowledgeService.searchIcd10Codes(query.trim(), limit);
+            return {
+                success: true,
+                codes: codes.map(c => ({ code: c.code, description: c.description, category: c.category })),
+                count: codes.length
+            };
+        } catch (error) {
+            console.error('search_icd10_codes error:', error);
+            return { success: false, error: error.message, codes: [] };
+        }
+    }
+
+    // Handle search_cpt_codes - real-time CPT lookup during voice calls
+    async handleSearchCptCodes(callId, functionArgs) {
+        const query = functionArgs.query || '';
+        const limit = Math.min(20, Math.max(1, parseInt(functionArgs.limit, 10) || 10));
+        if (!query || !query.trim()) {
+            return { success: false, error: 'Query is required for CPT search', codes: [] };
+        }
+        try {
+            const db = require('../database');
+            const codes = db.searchCptCodes(query.trim(), limit);
+            return {
+                success: true,
+                codes: codes.map(c => ({ code: c.code, description: c.description, category: c.category })),
+                count: codes.length
+            };
+        } catch (error) {
+            console.error('search_cpt_codes error:', error);
+            return { success: false, error: error.message, codes: [] };
+        }
+    }
+
+    // Handle search_hcpcs_codes - real-time HCPCS lookup (DME, supplies, modifiers)
+    async handleSearchHcpcsCodes(callId, functionArgs) {
+        const query = functionArgs.query || '';
+        const limit = Math.min(20, Math.max(1, parseInt(functionArgs.limit, 10) || 10));
+        if (!query || !query.trim()) {
+            return { success: false, error: 'Query is required for HCPCS search', codes: [] };
+        }
+        try {
+            const knowledgeService = require('../services/knowledge-service');
+            const codes = knowledgeService.searchHcpcsCodes(query.trim(), limit);
+            return {
+                success: true,
+                codes: codes.map(c => ({
+                    code: c.code,
+                    description: c.description,
+                    short_desc: c.short_desc,
+                    type: c.type
+                })),
+                count: codes.length
+            };
+        } catch (error) {
+            console.error('search_hcpcs_codes error:', error);
+            return { success: false, error: error.message, codes: [] };
+        }
+    }
+
+    // Handle extract_medical_text - structured extraction from patient utterance
+    async handleExtractMedicalText(callId, functionArgs) {
+        const text = functionArgs.patient_utterance || functionArgs.utterance || functionArgs.text || '';
+        if (!text || !text.trim()) {
+            return { success: false, error: 'patient_utterance is required', symptoms: [], vitals: {}, severity: null };
+        }
+        try {
+            const extractionService = require('../services/medical-text-extraction-service');
+            const data = extractionService.extractStructuredData(text.trim());
+            const temporal = { ...(data.temporal || {}) };
+            if (data.severity?.temporal) temporal.acuteness = data.severity.temporal;
+            return {
+                success: true,
+                symptoms: data.symptoms || [],
+                vitals: data.vitals || {},
+                severity: data.severity?.severity || null,
+                temporal
+            };
+        } catch (error) {
+            console.error('extract_medical_text error:', error);
+            return { success: false, error: error.message, symptoms: [], vitals: {}, severity: null };
+        }
+    }
+
+    // Handle assess_urgency - red-flag detection for emergency triage
+    async handleAssessUrgency(callId, functionArgs) {
+        const text = functionArgs.symptoms_text || functionArgs.symptoms || '';
+        if (!text || !text.trim()) {
+            return { success: false, error: 'symptoms_text is required', urgency: 'ROUTINE' };
+        }
+        try {
+            const assessment = detectRedFlags(text.trim());
+            return {
+                success: true,
+                urgency: assessment.urgency,
+                isEmergency: assessment.isEmergency,
+                redFlags: assessment.redFlags,
+                suggestedResponse: assessment.suggestedResponse
+            };
+        } catch (error) {
+            console.error('assess_urgency error:', error);
+            return { success: false, error: error.message, urgency: 'ROUTINE' };
+        }
+    }
+
+    // Handle suggest_codes_from_symptoms - proactive code suggestion from patient description
+    async handleSuggestCodesFromSymptoms(callId, functionArgs) {
+        const clinicalText = functionArgs.clinical_text || functionArgs.symptoms || '';
+        const maxIcd10 = Math.min(10, Math.max(1, parseInt(functionArgs.max_icd10, 10) || 5));
+        const maxCpt = Math.min(10, Math.max(1, parseInt(functionArgs.max_cpt, 10) || 5));
+        if (!clinicalText || !clinicalText.trim()) {
+            return { success: false, error: 'clinical_text is required', icd10: [], cpt: [] };
+        }
+        try {
+            const knowledgeService = require('../services/knowledge-service');
+            const conn = this.activeConnections?.get(callId);
+            const clinicId = conn?.clinic_id || null;
+
+            // Token budget check (Section 10) - disable semantic search if over budget
+            let useSemantic = undefined;
+            const tokenBudget = require('../utils/token-budget');
+            const estimatedTokens = Math.ceil(clinicalText.length / 4) + 2000;
+            if (!tokenBudget.canProceed(callId, estimatedTokens)) {
+                useSemantic = false;
+                console.warn(`⚠️  Token budget exceeded for call ${callId}, suggest_codes using keyword-only`);
+            }
+
+            // Use perceptual_state from graph when available (Layer 2 - findings-based RAG)
+            let perceptualState = null;
+            const callState = typeof this.db.getCallState === 'function' ? this.db.getCallState(callId) : null;
+            if (callState?.state_data?.perceptual_state) {
+                perceptualState = callState.state_data.perceptual_state;
+            }
+
+            const result = await knowledgeService.getCodeCandidates(clinicalText.trim(), {
+                maxIcd10,
+                maxCpt,
+                maxHcpcs: 3,
+                clinicId,
+                callId,
+                perceptualState,
+                ...(useSemantic !== undefined && { useSemantic })
+            });
+
+            // Track tokens used (embedding + retrieval estimate)
+            tokenBudget.addTokens(callId, Math.ceil(clinicalText.length / 4) + 500);
+
+            const simplifyForPatient = (desc) => {
+                if (!desc) return '';
+                return desc
+                    .replace(/\s*,\s*[^,]+$/, '')
+                    .replace(/\s*\([^)]*\)/g, '')
+                    .trim()
+                    .slice(0, 80);
+            };
+            let icd10List = (result.icd10 || []).slice(0, maxIcd10);
+            let cptList = (result.cpt || []).slice(0, maxCpt);
+
+            // Mandatory validation: filter out codes not in KB (Section 6)
+            const validation = knowledgeService.validateCodesExist({
+                icd10: icd10List.map(c => c.code).filter(Boolean),
+                cpt: cptList.map(c => c.code).filter(Boolean)
+            });
+            if (!validation.valid) {
+                icd10List = icd10List.filter(c => !validation.invalid.icd10.includes(c.code));
+                cptList = cptList.filter(c => !validation.invalid.cpt.includes(c.code));
+            }
+
+            // Check if any suggested code has low confidence (Section 5)
+            const minConfidence = 0.6;
+            const hasLowConfidence = [...icd10List, ...cptList].some(
+                c => (c.confidence ?? 0.8) < minConfidence
+            );
+
+            // Validate primary ICD-10 + CPT pairs (top 3×3) for agent to present confidently
+            const validatedPairs = [];
+            const maxPairs = 9;
+            for (const icd of icd10List.slice(0, 3)) {
+                for (const cpt of cptList.slice(0, 3)) {
+                    if (validatedPairs.length >= maxPairs) break;
+                    const pairCheck = knowledgeService.validateCodePair(icd.code, cpt.code);
+                    validatedPairs.push({
+                        icd10_code: icd.code,
+                        cpt_code: cpt.code,
+                        valid: pairCheck.valid,
+                        reason: pairCheck.reason || null
+                    });
+                }
+            }
+            return {
+                success: true,
+                icd10: icd10List.map(c => ({
+                    code: c.code,
+                    description: c.description,
+                    patient_friendly: simplifyForPatient(c.description)
+                })),
+                cpt: cptList.map(c => ({
+                    code: c.code,
+                    description: c.description,
+                    patient_friendly: simplifyForPatient(c.description)
+                })),
+                validated_pairs: validatedPairs,
+                needs_review: hasLowConfidence
+            };
+        } catch (error) {
+            console.error('suggest_codes_from_symptoms error:', error);
+            return { success: false, error: error.message, icd10: [], cpt: [] };
+        }
+    }
+
+    // Handle validate_code_pair - ICD-10 + CPT compatibility check
+    async handleValidateCodePair(callId, functionArgs) {
+        const icd10 = functionArgs.icd10_code || functionArgs.icd10 || '';
+        const cpt = functionArgs.cpt_code || functionArgs.cpt || '';
+        if (!icd10 || !cpt) {
+            return { success: false, error: 'icd10_code and cpt_code are required', valid: false };
+        }
+        try {
+            const knowledgeService = require('../services/knowledge-service');
+            const db = this.db || require('../database');
+
+            // 1. Code existence check
+            const icdExists = db.codeExists?.(icd10, 'icd10');
+            const cptExists = db.codeExists?.(cpt, 'cpt');
+            if (!icdExists || !cptExists) {
+                const result = {
+                    success: true,
+                    valid: false,
+                    reason: !icdExists ? `ICD-10 code ${icd10} not found in knowledge base` : `CPT code ${cpt} not found in knowledge base`,
+                    codesExist: { icd10: icdExists, cpt: cptExists }
+                };
+                if (typeof db.insertCodingDecision === 'function') {
+                    const conn = this.activeConnections?.get(callId);
+                    const hist = db.getConversationHistory?.(callId, 1);
+                    db.insertCodingDecision({
+                        call_id: callId,
+                        clinic_id: conn?.clinic_id || null,
+                        clinical_note: hist?.[0]?.role === 'user' ? hist[0].content : null,
+                        proposed_icd10: icd10,
+                        proposed_cpt: cpt,
+                        validation_status: 'invalid',
+                        validation_reason: result.reason,
+                        rule_version: knowledgeService.getRuleVersionForDate?.(new Date()),
+                        rule_hash: knowledgeService.getRuleHash?.()
+                    });
+                }
+                return result;
+            }
+
+            // 2. Pair compatibility check
+            const pairCheck = knowledgeService.validateCodePair(icd10, cpt);
+            const result = {
+                success: true,
+                valid: pairCheck.valid,
+                reason: pairCheck.reason,
+                icd10_code: icd10,
+                cpt_code: cpt
+            };
+
+            // 3. Log coding decision for audit (Phase 5.2)
+            if (typeof db.insertCodingDecision === 'function') {
+                const conn = this.activeConnections?.get(callId);
+                const hist = db.getConversationHistory?.(callId, 1);
+                db.insertCodingDecision({
+                    call_id: callId,
+                    clinic_id: conn?.clinic_id || null,
+                    clinical_note: hist?.[0]?.role === 'user' ? hist[0].content : null,
+                    proposed_icd10: icd10,
+                    proposed_cpt: cpt,
+                    validation_status: pairCheck.valid ? 'valid' : 'invalid',
+                    validation_reason: pairCheck.reason || null,
+                    rule_version: knowledgeService.getRuleVersionForDate?.(new Date()),
+                    rule_hash: knowledgeService.getRuleHash?.()
+                });
+            }
+
+            return result;
+        } catch (error) {
+            console.error('validate_code_pair error:', error);
+            return { success: false, error: error.message, valid: false };
+        }
+    }
+
+    // Handle check_payer_guidelines - check if payer has fee schedule
+    async handleCheckPayerGuidelines(callId, functionArgs) {
+        const payerId = functionArgs.payer_id || functionArgs.payerId || functionArgs.payer_name || '';
+        if (!payerId) {
+            return { success: false, error: 'payer_id is required', has_guidelines: false };
+        }
+        try {
+            const FeeScheduleService = require('../services/fee-schedule-service');
+            const hasGuidelines = FeeScheduleService.hasFeeScheduleForPayer(String(payerId).trim());
+            return {
+                success: true,
+                payer_id: String(payerId).trim().toUpperCase(),
+                has_guidelines: hasGuidelines,
+                message: hasGuidelines ? 'Fee schedule available for this payer' : 'No fee schedule on file; pricing may be estimated'
+            };
+        } catch (error) {
+            console.error('check_payer_guidelines error:', error);
+            return { success: false, error: error.message, has_guidelines: false };
+        }
+    }
+
+    // Handle get_code_pricing - get allowed amounts for CPT codes
+    async handleGetCodePricing(callId, functionArgs) {
+        const payerId = functionArgs.payer_id || functionArgs.payerId || '';
+        let cptCodes = functionArgs.cpt_codes || functionArgs.cptCodes || [];
+        const dateOfService = functionArgs.date_of_service || functionArgs.dateOfService || null;
+        if (!payerId) {
+            return { success: false, error: 'payer_id is required', pricing: {} };
+        }
+        if (!Array.isArray(cptCodes)) {
+            cptCodes = [String(cptCodes)];
+        }
+        if (cptCodes.length === 0) {
+            return { success: false, error: 'cpt_codes is required', pricing: {} };
+        }
+        try {
+            const FeeScheduleService = require('../services/fee-schedule-service');
+            const pricing = FeeScheduleService.getAllowedAmountsForCodes(
+                String(payerId).trim().toUpperCase(),
+                cptCodes.map(c => String(c).trim()),
+                dateOfService
+            );
+            return {
+                success: true,
+                payer_id: String(payerId).trim().toUpperCase(),
+                pricing,
+                message: Object.keys(pricing).length > 0 ? 'Pricing from fee schedule' : 'No fee schedule rates found for these codes'
+            };
+        } catch (error) {
+            console.error('get_code_pricing error:', error);
+            return { success: false, error: error.message, pricing: {} };
         }
     }
 
@@ -1309,8 +1869,26 @@ class RetellWebSocketHandler {
     // Handle schedule_appointment function
     async handleScheduleAppointment(callId, args) {
         try {
-            // Store the initial name when first provided (for fraud detection)
             const connection = this.activeConnections.get(callId);
+
+            // SAFETY: Red-flag check before scheduling (emergency symptoms → block scheduling)
+            if (typeof this.db.getConversationHistory === 'function') {
+                const recentTurns = this.db.getConversationHistory(callId, 10);
+                const { blockScheduling, assessment } = checkBeforeScheduling(recentTurns);
+                if (blockScheduling && assessment?.isEmergency) {
+                    console.warn(`🚨 EMERGENCY: Blocked scheduling - red flags detected: ${assessment.redFlags?.join(', ')}`);
+                    return {
+                        success: false,
+                        blockScheduling: true,
+                        isEmergency: true,
+                        urgency: 'EMERGENT',
+                        message: assessment.suggestedResponse,
+                        voice_agent_instruction: `CRITICAL: Do NOT schedule an appointment. The caller has described emergency symptoms. You MUST say: "${assessment.suggestedResponse}" and advise them to call 911 or go to the ER immediately.`
+                    };
+                }
+            }
+
+            // Store the initial name when first provided (for fraud detection)
             if (connection && args.patient_name && !connection.initialName) {
                 connection.initialName = args.patient_name.trim();
                 connection.nameProvidedAt = Date.now();

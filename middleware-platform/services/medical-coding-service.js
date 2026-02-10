@@ -1,8 +1,43 @@
-const Groq = require('groq-sdk');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+if (!process.env.LANGSMITH_API_KEY && !process.env.AP_Langchain) {
+  require('dotenv').config({ path: path.resolve(__dirname, '../.env.bak2') });
+}
 
+// LangSmith: support AP_Langchain as fallback for LANGSMITH_API_KEY (MUST HAVE for tracking)
+if (!process.env.LANGSMITH_API_KEY && process.env.AP_Langchain) {
+  process.env.LANGSMITH_API_KEY = process.env.AP_Langchain;
+}
+if (process.env.LANGSMITH_API_KEY && process.env.LANGCHAIN_TRACING_V2 !== 'false') {
+  process.env.LANGCHAIN_TRACING_V2 = 'true';
+}
+
+const Groq = require('groq-sdk');
 const knowledgeService = require('./knowledge-service');
+const db = require('../database');
+const featureFlags = require('../utils/feature-flags');
+const { getOrCreate, GROQ } = require('../utils/circuit-breaker');
+const tokenBudget = require('../utils/token-budget');
+
+const groqBreaker = getOrCreate(GROQ, { failureThreshold: 5, windowMs: 60000, resetTimeMs: 30000 });
+
+// Groq 429 retry (Section 17): exponential backoff 1s, 2s, 4s; max 3 retries
+const GROQ_429_RETRIES = 3;
+const GROQ_429_BACKOFF_MS = [1000, 2000, 4000];
+
+// Optional LangChain for LangSmith tracing
+let ChatGroq = null;
+let HumanMessage = null;
+let SystemMessage = null;
+try {
+  const groqPkg = require('@langchain/groq');
+  const corePkg = require('@langchain/core/messages');
+  ChatGroq = groqPkg.ChatGroq;
+  HumanMessage = corePkg.HumanMessage;
+  SystemMessage = corePkg.SystemMessage;
+} catch (_) {
+  // LangChain not available, will use raw Groq SDK
+}
 
 // Make Groq optional - only initialize if API key is available
 let groq = null;
@@ -11,6 +46,9 @@ if (GROQ_API_KEY) {
   try {
     groq = new Groq({ apiKey: GROQ_API_KEY });
     console.log('✅ Groq configured - Medical coding AI enabled');
+    if (ChatGroq && process.env.LANGCHAIN_TRACING_V2 === 'true') {
+      console.log('✅ LangSmith tracing enabled (LANGSMITH_API_KEY/AP_Langchain)');
+    }
   } catch (error) {
     console.warn('⚠️  Groq initialization failed:', error.message);
     groq = null;
@@ -22,9 +60,45 @@ if (GROQ_API_KEY) {
 
 const DEFAULT_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
-function buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidates, icdReference }) {
-  // Truncate patient context if too long
-  const context = patientContext ? JSON.stringify(patientContext, null, 2).slice(0, 500) : 'Not provided';
+// Confidence thresholds (P0 - Section 5)
+const CONFIDENCE_THRESHOLD_LOW = parseFloat(process.env.CONFIDENCE_THRESHOLD_LOW || '0.6');
+const CONFIDENCE_THRESHOLD_ESCALATE = parseFloat(process.env.CONFIDENCE_THRESHOLD_ESCALATE || '0.75');
+
+// Rough cost per 1M tokens (Groq Llama-3.3-70B)
+const COST_PER_1M_INPUT = 0.59;
+const COST_PER_1M_OUTPUT = 0.79;
+
+/**
+ * Build evidence trace from cross_modal_links for defensible justification
+ */
+function buildEvidenceTrace(perceptualState, llmRationale) {
+  const links = perceptualState?.cross_modal_links || [];
+  if (links.length === 0) {
+    return { rationale: llmRationale, links: [] };
+  }
+  const evidenceLines = links
+    .filter((l) => l.alignment_score > 0 && l.supporting_evidence)
+    .map((l) => `- ${l.text_concept} ↔ ${l.visual_finding || 'N/A'} (align=${l.alignment_score}): ${l.supporting_evidence}`);
+  const evidenceBlock = evidenceLines.length
+    ? `\n\nEvidence (cross-modal links):\n${evidenceLines.join('\n')}`
+    : '';
+  return {
+    rationale: (llmRationale || '').trim() + evidenceBlock,
+    links
+  };
+}
+
+/**
+ * Compute overall coding confidence (min of all code confidences, or 0.85 if single code)
+ */
+function computeOverallConfidence(icd10 = [], cpt = []) {
+  const all = [...icd10, ...cpt].filter(Boolean);
+  if (all.length === 0) return 0.5;
+  const confidences = all.map(c => knowledgeService.ensureCodeConfidence(c, 0.8));
+  return Math.min(...confidences);
+}
+
+function buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidates, icdReference, perceptualState, retrievedGuidelines }) {
   const cptSection = cptCandidates.length
     ? cptCandidates.map(item => `${item.code}: ${item.description}`).join('\n')
     : 'No candidate CPT codes found';
@@ -32,14 +106,53 @@ function buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidate
     ? icdReference.map(item => `${item.code}: ${item.description}`).join('\n')
     : 'No ICD-10 reference codes available';
 
+  let perceptualSection = '';
+  let evidenceInstruction = '';
+
+  if (perceptualState && (perceptualState.visual_findings?.length > 0 || perceptualState.cross_modal_links?.length > 0)) {
+    const vf = perceptualState.visual_findings || [];
+    const txt = perceptualState.textual_findings || [];
+    const links = perceptualState.cross_modal_links || [];
+    const specialty = perceptualState.specialty_tag || 'general';
+
+    perceptualSection = `
+---
+EVIDENCE PACKAGE (Perceptual State - use as grounding truth):
+The patient's clinical note has been analyzed alongside imaging. Use VISUAL FINDINGS as the primary diagnostic driver when available.
+
+Visual Findings (from imaging):
+${vf.length ? vf.map(f => `- ${f.finding} @ ${f.body_region || 'N/A'} (${f.laterality || 'N/A'}) confidence=${f.confidence} evidence=${f.evidence_strength || 'N/A'}`).join('\n') : '(none)'}
+
+Textual Findings (from clinical note):
+${txt.length ? txt.map(f => `- ${f.concept}: ${f.mention || '-'} (${f.severity || 'N/A'})`).join('\n') : '(none)'}
+
+Cross-Modal Links (text ↔ image alignment):
+${links.length ? links.map(l => `- "${l.text_concept}" ↔ "${l.visual_finding || 'N/A'}" alignment=${l.alignment_score} type=${l.alignment_type} evidence: ${l.supporting_evidence || 'N/A'}`).join('\n') : '(none)'}
+
+Specialty context: ${specialty}
+---
+`;
+
+    evidenceInstruction = `
+CRITICAL: Prioritize visual findings over text when both exist. For each ICD-10 code you select, cite the supporting evidence from the cross-modal links above. Your rationale MUST reference which visual finding and/or textual finding supports each code.
+`;
+  }
+
+  const guidelinesSection = retrievedGuidelines && retrievedGuidelines.length > 0
+    ? `\nRelevant Guidelines:\n${retrievedGuidelines.slice(0, 5).map(g => typeof g === 'string' ? g : g.text || g).join('\n---\n')}\n`
+    : '';
+
   return `You are a certified medical coding specialist. Review the clinical note and select appropriate codes.
-Respond with JSON: {"icd10": [{"code": "...", "description": "...", "confidence": 0.0-1.0}], "cpt": [{"code": "...", "description": "...", "confidence": 0.0-1.0}], "rationale": "..."}
+Respond with JSON: {"icd10": [{"code": "...", "description": "...", "confidence": 0.0-1.0}], "cpt": [{"code": "...", "description": "...", "confidence": 0.0-1.0, "modifiers": ["-25", "-59", "-51"]}], "rationale": "..."}
+Include modifiers when applicable: -25 when E/M and procedure same visit (on E/M); -59 when distinct procedures; -51 when multiple surgery.
 Only use codes from the reference lists below. Return empty arrays if no codes apply.
+${evidenceInstruction}
 
 Clinical Note:
 ${clinicalNote}
 
 Encounter: ${encounterType || 'Unknown'}
+${perceptualSection}${guidelinesSection}
 
 CPT Candidates:
 ${cptSection}
@@ -49,108 +162,397 @@ ${icdSection}
 `;
 }
 
-async function generateCodingSuggestion({ clinicalNote, encounterType, patientContext }) {
-  if (!clinicalNote || typeof clinicalNote !== 'string') {
-    throw new Error('Clinical note is required for coding suggestions');
-  }
-
-  // If Groq is not available, fall back to knowledge service
-  if (!groq) {
-    console.warn('⚠️  Groq not available - using knowledge service fallback for medical coding');
-    const cptCandidates = knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 });
-    const icdReference = knowledgeService.getReferenceIcdCodes(3);
-    
-    return {
-      icd10: icdReference,
-      cpt: cptCandidates.slice(0, 1),
-      rationale: 'Selected highest-ranked CPT candidate with reference ICD-10 list (Groq AI unavailable).',
-      model: 'knowledge-service-fallback',
-      raw: null,
-      promptContext: {
-        cptCandidates,
-        icdReference
+async function callGroqWithRetry(fn) {
+  let lastErr;
+  for (let i = 0; i <= GROQ_429_RETRIES; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const is429 = err.status === 429 || err.statusCode === 429 ||
+      (err.response && err.response.status === 429) ||
+      (err.message && /rate limit|429/i.test(err.message));
+      if (is429 && i < GROQ_429_RETRIES) {
+        const delay = GROQ_429_BACKOFF_MS[i];
+        console.warn(`⚠️  Groq 429 - retry ${i + 1}/${GROQ_429_RETRIES} in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
       }
-    };
+    }
   }
+  throw lastErr;
+}
 
-  // Truncate very long clinical notes to prevent token overflow
-  // Keep last 4000 characters (most recent/relevant info) if note is too long
-  const MAX_NOTE_LENGTH = 4000;
-  const truncatedNote = clinicalNote.length > MAX_NOTE_LENGTH 
-    ? clinicalNote.slice(-MAX_NOTE_LENGTH) + '\n[... previous content truncated ...]'
-    : clinicalNote;
-
-  const cptCandidates = knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 10 });
-  const icdReference = knowledgeService.getReferenceIcdCodes(12);
-
-  const prompt = buildPrompt({ clinicalNote: truncatedNote, encounterType, patientContext, cptCandidates, icdReference });
-
-  try {
-    const response = await groq.chat.completions.create({
+async function callGroqRaw({ systemContent, userContent }) {
+  return groqBreaker.execute(() =>
+    callGroqWithRetry(() => groq.chat.completions.create({
       model: DEFAULT_MODEL,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a certified medical coder. Always follow AMA and CMS guidelines. Respond with valid JSON only.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'system', content: systemContent },
+        { role: 'user', content: userContent }
       ],
       response_format: { type: 'json_object' },
       max_tokens: 2000,
       temperature: 0.2
-    });
+    }))
+  );
+}
+
+async function callGroqLangChain({ systemContent, userContent, callId, clinicId, operation = 'suggest_codes' }) {
+  return groqBreaker.execute(() =>
+    callGroqWithRetry(async () => {
+  const model = new ChatGroq({
+    apiKey: GROQ_API_KEY,
+    model: DEFAULT_MODEL,
+    temperature: 0.2,
+    streaming: false,
+    response_format: { type: 'json_object' }
+  });
+  const tags = ['medical-coding', 'doctor-little', operation];
+  if (clinicId) tags.push(`clinic:${clinicId}`);
+  if (callId) tags.push(`call:${callId}`);
+  const runnableConfig = {
+    runName: `medical_coding_${operation}`,
+    tags,
+    metadata: { clinic_id: clinicId || null, call_id: callId || null, operation }
+  };
+  const res = await model.invoke([
+    new SystemMessage(systemContent),
+    new HumanMessage(userContent)
+  ], runnableConfig);
+  const content = typeof res?.content === 'string' ? res.content : JSON.stringify(res?.content || {});
+  const usage = res?.response_metadata?.usage || res?.usage_metadata || {};
+  return {
+    choices: [{ message: { content } }],
+    usage: {
+      prompt_tokens: usage.input_tokens ?? usage.prompt_tokens ?? 0,
+      completion_tokens: usage.output_tokens ?? usage.completion_tokens ?? 0
+    }
+  };
+    })
+  );
+}
+
+async function generateCodingSuggestion({ clinicalNote, encounterType, patientContext, perceptualState, retrievedGuidelines, callId, clinicId }) {
+  if (!clinicalNote || typeof clinicalNote !== 'string') {
+    throw new Error('Clinical note is required for coding suggestions');
+  }
+
+  // Standalone (PDF/orchestrator): reset token count so each request gets full budget
+  if (!callId) tokenBudget.reset('standalone');
+
+  if (!groq) {
+    console.warn('⚠️  Groq not available - using knowledge service fallback for medical coding');
+    const fallback = perceptualState
+      ? knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+      : {
+          cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }),
+          icd10: knowledgeService.getReferenceIcdCodes(3, 0.7)
+        };
+    const cptCandidates = fallback.cpt;
+    const icdReference = fallback.icd10;
+    const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({
+      ...c,
+      confidence: typeof c.confidence === 'number' ? c.confidence : 0.7
+    }));
+    const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.7 }));
+
+    const codesToValidate = {
+      icd10: icdWithConf.map(c => c.code).filter(Boolean),
+      cpt: cptWithConf.map(c => c.code).filter(Boolean)
+    };
+    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    let validIcd = icdWithConf;
+    let validCpt = cptWithConf;
+    if (!validation.valid) {
+      validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
+      validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
+    }
+    const conf = computeOverallConfidence(validIcd, validCpt);
+
+    return {
+      icd10: validIcd,
+      cpt: validCpt,
+      rationale: 'Selected highest-ranked CPT candidate with reference ICD-10 list (Groq AI unavailable).',
+      model: 'knowledge-service-fallback',
+      raw: null,
+      promptContext: { cptCandidates, icdReference },
+      codingConfidence: conf,
+      needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE
+    };
+  }
+
+  const MAX_NOTE_LENGTH = 4000;
+  const truncatedNote = clinicalNote.length > MAX_NOTE_LENGTH
+    ? clinicalNote.slice(-MAX_NOTE_LENGTH) + '\n[... previous content truncated ...]'
+    : clinicalNote;
+
+  const { cpt: cptCandidates, icd10: icdReference } = perceptualState
+    ? knowledgeService.getCandidatesForCoding(truncatedNote, {
+        perceptualState,
+        limitCpt: 10,
+        limitIcd10: 12
+      })
+    : {
+        cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 10 }),
+        icd10: knowledgeService.getReferenceIcdCodes(12)
+      };
+
+  const prompt = buildPrompt({
+    clinicalNote: truncatedNote,
+    encounterType,
+    patientContext,
+    cptCandidates,
+    icdReference,
+    perceptualState,
+    retrievedGuidelines
+  });
+  const systemContent = 'You are a certified medical coder. Always follow AMA and CMS guidelines. Respond with valid JSON only.';
+
+  // Monthly cost cap (Section 10): block Groq if clinic exceeded cap
+  if (clinicId && typeof db.getClinicMonthlyLlmCost === 'function' && typeof db.getClinicMonthlyCostCap === 'function') {
+    const costRow = db.getClinicMonthlyLlmCost(clinicId);
+    const cap = db.getClinicMonthlyCostCap(clinicId);
+    if (cap != null && cap > 0 && (costRow?.cost_usd ?? 0) >= cap) {
+      console.warn(`⚠️  Clinic ${clinicId} monthly LLM cost cap exceeded (${costRow?.cost_usd ?? 0} >= ${cap}) - using knowledge-service fallback`);
+      const capFallback = perceptualState
+        ? knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+        : { cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
+      const cptFallback = capFallback.cpt;
+      const icdFallback = capFallback.icd10;
+      const cptWithConf = (cptFallback.slice(0, 1) || []).map(c => ({ ...c, confidence: c.confidence ?? 0.65 }));
+      const icdWithConf = icdFallback.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
+      const codesToValidate = { icd10: icdWithConf.map(c => c.code).filter(Boolean), cpt: cptWithConf.map(c => c.code).filter(Boolean) };
+      const validation = knowledgeService.validateCodesExist(codesToValidate);
+      let validIcd = icdWithConf, validCpt = cptWithConf;
+      if (!validation.valid) {
+        validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
+        validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
+      }
+      const conf = computeOverallConfidence(validIcd, validCpt);
+      return {
+        icd10: validIcd, cpt: validCpt,
+        rationale: 'Monthly cost cap exceeded; using knowledge-service fallback.',
+        model: 'knowledge-service-fallback', raw: null,
+        promptContext: { cptCandidates: cptFallback, icdReference: icdFallback },
+        codingConfidence: conf,
+        needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE,
+        costCapExceeded: true
+      };
+    }
+  }
+
+  // Token budget (Section 10): skip Groq if call would exceed limit
+  const estimatedTokens = tokenBudget.estimateTokens(prompt) + tokenBudget.estimateTokens(systemContent) + 2500; // ~2k output
+  if (!tokenBudget.canProceed(callId, estimatedTokens)) {
+    console.warn(`⚠️  Token budget exceeded for call ${callId || 'standalone'} - using knowledge-service fallback`);
+    const tokFallback = perceptualState
+      ? knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+      : { cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
+    const cptCandidates = tokFallback.cpt;
+    const icdReference = tokFallback.icd10;
+    const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({ ...c, confidence: c.confidence ?? 0.65 }));
+    const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
+    const codesToValidate = { icd10: icdWithConf.map(c => c.code).filter(Boolean), cpt: cptWithConf.map(c => c.code).filter(Boolean) };
+    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    let validIcd = icdWithConf, validCpt = cptWithConf;
+    if (!validation.valid) {
+      validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
+      validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
+    }
+    const conf = computeOverallConfidence(validIcd, validCpt);
+    return {
+      icd10: validIcd, cpt: validCpt,
+      rationale: 'Token budget exceeded; using knowledge-service fallback.',
+      model: 'knowledge-service-fallback', raw: null,
+      promptContext: { cptCandidates, icdReference },
+      codingConfidence: conf,
+      needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE
+    };
+  }
+
+  try {
+    const startMs = Date.now();
+    // MUST HAVE: Always use LangChain when available so traces go to LangSmith
+    const useLangChain = ChatGroq && process.env.LANGCHAIN_TRACING_V2 !== 'false';
+    const response = useLangChain
+      ? await callGroqLangChain({ systemContent, userContent: prompt, callId, clinicId, operation: 'suggest_codes' })
+      : await callGroqRaw({ systemContent, userContent: prompt });
+    const latencyMs = Date.now() - startMs;
+
+    const usage = response?.usage || {};
+    const tokensIn = usage.prompt_tokens ?? usage.input_tokens ?? 0;
+    const tokensOut = usage.completion_tokens ?? usage.output_tokens ?? 0;
+    tokenBudget.addTokens(callId, { prompt_tokens: tokensIn, completion_tokens: tokensOut });
+    const costUsd = (tokensIn / 1e6) * COST_PER_1M_INPUT + (tokensOut / 1e6) * COST_PER_1M_OUTPUT;
 
     let parsed;
-    const message = response?.choices?.[0]?.message?.content;
+    let message = response?.choices?.[0]?.message?.content;
+    if (typeof message === 'string' && message.includes('```')) {
+      const match = message.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (match) message = match[1].trim();
+    }
     try {
       parsed = message ? JSON.parse(message) : null;
     } catch (error) {
       throw new Error(`Failed to parse Groq response: ${error.message}`);
     }
 
+    const icd10 = (Array.isArray(parsed?.icd10) ? parsed.icd10 : []).map(icd => ({
+      ...icd,
+      confidence: knowledgeService.ensureCodeConfidence(icd, 0.85)
+    }));
+    const cpt = (Array.isArray(parsed?.cpt) ? parsed.cpt : []).map(c => ({
+      ...c,
+      confidence: knowledgeService.ensureCodeConfidence(c, 0.85),
+      modifiers: Array.isArray(c.modifiers) ? c.modifiers.map(m => String(m).trim()) : []
+    }));
+
+    const codingConfidence = computeOverallConfidence(icd10, cpt);
+
+    // Mandatory validation: filter out any code not in KB (Section 6)
+    const codesToValidate = {
+      icd10: icd10.map(c => (typeof c === 'object' ? c.code : c)).filter(Boolean),
+      cpt: cpt.map(c => (typeof c === 'object' ? c.code : c)).filter(Boolean)
+    };
+    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    let validIcd10 = icd10;
+    let validCpt = cpt;
+    if (!validation.valid) {
+      validIcd10 = icd10.filter(c => !validation.invalid.icd10.includes(typeof c === 'object' ? c.code : c));
+      validCpt = cpt.filter(c => !validation.invalid.cpt.includes(typeof c === 'object' ? c.code : c));
+      if (validation.invalid.icd10.length || validation.invalid.cpt.length) {
+        console.warn('⚠️  Filtered invalid codes:', validation.invalid);
+      }
+    }
+    const finalConfidence = computeOverallConfidence(validIcd10, validCpt);
+
+    // Confidence thresholds: reject <0.6, escalate 0.6-0.75 (Section 5)
+    // Feature flag: confidence_rejection_enabled (default true)
+    if (featureFlags.isEnabled('confidence_rejection_enabled', clinicId) && finalConfidence < CONFIDENCE_THRESHOLD_LOW) {
+    const rejTrace = buildEvidenceTrace(perceptualState, parsed?.rationale || '');
     return {
-      icd10: Array.isArray(parsed?.icd10) ? parsed.icd10 : [],
-      cpt: Array.isArray(parsed?.cpt) ? parsed.cpt : [],
-      rationale: parsed?.rationale || '',
+      icd10: [],
+      cpt: [],
+      rationale: rejTrace.rationale,
+      evidenceTrace: rejTrace.links,
       model: DEFAULT_MODEL,
       raw: parsed,
-      promptContext: {
-        cptCandidates,
-        icdReference
+      rejected: true,
+      reason: 'low_confidence',
+      escalateToHuman: true,
+      codingConfidence: finalConfidence,
+      promptContext: { cptCandidates, icdReference }
+    };
+    }
+    if (finalConfidence < CONFIDENCE_THRESHOLD_ESCALATE) {
+      console.warn(`⚠️  Coding confidence ${finalConfidence.toFixed(2)} in escalate range - consider human review`);
+    }
+
+    if (typeof db.insertLlmUsageLog === 'function') {
+      try {
+        db.insertLlmUsageLog({
+          call_id: callId || null,
+          clinic_id: clinicId || null,
+          operation: 'medical_coding',
+          model: DEFAULT_MODEL,
+          tokens_in: tokensIn || null,
+          tokens_out: tokensOut || null,
+          cost_usd: costUsd > 0 ? Math.round(costUsd * 1e6) / 1e6 : null,
+          latency_ms: latencyMs,
+          confidence_score: finalConfidence
+        });
+      } catch (logErr) {
+        console.warn('⚠️  llm_usage_log insert failed:', logErr.message);
       }
+    }
+
+    const rationale = parsed?.rationale || '';
+    const evidenceTrace = buildEvidenceTrace(perceptualState, rationale);
+
+    return {
+      icd10: validIcd10,
+      cpt: validCpt,
+      rationale: evidenceTrace.rationale,
+      evidenceTrace: evidenceTrace.links,
+      model: DEFAULT_MODEL,
+      raw: parsed,
+      promptContext: { cptCandidates, icdReference },
+      codingConfidence: finalConfidence,
+      needsReview: finalConfidence < CONFIDENCE_THRESHOLD_ESCALATE
     };
   } catch (error) {
-    // Log full error details for debugging
     const errorDetails = error.response?.data || error.message;
     console.error('❌ Groq API error:', error.status || error.code || 'Unknown', errorDetails);
-    
-    // Check if it's a token limit error
+
     if (error.message?.includes('max completion tokens') || error.message?.includes('json_validate_failed')) {
       console.warn('⚠️  Token limit reached - consider truncating clinical note further or reducing candidate codes');
     }
-    
-    // Fall back to knowledge service on error
+
     console.warn('⚠️  Falling back to knowledge service due to Groq error');
-    const cptCandidates = knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 });
-    const icdReference = knowledgeService.getReferenceIcdCodes(3);
-    
+    const errFallback = perceptualState
+      ? knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+      : { cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
+    const cptCandidates = errFallback.cpt;
+    const icdReference = errFallback.icd10;
+
+    const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({
+      ...c,
+      confidence: typeof c.confidence === 'number' ? c.confidence : 0.65
+    }));
+    const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
+
+    const codesToValidate = {
+      icd10: icdWithConf.map(c => c.code).filter(Boolean),
+      cpt: cptWithConf.map(c => c.code).filter(Boolean)
+    };
+    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    let validIcd = icdWithConf;
+    let validCpt = cptWithConf;
+    if (!validation.valid) {
+      validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
+      validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
+    }
+    const conf = computeOverallConfidence(validIcd, validCpt);
+
     return {
-      icd10: icdReference,
-      cpt: cptCandidates.slice(0, 1),
+      icd10: validIcd,
+      cpt: validCpt,
       rationale: `Groq AI error: ${error.message}. Using knowledge service fallback.`,
       model: 'knowledge-service-fallback',
       raw: null,
-      promptContext: {
-        cptCandidates,
-        icdReference
-      }
+      promptContext: { cptCandidates, icdReference },
+      codingConfidence: conf,
+      needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE
     };
   }
 }
 
+/**
+ * LangSmith status for health check (Section 25).
+ * @returns {{ enabled: boolean, project: string, hasKey: boolean }}
+ */
+function getLangSmithStatus() {
+  let projectId = null;
+  try {
+    const cfg = require('../utils/langsmith-config');
+    projectId = cfg.DOCTOR_LITTLE_PROJECT;
+  } catch (_) { /* ignore */ }
+  const key = process.env.LANGSMITH_API_KEY || process.env.AP_Langchain;
+  const project = process.env.LANGCHAIN_PROJECT || process.env.LANGSMITH_PROJECT || projectId || 'middleware-default';
+  const tracingOn = process.env.LANGCHAIN_TRACING_V2 === 'true';
+  return {
+    enabled: !!(key && tracingOn),
+    project,
+    projectId: projectId || project,
+    hasKey: !!key,
+    traceUrl: project ? `https://smith.langchain.com/projects` : null
+  };
+}
+
 module.exports = {
-  generateCodingSuggestion
+  generateCodingSuggestion,
+  getLangSmithStatus,
+  computeOverallConfidence
 };
