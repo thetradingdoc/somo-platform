@@ -15,6 +15,9 @@
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
+const { getOrCreate, ONE_UP_HEALTH } = require('../utils/circuit-breaker');
+
+const oneUpHealthBreaker = getOrCreate(ONE_UP_HEALTH, { failureThreshold: 3, windowMs: 30000, resetTimeMs: 30000 });
 
 class EHRAggregatorService {
   constructor() {
@@ -69,13 +72,16 @@ class EHRAggregatorService {
         throw new Error('Invalid state token');
       }
 
-      // Exchange code for token via 1upHealth
-      const tokenResponse = await axios.post(`${this.baseUrl}/oauth2/token`, {
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        code: code,
-        grant_type: 'authorization_code'
-      });
+      // Exchange code for token via 1upHealth (Section 2.1: circuit breaker)
+      const tokenResponse = await oneUpHealthBreaker.execute(
+        () => axios.post(`${this.baseUrl}/oauth2/token`, {
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          code: code,
+          grant_type: 'authorization_code'
+        }),
+        () => { throw new Error('1upHealth unavailable (circuit open)'); }
+      );
 
       const { access_token, refresh_token, expires_in, patient } = tokenResponse.data;
 
@@ -118,12 +124,15 @@ class EHRAggregatorService {
         throw new Error('Connection not found or no refresh token');
       }
 
-      const tokenResponse = await axios.post(`${this.baseUrl}/oauth2/token`, {
-        client_id: this.clientId,
-        client_secret: this.clientSecret,
-        refresh_token: connection.refresh_token,
-        grant_type: 'refresh_token'
-      });
+      const tokenResponse = await oneUpHealthBreaker.execute(
+        () => axios.post(`${this.baseUrl}/oauth2/token`, {
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          refresh_token: connection.refresh_token,
+          grant_type: 'refresh_token'
+        }),
+        () => { throw new Error('1upHealth unavailable (circuit open)'); }
+      );
 
       const { access_token, expires_in } = tokenResponse.data;
       const expiresAt = new Date(Date.now() + expires_in * 1000);
@@ -181,13 +190,12 @@ class EHRAggregatorService {
         url += `?date=${date}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
+      const response = await oneUpHealthBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => { throw new Error('1upHealth unavailable (circuit open)'); }
+      );
       return response.data.entry || [];
     } catch (error) {
       console.error('Error fetching encounters:', error.response?.data || error.message);
@@ -205,17 +213,14 @@ class EHRAggregatorService {
     try {
       const token = await this.getValidToken(connectionId);
       
-      const response = await axios.get(
-        `${this.baseUrl}/fhir/dstu2/Condition?encounter=${encounterId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
+      const response = await oneUpHealthBreaker.execute(
+        () => axios.get(
+          `${this.baseUrl}/fhir/dstu2/Condition?encounter=${encounterId}`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+        ),
+        () => [] // Fallback when circuit open
       );
-
-      return response.data.entry || [];
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching conditions:', error.response?.data || error.message);
       return []; // Return empty array on error (conditions may not always be available)
@@ -232,17 +237,14 @@ class EHRAggregatorService {
     try {
       const token = await this.getValidToken(connectionId);
       
-      const response = await axios.get(
-        `${this.baseUrl}/fhir/dstu2/Procedure?encounter=${encounterId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
+      const response = await oneUpHealthBreaker.execute(
+        () => axios.get(
+          `${this.baseUrl}/fhir/dstu2/Procedure?encounter=${encounterId}`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+        ),
+        () => [] // Fallback when circuit open
       );
-
-      return response.data.entry || [];
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching procedures:', error.response?.data || error.message);
       return []; // Return empty array on error
@@ -259,17 +261,14 @@ class EHRAggregatorService {
     try {
       const token = await this.getValidToken(connectionId);
       
-      const response = await axios.get(
-        `${this.baseUrl}/fhir/dstu2/Observation?encounter=${encounterId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
+      const response = await oneUpHealthBreaker.execute(
+        () => axios.get(
+          `${this.baseUrl}/fhir/dstu2/Observation?encounter=${encounterId}`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+        ),
+        () => [] // Fallback when circuit open
       );
-
-      return response.data.entry || [];
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching observations:', error.response?.data || error.message);
       return []; // Return empty array on error
@@ -286,14 +285,12 @@ class EHRAggregatorService {
     try {
       const token = await this.getValidToken(connectionId);
       
-      const response = await axios.get(
-        `${this.baseUrl}/fhir/dstu2/Practitioner/${practitionerId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
-        }
+      const response = await oneUpHealthBreaker.execute(
+        () => axios.get(
+          `${this.baseUrl}/fhir/dstu2/Practitioner/${practitionerId}`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }
+        ),
+        () => { throw new Error('1upHealth unavailable (circuit open)'); }
       );
 
       return response.data;

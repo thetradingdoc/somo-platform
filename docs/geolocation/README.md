@@ -73,11 +73,11 @@ GEOCODING_CACHE_TTL=86400
 
 ## Testing
 
-Run test files:
+Location-related services can be tested via integration tests. Run the middleware test suite:
+
 ```bash
-node middleware-platform/tests/test-location-verification.js
-node middleware-platform/tests/test-geocoding-service.js
-node middleware-platform/tests/test-delivery-confirmation.js
+cd middleware-platform
+npm test
 ```
 
 ---

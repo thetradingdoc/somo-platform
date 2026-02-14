@@ -61,12 +61,28 @@ router.get('/checkout/:token', (req, res) => {
  */
 router.post('/process', async (req, res) => {
     try {
-        const { payment_token, payment_method_id, amount, currency } = req.body;
+        const { payment_token, payment_method_id, amount, currency, idempotency_key } = req.body;
+        const idemKey = idempotency_key || req.headers['idempotency-key'] || `payment_${payment_token}`;
+
+        const db = require('../database');
 
         // Validate token
         const checkoutResult = PaymentService.getCheckoutByToken(payment_token);
         if (!checkoutResult.success) {
             return res.status(400).json(checkoutResult);
+        }
+        const claimOpType = 'payment_process';
+        const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
+        if (cached) {
+            return res.json({ ...cached.result, idempotent: true });
+        }
+        const reserve = db.reserveIdempotencyKey && db.reserveIdempotencyKey(idemKey, claimOpType);
+        if (reserve === 'in_progress') {
+            return res.status(409).json({ success: false, error: 'Payment in progress', idempotent: true });
+        }
+        if (reserve === 'completed') {
+            const c2 = db.getIdempotentResult(idemKey, claimOpType);
+            if (c2) return res.json({ ...c2.result, idempotent: true });
         }
 
         // SECURITY: Validate amount matches checkout amount (prevent tampering)
@@ -81,6 +97,7 @@ router.post('/process', async (req, res) => {
                 request_amount: requestAmount,
                 difference: amountDifference
             });
+            if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
             return res.status(400).json({
                 success: false,
                 error: 'Amount mismatch. Payment amount does not match checkout amount.'
@@ -130,12 +147,14 @@ router.post('/process', async (req, res) => {
             // Handle 3D Secure or other actions required
             if (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_source_action') {
                 console.log('⚠️  Payment requires additional action (3D Secure)');
-                return res.json({
+                const result = {
                     success: true,
                     requires_action: true,
                     client_secret: paymentIntent.client_secret,
                     payment_intent_id: paymentIntent.id
-                });
+                };
+                if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
+                return res.json(result);
             }
 
             // Payment succeeded or is processing
@@ -148,6 +167,7 @@ router.post('/process', async (req, res) => {
 
                 if (!processResult.success) {
                     console.error('❌ Failed to process payment in system:', processResult.error);
+                    if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
                     return res.status(500).json({
                         success: false,
                         error: processResult.error || 'Failed to process payment'
@@ -155,16 +175,19 @@ router.post('/process', async (req, res) => {
                 }
 
                 console.log('✅ Payment processed successfully');
-                return res.json({
+                const result = {
                     success: true,
                     payment_intent_id: paymentIntent.id,
                     status: paymentIntent.status,
                     checkout_id: processResult.checkout_id
-                });
+                };
+                if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
+                return res.json(result);
             }
 
             // Payment failed or was cancelled
             console.error('❌ Payment failed:', paymentIntent.status);
+            if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
             return res.status(400).json({
                 success: false,
                 error: `Payment ${paymentIntent.status}`,
@@ -175,7 +198,7 @@ router.post('/process', async (req, res) => {
             console.error('❌ Stripe API error:', stripeError.message);
             console.error('   Type:', stripeError.type);
             console.error('   Code:', stripeError.code);
-            
+            if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
             return res.status(400).json({
                 success: false,
                 error: stripeError.message || 'Stripe payment failed',

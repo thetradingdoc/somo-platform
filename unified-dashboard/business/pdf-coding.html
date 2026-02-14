@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF Medical Coding - Medical Coding Assistant</title>
+    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/auth-utils.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <script>
         // Redirect to unified billing page (scan section)
         (function() {
@@ -488,33 +491,8 @@
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
 
-            <!-- Navigation for authenticated users (full dashboard access) -->
-            <nav class="sidebar-nav" id="authenticatedNav" style="display: none;">
-                <a href="pdf-coding.html" class="nav-item active">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
-                </a>
-                <a href="invoices.html" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Patients</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
-                <a href="wallets.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
-            </nav>
+            <!-- Navigation for authenticated users (populated by navigation.js) -->
+            <nav class="sidebar-nav" id="sidebarNav" style="display: none;"></nav>
 
             <!-- Navigation for public users (scan-only access) -->
             <nav class="sidebar-nav" id="publicNav">
@@ -895,21 +873,25 @@
         // Authentication and Navigation Setup
         function setupNavigation() {
             const isAuthenticated = sessionStorage.getItem('authenticated') === 'true';
-            const authenticatedNav = document.getElementById('authenticatedNav');
+            const sidebarNav = document.getElementById('sidebarNav');
             const publicNav = document.getElementById('publicNav');
             const authenticatedFooter = document.getElementById('authenticatedFooter');
             const publicFooter = document.getElementById('publicFooter');
 
             if (isAuthenticated) {
                 // Show full dashboard navigation for authenticated users
-                if (authenticatedNav) authenticatedNav.style.display = 'block';
+                if (sidebarNav) {
+                    sidebarNav.style.display = 'block';
+                    renderNavigation('scan');
+                }
                 if (publicNav) publicNav.style.display = 'none';
                 if (authenticatedFooter) authenticatedFooter.style.display = 'block';
                 if (publicFooter) publicFooter.style.display = 'none';
 
-                // Load user info
-                const userName = sessionStorage.getItem('userName') || 'Healthcare Provider';
-                const userRole = sessionStorage.getItem('userRole') || 'Provider';
+                // Load user info from auth-utils
+                const userData = window.getUserData ? window.getUserData() : {};
+                const userName = userData.name || 'Healthcare Provider';
+                const userRole = userData.role || 'Provider';
                 const userAvatarEl = document.getElementById('userAvatar');
                 const userNameEl = document.getElementById('userName');
                 const userRoleEl = document.getElementById('userRole');
@@ -917,25 +899,16 @@
                 if (userNameEl) userNameEl.textContent = userName;
                 if (userRoleEl) userRoleEl.textContent = userRole;
                 if (userAvatarEl) {
-                    // Set avatar initials
                     const initials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
                     userAvatarEl.textContent = initials || 'HP';
                 }
             } else {
                 // Show restricted navigation for public users
-                if (authenticatedNav) authenticatedNav.style.display = 'none';
+                if (sidebarNav) sidebarNav.style.display = 'none';
                 if (publicNav) publicNav.style.display = 'block';
                 if (authenticatedFooter) authenticatedFooter.style.display = 'none';
                 if (publicFooter) publicFooter.style.display = 'block';
             }
-        }
-
-        // Logout function
-        function logout() {
-            sessionStorage.removeItem('authenticated');
-            sessionStorage.removeItem('userName');
-            sessionStorage.removeItem('userRole');
-            window.location.href = '../login.html';
         }
 
         // Load patients for dropdown

@@ -4,16 +4,15 @@
 
 **Pricing:** $1,000+ installation fee + monthly API usage
 
+> **Documentation**: [docs/](../docs/README.md) is the source of truth. API docs live in [docs/api/](../docs/api/).
+
 ---
 
 ## 📋 Table of Contents
 
-1. [API Architecture](../docs/api/design/API_ARCHITECTURE.md)
-2. [Authentication](../docs/api/design/AUTHENTICATION.md)
-3. [Azure Integration](../docs/api/design/AZURE_INTEGRATION.md)
-4. [Customer Configuration](../docs/api/design/CUSTOMER_CONFIG.md)
-5. [API Reference](../docs/api/API_DOCUMENTATION.md)
-6. [SDK & Examples](./examples/README.md) (Coming Soon)
+1. [API Reference](../docs/api/API_DOCUMENTATION.md) — Complete API documentation
+2. [Invoice API](../docs/api/INVOICE_API.md) — Invoice endpoints
+3. [SDK & Examples](./examples/README.md) (Coming Soon)
 
 ---
 
@@ -38,14 +37,10 @@ api/
     ├── python/                 # Python SDK & examples
     └── curl/                   # cURL examples
 
-Documentation has been moved to docs/api/:
+Documentation in docs/api/:
 ├── docs/api/
 │   ├── API_DOCUMENTATION.md    # Complete API reference
-│   └── design/                 # Architecture & design documents
-│       ├── API_ARCHITECTURE.md
-│       ├── AUTHENTICATION.md
-│       ├── AZURE_INTEGRATION.md
-│       └── CUSTOMER_CONFIG.md
+│   └── INVOICE_API.md          # Invoice endpoints
 ```
 
 ---
@@ -70,5 +65,5 @@ Documentation has been moved to docs/api/:
 ---
 
 **Status:** 🚧 Design Phase  
-**Last Updated:** November 15, 2025
+**Last Updated:** January 2026
 

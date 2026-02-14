@@ -410,10 +410,10 @@
                     </div>
                 </button>
 
-                <button class="demo-btn" onclick="loginDemo('patient@doclittle.com', 'demo123')">
+                <button class="demo-btn" onclick="loginDemo('patient@doclittle.com', 'demo123')" title="Patient portal: Bala Jones">
                     <span class="demo-btn-icon">👤</span>
                     <div class="demo-btn-content">
-                        <div class="demo-btn-title">Patient Wallet</div>
+                        <div class="demo-btn-title">Bala Jones (Patient)</div>
                         <div class="demo-btn-email">patient@doclittle.com</div>
                     </div>
                 </button>
@@ -506,27 +506,34 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    // Store customer data
+                    // Store auth - use both keys for compatibility across all pages
                     sessionStorage.setItem('authenticated', 'true');
-                    sessionStorage.setItem('customer', JSON.stringify(data.customer));
+                    const customer = data.customer || {};
+                    sessionStorage.setItem('customer', JSON.stringify(customer));
+                    sessionStorage.setItem('user', JSON.stringify({
+                        name: customer.name || customer.company_name || 'User',
+                        role: customer.role || 'Provider',
+                        ...customer
+                    }));
 
-                    console.log('Login successful. Customer data:', data.customer);
+                    console.log('Login successful. Customer data:', customer);
 
                     // Redirect to business dashboard on current subdomain
                     // If on tenant subdomain, stay on it; otherwise redirect to subdomain
                     const currentHostname = window.location.hostname;
                     const subdomain = data.customer.subdomain;
 
-                    // Check if we're already on the correct subdomain
-                    if (subdomain && currentHostname.includes(`${subdomain}.doclittle.site`)) {
+                    // Localhost: stay on current origin (no subdomain redirect) to avoid SSL errors
+                    if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
+                        window.location.href = '/business/business-dashboard.html';
+                    } else if (subdomain && currentHostname.includes(`${subdomain}.doclittle.site`)) {
                         // Already on correct subdomain - just go to dashboard
                         window.location.href = '/business/business-dashboard.html';
                     } else if (subdomain) {
-                        // Need to redirect to tenant subdomain
-                        const baseDomain = currentHostname.includes('localhost') ? 'localhost:4000' : 'doclittle.site';
+                        // Need to redirect to tenant subdomain (production uses https)
+                        const baseDomain = 'doclittle.site';
                         window.location.href = `https://${subdomain}.${baseDomain}/business/business-dashboard.html`;
                     } else {
-                        // No subdomain - use current domain
                         window.location.href = '/business/business-dashboard.html';
                     }
                 } else {

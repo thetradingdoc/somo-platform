@@ -341,6 +341,178 @@
     },
     {
       "type": "function",
+      "name": "search_icd10_codes",
+      "description": "Search ICD-10 diagnosis codes by symptom, condition, or code. Use when caller mentions a diagnosis, symptom, or when you need to look up diagnosis codes for medical coding.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search term - symptom, condition name, or ICD-10 code (e.g., 'diabetes', 'anxiety', 'Z00.00')"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max results to return (default 10)"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "search_cpt_codes",
+      "description": "Search CPT procedure codes by procedure name or code. Use when caller mentions a service, procedure, or when you need to look up procedure codes for medical billing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search term - procedure name or CPT code (e.g., 'office visit', '99213', 'therapy')"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max results to return (default 10)"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "extract_medical_text",
+      "description": "Extract structured medical data from patient utterance: symptoms, vitals, severity, temporal info. Use when patient describes symptoms to get structured data for triage or coding.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_utterance": {
+            "type": "string",
+            "description": "Patient's spoken description of symptoms, condition, or reason for visit (e.g., 'I have chest pain and shortness of breath for 2 days')"
+          }
+        },
+        "required": ["patient_utterance"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "assess_urgency",
+      "description": "Assess if patient symptoms indicate an emergency or urgent care need. Call when the patient describes symptoms before scheduling or coding. Returns EMERGENT (call 911), URGENT (same-day care), or ROUTINE.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "symptoms_text": {
+            "type": "string",
+            "description": "Patient's description of symptoms (e.g., 'chest pain radiating to arm, shortness of breath')"
+          }
+        },
+        "required": ["symptoms_text"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "suggest_codes_from_symptoms",
+      "description": "Get suggested ICD-10 and CPT codes from patient's description of symptoms or reason for visit. Use when patient describes their condition (e.g., 'I have diabetes and need a checkup', 'anxiety follow-up'). Returns top codes with patient-friendly descriptions and validated_pairs for compatible ICD-10+CPT combinations.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clinical_text": {
+            "type": "string",
+            "description": "Patient's description of symptoms, reason for visit, or clinical note (e.g., 'type 2 diabetes follow-up', 'anxiety and depression')"
+          },
+          "max_icd10": {
+            "type": "number",
+            "description": "Max ICD-10 codes to return (default 5)"
+          },
+          "max_cpt": {
+            "type": "number",
+            "description": "Max CPT codes to return (default 5)"
+          }
+        },
+        "required": ["clinical_text"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "validate_code_pair",
+      "description": "Validate ICD-10 + CPT compatibility for billing. suggest_codes_from_symptoms returns pre-validated pairs; call this when combining codes from search_icd10_codes + search_cpt_codes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "icd10_code": {
+            "type": "string",
+            "description": "ICD-10 diagnosis code (e.g., 'E11.9')"
+          },
+          "cpt_code": {
+            "type": "string",
+            "description": "CPT procedure code (e.g., '99213')"
+          }
+        },
+        "required": ["icd10_code", "cpt_code"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "check_payer_guidelines",
+      "description": "Check if a payer has fee schedule/guidelines available for billing. Use when caller asks about insurance coverage for specific codes or before quoting prices.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "payer_id": {
+            "type": "string",
+            "description": "Payer ID (e.g. BCBS, AETNA, UHC)"
+          },
+          "payer_name": {
+            "type": "string",
+            "description": "Payer name if payer_id not known"
+          }
+        },
+        "required": ["payer_id"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_code_pricing",
+      "description": "Get allowed amounts for CPT codes from payer fee schedule. Use when caller asks about cost, copay, or after suggesting codes when patient wants pricing info. Requires payer_id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "payer_id": {
+            "type": "string",
+            "description": "Payer ID (e.g. BCBS, AETNA)"
+          },
+          "cpt_codes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "CPT codes to look up (e.g. ['99213', '99214'])"
+          },
+          "date_of_service": {
+            "type": "string",
+            "description": "Date of service YYYY-MM-DD (optional)"
+          }
+        },
+        "required": ["payer_id", "cpt_codes"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "search_hcpcs_codes",
+      "description": "Search HCPCS Level II codes (supplies, DME, drugs, modifiers). Use for procedures/supplies not in CPT (e.g., DME, injectable drugs, certain modifiers).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search term - procedure, supply, modifier name or HCPCS code (e.g., 'wheelchair', 'E0601', 'modifier')"
+          },
+          "limit": {
+            "type": "number",
+            "description": "Max results to return (default 10)"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "type": "function",
       "name": "end_call",
       "description": "End the call when the customer is done or when the conversation is complete."
     }

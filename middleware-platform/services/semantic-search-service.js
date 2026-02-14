@@ -66,8 +66,9 @@ async function embedText(text) {
  * @param {number} topK - Max results
  * @param {string} codeType - 'icd10' | 'cpt' | 'hcpcs' | null (all)
  * @param {string} specialty - Optional specialty filter (e.g. 'orthopedics') for scope reduction
+ * @param {string} region - Region code (US, UK, ZA). Non-US regions exclude CPT/HCPCS (US-specific).
  */
-async function searchCodesBySemantics(query, topK = 15, codeType = null, specialty = null) {
+async function searchCodesBySemantics(query, topK = 15, codeType = null, specialty = null, region = 'US') {
   const q = (query || '').toString().trim();
   if (!q) return [];
 
@@ -77,7 +78,10 @@ async function searchCodesBySemantics(query, topK = 15, codeType = null, special
   const queryEmbedding = await embedText(q);
   if (!queryEmbedding) return [];
 
-  const rows = typeof db.getAllCodeEmbeddings === 'function' ? db.getAllCodeEmbeddings(codeType, specialty) : [];
+  let rows = typeof db.getAllCodeEmbeddings === 'function' ? db.getAllCodeEmbeddings(codeType, specialty) : [];
+  if (region && region.toUpperCase() !== 'US') {
+    rows = rows.filter(r => (r.code_type || '').toLowerCase() !== 'cpt' && (r.code_type || '').toLowerCase() !== 'hcpcs');
+  }
   if (rows.length === 0) return [];
 
   const scored = rows.map(r => ({
@@ -99,12 +103,17 @@ async function searchCodesBySemantics(query, topK = 15, codeType = null, special
 /**
  * Hybrid search: keyword + optional semantic. Merges and re-ranks.
  * @param {string} query
- * @param {Object} options - { limit, codeTypes: ['icd10','cpt','hcpcs'], specialty }
+ * @param {Object} options - { limit, codeTypes: ['icd10','cpt','hcpcs'], specialty, region }
  */
 async function hybridSearch(query, options = {}) {
   const limit = options.limit || 15;
-  const codeTypes = options.codeTypes || ['icd10', 'cpt', 'hcpcs'];
+  let codeTypes = options.codeTypes || ['icd10', 'cpt', 'hcpcs'];
   const specialty = options.specialty || null;
+  const region = options.region || 'US';
+  if (region && region.toUpperCase() !== 'US') {
+    codeTypes = codeTypes.filter(t => t.toLowerCase() !== 'cpt' && t.toLowerCase() !== 'hcpcs');
+    if (codeTypes.length === 0) codeTypes = ['icd10'];
+  }
 
   const keywordService = require('./knowledge-service');
   const keywordResults = [];
@@ -124,7 +133,7 @@ async function hybridSearch(query, options = {}) {
     );
   }
 
-  const semanticResults = await searchCodesBySemantics(query, limit * 2, null, specialty);
+  const semanticResults = await searchCodesBySemantics(query, limit * 2, null, specialty, region);
   if (semanticResults.length === 0) {
     return keywordResults.slice(0, limit);
   }

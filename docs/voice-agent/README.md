@@ -1,29 +1,11 @@
 # Voice Agent Documentation
 
-This directory contains documentation for the Retell AI voice agent integration.
+Documentation for the Retell AI voice agent (Kelly) integration.
 
-## 📁 Files
+## 📁 Prompts
 
-### [VOICE_AGENT_CAPABILITIES.md](./VOICE_AGENT_CAPABILITIES.md)
-Complete list of 11 core voice agent functions:
-1. `collect_insurance` - Collect and verify insurance information
-2. `get_available_slots` - Get available appointment times
-3. `schedule_appointment` - Book appointments
-4. `search_appointments` - Find existing appointments
-5. `confirm_appointment` - Confirm appointment details
-6. `cancel_appointment` - Cancel appointments
-7. `reschedule_appointment` - Reschedule appointments
-8. `create_appointment_checkout` - Create payment checkout
-9. `verify_checkout_code` - Verify payment codes
-10. `get_patient_claims` - Get patient claim history
-11. `end_call` - End the conversation
-
-### [VOICE_AGENT_TEST_RESULTS.md](./VOICE_AGENT_TEST_RESULTS.md)
-Production test results for voice agent functions, including:
-- Function call success rates
-- Response times
-- Error handling
-- Real conversation scenarios
+- **[Kelly Voice Agent](./prompts/kelly-voice-agent-prompt.md)** - Main system prompt
+- **[Medical Voice Agent](./medical-voice-agent-prompt.md)** - Medical coding workflow (EXTRACT → TRIAGE → CODE → PRICE → VALIDATE); appended to Kelly by configure-retell.js
 
 ## 🤖 Agent Details
 
@@ -31,15 +13,16 @@ Production test results for voice agent functions, including:
 **Platform**: Retell AI  
 **Voice**: Multilingual support  
 **Integration**: Twilio for phone calls  
-**Functions**: 11 core healthcare functions
+**Functions**: Scheduling, insurance, medical coding, claims (see retell-functions.json)
 
-## 📋 Prompt & Configuration
+## 📋 Configuration
 
-- **Prompt**: `docs/voice-agent/kelly-voice-agent-prompt.md`
+- **Prompt**: Kelly + medical-voice-agent-prompt (combined by configure-retell.js)
 - **Functions**: `middleware-platform/retell-functions/retell-functions.json`
-- **Configuration**: `middleware-platform/configure-retell.js`
+- **Configure**: `cd middleware-platform && node configure-retell.js` (requires RETELL_API_KEY, RETELL_AGENT_ID)
 
 ## 🔗 Related Documentation
 
-- [Patient Journey](../patient-journey/) - Voice booking workflows
-- [Deployment](../deployment/) - Production deployment
+- [Medical Coding Runbook](../architecture/voice-agent/RUNBOOK.md) - Imports, evaluation, tools
+- [Tool Schemas](../architecture/voice-agent/TOOL_SCHEMAS.md) - suggest_codes_from_symptoms, extract_medical_text, etc.
+- [AI Agent Financial Layer TODO](../architecture/voice-agent/AI_AGENT_FINANCIAL_LAYER_TODO.md) - Integration roadmap

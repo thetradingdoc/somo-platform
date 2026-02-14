@@ -118,14 +118,15 @@ router.get('/config', (req, res) => {
       }
     }
     
-    // Define navigation items
-    // Note: Scan and Invoices are now integrated into the unified Billing page
+    // Define navigation items - tenant-aware
+    // Medical/clinic: Claims = create + view. Revenue = money collected.
     const clinicNavItems = [
-      { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+      { id: 'dashboard', label: 'Home', icon: '📊', href: 'business-dashboard.html' },
+      { id: 'calendar', label: 'Calendar', icon: '📅', href: 'calendar.html' },
       { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
-      { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' },
-      { id: 'wallets', label: 'Wallets', icon: '💰', href: 'wallets.html' },
-      { id: 'calendar', label: 'Calendar', icon: '📅', href: 'calendar.html' }
+      { id: 'claims', label: 'Claims', icon: '📋', href: 'billing.html?section=claims' },
+      { id: 'billing', label: 'Revenue', icon: '💳', href: 'billing.html?section=overview' },
+      { id: 'video', label: 'Video', icon: '📹', href: 'video-call.html' }
     ];
     
     const shopNavItems = [

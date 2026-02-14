@@ -2,88 +2,30 @@
 
 Test results, test suites, and testing guides.
 
----
+## Test Suites
 
-## 📚 Documentation Index
+Tests live in `middleware-platform/tests/`:
 
-1. **TEST_SUITE.md** 🧪 **MAIN TEST SUITE**
-   - Complete test suite documentation
-   - Test coverage
-   - Test execution
+- **Medical coding**: `tests/medical-coding/` — evaluation, voice flow tests
+- **Tenant isolation**: `tests/test-tenant-isolation.js` — multi-tenant regression
+- **Voice agent flow**: `tests/test-voice-agent-flow.js` — Twilio + Retell simulation
+- **LangGraph**: `scripts/test-langgraph.js` — LangGraph state machine
 
-2. **FINAL_TEST_REPORT.md** 📊 **FINAL REPORT**
-   - Final test report
-   - Comprehensive results
-   - Production readiness
+## Running Tests
 
-3. **TEST_RESULTS_SUMMARY.md** 📋 **RESULTS SUMMARY**
-   - Test results summary
-   - Quick overview
-   - Status summary
+```bash
+cd middleware-platform
+npm test
+# Or run specific suites
+node scripts/test-langgraph.js
+```
 
-4. **EMAIL_BOOKING_TEST_RESULTS.md** 📧 **EMAIL BOOKING**
-   - Email booking test results
-   - Email functionality tests
-   - Email validation
+## Related Documentation
 
-5. **EMAIL_BOOKING_VERIFICATION.md** ✅ **EMAIL VERIFICATION**
-   - Email booking verification
-   - Verification process
-   - Validation steps
-
-6. **TEST_APPOINTMENT_EMAIL.md** 📅 **APPOINTMENT EMAIL**
-   - Appointment email testing
-   - Email template tests
-   - Email delivery tests
-
-7. **TEST_EMAIL_BOOKING.md** 📝 **EMAIL BOOKING**
-   - Email booking test guide
-   - Test procedures
-   - Test scenarios
-
-8. **TEST_EMAIL_NOW.md** ⚡ **QUICK EMAIL TEST**
-   - Quick email test instructions
-   - Immediate testing
-   - Fast validation
-
-9. **QUICK_FIX.md** 🔧 **QUICK FIXES**
-   - Quick fixes and troubleshooting
-   - Common issues
-   - Fast solutions
-
-10. **TEST_FIXES.md** 🛠️ **TEST FIXES**
-    - Test fixes documentation
-    - Fixes applied
-    - Issue resolution
-
-11. **TENANT_ISOLATION_TESTS.md** 🔒 **TENANT ISOLATION**
-    - Multi-tenant regression tests
-    - Covers `tests/test-tenant-isolation.js`
-    - Ensures clinic-scoped data access
-
-12. **VOICE_AGENT_FLOW.md** 🎙️ **VOICE FLOW**
-    - Twilio + Retell function simulation
-    - Covers `tests/test-voice-agent-flow.js`
-    - Validates scheduling, insurance, checkout automation
+- [Architecture Voice Agent](../architecture/voice-agent/RUNBOOK.md) — medical coding runbook
+- [LangGraph Developer Guide](../middleware-platform/LANGGRAPH_LANGSMITH_DEVELOPER_GUIDE.md)
+- [Main Docs](../README.md)
 
 ---
 
-## 🧪 Test Status
-
-- **Feature Tests:** 9/9 passing ✅
-- **Email Tests:** All types working ✅
-- **API Tests:** All endpoints tested ✅
-- **Integration Tests:** All integrations tested ✅
-
----
-
-## 🔗 Related Documentation
-
-- **Features:** `../features/README.md`
-- **Email:** `../email/README.md`
-- **Main Docs:** `../README.md`
-
----
-
-**Last Updated:** November 15, 2025
-
+**Last Updated:** January 2026

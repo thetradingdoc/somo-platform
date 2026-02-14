@@ -42,7 +42,9 @@ router.post('/process', upload.single('pdf'), async (req, res) => {
     const result = await PDFCodingService.processPDF(req.file.buffer, {
       appointmentType: req.body.appointmentType || 'Unknown',
       durationMinutes: req.body.durationMinutes ? parseInt(req.body.durationMinutes) : 60,
-      patientContext: req.body.patientContext ? (typeof req.body.patientContext === 'string' ? JSON.parse(req.body.patientContext) : req.body.patientContext) : {}
+      patientContext: req.body.patientContext ? (typeof req.body.patientContext === 'string' ? JSON.parse(req.body.patientContext) : req.body.patientContext) : {},
+      payerId: req.body.payerId || null,
+      dateOfService: req.body.dateOfService || null
     });
 
     // Return result with PDF metadata

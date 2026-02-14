@@ -245,7 +245,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
   if (!groq) {
     console.warn('⚠️  Groq not available - using knowledge service fallback for medical coding');
     const fallback = perceptualState
-      ? knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+      ? await knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
       : {
           cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }),
           icd10: knowledgeService.getReferenceIcdCodes(3, 0.7)
@@ -262,7 +262,8 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       icd10: icdWithConf.map(c => c.code).filter(Boolean),
       cpt: cptWithConf.map(c => c.code).filter(Boolean)
     };
-    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    const trustRag = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
+    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRag });
     let validIcd = icdWithConf;
     let validCpt = cptWithConf;
     if (!validation.valid) {
@@ -289,7 +290,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
     : clinicalNote;
 
   const { cpt: cptCandidates, icd10: icdReference } = perceptualState
-    ? knowledgeService.getCandidatesForCoding(truncatedNote, {
+    ? await knowledgeService.getCandidatesForCoding(truncatedNote, {
         perceptualState,
         limitCpt: 10,
         limitIcd10: 12
@@ -317,14 +318,15 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
     if (cap != null && cap > 0 && (costRow?.cost_usd ?? 0) >= cap) {
       console.warn(`⚠️  Clinic ${clinicId} monthly LLM cost cap exceeded (${costRow?.cost_usd ?? 0} >= ${cap}) - using knowledge-service fallback`);
       const capFallback = perceptualState
-        ? knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+        ? await knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
         : { cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
       const cptFallback = capFallback.cpt;
       const icdFallback = capFallback.icd10;
       const cptWithConf = (cptFallback.slice(0, 1) || []).map(c => ({ ...c, confidence: c.confidence ?? 0.65 }));
       const icdWithConf = icdFallback.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
       const codesToValidate = { icd10: icdWithConf.map(c => c.code).filter(Boolean), cpt: cptWithConf.map(c => c.code).filter(Boolean) };
-      const validation = knowledgeService.validateCodesExist(codesToValidate);
+      const trustRagCap = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
+      const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagCap });
       let validIcd = icdWithConf, validCpt = cptWithConf;
       if (!validation.valid) {
         validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
@@ -348,14 +350,15 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
   if (!tokenBudget.canProceed(callId, estimatedTokens)) {
     console.warn(`⚠️  Token budget exceeded for call ${callId || 'standalone'} - using knowledge-service fallback`);
     const tokFallback = perceptualState
-      ? knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+      ? await knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
       : { cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
     const cptCandidates = tokFallback.cpt;
     const icdReference = tokFallback.icd10;
     const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({ ...c, confidence: c.confidence ?? 0.65 }));
     const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
     const codesToValidate = { icd10: icdWithConf.map(c => c.code).filter(Boolean), cpt: cptWithConf.map(c => c.code).filter(Boolean) };
-    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    const trustRagTok = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
+    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagTok });
     let validIcd = icdWithConf, validCpt = cptWithConf;
     if (!validation.valid) {
       validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
@@ -412,11 +415,13 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
     const codingConfidence = computeOverallConfidence(icd10, cpt);
 
     // Mandatory validation: filter out any code not in KB (Section 6)
+    // When RAG is configured, trust well-formatted codes from RAG even if not in local DB
     const codesToValidate = {
       icd10: icd10.map(c => (typeof c === 'object' ? c.code : c)).filter(Boolean),
       cpt: cpt.map(c => (typeof c === 'object' ? c.code : c)).filter(Boolean)
     };
-    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    const trustRagCodes = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
+    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagCodes });
     let validIcd10 = icd10;
     let validCpt = cpt;
     if (!validation.valid) {
@@ -468,6 +473,12 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       }
     }
 
+    if (callId && typeof db.logDecision === 'function') {
+      try {
+        db.logDecision(callId, 'code', { candidates: cptCandidates?.length, icd_ref: icdReference?.length }, { icd10: validIcd10?.length, cpt: validCpt?.length, confidence: finalConfidence }, (parsed?.rationale || '').slice(0, 500));
+      } catch (_) {}
+    }
+
     const rationale = parsed?.rationale || '';
     const evidenceTrace = buildEvidenceTrace(perceptualState, rationale);
 
@@ -492,11 +503,12 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
 
     console.warn('⚠️  Falling back to knowledge service due to Groq error');
     const errFallback = perceptualState
-      ? knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+      ? await knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
       : { cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
     const cptCandidates = errFallback.cpt;
     const icdReference = errFallback.icd10;
 
+    const trustRagErr = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
     const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({
       ...c,
       confidence: typeof c.confidence === 'number' ? c.confidence : 0.65
@@ -507,7 +519,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       icd10: icdWithConf.map(c => c.code).filter(Boolean),
       cpt: cptWithConf.map(c => c.code).filter(Boolean)
     };
-    const validation = knowledgeService.validateCodesExist(codesToValidate);
+    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagErr });
     let validIcd = icdWithConf;
     let validCpt = cptWithConf;
     if (!validation.valid) {

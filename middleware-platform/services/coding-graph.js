@@ -50,10 +50,11 @@ async function getCheckpointer() {
   return LG ? new LG.MemorySaver() : null;
 }
 
-async function getGraph(db) {
+async function getGraph(dbModule) {
   if (compiledGraph) return compiledGraph;
   const LG = await loadLangGraph();
   if (!LG) return null;
+  const db = dbModule;
 
   const { StateGraph, Annotation, START, END, MemorySaver } = LG;
   checkpointer = await getCheckpointer();
@@ -86,12 +87,23 @@ async function getGraph(db) {
       }
 
       try {
-        const perceptualState = await buildPerceptualState({
-          callId: state.clinic_id ? `call_${state.clinic_id}` : 'graph',
-          clinicalText: clinicalText || '',
-          imagePath: imagePath || undefined,
-          modality: imagePath ? 'xray' : 'text'
-        });
+        const dbRef = db;
+        const perceptualState = await buildPerceptualState(
+          {
+            callId: state.clinic_id ? `call_${state.clinic_id}` : 'graph',
+            clinicalText: clinicalText || '',
+            imagePath: imagePath || undefined,
+            modality: imagePath ? 'xray' : 'text',
+            clinicId: state.clinic_id || null
+          },
+          dbRef
+        );
+        const callId = state.clinic_id || 'graph';
+        if (db?.logDecision) {
+          const vf = perceptualState.visual_findings?.length || 0;
+          const tf = perceptualState.textual_findings?.length || 0;
+          db.logDecision(callId, 'perceive', { clinical_text_len: clinicalText.length, image_path: !!imagePath }, { perceptual_state: true }, `Visual: ${vf} findings. Text: ${tf} findings. Specialty: ${perceptualState.specialty_tag || 'general'}`);
+        }
         return {
           perceptual_state: perceptualState,
           state_data: { ...stateData, perceptual_state: perceptualState }
@@ -111,6 +123,11 @@ async function getGraph(db) {
         triggerType,
         triggerPayload
       );
+
+      const callId = state.clinic_id || 'graph';
+      if (db?.logDecision) {
+        db.logDecision(callId, 'apply_trigger', { current_stage: currentStage, trigger_type: triggerType }, { next_stage: nextStage, transition }, `Reason: ${reason}`);
+      }
 
       const stateData = {
         ...(state.state_data || {}),

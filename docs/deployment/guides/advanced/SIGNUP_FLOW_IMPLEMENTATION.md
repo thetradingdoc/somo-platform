@@ -297,7 +297,7 @@ This enables:
 
 - **Terms of Service**: `docs/legal/TERMS_OF_SERVICE.md`
 - **API Documentation**: `docs/api/API_DOCUMENTATION.md` (will need update)
-- **Deployment Guide**: `docs/deployment/DEPLOYMENT.md`
+- **Deployment Guide**: `docs/deployment/guides/DEPLOYMENT_GUIDE.md`
 
 ---
 

@@ -1,0 +1,25 @@
+{
+  "version": "2026-Q1",
+  "description": "ICD-10-CM Excludes1/Excludes2-style conflict rules. Excludes1: codes cannot be used together. Excludes2: code B is 'not included here' when A applies.",
+  "excludes1": [
+    {
+      "rule_id": "closed_vs_open_fracture",
+      "when_code_pattern": "^S52\\.?5[0-4]",
+      "excludes_pattern": "^S52\\.?55",
+      "reason": "Closed fracture excludes open fracture (Excludes1)"
+    },
+    {
+      "rule_id": "open_vs_closed_fracture",
+      "when_code_pattern": "^S52\\.?55",
+      "excludes_pattern": "^S52\\.?5[0-4]",
+      "reason": "Open fracture excludes closed fracture (Excludes1)"
+    },
+    {
+      "rule_id": "routine_exam_primary",
+      "when_code_pattern": "^Z00",
+      "excludes_pattern": "^[A-Y]",
+      "reason": "Routine exam (Z00) should not be primary when other diagnosis exists"
+    }
+  ],
+  "excludes2": []
+}

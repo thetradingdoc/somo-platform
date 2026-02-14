@@ -7,6 +7,8 @@
     <title>Claim Details - Medical Coding Assistant</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/auth-utils.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -396,32 +398,7 @@
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="pdf-coding.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
-                </a>
-                <a href="invoices.html" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Patients</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
-                <a href="wallets.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
-            </nav>
+            <nav class="sidebar-nav" id="sidebarNav"></nav>
 
             <div class="sidebar-footer">
                 <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
@@ -439,7 +416,7 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <button class="back-btn" onclick="window.location.href='billing.html'">← Back to Billing</button>
+            <button class="back-btn" onclick="window.location.href='billing.html?section=claims'">← Back to Claims</button>
 
             <div class="eob-container" id="eobContainer">
                 <div class="empty-state">
@@ -453,28 +430,14 @@
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
 
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
-        }
-
-        // Load user info with null checks
-        const userName = sessionStorage.getItem('userName') || 'Healthcare Provider';
-        const userRole = sessionStorage.getItem('userRole') || 'Provider';
-        const userNameEl = document.getElementById('userName');
-        const userRoleEl = document.getElementById('userRole');
-        if (userNameEl) {
-            userNameEl.textContent = userName;
-        }
-        if (userRoleEl) {
-            userRoleEl.textContent = userRole;
-        }
-
-        // Logout function
-        function logout() {
-            sessionStorage.removeItem('authenticated');
-            sessionStorage.removeItem('userName');
-            sessionStorage.removeItem('userRole');
-            window.location.href = '../login.html';
+        const userData = requireAuth('../login.html');
+        if (userData) {
+            const userNameEl = document.getElementById('userName');
+            const userRoleEl = document.getElementById('userRole');
+            const avatarEl = document.getElementById('userAvatar');
+            if (userNameEl && userData.name) userNameEl.textContent = userData.name;
+            if (userRoleEl && userData.role) userRoleEl.textContent = userData.role;
+            if (avatarEl && userData.name) avatarEl.textContent = userData.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         }
 
         // Get claim ID from URL
@@ -482,6 +445,7 @@
         const claimId = urlParams.get('id');
 
         document.addEventListener('DOMContentLoaded', () => {
+            renderNavigation('claims');
             if (claimId) {
                 loadClaim(claimId);
             } else {
@@ -745,8 +709,8 @@
                 <div class="empty-state">
                     <div class="empty-state-icon">❌</div>
                     <p>${message}</p>
-                    <button class="back-btn" onclick="window.location.href='billing.html'" style="margin-top: 16px;">
-                        Back to Billing
+                    <button class="back-btn" onclick="window.location.href='billing.html?section=claims'" style="margin-top: 16px;">
+                        Back to Claims
                     </button>
                 </div>
             `;

@@ -631,8 +631,64 @@ Always be polite, patient, and professional. If you don't know something, ask fo
         console.error('   Status:', error.response.status);
         console.error('   Response Data:', JSON.stringify(error.response.data, null, 2));
       }
-
       throw new Error(`Failed to create outbound call: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a web call access token for in-browser voice (Retell Web SDK)
+   * @param {string} agentId - Retell agent ID
+   * @param {Object} options - Optional: retell_llm_dynamic_variables, metadata
+   * @returns {Promise<Object>} { access_token, call_type }
+   */
+  async createWebCall(agentId, options = {}) {
+    if (!this.apiKey) {
+      throw new Error('RETELL_API_KEY not configured');
+    }
+    if (!agentId) {
+      throw new Error('Agent ID is required for web call');
+    }
+    try {
+      const dynamicVars = options.retell_llm_dynamic_variables || options.dynamic_variables || {};
+      const stringifiedDynamicVars = {};
+      for (const [key, value] of Object.entries(dynamicVars)) {
+        stringifiedDynamicVars[key] = String(value);
+      }
+      const payload = {
+        agent_id: agentId,
+        ...(Object.keys(stringifiedDynamicVars).length > 0 && { retell_llm_dynamic_variables: stringifiedDynamicVars }),
+        ...(options.metadata && { metadata: options.metadata })
+      };
+      const response = await axios.post(
+        `${this.apiBaseUrl}/v2/create-web-call`,
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+      if (response.data && response.data.access_token) {
+        return {
+          success: true,
+          access_token: response.data.access_token,
+          call_type: response.data.call_type || 'web_call'
+        };
+      }
+      throw new Error('Invalid Retell web call response');
+    } catch (error) {
+      console.error('❌ Failed to create web call token:', error.message);
+      if (error.response) {
+        console.error('   Status:', error.response.status);
+        console.error('   Response Data:', JSON.stringify(error.response.data, null, 2));
+        const msg = error.response.data?.message || error.response.data?.error;
+        if (error.response.status === 402 && msg) {
+          throw new Error(`Retell billing: ${msg} Please check your Retell account at retellai.com.`);
+        }
+      }
+      throw error;
     }
   }
 

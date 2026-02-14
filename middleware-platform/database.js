@@ -58,7 +58,10 @@ if (process.env.DB_NAME) {
   dbFileName = 'middleware-dev.db';
 }
 
-const dbPath = path.join(defaultDbDir, dbFileName);
+// DB_PATH overrides location (use project-local path to avoid readonly HOME dir)
+const dbPath = process.env.DB_PATH
+  ? path.resolve(process.cwd(), process.env.DB_PATH)
+  : path.join(defaultDbDir, dbFileName);
 console.log(`📁 Database path: ${dbPath} (environment: ${env})`);
 
 // Ensure directory exists
@@ -1198,6 +1201,12 @@ try {
     }
     if (needEhrSynced || needPrimaryIcd10 || needPrimaryCpt) {
       console.log('✅ Migration complete: EHR columns added to appointments');
+    }
+    const needVideoRoom = !info.some(c => c.name === 'video_room_name');
+    if (needVideoRoom) {
+      console.log('📦 Adding video_room_name column to appointments table...');
+      db.exec(`ALTER TABLE appointments ADD COLUMN video_room_name TEXT;`);
+      console.log('✅ Migration complete: video_room_name added to appointments');
     }
   }
 } catch (migrationError) {
@@ -2969,6 +2978,17 @@ function migrateVoiceCallStateTables() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_agent_state_snapshots_call_id ON agent_state_snapshots(call_id);
+
+      CREATE TABLE IF NOT EXISTS decision_log (
+        id TEXT PRIMARY KEY,
+        call_id TEXT NOT NULL,
+        node TEXT NOT NULL,
+        input_summary TEXT,
+        output_summary TEXT,
+        reasoning TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_decision_log_call_id ON decision_log(call_id);
     `);
     console.log('✅ Migration complete: voice call state tables ensured');
   } catch (migrationError) {
@@ -3133,6 +3153,14 @@ function migrateClinicsMonthlyCostCap() {
     if (!info.some(c => c.name === 'monthly_cost_cap')) {
       db.exec('ALTER TABLE clinics ADD COLUMN monthly_cost_cap REAL');
       console.log('✅ Migration: clinics.monthly_cost_cap added');
+    }
+    if (!info.some(c => c.name === 'region')) {
+      db.exec('ALTER TABLE clinics ADD COLUMN region TEXT');
+      console.log('✅ Migration: clinics.region added');
+    }
+    if (!info.some(c => c.name === 'country_code')) {
+      db.exec('ALTER TABLE clinics ADD COLUMN country_code TEXT');
+      console.log('✅ Migration: clinics.country_code added');
     }
   } catch (e) {
     console.warn('⚠️  clinics monthly_cost_cap migration failed:', e.message);
@@ -3360,16 +3388,15 @@ function migrateCodeEmbeddingsTable() {
         code_type TEXT NOT NULL,
         description_text TEXT,
         embedding_json TEXT,
-        specialty TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_code_embeddings_code_type ON code_embeddings(code_type);
-      CREATE INDEX IF NOT EXISTS idx_code_embeddings_specialty ON code_embeddings(specialty);
     `);
     const tableInfo = db.prepare('PRAGMA table_info(code_embeddings)').all();
     const hasSpecialty = tableInfo.some(c => c.name === 'specialty');
     if (!hasSpecialty) {
       db.prepare('ALTER TABLE code_embeddings ADD COLUMN specialty TEXT').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_code_embeddings_specialty ON code_embeddings(specialty)').run();
       console.log('✅ Migration complete: code_embeddings.specialty column added');
     } else {
       console.log('✅ Migration complete: code_embeddings table ensured');
@@ -6150,7 +6177,7 @@ module.exports = {
         insurance_pays, deductible_total, deductible_remaining,
         coinsurance_percent, plan_summary, oop_max, oop_met,
         response_data, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       eligibility.id,
@@ -7412,6 +7439,23 @@ module.exports = {
     `).run(id, callId, stateName, dataJson);
   },
 
+  logDecision(callId, node, inputSummary, outputSummary, reasoning) {
+    try {
+      const tableInfo = db.prepare('PRAGMA table_info(decision_log)').all();
+      if (tableInfo.length === 0) return;
+      const id = require('crypto').randomBytes(16).toString('hex');
+      const inputStr = typeof inputSummary === 'string' ? inputSummary : (inputSummary ? JSON.stringify(inputSummary).slice(0, 2000) : null);
+      const outputStr = typeof outputSummary === 'string' ? outputSummary : (outputSummary ? JSON.stringify(outputSummary).slice(0, 2000) : null);
+      const reasonStr = typeof reasoning === 'string' ? reasoning.slice(0, 4000) : null;
+      db.prepare(`
+        INSERT INTO decision_log (id, call_id, node, input_summary, output_summary, reasoning)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(id, callId, node, inputStr, outputStr, reasonStr);
+    } catch (e) {
+      console.warn('⚠️  decision_log insert failed:', e.message);
+    }
+  },
+
   cleanupVoiceCallStateData(retentionDays = 30) {
     const d = new Date();
     d.setDate(d.getDate() - Math.max(1, retentionDays));
@@ -7425,6 +7469,10 @@ module.exports = {
     total += r3.changes;
     const r4 = db.prepare('DELETE FROM coding_decisions WHERE created_at < ?').run(cutoffStr);
     total += r4.changes;
+    try {
+      const r5 = db.prepare('DELETE FROM decision_log WHERE created_at < ?').run(cutoffStr);
+      total += r5.changes;
+    } catch (_) {}
     if (total > 0) {
       console.log(`🧹 Cleaned ${total} voice call state records (older than ${retentionDays} days)`);
     }
@@ -10642,6 +10690,21 @@ module.exports.upsertCodeEmbedding = function upsertCodeEmbedding(record) {
 module.exports.getCodeEmbeddingsCount = function getCodeEmbeddingsCount() {
   const row = db.prepare('SELECT COUNT(*) as n FROM code_embeddings WHERE embedding_json IS NOT NULL').get();
   return row ? row.n : 0;
+};
+
+module.exports.backfillCodeEmbeddingSpecialty = function backfillCodeEmbeddingSpecialty() {
+  const tableInfo = db.prepare('PRAGMA table_info(code_embeddings)').all();
+  const hasSpecialty = tableInfo.some(c => c.name === 'specialty');
+  if (!hasSpecialty) return { updated: 0, skipped: 0, reason: 'specialty_column_missing' };
+  const rows = db.prepare('SELECT id, code, code_type FROM code_embeddings WHERE specialty IS NULL OR specialty = \'\'').all();
+  let updated = 0;
+  const updateStmt = db.prepare('UPDATE code_embeddings SET specialty = ? WHERE id = ?');
+  for (const r of rows) {
+    const specialty = deriveSpecialtyFromCode(r.code, r.code_type);
+    updateStmt.run(specialty, r.id);
+    updated++;
+  }
+  return { updated, skipped: 0 };
 };
 
 module.exports.getCptCodesByCodes = function getCptCodesByCodes(codes = []) {

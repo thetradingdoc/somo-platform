@@ -5,7 +5,7 @@ This document outlines the code structure and organization of the DocLittle plat
 ## 📁 Project Structure
 
 ```
-agentic-commerce-platform/
+doclittle-platform/
 ├── middleware-platform/          # Backend API service
 │   ├── server.js                  # Main Express server entry point
 │   ├── database.js                # Database schema and migrations

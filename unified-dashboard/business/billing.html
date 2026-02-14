@@ -611,22 +611,28 @@
 
             <!-- Content Sections -->
 
-            <!-- Overview Section -->
+            <!-- Overview Section (Revenue) -->
             <div class="content-section" id="overviewSection">
                 <div class="section-header">
-                    <h2 class="section-title">Billing Overview</h2>
-                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                    <h2 class="section-title">Revenue</h2>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="showSection('invoices')">Invoices</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showSection('payments')">Payments</button>
+                    </div>
                 </div>
                 <div id="overviewContent">
                     <!-- Content populated by JavaScript -->
                 </div>
             </div>
 
-            <!-- Scan Section -->
+            <!-- Scan Section (Create Claim - reached from Claims) -->
             <div class="content-section" id="scanSection">
                 <div class="section-header">
-                    <h2 class="section-title">📄 Scan PDF</h2>
-                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                    <h2 class="section-title">📄 Create Claim</h2>
+                    <button class="back-to-cards-btn" onclick="showSection('claims')">← Back to Claims</button>
+                </div>
+                <div id="videoVisitBanner" style="display:none; background:linear-gradient(135deg,#d1fae5 0%,#a7f3d0 100%); border-radius:8px; padding:12px 16px; margin-bottom:16px; color:#065f46; font-size:14px;">
+                    📹 Creating claim for your recent video visit. Upload a superbill or visit summary PDF below.
                 </div>
                 <div id="scanContent">
                     <div class="upload-area" id="uploadArea">
@@ -685,7 +691,9 @@
             <div class="content-section" id="claimsSection">
                 <div class="section-header">
                     <h2 class="section-title">Claims & EOB</h2>
-                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button class="btn btn-primary" onclick="showSection('scan')">📄 Create Claim</button>
+                    </div>
                 </div>
                 <div id="claimsContent">
                     <!-- Claims content populated by JavaScript -->
@@ -696,7 +704,7 @@
             <div class="content-section" id="invoicesSection">
                 <div class="section-header">
                     <h2 class="section-title">Invoices</h2>
-                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                    <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
                 </div>
                 <div id="invoicesContent">
                     <!-- Invoices content populated by JavaScript -->
@@ -707,7 +715,7 @@
             <div class="content-section" id="paymentsSection">
                 <div class="section-header">
                     <h2 class="section-title">Payments</h2>
-                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                    <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
                 </div>
                 <div id="paymentsContent">
                     <!-- Payments content populated by JavaScript -->
@@ -718,7 +726,7 @@
             <div class="content-section" id="commerceSection">
                 <div class="section-header">
                     <h2 class="section-title">Commerce Billing</h2>
-                    <button class="back-to-cards-btn" onclick="showNavCards()">← Back to Menu</button>
+                    <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
                 </div>
                 <div id="commerceContent">
                     <!-- Commerce billing content populated by JavaScript -->
@@ -750,8 +758,12 @@
 
         // Initialize (handle already-loaded DOM)
         function startBillingApp() {
-            // Navigation is now handled by navigation.js
-            renderNavigation('billing');
+            // Determine active nav from ?section= param so correct tab highlights
+            const urlParams = new URLSearchParams(window.location.search);
+            const section = urlParams.get('section');
+            const sectionToNavId = { scan: 'claims', invoices: 'billing', claims: 'claims', overview: 'billing', payments: 'billing', commerce: 'billing' };
+            const activeId = section && sectionToNavId[section] ? sectionToNavId[section] : 'billing';
+            renderNavigation(activeId);
             loadCredits();
             initializeBilling();
         }
@@ -820,13 +832,13 @@
             await checkMedicalBillingAvailability();
 
             renderNavCards();
+            document.getElementById('navCards').style.display = 'none';
 
-            // Check URL for section parameter
+            // Check URL for section parameter - always show section, never card menu
             const urlParams = new URLSearchParams(window.location.search);
-            const section = urlParams.get('section');
-            if (section) {
-                showSection(section);
-            }
+            const section = urlParams.get('section') || 'overview';
+            const appointmentId = urlParams.get('appointment_id');
+            showSection(section, appointmentId);
         }
 
         // Check if medical billing features are available
@@ -960,8 +972,8 @@
             window.history.pushState({}, '', 'billing.html');
         }
 
-        // Show specific section
-        function showSection(sectionId) {
+        // Show specific section (appointmentId optional - for video visit -> create claim flow)
+        function showSection(sectionId, appointmentIdFromUrl) {
             // Hide nav cards
             document.getElementById('navCards').style.display = 'none';
 
@@ -969,6 +981,8 @@
             document.querySelectorAll('.content-section').forEach(section => {
                 section.classList.remove('active');
             });
+
+            const appointmentId = appointmentIdFromUrl || new URLSearchParams(window.location.search).get('appointment_id');
 
             // Show selected section
             const sectionMap = {
@@ -990,20 +1004,22 @@
             currentSection = sectionId;
 
             // Load section content
-            loadSectionContent(sectionId);
+            loadSectionContent(sectionId, appointmentId);
 
-            // Update URL
-            window.history.pushState({}, '', `billing.html?section=${sectionId}`);
+            // Update URL (preserve appointment_id when on scan)
+            let url = `billing.html?section=${sectionId}`;
+            if (appointmentId && sectionId === 'scan') url += `&appointment_id=${encodeURIComponent(appointmentId)}`;
+            window.history.pushState({}, '', url);
         }
 
         // Load content for specific section
-        async function loadSectionContent(sectionId) {
+        async function loadSectionContent(sectionId, appointmentId) {
             switch (sectionId) {
                 case 'overview':
                     await loadOverview();
                     break;
                 case 'scan':
-                    initializeScan();
+                    initializeScan(appointmentId);
                     break;
                 case 'claims':
                     await loadClaims();
@@ -1152,9 +1168,11 @@
         }
 
         // Initialize scan section
-        function initializeScan() {
+        function initializeScan(appointmentId) {
             const uploadArea = document.getElementById('uploadArea');
             const fileInput = document.getElementById('fileInput');
+            const videoBanner = document.getElementById('videoVisitBanner');
+            if (videoBanner) videoBanner.style.display = appointmentId ? 'block' : 'none';
 
             // Reset
             document.getElementById('scanResults').style.display = 'none';

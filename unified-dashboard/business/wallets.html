@@ -7,6 +7,8 @@
     <title>Circle Wallets - Medical Coding Assistant</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/auth-utils.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -354,32 +356,7 @@
                 <div class="sidebar-subtitle">Medical Coding Assistant</div>
             </div>
 
-            <nav class="sidebar-nav">
-                <a href="pdf-coding.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
-                    <span>Scan</span>
-                </a>
-                <a href="invoices.html" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>Invoices</span>
-                </a>
-                <a href="patients.html" class="nav-item">
-                    <span class="nav-icon">👥</span>
-                    <span>Patients</span>
-                </a>
-                <a href="billing.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Billing</span>
-                </a>
-                <a href="wallets.html" class="nav-item active">
-                    <span class="nav-icon">💰</span>
-                    <span>Wallets</span>
-                </a>
-                <a href="calendar.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
-                    <span>Calendar</span>
-                </a>
-            </nav>
+            <nav class="sidebar-nav" id="sidebarNav"></nav>
 
             <div class="sidebar-footer">
                 <div class="user-info" onclick="window.navigateToBusinessPage('settings.html')" title="Open Settings">
@@ -414,19 +391,14 @@
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
 
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
-        }
-
-        // Load user info
-        const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
-        if (userData.name) {
-            document.getElementById('userName').textContent = userData.name;
-            const initials = userData.name.split(' ').map(n => n[0]).join('').substring(0, 2);
-            document.getElementById('userAvatar').textContent = initials;
-        }
-        if (userData.role) {
-            document.getElementById('userRole').textContent = userData.role;
+        const userData = requireAuth('../login.html');
+        if (userData) {
+            const nameEl = document.getElementById('userName');
+            const avatarEl = document.getElementById('userAvatar');
+            const roleEl = document.getElementById('userRole');
+            if (nameEl && userData.name) nameEl.textContent = userData.name;
+            if (avatarEl && userData.name) avatarEl.textContent = userData.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            if (roleEl && userData.role) roleEl.textContent = userData.role;
         }
 
         // Test accounts configuration - match the 3 test accounts from login
@@ -437,6 +409,7 @@
         ];
 
         document.addEventListener('DOMContentLoaded', () => {
+            renderNavigation('wallets');
             loadWallets();
         });
 
@@ -669,10 +642,6 @@
             }, 5000);
         }
 
-        function logout() {
-            sessionStorage.clear();
-            window.location.href = '../login.html';
-        }
     </script>
 </body>
 

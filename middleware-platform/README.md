@@ -3,6 +3,8 @@
 **Version**: 3.0.0  
 **Status**: Production Ready
 
+> **Full docs**: [docs/](../docs/README.md) is the source of truth. See [docs/middleware-platform/](../docs/middleware-platform/README.md) for platform-specific docs.
+
 ## Overview
 
 The middleware platform is the core backend API for DocLittle, handling all business logic, database operations, and external API integrations.
@@ -142,6 +144,8 @@ See main [README.md](../README.md) for complete environment variable documentati
 - `STEDI_API_KEY` - Stedi API key (for insurance)
 - `CIRCLE_API_KEY` - Circle API key (for USDC payments)
 - `GROQ_API_KEY` - Groq API key (for medical coding)
+- `LANGSMITH_API_KEY` or `AP_Langchain` - LangSmith tracing (required in production)
+- `POSTGRES_URL` - Postgres for LangGraph checkpoints (production)
 - `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` - Twilio credentials
 - `SMTP_*` or `AZURE_COMMUNICATION_*` - Email configuration
 
@@ -150,28 +154,21 @@ See main [README.md](../README.md) for complete environment variable documentati
 ### Run Tests
 
 ```bash
-# Comprehensive system test
-node tests/test-comprehensive-system.js
+# Full suite (LangSmith, EOB, tool handlers, state transitions)
+npm test
 
-# Patient selection fix test
-node tests/test-patient-selection-fix.js
-
-# Patient ID uniqueness test
-node tests/test-patient-id-uniqueness.js
-
-# EHR integration test
-node tests/test-ehr-integration.js
+# Individual suites
+npm run test:langsmith    # LangSmith tracing
+npm run test:langgraph    # LangGraph state flow
+npm run test:eob          # EOB calculation
+npm run test:tool-handlers # validate-code-pair, suggest-codes
+npm run test:state-transitions  # State machine
+npm run test:accuracy     # Medical coding accuracy
+npm run test:load         # Load test
+npm run test:contract     # Stedi contract tests
 ```
 
-### Test Coverage
-
-- ✅ Appointment booking flow
-- ✅ Insurance eligibility checks
-- ✅ Payment processing
-- ✅ Patient selection logic
-- ✅ Patient ID uniqueness
-- ✅ EHR integration
-- ✅ Medical coding
+See [tests/README.md](tests/README.md) for full test documentation.
 
 ## Scripts
 
@@ -184,6 +181,8 @@ node tests/test-ehr-integration.js
 - `scripts/backup-database.js` - Backup database
 - `scripts/import-cpt-codes.js` - Import CPT codes
 - `scripts/sync-epic-data.js` - Sync Epic EHR data
+- `scripts/reconcile-langgraph-state.js` - Reconcile LangGraph vs DB (`npm run reconcile:langgraph`)
+- `scripts/migrate-to-langgraph.js` - Seed LangGraph from DB (`npm run migrate:langgraph`)
 
 ### Test Scripts
 - `scripts/test-circle-api-key.js` - Test Circle API connection
@@ -230,6 +229,6 @@ See `railway.json` for configuration.
 
 - [Main README](../README.md) - Project overview
 - [API Documentation](../docs/api/API_DOCUMENTATION.md) - Complete API reference
-- [Setup Guide](../docs/setup/SETUP.md) - Setup instructions
-- [Voice Agent Prompt](../docs/voice-agent/kelly-voice-agent-prompt.md) - Kelly voice agent configuration
+- [Setup Guide](../docs/setup/getting-started/SETUP.md) - Setup instructions
+- [Voice Agent Prompt](../docs/voice-agent/prompts/kelly-voice-agent-prompt.md) - Kelly voice agent configuration
 

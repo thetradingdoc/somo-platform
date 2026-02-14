@@ -249,7 +249,7 @@ Potential improvements:
 - `unified-dashboard/business/commerce-billing.html`
 - `docs/api/INVOICE_API.md`
 - `docs/user-guides/INVOICE_WORKFLOW.md`
-- `docs/IMPLEMENTATION_SUMMARY.md` (this file)
+- `docs/development/invoice-billing/IMPLEMENTATION_SUMMARY.md` (this file)
 
 ### Modified Files
 - `middleware-platform/database.js` - Added invoice tables and functions

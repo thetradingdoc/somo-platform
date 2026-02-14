@@ -253,7 +253,7 @@ node scripts/verify-azure-email.js doctorjay254@gmail.com
 
 ## 🔗 RELATED DOCUMENTATION
 
-- **Deployment:** `../deployment/DEPLOYMENT.md`
+- **Deployment:** [Deployment Guide](../deployment/guides/DEPLOYMENT_GUIDE.md)
 - **Email Service:** `../email/README.md`
 - **Main Docs:** `../README.md`
 

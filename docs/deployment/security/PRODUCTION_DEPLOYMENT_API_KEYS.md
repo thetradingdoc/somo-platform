@@ -35,7 +35,7 @@ az webapp config appsettings set \
 
 **Quick deploy script:**
 ```bash
-cd /Users/jeremiahrichie/agentic-commerce-platform
+cd /path/to/doclittle-platform
 chmod +x scripts/deploy-to-azure.sh
 ./scripts/deploy-to-azure.sh
 ```

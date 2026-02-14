@@ -1,0 +1,17 @@
+{
+  "pain_scale": {
+    "mild": ["1", "2", "3", "mild", "slight", "minor", "light", "a little", "somewhat", "manageable"],
+    "moderate": ["4", "5", "6", "moderate", "medium", "noticeable", "significant", "uncomfortable"],
+    "severe": ["7", "8", "9", "10", "severe", "intense", "bad", "excruciating", "unbearable", "crushing", "worst", "terrible"]
+  },
+  "temporal": {
+    "acute": ["sudden", "just started", "today", "this morning", "rapid onset", "out of nowhere", "acute"],
+    "subacute": ["past week", "few days", "several days", "this week", "subacute"],
+    "chronic": ["months", "years", "ongoing", "long-term", "recurring", "off and on", "chronic", "persistent"]
+  },
+  "urgency_words": {
+    "emergent": ["emergency", "urgent", "immediately", "right now", "can't wait", "critical"],
+    "urgent": ["soon", "today", "same day", "asap", "need to see someone"],
+    "routine": ["whenever", "no rush", "schedule", "next available"]
+  }
+}

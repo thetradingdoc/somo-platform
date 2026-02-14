@@ -1,10 +1,25 @@
 /**
  * Chat LLM Service
- * Uses Groq LLM to understand natural language commands and convert them to structured actions
+ * Uses Groq LLM to understand natural language commands and convert them to structured actions.
+ * P0: Uses LangChain ChatGroq when available for LangSmith tracing.
  */
 
+require('../utils/langsmith-config');
 const Groq = require('groq-sdk');
 const db = require('../database');
+
+let ChatGroq = null;
+let HumanMessage = null;
+let SystemMessage = null;
+let AIMessage = null;
+try {
+  const groqPkg = require('@langchain/groq');
+  const corePkg = require('@langchain/core/messages');
+  ChatGroq = groqPkg.ChatGroq;
+  HumanMessage = corePkg.HumanMessage;
+  SystemMessage = corePkg.SystemMessage;
+  AIMessage = corePkg.AIMessage;
+} catch (_) {}
 
 class ChatLLMService {
     constructor() {
@@ -12,6 +27,10 @@ class ChatLLMService {
         if (process.env.GROQ_API_KEY) {
             this.groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
         }
+    }
+
+    _useLangChain() {
+        return ChatGroq && process.env.LANGCHAIN_TRACING_V2 !== 'false';
     }
 
     /**
@@ -86,22 +105,43 @@ Return your response as JSON with this structure:
 }`;
 
         try {
-            // Build conversation messages
-            const messages = [
-                { role: 'system', content: systemPrompt },
-                ...conversationHistory.slice(-5), // Last 5 messages for context
-                { role: 'user', content: userMessage }
-            ];
-
-            const completion = await this.groq.chat.completions.create({
-                messages: messages,
-                model: 'llama-3.1-8b-instant', // Fast and efficient
-                temperature: 0.3, // Lower temperature for more consistent parsing
-                max_tokens: 200,
-                response_format: { type: 'json_object' }
-            });
-
-            const response = completion.choices[0]?.message?.content;
+            const model = 'llama-3.1-8b-instant';
+            let response;
+            if (this._useLangChain()) {
+                const msgs = [
+                    new SystemMessage(systemPrompt),
+                    ...conversationHistory.slice(-5).map(m => {
+                        if (!m || !m.content) return null;
+                        return m.role === 'assistant' && AIMessage
+                            ? new AIMessage(m.content)
+                            : new HumanMessage(m.content);
+                    }).filter(Boolean),
+                    new HumanMessage(userMessage)
+                ].filter(Boolean);
+                const chatModel = new ChatGroq({
+                    apiKey: process.env.GROQ_API_KEY,
+                    model,
+                    temperature: 0.3,
+                    maxTokens: 200,
+                    response_format: { type: 'json_object' }
+                });
+                const res = await chatModel.invoke(msgs);
+                response = typeof res?.content === 'string' ? res.content : (res?.content ? JSON.stringify(res.content) : '');
+            } else {
+                const messages = [
+                    { role: 'system', content: systemPrompt },
+                    ...conversationHistory.slice(-5),
+                    { role: 'user', content: userMessage }
+                ];
+                const completion = await this.groq.chat.completions.create({
+                    messages,
+                    model,
+                    temperature: 0.3,
+                    max_tokens: 200,
+                    response_format: { type: 'json_object' }
+                });
+                response = completion.choices[0]?.message?.content;
+            }
             if (!response) {
                 return null;
             }
@@ -143,22 +183,34 @@ If clarification is needed, ask a helpful question.
 Keep responses under 50 words.`;
 
         try {
-            const messages = [
-                { role: 'system', content: systemPrompt },
-                {
-                    role: 'user',
-                    content: `User said: "${userMessage}"\n\nError: ${error || 'None'}\nAvailable options: ${availableOptions.join(', ')}\n\nProvide a helpful response.`
-                }
-            ];
-
-            const completion = await this.groq.chat.completions.create({
-                messages: messages,
-                model: 'llama-3.1-8b-instant',
-                temperature: 0.7,
-                max_tokens: 100
-            });
-
-            return completion.choices[0]?.message?.content?.trim() || null;
+            const model = 'llama-3.1-8b-instant';
+            const userContent = `User said: "${userMessage}"\n\nError: ${error || 'None'}\nAvailable options: ${availableOptions.join(', ')}\n\nProvide a helpful response.`;
+            let content;
+            if (this._useLangChain()) {
+                const chatModel = new ChatGroq({
+                    apiKey: process.env.GROQ_API_KEY,
+                    model,
+                    temperature: 0.7,
+                    maxTokens: 100
+                });
+                const res = await chatModel.invoke([
+                    new SystemMessage(systemPrompt),
+                    new HumanMessage(userContent)
+                ]);
+                content = typeof res?.content === 'string' ? res.content : (res?.content ? String(res.content) : '');
+            } else {
+                const completion = await this.groq.chat.completions.create({
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userContent }
+                    ],
+                    model,
+                    temperature: 0.7,
+                    max_tokens: 100
+                });
+                content = completion.choices[0]?.message?.content;
+            }
+            return content?.trim() || null;
         } catch (error) {
             console.error('LLM helpful response error:', error.message);
             return null;

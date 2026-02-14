@@ -158,5 +158,5 @@ If `STRIPE_SECRET_KEY` is not set, the service operates in mock mode:
 - `middleware-platform/database.js` - Database schema and CRUD functions
 - `middleware-platform/server.js` - API endpoints and webhooks
 - `unified-dashboard/patients/wallet.html` - Frontend card display
-- `docs/STRIPE_ISSUING_IMPLEMENTATION.md` - Full implementation details
+- `docs/architecture/payments/STRIPE_ISSUING_IMPLEMENTATION.md` - Full implementation details
 

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Call - DocLittle Telehealth</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/auth-utils.js"></script>
+  <script src="../assets/js/navigation.js"></script>
+  <style>
+    :root { --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6; }
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar { width: 260px; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.05); position: fixed; height: 100vh; overflow-y: auto; }
+    .sidebar-header { padding: 24px; border-bottom: 1px solid var(--gray-200, #e2e8f0); }
+    .sidebar-logo { font-size: 32px; line-height: 1; letter-spacing: -3px; color: #2d3748; margin-bottom: 4px; }
+    .sidebar-logo .doc { font-family: 'Times New Roman', serif; font-style: italic; }
+    .sidebar-logo .little { font-family: Verdana, sans-serif; font-weight: 700; }
+    .sidebar-subtitle { font-size: 12px; color: var(--gray-500, #64748b); margin-top: 4px; }
+    .sidebar-nav { padding: 16px; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; color: var(--gray-700, #4a5568); font-weight: 500; cursor: pointer; transition: all 0.2s; margin-bottom: 4px; text-decoration: none; }
+    .nav-item:hover { background: var(--gray-50, #f7fafc); color: var(--primary); }
+    .nav-item.active { background: var(--primary); color: white; }
+    .nav-icon { font-size: 20px; }
+    .sidebar-footer { padding: 16px; border-top: 1px solid var(--gray-200, #e2e8f0); position: absolute; bottom: 0; width: 260px; background: white; }
+    .user-info { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: var(--gray-50, #f7fafc); cursor: pointer; transition: all 0.2s; }
+    .user-info:hover { background: var(--gray-100, #edf2f7); transform: translateY(-1px); }
+    .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+    .user-details { flex: 1; }
+    .user-name { font-weight: 600; font-size: 14px; color: var(--gray-900, #1a202c); }
+    .user-role { font-size: 12px; color: var(--gray-500, #718096); }
+    .logout-btn { background: none; border: none; color: var(--gray-500, #718096); cursor: pointer; padding: 8px; border-radius: 4px; transition: all 0.2s; }
+    .logout-btn:hover { background: var(--danger-light, #fed7d7); color: var(--danger, #f56565); }
+    .main-content { margin-left: 260px; padding: 24px; flex: 1; background: #f7fafc; min-height: 100vh; }
+    .video-container { background: #1a1a2e; border-radius: 16px; aspect-ratio: 16/10; max-height: 70vh; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+    .video-container video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+    .video-placeholder { color: #94a3b8; text-align: center; padding: 48px; }
+    .video-placeholder .icon { font-size: 64px; margin-bottom: 16px; }
+    .local-video { position: absolute; bottom: 16px; right: 16px; width: 180px; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    .local-video video { width: 100%; display: block; }
+    .remote-videos { flex: 1; display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: center; justify-content: center; }
+    .remote-video { width: 320px; border-radius: 12px; overflow: hidden; background: #0f172a; position: relative; }
+    .remote-video video { width: 100%; display: block; }
+    .remote-video .label { position: absolute; bottom: 8px; left: 8px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+    .controls { display: flex; gap: 12px; margin-top: 16px; justify-content: center; flex-wrap: wrap; }
+    .btn { padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 16px; transition: all 0.2s; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-danger { background: #dc2626; color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .room-input { padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; width: 200px; }
+    .room-input[readonly] { background: #f1f5f9; color: #475569; cursor: default; }
+    .status { margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; color: #166534; font-size: 14px; }
+    .status.error { background: #fef2f2; color: #991b1b; }
+    .status.connecting { background: #fefce8; color: #854d0e; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo"><span class="doc">Doc</span><span class="little">Little</span>.</div>
+        <div class="sidebar-subtitle">Medical Coding Assistant</div>
+      </div>
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
+      <div class="sidebar-footer">
+        <div class="user-info" onclick="(window.navigateToBusinessPage||function(p){window.location.href=(window.resolveBusinessPath||function(x){return'/business/'+x})(p);})('settings.html')" title="Open Settings">
+          <div class="user-avatar" id="userAvatar">HP</div>
+          <div class="user-details">
+            <div class="user-name" id="userName">Healthcare Provider</div>
+            <div class="user-role" id="userRole">Provider</div>
+          </div>
+          <button class="logout-btn" onclick="event.stopPropagation(); (window.logout||function(){sessionStorage.removeItem('authenticated');window.location.href='../login.html';})();" title="Logout">🚪</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <h1 style="margin-bottom: 8px;">Video Call</h1>
+      <p style="color: #64748b; margin-bottom: 24px;">Start or join a telehealth video room. Share the room name with the other participant.</p>
+
+      <div id="joinSection">
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
+          <input type="text" id="roomInput" class="room-input" placeholder="Room name (e.g. consult-abc123)" value="">
+          <input type="text" id="nameInput" class="room-input" placeholder="Your name" value="">
+          <button id="joinBtn" class="btn btn-primary">Join Room</button>
+        </div>
+      </div>
+
+      <div id="videoSection" style="display: none;">
+        <div class="video-container" id="videoContainer">
+          <div class="video-placeholder" id="placeholder">
+            <div class="icon">📹</div>
+            <p>Your camera will appear here when you join</p>
+          </div>
+          <div class="remote-videos" id="remoteVideos"></div>
+          <div class="local-video" id="localVideo" style="display: none;">
+            <video id="localVideoEl" autoplay muted playsinline></video>
+          </div>
+        </div>
+        <div class="connection-status" id="connectionStatus" style="margin-bottom:12px;font-size:14px;color:#94a3b8;"></div>
+        <div class="controls">
+          <button id="toggleVideoBtn" class="btn btn-primary">Stop Video</button>
+          <button id="toggleMicBtn" class="btn btn-primary">Mute</button>
+          <button id="leaveBtn" class="btn btn-danger">Leave Call</button>
+          <button id="endAndClaimBtn" class="btn" style="background:#059669;color:#fff;display:none;">End & Create Claim</button>
+        </div>
+      </div>
+
+      <div id="status" class="status" style="display: none;"></div>
+    </main>
+  </div>
+
+  <script type="module">
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+    // Auth check
+    if (!requireAuth('../login.html')) {
+      // Redirect handled
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderNavigation('video');
+      const userData = requireAuth('../login.html');
+      if (userData) {
+        const nameEl = document.getElementById('userName');
+        const avatarEl = document.getElementById('userAvatar');
+        const roleEl = document.getElementById('userRole');
+        if (nameEl && userData.name) nameEl.textContent = userData.name;
+        if (avatarEl && userData.name) avatarEl.textContent = userData.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        if (roleEl && userData.role) roleEl.textContent = userData.role;
+      }
+      const params = new URLSearchParams(window.location.search);
+      const roomFromUrl = params.get('room');
+      if (roomFromUrl) {
+        const roomInput = document.getElementById('roomInput');
+        roomInput.value = roomFromUrl;
+        roomInput.readOnly = roomFromUrl.startsWith('appt-');
+        if (roomInput.readOnly) roomInput.title = 'Room is linked to an appointment';
+      }
+    });
+
+    // Dynamic import for livekit-client (ESM from CDN)
+    const { Room, RoomEvent, Track } = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.17.1/dist/livekit-client.esm.mjs');
+
+    let room = null;
+    let localVideoEnabled = true;
+    let localMicEnabled = true;
+    let currentRoomName = '';
+
+    function showStatus(msg, type = '') {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+      el.style.display = 'block';
+    }
+
+    function hideStatus() {
+      document.getElementById('status').style.display = 'none';
+    }
+
+    async function fetchToken(roomName, identity, name) {
+      const body = { room: roomName, identity, name };
+      if (roomName.startsWith('appt-')) {
+        const appointmentId = roomName.replace(/^appt-/, '');
+        body.appointment_id = appointmentId;
+      }
+      const res = await fetch(`${API_BASE}/api/livekit/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to get token');
+      return data;
+    }
+
+    async function joinRoom() {
+      const roomInput = document.getElementById('roomInput');
+      const nameInput = document.getElementById('nameInput');
+      const roomName = roomInput.value.trim() || 'consult-' + Math.random().toString(36).slice(2, 8);
+      const name = nameInput.value.trim() || 'Participant';
+
+      roomInput.value = roomName;
+
+      showStatus('Connecting...', 'connecting');
+      document.getElementById('joinBtn').disabled = true;
+
+      try {
+        const { token, url } = await fetchToken(roomName, 'user-' + Date.now(), name);
+
+        room = new Room({
+          adaptiveStream: true,
+          dynacast: true
+        });
+
+        room.on(RoomEvent.Connected, () => {
+          currentRoomName = roomName;
+          hideStatus();
+          showStatus('Connected to ' + roomName, '');
+          document.getElementById('joinSection').style.display = 'none';
+          document.getElementById('videoSection').style.display = 'block';
+          updateConnectionStatus(0);
+          if (roomName.startsWith('appt-')) {
+            document.getElementById('endAndClaimBtn').style.display = 'inline-block';
+            document.getElementById('endAndClaimBtn').onclick = () => handleEndAndCreateClaim(roomName);
+          }
+          enableCameraAndMic();
+        });
+
+        room.on(RoomEvent.Disconnected, () => {
+          currentRoomName = '';
+          document.getElementById('endAndClaimBtn').style.display = 'none';
+          showStatus('Disconnected', 'error');
+          document.getElementById('joinSection').style.display = 'block';
+          document.getElementById('videoSection').style.display = 'none';
+          document.getElementById('joinBtn').disabled = false;
+        });
+
+        room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          const container = document.getElementById('remoteVideos');
+          const div = document.createElement('div');
+          div.className = 'remote-video';
+          div.id = 'remote-' + participant.identity;
+          div.innerHTML = '<video autoplay playsinline></video><span class="label">' + (participant.name || participant.identity) + '</span>';
+          container.appendChild(div);
+          track.attach(div.querySelector('video'));
+          if (room) updateConnectionStatus(room.remoteParticipants.size);
+        });
+
+        room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+          const el = document.getElementById('remote-' + participant.identity);
+          if (el) el.remove();
+          if (room) updateConnectionStatus(room.remoteParticipants.size);
+        });
+
+        await room.connect(url, token);
+      } catch (err) {
+        showStatus('Error: ' + err.message, 'error');
+        document.getElementById('joinBtn').disabled = false;
+      }
+    }
+
+    async function enableCameraAndMic() {
+      if (!room) return;
+      await room.localParticipant.enableCameraAndMicrophone();
+      const track = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      if (track?.track) {
+        document.getElementById('placeholder').style.display = 'none';
+        const localEl = document.getElementById('localVideo');
+        localEl.style.display = 'block';
+        track.track.attach(document.getElementById('localVideoEl'));
+      }
+    }
+
+    function toggleVideo() {
+      if (!room) return;
+      localVideoEnabled = !localVideoEnabled;
+      room.localParticipant.setCameraEnabled(localVideoEnabled);
+      document.getElementById('toggleVideoBtn').textContent = localVideoEnabled ? 'Stop Video' : 'Start Video';
+    }
+
+    function toggleMic() {
+      if (!room) return;
+      localMicEnabled = !localMicEnabled;
+      room.localParticipant.setMicrophoneEnabled(localMicEnabled);
+      document.getElementById('toggleMicBtn').textContent = localMicEnabled ? 'Mute' : 'Unmute';
+    }
+
+    function leaveCall() {
+      if (room) {
+        room.disconnect();
+        room = null;
+      }
+    }
+
+    function updateConnectionStatus(remoteCount) {
+      const el = document.getElementById('connectionStatus');
+      if (!el) return;
+      if (remoteCount === 0) el.textContent = '⏳ Waiting for participant to join…';
+      else el.textContent = '✓ Connected with ' + remoteCount + ' participant' + (remoteCount > 1 ? 's' : '');
+    }
+
+    function handleEndAndCreateClaim(roomName) {
+      if (!roomName.startsWith('appt-')) return;
+      const appointmentId = roomName.replace(/appt-/, '');
+      if (room) { room.disconnect(); room = null; }
+      const base = (typeof window.resolveBusinessPath === 'function')
+        ? window.location.origin + window.resolveBusinessPath('billing.html')
+        : window.location.origin + '/business/billing.html';
+      window.location.href = base + '?section=scan&appointment_id=' + encodeURIComponent(appointmentId);
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', joinRoom);
+    document.getElementById('toggleVideoBtn').addEventListener('click', toggleVideo);
+    document.getElementById('toggleMicBtn').addEventListener('click', toggleMic);
+    document.getElementById('leaveBtn').addEventListener('click', leaveCall);
+  </script>
+</body>
+</html>

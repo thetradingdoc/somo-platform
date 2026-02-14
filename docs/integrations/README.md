@@ -4,7 +4,7 @@ This directory contains documentation for third-party integrations and APIs.
 
 ## 📁 Files
 
-### [STEDI_API_ENDPOINTS.md](./STEDI_API_ENDPOINTS.md)
+### [STEDI API Endpoints](./stedi/api/STEDI_API_ENDPOINTS.md)
 Complete documentation of STEDI API integration for healthcare insurance operations:
 
 **Endpoints Available:**
@@ -25,6 +25,5 @@ Complete documentation of STEDI API integration for healthcare insurance operati
 
 ## 🔗 Related Documentation
 
-- [STEDI vs UHC FHIR Comparison](./STEDI_VS_UHC_FHIR_DATA_COMPARISON.md)
-- [UHC Flex FHIR API Analysis](./UHC_FLEX_FHIR_API_ANALYSIS.md)
-- [Patient Journey](../patient-journey/) - Insurance usage in patient workflows
+- [STEDI vs UHC FHIR Comparison](./stedi/api/STEDI_VS_UHC_FHIR_DATA_COMPARISON.md)
+- [UHC Flex FHIR API Analysis](./uhc/fhir/UHC_FLEX_FHIR_API_ANALYSIS.md)

@@ -203,5 +203,5 @@ Once connected, DocLittle handles **everything** automatically:
 
 ## Technical Details (For Developers)
 
-See `docs/setup/GOOGLE_CALENDAR_OAUTH_SETUP.md` for platform setup instructions.
+See `docs/setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md` for platform setup instructions.
 

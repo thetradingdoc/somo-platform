@@ -1,20 +1,15 @@
 /**
  * EOB (Explanation of Benefits) Calculation Service
- * 
+ *
  * This service calculates EOB amounts based on:
- * 1. Real Stedi eligibility data (deductible, copay, coinsurance)
- * 2. CPT code charges from the claim
- * 3. Insurance plan rules
- * 
- * Amount Allowed Logic:
- * - Amount Allowed is the maximum amount the insurance will pay for a service
- * - It's typically from the payer's fee schedule or provider contract
- * - For now, we calculate it as a percentage of billed amount (typical 80-90% for in-network)
- * - In production, this should come from:
- *   1. Fee schedule lookup by CPT code
- *   2. Provider contract rates
- *   3. Or from 835 Remittance Advice after claim adjudication
+ * 1. Fee schedule (when available) - payer-specific allowed amounts
+ * 2. Stedi eligibility data (deductible, copay, coinsurance)
+ * 3. CPT code charges from the claim
+ *
+ * Amount Allowed: Fee schedule lookup first, else 85%/70% of billed (fallback)
  */
+
+const FeeScheduleService = require('./fee-schedule-service');
 
 class EOBCalculationService {
   /**
@@ -46,23 +41,23 @@ class EOBCalculationService {
 
   /**
    * Calculate EOB breakdown for a claim
-   * 
+   *
    * @param {Object} params - Calculation parameters
    * @param {Array} params.lineItems - Array of service line items with CPT codes and charges
    * @param {Object} params.eligibility - Stedi eligibility data
-   * @param {number} params.eligibility.deductible_total - Total deductible
-   * @param {number} params.eligibility.deductible_remaining - Remaining deductible
-   * @param {number} params.eligibility.copay_amount - Copay amount
-   * @param {number} params.eligibility.coinsurance_percent - Coinsurance percentage (e.g., 20 for 20%)
+   * @param {string} params.payerId - Payer ID (for fee schedule lookup)
+   * @param {string} params.dateOfService - YYYY-MM-DD (for fee schedule)
    * @returns {Object} EOB breakdown
    */
-  static calculateEOB({ lineItems = [], eligibility = {} }) {
+  static calculateEOB({ lineItems = [], eligibility = {}, payerId = null, dateOfService = null }) {
     // Extract eligibility data
     const deductibleTotal = parseFloat(eligibility.deductible_total || 0);
     const deductibleRemaining = parseFloat(eligibility.deductible_remaining || eligibility.deductible_total || 0);
     const copayAmount = parseFloat(eligibility.copay_amount || 0);
     const coinsurancePercent = parseFloat(eligibility.coinsurance_percent || 0);
-    
+    const oopMax = eligibility.oop_max != null ? parseFloat(eligibility.oop_max) : null;
+    const oopMet = eligibility.oop_met != null ? parseFloat(eligibility.oop_met) : 0;
+
     // Initialize totals
     let totalBilled = 0;
     let totalAllowed = 0;
@@ -71,16 +66,34 @@ class EOBCalculationService {
     let totalDeductible = 0;
     let totalCoinsurance = 0;
     let totalNotCovered = 0;
+    let totalBalanceBilling = 0;
     let runningDeductibleRemaining = deductibleRemaining;
     let copayApplied = false; // Track if copay has been applied to this claim
+    let runningOopMet = oopMet; // Tiba spec: b_oop_met, cumulative patient OOP YTD
 
     // Process each line item
     const processedLineItems = lineItems.map((item, index) => {
-      const billedAmount = parseFloat(item.charge || item.billed_amount || 0);
-      const allowed = item.allowed_amount 
-        ? parseFloat(item.allowed_amount)
-        : this.calculateAllowedAmount(billedAmount, true); // Assume in-network for now
-      
+      const billedAmount = parseFloat(item.charge || item.billed_amount || item.amount || item.price) || 0;
+      const cptCode = item.code || item.cpt_code || '';
+      let allowed;
+      let inNetwork = true;
+      if (item.allowed_amount != null) {
+        allowed = parseFloat(item.allowed_amount);
+        inNetwork = item.in_network !== false && item.inNetwork !== false;
+      } else if (payerId && cptCode && cptCode !== 'N/A') {
+        const resolved = FeeScheduleService.resolveAllowedAmountAndNetwork({
+          payerId,
+          cptCode,
+          billedAmount,
+          dateOfService: item.date_of_service || item.date || dateOfService,
+          inNetwork: true
+        });
+        allowed = resolved.allowedAmount;
+        inNetwork = resolved.inNetwork;
+      } else {
+        allowed = this.calculateAllowedAmount(billedAmount, true);
+      }
+
       totalBilled += billedAmount;
       totalAllowed += allowed;
 
@@ -89,12 +102,13 @@ class EOBCalculationService {
       let deductible = 0;
       let coinsurance = 0;
       let planPaid = 0;
-      let notCovered = Math.max(0, billedAmount - allowed);
+      const excessBilled = Math.max(0, billedAmount - allowed);
+      // Tiba spec: balance billing (1-n_i)*max(0, f_i - a_i) for out-of-network only
+      // In-network: excess often written off; OON: patient pays excess as balance billing
+      const balanceBilling = inNetwork ? 0 : excessBilled;
+      totalBalanceBilling += balanceBilling;
+      totalNotCovered += excessBilled; // Display: total gap between billed and allowed
 
-      // IMPORTANT: When allowed amount is much lower than billed (e.g., $200 allowed vs $1800 billed),
-      // the patient pays: Deductible + Copay + Amount Not Covered
-      // The plan pays the full allowed amount (or what's left after deductible/copay if applicable)
-      
       // Step 1: Apply deductible if applicable (from allowed amount)
       if (runningDeductibleRemaining > 0 && allowed > 0) {
         const deductibleApplied = Math.min(runningDeductibleRemaining, allowed);
@@ -103,9 +117,7 @@ class EOBCalculationService {
       }
 
       // Step 2: Apply copay (typically per visit/claim, not per service)
-      // Apply copay once to the first service with remaining allowed amount after deductible
       if (copayAmount > 0 && !copayApplied && (allowed - deductible) > 0) {
-        // Copay is usually a fixed amount per visit/claim
         copay = Math.min(copayAmount, allowed - deductible);
         copayApplied = true;
       }
@@ -117,16 +129,23 @@ class EOBCalculationService {
       }
 
       // Step 4: Plan pays the remainder of allowed amount
-      // If allowed is much less than billed, plan pays full allowed (or remainder after deductible/copay)
       planPaid = Math.max(0, allowed - deductible - copay - coinsurance);
-      
-      // Special case: If allowed amount is very low compared to billed (e.g., $200 vs $1800),
-      // and we want plan to pay full allowed, adjust planPaid
-      // This matches the EOB scenario where Plan Paid = Allowed Amount
       if (allowed > 0 && allowed < billedAmount * 0.3) {
-        // If allowed is less than 30% of billed, plan pays full allowed
-        // Patient pays: Deductible + Copay + Amount Not Covered
         planPaid = allowed;
+      }
+
+      // Patient responsibility for this line (before OOP cap)
+      let linePatientOwe = deductible + copay + coinsurance + balanceBilling;
+
+      // Step 6 (Tiba spec): OOP max cap - when b_oop_met + r^patient exceeds b_oop_max, cap patient
+      if (oopMax != null && oopMax > 0) {
+        const spaceRemaining = Math.max(0, oopMax - runningOopMet);
+        if (linePatientOwe > spaceRemaining) {
+          const excess = linePatientOwe - spaceRemaining;
+          linePatientOwe = spaceRemaining;
+          planPaid += excess; // Plan absorbs excess when patient hits OOP max
+        }
+        runningOopMet += linePatientOwe;
       }
 
       // Accumulate totals
@@ -134,27 +153,28 @@ class EOBCalculationService {
       totalDeductible += deductible;
       totalCoinsurance += coinsurance;
       totalPlanPaid += planPaid;
-      totalNotCovered += notCovered;
 
       return {
         dateOfService: item.date_of_service || item.date || '',
         typeOfService: item.description || item.code || '',
         cptCode: item.code || '',
+        modifiers: Array.isArray(item.modifiers) ? item.modifiers : [],
         amountBilled: billedAmount,
         allowedAmount: allowed,
+        inNetwork,
         planPaid: Math.max(0, planPaid),
-        otherInsurancePaid: 0, // Not applicable for now
+        otherInsurancePaid: 0,
         copay: copay,
         coinsurance: coinsurance,
         deductible: deductible,
-        amountNotCovered: notCovered,
-        whatYouOwe: deductible + copay + coinsurance + notCovered
+        amountNotCovered: excessBilled,
+        balanceBilling,
+        whatYouOwe: linePatientOwe
       };
     });
 
-    // Calculate total patient responsibility
-    // Patient owes: Deductible + Copay + Coinsurance + Amount Not Covered
-    const totalPatientOwe = totalCopay + totalDeductible + totalCoinsurance + totalNotCovered;
+    // Calculate total patient responsibility (sum of line whatYouOwe, which respects OOP cap)
+    const totalPatientOwe = processedLineItems.reduce((sum, li) => sum + (li.whatYouOwe || 0), 0);
 
     return {
       lineItems: processedLineItems,
@@ -167,13 +187,16 @@ class EOBCalculationService {
         coinsurance: totalCoinsurance,
         deductible: totalDeductible,
         amountNotCovered: totalNotCovered,
+        balanceBilling: totalBalanceBilling,
         whatYouOwe: totalPatientOwe
       },
       eligibility: {
         deductibleTotal,
-        deductibleRemaining: runningDeductibleRemaining, // Updated after applying claim
+        deductibleRemaining: runningDeductibleRemaining,
         copayAmount,
-        coinsurancePercent
+        coinsurancePercent,
+        oopMax,
+        oopMet: runningOopMet
       }
     };
   }
@@ -196,12 +219,14 @@ class EOBCalculationService {
     
     if (pricing.breakdown && Array.isArray(pricing.breakdown) && pricing.breakdown.length > 0) {
       // Use pricing breakdown if available (new format from PDF coding or generated from diagnosis codes)
+      // PDF breakdown uses 'price'; claims may use charge/amount/billed_amount
       lineItems = pricing.breakdown.map((item) => ({
         code: item.code || item.cpt_code || '',
         description: item.description || item.name || '',
-        charge: item.charge || item.amount || item.billed_amount || parseFloat(item.charge || item.amount || item.billed_amount) || 0,
+        charge: parseFloat(item.charge || item.amount || item.billed_amount || item.price) || 0,
         allowed_amount: item.allowed_amount || null,
-        date_of_service: item.date_of_service || claim.submitted_at || new Date().toISOString().split('T')[0]
+        date_of_service: item.date_of_service || claim.submitted_at || new Date().toISOString().split('T')[0],
+        modifiers: Array.isArray(item.modifiers) ? item.modifiers : []
       }));
     } else if (claim.service_code && claim.total_amount && claim.service_code !== 'N/A') {
       // Fallback: create line items from claim service codes (legacy format)
@@ -275,10 +300,13 @@ class EOBCalculationService {
       }];
     }
 
-    // Calculate EOB
+    // Calculate EOB (with fee schedule when payer available)
+    const dateOfService = claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
     const eobCalculation = this.calculateEOB({
       lineItems,
-      eligibility
+      eligibility,
+      payerId: claim.payer_id || null,
+      dateOfService
     });
 
     return eobCalculation;

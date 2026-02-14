@@ -5,6 +5,10 @@ const crypto = require('crypto');
 const db = require('../database');
 const cache = require('./cache-service');
 const { buildSearchQuery, buildSearchIntent } = require('./layer2-rag/search-intent-builder');
+const { retrieveFromColabRAG } = require('./layer2-rag/remote-rag-client');
+const { extractNegativeConstraints, filterCodesByNegativeConstraints } = require('./layer2-rag/negative-constraints');
+const { filterIcd10ByGuidelines } = require('./layer2-rag/guideline-resolver');
+const { rerankByPerceptualRelevance } = require('./layer2-rag/reranking-service');
 
 const ICD_REFERENCE_PATH = path.resolve(__dirname, '../../Knowledge/ICD-10 Files/icd10_reference.json');
 const ICD_REFERENCE_PATH_FALLBACK = path.resolve(__dirname, '../../Knowledge/icd10_reference.json');
@@ -342,21 +346,60 @@ function getCandidateIcd10Codes(note, options = {}) {
 
 /**
  * Retrieve CPT + ICD-10 candidates using perceptual-state-based query when available.
- * When perceptualState is present, builds query from visual/textual findings instead of raw note.
+ * When RAG_API_URL is set, calls Colab RAG API for retrieval; otherwise uses local search.
  * @param {string} clinicalNote - Raw clinical note (fallback when no perceptual state)
  * @param {Object} options - { perceptualState, limitCpt, limitIcd10, clinicId, callId }
- * @returns {{ cpt, icd10, searchIntent? }}
+ * @returns {Promise<{ cpt, icd10, searchIntent? }>}
  */
-function getCandidatesForCoding(clinicalNote, options = {}) {
+async function getCandidatesForCoding(clinicalNote, options = {}) {
   const limitCpt = options.limitCpt ?? 10;
   const limitIcd10 = options.limitIcd10 ?? 12;
   const perceptualState = options.perceptualState;
 
   const searchIntent = perceptualState ? buildSearchIntent(perceptualState, clinicalNote) : null;
   const query = searchIntent ? searchIntent.query : (clinicalNote || '').toString().trim();
+  const rawText = (clinicalNote || perceptualState?.expanded_text || '').toString();
+  const rawConstraints = extractNegativeConstraints(rawText);
+  const perceptualExclusions = searchIntent?.filters?.negative_constraints?.exclusion_keywords || [];
+  const negativeConstraints = [...new Set([...rawConstraints, ...perceptualExclusions])];
 
-  const cpt = getCandidateCptCodes(query, { limit: limitCpt });
-  const icd10 = getCandidateIcd10Codes(query, { limit: limitIcd10 });
+  let cpt;
+  let icd10;
+
+  // Try Colab RAG when RAG_API_URL is configured
+  if (process.env.RAG_API_URL && process.env.RAG_API_URL.trim()) {
+    const colabResult = await retrieveFromColabRAG({
+      query: query || rawText.slice(0, 2000),
+      specialty: searchIntent?.specialty || 'general',
+      region: searchIntent?.region || 'US',
+      exclusion_terms: negativeConstraints,
+      top_k: Math.max(limitIcd10, limitCpt)
+    });
+    if (colabResult && (colabResult.icd10?.length > 0 || colabResult.cpt?.length > 0)) {
+      icd10 = (colabResult.icd10 || []).slice(0, limitIcd10);
+      cpt = (colabResult.cpt || []).slice(0, limitCpt);
+      console.log(`📚 Colab RAG: ${icd10.length} ICD-10, ${cpt.length} CPT candidates`);
+    }
+  }
+
+  // Fallback to local search when RAG unavailable or returned no results
+  if (!cpt || !icd10) {
+    cpt = getCandidateCptCodes(query, { limit: limitCpt });
+    icd10 = getCandidateIcd10Codes(query, { limit: limitIcd10 });
+  }
+
+  if (negativeConstraints.length > 0) {
+    cpt = filterCodesByNegativeConstraints(cpt, negativeConstraints);
+    icd10 = filterCodesByNegativeConstraints(icd10, negativeConstraints);
+  }
+
+  const guidelineResult = filterIcd10ByGuidelines(icd10, []);
+  icd10 = guidelineResult.filtered;
+
+  if (perceptualState && (icd10.length > 0 || cpt.length > 0)) {
+    icd10 = rerankByPerceptualRelevance(icd10, perceptualState, clinicalNote);
+    cpt = rerankByPerceptualRelevance(cpt, perceptualState, clinicalNote);
+  }
 
   const result = { cpt, icd10 };
   if (searchIntent) result.searchIntent = searchIntent;
@@ -593,17 +636,17 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
 
   const sortByMatch = (a, b) => (b._matchCount || 0) - (a._matchCount || 0);
 
-  const icd10 = Array.from(icd10Results.values())
+  let icd10 = Array.from(icd10Results.values())
     .sort(sortByMatch)
     .slice(0, maxIcd10)
     .map(({ _matchCount, ...r }) => ({ ...r, confidence: Math.min(1, 0.5 + (_matchCount || 0) * 0.1) }));
 
-  const cpt = Array.from(cptResults.values())
+  let cpt = Array.from(cptResults.values())
     .sort(sortByMatch)
     .slice(0, maxCpt)
     .map(({ _matchCount, ...r }) => ({ ...r, confidence: Math.min(1, 0.5 + (_matchCount || 0) * 0.1) }));
 
-  const hcpcs = Array.from(hcpcsResults.values())
+  let hcpcs = Array.from(hcpcsResults.values())
     .sort(sortByMatch)
     .slice(0, maxHcpcs)
     .map(({ _matchCount, ...r }) => ({ ...r, confidence: Math.min(1, 0.5 + (_matchCount || 0) * 0.1) }));
@@ -611,10 +654,13 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
   if (useSemantic) {
     try {
       const semanticService = require('./semantic-search-service');
+      const region = searchIntent?.region || 'US';
+      const codeTypes = region === 'US' ? ['icd10', 'cpt', 'hcpcs'] : ['icd10'];
       const hybrid = await semanticService.hybridSearch(note, {
         limit: Math.max(maxIcd10, maxCpt, maxHcpcs),
-        codeTypes: ['icd10', 'cpt', 'hcpcs'],
-        specialty: specialty || undefined
+        codeTypes,
+        specialty: specialty || undefined,
+        region
       });
       hybrid.forEach(r => {
         if (r.code_type === 'icd10' && icd10.length < maxIcd10 && !icd10.some(c => c.code === r.code)) {
@@ -630,25 +676,60 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
     }
   }
 
+  const rawText = rawNote || (perceptualState?.expanded_text || '');
+  const rawConstraints = extractNegativeConstraints(rawText);
+  const perceptualExclusions = searchIntent?.filters?.negative_constraints?.exclusion_keywords || [];
+  const negativeConstraints = [...new Set([...rawConstraints, ...perceptualExclusions])];
+  if (negativeConstraints.length > 0) {
+    icd10 = filterCodesByNegativeConstraints(icd10, negativeConstraints);
+    cpt = filterCodesByNegativeConstraints(cpt, negativeConstraints);
+    hcpcs = filterCodesByNegativeConstraints(hcpcs, negativeConstraints);
+  }
+
+  const guidelineResult = filterIcd10ByGuidelines(icd10, []);
+  icd10 = guidelineResult.filtered;
+
+  if (perceptualState && (icd10.length > 0 || cpt.length > 0)) {
+    icd10 = rerankByPerceptualRelevance(icd10, perceptualState, rawNote);
+    cpt = rerankByPerceptualRelevance(cpt, perceptualState, rawNote);
+  }
+
   return { icd10, cpt, hcpcs };
 }
 
 /**
  * Validate that all codes exist in knowledge base (Phase 6.1).
  * Prevents hallucinated codes from being suggested.
+ * When trustExternalSource (RAG) is enabled, accepts well-formatted codes even if not in local DB.
  * @param {Object} codes - { icd10: string[], cpt: string[], hcpcs?: string[] }
+ * @param {Object} options - { trustExternalSource: boolean } - when true, accept format-valid codes (from RAG)
  * @returns {{ valid: boolean, invalid: { icd10: string[], cpt: string[], hcpcs: string[] } }}
  */
-function validateCodesExist(codes = {}) {
+function validateCodesExist(codes = {}, options = {}) {
   const invalid = { icd10: [], cpt: [], hcpcs: [] };
+  const trustExternal = options.trustExternalSource === true;
+
+  const isIcd10Format = (s) => /^[A-Z]\d{2}(\.[A-Z0-9]{1,4})?$/.test(String(s).trim().toUpperCase());
+  const isCptFormat = (s) => /^\d{5}$/.test(String(s).trim());
+  const isHcpcsFormat = (s) => /^[A-Z]\d{4}[A-Z0-9]?$/.test(String(s).trim().toUpperCase());
+
   (codes.icd10 || []).forEach(c => {
-    if (c && !db.codeExists?.(c, 'icd10')) invalid.icd10.push(String(c));
+    if (!c) return;
+    const str = String(c).trim();
+    if (trustExternal && isIcd10Format(str)) return;
+    if (!db.codeExists?.(c, 'icd10')) invalid.icd10.push(str);
   });
   (codes.cpt || []).forEach(c => {
-    if (c && !db.codeExists?.(c, 'cpt')) invalid.cpt.push(String(c));
+    if (!c) return;
+    const str = String(c).trim();
+    if (trustExternal && isCptFormat(str)) return;
+    if (!db.codeExists?.(c, 'cpt')) invalid.cpt.push(str);
   });
   (codes.hcpcs || []).forEach(c => {
-    if (c && !db.codeExists?.(c, 'hcpcs')) invalid.hcpcs.push(String(c));
+    if (!c) return;
+    const str = String(c).trim();
+    if (trustExternal && isHcpcsFormat(str)) return;
+    if (!db.codeExists?.(c, 'hcpcs')) invalid.hcpcs.push(str);
   });
   const hasInvalid = invalid.icd10.length > 0 || invalid.cpt.length > 0 || invalid.hcpcs.length > 0;
   return { valid: !hasInvalid, invalid };

@@ -81,21 +81,43 @@
     subdomain = parts[0];
   }
 
-  // Default config (fallback)
+  // Tenant-aware navigation (single source of truth)
+  // Medical/clinic: Claims = create + view. Revenue = money collected.
+  const MEDICAL_NAV_ITEMS = [
+    { id: 'dashboard', label: 'Home', icon: '📊', href: 'business-dashboard.html' },
+    { id: 'calendar', label: 'Calendar', icon: '📅', href: 'calendar.html' },
+    { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
+    { id: 'claims', label: 'Claims', icon: '📋', href: 'billing.html?section=claims' },
+    { id: 'billing', label: 'Revenue', icon: '💳', href: 'billing.html?section=overview' },
+    { id: 'video', label: 'Video', icon: '📹', href: 'video-call.html' }
+  ];
+
+  const ECOMMERCE_NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
+    { id: 'products', label: 'Products', icon: '📦', href: 'products.html' },
+    { id: 'orders', label: 'Orders', icon: '🛒', href: 'orders.html' },
+    { id: 'patients', label: 'Customers', icon: '👥', href: 'patients.html' },
+    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' },
+    { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' }
+  ];
+
+  const NAV_BY_TENANT = {
+    clinic: MEDICAL_NAV_ITEMS,
+    shop: ECOMMERCE_NAV_ITEMS
+  };
+
+  // Default config (fallback) - clinic for medical coding
   const defaultConfig = {
     hostname,
     subdomain,
     tenant_type: 'clinic',
-    navItems: [
-    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
-    { id: 'products', label: 'Products', icon: '📦', href: 'products.html' },
-    { id: 'orders', label: 'Orders', icon: '🛒', href: 'orders.html' },
-    { id: 'patients', label: 'Clients', icon: '👥', href: 'patients.html' },
-    { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' },
-    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
-    ],
+    navItems: NAV_BY_TENANT.clinic,
     sidebarSubtitle: 'Medical Coding Assistant'
   };
+
+  window.MEDICAL_NAV_ITEMS = MEDICAL_NAV_ITEMS;
+  window.ECOMMERCE_NAV_ITEMS = ECOMMERCE_NAV_ITEMS;
+  window.NAV_BY_TENANT = NAV_BY_TENANT;
 
   // Try to fetch tenant config from API
   // Use async IIFE to fetch config without blocking page load
@@ -108,12 +130,13 @@
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-  window.TENANT_CONFIG = {
+          const tenantType = data.tenant_type || 'clinic';
+          window.TENANT_CONFIG = {
             hostname: data.hostname,
             subdomain: data.subdomain,
-            tenant_type: data.tenant_type,
-            navItems: data.navItems,
-            sidebarSubtitle: data.sidebarSubtitle,
+            tenant_type: tenantType,
+            navItems: data.navItems || (window.NAV_BY_TENANT && window.NAV_BY_TENANT[tenantType]) || MEDICAL_NAV_ITEMS,
+            sidebarSubtitle: data.sidebarSubtitle || 'Medical Coding Assistant',
             merchant_id: data.merchant_id,
             clinic_id: data.clinic_id
           };
@@ -161,7 +184,7 @@
       // Use native URL constructor to resolve relative path correctly
       // This handles all edge cases: mobile, desktop, subdomains, redirects, etc.
       const resolvedUrl = new URL(relativePath, window.location.href);
-      return resolvedUrl.pathname;
+      return resolvedUrl.pathname + (resolvedUrl.search || '');
     } catch (error) {
       // Fallback: if URL constructor fails, use manual resolution
       console.warn('Path resolution fallback used:', error);

@@ -94,10 +94,20 @@ function decryptApiKey(encryptedKey) {
   return decrypted;
 }
 
+/**
+ * Rotate merchant API key (Gap Analysis). Delegates to database.rotateMerchantApiKey.
+ * @returns {{ apiKey: string, keyId: string }}
+ */
+function rotateMerchantApiKey(merchantId, revokedBy = 'system') {
+  const db = require('../database');
+  return db.rotateMerchantApiKey(merchantId, revokedBy);
+}
+
 module.exports = {
   generateApiKey,
   hashApiKey,
   encryptApiKey,
   decryptApiKey,
+  rotateMerchantApiKey,
 };
 

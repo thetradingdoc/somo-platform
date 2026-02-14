@@ -1,0 +1,26 @@
+{
+  "description": "CPT modifier rules for denial prevention (Tiba Spec 2.2, 2.5). E/M+procedure requires -25; distinct procedures require -59; multiple surgery requires -51.",
+  "em_codes": ["99202", "99203", "99204", "99205", "99211", "99212", "99213", "99214", "99215"],
+  "procedure_codes_pattern": "^(1[0-9]{4}|2[0-9]{4}|6[0-9]{4}|9[0-4][0-9]{2}|95[0-9]{2}|96[0-9]{2}|97[0-9]{2})$",
+  "combinations": [
+    {
+      "rule_id": "em_plus_procedure",
+      "condition": "em_and_procedure_same_visit",
+      "required_modifiers": { "em_codes": ["-25"], "procedure_codes": [] },
+      "reason": "E/M and procedure same visit require -25 on E/M"
+    },
+    {
+      "rule_id": "distinct_procedures",
+      "condition": "multiple_procedures",
+      "required_modifiers": { "secondary_procedures": ["-59"] },
+      "reason": "Distinct procedural services require -59 on secondary"
+    },
+    {
+      "rule_id": "multiple_surgery",
+      "condition": "multiple_surgery",
+      "required_modifiers": { "secondary_procedures": ["-51"] },
+      "reason": "Multiple procedures require -51 on secondary"
+    }
+  ],
+  "phi_modifier_cap": 0.6
+}

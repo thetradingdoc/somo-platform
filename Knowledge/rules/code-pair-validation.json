@@ -1,0 +1,14 @@
+{
+  "version": "2026-Q1",
+  "effective_date": "2026-01-01",
+  "description": "Incompatible ICD-10 + CPT code pairs. Patterns match codes with or without dots (e.g. Z00.129 or Z00129).",
+  "incompatible_pairs": [
+    {"rule_id":"psychiatric_plus_surgical","icd10_pattern":"^F[0-4]","cpt_pattern":"^(2[0-4][0-9]{3}|2[5-9][0-9]{2})","reason":"Psychiatric/mental health diagnosis cannot justify surgical procedures"},
+    {"rule_id":"routine_exam_plus_ed","icd10_pattern":"^Z00[\\.]?(00|01|129)$","cpt_pattern":"^(99281|99282|99283|99284|99285)","reason":"Routine/preventive exam cannot be billed with emergency department visit"},
+    {"rule_id":"well_child_plus_ed","icd10_pattern":"^Z00[\\.]?129","cpt_pattern":"^(99281|99282|99283|99284|99285)","reason":"Routine child health exam cannot be billed with ED visit"}
+  ],
+  "icd10_category_blacklists": {
+    "surgical_cpt": ["^F","^Z00","^Z01"],
+    "ed_cpt": ["^Z00","^Z01\\.1[0-2]"]
+  }
+}

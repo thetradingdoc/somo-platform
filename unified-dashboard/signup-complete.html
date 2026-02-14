@@ -215,9 +215,22 @@
                 <ul>
                     <li>Check your email inbox (and spam folder if needed)</li>
                     <li>You'll find your login credentials including your password</li>
-                    <li>Use your unique subdomain to access your dashboard</li>
-                    <li>Log in when you're ready to get started</li>
+                    <li>Log in at your dashboard when you're ready</li>
                 </ul>
+                <p style="margin-top: 16px;"><strong>Your login URL:</strong></p>
+                <p style="margin-top: 8px; font-family: monospace; word-break: break-all; background: white; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <a href="/login" id="login-url" style="color: #1e40af;">/login</a>
+                </p>
+                <script>
+                    (function() {
+                        var a = document.getElementById('login-url');
+                        if (a) {
+                            var url = window.location.origin + '/login';
+                            a.href = url;
+                            a.textContent = url;
+                        }
+                    })();
+                </script>
             </div>
 
             <div class="actions">

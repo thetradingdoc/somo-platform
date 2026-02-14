@@ -9,6 +9,9 @@
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
+const { getOrCreate, FHIR } = require('../utils/circuit-breaker');
+
+const fhirBreaker = getOrCreate(FHIR, { failureThreshold: 3, windowMs: 30000, resetTimeMs: 30000 });
 
 class UHCFHIRService {
   // UHC FHIR API Configuration
@@ -52,9 +55,10 @@ class UHCFHIRService {
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('OAuth URL:', this.OAUTH_URL);
 
-      // Request token using client credentials flow
-      const tokenResponse = await axios.post(
-        `${this.OAUTH_URL}/oauth/token`,
+      // Request token using client credentials flow (Section 2.1: circuit breaker)
+      const tokenResponse = await fhirBreaker.execute(
+        () => axios.post(
+          `${this.OAUTH_URL}/oauth/token`,
         new URLSearchParams({
           grant_type: 'client_credentials',
           client_id: this.CLIENT_ID,
@@ -62,11 +66,11 @@ class UHCFHIRService {
           scope: 'patient/Coverage.read patient/Patient.read patient/Condition.read patient/MedicationStatement.read patient/AllergyIntolerance.read patient/Organization.read patient/Practitioner.read patient/Claim.read patient/ExplanationOfBenefit.read'
         }),
         {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           timeout: 30000
         }
+      ),
+        () => { throw new Error('UHC FHIR unavailable (circuit open)'); }
       );
 
       if (tokenResponse.data && tokenResponse.data.access_token) {
@@ -670,14 +674,15 @@ class UHCFHIRService {
       const baseURL = useSandbox ? this.FHIR_SANDBOX : this.FHIR_BASE;
       console.log('Testing:', baseURL);
 
-      // Try public metadata endpoint (no auth required)
+      // Try public metadata endpoint (no auth required) - Section 2.1: circuit breaker
       try {
-        const response = await axios.get(`${baseURL}/metadata`, {
-          headers: {
-            'Accept': 'application/fhir+json'
-          },
-          timeout: 10000
-        });
+        const response = await fhirBreaker.execute(
+          () => axios.get(`${baseURL}/metadata`, {
+            headers: { 'Accept': 'application/fhir+json' },
+            timeout: 10000
+          }),
+          () => { throw new Error('UHC FHIR unavailable (circuit open)'); }
+        );
 
         console.log('✅ Connection successful!');
         console.log('   Status:', response.status);

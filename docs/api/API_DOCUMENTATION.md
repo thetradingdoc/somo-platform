@@ -2,7 +2,7 @@
 
 ## OpenAPI Specification
 
-**Full API specification**: See `openapi.yaml` in this directory for complete OpenAPI 3.0 specification.
+**Full API specification**: See `middleware-platform/openapi.yaml` for complete OpenAPI 3.0 specification.
 
 You can view the interactive API documentation using:
 - [Swagger UI](https://editor.swagger.io/) - Upload `openapi.yaml`
@@ -11,7 +11,7 @@ You can view the interactive API documentation using:
 
 ## Base URL
 
-**Production**: `https://web-production-a783d.up.railway.app`  
+**Production**: Configure per deployment (Azure App Service or Railway)  
 **Local**: `http://localhost:4000`
 
 ---

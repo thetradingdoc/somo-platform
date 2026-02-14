@@ -1,9 +1,8 @@
 # Documentation Summary
 
-**Last Updated**: December 2024  
-**Total Documents**: 85 files
+**Last Updated**: January 2026
 
-> **Note**: This is a detailed summary. For quick navigation, see [README.md](../README.md) or [SUMMARY.md](../SUMMARY.md)
+> **Note**: This is a detailed summary. For quick navigation, see [docs README](../README.md).
 
 ---
 
@@ -17,56 +16,51 @@ This document provides a high-level summary of all documentation in the DocLittl
 docs/
 ├── README.md                          # Main navigation index
 │
-├── api/                               # API Documentation (3 files)
+├── api/                               # API Documentation
 │   ├── API_DOCUMENTATION.md          # Complete API reference
 │   └── INVOICE_API.md                # Invoice endpoints
 │
-├── architecture/                      # System Architecture (15 files)
-│   ├── VISION.md                     # Platform vision
-│   ├── HEALTHCARE_ASSESSMENT.md      # Healthcare analysis
+├── architecture/                      # System Architecture
+│   ├── vision/VISION.md              # Platform vision
+│   ├── healthcare/                   # Healthcare assessment
+│   ├── financial/                    # Insurance, claims, Tiba
+│   ├── ai/                           # LangChain/LangGraph
+│   ├── media/                        # Media layer
+│   ├── middleware/                   # Brain improvements
+│   ├── maintenance/                  # Issues & fixes
 │   ├── database/                     # Database design
 │   ├── multi-tenant/                 # Multi-tenant architecture
 │   ├── payments/                     # Payment architecture
 │   └── voice-agent/                  # Voice agent architecture
 │
-├── development/                       # Development Guides (6 files)
-│   ├── invoice-billing/              # Invoice system implementation
-│   ├── code-reviews/                 # Code review findings
-│   ├── guides/                       # Development guides
-│   ├── IMPROVEMENT_PLAN.md           # Improvement roadmap
-│   └── DOCUMENTATION_SUMMARY.md      # This file
-│
-├── deployment/                        # Deployment Guides (20+ files)
-│   ├── DEPLOYMENT_GUIDE.md           # Main deployment guide
-│   ├── database/                     # Database deployment
-│   ├── dns/                          # DNS configuration
-│   ├── guides/                       # Deployment guides
+├── deployment/                        # Deployment Guides
+│   ├── guides/                       # Main deployment guide, backup
+│   ├── azure/                        # Azure-specific setup
+│   ├── database/                     # Postgres migration
+│   ├── dns/                          # DNS, SSL, subdomains
 │   └── security/                     # Security setup
 │
-├── setup/                            # Setup & Configuration (8 files)
-│   ├── SETUP.md                      # Main setup guide
-│   ├── STRIPE_ISSUING_COMPLETE_GUIDE.md
-│   └── google/                       # Google OAuth setup
+├── setup/                            # Setup & Configuration
+│   ├── getting-started/SETUP.md      # Main setup guide
+│   ├── stripe/                       # Stripe Issuing
+│   └── google/                       # Google OAuth
 │
-├── integrations/                      # Third-Party Integrations (8 files)
-│   ├── stedi/                        # Stedi integration
-│   ├── stripe/                       # Stripe integration
-│   └── uhc/                          # UHC integration
+├── integrations/                     # Third-Party Integrations
+│   ├── stedi/                        # Stedi API
+│   ├── stripe/                       # Stripe Issuing status
+│   └── uhc/                          # UHC FHIR
 │
-├── user-guides/                       # User Documentation (1 file)
-│   └── INVOICE_WORKFLOW.md           # Invoice workflow
+├── middleware-platform/              # Platform Config
+│   ├── LANGGRAPH_LANGSMITH_DEVELOPER_GUIDE.md
+│   └── RETELL_CONFIG_QUICK_REFERENCE.md
 │
-├── voice-agent/                       # Voice Agent (4 files)
+├── voice-agent/                      # Voice Agent
 │   └── prompts/                      # Agent prompts
 │
-├── onboarding/                        # Onboarding (2 files)
-│   └── CLINIC_ONBOARDING_CHECKLIST.md
-│
-├── azure/                            # Azure-Specific (2 files)
-│   └── AZURE_AUTOMATION.md
-│
-└── middleware-platform/              # Platform Config (4 files)
-    └── RETELL_CONFIG_QUICK_REFERENCE.md
+├── user-guides/                      # User Documentation
+├── onboarding/                       # Onboarding
+├── runbooks/                         # Incident runbooks
+└── archive/                          # Archived docs
 ```
 
 ---
@@ -76,7 +70,7 @@ docs/
 ### Essential Reading
 
 1. **[README.md](../README.md)** - Start here for navigation
-2. **[Deployment Guide](../deployment/DEPLOYMENT_GUIDE.md)** - Production deployment
+2. **[Deployment Guide](../deployment/guides/DEPLOYMENT_GUIDE.md)** - Production deployment
 3. **[API Documentation](../api/API_DOCUMENTATION.md)** - API reference
 4. **[Invoice Workflow](../user-guides/INVOICE_WORKFLOW.md)** - Invoice system usage
 

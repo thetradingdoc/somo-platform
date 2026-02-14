@@ -1,0 +1,12 @@
+{
+  "version": "2026-Q1",
+  "description": "Minimum encounter duration (minutes) for psychotherapy CPT codes per CMS time-based billing",
+  "phi_time_cap": 0.6,
+  "min_duration_minutes": {
+    "90832": 16,
+    "90834": 38,
+    "90837": 53,
+    "90846": 26,
+    "90847": 26
+  }
+}

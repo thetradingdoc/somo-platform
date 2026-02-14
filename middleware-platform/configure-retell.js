@@ -43,30 +43,37 @@ const WEBSOCKET_URL = IS_PRODUCTION
 // Load healthcare prompt and functions
 function loadHealthcarePrompt() {
     try {
-        // Load Kelly's prompt from docs/voice-agent/ folder
         const docsPath = path.join(__dirname, '..', 'docs', 'voice-agent');
-        const kellyPromptPath = path.join(docsPath, 'kelly-voice-agent-prompt.md');
+        const kellyPaths = [
+            path.join(docsPath, 'prompts', 'kelly-voice-agent-prompt.md'),
+            path.join(docsPath, 'kelly-voice-agent-prompt.md'),
+            path.join(__dirname, 'retell-functions', 'kelly-voice-agent-prompt.md')
+        ];
 
-        // Also check old location for backward compatibility
-        const oldKellyPath = path.join(__dirname, 'retell-functions', 'kelly-voice-agent-prompt.md');
+        let prompt = null;
+        for (const p of kellyPaths) {
+            if (fs.existsSync(p)) {
+                prompt = fs.readFileSync(p, 'utf8');
+                console.log('✅ Loaded Kelly prompt from', path.relative(path.join(__dirname, '..'), p));
+                break;
+            }
+        }
 
-        if (fs.existsSync(kellyPromptPath)) {
-            const prompt = fs.readFileSync(kellyPromptPath, 'utf8');
-            console.log('✅ Loaded Kelly voice agent prompt from docs/voice-agent/');
-            return prompt;
-        } else if (fs.existsSync(oldKellyPath)) {
-            const prompt = fs.readFileSync(oldKellyPath, 'utf8');
-            console.log('✅ Loaded Kelly voice agent prompt from retell-functions/');
-            return prompt;
-        } else {
-            console.error('⚠️  Could not find Kelly voice agent prompt file');
-            console.error('   Checked: docs/voice-agent/kelly-voice-agent-prompt.md');
-            console.error('   Checked: middleware-platform/retell-functions/kelly-voice-agent-prompt.md');
+        if (!prompt) {
+            console.error('⚠️  Could not find Kelly voice agent prompt');
             return null;
         }
+
+        const medicalPromptPath = path.join(docsPath, 'medical-voice-agent-prompt.md');
+        if (fs.existsSync(medicalPromptPath)) {
+            const medical = fs.readFileSync(medicalPromptPath, 'utf8');
+            prompt = prompt + '\n\n---\n\n' + medical;
+            console.log('✅ Appended medical coding workflow prompt');
+        }
+
+        return prompt;
     } catch (error) {
         console.error('⚠️  Could not load healthcare prompt:', error.message);
-        console.error('   Using default prompt instead');
         return null;
     }
 }
@@ -255,11 +262,11 @@ async function testWebhook() {
     console.log('\n🧪 TESTING WEBHOOK ENDPOINT...\n');
 
     try {
-        const healthUrl = `${API_BASE_URL}/health`;
+        const healthUrl = `${API_BASE_URL}/health/live`;
         console.log('   Testing:', healthUrl);
         const response = await axios.get(healthUrl, {
             timeout: 10000,
-            validateStatus: (status) => status < 500 // Accept 2xx, 3xx, 4xx as "server is reachable"
+            validateStatus: (status) => status === 200
         });
 
         console.log('✅ Server is reachable!');

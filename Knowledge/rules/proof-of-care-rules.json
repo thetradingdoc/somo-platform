@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "description": "Rules defining what constitutes Proof of Care for settlement release",
+  "rules": [
+    {
+      "id": "appointment_completed",
+      "description": "Appointment was completed (visit occurred)",
+      "type": "appointment_status",
+      "requiredStatus": ["completed", "completed_no_show"],
+      "weight": 1.0
+    },
+    {
+      "id": "encounter_finished",
+      "description": "FHIR encounter has finished status (clinical documentation exists)",
+      "type": "encounter_status",
+      "requiredStatus": ["finished", "completed"],
+      "weight": 1.0
+    },
+    {
+      "id": "ehr_encounter_synced",
+      "description": "EHR encounter synced with conditions/procedures",
+      "type": "ehr_encounter_exists",
+      "weight": 1.0
+    },
+    {
+      "id": "pdf_coding_uploaded",
+      "description": "Clinical note uploaded and coded via PDF (clinician documented)",
+      "type": "created_from_pdf",
+      "weight": 1.0
+    },
+    {
+      "id": "claim_has_coding",
+      "description": "Claim has ICD-10 and CPT coding (documented care)",
+      "type": "claim_has_coding",
+      "minCodes": 1,
+      "weight": 0.8
+    }
+  ],
+  "minWeightToVerify": 0.8,
+  "requireAnyRule": true
+}

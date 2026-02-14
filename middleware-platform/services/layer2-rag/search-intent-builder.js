@@ -5,17 +5,22 @@
  * Replaces raw clinicalNote search with structured findings-based query.
  */
 
+const { getRegionalConfig, mapSpecialtyToRegion } = require('../../config/regional-policies');
+
 /**
  * Build search query from perceptual state
- * @param {object} perceptualState - Layer 1 output { visual_findings, textual_findings, cross_modal_links, specialty_tag }
+ * @param {object} perceptualState - Layer 1 output { visual_findings, textual_findings, cross_modal_links, specialty_tag, region_tag, negative_findings }
  * @param {string} fallbackText - Raw clinical text when no perceptual state
- * @returns {{ query: string, specialty: string, filters: object }}
+ * @returns {{ query: string, specialty: string, region: string, regional_config: object, filters: object }}
  */
 function buildSearchIntent(perceptualState, fallbackText = '') {
   if (!perceptualState || (typeof perceptualState !== 'object')) {
     return {
       query: (fallbackText || '').toString().trim().slice(0, 500),
       specialty: 'general',
+      regional_specialty: 'general',
+      region: 'US',
+      regional_config: require('../../config/regional-policies').getRegionalConfig('US'),
       filters: {},
       source: 'fallback'
     };
@@ -26,8 +31,15 @@ function buildSearchIntent(perceptualState, fallbackText = '') {
     textual_findings = [],
     cross_modal_links = [],
     specialty_tag = 'general',
+    region_tag = 'US',
+    negative_findings = [],
     expanded_text = ''
   } = perceptualState;
+
+  const region = (region_tag || 'US').toString().toUpperCase();
+  const regional_config = getRegionalConfig(region);
+  const regional_specialty = mapSpecialtyToRegion(specialty_tag, region);
+  const baseSpecialty = specialty_tag || 'general';
 
   const parts = [];
 
@@ -60,14 +72,24 @@ function buildSearchIntent(perceptualState, fallbackText = '') {
   const textLat = textual_findings.find(f => f.laterality)?.laterality;
   const laterality = visualLat || textLat || null;
 
+  const filters = {
+    laterality,
+    has_visual: visual_findings.length > 0,
+    has_cross_modal: cross_modal_links.length > 0,
+    use_modifiers: regional_config.modifiers_enabled,
+    use_tariffs: regional_config.tariff_based,
+    negative_constraints: {
+      exclusion_keywords: Array.isArray(negative_findings) ? negative_findings : []
+    }
+  };
+
   return {
     query: hasQuery ? query : (expanded_text || fallbackText || '').toString().trim().slice(0, 500),
-    specialty: specialty_tag || 'general',
-    filters: {
-      laterality,
-      has_visual: visual_findings.length > 0,
-      has_cross_modal: cross_modal_links.length > 0
-    },
+    specialty: baseSpecialty,
+    regional_specialty,
+    region,
+    regional_config,
+    filters,
     source: hasQuery ? 'perceptual' : 'fallback'
   };
 }

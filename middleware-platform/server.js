@@ -11,6 +11,18 @@ try {
 const { validateAndExitIfInvalid } = require('./utils/env-validator');
 validateAndExitIfInvalid();
 
+// LangSmith: route traces to Doctor Little project
+try {
+  require('./utils/langsmith-config');
+} catch (e) { /* ignore */ }
+
+// Application Insights (optional - before other requires)
+try {
+  require('./middleware/application-insights').init();
+} catch (e) {
+  console.warn('⚠️  Application Insights init skipped:', e.message);
+}
+
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -69,6 +81,8 @@ const FHIRService = require('./services/fhir-service');
 const FHIRAdapter = require('./adapters/fhir-adapter');
 const BookingService = require('./services/booking-service');
 const ReminderScheduler = require('./services/reminder-scheduler');
+const PostgresSyncWorker = require('./services/postgres-sync-worker');
+const ToolCallDlqWorker = require('./services/tool-call-dlq-worker');
 const InsuranceService = require('./services/insurance-service');
 const PayerCacheService = require('./services/payer-cache-service');
 const Metrics = require('./services/metrics');
@@ -165,6 +179,7 @@ const RetellWebSocketHandler = require('./webhooks/retell-websocket');
 // Import middleware
 const { securityHeaders, sanitizeInput, requestLogger } = require('./middleware/security');
 const { apiLimiter, authLimiter, paymentLimiter, voiceLimiter } = require('./middleware/rate-limiter');
+const { check: clinicRateLimitCheck } = require('./utils/clinic-rate-limiter');
 const { usageLogger, logVoiceCall, logFunctionCall, logError } = require('./middleware/usage-logger');
 let errorHandler, asyncHandler, withTimeout, withRetry, logErrorHandler;
 let healthCheckHandler, readinessCheck, livenessCheck;
@@ -247,6 +262,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 // Handle preflight for all routes
 app.options('*', cors(corsOptions));
+
+const { correlationIdMiddleware } = require('./middleware/request-context');
+app.use(correlationIdMiddleware);
 
 // Cookie parser
 app.use(cookieParser());
@@ -538,10 +556,14 @@ app.get('/login', (req, res) => {
     return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
 
-  // Check for localhost
+  // Check for localhost - serve business dashboard login (password-based) for SaaS customers
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    console.log('[LOGIN ROUTE] ✅ Localhost detected - serving API signup page');
-    return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
+    console.log('[LOGIN ROUTE] ✅ Localhost detected - serving business dashboard login');
+    const loginPath = getUnifiedDashboardPath('login.html');
+    const fs = require('fs');
+    if (fs.existsSync(loginPath)) {
+      return res.sendFile(loginPath);
+    }
   }
 
   // CRITICAL: Tenant subdomain detection - MUST serve password login page
@@ -811,6 +833,10 @@ app.use('/api/admin/tenants', adminTenantsRoutes);
 const tenantConfigRoutes = require('./routes/tenant-config');
 app.use('/api/tenant', tenantConfigRoutes);
 
+// LiveKit video conferencing (token endpoint)
+const livekitRoutes = require('./routes/livekit');
+app.use('/api/livekit', livekitRoutes);
+
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
@@ -868,6 +894,10 @@ app.use('/api/automation', automationRoutes);
 // Outbound Calls
 const outboundCallRoutes = require('./routes/outbound-call');
 app.use('/api/voice/outbound', outboundCallRoutes);
+
+// Voice Web Call (in-browser voice via Retell Web SDK)
+const voiceWebCallRoutes = require('./routes/voice-web-call');
+app.use('/api/voice', voiceWebCallRoutes);
 // Register /terms route (MANDATORY - requires session and email verification)
 app.get('/terms', (req, res) => {
   const sessionId = req.cookies?.customer_session;
@@ -1283,6 +1313,19 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       }
     }
 
+    // Per-clinic rate limit (Section 17)
+    const tenantKey = clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
+    const rateLimit = clinicRateLimitCheck(tenantKey);
+    if (!rateLimit.allowed) {
+      console.warn(`⚠️  Clinic rate limit exceeded for ${tenantKey} (${rateLimit.limit}/min)`);
+      const rateLimitTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">We're experiencing high call volume. Please try again in a moment.</Say>
+  <Hangup/>
+</Response>`;
+      return res.type('text/xml').send(rateLimitTwiml);
+    }
+
     // CRITICAL: Register call with Retell FIRST (before responding)
     // But use a shorter timeout and handle errors gracefully
     const metadata = {};
@@ -1430,6 +1473,30 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     }
     if (matchedCustomer?.customer_type) {
       dynamicVariables.customer_type = matchedCustomer.customer_type;
+    }
+
+    // Pre-populate patient context for cost optimization (P1 - reduce data entry during call)
+    if (!isOutboundSales && req.body.From) {
+      try {
+        const callerPhone = SMSService.formatPhoneNumber(req.body.From);
+        let patient = db.getFHIRPatientByPhone(callerPhone);
+        if (!patient) {
+          const altPhone = normalizePhoneNumber(req.body.From);
+          if (altPhone !== callerPhone) patient = db.getFHIRPatientByPhone(altPhone);
+        }
+        if (patient) {
+          const data = patient.resource_data && typeof patient.resource_data === 'object' ? patient.resource_data : {};
+          const name = data?.name?.[0];
+          const patientName = name ? [name.given?.join(' '), name.family].filter(Boolean).join(' ').trim() : (patient.name || null);
+          const hasInsurance = !!(data?.insurance?.length || patient.insurance_verified);
+          dynamicVariables.patient_id = String(patient.resource_id);
+          if (patientName) dynamicVariables.patient_name = patientName;
+          dynamicVariables.has_insurance = hasInsurance ? 'yes' : 'no';
+          console.log(`✅ Pre-populated patient context: ${patientName || patient.resource_id} (insurance: ${dynamicVariables.has_insurance})`);
+        }
+      } catch (e) {
+        console.warn('⚠️  Patient pre-population failed:', e.message);
+      }
     }
 
     const registerPayload = {
@@ -1663,6 +1730,35 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
     res.send(errorTwiml);
   }
 });
+
+// ============================================
+// TWILIO SMS INCOMING (Call deflection P2)
+// ============================================
+// Configure Twilio Phone Number SMS webhook: https://yoursite.com/sms/incoming
+app.post('/sms/incoming', express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const from = req.body.From;
+    const to = req.body.To;
+    const body = req.body.Body || '';
+    const smsBooking = require('./services/sms-booking-service');
+    const responseText = await smsBooking.processIncoming(from, to, body);
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(responseText)}</Message></Response>`;
+    res.type('text/xml').send(twiml);
+  } catch (error) {
+    console.error('❌ SMS incoming error:', error);
+    const fallback = 'Sorry, something went wrong. Please call us.';
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeXml(fallback)}</Message></Response>`;
+    res.type('text/xml').send(twiml);
+  }
+});
+function escapeXml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
 // Twilio Status Callback - receives call status updates
 app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: true }), async (req, res) => {
@@ -2840,9 +2936,24 @@ app.get('/payment/:token', async (req, res) => {
 // Process payment
 app.post('/process-payment', paymentLimiter, async (req, res) => {
   try {
-    const { payment_method_id, checkout_id, amount, payment_method = 'stripe' } = req.body;
+    const { payment_method_id, checkout_id, amount, payment_method = 'stripe', idempotency_key } = req.body;
+    const idemKey = idempotency_key || req.headers['idempotency-key'] || `process_${checkout_id}_${payment_method}`;
 
     console.log(`\n💳 Processing payment for checkout: ${checkout_id}`);
+
+    const claimOpType = 'process_payment';
+    const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
+    if (cached) {
+      return res.json({ ...cached.result, idempotent: true });
+    }
+    const reserve = db.reserveIdempotencyKey && db.reserveIdempotencyKey(idemKey, claimOpType);
+    if (reserve === 'in_progress') {
+      return res.status(409).json({ success: false, error: 'Payment in progress', idempotent: true });
+    }
+    if (reserve === 'completed') {
+      const c2 = db.getIdempotentResult(idemKey, claimOpType);
+      if (c2) return res.json({ ...c2.result, idempotent: true });
+    }
     console.log(`   Method: ${payment_method}`);
     console.log(`   Amount: $${amount}`);
 
@@ -2865,6 +2976,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         }
 
         if (!fhirPatient) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(400).json({
             success: false,
             error: 'Patient not found. Cannot process wallet payment.'
@@ -2873,6 +2985,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
 
         // Check if CircleService is available
         if (!CircleService || !CircleService.isAvailable()) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(503).json({
             success: false,
             error: 'Wallet payment is not available. Circle service is not configured. Please use a card payment instead.'
@@ -2885,6 +2998,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         });
 
         if (!walletResult.success || !walletResult.account) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(400).json({
             success: false,
             error: 'Patient wallet not found. Please use a card payment instead.'
@@ -2895,6 +3009,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         const balanceResult = await CircleService.getWalletBalance(walletResult.account.circle_wallet_id);
 
         if (!balanceResult.success) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(500).json({
             success: false,
             error: 'Could not retrieve wallet balance.'
@@ -2917,6 +3032,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         }
 
         if (walletBalance < amount) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(400).json({
             success: false,
             error: `Insufficient wallet balance. Available: $${walletBalance.toFixed(2)}, Required: $${amount.toFixed(2)}`
@@ -2928,6 +3044,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         const providerWalletId = process.env.CIRCLE_PROVIDER_WALLET_ID || process.env.CIRCLE_SYSTEM_WALLET_ID;
 
         if (!providerWalletId) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(500).json({
             success: false,
             error: 'Provider wallet not configured. Cannot process wallet payment.'
@@ -2945,6 +3062,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         });
 
         if (!transferResult.success) {
+          if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(500).json({
             success: false,
             error: transferResult.error || 'Failed to process wallet transfer.'
@@ -3005,17 +3123,20 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           }
         }
 
-        return res.json({
+        const result = {
           success: true,
           payment_method: 'wallet',
           transfer_id: transferResult.transferId || transferResult.id,
           checkout_id: checkout_id,
           appointment_confirmed: checkout.appointment_id ? true : false,
           wallet_balance_after: walletBalance - amount
-        });
+        };
+        if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
+        return res.json(result);
 
       } catch (walletError) {
         console.error('❌ Wallet payment error:', walletError);
+        if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
         return res.status(500).json({
           success: false,
           error: walletError.message || 'Wallet payment failed'
@@ -3025,6 +3146,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
 
     // Handle Stripe payment (default)
     if (!payment_method_id) {
+      if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
       return res.status(400).json({
         success: false,
         error: 'Payment method ID is required for card payments'
@@ -3033,6 +3155,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
 
     // Create Stripe payment intent
     if (!stripe) {
+      if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
       return res.status(503).json({
         success: false,
         error: 'Payment processing is not configured. Please contact support.'
@@ -3079,16 +3202,21 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
       }
     }
 
-    res.json({
+    const result = {
       success: true,
       payment_method: 'stripe',
       payment_intent_id: paymentIntent.id,
       checkout_id: checkout_id,
       appointment_confirmed: checkout.appointment_id ? true : false
-    });
+    };
+    if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
+    res.json(result);
 
   } catch (error) {
     console.error('❌ Payment processing error:', error);
+    if (typeof idemKey !== 'undefined' && db.releaseIdempotencyKey) {
+      db.releaseIdempotencyKey(idemKey, claimOpType);
+    }
     res.status(500).json({
       success: false,
       error: error.message
@@ -4939,6 +5067,26 @@ app.post('/api/admin/clients/:clinicId/api-keys/:keyId/revoke', async (req, res)
   }
 });
 
+app.post('/api/admin/clients/:clinicId/api-keys/rotate', async (req, res) => {
+  try {
+    const clinic = await db.getClinicById(req.params.clinicId);
+    if (!clinic) {
+      return res.status(404).json({ success: false, error: 'Clinic not found' });
+    }
+    const merchantId = ensureMerchantForClinic(clinic);
+    const { apiKey, keyId } = db.rotateMerchantApiKey(merchantId, req.adminSession?.id || 'admin');
+    res.json({
+      success: true,
+      api_key: apiKey,
+      key_id: keyId,
+      message: 'Store the api_key securely; it will not be shown again.'
+    });
+  } catch (error) {
+    console.error('❌ Error rotating API key:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 
 // Get all transactions
 app.get('/api/admin/transactions', async (req, res) => {
@@ -5536,16 +5684,14 @@ app.post('/voice/appointments/cancel', async (req, res) => {
 });
 
 // Get available slots (for voice agent)
+// Cached 5 min by clinic+date+type to reduce call duration (cost optimization P1)
 app.post('/voice/appointments/available-slots', async (req, res) => {
   try {
-    console.log('\n🕐 VOICE: Get Available Slots');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-
     const args = req.body.args || req.body;
     const date = args.date;  // YYYY-MM-DD
     const provider = args.provider || null;
     const appointmentType = args.appointment_type || null;
-    const timezone = args.timezone || null;
+    const timezone = args.timezone || 'America/New_York';
     const clinicId = resolveClinicIdFromRequest(req, args);
     if (!clinicId) {
       return res.status(400).json({
@@ -5554,7 +5700,17 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
       });
     }
 
+    const cache = require('./services/cache-service');
+    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone].join('|');
+    const cached = cache.get('slot_availability', cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId);
+    if (result.success) {
+      cache.set('slot_availability', result, cacheKey);
+    }
 
     res.json(result);
   } catch (error) {
@@ -6278,6 +6434,23 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
       }
     }
 
+    const idempotencyKey = args.idempotency_key || req.headers['idempotency-key'] ||
+      `claim_${args.appointment_id}_${args.member_id}_${args.service_code || 'default'}_${args.date_of_service || appointment.date}`;
+
+    const claimOpType = 'claim_submit';
+    const cached = db.getIdempotentResult && db.getIdempotentResult(idempotencyKey, claimOpType);
+    if (cached) {
+      return res.json({ ...cached.result, idempotent: true });
+    }
+    const reserve = db.reserveIdempotencyKey && db.reserveIdempotencyKey(idempotencyKey, claimOpType);
+    if (reserve === 'in_progress') {
+      return res.status(409).json({ success: false, error: 'Claim submission in progress', idempotent: true });
+    }
+    if (reserve === 'completed') {
+      const c2 = db.getIdempotentResult(idempotencyKey, claimOpType);
+      if (c2) return res.json({ ...c2.result, idempotent: true });
+    }
+
     const claimData = {
       appointmentId: args.appointment_id,
       patientId: patientId,
@@ -6292,10 +6465,17 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
       dateOfService: args.date_of_service || appointment.date,
       blockchainProof: args.blockchain_proof || null,
       providerId: args.provider_id || null,
-      npi: args.npi || null
+      npi: args.npi || null,
+      idempotency_key: idempotencyKey
     };
 
     const result = await InsuranceService.submitClaim(claimData);
+
+    if (result.success && db.completeIdempotentResult) {
+      db.completeIdempotentResult(idempotencyKey, claimOpType, result);
+    } else if (!result.success && db.releaseIdempotencyKey) {
+      db.releaseIdempotencyKey(idempotencyKey, claimOpType);
+    }
 
     // Send insurance billing email if claim was submitted successfully
     if (result.success && result.claimId) {
@@ -6416,8 +6596,9 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
       console.log(`✅ Generated ${cptCodes.length} service line items from diagnosis codes`);
     }
 
-    // Calculate totals
-    const totalAmountBilled = cptCodes.reduce((sum, item) => sum + (parseFloat(item.charge || item.amount || item.billed_amount) || 0), 0);
+    // Calculate totals (PDF breakdown uses 'price'; claims may use charge/amount/billed_amount)
+    const lineAmount = (item) => parseFloat(item.charge || item.amount || item.billed_amount || item.price) || 0;
+    const totalAmountBilled = cptCodes.reduce((sum, item) => sum + lineAmount(item), 0);
     const totalAllowedAmount = cptCodes.reduce((sum, item) => sum + (parseFloat(item.allowed_amount) || 0), 0);
 
     // Create claim ID
@@ -6454,6 +6635,14 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
 
     // Save claim to database
     db.createInsuranceClaim(claimData);
+
+    // Run pre-adjudication and persist real_time_plan_paid for Tiba reconciliation (Phase 5)
+    try {
+      const AdjudicationService = require('./services/adjudication-service');
+      AdjudicationService.preAdjudicateClaim(claimId);
+    } catch (adjErr) {
+      console.warn('⚠️  Pre-adjudication on PDF claim skipped:', adjErr.message);
+    }
 
     console.log(`✅ Claim created: ${claimId}`);
 
@@ -6573,12 +6762,23 @@ app.get('/api/claims/:id', async (req, res) => {
 
         // If no line items were created but claim has data, ensure totals reflect claim amount
         if ((!eobCalculation.lineItems || eobCalculation.lineItems.length === 0) && claim.total_amount > 0) {
-          // Create a basic EOB with claim total
           eobCalculation.totals = eobCalculation.totals || {};
           eobCalculation.totals.amountBilled = claim.total_amount;
           eobCalculation.totals.allowedAmount = claimDetails.allowed_amount || claim.total_amount * 0.85;
           eobCalculation.totals.whatYouOwe = claim.total_amount;
         }
+
+        // EOB transparency: persist audit for on-the-fly calculations
+        db.recordEOBCalculationAudit({
+          claimId,
+          calculationInputs: {
+            claimId: claim.id,
+            total_amount: claim.total_amount,
+            eligibility: eligibility ? { copay_amount: eligibility.copay_amount, deductible_remaining: eligibility.deductible_remaining } : null
+          },
+          calculationOutputs: eobCalculation,
+          triggeredBy: 'get-claim-detail'
+        });
       } catch (error) {
         console.error('Error calculating EOB:', error);
         // Fallback: create basic EOB structure
@@ -6636,6 +6836,21 @@ app.get('/api/claims/:id', async (req, res) => {
       circleTransfer = db.getCircleTransferByCircleId(claim.circle_transfer_id);
     }
 
+    // Settlement state (Tiba Phase 3.8) - explicit for API consumers
+    let settlementDecisionParsed = null;
+    if (claim.settlement_decision) {
+      try {
+        settlementDecisionParsed = typeof claim.settlement_decision === 'string' ? JSON.parse(claim.settlement_decision) : claim.settlement_decision;
+      } catch (_) {}
+    }
+    const settlement = {
+      settlement_state: claim.settlement_state || null,
+      settlement_aggregate_confidence: claim.settlement_aggregate_confidence ?? null,
+      settlement_amount_released: claim.settlement_amount_released ?? null,
+      settlement_escrow_remainder: claim.settlement_escrow_remainder ?? null,
+      settlement_decision: settlementDecisionParsed
+    };
+
     // Build complete EOB response
     res.json({
       success: true,
@@ -6651,8 +6866,10 @@ app.get('/api/claims/:id', async (req, res) => {
         eligibility: eligibility || {},
         eob: eobCalculation,
         diagnosisCodes,
-        circleTransfer
+        circleTransfer,
+        settlement
       },
+      settlement,
       // Also include EOB at root level for easy access
       eob: eobCalculation,
       diagnosisCodes: diagnosisCodes
@@ -7727,6 +7944,154 @@ app.post('/api/claims/:claimId/submit-payment', async (req, res) => {
 });
 
 /**
+ * Pre-adjudicate claim (real-time adjudication estimate)
+ * GET /api/claims/:claimId/pre-adjudicate
+ */
+app.get('/api/claims/:claimId/pre-adjudicate', async (req, res) => {
+  try {
+    const AdjudicationService = require('./services/adjudication-service');
+    const result = AdjudicationService.preAdjudicateClaim(req.params.claimId);
+    if (!result.success) {
+      return res.status(404).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Error pre-adjudicating claim:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get Proof of Care status for a claim
+ * GET /api/claims/:claimId/proof-of-care
+ */
+app.get('/api/claims/:claimId/proof-of-care', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const claim = db.getClaimById(claimId);
+    if (!claim) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const ProofOfCareService = require('./services/proof-of-care-service');
+    const poc = await ProofOfCareService.verifyProofOfCare(claim);
+
+    res.json({
+      success: true,
+      claimId,
+      proofOfCare: {
+        verified: poc.verified,
+        totalWeight: poc.totalWeight,
+        evidence: poc.evidence,
+        reason: poc.reason
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error getting Proof of Care:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get EOB calculation audit trail for a claim (full transparency)
+ * GET /api/claims/:claimId/eob-audit
+ */
+app.get('/api/claims/:claimId/eob-audit', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const claim = db.getClaimById(claimId);
+    if (!claim) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const audits = db.getEOBCalculationAuditsByClaim(claimId, 50);
+    const parsed = audits.map(a => ({
+      id: a.id,
+      claimId: a.claim_id,
+      triggeredBy: a.triggered_by,
+      created_at: a.created_at,
+      calculationInputs: typeof a.calculation_inputs === 'string' ? JSON.parse(a.calculation_inputs || '{}') : a.calculation_inputs,
+      calculationOutputs: typeof a.calculation_outputs === 'string' ? JSON.parse(a.calculation_outputs || '{}') : a.calculation_outputs
+    }));
+
+    res.json({ success: true, claimId, audits: parsed });
+  } catch (error) {
+    console.error('❌ Error getting EOB audit:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get settlement recommendation for a claim (auto-approve vs manual review)
+ * GET /api/claims/:claimId/settlement-recommendation
+ */
+app.get('/api/claims/:claimId/settlement-recommendation', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const claim = db.getClaimById(claimId);
+    if (!claim) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    let claimDetails = {};
+    if (claim.response_data) {
+      try {
+        claimDetails = typeof claim.response_data === 'string'
+          ? JSON.parse(claim.response_data)
+          : claim.response_data;
+      } catch (e) {
+        console.warn('Could not parse claim response_data:', e.message);
+      }
+    }
+
+    let eligibility = null;
+    if (claim.patient_id) {
+      const checks = db.getEligibilityChecksByPatient(claim.patient_id) || [];
+      eligibility = checks[0] || null;
+    }
+
+    const EOBCalculationService = require('./services/eob-calculation-service');
+    let eobCalculation;
+    try {
+      eobCalculation = EOBCalculationService.calculateEOBFromClaim(
+        claim,
+        eligibility || {},
+        claimDetails
+      );
+    } catch (error) {
+      eobCalculation = {};
+    }
+
+    const SettlementRulesService = require('./services/settlement-rules-service');
+    const evaluation = SettlementRulesService.evaluateSettlementRules({
+      claim,
+      claimDetails,
+      eobCalculation,
+      eligibility: eligibility || {}
+    });
+
+    res.json({
+      success: true,
+      claimId,
+      recommendation: {
+        action: evaluation.action,
+        reason: evaluation.reason,
+        matchedRuleId: evaluation.matchedRuleId
+      },
+      context: {
+        codingConfidence: claimDetails?.coding?.codingConfidence ?? claimDetails?.pricing?.codingConfidence,
+        codingBand: claimDetails?.coding?.band,
+        amount: claim.total_amount,
+        payerId: claim.payer_id
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error getting settlement recommendation:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Approve claim and process payment (Insurer approves and pays)
  * POST /api/claims/:claimId/approve-payment
  */
@@ -7783,6 +8148,26 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
       );
       deductibleUsed = eobCalculation.totals?.deductible || 0;
       planPaidAmount = eobCalculation.totals?.planPaid || 0;
+
+      // EOB transparency: persist full calculation breakdown and audit trail
+      db.recordEOBCalculationAudit({
+        claimId,
+        calculationInputs: {
+          claimId: claim.id,
+          total_amount: claim.total_amount,
+          service_code: claim.service_code,
+          diagnosis_code: claim.diagnosis_code,
+          eligibility: eligibility ? {
+            copay_amount: eligibility.copay_amount,
+            deductible_total: eligibility.deductible_total,
+            deductible_remaining: eligibility.deductible_remaining,
+            coinsurance_percent: eligibility.coinsurance_percent
+          } : null,
+          claimDetailsKeys: Object.keys(claimDetails || {})
+        },
+        calculationOutputs: eobCalculation,
+        triggeredBy: 'approve-payment'
+      });
     } catch (error) {
       console.error('Error calculating EOB:', error);
       // Fallback: use claim total amount
@@ -7822,6 +8207,42 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
 
     // Calculate payment amount (insurance pays amount)
     const paymentAmount = planPaidAmount || claim.insurance_amount || (claim.total_amount * 0.85);
+
+    // Evaluate settlement rules (auto-approve vs manual review)
+    const SettlementRulesService = require('./services/settlement-rules-service');
+    const settlementEvaluation = SettlementRulesService.evaluateSettlementRules({
+      claim,
+      claimDetails,
+      eobCalculation,
+      eligibility: eligibility || {}
+    });
+
+    if (!SettlementRulesService.shouldAllowApproval(settlementEvaluation)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Settlement rules require manual review',
+        settlementRecommendation: {
+          action: settlementEvaluation.action,
+          reason: settlementEvaluation.reason,
+          matchedRuleId: settlementEvaluation.matchedRuleId
+        },
+        message: 'Claim does not meet auto-approve criteria. Manual review required (SETTLEMENT_STRICT_AUTO is enabled).'
+      });
+    }
+
+    // Proof of Care: when PROOF_OF_CARE_REQUIRED=1, block approval until care is verified
+    const ProofOfCareService = require('./services/proof-of-care-service');
+    const poc = await ProofOfCareService.verifyProofOfCare(claim);
+    if (process.env.PROOF_OF_CARE_REQUIRED === '1' || process.env.PROOF_OF_CARE_REQUIRED === 'true') {
+      if (!poc.verified) {
+        return res.status(403).json({
+          success: false,
+          error: 'Proof of Care required',
+          proofOfCare: { verified: poc.verified, evidence: poc.evidence, reason: poc.reason },
+          message: 'Care must be verified before approval (PROOF_OF_CARE_REQUIRED is enabled).'
+        });
+      }
+    }
 
     // Try to create Circle transfer if wallets exist (optional)
     let transferId = null;
@@ -7906,6 +8327,39 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
 
     console.log(`✅ Claim ${claimId} approved: Payment $${paymentAmount.toFixed(2)}, Deductible used: $${deductibleUsed.toFixed(2)}, Patient owes: $${(eobCalculation?.totals?.whatYouOwe || 0).toFixed(2)}`);
 
+    // Record insurance payment to related invoices so it shows in Payment History
+    if (planPaidAmount > 0) {
+      const amountBilled = eobCalculation?.totals?.amountBilled || 0;
+      const invoices = db.getInvoicesByClaim(claimId);
+      // Add payment to first matching invoice (one claim typically has one invoice)
+      const target = invoices.find(
+        (inv) => amountBilled > 0 && inv.amount >= amountBilled * 0.99
+      );
+      if (target) {
+        db.addInvoicePayment({
+          invoice_id: target.id,
+          payment_date: new Date().toISOString().split('T')[0],
+          amount: planPaidAmount,
+          payment_method: 'insurance',
+          reference_number: `claim-${claimId}`,
+          notes: 'Insurance payment - claim approved'
+        });
+        console.log(`📋 Recorded insurance payment $${planPaidAmount.toFixed(2)} for invoice ${target.invoice_number}`);
+      }
+    }
+
+    // Escrow orchestration: include route when ESCROW_ENABLED
+    let settlementRoute = { route: 'direct' };
+    if (process.env.ESCROW_ENABLED === '1' || process.env.ESCROW_ENABLED === 'true') {
+      const EscrowOrchestratorService = require('./services/escrow-orchestrator-service');
+      settlementRoute = await EscrowOrchestratorService.getSettlementRoute({
+        claim,
+        claimDetails,
+        eobCalculation,
+        eligibility: eligibility || {}
+      });
+    }
+
     res.json({
       success: true,
       claimId: claimId,
@@ -7914,10 +8368,72 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
       deductibleUsed: deductibleUsed,
       status: 'approved',
       paymentStatus: 'paid',
-      message: 'Claim approved and payment processed'
+      message: 'Claim approved and payment processed',
+      settlementRecommendation: {
+        action: settlementEvaluation.action,
+        reason: settlementEvaluation.reason,
+        matchedRuleId: settlementEvaluation.matchedRuleId
+      },
+      proofOfCare: poc ? { verified: poc.verified, evidence: poc.evidence } : undefined,
+      settlementRoute: settlementRoute.route
     });
   } catch (error) {
     console.error('❌ Error approving claim payment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Reject claim (Insurer rejects claim)
+ * POST /api/claims/:claimId/reject
+ */
+app.post('/api/claims/:claimId/reject', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const { reason } = req.body || {};
+    const claim = db.getClaimById(claimId);
+
+    if (!claim) {
+      return res.status(404).json({
+        success: false,
+        error: 'Claim not found'
+      });
+    }
+
+    if (claim.status === 'approved' || claim.status === 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: `Claim is already ${claim.status}. Cannot reject.`
+      });
+    }
+
+    db.updateInsuranceClaim(claimId, {
+      status: 'rejected',
+      payment_status: 'rejected',
+      response_data: (() => {
+        let rd = {};
+        try {
+          rd = claim.response_data ? (typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data) : {};
+        } catch (_) {}
+        rd.rejectedAt = new Date().toISOString();
+        rd.rejectionReason = reason || 'Rejected by insurer';
+        return JSON.stringify(rd);
+      })()
+    });
+
+    console.log(`❌ Claim ${claimId} rejected`);
+
+    res.json({
+      success: true,
+      claimId,
+      status: 'rejected',
+      message: 'Claim rejected'
+    });
+  } catch (error) {
+    console.error('❌ Error rejecting claim:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -8129,12 +8645,257 @@ app.get('/api/admin/insurance/payers/stats', async (req, res) => {
   }
 });
 
-// Metrics endpoint (basic observability)
+/**
+ * Fee schedule API – list by payer
+ * GET /api/admin/fee-schedules?payerId=BCBS
+ */
+app.get('/api/admin/fee-schedules', async (req, res) => {
+  try {
+    const payerId = req.query.payerId;
+    if (!payerId) {
+      return res.status(400).json({ success: false, error: 'payerId query parameter required' });
+    }
+    const rows = db.getFeeSchedulesByPayer?.(payerId, 500) || [];
+    res.json({ success: true, payerId, feeSchedules: rows, count: rows.length });
+  } catch (error) {
+    console.error('❌ Error listing fee schedules:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Fee schedule API – add/upsert single
+ * POST /api/admin/fee-schedules
+ * Body: { payer_id, cpt_code, allowed_amount [, in_network, effective_date, end_date, source ] }
+ */
+app.post('/api/admin/fee-schedules', async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.payer_id || !body.cpt_code || body.allowed_amount == null) {
+      return res.status(400).json({
+        success: false,
+        error: 'payer_id, cpt_code, and allowed_amount are required'
+      });
+    }
+    const id = db.upsertFeeSchedule?.(body);
+    res.status(201).json({ success: true, id });
+  } catch (error) {
+    console.error('❌ Error upserting fee schedule:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Fee schedule API – bulk upload
+ * POST /api/admin/fee-schedules/bulk
+ * Body: { items: [ { payer_id, cpt_code, allowed_amount [, in_network, effective_date, source ] }, ... ] }
+ */
+app.post('/api/admin/fee-schedules/bulk', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const items = Array.isArray(body.items) ? body.items : body;
+    if (!items.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'items array required with payer_id, cpt_code, allowed_amount'
+      });
+    }
+    const result = db.bulkUpsertFeeSchedules?.(items) || { inserted: 0 };
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('❌ Error bulk upserting fee schedules:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Metrics endpoint (basic observability + LLM aggregates)
 app.get('/api/admin/metrics', async (req, res) => {
   try {
-    return res.json({ success: true, metrics: Metrics.getAll() });
+    const days = parseInt(req.query.days, 10) || 7;
+    const inMemory = Metrics.getAll();
+    let llmAggregates = null;
+    let cacheStats = null;
+    try {
+      if (typeof db.getLlmUsageAggregates === 'function') {
+        llmAggregates = db.getLlmUsageAggregates(days);
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      const cacheService = require('./services/cache-service');
+      cacheStats = cacheService.getStats();
+    } catch (e) { /* ignore */ }
+    let postgresSyncRetry = null;
+    try {
+      if (typeof db.getRetryQueueDepth === 'function') {
+        postgresSyncRetry = {
+          retry_queue_depth: db.getRetryQueueDepth(),
+          dlq_size: db.getDLQSize()
+        };
+      }
+    } catch (e) { /* ignore */ }
+    let circuitBreaker = null;
+    try {
+      const cb = require('./utils/circuit-breaker');
+      if (typeof cb.getMetrics === 'function') {
+        circuitBreaker = cb.getMetrics();
+      }
+    } catch (e) { /* ignore */ }
+    let tokenBudget = null;
+    try {
+      const tb = require('./utils/token-budget');
+      if (typeof tb.getConfig === 'function') {
+        tokenBudget = tb.getConfig();
+      }
+    } catch (e) { /* ignore */ }
+    let latencyBudget = null;
+    try {
+      const lb = require('./config/latency-budget');
+      if (typeof lb.getViolationCount === 'function') {
+        latencyBudget = { violations: lb.getViolationCount() };
+      }
+    } catch (e) { /* ignore */ }
+    let clinicRateLimit = null;
+    try {
+      const crl = require('./utils/clinic-rate-limiter');
+      if (typeof crl.getConfig === 'function') {
+        clinicRateLimit = crl.getConfig();
+      }
+    } catch (e) { /* ignore */ }
+    let dlqToolCalls = null;
+    try {
+      if (typeof db.getDlqToolCallsSize === 'function') {
+        dlqToolCalls = { size: db.getDlqToolCallsSize() };
+      }
+    } catch (e) { /* ignore */ }
+    return res.json({
+      success: true,
+      metrics: inMemory,
+      llm: llmAggregates,
+      cache: cacheStats,
+      postgres_sync_retry: postgresSyncRetry,
+      circuit_breaker: circuitBreaker,
+      token_budget: tokenBudget,
+      latency_budget_violations: latencyBudget?.violations ?? 0,
+      clinic_rate_limit: clinicRateLimit,
+      dlq_tool_calls: dlqToolCalls,
+      days
+    });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Call dashboard (Section 1 - call volume, state transitions, tool usage, error rates)
+app.get('/api/admin/dashboards/calls', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days, 10) || 7;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = cutoff.toISOString().slice(0, 19).replace('T', ' ');
+
+    const voiceCalls = db.db.prepare(`
+      SELECT COUNT(*) as total,
+             SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+             SUM(CASE WHEN status != 'completed' AND status IS NOT NULL THEN 1 ELSE 0 END) as failed
+      FROM voice_call_log WHERE created_at >= ?
+    `).get(cutoffStr);
+
+    const functionCalls = db.db.prepare(`
+      SELECT function_name, COUNT(*) as count, SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count
+      FROM function_call_log WHERE created_at >= ?
+      GROUP BY function_name
+    `).all(cutoffStr);
+
+    const stateTransitions = db.db.prepare(`
+      SELECT current_stage, COUNT(*) as count FROM voice_call_states
+      WHERE updated_at >= ? GROUP BY current_stage
+    `).all(cutoffStr);
+
+    const codingDecisions = db.db.prepare(`
+      SELECT COUNT(*) as total FROM coding_decisions WHERE created_at >= ?
+    `).get(cutoffStr);
+
+    const errorRate = voiceCalls?.total > 0
+      ? Math.round(((voiceCalls.failed || 0) / voiceCalls.total) * 10000) / 100
+      : 0;
+
+    return res.json({
+      success: true,
+      days,
+      voice_calls: { total: voiceCalls?.total ?? 0, completed: voiceCalls?.completed ?? 0, failed: voiceCalls?.failed ?? 0, error_rate_pct: errorRate },
+      tool_usage: functionCalls,
+      state_distribution: stateTransitions,
+      coding_decisions: codingDecisions?.total ?? 0,
+      dlq_tool_calls_size: typeof db.getDlqToolCallsSize === 'function' ? db.getDlqToolCallsSize() : 0
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DLQ tool calls list (for audit/retry)
+app.get('/api/admin/dlq-tool-calls', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const items = typeof db.getDlqToolCalls === 'function' ? db.getDlqToolCalls(limit) : [];
+    const size = typeof db.getDlqToolCallsSize === 'function' ? db.getDlqToolCallsSize() : 0;
+    return res.json({ success: true, items, total: size });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Cache stats for medical coding lookups (Phase 3.3)
+app.get('/api/admin/cache-stats', async (req, res) => {
+  try {
+    const cacheService = require('./services/cache-service');
+    const stats = cacheService.getStats();
+    const hitRate = stats.hits + stats.misses > 0
+      ? Math.round((stats.hits / (stats.hits + stats.misses)) * 100)
+      : 0;
+    return res.json({ success: true, cache: { ...stats, hitRatePercent: hitRate } });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Clear medical coding cache (e.g. after fee schedule or rule updates)
+app.post('/api/admin/cache/clear', async (req, res) => {
+  try {
+    const cacheService = require('./services/cache-service');
+    const bucket = req.query.bucket; // optional: code_lookup, payer_guidelines, payer_pricing, coding_rules
+    cacheService.clear(bucket);
+    return res.json({ success: true, cleared: bucket || 'all' });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Feature flags (Section 15) - list and toggle
+app.get('/api/admin/feature-flags', (req, res) => {
+  try {
+    const ff = require('./config/feature-flags');
+    return res.json({ success: true, flags: ff.getAll() });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.post('/api/admin/feature-flags', express.json(), async (req, res) => {
+  try {
+    const { flag_name, enabled_globally, enabled_for_clinic_ids, rollout_pct } = req.body || {};
+    if (!flag_name) return res.status(400).json({ success: false, error: 'flag_name required' });
+    db.db.prepare(`
+      INSERT INTO feature_flags (flag_name, enabled_globally, enabled_for_clinic_ids, rollout_pct, updated_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(flag_name) DO UPDATE SET
+        enabled_globally = COALESCE(excluded.enabled_globally, feature_flags.enabled_globally),
+        enabled_for_clinic_ids = COALESCE(excluded.enabled_for_clinic_ids, feature_flags.enabled_for_clinic_ids),
+        rollout_pct = COALESCE(excluded.rollout_pct, feature_flags.rollout_pct),
+        updated_at = datetime('now')
+    `).run(flag_name, enabled_globally ? 1 : 0, typeof enabled_for_clinic_ids === 'string' ? enabled_for_clinic_ids : JSON.stringify(enabled_for_clinic_ids || null), rollout_pct ?? 100);
+    return res.json({ success: true, flag_name });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -8153,24 +8914,60 @@ app.get('/api/admin/patients/:id/insurance', async (req, res) => {
 app.get('/api/admin/patients/:id/eligibility', async (req, res) => {
   try {
     const patientId = req.params.id;
-    const rows = db.getEligibilityChecksByPatient(patientId) || [];
+    let rows = db.getEligibilityChecksByPatient(patientId) || [];
+
+    // Fallback: if no eligibility_checks, use patient_insurance (same source as patient portal)
+    if (rows.length === 0) {
+      const insuranceList = db.getAllPatientInsurance && db.getAllPatientInsurance(patientId);
+      const primary = insuranceList && (insuranceList.find(i => i.is_primary) || insuranceList[0]);
+      if (primary) {
+        const payer = db.getPayerByPayerId(primary.payer_id);
+        const payer_name = payer ? payer.payer_name : (primary.payer_name || primary.payer_id);
+        rows = [{
+          id: null,
+          date_of_service: null,
+          eligible: true,
+          copay_amount: null,
+          allowed_amount: null,
+          insurance_pays: null,
+          deductible_total: null,
+          deductible_remaining: null,
+          coinsurance_percent: null,
+          plan_summary: primary.plan_name || 'Insurance on file',
+          payer_id: primary.payer_id,
+          payer_name,
+          member_id: primary.member_id,
+          service_code: null,
+          created_at: null
+        }];
+      }
+    }
+
     // Provide a compact view
-    const elig = rows.map(r => ({
-      id: r.id,
-      date_of_service: r.date_of_service,
-      eligible: !!r.eligible,
-      copay_amount: r.copay_amount,
-      allowed_amount: r.allowed_amount,
-      insurance_pays: r.insurance_pays,
-      deductible_total: r.deductible_total,
-      deductible_remaining: r.deductible_remaining,
-      coinsurance_percent: r.coinsurance_percent,
-      plan_summary: r.plan_summary,
-      payer_id: r.payer_id,
-      member_id: r.member_id,
-      service_code: r.service_code,
-      created_at: r.created_at
-    }));
+    const elig = rows.map(r => {
+      let payer_name = null;
+      if (r.payer_id) {
+        const payer = db.getPayerByPayerId(r.payer_id);
+        payer_name = payer ? payer.payer_name : null;
+      }
+      return {
+        id: r.id,
+        date_of_service: r.date_of_service,
+        eligible: !!r.eligible,
+        copay_amount: r.copay_amount,
+        allowed_amount: r.allowed_amount,
+        insurance_pays: r.insurance_pays,
+        deductible_total: r.deductible_total,
+        deductible_remaining: r.deductible_remaining,
+        coinsurance_percent: r.coinsurance_percent,
+        plan_summary: r.plan_summary,
+        payer_id: r.payer_id,
+        payer_name: payer_name || r.payer_name || r.payer_id,
+        member_id: r.member_id,
+        service_code: r.service_code,
+        created_at: r.created_at
+      };
+    });
     return res.json({ success: true, patientId, eligibility: elig, count: elig.length });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -8777,6 +9574,32 @@ app.get('/api/admin/appointments/upcoming', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Send video link via SMS to patient for telehealth appointment
+app.post('/api/admin/appointments/:id/send-video-link', async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
+    const appointment = await db.getAppointment(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ success: false, error: 'Appointment not found' });
+    }
+    const phone = appointment.patient_phone;
+    if (!phone || !phone.trim()) {
+      return res.status(400).json({ success: false, error: 'Patient has no phone number on file' });
+    }
+    const baseUrl = process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || `https://${req.headers.host || 'doclittle.site'}`;
+    const videoUrl = `${baseUrl.replace(/\/$/, '')}/business/video-call.html?room=appt-${encodeURIComponent(appointmentId)}`;
+    const message = `Your telehealth video visit: ${videoUrl}\n\nClick to join when it\'s time for your appointment.`;
+    const result = await SMSService.sendSMS(phone, message);
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || 'Failed to send SMS' });
+    }
+    res.json({ success: true, message: 'Video link sent via SMS' });
+  } catch (error) {
+    console.error('❌ Send video link error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -11705,6 +12528,11 @@ const server = app.listen(PORT, HOST, () => {
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));
   console.log(`\n📍 Server running on: http://${HOST}:${PORT}`);
+  // Cache warming (Section 24)
+  try {
+    const cacheService = require('./services/cache-service');
+    if (typeof cacheService.warm === 'function') cacheService.warm();
+  } catch (e) { console.warn('⚠️  Cache warm skipped:', e.message); }
   console.log('\n📊 Available Endpoints:');
   console.log('\n📞 Voice (Custom Telephony with SIP):');
   console.log(`   POST   http://localhost:${PORT}/voice/incoming`);
@@ -11802,6 +12630,27 @@ const server = app.listen(PORT, HOST, () => {
     console.error('⚠️  Failed to start EHR sync service:', error.message);
     console.log('   EHR sync will be disabled, but server will continue');
   }
+
+  // Start Postgres sync retry worker (Section 2.2)
+  try {
+    PostgresSyncWorker.start();
+    ToolCallDlqWorker.start();
+  } catch (error) {
+    console.error('⚠️  Failed to start background workers:', error.message);
+    console.log('   Retry queue will not process, but server will continue');
+  }
+
+  // Idempotency keys cleanup (Section 22 - 24h TTL)
+  try {
+    if (db.cleanupIdempotencyKeys) {
+      const deleted = db.cleanupIdempotencyKeys();
+      if (deleted > 0) console.log(`🧹 Idempotency cleanup: removed ${deleted} expired keys`);
+      setInterval(() => {
+        const n = db.cleanupIdempotencyKeys();
+        if (n > 0) console.log(`🧹 Idempotency cleanup: removed ${n} expired keys`);
+      }, 24 * 60 * 60 * 1000);
+    }
+  } catch (e) { /* ignore */ }
 
   console.log('⚙️  Configuration Status:');
   console.log(`   Database:      ✅ Using database.js module`);

@@ -69,6 +69,17 @@ jobs:
           fi
         continue-on-error: true
 
+      - name: Run accuracy evaluation (Section 4)
+        working-directory: ./middleware-platform
+        env:
+          ACCURACY_THRESHOLD: 50
+        run: |
+          if [ -f "scripts/evaluate-accuracy.js" ]; then
+            node scripts/evaluate-accuracy.js
+          else
+            echo "evaluate-accuracy.js not found, skipping"
+          fi
+
   security:
     name: Security Scan
     runs-on: ubuntu-latest

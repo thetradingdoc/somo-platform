@@ -6,7 +6,7 @@
    - `middleware-platform/services/retell-service.js` - Updated default prompt to include automatic language detection
 
 2. **Prompt File Changes:**
-   - `docs/voice-agent/kelly-voice-agent-prompt.md` - Updated to require automatic language detection
+   - `docs/voice-agent/prompts/kelly-voice-agent-prompt.md` - Updated to require automatic language detection
 
 ## ⚠️ Critical Issue Found
 
@@ -17,7 +17,7 @@ Looking at `scripts/deploy-to-azure.sh` line 75:
 -x "*.md" \
 ```
 
-This means the prompt file `docs/voice-agent/kelly-voice-agent-prompt.md` **will NOT be deployed** to Azure.
+This means the prompt file `docs/voice-agent/prompts/kelly-voice-agent-prompt.md` **will NOT be deployed** to Azure.
 
 ## Impact
 

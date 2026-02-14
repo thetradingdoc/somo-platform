@@ -1,0 +1,134 @@
+{
+  "emergent": [
+    {
+      "id": "acute_mi",
+      "symptoms": ["chest pain", "shortness of breath", "arm pain", "jaw pain", "crushing", "diaphoresis"],
+      "match_mode": "any_2_of_symptoms",
+      "patterns": ["chest pain", "radiating", "crushing", "arm pain", "jaw pain", "shortness of breath", "sweating"],
+      "age_ranges": { "adult": { "min": 18 } },
+      "action": "call_911",
+      "icd10": ["I21.9"],
+      "rationale": "Possible acute myocardial infarction (heart attack). Do NOT schedule. Direct to 911/ER."
+    },
+    {
+      "id": "stroke_fast",
+      "symptoms": ["facial droop", "arm weakness", "speech difficulty", "face drooping", "arm weakness", "slurred speech", "vision loss"],
+      "match_mode": "any_1",
+      "patterns": ["stroke", "numbness in face", "numbness in arm", "drooping face", "slurred speech", "sudden weakness", "vision blur", "vision loss"],
+      "onset": "sudden",
+      "action": "call_911",
+      "icd10": ["I63.9"],
+      "rationale": "Possible stroke (FAST protocol). Do NOT schedule. Direct to 911 immediately."
+    },
+    {
+      "id": "meningitis",
+      "symptoms": ["severe headache", "stiff neck", "fever"],
+      "match_mode": "all_3_or_headache_stiff",
+      "patterns": ["stiff neck", "severe headache", "fever", "meningitis"],
+      "action": "call_911",
+      "icd10": ["G03.9"],
+      "rationale": "Possible meningitis. Do NOT schedule. Direct to 911/ER."
+    },
+    {
+      "id": "active_seizure",
+      "symptoms": ["seizure", "unresponsive", "convulsing"],
+      "match_mode": "any_1",
+      "patterns": ["seizure", "convulsing", "unresponsive", "having a seizure"],
+      "action": "call_911",
+      "icd10": ["R56.9"],
+      "rationale": "Active seizure. Do NOT schedule. Direct to 911."
+    },
+    {
+      "id": "suicide_risk",
+      "symptoms": ["suicide", "kill myself", "end my life", "self harm"],
+      "match_mode": "any_1",
+      "patterns": ["suicide", "thoughts of suicide", "kill myself", "end my life", "self harm", "don't want to live"],
+      "action": "call_911",
+      "icd10": ["R45.851"],
+      "rationale": "Mental health emergency. Direct to 911 or crisis hotline (988)."
+    },
+    {
+      "id": "anaphylaxis",
+      "symptoms": ["throat swelling", "can't breathe", "allergic reaction", "hives", "swelling"],
+      "match_mode": "any_2_or_throat_swelling",
+      "patterns": ["throat swelling", "can't breathe", "severe allergic", "anaphylaxis", "throat closing"],
+      "action": "call_911",
+      "icd10": ["T78.2"],
+      "rationale": "Possible anaphylaxis. Do NOT schedule. Direct to 911. Ask if they have EpiPen."
+    },
+    {
+      "id": "choking",
+      "symptoms": ["choking", "can't breathe", "something stuck"],
+      "match_mode": "any_1",
+      "patterns": ["choking", "can't breathe", "something stuck in throat"],
+      "action": "call_911",
+      "icd10": ["T17.900"],
+      "rationale": "Choking emergency. Direct to 911."
+    },
+    {
+      "id": "severe_bleeding",
+      "symptoms": ["severe bleeding", "heavy bleeding", "uncontrolled bleeding"],
+      "match_mode": "any_1",
+      "patterns": ["severe bleeding", "heavy bleeding", "uncontrolled bleeding", "bleeding a lot"],
+      "action": "call_911",
+      "icd10": ["R58"],
+      "rationale": "Severe bleeding. Direct to 911."
+    },
+    {
+      "id": "overdose",
+      "symptoms": ["overdose", "poisoning", "took too much"],
+      "match_mode": "any_1",
+      "patterns": ["overdose", "poisoning", "took too much", "ingested"],
+      "action": "call_911",
+      "icd10": ["T50.901"],
+      "rationale": "Possible overdose/poisoning. Direct to 911."
+    }
+  ],
+  "urgent": [
+    {
+      "id": "high_fever",
+      "symptoms": ["high fever", "fever 104", "fever 103", "fever 102"],
+      "match_mode": "any_1",
+      "patterns": ["high fever", "fever 10[2-4]", "fever over 103", "104 fever"],
+      "action": "same_day",
+      "icd10": ["R50.9"],
+      "rationale": "High fever. Recommend same-day urgent care or ER."
+    },
+    {
+      "id": "fracture",
+      "symptoms": ["fracture", "broken bone", "possible fracture"],
+      "match_mode": "any_1",
+      "patterns": ["fracture", "broken bone", "possible fracture", "fell and", "injured arm", "injured leg"],
+      "action": "same_day",
+      "icd10": ["S52.509"],
+      "rationale": "Possible fracture. Recommend urgent care or ER for X-ray."
+    },
+    {
+      "id": "severe_pain",
+      "symptoms": ["severe pain", "intense pain", "can't stand the pain"],
+      "match_mode": "any_1",
+      "patterns": ["severe pain", "intense pain", "excruciating", "unbearable pain"],
+      "action": "same_day",
+      "icd10": ["R52"],
+      "rationale": "Severe pain. Consider same-day appointment or urgent care."
+    },
+    {
+      "id": "persistent_vomiting",
+      "symptoms": ["can't stop vomiting", "vomiting all day", "severe vomiting"],
+      "match_mode": "any_1",
+      "patterns": ["can't stop vomiting", "vomiting all day", "severe vomiting", "dehydration"],
+      "action": "same_day",
+      "icd10": ["R11.10"],
+      "rationale": "Persistent vomiting or dehydration. Recommend same-day care."
+    }
+  ],
+  "routine": [
+    {
+      "id": "default_routine",
+      "symptoms": [],
+      "match_mode": "fallback",
+      "action": "routine",
+      "rationale": "No emergency or urgent indicators. Proceed with routine scheduling."
+    }
+  ]
+}

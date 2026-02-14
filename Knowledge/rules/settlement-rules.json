@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "description": "Logic-based settlement rules for auto-approve vs manual review",
+  "defaultAction": "manual_review",
+  "rules": [
+    {
+      "id": "high_confidence_low_amount",
+      "action": "auto_approve",
+      "description": "High coding confidence and low amount - safe to auto-approve",
+      "conditions": {
+        "codingConfidence": { "min": 0.9 },
+        "amount": { "max": 500 },
+        "payerWhitelist": ["BCBS", "AETNA", "UHC", "CIGNA", "UNITED"]
+      }
+    },
+    {
+      "id": "deterministic_rule_match",
+      "action": "auto_approve",
+      "description": "Coding came from deterministic rule match (SIMPLE band) - high trust",
+      "conditions": {
+        "codingBand": "SIMPLE",
+        "amount": { "max": 1000 }
+      }
+    },
+    {
+      "id": "low_confidence_requires_review",
+      "action": "manual_review",
+      "description": "Low coding confidence - require manual review",
+      "conditions": {
+        "codingConfidence": { "max": 0.7 }
+      }
+    },
+    {
+      "id": "high_amount_requires_review",
+      "action": "manual_review",
+      "description": "High amount - require manual review",
+      "conditions": {
+        "amount": { "min": 5000 }
+      }
+    }
+  ]
+}

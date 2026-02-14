@@ -125,13 +125,13 @@ All scripts in `middleware-platform/scripts/` are kept as they serve operational
    - Best practices
    - Troubleshooting
 
-3. **Implementation Summary**: `docs/IMPLEMENTATION_SUMMARY.md`
+3. **Implementation Summary**: `docs/development/invoice-billing/IMPLEMENTATION_SUMMARY.md`
    - Complete implementation overview
    - Architecture details
    - File changes
    - Deployment notes
 
-4. **Code Review**: `docs/CODE_REVIEW_AND_CLEANUP.md` (this file)
+4. **Code Review**: `docs/development/code-reviews/CODE_REVIEW_AND_CLEANUP.md` (this file)
    - Issues found and fixed
    - Code quality checks
    - Cleanup decisions
@@ -147,7 +147,7 @@ All scripts in `middleware-platform/scripts/` are kept as they serve operational
 6. `unified-dashboard/business/commerce-billing.html`
 7. `docs/api/INVOICE_API.md`
 8. `docs/user-guides/INVOICE_WORKFLOW.md`
-9. `docs/IMPLEMENTATION_SUMMARY.md`
+9. `docs/development/invoice-billing/IMPLEMENTATION_SUMMARY.md`
 
 ### Files Modified (8)
 1. `middleware-platform/database.js` - Added invoice tables and functions

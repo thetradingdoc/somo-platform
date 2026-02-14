@@ -12,6 +12,8 @@
 
   <link rel="stylesheet" href="../assets/css/global.css">
   <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/auth-utils.js"></script>
+  <script src="../assets/js/navigation.js"></script>
   <style>
     /* Shared app layout (copied from patients/dashboard for left sidebar) */
     :root {
@@ -376,32 +378,7 @@
         <div class="sidebar-subtitle">Medical Coding Assistant</div>
       </div>
 
-      <nav class="sidebar-nav">
-        <a href="pdf-coding.html" class="nav-item">
-          <span class="nav-icon">📄</span>
-          <span>Scan</span>
-        </a>
-        <a href="invoices.html" class="nav-item">
-          <span class="nav-icon">🧾</span>
-          <span>Invoices</span>
-        </a>
-        <a href="patients.html" class="nav-item">
-          <span class="nav-icon">👥</span>
-          <span>Patients</span>
-        </a>
-        <a href="billing.html" class="nav-item">
-          <span class="nav-icon">💳</span>
-          <span>Billing</span>
-        </a>
-        <a href="wallets.html" class="nav-item">
-          <span class="nav-icon">💰</span>
-          <span>Wallets</span>
-        </a>
-        <a href="calendar.html" class="nav-item active">
-          <span class="nav-icon">📅</span>
-          <span>Calendar</span>
-        </a>
-      </nav>
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
     </aside>
 
     <!-- Main Content -->
@@ -472,17 +449,26 @@
         <button id="btnCheckSlots" class="btn">Check slots</button>
       </div>
       <div id="slotsWrap" style="padding:8px 16px; display:none;"></div>
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
-        <button id="btnPHI" class="btn">Show PHI</button>
-        <button id="btnConfirm" class="btn" style="background:#10b981;color:#fff;border:none;">Confirm</button>
-        <button id="btnReschedule" class="btn" style="background:#f59e0b;color:#fff;border:none;">Reschedule</button>
-        <button id="btnCancel" class="btn" style="background:#ef4444;color:#fff;border:none;">Cancel</button>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid #e5e7eb;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="btnJoinVideo" class="btn" style="background:#1e40af;color:#fff;border:none;">Join Video</button>
+          <button id="btnCopyVideoLink" class="btn" style="background:#64748b;color:#fff;border:none;">Copy Link</button>
+          <button id="btnSendVideoLink" class="btn" style="background:#059669;color:#fff;border:none;">Send Link</button>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="btnPHI" class="btn">Show PHI</button>
+          <button id="btnConfirm" class="btn" style="background:#10b981;color:#fff;border:none;">Confirm</button>
+          <button id="btnReschedule" class="btn" style="background:#f59e0b;color:#fff;border:none;">Reschedule</button>
+          <button id="btnCancel" class="btn" style="background:#ef4444;color:#fff;border:none;">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
     const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+    requireAuth('../login.html');
 
     // PHI masking helpers
     function maskPhone(phone) {
@@ -554,10 +540,55 @@
             buffer_after_minutes: meta.buffer_after_minutes || null,
             start_time: a.start_time,
             end_time: a.end_time,
-            notes: a.notes || ''
+            notes: a.notes || '',
+            video_room: `appt-${a.id}`
           }
         });
       });
+    }
+
+    function getVideoJoinUrl(appointmentId) {
+      const base = (typeof window.resolveBusinessPath === 'function')
+        ? window.location.origin + window.resolveBusinessPath('video-call.html')
+        : window.location.origin + '/business/video-call.html';
+      return base + '?room=appt-' + encodeURIComponent(appointmentId);
+    }
+
+    function handleJoinVideo(appointmentId) {
+      window.location.href = getVideoJoinUrl(appointmentId);
+    }
+
+    function handleCopyVideoLink(appointmentId) {
+      const url = getVideoJoinUrl(appointmentId);
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.getElementById('btnCopyVideoLink');
+        if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy Link'; }, 2000); }
+      }).catch(() => alert('Could not copy. Please copy manually: ' + url));
+    }
+
+    async function handleSendVideoLink(appointmentId) {
+      const btn = document.getElementById('btnSendVideoLink');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/appointments/${encodeURIComponent(appointmentId)}/send-video-link`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include'
+        });
+        const data = await res.json();
+        if (data.success) {
+          btn.textContent = 'Sent!';
+          setTimeout(() => { btn.textContent = 'Send Link'; btn.disabled = false; }, 2000);
+        } else {
+          alert(data.error || 'Failed to send');
+          btn.disabled = false;
+          btn.textContent = 'Send Link';
+        }
+      } catch (e) {
+        alert('Failed to send link');
+        btn.disabled = false;
+        btn.textContent = 'Send Link';
+      }
     }
 
     let currentApptId = null;
@@ -581,6 +612,16 @@
       btnConfirm.onclick = () => handleConfirm(currentApptId);
       btnCancel.onclick = () => handleCancel(currentApptId);
       btnReschedule.onclick = () => handleReschedule(currentApptId);
+
+      const btnJoinVideo = document.getElementById('btnJoinVideo');
+      const btnCopyVideoLink = document.getElementById('btnCopyVideoLink');
+      const btnSendVideoLink = document.getElementById('btnSendVideoLink');
+      btnJoinVideo.onclick = () => handleJoinVideo(currentApptId);
+      btnCopyVideoLink.onclick = () => handleCopyVideoLink(currentApptId);
+      btnSendVideoLink.onclick = () => handleSendVideoLink(currentApptId);
+      btnJoinVideo.disabled = s === 'cancelled';
+      btnCopyVideoLink.disabled = s === 'cancelled';
+      btnSendVideoLink.disabled = s === 'cancelled';
 
       const btnPHI = document.getElementById('btnPHI');
       btnPHI.onclick = () => { showPHI = !showPHI; btnPHI.textContent = showPHI ? 'Hide PHI' : 'Show PHI'; renderDetails(extProps); };
@@ -620,6 +661,7 @@
     }
 
     async function initCalendar() {
+      renderNavigation('calendar');
       const calendarEl = document.getElementById('calendar');
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',

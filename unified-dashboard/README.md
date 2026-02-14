@@ -110,5 +110,5 @@ python3 -m http.server 8000
 
 - [Main README](../README.md) - Project overview
 - [API Documentation](../docs/api/API_DOCUMENTATION.md) - Backend API reference
-- [Setup Guide](../docs/setup/SETUP.md) - Setup instructions
+- [Setup Guide](../docs/setup/getting-started/SETUP.md) - Setup instructions
 

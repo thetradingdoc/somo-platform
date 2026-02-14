@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Import CPT codes from the CMS addendum text file into the local SQLite knowledge base.
+ * Import CPT codes from the CMS addendum (xlsx or txt) into the local SQLite knowledge base.
  */
 
 const path = require('path');
@@ -9,7 +9,9 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const db = require('../database');
 
-const CPT_TEXT_PATH = path.resolve(__dirname, '../../Knowledge/CPT/2025_DHS_Code_List_Addendum_11_26_2024.txt');
+const CPT_DIR = path.resolve(__dirname, '../../Knowledge/CPT');
+const CPT_XLSX_PATH = path.join(CPT_DIR, '2025_DHS_Code_List_Addendum_11_26_2024.xlsx');
+const CPT_TEXT_PATH = path.join(CPT_DIR, '2025_DHS_Code_List_Addendum_11_26_2024.txt');
 
 function isHeading(line) {
   if (!line) return false;
@@ -160,11 +162,79 @@ function parseCptFile(filePath) {
   return codes;
 }
 
+function parseCptFromXlsx(filePath) {
+  const XLSX = require('xlsx');
+  const workbook = XLSX.readFile(filePath);
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  const codes = [];
+  const seen = new Set();
+  let codeCol = 0;
+  let descCol = 1;
+  let catCol = -1;
+
+  if (rows.length < 2) return codes;
+
+  const header = rows[0].map(h => String(h || '').toLowerCase());
+  if (header.some(h => h.includes('code') || h.includes('hcpcs') || h.includes('cpt'))) {
+    codeCol = header.findIndex(h => /code|hcpcs|cpt/i.test(h));
+    if (codeCol < 0) codeCol = 0;
+  }
+  if (header.some(h => h.includes('desc') || h.includes('description') || h.includes('long'))) {
+    descCol = header.findIndex(h => /desc|long|name/i.test(h));
+    if (descCol < 0) descCol = 1;
+  }
+  if (header.some(h => h.includes('category') || h.includes('type') || h.includes('section'))) {
+    catCol = header.findIndex(h => /category|type|section/i.test(h));
+  }
+
+  let currentCategory = 'General';
+  for (let i = 1; i < rows.length; i++) {
+    const row = Array.isArray(rows[i]) ? rows[i] : [];
+    const rawCode = row[codeCol];
+    const code = normalizeCode(rawCode != null ? String(rawCode) : '');
+    const description = String(row[descCol] || '').trim();
+    const category = catCol >= 0 && row[catCol] ? String(row[catCol]).trim() : currentCategory;
+    if (category && category.length < 100) currentCategory = category;
+
+    if (!code || !description || description.length < 3) continue;
+    if (code.length > 7) continue;
+    if (seen.has(code)) continue;
+    if (/^(LIST|INCLUDE|EXCLUDE|CLINICAL|RADIOLOGY)/i.test(description)) continue;
+
+    codes.push({
+      code,
+      description: description.slice(0, 500),
+      category: currentCategory,
+      subcategory: null,
+      is_new: /\bNEW\b/i.test(description)
+    });
+    seen.add(code);
+  }
+  return codes;
+}
+
+function loadCptCodes() {
+  if (fs.existsSync(CPT_XLSX_PATH)) {
+    console.log('📂 Loading from xlsx:', path.basename(CPT_XLSX_PATH));
+    return parseCptFromXlsx(CPT_XLSX_PATH);
+  }
+  if (fs.existsSync(CPT_TEXT_PATH)) {
+    console.log('📂 Loading from txt:', path.basename(CPT_TEXT_PATH));
+    return parseCptFile(CPT_TEXT_PATH);
+  }
+  throw new Error(`No CPT file found. Place 2025_DHS_Code_List_Addendum_11_26_2024.xlsx or .txt in Knowledge/CPT/`);
+}
+
 function main() {
   try {
-    const codes = parseCptFile(CPT_TEXT_PATH);
+    const codes = loadCptCodes();
+    if (codes.length === 0) {
+      console.warn('⚠️  No codes extracted. Check file format.');
+      process.exit(1);
+    }
     db.bulkUpsertCptCodes(codes);
-    console.log(`✅ Imported ${codes.length} CPT codes from ${path.basename(CPT_TEXT_PATH)}`);
+    console.log(`✅ Imported ${codes.length} CPT codes`);
   } catch (error) {
     console.error('❌ Failed to import CPT codes:', error.message);
     process.exit(1);
@@ -177,5 +247,8 @@ if (require.main === module) {
 
 module.exports = {
   parseCptFile,
-  CPT_TEXT_PATH
+  parseCptFromXlsx,
+  loadCptCodes,
+  CPT_TEXT_PATH,
+  CPT_XLSX_PATH
 };

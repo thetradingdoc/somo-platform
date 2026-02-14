@@ -14,11 +14,11 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://accounts.google.com", "https://cdnjs.cloudflare.com"], // Allow Google Sign-In and PDF.js
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://accounts.google.com", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://unpkg.com", "https://esm.sh"], // Allow Retell Web SDK, esm.sh
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
       workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // Allow PDF.js worker and blob URLs
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net"],
+      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net", "https://cdn.jsdelivr.net", "https://esm.sh"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"], // Allow Stripe iframes for card input
     },
   },

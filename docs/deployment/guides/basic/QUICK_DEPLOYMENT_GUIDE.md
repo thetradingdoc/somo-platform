@@ -3,7 +3,7 @@
 **Last Updated**: December 2024  
 **Status**: Production Ready
 
-> **Note**: This is a quick reference. For complete deployment guide, see [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)
+> **Note**: This is a quick reference. For complete deployment guide, see [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md)
 
 ## 🚀 Deploy doclittle.site to Azure (Demo Ready)
 
@@ -17,7 +17,7 @@
 ## Step 1: Deploy Code (Includes Frontend + Backend)
 
 ```bash
-cd /Users/jeremiahrichie/agentic-commerce-platform
+cd /path/to/doclittle-platform
 chmod +x scripts/deploy-to-azure.sh
 ./scripts/deploy-to-azure.sh
 ```

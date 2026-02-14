@@ -1,0 +1,56 @@
+{
+  "symptoms": {
+    "chest_pain": {
+      "synonyms": ["thoracic pain", "chest discomfort", "angina", "pressure in chest", "tightness in chest"],
+      "severity": ["mild", "moderate", "severe", "crushing", "pressure"],
+      "locations": ["substernal", "left-sided", "right-sided", "radiating"],
+      "temporal": ["sudden onset", "gradual", "intermittent", "constant"]
+    },
+    "shortness_of_breath": {
+      "synonyms": ["SOB", "dyspnea", "breathlessness", "difficulty breathing", "can't breathe", "trouble breathing"],
+      "severity": ["mild", "moderate", "severe", "at rest", "with exertion"],
+      "temporal": ["acute", "chronic", "worse at night"]
+    },
+    "headache": {
+      "synonyms": ["HA", "head pain", "cephalgia", "migraine"],
+      "severity": ["mild", "moderate", "severe", "thunderclap"],
+      "locations": ["frontal", "occipital", "temporal", "bilateral"],
+      "temporal": ["sudden", "gradual", "chronic", "daily"]
+    },
+    "abdominal_pain": {
+      "synonyms": ["stomach pain", "belly pain", "tummy ache", "abdominal discomfort"],
+      "locations": ["upper", "lower", "right upper quadrant", "left lower quadrant", "diffuse"],
+      "severity": ["mild", "moderate", "severe", "cramping"]
+    },
+    "back_pain": {
+      "synonyms": ["low back pain", "LBP", "lumbar pain", "spine pain"],
+      "locations": ["lower back", "mid back", "upper back", "neck"],
+      "severity": ["mild", "moderate", "severe", "radiating"]
+    },
+    "fever": {
+      "synonyms": ["elevated temp", "temperature", "febrile", "chills"],
+      "temporal": ["acute", "recurrent", "chronic"]
+    },
+    "nausea_vomiting": {
+      "synonyms": ["N/V", "N&V", "queasy", "sick to stomach", "throwing up", "vomiting"],
+      "severity": ["mild", "moderate", "severe", "persistent"]
+    }
+  },
+  "body_locations": {
+    "chest": ["chest", "thorax", "sternum", "heart area"],
+    "head": ["head", "skull", "face", "temple"],
+    "abdomen": ["abdomen", "stomach", "belly", "gut"],
+    "back": ["back", "spine", "lumbar", "lower back"],
+    "extremity": ["arm", "leg", "hand", "foot", "wrist", "ankle", "knee", "elbow"]
+  },
+  "severity_indicators": {
+    "mild": ["mild", "slight", "minor", "low", "1", "2", "3", "a little", "somewhat"],
+    "moderate": ["moderate", "medium", "4", "5", "6", "noticeable", "significant"],
+    "severe": ["severe", "intense", "bad", "7", "8", "9", "10", "excruciating", "unbearable", "crushing", "worst"]
+  },
+  "temporal_patterns": {
+    "acute": ["sudden", "just started", "today", "this morning", "rapid onset", "out of nowhere"],
+    "subacute": ["past week", "few days", "several days", "this week"],
+    "chronic": ["months", "years", "ongoing", "long-term", "recurring", "off and on"]
+  }
+}

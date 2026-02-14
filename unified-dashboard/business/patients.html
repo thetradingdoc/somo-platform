@@ -1047,52 +1047,36 @@
             const hasEhrData = patient.ehr_data && patient.ehr_data.encounters && patient.ehr_data.encounters.length > 0;
             const eligibility = patient.eligibility || null;
 
-            // For cannabis e-commerce (shop tenants), render commerce-style customer card
-            const hasTherapist = patient.fhir_patient_id || false;
+            // For shop tenants (cannabis e-commerce), render commerce-style card
+            const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
+            if (isShop) {
+                const hasTherapist = patient.fhir_patient_id || false;
                 const orders = patient.total_orders || 0;
                 const spend = patient.total_spend || 0;
-                const lastOrder = patient.last_order_at
-                    ? new Date(patient.last_order_at).toLocaleDateString()
-                    : '—';
-
-            // Always render commerce-style card (cannabis e-commerce focus)
+                const lastOrder = patient.last_order_at ? new Date(patient.last_order_at).toLocaleDateString() : '—';
                 return `
                 <div class="customer-card">
                     <div class="customer-header">
                         <div class="customer-avatar">${initials}</div>
                         <div class="customer-info">
-                            <div class="customer-name">
-                                ${patient.customer_name}
-                                ${hasTherapist ? '<span class="badge badge-success" style="margin-left: 8px; font-size: 10px;">Has Therapist</span>' : ''}
-                            </div>
+                            <div class="customer-name">${patient.customer_name}${hasTherapist ? '<span class="badge badge-success" style="margin-left: 8px; font-size: 10px;">Has Therapist</span>' : ''}</div>
                             <div class="customer-contact">${phone}${email ? ' · ' + email : ''}</div>
                         </div>
                     </div>
-
                     <div class="customer-stats">
-                        <div class="stat-item">
-                            <div class="stat-value">${orders}</div>
-                            <div class="stat-label">Total Orders</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value">$${spend.toFixed(2)}</div>
-                            <div class="stat-label">Lifetime Spend</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-value">${lastOrder}</div>
-                            <div class="stat-label">Last Order</div>
-                        </div>
+                        <div class="stat-item"><div class="stat-value">${orders}</div><div class="stat-label">Total Orders</div></div>
+                        <div class="stat-item"><div class="stat-value">$${spend.toFixed(2)}</div><div class="stat-label">Lifetime Spend</div></div>
+                        <div class="stat-item"><div class="stat-value">${lastOrder}</div><div class="stat-label">Last Order</div></div>
                     </div>
-
                     <div class="customer-actions">
                         <button class="btn btn-secondary btn-sm" onclick="viewOrders('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">View Orders</button>
                         ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone.replace(/'/g, "\\'")}')">📞 Contact</button>` : ''}
                         ${!hasTherapist ? `<button class="btn btn-secondary btn-sm" onclick="bookTherapist('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">Book Therapist</button>` : ''}
                     </div>
-                </div>
-                `;
+                </div>`;
+            }
 
-            // Extract EHR data summary (clinic tenants only)
+            // Clinic tenants: FHIR card with insurance, copay, deductible
             let ehrSummary = '';
             if (hasEhrData) {
                 const encounters = patient.ehr_data.encounters;
@@ -1214,8 +1198,14 @@
                             <div class="stat-label">Copay</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-value">${eligibility && eligibility.deductible_remaining !== null ? '$' + eligibility.deductible_remaining.toFixed(0) : '—'}</div>
-                            <div class="stat-label">Deductible</div>
+                            <div class="stat-value">${eligibility && (eligibility.deductible_total != null || eligibility.deductible_remaining != null)
+                                ? (eligibility.deductible_total != null && eligibility.deductible_remaining != null
+                                    ? `$${Number(eligibility.deductible_total).toFixed(0)} / $${Number(eligibility.deductible_remaining).toFixed(0)}`
+                                    : eligibility.deductible_remaining != null
+                                        ? '$' + Number(eligibility.deductible_remaining).toFixed(0) + ' remain'
+                                        : '$' + Number(eligibility.deductible_total).toFixed(0) + ' total')
+                                : '—'}</div>
+                            <div class="stat-label">Deductible (total / remain)</div>
                         </div>
                         <div class="stat-item">
                             <div class="stat-value">${eligibility && eligibility.coinsurance_percent !== null ? eligibility.coinsurance_percent + '%' : '—'}</div>
@@ -1227,7 +1217,7 @@
                         <div style="margin-top: 12px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #3b82f6;">
                             <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Plan Summary</div>
                             <div style="font-size: 12px; color: #1e293b;">${eligibility.plan_summary}</div>
-                            ${eligibility.payer_id ? `<div style="font-size: 10px; color: #64748b; margin-top: 4px;">Payer: ${eligibility.payer_id} · Member: ${eligibility.member_id || 'N/A'}</div>` : ''}
+                            ${eligibility.payer_name || eligibility.payer_id ? `<div style="font-size: 10px; color: #64748b; margin-top: 4px;">Insurance: ${eligibility.payer_name || eligibility.payer_id} · Member: ${eligibility.member_id || 'N/A'}</div>` : ''}
                         </div>
                     ` : `
                         <div style="margin-top: 12px; padding: 8px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444;">

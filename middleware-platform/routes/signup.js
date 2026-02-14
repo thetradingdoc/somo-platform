@@ -2023,6 +2023,63 @@ router.post('/signup/verify-card', rateLimiter, async (req, res) => {
       // But we can still try to save the payment method ID
       console.warn('⚠️  Stripe error retrieving payment method (account may be under review):', stripeError.message);
 
+      // resource_missing = PaymentMethod created in different Stripe mode (test vs live)
+      // Frontend pk_live_ + backend sk_test_ (or vice versa) = pm_ doesn't exist in backend's mode
+      const isResourceMissing = stripeError.code === 'resource_missing' ||
+        stripeError.raw?.code === 'resource_missing' ||
+        (stripeError.message && String(stripeError.message).includes('No such PaymentMethod'));
+      if (isResourceMissing) {
+        const isDev = process.env.NODE_ENV !== 'production';
+        if (isDev) {
+          // In dev: save placeholder so user can complete signup (convenience for testing)
+          const placeholderId = `pm_placeholder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          db.updateCustomerPaymentMethod(
+            customer.id,
+            placeholderId,
+            card_details?.last4 || '****',
+            card_details?.brand || 'card',
+            true
+          );
+          try {
+            const incompleteSignup = db.getIncompleteSignupByEmail(customer.email);
+            if (incompleteSignup) db.markIncompleteSignupCompleted(incompleteSignup.id, customer.id);
+          } catch (_) {}
+          try {
+            const freeCredits = (customer.customer_type || 'saas') === 'saas' ? 250 : 100;
+            db.allocateFreeCredits(customer.id, freeCredits);
+          } catch (_) {}
+          if (bcrypt) {
+            const existingCustomer = db.getCustomer(customer.id);
+            if (!existingCustomer.password_hash) {
+              const plainPassword = generateSimplePassword();
+              const passwordHash = await bcrypt.hash(plainPassword, 10);
+              db.updateCustomer(customer.id, { password_hash: passwordHash });
+              setImmediate(() => {
+                EmailService.sendWelcomeEmail(
+                  customer.email,
+                  customer.name || customer.company_name,
+                  null,
+                  customer.customer_type || 'saas',
+                  customer.merchant_id,
+                  plainPassword
+                ).catch(() => {});
+              });
+            }
+          }
+          return res.json({
+            success: true,
+            message: 'Payment method saved (dev mode – Stripe test/live keys were mismatched).',
+            payment_method: { card_brand: card_details?.brand || 'card', card_last4: card_details?.last4 || '****' },
+            note: 'Restart server and use pk_test_ with sk_test_ for real card verification.'
+          });
+        }
+        return res.status(400).json({
+          success: false,
+          error: 'Payment method could not be verified',
+          message: 'Stripe test and live keys may be mismatched. Refresh the page, enter your card again, and ensure test cards (e.g. 4242...) are used with test mode (pk_test_ / sk_test_).'
+        });
+      }
+
       // If we can't retrieve the payment method, we can't get card details
       // But we can still save the payment method ID for later use
       if (stripeError.code === 'account_invalid' || stripeError.message?.includes('cannot currently make live charges')) {

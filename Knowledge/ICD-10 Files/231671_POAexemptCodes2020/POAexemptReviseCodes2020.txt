@@ -1,0 +1,23 @@
+Order2020	Action	Diagnosis	Description
+74820	Revise from:	T40.906D	"Underdosing of unspecified psychodysleptics, subsequent encounter"
+74820	Revise to:	T40.906D	"Underdosing of unspecified psychodysleptics [hallucinogens], subsequent encounter"
+74821	Revise from:	T40.906S	"Underdosing of unspecified psychodysleptics, sequela"
+74821	Revise to:	T40.906S	"Underdosing of unspecified psychodysleptics [hallucinogens], sequela"
+74845	Revise from:	T40.996D	"Underdosing of other psychodysleptics, subsequent encounter"
+74845	Revise to:	T40.996D	"Underdosing of other psychodysleptics [hallucinogens], subsequent encounter"
+74846	Revise from:	T40.996S	"Underdosing of other psychodysleptics, sequela"
+74846	Revise to:	T40.996S	"Underdosing of other psychodysleptics [hallucinogens], sequela"
+75789	Revise from:	T44.1X6D	"Underdosing of other parasympathomimetics, subsequent encounter"
+75789	Revise to:	T44.1X6D	"Underdosing of other parasympathomimetics [cholinergics], subsequent encounter"
+75790	Revise from:	T44.1X6S	"Underdosing of other parasympathomimetics, sequela"
+75790	Revise to:	T44.1X6S	"Underdosing of other parasympathomimetics [cholinergics], sequela"
+85107	Revise from:	V43.13XA	"Car passenger injured in collision with pick-up in nontraffic accident, initial encounter"
+85107	Revise to:	V43.13XA	"Car passenger injured in collision with pick-up truck in nontraffic accident, initial encounter"
+85108	Revise from:	V43.13XD	"Car passenger injured in collision with pick-up in nontraffic accident, subsequent encounter"
+85108	Revise to:	V43.13XD	"Car passenger injured in collision with pick-up truck in nontraffic accident, subsequent encounter"
+85109	Revise from:	V43.13XS	"Car passenger injured in collision with pick-up in nontraffic accident, sequela"
+85109	Revise to:	V43.13XS	"Car passenger injured in collision with pick-up truck in nontraffic accident, sequela"
+93723	Revise from:	Z45.42	Encounter for adjustment and management of neuropacemaker (brain) (peripheral nerve) (spinal cord)
+93723	Revise to:	Z45.42	Encounter for adjustment and management of neurostimulator
+94007	Revise from:	Z68.43	"Body mass index (BMI) 50-59.9, adult"
+94007	Revise to:	Z68.43	"Body mass index (BMI) 50.0-59.9, adult"

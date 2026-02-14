@@ -4,6 +4,8 @@
 **Status**: Production Ready  
 **Last Updated**: November 2024
 
+> **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
+
 ---
 
 ## 📋 Overview
@@ -607,11 +609,11 @@ curl "http://localhost:4000/api/patient/benefits?memberId=CIGNA901234&patientNam
 All documentation has been organized in the [`docs/`](./docs/) folder:
 
 ### Quick Links
-- **Setup Guides**: [Domain Setup](./docs/setup/DOMAIN_SETUP_GUIDE.md), [Environment Variables](./docs/setup/ENV_SETUP.md)
-- **Architecture**: [Vision](./docs/architecture/VISION.md), [Payment Architecture](./docs/architecture/PAYMENT_ARCHITECTURE.md)
+- **Setup Guides**: [Setup](./docs/setup/getting-started/SETUP.md), [Stripe Issuing](./docs/setup/stripe/STRIPE_ISSUING_COMPLETE_GUIDE.md)
+- **Architecture**: [Vision](./docs/architecture/vision/VISION.md), [Payment Architecture](./docs/architecture/payments/PAYMENT_ARCHITECTURE.md)
 - **API**: [API Documentation](./docs/api/API_DOCUMENTATION.md)
-- **Deployment**: [Security](./docs/deployment/SECURITY_IMPROVEMENTS.md), [Backup Strategy](./docs/deployment/BACKUP_STRATEGY.md)
-- **Voice Agent**: [Kelly's Prompt](./docs/voice-agent/kelly-voice-agent-prompt.md)
+- **Deployment**: [Security](./docs/deployment/security/SECURITY_IMPROVEMENTS.md), [Backup Strategy](./docs/deployment/guides/BACKUP_STRATEGY.md)
+- **Voice Agent**: [Kelly's Prompt](./docs/voice-agent/prompts/kelly-voice-agent-prompt.md)
 
 See [`docs/README.md`](./docs/README.md) for a complete index of all documentation.
 
@@ -629,7 +631,7 @@ For issues and questions:
 1. Check the troubleshooting section
 2. Review API endpoint documentation in [`docs/api/`](./docs/api/)
 3. Check server logs for error details
-4. Verify environment variables are configured correctly (see [`docs/setup/ENV_SETUP.md`](./docs/setup/ENV_SETUP.md))
+4. Verify environment variables are configured correctly (see [`docs/setup/getting-started/SETUP.md`](./docs/setup/getting-started/SETUP.md))
 
 ---
 

@@ -31,7 +31,7 @@ class InvoiceService {
         throw new Error('Patient not found');
       }
 
-      // Calculate EOB to determine patient responsibility
+      // Calculate EOB to determine patient responsibility and total billed
       const eobData = await this.calculatePatientResponsibility(claim.patient_id, claimId);
       
       // Generate invoice number
@@ -40,8 +40,12 @@ class InvoiceService {
       // Calculate due date (default: 30 days from now)
       const dueDate = options.due_date || this.calculateDueDate(30);
 
-      // Create invoice
-      const invoiceAmount = eobData.patient_responsibility || 0;
+      // Invoice amount = total billed (amountBilled) so insurance + patient payments reconcile
+      // Balance after insurance payment = whatYouOwe (patient portion)
+      const amountBilled = eobData.totals?.amountBilled;
+      const invoiceAmount = (amountBilled != null && amountBilled > 0)
+        ? amountBilled
+        : (eobData.patient_responsibility || 0);
       const invoice = {
         claim_id: claimId,
         patient_id: claim.patient_id,
@@ -55,9 +59,10 @@ class InvoiceService {
       const result = db.createInvoice(invoice);
       const createdInvoice = db.getInvoice(result.id);
 
-      // Add invoice items from claim/EOB data
+      // Add invoice items from claim/EOB data (use amount_billed so line totals = invoice total)
       if (eobData.services && eobData.services.length > 0) {
         for (const service of eobData.services) {
+          const lineAmount = service.amount_billed ?? service.what_you_owe ?? 0;
           db.addInvoiceItem({
             invoice_id: result.id,
             service_date: service.date_of_service || claim.submitted_at,
@@ -65,8 +70,8 @@ class InvoiceService {
             cpt_code: service.cpt_code || null,
             icd_code: service.icd_code || null,
             quantity: 1,
-            unit_price: service.what_you_owe || 0,
-            total_price: service.what_you_owe || 0
+            unit_price: lineAmount,
+            total_price: lineAmount
           });
         }
       } else {
@@ -102,24 +107,54 @@ class InvoiceService {
       // Get latest eligibility check for patient
       const eligibilityChecks = db.getEligibilityChecksByPatient(patientId);
       const eligibility = eligibilityChecks && eligibilityChecks.length > 0 ? eligibilityChecks[0] : null;
-      
-      // Get EOB calculation
-      const eobData = await EOBCalculationService.calculateEOB(patientId, {
-        claimId: claimId
-      });
 
-      // Calculate total patient responsibility
-      const patientResponsibility = eobData.totals?.what_you_owe || 0;
+      if (!claimId) {
+        return {
+          patient_responsibility: 0,
+          services: [],
+          totals: {},
+          eligibility
+        };
+      }
+
+      const claim = db.getInsuranceClaim(claimId);
+      if (!claim) {
+        return {
+          patient_responsibility: 0,
+          services: [],
+          totals: {},
+          eligibility
+        };
+      }
+
+      let claimDetails = {};
+      try {
+        claimDetails = claim.response_data
+          ? (typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data)
+          : {};
+      } catch (_) {}
+
+      const eobResult = EOBCalculationService.calculateEOBFromClaim(claim, eligibility || {}, claimDetails);
+      const patientResponsibility = eobResult.totals?.whatYouOwe ?? eobResult.totals?.what_you_owe ?? 0;
+
+      // Map lineItems to services format expected by invoice (snake_case)
+      const services = (eobResult.lineItems || []).map((li) => ({
+        date_of_service: li.dateOfService,
+        type_of_service: li.typeOfService || li.description,
+        cpt_code: li.cptCode,
+        icd_code: null,
+        what_you_owe: li.whatYouOwe ?? 0,
+        amount_billed: li.amountBilled ?? 0
+      }));
 
       return {
         patient_responsibility: patientResponsibility,
-        services: eobData.services || [],
-        totals: eobData.totals || {},
-        eligibility: eligibility
+        services,
+        totals: eobResult.totals || {},
+        eligibility
       };
     } catch (error) {
       console.error('❌ Error calculating patient responsibility:', error);
-      // Fallback: return zero if EOB calculation fails
       return {
         patient_responsibility: 0,
         services: [],

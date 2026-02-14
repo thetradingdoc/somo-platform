@@ -30,9 +30,11 @@ const keyGenerator = (req) => {
 
 // General API rate limiter
 // Note: trust proxy must be set in server.js before this middleware is used
+// In development, use a much higher limit to avoid 429s from dashboard polling + PDF processing
+const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev';
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  max: isDev ? 2000 : 100, // Dev: 2000/15min to avoid 429s; Prod: 100
   message: {
     error: 'Too many requests from this IP, please try again later.',
     retryAfter: '15 minutes'

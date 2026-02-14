@@ -362,7 +362,7 @@ Users can disconnect anytime:
 ## 🔗 Related Documentation
 
 - **API Documentation**: `docs/api/API_DOCUMENTATION.md`
-- **Deployment Guide**: `docs/deployment/DEPLOYMENT_GUIDE.md`
+- **Deployment Guide**: `docs/deployment/guides/DEPLOYMENT_GUIDE.md`
 - **Multi-Tenant Architecture**: `docs/architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md`
 
 ---

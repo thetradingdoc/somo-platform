@@ -153,6 +153,75 @@ function extractTextualFindings(text) {
   };
 }
 
+/**
+ * Extract negative findings (exclusion keywords) from clinical text.
+ * Used for perceptual-state-aware negative constraints in Layer 2 RAG.
+ * Patterns: "no X", "denies X", "negative for X", "closed fracture", "rule out X", etc.
+ *
+ * @param {string} text - Clinical text
+ * @returns {{ exclusion_keywords: string[], negative_findings: Array<{ phrase: string, exclusions: string[] }> }}
+ */
+function extractNegativeFindings(text) {
+  if (!text || typeof text !== 'string') {
+    return { exclusion_keywords: [], negative_findings: [] };
+  }
+
+  const exclusion_keywords = new Set();
+  const negative_findings = [];
+  const t = text.slice(0, 8000);
+
+  const patterns = [
+    { re: /\bno\s+(open|closed|acute|chronic)\s+([a-z\s]+)/gi, idx: 1, expand: { open: ['open'], closed: ['open'], acute: ['acute'], chronic: ['chronic'] } },
+    { re: /\bdenies\s+([a-z\s]+)/gi, idx: 1, expand: {} },
+    { re: /\bwithout\s+([a-z\s]+)/gi, idx: 1, expand: {} },
+    { re: /\bruled?\s+out\s+([a-z\s]+)/gi, idx: 1, expand: {} },
+    { re: /\bnegative\s+for\s+([a-z\s]+)/gi, idx: 1, expand: {} },
+    { re: /\bno\s+([a-z]+)\s+(wound|fracture|dislocation|bleeding|infection)/gi, idx: 2, expand: { wound: ['open', 'laceration', 'puncture'], fracture: ['open'], infection: ['infection', 'infected', 'sepsis'] } }
+  ];
+
+  for (const { re, idx, expand } of patterns) {
+    let m;
+    const regex = new RegExp(re.source, re.flags);
+    while ((m = regex.exec(t)) !== null) {
+      const matched = (m[idx] || m[1] || '').toLowerCase().trim();
+      const words = matched.split(/\s+/).filter(w => w.length > 2);
+      const exclusions = [...words];
+      const firstWord = words[0];
+      if (expand[firstWord]) {
+        expand[firstWord].forEach(e => {
+          exclusions.push(e);
+          exclusion_keywords.add(e);
+        });
+      }
+      words.forEach(w => exclusion_keywords.add(w));
+      negative_findings.push({ phrase: m[0].trim(), exclusions });
+    }
+  }
+
+  if (/\bclosed\s+fracture\b/i.test(t)) {
+    exclusion_keywords.add('open');
+    negative_findings.push({ phrase: 'closed fracture', exclusions: ['open'] });
+  }
+  if (/\bno\s+open\b/i.test(t)) {
+    exclusion_keywords.add('open');
+    negative_findings.push({ phrase: 'no open', exclusions: ['open'] });
+  }
+  if (/\bdenies\s+chest\s+pain\b/i.test(t)) {
+    exclusion_keywords.add('angina');
+    negative_findings.push({ phrase: 'denies chest pain', exclusions: ['angina'] });
+  }
+  if (/\bno\s+infection\b/i.test(t)) {
+    exclusion_keywords.add('infection');
+    negative_findings.push({ phrase: 'no infection', exclusions: ['infection'] });
+  }
+
+  return {
+    exclusion_keywords: Array.from(exclusion_keywords).filter(term => term.length > 2),
+    negative_findings
+  };
+}
+
 module.exports = {
-  extractTextualFindings
+  extractTextualFindings,
+  extractNegativeFindings
 };

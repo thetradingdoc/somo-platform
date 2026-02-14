@@ -1,0 +1,13 @@
+POAexemptCode	Description
+Q66.0	Congenital talipes equinovarus
+Q66.1	Congenital talipes calcaneovarus
+Q66.21	Congenital metatarsus primus varus
+Q66.22	Congenital metatarsus adductus
+Q66.3	Other congenital varus deformities of feet
+Q66.4	Congenital talipes calcaneovalgus
+Q66.7	Congenital pes cavus
+Q66.9	"Congenital deformity of feet, unspecified"
+Q79.6	Ehlers-Danlos syndrome
+Q87.1	Congenital malformation syndromes predominantly associated with short stature
+T67.0XXD	"Heatstroke and sunstroke, subsequent encounter"
+T67.0XXS	"Heatstroke and sunstroke, sequela"

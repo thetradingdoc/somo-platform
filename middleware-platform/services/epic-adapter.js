@@ -9,6 +9,9 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const http = require('http');
+const { getOrCreate, EPIC } = require('../utils/circuit-breaker');
+
+const epicBreaker = getOrCreate(EPIC, { failureThreshold: 3, windowMs: 30000, resetTimeMs: 30000 });
 
 class EpicAdapter {
   constructor() {
@@ -218,12 +221,13 @@ class EpicAdapter {
         tokenData.append('client_secret', this.clientSecret);
       }
 
-      // Exchange code for token
-      const tokenResponse = await axios.post(tokenUrl, tokenData.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
+      // Exchange code for token (Section 2.1: circuit breaker)
+      const tokenResponse = await epicBreaker.execute(
+        () => axios.post(tokenUrl, tokenData.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        }),
+        () => { throw new Error('Epic unavailable (circuit open)'); }
+      );
 
       const { access_token, refresh_token, expires_in, patient, scope } = tokenResponse.data;
 
@@ -279,11 +283,12 @@ class EpicAdapter {
         tokenData.append('client_secret', this.clientSecret);
       }
 
-      const tokenResponse = await axios.post(tokenUrl, tokenData.toString(), {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
+      const tokenResponse = await epicBreaker.execute(
+        () => axios.post(tokenUrl, tokenData.toString(), {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        }),
+        () => { throw new Error('Epic unavailable (circuit open)'); }
+      );
 
       const { access_token, expires_in } = tokenResponse.data;
       const expiresAt = new Date(Date.now() + expires_in * 1000);
@@ -352,13 +357,12 @@ class EpicAdapter {
         url += `?${params.join('&')}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
+      const response = await epicBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => { throw new Error('Epic unavailable (circuit open)'); }
+      );
       return response.data.entry || [];
     } catch (error) {
       console.error('Error fetching Epic encounters:', error.response?.data || error.message);
@@ -383,14 +387,13 @@ class EpicAdapter {
         url += `&encounter=${encounterId}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      return response.data.entry || [];
+      const response = await epicBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => []
+      );
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching Epic conditions:', error.response?.data || error.message);
       return []; // Return empty array on error
@@ -414,14 +417,13 @@ class EpicAdapter {
         url += `&encounter=${encounterId}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      return response.data.entry || [];
+      const response = await epicBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => []
+      );
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching Epic procedures:', error.response?.data || error.message);
       return []; // Return empty array on error
@@ -445,14 +447,13 @@ class EpicAdapter {
         url += `&encounter=${encounterId}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      return response.data.entry || [];
+      const response = await epicBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => []
+      );
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching Epic observations:', error.response?.data || error.message);
       return []; // Return empty array on error
@@ -529,14 +530,13 @@ class EpicAdapter {
         url += `&encounter=${encounterId}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      return response.data.entry || [];
+      const response = await epicBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => []
+      );
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching Epic DocumentReferences:', error.response?.data || error.message);
       return []; // Return empty array on error
@@ -560,14 +560,13 @@ class EpicAdapter {
         url += `&encounter=${encounterId}`;
       }
 
-      const response = await axios.get(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-
-      return response.data.entry || [];
+      const response = await epicBreaker.execute(
+        () => axios.get(url, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
+        }),
+        () => []
+      );
+      return response?.data?.entry || [];
     } catch (error) {
       console.error('Error fetching Epic DiagnosticReports:', error.response?.data || error.message);
       return []; // Return empty array on error

@@ -1,0 +1,83 @@
+{
+  "symptoms": [
+    {
+      "id": "pain_in_location",
+      "pattern": "\\b(pain|ache|discomfort|soreness)\\s+(in|of)\\s+(?:my\\s+)?(\\w+(?:\\s+\\w+)?)\\b",
+      "extract": ["symptom", "location"],
+      "groups": { "symptom": 1, "location": 3 }
+    },
+    {
+      "id": "symptom_general",
+      "pattern": "\\b(pain|fever|chills|nausea|vomiting|diarrhea|constipation|headache|dizziness|cough|sore throat)\\b",
+      "extract": "symptom"
+    },
+    {
+      "id": "chest_symptoms",
+      "pattern": "\\b(chest pain|shortness of breath|difficulty breathing|palpitations|pressure in chest)\\b",
+      "extract": "symptom"
+    },
+    {
+      "id": "mental_health",
+      "pattern": "\\b(anxiety|depression|stress|panic|suicide|self[- ]harm)\\b",
+      "extract": "symptom"
+    }
+  ],
+  "vitals": [
+    {
+      "id": "temperature_f",
+      "pattern": "\\b(\\d{2,3}\\.?\\d*)\\s*°?F\\b|\\bfever\\s+(?:of\\s+)?(\\d{2,3})\\b",
+      "extract": "temperature",
+      "unit": "F"
+    },
+    {
+      "id": "temperature_c",
+      "pattern": "\\b(\\d{2}\\.?\\d*)\\s*°?C\\b",
+      "extract": "temperature",
+      "unit": "C"
+    },
+    {
+      "id": "blood_pressure",
+      "pattern": "\\b(\\d{2,3})\\s*/?\\s*(\\d{2,3})\\s*(?:mmHg|blood pressure)?\\b|\\bBP\\s*(\\d{2,3})\\s*/?\\s*(\\d{2,3})\\b",
+      "extract": ["systolic", "diastolic"]
+    },
+    {
+      "id": "heart_rate",
+      "pattern": "\\b(\\d{2,3})\\s*(?:bpm|beats per minute|pulse)?\\b|\\bheart rate\\s+(?:of\\s+)?(\\d{2,3})\\b",
+      "extract": "heart_rate"
+    }
+  ],
+  "temporal": [
+    {
+      "id": "duration_days",
+      "pattern": "\\b(?:for\\s+)?(\\d+)\\s*(?:days?|d)\\b",
+      "extract": "duration_days"
+    },
+    {
+      "id": "duration_weeks",
+      "pattern": "\\b(?:for\\s+)?(\\d+)\\s*(?:weeks?|wks?)\\b",
+      "extract": "duration_weeks"
+    },
+    {
+      "id": "duration_months",
+      "pattern": "\\b(?:for\\s+)?(\\d+)\\s*(?:months?|mos?)\\b",
+      "extract": "duration_months"
+    },
+    {
+      "id": "onset",
+      "pattern": "\\b(sudden|gradual|acute|chronic|recent|today|yesterday|this morning)\\b",
+      "extract": "onset"
+    }
+  ],
+  "severity": [
+    {
+      "id": "pain_scale",
+      "pattern": "\\b(\\d)\\s*out of\\s*10\\b|\\b(\\d{1,2})\\s*[/-]\\s*10\\b|\\bpain level\\s+(\\d{1,2})\\b",
+      "extract": "pain_scale"
+    },
+    {
+      "id": "severity_words",
+      "pattern": "\\b(mild|moderate|severe|intense|excruciating|unbearable|slight|bad|terrible)\\b",
+      "extract": "severity"
+    }
+  ]
+}

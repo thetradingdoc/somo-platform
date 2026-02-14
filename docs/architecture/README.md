@@ -6,50 +6,40 @@ System architecture, design decisions, and technical documentation.
 
 ## 📚 Documentation Index
 
-1. **VISION.md** 🎯 **MAIN VISION**
-   - Platform vision and roadmap
-   - Long-term goals
-   - Strategic direction
+### Vision & Overview
+- **[vision/VISION.md](./vision/VISION.md)** — Platform vision, goals, roadmap
 
-2. **MULTI_TENANT_VOICE_AGENT.md** 🏢 **MULTI-TENANT**
-   - Multi-tenant voice agent architecture
-   - Tenant isolation
-   - Agent management
+### Core Architecture
+- **[database/DATABASE_SCHEMA_APPROACH.md](./database/DATABASE_SCHEMA_APPROACH.md)** — Database design, multi-tenancy
+- **[multi-tenant/MULTI_TENANT_VOICE_AGENT.md](./multi-tenant/MULTI_TENANT_VOICE_AGENT.md)** — Multi-tenant architecture
+- **[payments/PAYMENT_ARCHITECTURE.md](./payments/PAYMENT_ARCHITECTURE.md)** — Payment processing, orchestrator
 
-3. **PAYMENT_ARCHITECTURE.md** 💳 **PAYMENTS**
-   - Payment processing architecture
-   - Payment orchestrator
-   - Payment flows
+### Layer-Specific
+- **[intelligence-layer/README.md](./intelligence-layer/README.md)** — Multimodal medical AI (Layers 1–4), perception, RAG, coding agents
+- **[financial/FINANCIAL_LAYER_ARCHITECTURE.md](./financial/FINANCIAL_LAYER_ARCHITECTURE.md)** — Insurance, claims, EOB, coding, settlement, Tiba
+- **[healthcare/HEALTHCARE_ASSESSMENT.md](./healthcare/HEALTHCARE_ASSESSMENT.md)** — Healthcare platform assessment
+- **[media/MEDIA_LAYER_ARCHITECTURE.md](./media/MEDIA_LAYER_ARCHITECTURE.md)** — Retell, Twilio, LiveKit
+- **[ai/LANGCHAIN_LANGGRAPH_RAG_ARCHITECTURE.md](./ai/LANGCHAIN_LANGGRAPH_RAG_ARCHITECTURE.md)** — LangChain, LangGraph, RAG, state, memory, evaluation
 
-4. **DATABASE_SCHEMA_APPROACH.md** 🗄️ **DATABASE**
-   - Database schema design
-   - Multi-tenancy approach
-   - Schema evolution
+### Implementation & Maintenance
+- **[middleware/MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md](./middleware/MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md)** — Brain improvements implementation
+- **[maintenance/ARCHITECTURE_ISSUES.md](./maintenance/ARCHITECTURE_ISSUES.md)** — Known architecture issues
+- **[maintenance/FIXES_APPLIED.md](./maintenance/FIXES_APPLIED.md)** — Applied fixes log
 
-5. **AUTOMATED_RETELL_AGENT_CREATION.md** 🤖 **RETELL**
-   - Automated Retell agent creation
-   - Agent provisioning
-   - Configuration
+### Voice Agent & Retell
+- **[voice-agent/RUNBOOK.md](./voice-agent/RUNBOOK.md)** — Medical coding runbook
+- **[voice-agent/TOOL_SCHEMAS.md](./voice-agent/TOOL_SCHEMAS.md)** — Retell function schemas
+- **[voice-agent/AUTOMATED_RETELL_AGENT_CREATION.md](./voice-agent/AUTOMATED_RETELL_AGENT_CREATION.md)** — Agent provisioning
 
-6. **STRIPE_ISSUING_IMPLEMENTATION.md** 💰 **STRIPE**
-   - Stripe Issuing implementation
-   - Card issuance flow
-   - Integration details
+### Financial Layer (Tiba)
+- **[financial/TIBA_FINANCIAL_LAYER_GAP_ANALYSIS.md](./financial/TIBA_FINANCIAL_LAYER_GAP_ANALYSIS.md)**
+- **[financial/TIBA_FINANCIAL_LAYER_GAP_REMEDIATION_TODO.md](./financial/TIBA_FINANCIAL_LAYER_GAP_REMEDIATION_TODO.md)**
+- **[financial/TIBA_FINANCIAL_LAYER_TODO.md](./financial/TIBA_FINANCIAL_LAYER_TODO.md)**
+- **[financial/STATIC_RECORDS_AUDIT.md](./financial/STATIC_RECORDS_AUDIT.md)**
 
-7. **STRIPE_ISSUING_INTEGRATION.md** 🔗 **STRIPE INTEGRATION**
-   - Stripe Issuing integration
-   - API integration
-   - Webhook handling
-
-8. **multi-tenant-signup-implementation.md** 📝 **SIGNUP**
-   - Multi-tenant signup implementation
-   - Registration flow
-   - Tenant creation
-
-9. **HEALTHCARE_ASSESSMENT.md** 🏥 **HEALTHCARE**
-   - Healthcare platform assessment
-   - Compliance considerations
-   - Healthcare-specific features
+### Stripe
+- **[payments/STRIPE_ISSUING_IMPLEMENTATION.md](./payments/STRIPE_ISSUING_IMPLEMENTATION.md)**
+- **[payments/STRIPE_ISSUING_INTEGRATION.md](./payments/STRIPE_ISSUING_INTEGRATION.md)**
 
 ---
 
@@ -71,5 +61,4 @@ System architecture, design decisions, and technical documentation.
 
 ---
 
-**Last Updated:** November 15, 2025
-
+**Last Updated:** January 2026

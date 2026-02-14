@@ -182,7 +182,7 @@ async function runCodingPipeline(encounter, options = {}) {
 
   if (classification.band === 'MODERATE') {
     const modCandidates = encounter.perceptualState
-      ? knowledgeService.getCandidatesForCoding(encounter.clinicalNote, { perceptualState: encounter.perceptualState, limitCpt: 5, limitIcd10: 3 })
+      ? await knowledgeService.getCandidatesForCoding(encounter.clinicalNote, { perceptualState: encounter.perceptualState, limitCpt: 5, limitIcd10: 3 })
       : { cpt: knowledgeService.getCandidateCptCodes(encounter.clinicalNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3, 0.8) };
     const cptCandidates = modCandidates.cpt;
     const icd10 = modCandidates.icd10;

@@ -9,6 +9,26 @@ const visionEncoder = require('./vision-encoder');
 const textEncoder = require('./text-encoder');
 const crossAttention = require('./cross-attention');
 
+/**
+ * Infer region from clinic (for regional policy routing).
+ * @param {string|null} clinicId - Clinic ID
+ * @returns {string} Region code (US, UK, ZA)
+ */
+function inferRegion(clinicId) {
+  if (!clinicId) return 'US';
+  try {
+    const db = require('../../database');
+    const clinic = typeof db.getClinicById === 'function' ? db.getClinicById(clinicId) : null;
+    if (!clinic) return 'US';
+    const region = (clinic.region || clinic.country_code || '').toString().trim().toUpperCase();
+    if (region === 'UK' || region === 'GB') return 'UK';
+    if (region === 'ZA') return 'ZA';
+    return region || 'US';
+  } catch (_) {
+    return 'US';
+  }
+}
+
 function calculateConfidenceScores(state) {
   const scores = {
     vision_confidence: 0,
@@ -128,7 +148,8 @@ async function buildPerceptualState(inputs) {
     imagePath,
     clinicalText,
     audioPath,
-    modality = 'xray'
+    modality = 'xray',
+    clinicId = null
   } = inputs;
 
   const state = {
@@ -137,6 +158,7 @@ async function buildPerceptualState(inputs) {
     modality,
     visual_findings: [],
     textual_findings: [],
+    negative_findings: [],
     audio_metadata: null,
     cross_modal_links: [],
     alignment_metrics: null,
@@ -175,8 +197,13 @@ async function buildPerceptualState(inputs) {
       const textResult = textEncoder.extractTextualFindings(fullText);
       state.textual_findings = textResult.findings || [];
       state.expanded_text = textResult.expanded_text || fullText;
+      const negResult = textEncoder.extractNegativeFindings(fullText);
+      state.negative_findings = negResult.exclusion_keywords || [];
       state.processing_metadata.text_ms = Date.now() - t1;
     }
+
+    // 3b. Region tag (for regional policy routing)
+    state.region_tag = inferRegion(clinicId);
 
     // 4. Cross-modal fusion
     if (
@@ -216,5 +243,6 @@ async function buildPerceptualState(inputs) {
 module.exports = {
   buildPerceptualState,
   calculateConfidenceScores,
-  shouldFlagForReview
+  shouldFlagForReview,
+  inferRegion
 };

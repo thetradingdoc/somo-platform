@@ -2,16 +2,14 @@
 
 Historical reports and system review documents.
 
-## 📊 Reports
+## Current Status
 
-### System Reviews
-- **[System Review - November 5, 2024](./system-review-2024-11-05.md)** - Comprehensive system test and status check report
+No reports are currently in this folder. Reports are generated on an as-needed basis.
+
+## Related Documentation
+
+For current system status, see the main [docs README](../README.md) or [deployment documentation](../deployment/guides/DEPLOYMENT_GUIDE.md).
 
 ---
 
-**Note**: These reports are historical snapshots of the system state at specific points in time. For current system status, see the main [README.md](../README.md) or deployment documentation.
-
----
-
-**Last Updated**: November 2024
-
+**Last Updated:** January 2026

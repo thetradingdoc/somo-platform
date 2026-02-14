@@ -1613,12 +1613,18 @@
                 // Already handled by checkAuth above
             }
 
-            // Check if user is an insurer and redirect to insurer dashboard
+            // Check user role and redirect to correct portal
             try {
                 const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
                 if (userData.email === 'insurer@doclittle.com' || userData.role === 'insurer_admin' || userData.role === 'insurer') {
                     console.log('Insurer user detected, redirecting to insurer dashboard...');
                     window.location.href = '../insurer/insurer-dashboard.html';
+                    return;
+                }
+                if (userData.email === 'patient@doclittle.com' || userData.role === 'Patient' || userData.role === 'patient') {
+                    console.log('Patient user detected, redirecting to patient portal...');
+                    if (userData.email) localStorage.setItem('patient_email', userData.email);
+                    window.location.href = '../patients/patient-dashboard.html';
                     return;
                 }
             } catch (e) {

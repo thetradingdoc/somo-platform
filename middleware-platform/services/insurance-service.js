@@ -7,6 +7,9 @@
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
+const { getOrCreate, STEDI } = require('../utils/circuit-breaker');
+
+const stediBreaker = getOrCreate(STEDI, { failureThreshold: 5, windowMs: 60000, resetTimeMs: 30000 });
 
 class InsuranceService {
   // Stedi API Configuration
@@ -55,18 +58,38 @@ class InsuranceService {
 
       // Call Stedi API to translate to EDI format
       const stediClient = this.getStediClient();
-      
+      let eligibilityResponse = null;
+
       try {
-        // Option 1: Use Stedi's X12 translation API
-        // POST /x12/translate/270-to-edi
-        const translateResponse = await stediClient.post('/x12/translate/270-to-edi', {
-          json: x12Request
-        });
+        const translateResponse = await stediBreaker.execute(
+          () => stediClient.post('/x12/translate/270-to-edi', { json: x12Request }),
+          () => { throw new Error('Circuit open - using simulation'); }
+        );
 
         console.log('✅ Stedi API response received');
         console.log('   EDI Request generated:', translateResponse.data?.edi ? 'Yes' : 'No');
+
+        // Deep 271 parsing: extract structured eligibility from Stedi response
+        const stedi271Parser = require('./stedi-271-parser');
+        const parsed = stedi271Parser.parse271Response(translateResponse.data || translateResponse);
+
+        if (stedi271Parser.hasMeaningfulData(parsed)) {
+          eligibilityResponse = {
+            eligible: parsed.eligible,
+            copay: parsed.copay ?? 0,
+            allowedAmount: parsed.allowedAmount ?? 0,
+            insurancePays: parsed.insurancePays ?? 0,
+            deductibleTotal: parsed.deductibleTotal,
+            deductibleRemaining: parsed.deductibleRemaining,
+            coinsurancePercent: parsed.coinsurancePercent,
+            oopMax: parsed.oopMax ?? null,
+            oopMet: parsed.oopMet ?? 0,
+            planSummary: parsed.planSummary,
+            message: parsed.message || (parsed.eligible ? `Eligible - Copay $${parsed.copay ?? 0}` : 'Not eligible')
+          };
+          console.log('   Parsed 271 response: eligible=%s, copay=$%s', eligibilityResponse.eligible, eligibilityResponse.copay);
+        }
       } catch (apiError) {
-        // If Stedi API fails, log and continue with simulation
         console.warn('⚠️  Stedi API call failed, using simulation:', apiError.message);
         try {
           const Metrics = require('./metrics');
@@ -78,14 +101,20 @@ class InsuranceService {
         }
       }
 
-      // Simulate or parse eligibility check (replace with real API call when ready)
-      const eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
+      // Use parsed Stedi response, or fall back to simulation (Section 2 - graceful Tiba degradation)
+      let stediFailed = false;
+      if (!eligibilityResponse) {
+        eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
+        stediFailed = true;
+      }
 
       // Attempt to parse 271-style benefit details if present on response
       const planSummary = eligibilityResponse.planSummary || null;
       const deductibleTotal = eligibilityResponse.deductibleTotal ?? null;
       const deductibleRemaining = eligibilityResponse.deductibleRemaining ?? null;
       const coinsurancePercent = eligibilityResponse.coinsurancePercent ?? null;
+      const oopMax = eligibilityResponse.oopMax ?? null;
+      const oopMet = eligibilityResponse.oopMet ?? 0;
 
       // Store eligibility check in database
       const eligibilityRecord = {
@@ -102,6 +131,8 @@ class InsuranceService {
         deductible_total: deductibleTotal,
         deductible_remaining: deductibleRemaining,
         coinsurance_percent: coinsurancePercent,
+        oop_max: oopMax,
+        oop_met: oopMet,
         plan_summary: planSummary,
         response_data: JSON.stringify(eligibilityResponse),
         created_at: new Date().toISOString()
@@ -117,7 +148,7 @@ class InsuranceService {
       }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-      return {
+      const result = {
         success: true,
         eligible: eligibilityResponse.eligible,
         copay: eligibilityResponse.copay || 0,
@@ -126,20 +157,30 @@ class InsuranceService {
         deductibleTotal: deductibleTotal,
         deductibleRemaining: deductibleRemaining,
         coinsurancePercent: coinsurancePercent,
+        oopMax: oopMax,
+        oopMet: oopMet,
         planSummary: planSummary,
         patientResponsibility: eligibilityResponse.copay || 0,
         eligibilityId: eligibilityRecord.id,
-        message: eligibilityResponse.eligible 
+        message: eligibilityResponse.eligible
           ? `Eligible - Copay: $${eligibilityResponse.copay}, Insurance pays: $${eligibilityResponse.insurancePays}`
           : 'Not eligible for this service'
       };
+      if (stediFailed) {
+        result.settled = false;
+        result.manualReview = true;
+        result.stediFallback = true;
+      }
+      return result;
 
     } catch (error) {
       console.error('❌ Error checking eligibility:', error.message);
       return {
         success: false,
         eligible: false,
-        error: error.message
+        error: error.message,
+        settled: false,
+        manualReview: true
       };
     }
   }
@@ -195,19 +236,20 @@ class InsuranceService {
       // Build X12 837 claim
       const x12Claim = this._buildClaimRequest(claimData);
 
-      // Call Stedi API to translate to EDI format
+      // Call Stedi API to translate to EDI format (Section 2 - graceful Tiba degradation)
       const stediClient = this.getStediClient();
-      
+      let stediSucceeded = false;
       try {
-        // POST /x12/translate/837-to-edi
-        const translateResponse = await stediClient.post('/x12/translate/837-to-edi', {
-          json: x12Claim
-        });
+        const translateResponse = await stediBreaker.execute(
+          () => stediClient.post('/x12/translate/837-to-edi', { json: x12Claim }),
+          () => { throw new Error('Circuit open - using simulation'); }
+        );
 
         console.log('✅ Stedi API response received');
         console.log('   EDI Claim generated:', translateResponse.data?.edi ? 'Yes' : 'No');
+        stediSucceeded = true;
       } catch (apiError) {
-        // If Stedi API fails, log and continue with simulation
+        // If Stedi API fails, log and continue with simulation - do not block call
         console.warn('⚠️  Stedi API call failed, using simulation:', apiError.message);
         if (apiError.response) {
           console.warn('   Status:', apiError.response.status);
@@ -274,19 +316,27 @@ class InsuranceService {
       console.log('   Status: Submitted - Pending approval');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-      return {
+      const result = {
         success: true,
         claimId: claimRecord.id,
         x12ClaimId: claimResponse.claimId,
         status: 'submitted',
         message: 'Claim submitted successfully'
       };
+      if (!stediSucceeded) {
+        result.settled = false;
+        result.manualReview = true;
+        result.stediFallback = true;
+      }
+      return result;
 
     } catch (error) {
       console.error('❌ Error submitting claim:', error.message);
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        settled: false,
+        manualReview: true
       };
     }
   }
@@ -317,11 +367,10 @@ class InsuranceService {
       const stediClient = this.getStediClient();
       
       try {
-        // POST /x12/translate/276-to-edi
-        const translateResponse = await stediClient.post('/x12/translate/276-to-edi', {
-          json: x12StatusRequest
-        });
-
+        await stediBreaker.execute(
+          () => stediClient.post('/x12/translate/276-to-edi', { json: x12StatusRequest }),
+          () => { throw new Error('Circuit open - using simulation'); }
+        );
         console.log('✅ Stedi API response received');
       } catch (apiError) {
         console.warn('⚠️  Stedi API call failed, using simulation:', apiError.message);
@@ -333,11 +382,86 @@ class InsuranceService {
 
       // Update claim status in database
       if (statusResponse.status !== claim.status) {
-        db.updateInsuranceClaim(claimId, {
+        let mergedResponse = statusResponse;
+        try {
+          const existing = claim.response_data ? (typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data) : {};
+          if (existing && typeof existing === 'object' && (existing.coding || existing.pricing)) {
+            mergedResponse = { ...existing, ...statusResponse };
+          }
+        } catch (_) {}
+        const updates = {
           status: statusResponse.status,
           status_checked_at: new Date().toISOString(),
-          response_data: JSON.stringify(statusResponse)
-        });
+          response_data: JSON.stringify(mergedResponse)
+        };
+        if (statusResponse.paymentAmount != null) {
+          updates.payment_amount = statusResponse.paymentAmount;
+        }
+        db.updateInsuranceClaim(claimId, updates);
+
+        // Tiba Phase 5: reconciliation when approved/paid
+        if (statusResponse.status === 'approved' || statusResponse.status === 'paid') {
+          try {
+            const ReconciliationService = require('./reconciliation-service');
+            const EOBCalculationService = require('./eob-calculation-service');
+            const finalPlanPaid = ReconciliationService.extractFinalPlanPaid(statusResponse);
+            const updatedClaim = db.getInsuranceClaim(claimId);
+            if (finalPlanPaid != null && updatedClaim) {
+              let eligibility = null;
+              if (updatedClaim.patient_id) {
+                const checks = db.getEligibilityChecksByPatient?.(updatedClaim.patient_id) || [];
+                eligibility = checks[0] || null;
+              }
+              let claimDetails = {};
+              try {
+                claimDetails = updatedClaim.response_data ? (typeof updatedClaim.response_data === 'string' ? JSON.parse(updatedClaim.response_data) : updatedClaim.response_data) : {};
+              } catch (_) {}
+              const eob = EOBCalculationService.calculateEOBFromClaim(updatedClaim, eligibility, claimDetails);
+              const recon = ReconciliationService.computeReconciliation(updatedClaim, finalPlanPaid, eob);
+              if (recon.action !== 'none') {
+                console.log(`📊 Reconciliation: Δ_plan=$${recon.deltaPlan.toFixed(2)}, action=${recon.action}, withinTolerance=${recon.withinTolerance}`);
+                let toStore = {};
+                try {
+                  toStore = updatedClaim.response_data ? (typeof updatedClaim.response_data === 'string' ? JSON.parse(updatedClaim.response_data) : updatedClaim.response_data) : {};
+                } catch (_) {}
+                toStore.reconciliation = recon;
+                db.updateInsuranceClaim(claimId, { response_data: JSON.stringify(toStore) });
+              }
+            }
+          } catch (reconErr) {
+            console.warn('⚠️  Reconciliation skipped:', reconErr.message);
+          }
+        }
+
+        // Track code acceptance for Tiba φ^historical (Phase 4)
+        const newStatus = statusResponse.status;
+        if (newStatus === 'approved' || newStatus === 'paid' || newStatus === 'denied' || newStatus === 'rejected') {
+          try {
+            const CodeAcceptanceService = require('./code-acceptance-service');
+            const codes = [];
+            if (claim.service_code) {
+              claim.service_code.split(',').forEach(s => { const t = s.trim(); if (t && t !== 'N/A') codes.push(t); });
+            }
+            let claimDetails = {};
+            try {
+              claimDetails = claim.response_data ? (typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data) : {};
+            } catch (_) {}
+            const coding = claimDetails.coding || claimDetails;
+            if (coding.cpt && Array.isArray(coding.cpt)) {
+              coding.cpt.forEach(c => codes.push(c.code || c));
+            }
+            if (codes.length > 0 && claim.payer_id) {
+              CodeAcceptanceService.trackCodeOutcome(claimId, codes, newStatus, claim.payer_id);
+            }
+            const accepted = newStatus === 'approved' || newStatus === 'paid';
+            const providerNpi = claim.provider_npi || null;
+            if (providerNpi) {
+              CodeAcceptanceService.updateProviderTrustScore(providerNpi, accepted);
+            }
+          } catch (trackErr) {
+            console.warn('⚠️  Code acceptance tracking skipped:', trackErr.message);
+          }
+        }
       }
 
       console.log('✅ Status check completed');
@@ -458,6 +582,8 @@ class InsuranceService {
         deductibleTotal: 500,
         deductibleRemaining: 200,
         coinsurancePercent: 20,
+        oopMax: 5000,
+        oopMet: 0,
         planSummary: 'Covers outpatient mental health visits; prior auth not required for first 6 visits.',
         message: 'Eligible - Copay $20'
       },
@@ -469,6 +595,8 @@ class InsuranceService {
         deductibleTotal: 1000,
         deductibleRemaining: 600,
         coinsurancePercent: 20,
+        oopMax: 6000,
+        oopMet: 0,
         planSummary: 'Standard PPO: outpatient mental health covered after copay; deductible applies to labs only.',
         message: 'Eligible - Copay $25'
       },
@@ -480,6 +608,8 @@ class InsuranceService {
         deductibleTotal: 750,
         deductibleRemaining: 300,
         coinsurancePercent: 20,
+        oopMax: 5500,
+        oopMet: 0,
         planSummary: 'Outpatient behavioral health in-network covered; 30$ copay; 20% coinsurance after deductible for some services.',
         message: 'Eligible - Copay $30'
       }
@@ -492,6 +622,8 @@ class InsuranceService {
       copay: 20,
       allowedAmount: 150,
       insurancePays: 130,
+      oopMax: 5000,
+      oopMet: 0,
       message: 'Eligible - Copay $20 (default)'
     };
   }
