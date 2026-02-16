@@ -1,0 +1,14 @@
+# LiveKit Video Consult Agents
+# Install: pip install -r requirements.txt
+
+livekit-agents>=0.8.0
+livekit-api>=0.8.0
+livekit-plugins-openai>=0.8.0
+livekit-plugins-deepgram>=0.8.0
+
+openai>=1.0.0
+httpx>=0.25.0
+
+# Optional: for vision/YOLO
+# ultralytics>=8.0.0
+# opencv-python-headless>=4.8.0

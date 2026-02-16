@@ -9,7 +9,6 @@ yarn-error.log*
 .env.local
 .env.*.local
 .env.bak
-.env.bak2
 *.env.bak
 
 # Database files

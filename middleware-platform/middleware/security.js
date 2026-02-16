@@ -14,7 +14,7 @@ const securityHeaders = helmet({
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://js.stripe.com", "https://accounts.google.com", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://unpkg.com", "https://esm.sh"], // Allow Retell Web SDK, esm.sh
+      scriptSrc: ["'self'", "'unsafe-inline'", "blob:", "data:", "https://js.stripe.com", "https://accounts.google.com", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net", "https://unpkg.com", "https://esm.sh"], // blob/data for ElevenLabs AudioWorklets
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
       workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // Allow PDF.js worker and blob URLs
       imgSrc: ["'self'", "data:", "https:"],

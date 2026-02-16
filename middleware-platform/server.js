@@ -836,6 +836,8 @@ app.use('/api/tenant', tenantConfigRoutes);
 // LiveKit video conferencing (token endpoint)
 const livekitRoutes = require('./routes/livekit');
 app.use('/api/livekit', livekitRoutes);
+const videoConsultRoutes = require('./routes/video-consult');
+app.use('/api/video-consult', videoConsultRoutes);
 
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
@@ -898,6 +900,10 @@ app.use('/api/voice/outbound', outboundCallRoutes);
 // Voice Web Call (in-browser voice via Retell Web SDK)
 const voiceWebCallRoutes = require('./routes/voice-web-call');
 app.use('/api/voice', voiceWebCallRoutes);
+
+// Research Bounties (Pharma Data Requests - Impact-Weighted Escrow)
+const researchBountiesRoutes = require('./routes/research-bounties');
+app.use('/api/research-bounties', researchBountiesRoutes);
 // Register /terms route (MANDATORY - requires session and email verification)
 app.get('/terms', (req, res) => {
   const sessionId = req.cookies?.customer_session;
@@ -7074,6 +7080,38 @@ app.get('/api/circle/accounts/:entityType/:entityId', async (req, res) => {
       error: error.message
     });
   }
+});
+
+/**
+ * Patient HSA Wallet - Link wallet address (for Privy/Magic client-created wallets)
+ * PATCH /api/patient/:patientId/hsa-wallet
+ * Body: { walletAddress: "0x..." }
+ */
+app.patch('/api/patient/:patientId/hsa-wallet', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { walletAddress } = req.body;
+    if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
+      return res.status(400).json({ success: false, error: 'Valid walletAddress (0x...) required' });
+    }
+    const patient = db.getFHIRPatient(patientId);
+    if (!patient) return res.status(404).json({ success: false, error: 'Patient not found' });
+    if (db.updateFHIRPatientWallet) db.updateFHIRPatientWallet(patientId, walletAddress);
+    const updated = db.getFHIRPatient(patientId);
+    res.json({ success: true, patient_wallet_address: updated?.patient_wallet_address });
+  } catch (err) {
+    console.error('HSA wallet link error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Get HSA wallet config for client (Privy/Magic init)
+ * GET /api/patient/hsa-wallet/config
+ */
+app.get('/api/patient/hsa-wallet/config', (req, res) => {
+  const HSAWalletService = require('./services/hsa-wallet-service');
+  res.json(HSAWalletService.getClientConfig());
 });
 
 /**

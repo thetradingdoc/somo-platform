@@ -411,6 +411,98 @@ class FHIRResources {
   }
 
   /**
+   * Create a clinical Observation (dermatology, imaging findings)
+   * @param {Object} data - { patientId, patientName, encounterId, code, value, bodySite, interpretation, ... }
+   */
+  static createClinicalObservation(data) {
+    const id = data.id || `observation-${uuidv4()}`;
+    const code = data.code || data.finding || 'unknown';
+    return {
+      resourceType: 'Observation',
+      id,
+      status: data.status || 'final',
+      category: [{
+        coding: [{
+          system: 'http://terminology.hl7.org/CodeSystem/observation-category',
+          code: 'exam',
+          display: 'Exam'
+        }]
+      }],
+      code: {
+        coding: [{
+          system: 'http://snomed.info/sct',
+          code: data.snomedCode || code,
+          display: data.text || data.display || code
+        }],
+        text: data.text || code
+      },
+      subject: {
+        reference: `Patient/${data.patientId}`,
+        display: data.patientName
+      },
+      ...(data.encounterId && {
+        encounter: { reference: `Encounter/${data.encounterId}` }
+      }),
+      effectiveDateTime: data.effectiveDateTime || new Date().toISOString(),
+      ...(data.valueInteger !== undefined && { valueInteger: data.valueInteger }),
+      ...(data.valueString && { valueString: data.valueString }),
+      ...(typeof data.value === 'number' && { valueQuantity: { value: data.value, unit: '%', system: 'http://unitsofmeasure.org', code: '%' } }),
+      ...(data.bodySite && {
+        bodySite: {
+          coding: [{ system: 'http://snomed.info/sct', display: data.bodySite }]
+        }
+      }),
+      ...(data.interpretation && {
+        interpretation: [{
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation',
+            code: data.interpretation,
+            display: data.interpretation
+          }]
+        }]
+      }),
+      meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: 'https://doclittle.health' }
+    };
+  }
+
+  /**
+   * Create a DiagnosticReport (clinical assessment summary)
+   * @param {Object} data - { patientId, patientName, encounterId, conclusion, results[], ... }
+   */
+  static createDiagnosticReport(data) {
+    const id = data.id || `diagnosticreport-${uuidv4()}`;
+    return {
+      resourceType: 'DiagnosticReport',
+      id,
+      status: data.status || 'final',
+      code: {
+        coding: [{
+          system: 'http://loinc.org',
+          code: data.loincCode || '58410-2',
+          display: data.display || 'Summary clinical note'
+        }],
+        text: data.text || 'Video consult AI assessment'
+      },
+      subject: {
+        reference: `Patient/${data.patientId}`,
+        display: data.patientName
+      },
+      ...(data.encounterId && {
+        encounter: { reference: `Encounter/${data.encounterId}` }
+      }),
+      effectiveDateTime: data.effectiveDateTime || new Date().toISOString(),
+      issued: data.issued || new Date().toISOString(),
+      conclusion: data.conclusion || '',
+      ...(data.results && data.results.length > 0 && {
+        result: data.results.map((r, i) => ({
+          reference: typeof r === 'string' ? r : `Observation/obs-${i}`
+        }))
+      }),
+      meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: 'https://doclittle.health' }
+    };
+  }
+
+  /**
    * Validate a FHIR resource
    * @param {Object} resource - FHIR resource to validate
    * @returns {Object} Validation result { valid: boolean, errors: [] }

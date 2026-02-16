@@ -3,9 +3,11 @@
  *
  * Orchestrates vision encoder, text encoder, and cross-attention fusion.
  * Outputs perceptual state JSON for downstream coding agents.
+ * Supports imagePath (file) or imageBase64 (video consult frames from LiveKit).
  */
 
 const visionEncoder = require('./vision-encoder');
+const frameStorage = require('../frame-storage-service');
 const textEncoder = require('./text-encoder');
 const crossAttention = require('./cross-attention');
 
@@ -146,11 +148,27 @@ async function buildPerceptualState(inputs) {
   const {
     callId = 'unknown',
     imagePath,
+    imageBase64,
     clinicalText,
     audioPath,
     modality = 'xray',
     clinicId = null
   } = inputs;
+
+  let effectiveImagePath = imagePath;
+  let tempCleanup = null;
+  if (!effectiveImagePath && imageBase64) {
+    try {
+      const { path: p, cleanup } = await frameStorage.writeFrame(
+        imageBase64,
+        imageBase64.startsWith('data:image/png') ? '.png' : '.jpg'
+      );
+      effectiveImagePath = p;
+      tempCleanup = cleanup;
+    } catch (e) {
+      console.warn(`[${callId}] Frame storage failed (continuing text-only):`, e.message);
+    }
+  }
 
   const state = {
     call_id: callId,
@@ -169,11 +187,11 @@ async function buildPerceptualState(inputs) {
 
   try {
     // 1. Vision (graceful degradation on API/parse errors)
-    if (imagePath) {
+    if (effectiveImagePath) {
       const t0 = Date.now();
       try {
         state.visual_findings = await visionEncoder.extractVisualFindings(
-          imagePath,
+          effectiveImagePath,
           modality,
           clinicalText ? { chief_complaint: clinicalText.substring(0, 200) } : null
         );
@@ -214,7 +232,7 @@ async function buildPerceptualState(inputs) {
       const fusion = await crossAttention.fuseModalities(
         state.visual_findings,
         state.textual_findings,
-        imagePath
+        effectiveImagePath
       );
       state.cross_modal_links = fusion.cross_modal_links || [];
       state.alignment_metrics = fusion.alignment_metrics || null;
@@ -237,6 +255,8 @@ async function buildPerceptualState(inputs) {
   } catch (err) {
     console.error(`[${callId}] Perceptual state error:`, err);
     throw new Error(`Failed to build perceptual state: ${err.message}`);
+  } finally {
+    if (tempCleanup) await tempCleanup();
   }
 }
 

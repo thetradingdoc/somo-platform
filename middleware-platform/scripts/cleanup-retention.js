@@ -48,6 +48,16 @@ function run() {
     }
   }
 
+  // Video consult (P2 retention)
+  if (retention.video_consult_sessions && !dryRun) {
+    try {
+      const vcResult = db.cleanupVideoConsultData(retention.video_consult_sessions);
+      totalDeleted += vcResult.deleted || 0;
+    } catch (e) {
+      console.warn('  ⚠️  video_consult cleanup:', e.message);
+    }
+  }
+
   // hipaa_access_log: 7 years retention (HIPAA requirement - delete only after 7 years)
   if (retention.hipaa_access_log) {
     try {

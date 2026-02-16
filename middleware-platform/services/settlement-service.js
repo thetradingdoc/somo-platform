@@ -2,12 +2,23 @@
  * Settlement Service (Tiba Spec 4)
  * Confidence-weighted settlement: aggregate confidence Φ and settlement amount S(R_plan, Φ).
  * Φ_effective = Φ × τ_provider when provider trust score available.
+ *
+ * Impact-Weighted Extension: 50/20/20/10 split for escrow release.
+ * impact_weight_multiplier boosts settlement for rare cases (e.g., cancer).
  */
 
 const db = require('../database');
 const THETA_HIGH = parseFloat(process.env.THETA_HIGH || '0.95');
 const THETA_LOW = parseFloat(process.env.THETA_LOW || '0.70');
 const ALPHA = parseFloat(process.env.ALPHA || '0.7');
+
+// Impact-weighted split (basis points, 10000 = 100%)
+const IMPACT_SPLIT = {
+  patientBps: 5000,   // 50% to Patient HSA
+  staffBps: 2000,     // 20% to Healthcare Staff
+  investorBps: 2000,  // 20% to Investor Pool
+  protocolBps: 1000   // 10% to Protocol Treasury
+};
 
 /**
  * Compute aggregate confidence Φ per Tiba spec 4.
@@ -135,11 +146,44 @@ function getSettlementDecision(claim, codingResult = {}, eob = {}, config = {}) 
   return out;
 }
 
+/**
+ * Compute 50/20/20/10 split amounts for impact-weighted escrow release.
+ * @param {number} totalAmount - Total settlement amount (USDC units)
+ * @param {number} impactWeightMultiplier - Boost for rare cases (1.0 = no boost, 1.5 = 50% boost)
+ * @returns {{ patientAmount: number, staffAmount: number, investorAmount: number, protocolAmount: number }}
+ */
+function computeImpactWeightedSplits(totalAmount, impactWeightMultiplier = 1.0) {
+  const base = Math.round(parseFloat(totalAmount || 0) * Math.max(0.5, Math.min(2, impactWeightMultiplier)) * 100) / 100;
+  const bps = 10000;
+  return {
+    patientAmount: Math.round((base * IMPACT_SPLIT.patientBps) / bps * 100) / 100,
+    staffAmount: Math.round((base * IMPACT_SPLIT.staffBps) / bps * 100) / 100,
+    investorAmount: Math.round((base * IMPACT_SPLIT.investorBps) / bps * 100) / 100,
+    protocolAmount: Math.round((base * IMPACT_SPLIT.protocolBps) / bps * 100) / 100,
+    totalAmount: base
+  };
+}
+
+/**
+ * Get impact weight multiplier for disease rarity.
+ * Tier 1 (common): 1.0; Tier 2 (rare/cancer): configurable (default 1.2).
+ */
+function getImpactWeightMultiplier(impactTier = 1) {
+  const tierMultipliers = {
+    1: parseFloat(process.env.IMPACT_TIER_1_MULTIPLIER || '1.0'),
+    2: parseFloat(process.env.IMPACT_TIER_2_MULTIPLIER || '1.2')
+  };
+  return tierMultipliers[impactTier] ?? 1.0;
+}
+
 module.exports = {
   computeAggregateConfidence,
   computeSettlementAmount,
   getSettlementDecision,
   getEffectiveConfidence,
+  computeImpactWeightedSplits,
+  getImpactWeightMultiplier,
+  IMPACT_SPLIT,
   THETA_HIGH,
   THETA_LOW,
   ALPHA

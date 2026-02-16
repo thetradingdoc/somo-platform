@@ -3,12 +3,16 @@
  *
  * Per-call token tracking: prevents runaway Groq usage.
  * MAX_TOKENS_PER_CALL (default 10000); graceful fallback when exceeded.
+ *
+ * Video Consult: Separate cost tracking per room (VIDEO_CONSULT_MAX_COST_PER_SESSION).
  */
 
 const MAX_TOKENS_PER_CALL = parseInt(process.env.MAX_TOKENS_PER_CALL || '10000', 10);
 const ABUSE_THRESHOLD = parseInt(process.env.TOKEN_ABUSE_ALERT_THRESHOLD || '50000', 10);
+const VIDEO_CONSULT_MAX_COST = parseFloat(process.env.VIDEO_CONSULT_MAX_COST_PER_SESSION || '10', 10);
 
 const callTokens = new Map();
+const videoConsultCosts = new Map();
 
 /**
  * Rough token estimate: ~4 chars per token for LLMs
@@ -65,16 +69,53 @@ function getConfig() {
   return {
     max_per_call: MAX_TOKENS_PER_CALL,
     abuse_threshold: ABUSE_THRESHOLD,
-    active_calls: callTokens.size
+    active_calls: callTokens.size,
+    video_consult_max_cost: VIDEO_CONSULT_MAX_COST,
+    video_consult_active_rooms: videoConsultCosts.size
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Video Consult cost tracking (separate from voice)
+// ═══════════════════════════════════════════════════════════════════
+
+const COST_ALERT_THRESHOLD = parseFloat(process.env.VIDEO_CONSULT_COST_ALERT_THRESHOLD || '15', 10);
+
+function addVideoConsultCost(roomId, costUsd) {
+  const key = roomId || 'unknown';
+  const current = videoConsultCosts.get(key) || 0;
+  const next = current + (typeof costUsd === 'number' ? costUsd : 0);
+  videoConsultCosts.set(key, next);
+  if (next >= COST_ALERT_THRESHOLD) {
+    console.warn(`⚠️  [video-consult] Cost alert: room ${key} at $${next.toFixed(2)} (threshold: $${COST_ALERT_THRESHOLD})`);
+  }
+  return next;
+}
+
+function getVideoConsultCost(roomId) {
+  return videoConsultCosts.get(roomId || 'unknown') || 0;
+}
+
+function canProceedVideoConsult(roomId, estimatedCostUsd = 0) {
+  const used = getVideoConsultCost(roomId);
+  return used + estimatedCostUsd <= VIDEO_CONSULT_MAX_COST;
+}
+
+function resetVideoConsult(roomId) {
+  if (roomId) videoConsultCosts.delete(roomId);
 }
 
 module.exports = {
   MAX_TOKENS_PER_CALL,
+  VIDEO_CONSULT_MAX_COST,
   estimateTokens,
   addTokens,
   getUsed,
   canProceed,
   reset,
-  getConfig
+  getConfig,
+  addVideoConsultCost,
+  getVideoConsultCost,
+  canProceedVideoConsult,
+  resetVideoConsult
 };

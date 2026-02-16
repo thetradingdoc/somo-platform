@@ -291,6 +291,24 @@ class FHIRService {
       try {
         db.createFHIRPatient(patientResource);
         console.log(`[FHIR] ✅ Created new patient: ${patientResource.id}${patientResource.merchant_id ? ` (merchant: ${patientResource.merchant_id})` : ''}`);
+
+        // HSA wallet: create embedded wallet for patient (phone-based for Busia)
+        try {
+          const HSAWalletService = require('./hsa-wallet-service');
+          if (HSAWalletService.isConfigured() && (patientData.phone || patientData.email)) {
+            const wallet = await HSAWalletService.createPatientWallet({
+              phone: patientData.phone,
+              email: patientData.email,
+              patientId: patientResource.id
+            });
+            if (wallet?.walletAddress && db.updateFHIRPatientWallet) {
+              db.updateFHIRPatientWallet(patientResource.id, wallet.walletAddress);
+              console.log(`[FHIR] ✅ HSA wallet created for patient ${patientResource.id}`);
+            }
+          }
+        } catch (walletErr) {
+          console.warn('[FHIR] HSA wallet creation skipped:', walletErr.message);
+        }
       } catch (createError) {
         // If error is due to duplicate phone, try to find existing patient
         if (createError.message && createError.message.includes('phone') && createError.message.includes('already exists')) {

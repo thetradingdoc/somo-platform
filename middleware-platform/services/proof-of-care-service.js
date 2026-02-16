@@ -2,13 +2,21 @@
  * Proof of Care Service
  * Verifies that care was delivered before enabling settlement release.
  * Used by escrow flow: USDC held in "pending" until Proof of Care verified.
+ *
+ * Impact-Weighted Extension: When Octopi AI scan data present, verifies:
+ * - data_integrity_hash (salted SHA-256 of scan)
+ * - High AI confidence score
+ * - Specialist sign-off (M-of-N for Tier 2)
  */
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const db = require('../database');
 const RULES_PATH = path.resolve(__dirname, '../../Knowledge/rules/proof-of-care-rules.json');
+
+const MIN_AI_CONFIDENCE = parseFloat(process.env.OCTOPI_MIN_AI_CONFIDENCE || '0.9');
 
 let rulesConfig = null;
 
@@ -111,6 +119,32 @@ async function verifyProofOfCare(claim, options = {}) {
     evidence.push({ rule: 'claim_has_coding', hasIcd10, hasCpt });
   }
 
+  // 6. Octopi AI verification (when data_integrity_hash present)
+  const octopiHash = claim.data_integrity_hash || claimDetails.octopi_scan_hash || options?.octopiHash;
+  const aiConfidence = claimDetails.ai_confidence_score ?? claim.ai_confidence_score ?? options?.aiConfidence;
+  const specialistSignedOff = claimDetails.specialist_signed_off ?? claim.specialist_signed_off ?? options?.specialistSignedOff;
+  const specialistSignatureCount = claimDetails.specialist_signature_count ?? claim.specialist_signature_count ?? options?.specialistSignatureCount ?? (specialistSignedOff ? 1 : 0);
+
+  if (octopiHash) {
+    evidence.push({ rule: 'octopi_hash_present', dataIntegrityHash: octopiHash });
+    if (typeof aiConfidence === 'number' && aiConfidence >= MIN_AI_CONFIDENCE) {
+      totalWeight += 0.5;
+      evidence.push({ rule: 'ai_high_confidence', score: aiConfidence });
+    }
+    if (specialistSignedOff === true) {
+      totalWeight += 0.3;
+      evidence.push({ rule: 'specialist_signed_off' });
+    }
+    // M-of-N: Tier 2 (rare/cancer) requires 2+ specialist signatures
+    const impactTier = claim.impact_tier ?? claimDetails.impact_tier ?? 1;
+    const requiredSignatures = impactTier === 2 ? 2 : 1;
+    const sigCount = typeof specialistSignatureCount === 'number' ? specialistSignatureCount : (specialistSignedOff ? 1 : 0);
+    if (sigCount >= requiredSignatures) {
+      totalWeight += 0.2;
+      evidence.push({ rule: 'm_of_n_specialists', count: sigCount, required: requiredSignatures, impactTier });
+    }
+  }
+
   const minWeight = config.minWeightToVerify ?? 0.8;
   const verified = totalWeight >= minWeight;
 
@@ -143,8 +177,24 @@ async function canReleaseSettlement(claim, settlementEvaluation, options = {}) {
   };
 }
 
+/**
+ * Generate salted SHA-256 data_integrity_hash for Octopi scan.
+ * Salt prevents reverse lookup of PHI from hash (GDPR/HIPAA safe).
+ * @param {string} scanIdOrPayload - Scan ID or serialized scan metadata
+ * @param {string} salt - Secret salt (never store raw PHI)
+ * @returns {string} Hex-encoded hash (0x-prefix for Solidity bytes32)
+ */
+function generateDataIntegrityHash(scanIdOrPayload, salt = '') {
+  const s = typeof salt === 'string' && salt ? salt : crypto.randomBytes(16).toString('hex');
+  const payload = `${scanIdOrPayload}:${s}`;
+  const hash = crypto.createHash('sha256').update(payload).digest('hex');
+  return '0x' + hash;
+}
+
 module.exports = {
   verifyProofOfCare,
   canReleaseSettlement,
-  loadRules
+  loadRules,
+  generateDataIntegrityHash,
+  MIN_AI_CONFIDENCE
 };

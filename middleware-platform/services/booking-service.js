@@ -59,6 +59,13 @@ const APPOINTMENT_TYPES = {
     buffer_after_minutes: 5,
     color: 'yellow'
   },
+  'Video Consultation': {
+    duration_minutes: 30,
+    buffer_before_minutes: 5,
+    buffer_after_minutes: 5,
+    color: 'teal',
+    is_video: true
+  },
   'External Calendar Event': {
     duration_minutes: 0,
     buffer_before_minutes: 0,
@@ -309,6 +316,7 @@ class BookingService {
       }
 
       // Prepare appointment record
+      const isVideoConsult = (typeConfig.is_video === true) || (appointmentType === 'Video Consultation');
       const appointment = {
         id: appointmentId,
         clinic_id: clinicId,
@@ -318,6 +326,7 @@ class BookingService {
         patient_email: appointmentData.patient_email,
         patient_id: fhirPatientId || null,
         appointment_type: appointmentType,
+        video_room_name: isVideoConsult ? appointmentId : null, // appt-{uuid} for LiveKit room resolution
         date: appointmentDateTime.date,
         time: appointmentDateTime.time,
         start_time: appointmentDateTime.startISO,

@@ -2329,6 +2329,27 @@ function migrateInsuranceClaimsTable() {
       db.prepare("ALTER TABLE insurance_claims ADD COLUMN payment_amount REAL").run();
     }
 
+    // Impact-weighted escrow: salted SHA-256 hash linking Octopi scan to blockchain (PHI-safe)
+    if (!columnNames.includes('data_integrity_hash')) {
+      console.log('🔄 Migrating: Adding data_integrity_hash column to insurance_claims table');
+      db.prepare("ALTER TABLE insurance_claims ADD COLUMN data_integrity_hash TEXT").run();
+    }
+
+    if (!columnNames.includes('impact_tier')) {
+      console.log('🔄 Migrating: Adding impact_tier column to insurance_claims table');
+      db.prepare("ALTER TABLE insurance_claims ADD COLUMN impact_tier INTEGER DEFAULT 1").run();
+    }
+
+    if (!columnNames.includes('escrow_hash')) {
+      console.log('🔄 Migrating: Adding escrow_hash column to insurance_claims table');
+      db.prepare("ALTER TABLE insurance_claims ADD COLUMN escrow_hash TEXT").run();
+    }
+
+    if (!columnNames.includes('healthcare_staff_address')) {
+      console.log('🔄 Migrating: Adding healthcare_staff_address column to insurance_claims table');
+      db.prepare("ALTER TABLE insurance_claims ADD COLUMN healthcare_staff_address TEXT").run();
+    }
+
     // Re-enable foreign keys after migration
     db.pragma('foreign_keys = ON');
   } catch (error) {
@@ -3434,6 +3455,28 @@ function migrateFHIRPatientsMerchantId() {
   }
 }
 
+// Migration: Add patient_wallet_address (HSA) to fhir_patients for impact-weighted escrow
+function migrateFHIRPatientsWalletAddress() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const tableInfo = db.prepare("PRAGMA table_info(fhir_patients)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('patient_wallet_address')) {
+      console.log('🔄 Migrating: Adding patient_wallet_address column to fhir_patients table');
+      db.prepare("ALTER TABLE fhir_patients ADD COLUMN patient_wallet_address TEXT").run();
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_fhir_patients_wallet ON fhir_patients(patient_wallet_address)").run();
+      console.log('✅ Migration complete: patient_wallet_address added for HSA escrow flow');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ FHIR patients wallet migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Migration: Add merchant_id column to circle_accounts table
 function migrateCircleAccountsMerchantId() {
   try {
@@ -3530,6 +3573,7 @@ function migrateLeadLabels() {
 
 // Run migrations on startup
 migrateInsuranceClaimsTable();
+migrateFHIRPatientsWalletAddress();
 migratePatientPortalSessionsEmail();
 migrateMonthlyInvoicesJobCalls();
 migrateOrderTracking();
@@ -3563,6 +3607,140 @@ migrateCustomerCreditsExpiration(); // Add expiration and alert tracking for cre
 migrateFHIRPatientsMerchantId(); // Link FHIR patients to merchants (tenants)
 migrateCircleAccountsMerchantId(); // Link wallets to merchants (tenants)
 migrateLeadLabels(); // Create lead labels system
+migrateResearchBounties(); // Pharma data requests for impact-weighted escrow
+migrateVideoConsultSessions(); // Video consult multimodal AI sessions
+
+/**
+ * Migration: Create video_consult_sessions table (multimodal telehealth)
+ */
+function migrateVideoConsultSessions() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_sessions'`).get();
+    if (!exists) {
+      console.log('🔄 Migrating: Creating video_consult_sessions table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS video_consult_sessions (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL UNIQUE,
+          encounter_id TEXT,
+          clinic_id TEXT,
+          patient_id TEXT,
+          provider_id TEXT,
+          session_status TEXT DEFAULT 'active',
+          start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+          end_time DATETIME,
+          metadata TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_consult_sessions_room ON video_consult_sessions(room_id);
+        CREATE INDEX IF NOT EXISTS idx_video_consult_sessions_encounter ON video_consult_sessions(encounter_id);
+        CREATE INDEX IF NOT EXISTS idx_video_consult_sessions_status ON video_consult_sessions(session_status);
+        CREATE INDEX IF NOT EXISTS idx_video_consult_sessions_created ON video_consult_sessions(created_at);
+      `);
+      console.log('✅ Migration complete: video_consult_sessions table created');
+    }
+
+    const aiExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_ai_decisions'`).get();
+    if (!aiExists) {
+      console.log('🔄 Migrating: Creating video_consult_ai_decisions audit table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS video_consult_ai_decisions (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL,
+          stage TEXT NOT NULL,
+          findings TEXT,
+          codes TEXT,
+          confidence REAL,
+          patient_id TEXT,
+          model_used TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_consult_ai_room ON video_consult_ai_decisions(room_id);
+        CREATE INDEX IF NOT EXISTS idx_video_consult_ai_created ON video_consult_ai_decisions(created_at);
+      `);
+      console.log('✅ Migration complete: video_consult_ai_decisions table created');
+    }
+
+    const reviewExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_review_tasks'`).get();
+    if (!reviewExists) {
+      console.log('🔄 Migrating: Creating video_consult_review_tasks table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS video_consult_review_tasks (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL,
+          severity TEXT DEFAULT 'WARNING',
+          findings TEXT,
+          assigned_to TEXT,
+          status TEXT DEFAULT 'pending',
+          resolved_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_video_consult_review_room ON video_consult_review_tasks(room_id);
+        CREATE INDEX IF NOT EXISTS idx_video_consult_review_status ON video_consult_review_tasks(status);
+      `);
+      console.log('✅ Migration complete: video_consult_review_tasks table created');
+    }
+
+    // vc-db-4: Composite indexes for common queries
+    try {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_vc_sessions_room_created ON video_consult_sessions(room_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_vc_ai_room_created ON video_consult_ai_decisions(room_id, created_at);
+      `);
+    } catch (e) {
+      if (!e.message?.includes('already exists')) console.warn('⚠️  Video consult composite indexes:', e.message);
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ Video consult migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+/**
+ * Migration: Create research_bounties table (Pharma Data Requests)
+ */
+function migrateResearchBounties() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='research_bounties'`).get();
+    if (!exists) {
+      console.log('🔄 Migrating: Creating research_bounties table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS research_bounties (
+          id TEXT PRIMARY KEY,
+          requester_id TEXT,
+          requester_type TEXT DEFAULT 'pharma',
+          title TEXT,
+          description TEXT,
+          data_type TEXT,
+          target_count INTEGER,
+          fulfilled_count INTEGER DEFAULT 0,
+          bounty_amount_per_unit REAL,
+          total_bounty_amount REAL,
+          status TEXT DEFAULT 'open',
+          impact_tier INTEGER DEFAULT 1,
+          escrow_hash TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_research_bounties_status ON research_bounties(status);
+        CREATE INDEX IF NOT EXISTS idx_research_bounties_escrow ON research_bounties(escrow_hash);
+      `);
+      console.log('✅ Migration complete: research_bounties table created');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ Research bounties migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
 
 /**
  * Helper to safely stringify data
@@ -4915,6 +5093,12 @@ module.exports = {
     );
   },
 
+  updateFHIRPatientWallet(resourceId, walletAddress) {
+    const tableInfo = db.prepare('PRAGMA table_info(fhir_patients)').all();
+    if (!tableInfo.some(c => c.name === 'patient_wallet_address')) return;
+    db.prepare('UPDATE fhir_patients SET patient_wallet_address = ?, updated_at = datetime("now") WHERE resource_id = ?').run(walletAddress, resourceId);
+  },
+
   // Search FHIR Patients
   searchFHIRPatients(params = {}) {
     let query = 'SELECT * FROM fhir_patients WHERE is_deleted = 0';
@@ -5800,7 +5984,7 @@ module.exports = {
           id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
           appointment_type, date, time, start_time, end_time,
           duration_minutes, provider, status, notes,
-          calendar_event_id, calendar_link, created_at
+          calendar_event_id, calendar_link, video_room_name, created_at
         ) VALUES (
           ${appointment.id},
           ${appointment.clinic_id || null},
@@ -5820,6 +6004,7 @@ module.exports = {
           ${notes},
           ${appointment.calendar_event_id},
           ${appointment.calendar_link},
+          ${appointment.video_room_name || null},
           ${appointment.created_at || new Date().toISOString()}
         )
       `;
@@ -5831,8 +6016,8 @@ module.exports = {
           id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
           appointment_type, date, time, start_time, end_time,
           duration_minutes, provider, status, notes,
-          calendar_event_id, calendar_link, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          calendar_event_id, calendar_link, video_room_name, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       return stmt.run(
         appointment.id,
@@ -5853,6 +6038,7 @@ module.exports = {
         notes,
         appointment.calendar_event_id,
         appointment.calendar_link,
+        appointment.video_room_name || null,
         appointment.created_at
       );
     }
@@ -6296,6 +6482,61 @@ module.exports = {
       WHERE id = ?
     `);
     return stmt.get(claimId);
+  },
+
+  // Research Bounties (Pharma Data Requests - Impact-Weighted Escrow)
+  createResearchBounty(bounty) {
+    const { v4: uuidv4 } = require('uuid');
+    const id = bounty.id || `rb_${uuidv4()}`;
+    db.prepare(`
+      INSERT INTO research_bounties (id, requester_id, requester_type, title, description, data_type, target_count, fulfilled_count, bounty_amount_per_unit, total_bounty_amount, status, impact_tier, escrow_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      bounty.requester_id || null,
+      bounty.requester_type || 'pharma',
+      bounty.title || null,
+      bounty.description || null,
+      bounty.data_type || null,
+      bounty.target_count || 0,
+      bounty.fulfilled_count ?? 0,
+      bounty.bounty_amount_per_unit ?? 0,
+      bounty.total_bounty_amount ?? 0,
+      bounty.status || 'open',
+      bounty.impact_tier ?? 1,
+      bounty.escrow_hash || null
+    );
+    return id;
+  },
+
+  getResearchBounty(id) {
+    return db.prepare('SELECT * FROM research_bounties WHERE id = ?').get(id);
+  },
+
+  listResearchBounties(filters = {}) {
+    let q = 'SELECT * FROM research_bounties WHERE 1=1';
+    const params = [];
+    if (filters.status) { q += ' AND status = ?'; params.push(filters.status); }
+    if (filters.requester_id) { q += ' AND requester_id = ?'; params.push(filters.requester_id); }
+    q += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(filters.limit ?? 50);
+    return db.prepare(q).all(...params);
+  },
+
+  updateResearchBounty(id, updates) {
+    const fields = [];
+    const values = [];
+    const allowed = ['title', 'description', 'fulfilled_count', 'status', 'escrow_hash'];
+    for (const k of Object.keys(updates)) {
+      if (allowed.includes(k)) {
+        fields.push(`${k} = ?`);
+        values.push(updates[k]);
+      }
+    }
+    if (fields.length === 0) return;
+    fields.push('updated_at = datetime("now")');
+    values.push(id);
+    db.prepare(`UPDATE research_bounties SET ${fields.join(', ')} WHERE id = ?`).run(...values);
   },
 
   // Code acceptance rates (Tiba Phase 4 - φ^historical_i)
@@ -7477,6 +7718,95 @@ module.exports = {
       console.log(`🧹 Cleaned ${total} voice call state records (older than ${retentionDays} days)`);
     }
     return { deleted: total, retentionDays, cutoff: cutoffStr };
+  },
+
+  cleanupVideoConsultData(retentionDays = 30) {
+    const d = new Date();
+    d.setDate(d.getDate() - Math.max(1, retentionDays));
+    const cutoffStr = d.toISOString().slice(0, 19).replace('T', ' ');
+    let total = 0;
+    try {
+      const r1 = db.prepare('DELETE FROM video_consult_sessions WHERE created_at < ?').run(cutoffStr);
+      total += r1.changes;
+      const r2 = db.prepare('DELETE FROM video_consult_ai_decisions WHERE created_at < ?').run(cutoffStr);
+      total += r2.changes;
+    } catch (e) {
+      if (e.message && !e.message.includes('no such table')) console.warn('⚠️  cleanupVideoConsultData:', e.message);
+    }
+    const reviewDays = Math.min(retentionDays * 3, 90);
+    const reviewCutoff = new Date();
+    reviewCutoff.setDate(reviewCutoff.getDate() - reviewDays);
+    const reviewCutoffStr = reviewCutoff.toISOString().slice(0, 19).replace('T', ' ');
+    try {
+      const r3 = db.prepare('DELETE FROM video_consult_review_tasks WHERE resolved_at IS NOT NULL AND resolved_at < ?').run(reviewCutoffStr);
+      total += r3.changes;
+    } catch (e) {
+      if (e.message && !e.message.includes('no such table')) console.warn('⚠️  cleanupVideoConsultData review_tasks:', e.message);
+    }
+    if (total > 0) {
+      console.log(`🧹 Cleaned ${total} video consult records (sessions/decisions: ${retentionDays}d, resolved tasks: ${reviewDays}d)`);
+    }
+    return { deleted: total, retentionDays, cutoff: cutoffStr };
+  },
+
+  // Video consult sessions (multimodal telehealth)
+  createVideoConsultSession(roomId, options = {}) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const metaJson = options.metadata ? JSON.stringify(options.metadata) : null;
+    try {
+      db.prepare(`
+        INSERT INTO video_consult_sessions (id, room_id, encounter_id, clinic_id, patient_id, provider_id, session_status, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+      `).run(
+        id, roomId,
+        options.encounter_id ?? null,
+        options.clinic_id ?? null,
+        options.patient_id ?? null,
+        options.provider_id ?? null,
+        metaJson
+      );
+      return this.getVideoConsultSession(roomId);
+    } catch (e) {
+      if (e.message && e.message.includes('UNIQUE')) {
+        return this.getVideoConsultSession(roomId);
+      }
+      throw e;
+    }
+  },
+
+  getVideoConsultSession(roomId) {
+    const row = db.prepare('SELECT * FROM video_consult_sessions WHERE room_id = ?').get(roomId);
+    if (!row) return null;
+    return {
+      ...row,
+      metadata: row.metadata ? JSON.parse(row.metadata) : null
+    };
+  },
+
+  endVideoConsultSession(roomId, metadata = null) {
+    const metaJson = metadata ? JSON.stringify(metadata) : null;
+    db.prepare(`
+      UPDATE video_consult_sessions SET session_status = 'ended', end_time = datetime('now'),
+        metadata = COALESCE(?, metadata), updated_at = datetime('now')
+      WHERE room_id = ?
+    `).run(metaJson, roomId);
+    return this.getVideoConsultSession(roomId);
+  },
+
+  insertVideoConsultAiDecision(roomId, stage, findings, codes, confidence, patientId, modelUsed) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const findingsJson = findings ? JSON.stringify(findings) : null;
+    const codesJson = codes ? JSON.stringify(codes) : null;
+    try {
+      db.prepare(`
+        INSERT INTO video_consult_ai_decisions (id, room_id, stage, findings, codes, confidence, patient_id, model_used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, roomId, stage, findingsJson, codesJson, confidence ?? null, patientId ?? null, modelUsed ?? null);
+      return id;
+    } catch (e) {
+      console.warn('⚠️  video_consult_ai_decisions insert failed:', e.message);
+      return null;
+    }
   },
 
   insertCodingDecision({ call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash }) {

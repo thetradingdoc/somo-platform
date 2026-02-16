@@ -10,6 +10,7 @@ const axios = require('axios');
 
 const RAG_API_URL = process.env.RAG_API_URL;
 const RAG_TIMEOUT = parseInt(process.env.RAG_TIMEOUT || '10000', 10);
+const RAG_RETRIES = parseInt(process.env.RAG_RETRIES || '2', 10);
 
 let logger;
 try {
@@ -55,18 +56,30 @@ async function retrieveFromColabRAG(params) {
       specialty: payload.specialty
     });
 
-    const response = await axios.post(
-      `${RAG_API_URL.replace(/\/$/, '')}/api/retrieve`,
-      payload,
-      {
-        timeout: RAG_TIMEOUT,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Source': 'middleware-platform',
-          'ngrok-skip-browser-warning': 'true'
+    let response;
+    for (let attempt = 0; attempt <= RAG_RETRIES; attempt++) {
+      try {
+        response = await axios.post(
+          `${RAG_API_URL.replace(/\/$/, '')}/api/retrieve`,
+          payload,
+          {
+            timeout: RAG_TIMEOUT,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Source': 'middleware-platform',
+              'ngrok-skip-browser-warning': 'true'
+            }
+          }
+        );
+        break;
+      } catch (err) {
+        if (attempt < RAG_RETRIES) {
+          await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+        } else {
+          throw err;
         }
       }
-    );
+    }
 
     const duration = Date.now() - startTime;
 

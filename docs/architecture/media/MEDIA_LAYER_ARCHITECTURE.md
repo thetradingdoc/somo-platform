@@ -196,9 +196,34 @@ User speaks on call
 
 ---
 
-## 5. Future: LiveKit Video & In-App
+## 5. Video Consult (LiveKit + AI)
 
-### 5.1 Planned Additions
+**Status:** Implemented. Multimodal telehealth with transcript, vision, RAG, FHIR.
+
+### 5.1 Architecture
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Agent events route | `routes/video-consult.js` | `POST /api/video-consult/agent-events` |
+| LangGraph | `services/video-consult-graph.js` | accumulate → retrieve_context → human_review → store_fhir |
+| Session service | `services/video-consult-service.js` | createSession, endSession, getSessionState |
+| Frame storage | `services/frame-storage-service.js` | Temp file handling for vision |
+| Review tasks | `services/review-task-service.js` | HITL workflow |
+
+### 5.2 Event Flow
+
+1. Python agents (transcription, vision) send events to middleware
+2. `transcript` / `vision_frame` → accumulate state
+3. `end_session` → full pipeline (RAG → HITL check → FHIR)
+4. Transcript stored as FHIR Communication
+
+See [VIDEO_CONSULT_ARCHITECTURE.md](../VIDEO_CONSULT_ARCHITECTURE.md) and [VIDEO_CONSULT_ENV.md](../VIDEO_CONSULT_ENV.md).
+
+---
+
+## 6. Future: LiveKit Video & In-App (Expanded)
+
+### 6.1 Planned Additions
 
 1. **LiveKit video rooms**
    - Doctor–patient telemedicine
@@ -213,7 +238,7 @@ User speaks on call
    - Patient initiates call/video from app (WebRTC or LiveKit client SDK)
    - Routes to same agent and/or provider depending on flow
 
-### 5.2 Architecture (Future)
+### 6.2 Architecture (Future)
 
 ```
                     ┌─────────────────────┐
@@ -236,16 +261,16 @@ User speaks on call
                                                └─────────────┘
 ```
 
-### 5.3 Transcription in LiveKit Context
+### 6.3 Transcription in LiveKit Context
 
 - **During session:** LiveKit Agents `lk.transcription` → stream to UI and/or middleware
 - **After session:** Egress → file → STT (or LiveKit transcription) → notes, coding, claims
 
 ---
 
-## 6. Component Reference
+## 7. Component Reference
 
-### 6.1 Services
+### 7.1 Services
 
 | Service | Path | Purpose |
 |---------|------|---------|
@@ -254,8 +279,11 @@ User speaks on call
 | sms-service | `services/sms-service.js` | SMS send/receive |
 | coding-state-service | `services/coding-state-service.js` | State machine, coding triggers |
 | fhir-service | `services/fhir-service.js` | storeTranscript, encounters |
+| video-consult-service | `services/video-consult-service.js` | Session, transcript, participants |
+| video-consult-graph | `services/video-consult-graph.js` | LangGraph pipeline |
+| frame-storage-service | `services/frame-storage-service.js` | Temp frame files |
 
-### 6.2 Database Tables
+### 7.2 Database Tables
 
 | Table | Purpose |
 |-------|---------|
@@ -265,20 +293,25 @@ User speaks on call
 | agent_state_snapshots | State checkpoints |
 | coding_decisions | Validation audit (rule_version, rule_hash) |
 | lead_calls | transcript_url (if available) |
+| video_consult_sessions | Room, encounter, status |
+| video_consult_ai_decisions | Audit trail |
+| video_consult_review_tasks | HITL tasks |
 
-### 6.3 Webhooks & Routes
+### 7.3 Webhooks & Routes
 
 | Route | Handler | Purpose |
 |-------|---------|---------|
 | `/webhook/retell/llm` | retell-websocket.js | Retell LLM WebSocket |
 | `/voice/*` | routes/voice.js | Voice API endpoints |
 | `/retell-functions` | routes/retell-functions.js | Retell function webhooks |
+| `/api/video-consult/agent-events` | routes/video-consult.js | Python agent events |
+| `/api/video-consult/session/:roomId` | routes/video-consult.js | Session state for UI |
 
 ---
 
-## 7. Data Flow & Storage
+## 8. Data Flow & Storage
 
-### 7.1 Transcript Lifecycle (Current)
+### 8.1 Transcript Lifecycle (Current)
 
 ```
 Call start
@@ -294,7 +327,7 @@ Call start
         → lead_calls.transcript_url if Retell provides URL
 ```
 
-### 7.2 Integration with Financial Layer
+### 8.2 Integration with Financial Layer
 
 - Transcript + conversation → **coding pipeline** (CodingOrchestrator, MedicalCodingService)
 - Structured notes → **claims**, **EOB**, **prior auth** (financial layer)

@@ -6,13 +6,15 @@
  * Flow:
  * 1. Claim approved -> check PoC + settlement rules
  * 2. If both pass and ESCROW_ENABLED=1 -> route to escrow (pending)
- * 3. Backend (relayer) calls release on contract when ready
+ * 3. Backend (relayer) calls releaseImpactWeighted(escrowHash) on contract
  *
- * When ESCROW_ENABLED=0 (default): use existing Circle direct transfer.
+ * Impact-Weighted: Returns patientHSA, healthcareStaff, splits for 50/20/20/10.
+ * Tier 2 (rare): Requires M-of-N specialist signatures (enforced by caller).
  */
 
 const SettlementRulesService = require('./settlement-rules-service');
 const ProofOfCareService = require('./proof-of-care-service');
+const SettlementService = require('./settlement-service');
 
 /**
  * Determine settlement route: direct transfer vs escrow.
@@ -37,7 +39,10 @@ async function getSettlementRoute({ claim, claimDetails = {}, eobCalculation = {
   const proofOfCare = await ProofOfCareService.verifyProofOfCare(claim);
 
   const settlementOk = settlementEvaluation.action === 'auto_approve';
-  const pocOk = proofOfCare.verified;
+  const impactTier = claim?.impact_tier ?? 1;
+  // Tier 2: require M-of-N (2) specialist signatures - verified in PoC
+  const tier2Ok = impactTier !== 2 || proofOfCare.evidence?.some(e => e.rule === 'm_of_n_specialists' && e.count >= 2);
+  const pocOk = proofOfCare.verified && tier2Ok;
 
   const canRelease = settlementOk && pocOk;
 
@@ -86,14 +91,69 @@ async function shouldTriggerEscrowRelease(claimId, db) {
     eligibility
   });
 
+  const planPaidAmount = eobCalculation?.totals?.planPaid ?? claim.insurance_amount;
+  const impactTier = claim.impact_tier ?? 1;
+  const multiplier = SettlementService.getImpactWeightMultiplier(impactTier);
+  const splits = SettlementService.computeImpactWeightedSplits(planPaidAmount, multiplier);
+
+  const patient = claim.patient_id && db.getFHIRPatient ? db.getFHIRPatient(claim.patient_id) : null;
+  const patientHSA = patient?.patient_wallet_address || claim.patient_hsa_address || null;
+
   return {
     shouldRelease: route.canRelease && route.route === 'escrow',
     route,
-    planPaidAmount: eobCalculation?.totals?.planPaid ?? claim.insurance_amount
+    planPaidAmount,
+    impactTier,
+    splits,
+    releasePayload: {
+      patientHSA,
+      healthcareStaff: claim.healthcare_staff_address || null,
+      dataIntegrityHash: claim.data_integrity_hash || null,
+      escrowHash: claim.escrow_hash || null,
+      impactTier
+    }
+  };
+}
+
+/**
+ * Build payload for HealthcareEscrow.releaseImpactWeighted(escrowHash).
+ * Caller must have escrowHash from deposit; addresses from claim/patient.
+ */
+function buildReleasePayload(claim, db) {
+  const patient = claim.patient_id ? db.getFHIRPatient?.(claim.patient_id) : null;
+  return {
+    escrowHash: claim.escrow_hash,
+    patientHSA: patient?.patient_wallet_address || claim.patient_hsa_address,
+    healthcareStaff: claim.healthcare_staff_address,
+    dataIntegrityHash: claim.data_integrity_hash,
+    impactTier: claim.impact_tier ?? 1
+  };
+}
+
+/**
+ * Data Request flow: Pharma pays for research data (bounty), not insurance claim.
+ * When type === 'data_request', evaluate bounty fulfillment + PoC for escrow release.
+ */
+async function getDataRequestSettlementRoute({ bounty, fulfillmentCount = 0, proofOfCare }) {
+  const useEscrow = process.env.ESCROW_ENABLED === '1' || process.env.ESCROW_ENABLED === 'true';
+  const targetCount = bounty?.target_count ?? 0;
+  const fulfilled = fulfillmentCount >= targetCount;
+  const pocOk = proofOfCare?.verified ?? false;
+  const canRelease = fulfilled && pocOk;
+
+  return {
+    route: useEscrow && canRelease ? 'escrow' : 'direct',
+    canRelease,
+    proofOfCare,
+    fulfillmentCount,
+    targetCount,
+    fulfilled
   };
 }
 
 module.exports = {
   getSettlementRoute,
-  shouldTriggerEscrowRelease
+  shouldTriggerEscrowRelease,
+  buildReleasePayload,
+  getDataRequestSettlementRoute
 };
