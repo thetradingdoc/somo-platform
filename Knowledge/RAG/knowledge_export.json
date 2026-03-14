@@ -1,0 +1,4445 @@
+{
+  "_meta": {
+    "version": "3.0",
+    "generated_at": "2026-03-14T18:46:09.682236",
+    "pinecone_index": "doctorlittle",
+    "total_vectors": 271369,
+    "embed_model": "text-embedding-3-small",
+    "elapsed_seconds": 133.2,
+    "validation_passed": false,
+    "fixes_from_v2": [
+      "FIX1: concept ICD codes now from chunk vectors (concept vectors have none)",
+      "FIX2: KNOWN_ICD_EXPANSIONS is primary source — corpus is supplementary",
+      "FIX3: CPT codes from TERM_CPT_TABLE (64 terms) — Pinecone has no CPT metadata",
+      "FIX4: expanded SYNONYM_NOISE_WORDS covers all high-freq offenders from audit"
+    ],
+    "description": "DocLittle knowledge base export v3. No patient data. Copy to middleware-platform/Knowledge/RAG/knowledge_export.json",
+    "field_summary": {
+      "concept_specialty_map": 115,
+      "concepts_with_icd10_codes": 26,
+      "icd10_code_expansions": 78,
+      "total_icd10_children": 524,
+      "term_to_codes": 163,
+      "terms_with_cpt": 91,
+      "phrase_expansions": 89,
+      "medical_phrases": 625,
+      "cpt_families": 9,
+      "cpt_codes_mapped": 75
+    }
+  },
+  "concept_specialty_map": {
+    "C_HEP_CHOLESTASIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "cholestasis",
+      "description": "Impairment of bile formation or flow causing accumulation of bile acids, bilirubin, and cholesterol. Presents with jaundice, pruritus, pale stools, dark urine. Biochemically: elevated ALP, GGT, direct"
+    },
+    "C_HEP_PRIMARY_BILIARY_CHOLANGITIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [
+        "S25",
+        "S37"
+      ],
+      "cpt_codes": [],
+      "label": "primary biliary cholangitis",
+      "description": "Chronic autoimmune cholestatic liver disease from progressive destruction of intrahepatic bile ducts. Predominantly affects middle-aged women. Highly specific anti-mitochondrial antibody (AMA-M2) in 9"
+    },
+    "C_HEP_PRIMARY_SCLEROSING_CHOLANGITIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "primary sclerosing cholangitis",
+      "description": "Chronic fibro-inflammatory obliterative disease of intra- and extrahepatic bile ducts causing multifocal strictures. Strong association with inflammatory bowel disease (especially UC). MRCP shows bead"
+    },
+    "C_HEP_ERCP": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "ercp",
+      "description": "Endoscopic procedure combining fluoroscopy and endoscopy to diagnose and treat biliary and pancreatic duct pathology. Indications: choledocholithiasis, biliary strictures, PSC, post-surgical bile leak"
+    },
+    "C_HEP_CIRRHOSIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "cirrhosis",
+      "description": "Irreversible end-stage hepatic fibrosis with nodule formation causing distorted liver architecture. Complications include portal hypertension, ascites, variceal bleeding, hepatic encephalopathy, spont"
+    },
+    "C_HEP_HEPATITIS_C": {
+      "specialty": "hepatology",
+      "icd10_codes": [
+        "C22"
+      ],
+      "cpt_codes": [],
+      "label": "hepatitis c",
+      "description": "Chronic bloodborne viral hepatitis caused by HCV; most common cause of viral cirrhosis in the developed world. Often asymptomatic until advanced fibrosis. Diagnosed by anti-HCV antibody and confirmed "
+    },
+    "C_HEP_PORTAL_HYPERTENSION": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "portal hypertension",
+      "description": "Increased pressure in the portal venous system (>5 mmHg gradient) resulting from intrahepatic resistance in cirrhosis. Drives formation of esophageal and gastric varices, ascites, splenomegaly, caput "
+    },
+    "C_HEP_VARICEAL_BLEEDING": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "variceal bleeding",
+      "description": "Life-threatening haemorrhage from rupture of portal hypertension-induced varices (oesophageal or gastric). Initial management: IV terlipressin or octreotide, prophylactic antibiotics, urgent endoscopy"
+    },
+    "C_HEP_ASCITES": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "ascites",
+      "description": "Accumulation of fluid in the peritoneal cavity, most commonly due to portal hypertension from cirrhosis. SAAG ≥1.1 g/dL confirms portal hypertensive aetiology. Managed with sodium restriction and diur"
+    },
+    "C_HEP_HEPATOCELLULAR_CARCINOMA": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hepatocellular carcinoma",
+      "description": "Primary malignancy of hepatocytes; most common primary liver cancer. Arises in 80–90% of cases on background of cirrhosis or chronic viral hepatitis. Surveillance with ultrasound ± AFP every 6 months."
+    },
+    "C_HEP_PARACENTESIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "paracentesis",
+      "description": "Needle drainage of peritoneal fluid for diagnosis (cell count, culture, SAAG, albumin, protein, cytology) and therapy (large-volume paracentesis). LVP removes ≥5 L; albumin infusion (6–8 g per litre r"
+    },
+    "C_HEP_HEPATIC_ENCEPHALOPATHY": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hepatic encephalopathy",
+      "description": "Neuropsychiatric dysfunction from impaired hepatic detoxification of nitrogenous waste (ammonia). Grades 0–4 (West Haven criteria). Precipitants: infection, GI bleeding, electrolyte disturbance, const"
+    },
+    "C_HEP_BUDD_CHIARI": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "budd chiari",
+      "description": "Obstruction of hepatic venous outflow at the level of hepatic veins or IVC. Causes: myeloproliferative disorders (JAK2 V617F), thrombophilia, OCP. Acute: RUQ pain, ascites, hepatomegaly. Doppler ultra"
+    },
+    "C_HEP_TIPS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "tips",
+      "description": "Radiologically placed intrahepatic shunt connecting portal vein to hepatic vein, decompressing portal hypertension. Indications: refractory ascites, recurrent variceal bleeding, Budd-Chiari, hepatic h"
+    },
+    "C_HEP_SPONTANEOUS_BACTERIAL_PERITONITIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "spontaneous bacterial peritonitis",
+      "description": "Bacterial infection of ascitic fluid without an identifiable intra-abdominal source. Diagnostic: ascitic fluid PMN ≥250 cells/mm³. Most common organisms: E. coli, Klebsiella, Streptococcus. Treatment:"
+    },
+    "C_HEP_HEPATORENAL_SYNDROME": {
+      "specialty": "hepatology",
+      "icd10_codes": [
+        "R23"
+      ],
+      "cpt_codes": [],
+      "label": "hepatorenal syndrome",
+      "description": "Functional renal failure in advanced cirrhosis without identifiable intrinsic renal cause. Type 1 HRS (HRS-AKI): rapid creatinine doubling; Type 2: gradual progression. Pathophysiology: splanchnic vas"
+    },
+    "C_HEP_HEPATITIS_B": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hepatitis b",
+      "description": "Viral hepatitis caused by hepatitis B virus (HBV); transmitted parenterally and sexually. Acute infection may resolve or progress to chronic hepatitis (HBsAg >6 months), cirrhosis, and hepatocellular "
+    },
+    "C_HEP_AUTOIMMUNE_HEPATITIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "autoimmune hepatitis",
+      "description": "Chronic inflammatory liver disease caused by immune-mediated hepatocyte destruction. Predominantly affects women. Characterized by elevated ALT, AST, IgG, ANA, anti-SMA (Type 1) or anti-LKM1 (Type 2)."
+    },
+    "C_HEP_NAFLD": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "nafld",
+      "description": "Spectrum of liver disease from simple steatosis to NASH, fibrosis, and cirrhosis in patients without significant alcohol intake. Strongly associated with obesity, insulin resistance, type 2 diabetes, "
+    },
+    "C_HEP_NASH": {
+      "specialty": "hepatology",
+      "icd10_codes": [
+        "M30"
+      ],
+      "cpt_codes": [],
+      "label": "nash",
+      "description": "Progressive form of NAFLD characterised by hepatic steatosis, lobular inflammation, hepatocyte ballooning, and variable fibrosis on biopsy. NAS (NAFLD Activity Score) quantifies activity. High risk of"
+    },
+    "C_HEP_ALCOHOLIC_LIVER_DISEASE": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "alcoholic liver disease",
+      "description": "Spectrum from alcoholic fatty liver to alcoholic hepatitis and cirrhosis due to chronic heavy alcohol use. Alcoholic hepatitis: acute onset jaundice, fever, elevated AST:ALT ratio >2, neutrophilia. Ma"
+    },
+    "C_SCORE_MADDREY": {
+      "specialty": "hepatology",
+      "icd10_codes": [
+        "S67"
+      ],
+      "cpt_codes": [],
+      "label": "maddrey",
+      "description": "Severity score for alcoholic hepatitis: MDF = 4.6 × (prothrombin time − control) + serum bilirubin (µmol/L ÷ 17.1). MDF ≥32 indicates severe alcoholic hepatitis (1-month mortality 30–50%), and is the "
+    },
+    "C_HEP_ALT_AST": {
+      "specialty": "hepatology",
+      "icd10_codes": [
+        "A11"
+      ],
+      "cpt_codes": [],
+      "label": "alt ast",
+      "description": "ALT and AST are markers of hepatocyte injury. Elevated in viral hepatitis, autoimmune hepatitis, NAFLD, DILI, and ischaemic hepatitis. ALT is more liver-specific than AST. AST:ALT ratio >2:1 suggests "
+    },
+    "C_SCORE_BISHOP": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "bishop",
+      "description": "Pelvic scoring system assessing cervical readiness for labour induction. Parameters: cervical dilation, effacement, consistency, position, and fetal station. Total 0–13. Score <6: unfavourable cervix "
+    },
+    "C_SCORE_APACHE_II": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "I63",
+        "R29.7"
+      ],
+      "cpt_codes": [],
+      "label": "apache ii",
+      "description": "ICU severity of illness scoring system. 12 acute physiology variables (vital signs, ABG, biochemistry, haematology), age, and chronic health status. Range 0–71; higher scores predict greater ICU morta"
+    },
+    "C_SCORE_CURB65": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "curb65",
+      "description": "Severity scoring for community-acquired pneumonia. CURB-65: Confusion (1), Urea >7 mmol/L (1), Respiratory rate ≥30 (1), Blood pressure systolic <90 or diastolic ≤60 (1), age ≥65 (1). Score 0–1: low r"
+    },
+    "C_HEP_DRUG_INDUCED_LIVER_INJURY": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "drug induced liver injury",
+      "description": "Liver injury caused by medications, herbal products, or dietary supplements. Patterns: hepatocellular (ALT elevation), cholestatic (ALP/GGT elevation), mixed. Acetaminophen (paracetamol) is most commo"
+    },
+    "C_HEP_AFP": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "afp",
+      "description": "Oncofetal protein used in HCC surveillance and diagnosis. AFP >20 ng/mL in high-risk patient raises concern for HCC; >400 ng/mL strongly suggests it. Also elevated in non-seminomatous germ cell tumour"
+    },
+    "C_SCORE_MELD": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "meld",
+      "description": "MELD (Model for End-stage Liver Disease) predicts 90-day mortality in cirrhosis. Original: 3.8×log(bilirubin) + 11.2×log(INR) + 9.6×log(creatinine) + 6.4. MELD-Na adds serum sodium. MELD 3.0 includes "
+    },
+    "C_HEP_LIVER_TRANSPLANT": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "liver transplant",
+      "description": "Definitive treatment for end-stage liver disease, acute liver failure, and early HCC (Milan criteria). Donor organs: deceased donor (cadaveric) or living donor. MELD score determines waitlist priority"
+    },
+    "C_SCORE_CHILD_PUGH": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "child pugh",
+      "description": "Cirrhosis severity score based on 5 parameters: bilirubin, albumin, INR/prothrombin time, ascites, and hepatic encephalopathy. Class A (5–6 points): well-compensated, 1–2% 1-year mortality. Class B (7"
+    },
+    "C_HEP_ALBUMIN_INR": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "albumin inr",
+      "description": "Albumin and INR/prothrombin time reflect hepatic synthetic function. Hypoalbuminaemia and prolonged PT/INR indicate significant parenchymal dysfunction. Both are components of Child-Pugh and MELD scor"
+    },
+    "C_SCORE_MELD_FIB4": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "meld fib4",
+      "description": "Non-invasive fibrosis assessment: FIB-4 = (Age × AST) / (Platelets × √ALT). FIB-4 <1.30: low risk of advanced fibrosis (F0–F2); >2.67: high risk (F3–F4). Validated in NAFLD, hepatitis B and C. First-l"
+    },
+    "C_SCORE_CHA2DS2_VASC": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "cha2ds2 vasc",
+      "description": "Stroke risk stratification in non-valvular atrial fibrillation. Variables: Congestive heart failure (1), Hypertension (1), Age ≥75 (2), Diabetes (1), prior Stroke/TIA (2), Vascular disease (1), Age 65"
+    },
+    "C_HEP_FIBROSCAN": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "fibroscan",
+      "description": "Non-invasive ultrasound-based tool measuring liver stiffness in kilopascals (kPa) as a surrogate for fibrosis. Values interpreted as F0–F4 stages. Also measures controlled attenuation parameter (CAP) "
+    },
+    "C_HEP_LIVER_BIOPSY": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "liver biopsy",
+      "description": "Gold standard for diagnosing and staging hepatic fibrosis and inflammation. Performed percutaneously, transjugularly (in coagulopathic patients), or laparoscopically. METAVIR (F0–F4) and Ishak (0–6) s"
+    },
+    "C_HEP_BILIRUBIN": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "bilirubin",
+      "description": "Bilirubin is a haemoglobin breakdown product. Elevated total bilirubin causes jaundice (clinically visible >2–3 mg/dL). Conjugated (direct) hyperbilirubinemia indicates hepatocellular or cholestatic d"
+    },
+    "C_HEP_ALP_GGT": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "alp ggt",
+      "description": "ALP and GGT elevation reflects biliary tract disease. Elevated in cholestatic conditions: PBC, PSC, biliary obstruction, drug cholestasis. GGT elevation also indicates alcohol use and enzyme induction"
+    },
+    "C_HEP_HEMOCHROMATOSIS": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hemochromatosis",
+      "description": "Autosomal recessive iron overload disorder; most common: HFE gene C282Y homozygosity. Excess iron deposits in liver, heart, pancreas, joints, and pituitary. Presents with fatigue, arthralgia, liver di"
+    },
+    "C_HEP_ACUTE_LIVER_FAILURE": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "acute liver failure",
+      "description": "Rapid loss of hepatic function in previously healthy liver, presenting with coagulopathy (INR ≥1.5) and hepatic encephalopathy within 26 weeks of symptom onset. Causes: acetaminophen, viral hepatitis,"
+    },
+    "C_ID_SEPSIS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [
+        "R65.2",
+        "R65.21",
+        "T81.12"
+      ],
+      "cpt_codes": [],
+      "label": "sepsis",
+      "description": "Life-threatening organ dysfunction caused by dysregulated host response to infection (Sepsis-3 definition). SOFA score ≥2 from baseline. Septic shock: sepsis + vasopressors + lactate >2 mmol/L despite"
+    },
+    "C_SCORE_SOFA": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [
+        "R31",
+        "R82"
+      ],
+      "cpt_codes": [],
+      "label": "sofa",
+      "description": "Sequential Organ Failure Assessment (SOFA) quantifies organ dysfunction in ICU. Six organ systems: PaO2/FiO2 (respiratory), platelet count (coagulation), bilirubin (hepatic), MAP/vasopressor dose (car"
+    },
+    "C_ID_MENINGITIS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "meningitis",
+      "description": "Medical emergency from bacterial inflammation of meninges. Triad: fever, severe headache, neck stiffness. Petechial rash suggests Neisseria meningitidis. LP: elevated opening pressure, turbid CSF, neu"
+    },
+    "C_ID_HIV_AIDS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hiv aids",
+      "description": "Retroviral infection (HIV-1/2) causing progressive CD4+ T-cell depletion leading to AIDS (CD4 <200 cells/µL or AIDS-defining illness). Transmission: sexual, parenteral, vertical. Diagnosis: 4th-genera"
+    },
+    "C_DRUG_ANTIRETROVIRAL": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "antiretroviral",
+      "description": "Combination antiretroviral therapy (ART) for HIV; current standard: 2 NRTIs (backbone: tenofovir alafenamide + emtricitabine) + integrase strand transfer inhibitor (INSTI: dolutegravir, bictegravir). "
+    },
+    "C_ID_COVID19": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [
+        "J12.8",
+        "J12.82",
+        "J20.8",
+        "J40",
+        "R05",
+        "R05.9",
+        "R06.02",
+        "R50.9"
+      ],
+      "cpt_codes": [],
+      "label": "covid19",
+      "description": "Respiratory illness caused by SARS-CoV-2 coronavirus. Ranges from asymptomatic to severe pneumonia and ARDS. Key features: fever, cough, dyspnoea, anosmia. Severe: hypoxaemia, bilateral infiltrates, h"
+    },
+    "C_ID_TUBERCULOSIS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "tuberculosis",
+      "description": "Infection by Mycobacterium tuberculosis, primarily pulmonary but can affect any organ. Spread by respiratory droplets. Active TB: productive cough, haemoptysis, night sweats, weight loss, CXR cavitati"
+    },
+    "C_ID_MALARIA": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "malaria",
+      "description": "Parasitic infection by Plasmodium species transmitted by Anopheles mosquito. P. falciparum: most lethal; causes cerebral malaria, severe anaemia, ARDS, renal failure, blackwater fever. Cyclical fever,"
+    },
+    "C_ID_DENGUE": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "dengue",
+      "description": "Arboviral infection (dengue virus serotypes 1–4) transmitted by Aedes mosquito. High fever, severe headache, retroorbital pain, myalgia, rash, thrombocytopenia, and leukopenia. Dengue haemorrhagic fev"
+    },
+    "C_ID_CLOSTRIDIUM_DIFFICILE": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "clostridium difficile",
+      "description": "Toxin-mediated colitis from C. difficile overgrowth, usually following antibiotic disruption of colonic flora. Watery diarrhoea, abdominal cramps, fever, leukocytosis. Pseudomembranes on colonoscopy. "
+    },
+    "C_ID_MRSA": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [
+        "A41.02",
+        "B95.62",
+        "J15.212",
+        "Z16.11",
+        "Z22.321",
+        "Z22.322"
+      ],
+      "cpt_codes": [],
+      "label": "mrsa",
+      "description": "S. aureus resistant to beta-lactam antibiotics via mecA gene-encoded PBP2a. Causes skin/soft tissue infections (furuncles, abscesses), pneumonia, bacteraemia, endocarditis, osteomyelitis. CA-MRSA ofte"
+    },
+    "C_DRUG_GLYCOPEPTIDE": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "glycopeptide",
+      "description": "Antibiotics inhibiting cell wall synthesis by binding D-Ala-D-Ala terminal peptide. Vancomycin: key agent for MRSA, C. difficile (oral), gram-positive infections. IV vancomycin: AUC-guided dosing (AUC"
+    },
+    "C_ID_CANDIDIASIS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "candidiasis",
+      "description": "Fungal infection caused by Candida species. Mucocutaneous forms: oral thrush (pseudomembranous plaques), oesophageal candidiasis, vulvovaginal candidiasis. Invasive candidiasis: candidemia, hepatosple"
+    },
+    "C_ID_ASPERGILLOSIS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "aspergillosis",
+      "description": "Spectrum of infections by Aspergillus species. Invasive pulmonary aspergillosis (IPA) in neutropenic/transplant patients: angioinvasion, infarction, haematogenous spread. CT: halo sign, air-crescent s"
+    },
+    "C_ID_PNEUMOCYSTIS": {
+      "specialty": "infectious_disease",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "pneumocystis",
+      "description": "Life-threatening pneumonia from Pneumocystis jirovecii in immunocompromised patients (HIV CD4 <200, transplant, haematological malignancy, long-term steroids). Presents with progressive dyspnoea, dry "
+    },
+    "C_ONC_BREAST_CANCER": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "breast cancer",
+      "description": "Most common cancer in women. Subtypes by receptor status: ER/PR-positive (most common, endocrine therapy — tamoxifen, aromatase inhibitors), HER2-positive (trastuzumab, pertuzumab), triple-negative TN"
+    },
+    "C_ONC_LUNG_CANCER": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "lung cancer",
+      "description": "Leading cause of cancer death. NSCLC (85%): adenocarcinoma (most common, peripheral, EGFR/ALK/ROS1/KRAS mutations), squamous cell, large cell. SCLC: central, rapid growth, paraneoplastic syndromes. Mo"
+    },
+    "C_ONC_COLORECTAL_CANCER": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "colorectal cancer",
+      "description": "Third most common cancer globally. Most arise from adenomatous polyps. Risk factors: IBD, Lynch syndrome (MMR gene mutations), FAP. Symptoms: rectal bleeding, change in bowel habit, iron-deficiency an"
+    },
+    "C_ONC_PANCREATIC_CANCER": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "pancreatic cancer",
+      "description": "Most lethal GI malignancy; 5-year survival ~12%. Most are PDAC from ductal epithelium. Head of pancreas (most common): presents with painless obstructive jaundice, weight loss. Body/tail: often late p"
+    },
+    "C_ONC_PROSTATE_CANCER": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "prostate cancer",
+      "description": "Most common cancer in men. PSA screening debated. Gleason/Grade Group scoring from biopsy determines risk stratification. Localised: active surveillance, radical prostatectomy, or radiotherapy per ris"
+    },
+    "C_ONC_OVARIAN_CANCER": {
+      "specialty": "oncology",
+      "icd10_codes": [
+        "P53"
+      ],
+      "cpt_codes": [],
+      "label": "ovarian cancer",
+      "description": "Most lethal gynaecologic cancer; typically presents at advanced stage III–IV. High-grade serous carcinoma (HGSC) most common — BRCA1/2 and homologous recombination deficiency (HRD) in 50%. CA-125 elev"
+    },
+    "C_ONC_AML": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "aml",
+      "description": "Aggressive haematologic malignancy from clonal expansion of myeloid precursors. Blasts ≥20% in bone marrow. WHO molecular risk stratification: favourable (core binding factor AML, NPM1+), intermediate"
+    },
+    "C_ONC_CML": {
+      "specialty": "oncology",
+      "icd10_codes": [
+        "B12"
+      ],
+      "cpt_codes": [],
+      "label": "cml",
+      "description": "Myeloproliferative neoplasm driven by BCR-ABL1 tyrosine kinase from t(9;22) Philadelphia chromosome translocation. Phases: chronic, accelerated, blast crisis. Chronic phase: splenomegaly, leukocytosis"
+    },
+    "C_ONC_HODGKIN_LYMPHOMA": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hodgkin lymphoma",
+      "description": "Lymphoid malignancy characterised by Reed-Sternberg cells (CD30+, CD15+) in an inflammatory background. Bimodal age distribution. Painless lymphadenopathy, B symptoms (fever, night sweats, weight loss"
+    },
+    "C_ONC_NON_HODGKIN_LYMPHOMA": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "non hodgkin lymphoma",
+      "description": "Heterogeneous group of lymphoid malignancies. Indolent (follicular, MZL, CLL/SLL) vs aggressive (DLBCL, MCL, Burkitt). DLBCL: most common NHL; GCB vs ABC subtype by cell of origin. R-CHOP (rituximab +"
+    },
+    "C_ONC_MULTIPLE_MYELOMA": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "multiple myeloma",
+      "description": "Clonal plasma cell malignancy producing monoclonal immunoglobulin (M protein). CRAB criteria: hyperCalcaemia, Renal failure, Anaemia, Bone lesions (lytic). Diagnosis: SPEP, serum free light chains, bo"
+    },
+    "C_ONC_IMMUNOTHERAPY": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "immunotherapy",
+      "description": "Systemic cancer treatment leveraging the immune system. Checkpoint inhibitors block PD-1 (pembrolizumab, nivolumab), PD-L1 (atezolizumab, durvalumab), or CTLA-4 (ipilimumab). Approved across NSCLC, me"
+    },
+    "C_ONC_CAR_T": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "car t",
+      "description": "Adoptive cell therapy where patient's T cells are genetically engineered to express tumour-targeting CARs. CD19-directed CAR-T for B-cell ALL and diffuse large B-cell lymphoma; BCMA-directed for multi"
+    },
+    "C_ONC_CHEMOTHERAPY": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "chemotherapy",
+      "description": "Cytotoxic agents that kill rapidly dividing cells, used as neoadjuvant, adjuvant, or palliative treatment. Mechanism classes: alkylating agents, antimetabolites (5-FU, methotrexate), topoisomerase inh"
+    },
+    "C_ONC_TARGETED_THERAPY": {
+      "specialty": "oncology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "targeted therapy",
+      "description": "Cancer drugs targeting specific molecular drivers identified by tumour profiling. Examples: EGFR-mutated NSCLC → osimertinib; BRAF V600E melanoma → vemurafenib; HER2+ breast → trastuzumab, pertuzumab,"
+    },
+    "C_DERM_PSORIASIS": {
+      "specialty": "dermatology",
+      "icd10_codes": [
+        "K17"
+      ],
+      "cpt_codes": [],
+      "label": "psoriasis",
+      "description": "Chronic immune-mediated inflammatory skin disease with T-cell-driven keratinocyte hyperproliferation. Classic: well-demarcated erythematous plaques with silver scaling on extensor surfaces, scalp, and"
+    },
+    "C_DERM_ATOPIC_DERMATITIS": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "atopic dermatitis",
+      "description": "Chronic relapsing pruritic inflammatory skin disorder; part of the atopic triad (with asthma and allergic rhinitis). Mediated by Th2 immune response, barrier dysfunction (filaggrin mutations), and IgE"
+    },
+    "C_DERM_MELANOMA": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "melanoma",
+      "description": "Malignant neoplasm of melanocytes with highest mortality of skin cancers. ABCDE criteria (Asymmetry, Border, Colour, Diameter, Evolution). Breslow thickness is primary prognostic factor. BRAF V600E mu"
+    },
+    "C_DERM_BASAL_CELL_CARCINOMA": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "basal cell carcinoma",
+      "description": "Most common human malignancy; arises from basal keratinocytes. UV radiation main risk factor. Subtypes: nodular (pearly papule with telangiectasia), superficial, morphoeic (aggressive). Rarely metasta"
+    },
+    "C_DERM_SQUAMOUS_CELL_CARCINOMA": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "squamous cell carcinoma",
+      "description": "Second most common skin cancer; arises from keratinocytes. Risk: chronic UV exposure, immunosuppression, HPV, chronic wounds, precursor lesions (actinic keratosis, Bowen's disease). Can metastasise (e"
+    },
+    "C_DERM_ACNE_VULGARIS": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "acne vulgaris",
+      "description": "Multifactorial pilosebaceous unit disorder from sebum overproduction, follicular hyperkeratinisation, Cutibacterium acnes colonisation, and inflammation. Presents as comedones, papules, pustules, nodu"
+    },
+    "C_DERM_ROSACEA": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "rosacea",
+      "description": "Chronic inflammatory facial dermatosis characterised by flushing, erythema, telangiectasia, inflammatory papulopustules, and phymatous changes. Triggers: heat, alcohol, spicy food, UV. Ocular rosacea:"
+    },
+    "C_DERM_TINEA": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "tinea",
+      "description": "Superficial fungal infection of keratinised structures (skin, hair, nails) caused by dermatophytes (Trichophyton, Microsporum, Epidermophyton). KOH microscopy demonstrates hyphae. Topical imidazoles o"
+    },
+    "C_DERM_HERPES_ZOSTER": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "herpes zoster",
+      "description": "Reactivation of latent varicella-zoster virus (VZV) in dorsal root ganglia causing unilateral dermatomal painful vesicular rash. Prodrome: burning pain before rash. Complications: postherpetic neuralg"
+    },
+    "C_DERM_VITILIGO": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "vitiligo",
+      "description": "Autoimmune destruction of melanocytes causing well-demarcated achromic patches. Koebner phenomenon (new lesions at sites of trauma). Associated with thyroid disease, T1DM, alopecia areata. Wood's lamp"
+    },
+    "C_DERM_PEMPHIGUS_VULGARIS": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "pemphigus vulgaris",
+      "description": "Life-threatening autoimmune blistering disorder from IgG antibodies against desmoglein-1/3, causing intraepidermal acantholysis. Flaccid bullae that rupture easily; painful mucosal erosions often prec"
+    },
+    "C_DERM_BULLOUS_PEMPHIGOID": {
+      "specialty": "dermatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "bullous pemphigoid",
+      "description": "Most common autoimmune blistering disease, predominantly in elderly. IgG antibodies target BP180/BP230 (hemidesmosomal proteins), causing subepidermal blistering. Tense, pruritic bullae on normal or u"
+    },
+    "C_GEN_HEART_FAILURE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "heart failure",
+      "description": "Syndrome of inadequate cardiac output relative to metabolic demands. HFrEF (EF <40%): GDMT — ACEi/ARB/ARNi, beta-blocker, MRA, SGLT2 inhibitor. HFpEF (EF ≥50%): manage comorbidities + SGLT2 inhibitors"
+    },
+    "C_GEN_MYOCARDIAL_INFARCTION": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "I21",
+        "I25.2"
+      ],
+      "cpt_codes": [],
+      "label": "myocardial infarction",
+      "description": "Myocardial necrosis from acute coronary artery occlusion. STEMI: ST elevation + troponin rise → emergent primary PCI (within 90 min door-to-balloon). NSTEMI/UA: troponin rise without ST elevation → ri"
+    },
+    "C_GEN_ATRIAL_FIBRILLATION": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "atrial fibrillation",
+      "description": "Most common cardiac arrhythmia. Irregularly irregular pulse, absent P-waves, irregular RR intervals on ECG. Stroke risk stratification: CHA2DS2-VASc score (anticoagulate if ≥2 in men, ≥3 in women). An"
+    },
+    "C_GEN_HYPERTENSION": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "hypertension",
+      "description": "Systolic BP ≥130 mmHg or diastolic ≥80 mmHg (AHA 2017). Primary hypertension in 90-95%. Secondary causes: renal artery stenosis, primary hyperaldosteronism (Conn), phaeochromocytoma, Cushing. First-li"
+    },
+    "C_GEN_PULMONARY_EMBOLISM": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "pulmonary embolism",
+      "description": "Obstruction of pulmonary arterial system by thrombus (usually DVT). Symptoms: pleuritic chest pain, dyspnoea, haemoptysis, tachycardia. Diagnosis: Wells score risk stratification, D-dimer (high sensit"
+    },
+    "C_GEN_COPD": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "S49"
+      ],
+      "cpt_codes": [],
+      "label": "copd",
+      "description": "Progressive airflow limitation (FEV1/FVC <70%) due to airway inflammation and parenchymal destruction, predominantly from smoking. GOLD staging (1–4) by FEV1%. Inhaled bronchodilators (LAMA, LABA), in"
+    },
+    "C_GEN_ASTHMA": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "asthma",
+      "description": "Chronic inflammatory airway disease with reversible airflow obstruction, bronchial hyperreactivity. Episodic wheeze, dyspnoea, chest tightness, cough (nocturnal/exercise). Peak flow and spirometry (FE"
+    },
+    "C_GEN_ACUTE_KIDNEY_INJURY": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "R23",
+        "R31"
+      ],
+      "cpt_codes": [],
+      "label": "acute kidney injury",
+      "description": "Abrupt reduction in kidney function (KDIGO: creatinine rise ≥26.5 µmol/L within 48h, or ≥1.5× baseline within 7 days, or urine output <0.5 mL/kg/h for 6h). Causes: pre-renal (hypovolaemia, hypoperfusi"
+    },
+    "C_GEN_CHRONIC_KIDNEY_DISEASE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "N18.2",
+        "N18.3",
+        "N18.30",
+        "N18.32",
+        "N18.4",
+        "N18.6"
+      ],
+      "cpt_codes": [],
+      "label": "chronic kidney disease",
+      "description": "Progressive structural or functional kidney disease >3 months (eGFR <60 mL/min/1.73m² or albuminuria). Staged G1–G5 by eGFR; A1–A3 by albuminuria. Complications: anaemia (EPO deficiency), CKD-MBD (sec"
+    },
+    "C_GEN_DIABETES_TYPE2": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "B12"
+      ],
+      "cpt_codes": [],
+      "label": "diabetes type2",
+      "description": "Insulin resistance with relative insulin deficiency causing chronic hyperglycaemia. Diagnosis: HbA1c ≥48 mmol/mol (6.5%) or fasting plasma glucose ≥7.0 mmol/L. Complications: retinopathy, nephropathy,"
+    },
+    "C_DRUG_ANTIDIABETIC": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "antidiabetic",
+      "description": "Pharmacological agents for glycaemic control in diabetes. Metformin: first-line (biguanide, reduces hepatic glucose output, hold with iodinated contrast, eGFR <30 contraindicated). SGLT2 inhibitors (e"
+    },
+    "C_GEN_STROKE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "stroke",
+      "description": "Acute focal neurological deficit from brain infarction (ischaemic, 87%) or haemorrhage (intracerebral, subarachnoid). FAST: Face, Arm, Speech, Time. Ischaemic: IV alteplase (tPA) within 4.5h of onset;"
+    },
+    "C_GEN_SEIZURE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "seizure",
+      "description": "Epilepsy: recurrent unprovoked seizures from abnormal brain electrical activity. Classification: focal (aware/impaired), generalised (tonic-clonic, absence, myoclonic). EEG and MRI brain for investiga"
+    },
+    "C_GEN_ANAEMIA": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "B12",
+        "B19"
+      ],
+      "cpt_codes": [],
+      "label": "anaemia",
+      "description": "Haemoglobin below reference range (men <130, women <120 g/L). Classification by MCV: microcytic (iron deficiency — serum ferritin, thalassaemia), normocytic (CKD, bone marrow failure, acute blood loss"
+    },
+    "C_DRUG_STATIN": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "statin",
+      "description": "HMG-CoA reductase inhibitors; reduce LDL cholesterol and cardiovascular events. High-intensity: atorvastatin 40–80 mg, rosuvastatin 20–40 mg. Primary and secondary prevention of ASCVD. Adverse effects"
+    },
+    "C_DRUG_ANTICOAGULANT": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "anticoagulant",
+      "description": "Anticoagulants prevent thrombus formation. Parenteral: unfractionated heparin (UFH, aPTT-guided), LMWH (enoxaparin, renal dosing). Oral: warfarin (vitamin K antagonist, INR 2–3 for AF/VTE, narrow TW, "
+    },
+    "C_DRUG_CORTICOSTEROID": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "corticosteroid",
+      "description": "Synthetic glucocorticoids with potent anti-inflammatory and immunosuppressive effects. Doses: physiological replacement (hydrocortisone 20 mg/day), anti-inflammatory, pulse (IV methylprednisolone). Ad"
+    },
+    "C_DRUG_NSAID": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "nsaid",
+      "description": "Anti-inflammatory analgesics inhibiting COX-1 and COX-2 enzymes, reducing prostaglandin synthesis. Indications: pain, fever, inflammatory arthritis, gout. Adverse effects: GI ulceration/bleeding (use "
+    },
+    "C_DRUG_OPIOID": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "opioid",
+      "description": "Pain management agents acting on mu, kappa, and delta opioid receptors. Stepwise WHO analgesic ladder. Adverse effects: constipation (prevent routinely), respiratory depression (reverse with naloxone)"
+    },
+    "C_DRUG_BIOLOGIC": {
+      "specialty": "pharmacology",
+      "icd10_codes": [
+        "P13",
+        "R19",
+        "R20",
+        "R42"
+      ],
+      "cpt_codes": [],
+      "label": "biologic",
+      "description": "Protein-based therapeutics targeting specific molecular pathways. TNF-inhibitors (adalimumab, infliximab, etanercept): RA, IBD, psoriasis, AS. Screen for TB and hepatitis B before initiation. IL-6 inh"
+    },
+    "C_DRUG_IMMUNOSUPPRESSANT": {
+      "specialty": "pharmacology",
+      "icd10_codes": [
+        "S15"
+      ],
+      "cpt_codes": [],
+      "label": "immunosuppressant",
+      "description": "Agents suppressing immune responses for transplantation and autoimmune disease. Calcineurin inhibitors (tacrolimus, cyclosporine): narrow therapeutic index, TDM mandatory; nephrotoxicity, neurotoxicit"
+    },
+    "C_DRUG_ANTIFUNGAL": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "antifungal",
+      "description": "Antifungal drug classes: azoles (ergosterol synthesis inhibition — fluconazole for Candida/Cryptococcus, voriconazole for Aspergillus), echinocandins (beta-glucan synthase inhibition — caspofungin, mi"
+    },
+    "C_DRUG_BETA_LACTAM": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "beta lactam",
+      "description": "Largest antibiotic class; inhibit cell wall synthesis by binding penicillin-binding proteins (PBPs). Subclasses: penicillins, cephalosporins (1st–5th generation), carbapenems, monobactams. Broad-spect"
+    },
+    "C_DRUG_FLUOROQUINOLONE": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "fluoroquinolone",
+      "description": "Bactericidal antibiotics inhibiting bacterial DNA gyrase and topoisomerase IV. Broad spectrum: gram-negative, atypicals, mycobacteria. Ciprofloxacin: gram-negative (UTI, anthrax). Levofloxacin: respir"
+    },
+    "C_DRUG_MACROLIDE": {
+      "specialty": "pharmacology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "macrolide",
+      "description": "Bacteriostatic antibiotics inhibiting bacterial protein synthesis at 50S ribosomal subunit. Active against atypicals (Mycoplasma, Legionella, Chlamydia), H. pylori (clarithromycin), NTM (clarithromyci"
+    },
+    "C_SCORE_GLASGOW_COMA_SCALE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "R40.2",
+        "R40.24"
+      ],
+      "cpt_codes": [],
+      "label": "glasgow coma scale",
+      "description": "Standardised neurological assessment of conscious level. Three components: Eye opening (1–4), Verbal response (1–5), Motor response (1–6). Total 3–15; GCS ≤8 = severe injury/coma, consider intubation."
+    },
+    "C_SCORE_WELLS_PE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "D12"
+      ],
+      "cpt_codes": [],
+      "label": "wells pe",
+      "description": "Pre-test probability score for pulmonary embolism. Variables include: clinical signs of DVT, PE most likely diagnosis, heart rate >100, immobilisation >3 days/surgery <4 weeks, prior DVT/PE, haemoptys"
+    },
+    "C_SCORE_NIHSS": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "I63",
+        "R29.7",
+        "Z55",
+        "Z65"
+      ],
+      "cpt_codes": [],
+      "label": "nihss",
+      "description": "Standardised quantitative measure of stroke-related neurological deficit. 11 domains: level of consciousness, gaze, visual fields, facial palsy, arm/leg motor, limb ataxia, sensory, language, dysarthr"
+    },
+    "C_SCORE_APGAR": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "apgar",
+      "description": "Neonatal assessment at 1 and 5 minutes post-delivery. Five criteria: Appearance (skin colour), Pulse (heart rate), Grimace (reflex irritability), Activity (muscle tone), Respiration. Each 0–2; total 0"
+    },
+    "C_HEP_WILSON_DISEASE": {
+      "specialty": "hepatology",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "wilson disease",
+      "description": ""
+    },
+    "C_GEN_ARDS": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "ards",
+      "description": ""
+    },
+    "C_GEN_THYROID_DISEASE": {
+      "specialty": "general_medicine",
+      "icd10_codes": [
+        "R13",
+        "R20"
+      ],
+      "cpt_codes": [],
+      "label": "thyroid disease",
+      "description": ""
+    },
+    "C_GEN_SHOCK": {
+      "specialty": "general_medicine",
+      "icd10_codes": [],
+      "cpt_codes": [],
+      "label": "shock",
+      "description": ""
+    }
+  },
+  "icd10_code_expansions": {
+    "K70": [
+      "K70",
+      "K70.0",
+      "K70.1",
+      "K70.2",
+      "K70.3",
+      "K70.30",
+      "K70.31",
+      "K70.4",
+      "K70.40",
+      "K70.41",
+      "K70.9"
+    ],
+    "K71": [
+      "K71",
+      "K71.0",
+      "K71.1",
+      "K71.10",
+      "K71.11",
+      "K71.2",
+      "K71.3",
+      "K71.4",
+      "K71.5",
+      "K71.50",
+      "K71.51",
+      "K71.6",
+      "K71.7",
+      "K71.8",
+      "K71.9"
+    ],
+    "K72": [
+      "K72",
+      "K72.0",
+      "K72.00",
+      "K72.01",
+      "K72.1",
+      "K72.10",
+      "K72.11",
+      "K72.9",
+      "K72.90",
+      "K72.91"
+    ],
+    "K73": [
+      "K73",
+      "K73.0",
+      "K73.1",
+      "K73.2",
+      "K73.8",
+      "K73.9"
+    ],
+    "K74": [
+      "K74",
+      "K74.0",
+      "K74.1",
+      "K74.2",
+      "K74.3",
+      "K74.4",
+      "K74.5",
+      "K74.6",
+      "K74.60",
+      "K74.69"
+    ],
+    "K75": [
+      "K75",
+      "K75.0",
+      "K75.1",
+      "K75.2",
+      "K75.3",
+      "K75.4",
+      "K75.8",
+      "K75.81",
+      "K75.89",
+      "K75.9"
+    ],
+    "K76": [
+      "K76",
+      "K76.0",
+      "K76.1",
+      "K76.2",
+      "K76.3",
+      "K76.4",
+      "K76.5",
+      "K76.6",
+      "K76.7",
+      "K76.8",
+      "K76.9"
+    ],
+    "K77": [
+      "K77"
+    ],
+    "K80": [
+      "K80",
+      "K80.0",
+      "K80.00",
+      "K80.01",
+      "K80.1",
+      "K80.10",
+      "K80.11",
+      "K80.12",
+      "K80.13",
+      "K80.2",
+      "K80.20",
+      "K80.21",
+      "K80.3",
+      "K80.30",
+      "K80.31",
+      "K80.4",
+      "K80.40",
+      "K80.41",
+      "K80.5",
+      "K80.50",
+      "K80.51",
+      "K80.8"
+    ],
+    "K85": [
+      "K85",
+      "K85.0",
+      "K85.00",
+      "K85.01",
+      "K85.02",
+      "K85.1",
+      "K85.10",
+      "K85.11",
+      "K85.12",
+      "K85.2",
+      "K85.20",
+      "K85.21",
+      "K85.22",
+      "K85.3",
+      "K85.30",
+      "K85.31",
+      "K85.32",
+      "K85.8",
+      "K85.80",
+      "K85.81",
+      "K85.82",
+      "K85.9",
+      "K85.90",
+      "K85.91",
+      "K85.92"
+    ],
+    "K86": [
+      "K86",
+      "K86.0",
+      "K86.1",
+      "K86.2",
+      "K86.3",
+      "K86.81",
+      "K86.89",
+      "K86.9"
+    ],
+    "B16": [
+      "B16",
+      "B16.0",
+      "B16.1",
+      "B16.2",
+      "B16.9"
+    ],
+    "B17": [
+      "B17",
+      "B17.0",
+      "B17.1",
+      "B17.10",
+      "B17.11",
+      "B17.2",
+      "B17.8",
+      "B17.9"
+    ],
+    "B18": [
+      "B18",
+      "B18.0",
+      "B18.1",
+      "B18.2",
+      "B18.8",
+      "B18.9"
+    ],
+    "B19": [
+      "B19",
+      "B19.0",
+      "B19.00",
+      "B19.01",
+      "B19.1",
+      "B19.10",
+      "B19.11",
+      "B19.20",
+      "B19.21",
+      "B19.9"
+    ],
+    "C22": [
+      "C22",
+      "C22.0",
+      "C22.1",
+      "C22.2",
+      "C22.3",
+      "C22.4",
+      "C22.7",
+      "C22.8",
+      "C22.9"
+    ],
+    "C50": [
+      "C50",
+      "C50.0",
+      "C50.01",
+      "C50.011",
+      "C50.012",
+      "C50.019",
+      "C50.1",
+      "C50.11",
+      "C50.111",
+      "C50.112",
+      "C50.119",
+      "C50.2",
+      "C50.21",
+      "C50.4",
+      "C50.41",
+      "C50.5",
+      "C50.51",
+      "C50.8",
+      "C50.81",
+      "C50.9",
+      "C50.91"
+    ],
+    "C34": [
+      "C34",
+      "C34.0",
+      "C34.00",
+      "C34.01",
+      "C34.02",
+      "C34.1",
+      "C34.10",
+      "C34.11",
+      "C34.12",
+      "C34.2",
+      "C34.3",
+      "C34.30",
+      "C34.31",
+      "C34.32",
+      "C34.8",
+      "C34.9",
+      "C34.90"
+    ],
+    "C18": [
+      "C18",
+      "C18.0",
+      "C18.1",
+      "C18.2",
+      "C18.3",
+      "C18.4",
+      "C18.5",
+      "C18.6",
+      "C18.7",
+      "C18.8",
+      "C18.9"
+    ],
+    "C61": [
+      "C61"
+    ],
+    "A41": [
+      "A41",
+      "A41.0",
+      "A41.01",
+      "A41.02",
+      "A41.1",
+      "A41.2",
+      "A41.3",
+      "A41.4",
+      "A41.5",
+      "A41.50",
+      "A41.51",
+      "A41.52",
+      "A41.53",
+      "A41.59",
+      "A41.8",
+      "A41.81",
+      "A41.89",
+      "A41.9"
+    ],
+    "J15": [
+      "J15",
+      "J15.0",
+      "J15.1",
+      "J15.2",
+      "J15.20",
+      "J15.211",
+      "J15.212",
+      "J15.29",
+      "J15.3",
+      "J15.4",
+      "J15.5",
+      "J15.6",
+      "J15.7",
+      "J15.8",
+      "J15.9"
+    ],
+    "B20": [
+      "B20"
+    ],
+    "L40": [
+      "L40",
+      "L40.0",
+      "L40.1",
+      "L40.2",
+      "L40.3",
+      "L40.4",
+      "L40.5",
+      "L40.50",
+      "L40.51",
+      "L40.52",
+      "L40.53",
+      "L40.54",
+      "L40.59",
+      "L40.8",
+      "L40.9"
+    ],
+    "L20": [
+      "L20",
+      "L20.0",
+      "L20.81",
+      "L20.82",
+      "L20.83",
+      "L20.84",
+      "L20.89",
+      "L20.9"
+    ],
+    "I10": [
+      "I10"
+    ],
+    "I21": [
+      "I21",
+      "I21.0",
+      "I21.01",
+      "I21.02",
+      "I21.09",
+      "I21.1",
+      "I21.11",
+      "I21.19",
+      "I21.2",
+      "I21.20",
+      "I21.21",
+      "I21.29",
+      "I21.3",
+      "I21.4",
+      "I21.9"
+    ],
+    "I25": [
+      "I25",
+      "I25.0",
+      "I25.1",
+      "I25.10",
+      "I25.110",
+      "I25.111",
+      "I25.118",
+      "I25.119",
+      "I25.2",
+      "I25.3",
+      "I25.41",
+      "I25.42",
+      "I25.5",
+      "I25.6",
+      "I25.7",
+      "I25.700",
+      "I25.9"
+    ],
+    "I48": [
+      "I48",
+      "I48.0",
+      "I48.1",
+      "I48.11",
+      "I48.19",
+      "I48.2",
+      "I48.20",
+      "I48.21",
+      "I48.3",
+      "I48.4",
+      "I48.9",
+      "I48.90",
+      "I48.91"
+    ],
+    "I26": [
+      "I26",
+      "I26.0",
+      "I26.01",
+      "I26.02",
+      "I26.09",
+      "I26.9",
+      "I26.90",
+      "I26.92",
+      "I26.99"
+    ],
+    "I50": [
+      "I50",
+      "I50.1",
+      "I50.2",
+      "I50.20",
+      "I50.21",
+      "I50.22",
+      "I50.23",
+      "I50.3",
+      "I50.30",
+      "I50.31",
+      "I50.32",
+      "I50.33",
+      "I50.4",
+      "I50.40",
+      "I50.41",
+      "I50.42",
+      "I50.43",
+      "I50.8",
+      "I50.81",
+      "I50.82",
+      "I50.83",
+      "I50.84",
+      "I50.89",
+      "I50.9"
+    ],
+    "E11": [
+      "E11",
+      "E11.0",
+      "E11.1",
+      "E11.2",
+      "E11.21",
+      "E11.22",
+      "E11.29",
+      "E11.3",
+      "E11.4",
+      "E11.40",
+      "E11.41",
+      "E11.42",
+      "E11.43",
+      "E11.44",
+      "E11.49",
+      "E11.5",
+      "E11.6",
+      "E11.65",
+      "E11.8",
+      "E11.9"
+    ],
+    "E03": [
+      "E03",
+      "E03.0",
+      "E03.1",
+      "E03.2",
+      "E03.3",
+      "E03.4",
+      "E03.5",
+      "E03.8",
+      "E03.9"
+    ],
+    "N17": [
+      "N17",
+      "N17.0",
+      "N17.1",
+      "N17.2",
+      "N17.8",
+      "N17.9"
+    ],
+    "N18": [
+      "N18",
+      "N18.1",
+      "N18.2",
+      "N18.3",
+      "N18.30",
+      "N18.31",
+      "N18.32",
+      "N18.4",
+      "N18.5",
+      "N18.6",
+      "N18.9"
+    ],
+    "J44": [
+      "J44",
+      "J44.0",
+      "J44.1",
+      "J44.9"
+    ],
+    "J45": [
+      "J45",
+      "J45.2",
+      "J45.20",
+      "J45.21",
+      "J45.22",
+      "J45.3",
+      "J45.30",
+      "J45.31",
+      "J45.32",
+      "J45.4",
+      "J45.40",
+      "J45.41",
+      "J45.42",
+      "J45.5",
+      "J45.50",
+      "J45.51",
+      "J45.52",
+      "J45.9",
+      "J45.90",
+      "J45.91",
+      "J45.99"
+    ],
+    "G40": [
+      "G40",
+      "G40.0",
+      "G40.00",
+      "G40.001",
+      "G40.009",
+      "G40.01",
+      "G40.011",
+      "G40.019",
+      "G40.1",
+      "G40.10",
+      "G40.101",
+      "G40.109",
+      "G40.2",
+      "G40.3",
+      "G40.4",
+      "G40.5",
+      "G40.8",
+      "G40.9",
+      "G40.90",
+      "G40.901",
+      "G40.909"
+    ],
+    "D50": [
+      "D50",
+      "D50.0",
+      "D50.1",
+      "D50.8",
+      "D50.9"
+    ],
+    "D64": [
+      "D64",
+      "D64.0",
+      "D64.1",
+      "D64.2",
+      "D64.3",
+      "D64.4",
+      "D64.81",
+      "D64.89",
+      "D64.9"
+    ],
+    "M05": [
+      "M05",
+      "M05.0",
+      "M05.00",
+      "M05.01",
+      "M05.09",
+      "M05.1",
+      "M05.10",
+      "M05.2",
+      "M05.3",
+      "M05.4",
+      "M05.5",
+      "M05.6",
+      "M05.7",
+      "M05.8",
+      "M05.9"
+    ],
+    "N20": [
+      "N20",
+      "N20.0",
+      "N20.1",
+      "N20.2",
+      "N20.9"
+    ],
+    "N40": [
+      "N40",
+      "N40.0",
+      "N40.1",
+      "N40.2",
+      "N40.3"
+    ],
+    "S25": [
+      "S25"
+    ],
+    "S37": [
+      "S37"
+    ],
+    "R23": [
+      "R23"
+    ],
+    "M30": [
+      "M30"
+    ],
+    "S67": [
+      "S67"
+    ],
+    "A11": [
+      "A11"
+    ],
+    "I63": [
+      "I63"
+    ],
+    "R29": [
+      "R29.7"
+    ],
+    "R65": [
+      "R65.2",
+      "R65.21"
+    ],
+    "T81": [
+      "T81.12"
+    ],
+    "R31": [
+      "R31"
+    ],
+    "R82": [
+      "R82"
+    ],
+    "J12": [
+      "J12.8",
+      "J12.82"
+    ],
+    "J20": [
+      "J20.8"
+    ],
+    "J40": [
+      "J40"
+    ],
+    "R05": [
+      "R05",
+      "R05.9"
+    ],
+    "R06": [
+      "R06.02"
+    ],
+    "R50": [
+      "R50.9"
+    ],
+    "B95": [
+      "B95.62"
+    ],
+    "Z16": [
+      "Z16.11"
+    ],
+    "Z22": [
+      "Z22.321",
+      "Z22.322"
+    ],
+    "P53": [
+      "P53"
+    ],
+    "B12": [
+      "B12"
+    ],
+    "K17": [
+      "K17"
+    ],
+    "S49": [
+      "S49"
+    ],
+    "P13": [
+      "P13"
+    ],
+    "R19": [
+      "R19"
+    ],
+    "R20": [
+      "R20"
+    ],
+    "R42": [
+      "R42"
+    ],
+    "S15": [
+      "S15"
+    ],
+    "R40": [
+      "R40.2",
+      "R40.24"
+    ],
+    "D12": [
+      "D12"
+    ],
+    "Z55": [
+      "Z55"
+    ],
+    "Z65": [
+      "Z65"
+    ],
+    "R13": [
+      "R13"
+    ]
+  },
+  "term_to_codes": {
+    "liver cirrhosis": {
+      "icd10": [],
+      "cpt": [
+        "47000",
+        "91200"
+      ]
+    },
+    "hepatic cirrhosis": {
+      "icd10": [],
+      "cpt": [
+        "47000",
+        "91200"
+      ]
+    },
+    "portal hypertension": {
+      "icd10": [],
+      "cpt": [
+        "37182",
+        "37183",
+        "43243"
+      ]
+    },
+    "ascites": {
+      "icd10": [],
+      "cpt": [
+        "49082",
+        "49083"
+      ]
+    },
+    "hepatic encephalopathy": {
+      "icd10": [],
+      "cpt": [
+        "99232",
+        "99233"
+      ]
+    },
+    "variceal bleeding": {
+      "icd10": [],
+      "cpt": [
+        "43243",
+        "43244",
+        "43255"
+      ]
+    },
+    "oesophageal varices": {
+      "icd10": [],
+      "cpt": [
+        "43243",
+        "43244"
+      ]
+    },
+    "spontaneous bacterial peritonitis": {
+      "icd10": [],
+      "cpt": [
+        "49082",
+        "49083"
+      ]
+    },
+    "hepatorenal syndrome": {
+      "icd10": [
+        "R23"
+      ],
+      "cpt": [
+        "99291",
+        "99292"
+      ]
+    },
+    "alcoholic hepatitis": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82977",
+        "91200"
+      ]
+    },
+    "alcoholic liver disease": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "91200"
+      ]
+    },
+    "fatty liver": {
+      "icd10": [],
+      "cpt": [
+        "76700",
+        "76705"
+      ]
+    },
+    "non-alcoholic steatohepatitis": {
+      "icd10": [
+        "M30"
+      ],
+      "cpt": [
+        "76700",
+        "76705",
+        "91200"
+      ]
+    },
+    "nash": {
+      "icd10": [],
+      "cpt": [
+        "76700",
+        "91200"
+      ]
+    },
+    "nafld": {
+      "icd10": [],
+      "cpt": [
+        "76700",
+        "76705",
+        "91200"
+      ]
+    },
+    "steatohepatitis": {
+      "icd10": [
+        "M30"
+      ],
+      "cpt": []
+    },
+    "autoimmune hepatitis": {
+      "icd10": [],
+      "cpt": [
+        "86039",
+        "86235",
+        "86596"
+      ]
+    },
+    "primary biliary cholangitis": {
+      "icd10": [
+        "S25",
+        "S37"
+      ],
+      "cpt": [
+        "86003",
+        "86596"
+      ]
+    },
+    "pbc": {
+      "icd10": [],
+      "cpt": []
+    },
+    "primary sclerosing cholangitis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "psc": {
+      "icd10": [],
+      "cpt": []
+    },
+    "cholestasis": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82247",
+        "82248"
+      ]
+    },
+    "hepatocellular carcinoma": {
+      "icd10": [],
+      "cpt": [
+        "47370",
+        "47371",
+        "47380",
+        "47381",
+        "47382"
+      ]
+    },
+    "hcc": {
+      "icd10": [],
+      "cpt": [
+        "47370",
+        "47371",
+        "47380"
+      ]
+    },
+    "liver biopsy": {
+      "icd10": [],
+      "cpt": [
+        "47000",
+        "47001",
+        "47100"
+      ]
+    },
+    "fibroscan": {
+      "icd10": [],
+      "cpt": [
+        "91200"
+      ]
+    },
+    "liver failure": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "84155",
+        "85610"
+      ]
+    },
+    "acute liver failure": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "84155",
+        "99291"
+      ]
+    },
+    "liver transplant": {
+      "icd10": [],
+      "cpt": [
+        "47135",
+        "47136"
+      ]
+    },
+    "drug induced liver injury": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82977"
+      ]
+    },
+    "dili": {
+      "icd10": [],
+      "cpt": []
+    },
+    "jaundice": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82247",
+        "82248"
+      ]
+    },
+    "hyperbilirubinaemia": {
+      "icd10": [],
+      "cpt": [
+        "82247",
+        "82248"
+      ]
+    },
+    "ast alt ratio": {
+      "icd10": [],
+      "cpt": [
+        "84450",
+        "84460"
+      ]
+    },
+    "de ritis ratio": {
+      "icd10": [],
+      "cpt": []
+    },
+    "meld score": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82248",
+        "84155"
+      ]
+    },
+    "child pugh score": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82248",
+        "84155"
+      ]
+    },
+    "maddrey discriminant function": {
+      "icd10": [],
+      "cpt": [
+        "80076",
+        "82977"
+      ]
+    },
+    "fib4": {
+      "icd10": [],
+      "cpt": []
+    },
+    "liver fibrosis": {
+      "icd10": [],
+      "cpt": [
+        "47000",
+        "91200"
+      ]
+    },
+    "sepsis": {
+      "icd10": [
+        "R65.2",
+        "R65.21",
+        "T81.12"
+      ],
+      "cpt": [
+        "86003",
+        "87040",
+        "99291",
+        "99292"
+      ]
+    },
+    "septic shock": {
+      "icd10": [
+        "R65.21",
+        "T81.12"
+      ],
+      "cpt": [
+        "99291",
+        "99292"
+      ]
+    },
+    "bacteraemia": {
+      "icd10": [],
+      "cpt": []
+    },
+    "bacteremia": {
+      "icd10": [],
+      "cpt": []
+    },
+    "community acquired pneumonia": {
+      "icd10": [],
+      "cpt": [
+        "71046",
+        "87070",
+        "87081"
+      ]
+    },
+    "hospital acquired pneumonia": {
+      "icd10": [],
+      "cpt": [
+        "71046",
+        "87070"
+      ]
+    },
+    "urinary tract infection": {
+      "icd10": [],
+      "cpt": [
+        "81001",
+        "87086"
+      ]
+    },
+    "meningitis": {
+      "icd10": [],
+      "cpt": [
+        "62270",
+        "87070"
+      ]
+    },
+    "endocarditis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "tuberculosis": {
+      "icd10": [],
+      "cpt": [
+        "71046",
+        "86580",
+        "87116"
+      ]
+    },
+    "hiv": {
+      "icd10": [],
+      "cpt": [
+        "86701",
+        "86702",
+        "86703"
+      ]
+    },
+    "antiretroviral therapy": {
+      "icd10": [],
+      "cpt": []
+    },
+    "clostridioides difficile": {
+      "icd10": [],
+      "cpt": [
+        "87230",
+        "87493"
+      ]
+    },
+    "mrsa": {
+      "icd10": [],
+      "cpt": [
+        "87070",
+        "87081"
+      ]
+    },
+    "vancomycin dosing": {
+      "icd10": [],
+      "cpt": [
+        "80202"
+      ]
+    },
+    "breast cancer": {
+      "icd10": [],
+      "cpt": [
+        "19100",
+        "19101",
+        "19120",
+        "96401"
+      ]
+    },
+    "lung cancer": {
+      "icd10": [],
+      "cpt": [
+        "32668",
+        "32669",
+        "71046",
+        "74177"
+      ]
+    },
+    "colorectal cancer": {
+      "icd10": [],
+      "cpt": [
+        "45380",
+        "45385",
+        "88305"
+      ]
+    },
+    "pancreatic cancer": {
+      "icd10": [],
+      "cpt": [
+        "48100",
+        "48105",
+        "74177"
+      ]
+    },
+    "prostate cancer": {
+      "icd10": [],
+      "cpt": [
+        "55700",
+        "84153",
+        "86316"
+      ]
+    },
+    "lymphoma": {
+      "icd10": [
+        "D36"
+      ],
+      "cpt": [
+        "38570",
+        "88305"
+      ]
+    },
+    "acute myeloid leukaemia": {
+      "icd10": [],
+      "cpt": [
+        "85025",
+        "88305"
+      ]
+    },
+    "aml": {
+      "icd10": [],
+      "cpt": [
+        "85025",
+        "88305"
+      ]
+    },
+    "multiple myeloma": {
+      "icd10": [],
+      "cpt": [
+        "86596",
+        "88305"
+      ]
+    },
+    "checkpoint inhibitor": {
+      "icd10": [],
+      "cpt": [
+        "96365",
+        "96366"
+      ]
+    },
+    "immunotherapy": {
+      "icd10": [],
+      "cpt": [
+        "96365",
+        "96366",
+        "96367"
+      ]
+    },
+    "pembrolizumab": {
+      "icd10": [],
+      "cpt": [
+        "96365",
+        "96366",
+        "J9271"
+      ]
+    },
+    "trastuzumab": {
+      "icd10": [],
+      "cpt": [
+        "96365",
+        "96366",
+        "J9355"
+      ]
+    },
+    "sorafenib": {
+      "icd10": [],
+      "cpt": []
+    },
+    "chemotherapy": {
+      "icd10": [],
+      "cpt": [
+        "96365",
+        "96401",
+        "96402",
+        "96409",
+        "96413"
+      ]
+    },
+    "psoriasis": {
+      "icd10": [
+        "K17"
+      ],
+      "cpt": [
+        "11100",
+        "96401",
+        "99213"
+      ]
+    },
+    "atopic dermatitis": {
+      "icd10": [],
+      "cpt": [
+        "96372",
+        "99213"
+      ]
+    },
+    "eczema": {
+      "icd10": [],
+      "cpt": []
+    },
+    "acne": {
+      "icd10": [],
+      "cpt": [
+        "17000",
+        "99213"
+      ]
+    },
+    "rosacea": {
+      "icd10": [],
+      "cpt": []
+    },
+    "melanoma": {
+      "icd10": [],
+      "cpt": [
+        "11600",
+        "11601",
+        "11602",
+        "11603",
+        "11604"
+      ]
+    },
+    "basal cell carcinoma": {
+      "icd10": [],
+      "cpt": [
+        "17260",
+        "17261",
+        "17262",
+        "17263",
+        "17264",
+        "17266"
+      ]
+    },
+    "squamous cell carcinoma": {
+      "icd10": [],
+      "cpt": [
+        "17270",
+        "17271",
+        "17272",
+        "17273",
+        "17274",
+        "17276"
+      ]
+    },
+    "heart failure": {
+      "icd10": [],
+      "cpt": [
+        "93306",
+        "93307",
+        "93308",
+        "99232"
+      ]
+    },
+    "myocardial infarction": {
+      "icd10": [
+        "I21",
+        "I25.2"
+      ],
+      "cpt": [
+        "93000",
+        "93010",
+        "99281"
+      ]
+    },
+    "atrial fibrillation": {
+      "icd10": [],
+      "cpt": [
+        "93000",
+        "93010",
+        "93241"
+      ]
+    },
+    "pulmonary embolism": {
+      "icd10": [],
+      "cpt": [
+        "71275",
+        "93970",
+        "93971"
+      ]
+    },
+    "deep vein thrombosis": {
+      "icd10": [],
+      "cpt": [
+        "93970",
+        "93971"
+      ]
+    },
+    "hypertension": {
+      "icd10": [],
+      "cpt": [
+        "93000",
+        "99213",
+        "99214"
+      ]
+    },
+    "type 2 diabetes": {
+      "icd10": [],
+      "cpt": [
+        "82947",
+        "83036",
+        "99213",
+        "99214"
+      ]
+    },
+    "chronic kidney disease": {
+      "icd10": [
+        "N18.2",
+        "N18.3",
+        "N18.30",
+        "N18.32",
+        "N18.4",
+        "N18.6"
+      ],
+      "cpt": [
+        "81001",
+        "82565",
+        "99213"
+      ]
+    },
+    "acute kidney injury": {
+      "icd10": [
+        "R23",
+        "R31"
+      ],
+      "cpt": [
+        "82565",
+        "99291"
+      ]
+    },
+    "copd": {
+      "icd10": [],
+      "cpt": [
+        "71046",
+        "94010",
+        "94060"
+      ]
+    },
+    "asthma": {
+      "icd10": [],
+      "cpt": [
+        "94010",
+        "94060",
+        "99213"
+      ]
+    },
+    "stroke": {
+      "icd10": [],
+      "cpt": [
+        "70553",
+        "93971"
+      ]
+    },
+    "epilepsy": {
+      "icd10": [],
+      "cpt": [
+        "95816",
+        "95819",
+        "95822"
+      ]
+    },
+    "rheumatoid arthritis": {
+      "icd10": [],
+      "cpt": [
+        "86200",
+        "86228",
+        "99214"
+      ]
+    },
+    "prolactinoma": {
+      "icd10": [],
+      "cpt": [
+        "70553",
+        "84146"
+      ]
+    },
+    "hyperprolactinaemia": {
+      "icd10": [],
+      "cpt": [
+        "70553",
+        "84146"
+      ]
+    },
+    "hypothyroidism": {
+      "icd10": [],
+      "cpt": [
+        "84439",
+        "84443"
+      ]
+    },
+    "prostatomegaly": {
+      "icd10": [],
+      "cpt": [
+        "52000",
+        "55700",
+        "84153"
+      ]
+    },
+    "benign prostatic hyperplasia": {
+      "icd10": [],
+      "cpt": [
+        "52000",
+        "52001",
+        "52601"
+      ]
+    },
+    "renal calculus": {
+      "icd10": [],
+      "cpt": [
+        "52352",
+        "52353",
+        "74177"
+      ]
+    },
+    "nephrolithiasis": {
+      "icd10": [],
+      "cpt": [
+        "52352",
+        "52353",
+        "74177"
+      ]
+    },
+    "kidney stone": {
+      "icd10": [],
+      "cpt": [
+        "52352",
+        "52353"
+      ]
+    },
+    "cirrhosis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "hepatitis c": {
+      "icd10": [
+        "C22"
+      ],
+      "cpt": [
+        "86803",
+        "86804",
+        "87902"
+      ]
+    },
+    "paracentesis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "budd chiari": {
+      "icd10": [],
+      "cpt": []
+    },
+    "hepatitis b": {
+      "icd10": [],
+      "cpt": [
+        "86704",
+        "86705",
+        "87340",
+        "87341"
+      ]
+    },
+    "maddrey": {
+      "icd10": [
+        "S67"
+      ],
+      "cpt": []
+    },
+    "alt ast": {
+      "icd10": [
+        "A11"
+      ],
+      "cpt": []
+    },
+    "bishop": {
+      "icd10": [],
+      "cpt": []
+    },
+    "apache ii": {
+      "icd10": [
+        "I63",
+        "R29.7"
+      ],
+      "cpt": []
+    },
+    "curb65": {
+      "icd10": [],
+      "cpt": []
+    },
+    "child pugh": {
+      "icd10": [],
+      "cpt": []
+    },
+    "albumin inr": {
+      "icd10": [],
+      "cpt": []
+    },
+    "meld fib4": {
+      "icd10": [],
+      "cpt": []
+    },
+    "cha2ds2 vasc": {
+      "icd10": [],
+      "cpt": []
+    },
+    "bilirubin": {
+      "icd10": [],
+      "cpt": []
+    },
+    "alp ggt": {
+      "icd10": [],
+      "cpt": []
+    },
+    "hemochromatosis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "hiv aids": {
+      "icd10": [],
+      "cpt": []
+    },
+    "antiretroviral": {
+      "icd10": [],
+      "cpt": []
+    },
+    "covid19": {
+      "icd10": [
+        "J12.8",
+        "J12.82",
+        "J20.8",
+        "J40",
+        "R05",
+        "R05.9"
+      ],
+      "cpt": []
+    },
+    "malaria": {
+      "icd10": [],
+      "cpt": []
+    },
+    "dengue": {
+      "icd10": [],
+      "cpt": []
+    },
+    "clostridium difficile": {
+      "icd10": [],
+      "cpt": []
+    },
+    "glycopeptide": {
+      "icd10": [],
+      "cpt": []
+    },
+    "candidiasis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "aspergillosis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "pneumocystis": {
+      "icd10": [],
+      "cpt": []
+    },
+    "ovarian cancer": {
+      "icd10": [
+        "P53"
+      ],
+      "cpt": []
+    },
+    "hodgkin lymphoma": {
+      "icd10": [],
+      "cpt": []
+    },
+    "non hodgkin lymphoma": {
+      "icd10": [],
+      "cpt": []
+    },
+    "car t": {
+      "icd10": [],
+      "cpt": []
+    },
+    "targeted therapy": {
+      "icd10": [],
+      "cpt": []
+    },
+    "acne vulgaris": {
+      "icd10": [],
+      "cpt": []
+    },
+    "tinea": {
+      "icd10": [],
+      "cpt": []
+    },
+    "herpes zoster": {
+      "icd10": [],
+      "cpt": []
+    },
+    "vitiligo": {
+      "icd10": [],
+      "cpt": []
+    },
+    "pemphigus vulgaris": {
+      "icd10": [],
+      "cpt": []
+    },
+    "bullous pemphigoid": {
+      "icd10": [],
+      "cpt": []
+    },
+    "diabetes type2": {
+      "icd10": [
+        "B12"
+      ],
+      "cpt": []
+    },
+    "antidiabetic": {
+      "icd10": [],
+      "cpt": []
+    },
+    "seizure": {
+      "icd10": [],
+      "cpt": []
+    },
+    "anaemia": {
+      "icd10": [
+        "B12",
+        "B19"
+      ],
+      "cpt": []
+    },
+    "statin": {
+      "icd10": [],
+      "cpt": []
+    },
+    "anticoagulant": {
+      "icd10": [],
+      "cpt": []
+    },
+    "corticosteroid": {
+      "icd10": [],
+      "cpt": []
+    },
+    "nsaid": {
+      "icd10": [],
+      "cpt": []
+    },
+    "opioid": {
+      "icd10": [],
+      "cpt": []
+    },
+    "biologic": {
+      "icd10": [
+        "P13",
+        "R19",
+        "R20",
+        "R42"
+      ],
+      "cpt": []
+    },
+    "immunosuppressant": {
+      "icd10": [
+        "S15"
+      ],
+      "cpt": []
+    },
+    "antifungal": {
+      "icd10": [],
+      "cpt": []
+    },
+    "beta lactam": {
+      "icd10": [],
+      "cpt": []
+    },
+    "fluoroquinolone": {
+      "icd10": [],
+      "cpt": []
+    },
+    "macrolide": {
+      "icd10": [],
+      "cpt": []
+    },
+    "glasgow coma scale": {
+      "icd10": [
+        "R40.2",
+        "R40.24"
+      ],
+      "cpt": []
+    },
+    "wells pe": {
+      "icd10": [
+        "D12"
+      ],
+      "cpt": []
+    },
+    "nihss": {
+      "icd10": [
+        "I63",
+        "R29.7",
+        "Z55",
+        "Z65"
+      ],
+      "cpt": []
+    },
+    "apgar": {
+      "icd10": [],
+      "cpt": []
+    },
+    "wilson disease": {
+      "icd10": [],
+      "cpt": []
+    },
+    "thyroid disease": {
+      "icd10": [
+        "R13",
+        "R20"
+      ],
+      "cpt": []
+    },
+    "shock": {
+      "icd10": [],
+      "cpt": []
+    },
+    "ercp": {
+      "icd10": [],
+      "cpt": [
+        "43260",
+        "43261",
+        "43262",
+        "43263",
+        "43264",
+        "43265",
+        "43267",
+        "43268",
+        "43269",
+        "43270",
+        "43271",
+        "43272"
+      ]
+    },
+    "tips": {
+      "icd10": [],
+      "cpt": [
+        "37182",
+        "37183"
+      ]
+    },
+    "hyperprolactinemia": {
+      "icd10": [],
+      "cpt": [
+        "84146",
+        "70553"
+      ]
+    }
+  },
+  "phrase_expansions": {
+    "liver cirrhosis": [
+      "alkaline phosphatase",
+      "biopsy",
+      "chronic active hepatitis",
+      "chronic hepatitis and cirrhosis",
+      "chronic liver failure and cirrhosis",
+      "cirrhosis of the liver",
+      "clinical features",
+      "clinical manifestations and complications of cirrhosis",
+      "end stage liver disease",
+      "esld",
+      "hepatic cirrhosis",
+      "hepatic fibrosis stage 4"
+    ],
+    "hepatic cirrhosis": [
+      "acute kidney injury",
+      "alkaline phosphatase",
+      "biopsy",
+      "chronic active hepatitis",
+      "chronic hepatitis and cirrhosis",
+      "chronic liver failure and cirrhosis",
+      "clinical features",
+      "e. clinical significance: chronic disease",
+      "hepatitis b",
+      "hepatitis c"
+    ],
+    "ascites": [
+      "abnormal fluid",
+      "ultrasound"
+    ],
+    "hepatic encephalopathy": [
+      "clinical features",
+      "clinical features indicative of poor prognosis",
+      "complications and prognosis",
+      "covert hepatic encephalopathy",
+      "differential diagnosis",
+      "diseases and disorders of the liver",
+      "echocardiography",
+      "hepatic coma",
+      "hepatic failure",
+      "hepaticencephalopathy",
+      "hypoglycemia",
+      "in case of hepatic encephalopathy:"
+    ],
+    "variceal bleeding": [
+      "aspiration",
+      "clinical features",
+      "clinical practice guidelines",
+      "endoscopy",
+      "gastric varices",
+      "gastric varices bleeding",
+      "haematemesis of oesophageal origin",
+      "haemorrhage",
+      "intubation",
+      "management ofan acute varicealbleed",
+      "natural history of gastro",
+      "oesophageal variceal haemorrhage"
+    ],
+    "oesophageal varices": [
+      "clinical features",
+      "differential diagnosis",
+      "drainage",
+      "endoscopy",
+      "esophageal varices",
+      "gastric varices",
+      "natural history of gastro",
+      "oesophageal varices and variceal haemorrhage",
+      "oesophagealvarices",
+      "pathogenesis"
+    ],
+    "spontaneous bacterial peritonitis": [
+      "etiology.",
+      "general principles",
+      "heart failure",
+      "i. introduction",
+      "management of spontaneous bacterial peritonitis",
+      "pancreatitis",
+      "peritoneal dialysis",
+      "peritoneal infection",
+      "peritonitis",
+      "pneumonia"
+    ],
+    "hepatorenal syndrome": [
+      "acute kidney injury",
+      "clinical features",
+      "dialysis",
+      "hemodialysis",
+      "hepatic failure",
+      "hepatorenalsyndrome",
+      "journal of hepatology",
+      "liver failure",
+      "norfloxacin",
+      "octreotide"
+    ],
+    "alcoholic hepatitis": [
+      "acute alcoholic hepatitis",
+      "alcoholic liver disease and cirrhosis",
+      "alcoholic steatohepatitis",
+      "alcoholism",
+      "alkaline phosphatase",
+      "amiodarone",
+      "ash",
+      "biopsy",
+      "clinical features",
+      "hepatocellular carcinoma",
+      "immunoperoxidase",
+      "insulin"
+    ],
+    "alcoholic liver disease": [
+      "alcoholic liver disease and cirrhosis",
+      "alkaline phosphatase",
+      "biopsy",
+      "fatty liver disease",
+      "hepatocellular carcinoma",
+      "immunoperoxidase",
+      "phosphatase",
+      "prothrombin time",
+      "transpeptidase"
+    ],
+    "fatty liver": [
+      "biopsy",
+      "diabetes mellitus",
+      "dyslipidemia",
+      "ectopic fat deposition",
+      "effects of fatty change",
+      "fatty liver disease",
+      "hyperglycemia",
+      "hyperlipidaemia",
+      "hyperlipidemia",
+      "insulin"
+    ],
+    "non-alcoholic steatohepatitis": [
+      "alcoholic steatohepatitis",
+      "biopsy",
+      "cirrhosis in non",
+      "diabetes mellitus",
+      "diabetes mellitus type 2",
+      "differential diagnosis",
+      "dyslipidaemia",
+      "hepatitis c",
+      "hepatocellular carcinoma",
+      "hyperlipidemia",
+      "mash",
+      "metabolic associated steatohepatitis"
+    ],
+    "nafld": [
+      "biopsy",
+      "diabetes mellitus type 2",
+      "dyslipidaemia",
+      "hepatocellular carcinoma",
+      "hyperlipidemia",
+      "insulin",
+      "nonalcoholic fatty liver disease (nafld)",
+      "ultrasound"
+    ],
+    "autoimmune hepatitis": [
+      "aih",
+      "alkaline phosphatase",
+      "autoimmune liver diseases",
+      "biopsy",
+      "cirrhosis in autoimmune hepatitis",
+      "clinical features",
+      "clinical practice guidelines",
+      "hepatitis c",
+      "immunosuppression",
+      "journal of hepatology",
+      "lupoid hepatitis",
+      "minocycline"
+    ],
+    "primary biliary cholangitis": [
+      "anti-mitochondrial antibody positive",
+      "background and context",
+      "biopsy",
+      "cholecystectomy",
+      "codeine",
+      "colonoscopy",
+      "cyclase",
+      "kinase",
+      "leukocyte",
+      "naltrexone",
+      "obeticholic",
+      "pbc"
+    ],
+    "pbc": [
+      "clinical features",
+      "hepatocellular carcinoma",
+      "obeticholic",
+      "pathogenesis",
+      "primary biliary cholangitis (pbc)",
+      "ursodeoxycholic"
+    ],
+    "primary sclerosing cholangitis": [
+      "allopurinol",
+      "biopsy",
+      "c-reactive protein",
+      "cholecystectomy",
+      "clinical features",
+      "clinical practice guidelines",
+      "colectomy",
+      "colonoscopy",
+      "colorectal cancer",
+      "future directions"
+    ],
+    "cholestasis": [
+      "alkaline phosphatase",
+      "biopsy",
+      "cholestatic diseases",
+      "drugs known to cause cholestasis",
+      "gammaglutamyltranspeptidase",
+      "genetic testing",
+      "hyperlipidaemia",
+      "methimazole",
+      "penicillin",
+      "phosphatase"
+    ],
+    "hepatocellular carcinoma": [
+      "biopsy",
+      "cholangiocarcinoma",
+      "hepatitis b",
+      "hepatitis c",
+      "hepatocellular carcinoma (hcc)",
+      "hypoglycaemia",
+      "liver tumours",
+      "pathogenesis",
+      "phase",
+      "sorafenib"
+    ],
+    "hcc": [
+      "biopsy",
+      "hepatitis c",
+      "hepatocellular carcinoma",
+      "liver tumours",
+      "phase",
+      "platelet",
+      "sorafenib",
+      "ultrasound",
+      "who should have surveillance for hcc?"
+    ],
+    "liver biopsy": [
+      "advanceddisease",
+      "biopsy",
+      "chapter16 gastrointestinal infections",
+      "hepatitis b",
+      "sepsis",
+      "when to biopsy"
+    ],
+    "fibroscan": [
+      "biopsy",
+      "diagnostic accuracy of non",
+      "invasive tests (tables 4.4 and 4.5)",
+      "ultrasound"
+    ],
+    "liver failure": [
+      "acute",
+      "acute liver failure",
+      "chronic liver failure",
+      "chronic liver failure and cirrhosis",
+      "clinical features",
+      "diseases and disorders of the liver",
+      "failure of liver function can be:",
+      "hepatic failure",
+      "hepatitis a",
+      "hepatitis b"
+    ],
+    "acute liver failure": [
+      "acute",
+      "acute liver failure guidelines",
+      "chronic liver failure",
+      "clinical features",
+      "heart failure",
+      "hepatic failure",
+      "hepatitis a",
+      "hepatitis b",
+      "hepatitis c",
+      "intensesystemicin"
+    ],
+    "liver transplant": [
+      "hepatitis a",
+      "hepatitis b",
+      "immunosuppression",
+      "journal of hepatology",
+      "liver failure",
+      "liver transplantation",
+      "liver transplantation: graft considerations",
+      "liver transplantation: transplant evaluation",
+      "neuropathy",
+      "pancreatitis"
+    ],
+    "drug induced liver injury": [
+      "alanine aminotransferase",
+      "alkaline phosphatase",
+      "aminotransferase",
+      "and toxin",
+      "chemical and drug injury",
+      "clinical features",
+      "clinicalassessment",
+      "hiv",
+      "induced hepatotoxicity",
+      "induced liver injury"
+    ],
+    "jaundice": [
+      "biopsy",
+      "general",
+      "heart failure",
+      "liver failure",
+      "melanin pigmentary disorders",
+      "neonataljaundice",
+      "paracetamol",
+      "rifampicin"
+    ],
+    "hyperbilirubinaemia": [
+      "alkaline phosphatase",
+      "background and epidemiology",
+      "bilirubin encephalopathy (kernicterus)",
+      "haemolytic hyperbilirubinaemias",
+      "hereditary non",
+      "hypoglycemia",
+      "hypothyroidism",
+      "i. predominantly unconjugated hyperbilirubinaemia",
+      "kinase",
+      "pathophysiology of hyperbilirubinemia"
+    ],
+    "meld score": [
+      "meld"
+    ],
+    "child pugh score": [
+      "atrial fibrillation",
+      "child pugh",
+      "figure 11. doac laboratory monitoring.",
+      "poor prognostic factors:"
+    ],
+    "maddrey discriminant function": [
+      "maddrey"
+    ],
+    "fib4": [
+      "meld fib4"
+    ],
+    "liver fibrosis": [
+      "biopsy",
+      "chronic active hepatitis",
+      "chronic liver failure and cirrhosis",
+      "fibropolycystic disease",
+      "fibrosis",
+      "hepatitis b",
+      "hepatitis c",
+      "liver failure",
+      "pathogenesis",
+      "scar formation and regression"
+    ],
+    "sepsis": [
+      "clinical findings",
+      "hydrocortisone",
+      "i. introduction",
+      "leukaemia",
+      "life-threatening infection",
+      "organ dysfunction infection",
+      "pancreatitis",
+      "sepsis syndrome",
+      "sepsis-3",
+      "sepsisdefinitions",
+      "septic shock",
+      "shock"
+    ],
+    "septic shock": [
+      "acute respiratory distress syndrome",
+      "causes ofshock followingtrauma",
+      "chemotherapy",
+      "choose the one correct answer.",
+      "diabetes mellitus",
+      "disseminated intravascular coagulation",
+      "immunosuppression",
+      "pancreatitis",
+      "pathogenesis of septic shock",
+      "phase"
+    ],
+    "bacteraemia": [
+      "anaerobic bacteremia",
+      "bacteraemia and shock",
+      "neutropenia",
+      "nosocomial infections",
+      "penicillin",
+      "peritoneal dialysis",
+      "sepsis",
+      "septicaemia",
+      "tissue infection",
+      "vancomycin"
+    ],
+    "bacteremia": [
+      "bacteremia or sepsis.",
+      "clinical findings",
+      "clinical manifestations",
+      "disseminated intravascular coagulation",
+      "figure 9.10",
+      "follow",
+      "general principles",
+      "neutropenia",
+      "nosocomial infections",
+      "penicillin"
+    ],
+    "community acquired pneumonia": [
+      "acquired bacterial pneumonias",
+      "acquired bacterialpneumonia",
+      "acquired pneumonia",
+      "acquired respiratory infection",
+      "acute pneumonia",
+      "azithromycin",
+      "cap",
+      "clinical features",
+      "community",
+      "copd",
+      "dialysis",
+      "lower respiratory tract infection"
+    ],
+    "hospital acquired pneumonia": [
+      "acquired pneumonia",
+      "acquired pneumonia.",
+      "chemotherapy",
+      "community",
+      "general principles",
+      "hemodialysis",
+      "hospital",
+      "i. introduction",
+      "immunosuppression",
+      "intubation"
+    ],
+    "urinary tract infection": [
+      "catheterization",
+      "diabetes mellitus",
+      "i. introduction",
+      "immunosuppression",
+      "inflammations",
+      "keith m. krasinski",
+      "pathogenesis",
+      "urinary tract infection (uti)",
+      "urinary tract infections",
+      "urinary tractinfection"
+    ],
+    "meningitis": [
+      "acute meningitis",
+      "d. clinical significance",
+      "meningiitis",
+      "meningismus",
+      "meningitis in infancy",
+      "pneumonia",
+      "tuberculosis",
+      "· meningitis"
+    ],
+    "endocarditis": [
+      "cardiac",
+      "catalase",
+      "heart failure",
+      "hemodialysis",
+      "infective (bacterial) endocarditis",
+      "infective endocarditis",
+      "infective endocarditis (ie)",
+      "lisa saiman",
+      "penicillin",
+      "specific types of infective endocarditis"
+    ],
+    "tuberculosis": [
+      "chemotherapy",
+      "hiv",
+      "jeffrey r. starke",
+      "pulmonary tuberculosis",
+      "tuberculosis (tb)",
+      "tuberculosis at a glance",
+      "· tuberculosis:"
+    ],
+    "hiv": [
+      "hiv aids"
+    ],
+    "antiretroviral therapy": [
+      "antiretroviral",
+      "antiretroviral therapy 100",
+      "considerations whenstarting antiretroviral therapy",
+      "hiv"
+    ],
+    "clostridioides difficile": [
+      "clostridium difficile",
+      "clostridium difficile infection",
+      "clostridium difficile.",
+      "endoscopy",
+      "metronidazole",
+      "other clostridia"
+    ],
+    "mrsa": [
+      "bacterial 193",
+      "ciprofloxacin",
+      "clindamycin",
+      "f. treatment",
+      "gentamicin",
+      "methicillin",
+      "pneumonia",
+      "resistant s. aureus introduction",
+      "resistant s. aureus.",
+      "sulfamethoxazole"
+    ],
+    "vancomycin dosing": [
+      "add vancomycin",
+      "antibiotics",
+      "cefotaxime",
+      "ceftazidime",
+      "dialysis",
+      "dosing and administration",
+      "glycopeptide monitoring",
+      "hcp241226rn106",
+      "key monitoring and safety information",
+      "medications"
+    ],
+    "breast cancer": [
+      "carcinoma of the breast",
+      "lumpectomy",
+      "mastectomy",
+      "radiotherapy"
+    ],
+    "lung cancer": [
+      "biopsy",
+      "carcinomas",
+      "clinical features",
+      "copd",
+      "lung tumours",
+      "lungcancer",
+      "pneumonia",
+      "prostate cancer"
+    ],
+    "pancreatic cancer": [
+      "carcinoma of the pancreas",
+      "chemotherapy",
+      "deep vein thrombosis",
+      "diabetes mellitus",
+      "endocrine tumors of the pancreas",
+      "insulin",
+      "octreotide",
+      "pancreatic\ncancer",
+      "pancreatic carcinoma",
+      "pancreatic islet cell cancers"
+    ],
+    "prostate cancer": [
+      "april",
+      "biopsy",
+      "carcinoma of prostate",
+      "carcinoma of the prostate",
+      "crease",
+      "estro esur",
+      "lung cancer",
+      "prostate cancer eau",
+      "prostate conditions",
+      "prostatectomy"
+    ],
+    "lymphoma": [
+      "aspiration",
+      "breast cancer",
+      "coding lymphoma",
+      "hiv",
+      "hodgkin lymphoma",
+      "hodgkin's lymphoma (hl)",
+      "leukaemia",
+      "leukemia",
+      "lymphoid neoplasms",
+      "lymphomas"
+    ],
+    "acute myeloid leukaemia": [
+      "acute myeloblastic leukaemia",
+      "acute myeloblastic leukaemia (aml)",
+      "acute myeloid leukaemia (aml)",
+      "acute myeloid leukemia",
+      "biopsy",
+      "chemotherapy",
+      "classification: current concepts",
+      "clinical features",
+      "definition and pathophysiology",
+      "leukaemia"
+    ],
+    "multiple myeloma": [
+      "aspiration",
+      "biopsy",
+      "chemotherapy",
+      "clinical features",
+      "etiology and pathogenesis",
+      "leukemia",
+      "lymphoma",
+      "multiple myeloma (mm)",
+      "multiple myeloma (myelomatosis)",
+      "multiple myeloma, version 2.2024"
+    ],
+    "immunotherapy": [
+      "additional immunotherapy trials",
+      "chemotherapy",
+      "chemotherapy and immunotherapies.",
+      "immunochemotherapy",
+      "immunoprophylaxis",
+      "lymphoma",
+      "methotrexate",
+      "oncology treatments",
+      "pembrolizumab",
+      "phase"
+    ],
+    "pembrolizumab": [
+      "axitinib",
+      "ipilimumab",
+      "pazopanib"
+    ],
+    "trastuzumab": [
+      "april",
+      "breast cancer",
+      "chemotherapy",
+      "cyclophosphamide",
+      "docetaxel",
+      "doxorubicin",
+      "lapatinib",
+      "nab-paclitaxel",
+      "nabpaclitaxel",
+      "neuropathy"
+    ],
+    "sorafenib": [
+      "a. vogel et al.",
+      "annals of oncology",
+      "atezolizumab",
+      "axitinib",
+      "brivanib",
+      "cabozantinib",
+      "camrelizumab",
+      "clinical question 2",
+      "dovitinib",
+      "doxorubicin"
+    ],
+    "chemotherapy": [
+      "chemotherapyadministration",
+      "dynamics of chemotherapy",
+      "leukaemia",
+      "methotrexate",
+      "phase",
+      "radiotherapy"
+    ],
+    "psoriasis": [
+      "clinical description",
+      "drugtherapiesforpsoriasis",
+      "hiv",
+      "lithium",
+      "psoriasis vulgaris, chronic stationary psoriasis, plaque",
+      "psoriatic arthritis",
+      "rheumatoid arthritis",
+      "tacrolimus",
+      "type psoriasis.",
+      "vii. scaling dermatoses"
+    ],
+    "atopic dermatitis": [
+      "adult atopic eczema (dermatitis)",
+      "atopic dermatitis (ad)",
+      "atopic dermatitis (atopiceczema)",
+      "atopic eczema",
+      "context",
+      "dermatitis",
+      "histology",
+      "immunology",
+      "purchase",
+      "summary of reviewed clinical studies"
+    ],
+    "eczema": [
+      "asteatoticeczema",
+      "cloxacillin",
+      "dermatitis (eczema)",
+      "hydrocortisone",
+      "prednisolone",
+      "summary of reviewed clinical studies",
+      "what should ilookfor?"
+    ],
+    "acne": [
+      "a c n e",
+      "acne and the adolescent",
+      "acne at a glance",
+      "acne conglobata",
+      "acne type",
+      "acne vulgaris",
+      "acne:presentation",
+      "clinical foms ofacne",
+      "freecirculatingtestosterone"
+    ],
+    "rosacea": [
+      "clinical description",
+      "differential diagnosis",
+      "doxycycline",
+      "erythematotelangiectatic (vascular) rosacea",
+      "managementofvariants ofrosacea",
+      "metronidazole",
+      "oral therapy",
+      "oxytetracycline",
+      "rosacea type",
+      "telengiectase"
+    ],
+    "melanoma": [
+      "histopathology",
+      "malignant melanoma",
+      "melanoma at a glance",
+      "melanoma, malignant",
+      "phase",
+      "sarcoma"
+    ],
+    "basal cell carcinoma": [
+      "basal cell carcinoma (basal cell epithelioma)",
+      "basal cell carcinoma (bcc)",
+      "basal cell carcinoma at a glance",
+      "basalcell carcinoma",
+      "basaloid scc",
+      "biopsy",
+      "immunosuppression",
+      "mohs surgery for basal cell carcinoma",
+      "radiotherapy",
+      "superficial basal cell carcinoma"
+    ],
+    "squamous cell carcinoma": [
+      "clinical description",
+      "distribution",
+      "hysterectomy",
+      "mohs surgery for squamous cell carcinoma",
+      "squamous cell carcinoma at a glance",
+      "squamous cell carcinoma morphologies"
+    ],
+    "heart failure": [
+      "clinical features",
+      "coronary artery disease",
+      "definition 1",
+      "echocardiography",
+      "heart. over",
+      "hyperthyroidism",
+      "myocardial infarction",
+      "pulmonary embolism",
+      "strained . see: athlete's heart."
+    ],
+    "myocardial infarction": [
+      "acs",
+      "acute coronary syndrome",
+      "acute myocardial infarction",
+      "angina",
+      "consequences and complications of myocardial infarction",
+      "definition 1",
+      "heart attack",
+      "hiv",
+      "nstemi",
+      "stemi",
+      "tuberculosis"
+    ],
+    "atrial fibrillation": [
+      "adenosine",
+      "angina",
+      "anticoagulation",
+      "biase",
+      "coronary artery disease",
+      "heart failure",
+      "hyperthyroidism",
+      "lung cancer",
+      "phase",
+      "pneumonia"
+    ],
+    "pulmonary embolism": [
+      "drainage",
+      "dvt",
+      "heart failure",
+      "heparin",
+      "myocardial infarction",
+      "part h: pulmonary embolism",
+      "pathogenesis",
+      "pe",
+      "pulmonary embolism (pe)",
+      "pulmonary thromboembolism",
+      "pulmonaryembolism",
+      "stroke"
+    ],
+    "deep vein thrombosis": [
+      "clinical features",
+      "d-dimer",
+      "deep vein thrombosis (dvt)",
+      "deep vein thrombosis and thrombophlebitis",
+      "drainage",
+      "heart failure",
+      "venous thrombosis"
+    ],
+    "hypertension": [
+      "aldosterone",
+      "angiotensinaldosterone",
+      "chronic kidney disease",
+      "definition and classification",
+      "dementia",
+      "heart failure",
+      "hypertensive vascular disease",
+      "insulin",
+      "myocardial infarction",
+      "portal hypertension"
+    ],
+    "type 2 diabetes": [
+      "categories of diabetes and dyslipidaemia",
+      "diabetes mellitus",
+      "diabetes mellitus type 2",
+      "dm2",
+      "dyslipidemia",
+      "hyperglycemia",
+      "insulin",
+      "phase",
+      "t2dm",
+      "type 2 : 85 %",
+      "type 2 diabetes mellitus"
+    ],
+    "chronic kidney disease": [
+      "biopsy",
+      "chronic kidney disease (ckd)",
+      "chronic renal failure",
+      "ckd",
+      "clinical manifestations of renal diseases",
+      "definition¹",
+      "diabetes mellitus",
+      "dialysis",
+      "haemodialysis",
+      "heart failure",
+      "hiv",
+      "renal impairment"
+    ],
+    "acute kidney injury": [
+      "acute kidneyinjury",
+      "acute renal failure",
+      "acute tubular injury",
+      "acute tubular necrosis",
+      "aki",
+      "aki: acute kidney injury",
+      "amphotericin",
+      "atn",
+      "chronic kidney disease",
+      "ct scan",
+      "dialysis",
+      "drainage"
+    ],
+    "copd": [
+      "causes and risk factors",
+      "chronic obstructive pulmonary disease",
+      "chronic obstructive pulmonary disease (copd)",
+      "clinical features of copd",
+      "clinical overview",
+      "copd",
+      "heart failure",
+      "lung cancer",
+      "mild copd",
+      "part c: chronic obstructive pulmonary disease"
+    ],
+    "asthma": [
+      "aspirin",
+      "asthma: definition",
+      "asthma: pathology",
+      "bronchial asthma",
+      "epinephrine",
+      "making the diagnosis of asthma",
+      "part b: asthma",
+      "what is known about asthma?",
+      "›› medical application"
+    ],
+    "epilepsy": [
+      "epilepsy: diagnosis",
+      "epilepsy: management",
+      "lamotrigine",
+      "levetiracetam",
+      "oxcarbazepine",
+      "stroke",
+      "topiramate",
+      "valproate"
+    ],
+    "rheumatoid arthritis": [
+      "arthritis",
+      "epo and rheumatoid arthritis",
+      "key points",
+      "neuropathy",
+      "osteoarthritis",
+      "rheumatoid arthritis (ra)",
+      "rheumatoidarthritis"
+    ],
+    "prolactinoma": [
+      "chemotherapy",
+      "clinical features",
+      "clinical presentation",
+      "dopamine",
+      "hyperprolactinaemia",
+      "hypothyroidism",
+      "introduction: prolactinoma and hyperprolactinemia",
+      "macroprolactinoma",
+      "microprolactinoma",
+      "pituitary adenoma prolactin",
+      "pituitary adenomas",
+      "producing pituitary tumors"
+    ],
+    "hyperprolactinaemia": [
+      "a. hyperfunction of anterior pituitary",
+      "clinical features",
+      "diagnosis: biochemical evaluation",
+      "domperidone",
+      "dopamine",
+      "haloperidol",
+      "hyperprolactinaemia and fertility",
+      "hypothyroidism",
+      "induced hyperprolactinemia",
+      "metoclopramide"
+    ],
+    "hypothyroidism": [
+      "anxiety",
+      "box 151",
+      "context key facts and figures",
+      "cutaneous manifestations of hypo",
+      "dementia",
+      "diabetes mellitus",
+      "hyperthyroidism",
+      "hypothyroidism (myxoedema)",
+      "hypothyroidism: diagnosis and treatment",
+      "levothyroxine"
+    ],
+    "prostatomegaly": [
+      "benign prostatic hyperplasia",
+      "bph",
+      "lower urinary tract symptoms",
+      "luts",
+      "prostate conditions"
+    ],
+    "benign prostatic hyperplasia": [
+      "benign prostatic hyperplasia (bph)",
+      "dihydrotesterone",
+      "inclusion criteria",
+      "nodular hyperplasia",
+      "prostate cancer",
+      "prostatectomy",
+      "reductase",
+      "summary of reviewed clinical studies",
+      "testosterone"
+    ],
+    "renal calculus": [
+      "bicarbonate",
+      "crohn's disease",
+      "kidney stone",
+      "nephrolithiasis",
+      "renal calculi",
+      "renal system",
+      "renalstones",
+      "sterility . see: infertility.",
+      "urinary tract calculi (nephrolithiasis)",
+      "urolithiasis"
+    ],
+    "nephrolithiasis": [
+      "bicarbonate",
+      "clinical features",
+      "complications and prognosis",
+      "inclusion criteria",
+      "renal calculi",
+      "table 6.1. types of renal stones",
+      "urinary tract calculi (nephrolithiasis)",
+      "urolithiasis (renal calculi, stones)"
+    ],
+    "kidney stone": [
+      "complications and prognosis",
+      "drainage",
+      "kidney stones",
+      "renal calculi",
+      "sterility . see: infertility.",
+      "table 6.1. types of renal stones",
+      "ultrasound",
+      "›› medical application"
+    ]
+  },
+  "medical_phrases": [
+    "a. hyperfunction of anterior pituitary",
+    "a. vogel et al.",
+    "abnormal fluid",
+    "acne and the adolescent",
+    "acne at a glance",
+    "acne conglobata",
+    "acne type",
+    "acne vulgaris",
+    "acne:presentation",
+    "acquired bacterial pneumonias",
+    "acquired bacterialpneumonia",
+    "acquired pneumonia",
+    "acquired pneumonia.",
+    "acquired respiratory infection",
+    "acs",
+    "acute",
+    "acute alcoholic hepatitis",
+    "acute coronary syndrome",
+    "acute kidney injury",
+    "acute kidneyinjury",
+    "acute liver failure",
+    "acute liver failure guidelines",
+    "acute meningitis",
+    "acute myeloblastic leukaemia",
+    "acute myeloblastic leukaemia (aml)",
+    "acute myeloid leukaemia",
+    "acute myeloid leukaemia (aml)",
+    "acute myeloid leukemia",
+    "acute myocardial infarction",
+    "acute pneumonia",
+    "acute renal failure",
+    "acute respiratory distress syndrome",
+    "acute tubular injury",
+    "acute tubular necrosis",
+    "add vancomycin",
+    "additional immunotherapy trials",
+    "adenosine",
+    "adult atopic eczema (dermatitis)",
+    "advanceddisease",
+    "aih",
+    "aki",
+    "aki: acute kidney injury",
+    "alanine aminotransferase",
+    "albumin inr",
+    "alcoholic hepatitis",
+    "alcoholic liver disease",
+    "alcoholic liver disease and cirrhosis",
+    "alcoholic steatohepatitis",
+    "alcoholism",
+    "aldosterone",
+    "alkaline phosphatase",
+    "allopurinol",
+    "alp ggt",
+    "alt ast",
+    "aminotransferase",
+    "amiodarone",
+    "aml",
+    "amphotericin",
+    "anaerobic bacteremia",
+    "angina",
+    "angiotensinaldosterone",
+    "annals of oncology",
+    "anti-mitochondrial antibody positive",
+    "antibiotics",
+    "anticoagulant",
+    "anticoagulation",
+    "antidiabetic",
+    "antifungal",
+    "antiretroviral",
+    "antiretroviral therapy",
+    "antiretroviral therapy 100",
+    "anxiety",
+    "apache ii",
+    "apgar",
+    "april",
+    "arthritis",
+    "ascites",
+    "ash",
+    "aspergillosis",
+    "aspiration",
+    "aspirin",
+    "ast alt ratio",
+    "asteatoticeczema",
+    "asthma: definition",
+    "asthma: pathology",
+    "atezolizumab",
+    "atn",
+    "atopic dermatitis",
+    "atopic dermatitis (ad)",
+    "atopic dermatitis (atopiceczema)",
+    "atopic eczema",
+    "atrial fibrillation",
+    "autoimmune hepatitis",
+    "autoimmune liver diseases",
+    "axitinib",
+    "azithromycin",
+    "background and context",
+    "background and epidemiology",
+    "bacteraemia and shock",
+    "bacteremia or sepsis.",
+    "bacterial 193",
+    "basal cell carcinoma",
+    "basal cell carcinoma (basal cell epithelioma)",
+    "basal cell carcinoma (bcc)",
+    "basal cell carcinoma at a glance",
+    "basalcell carcinoma",
+    "basaloid scc",
+    "benign prostatic hyperplasia",
+    "benign prostatic hyperplasia (bph)",
+    "beta lactam",
+    "biase",
+    "bicarbonate",
+    "bilirubin encephalopathy (kernicterus)",
+    "biologic",
+    "biopsy",
+    "bishop",
+    "box 151",
+    "bph",
+    "breast cancer",
+    "brivanib",
+    "bronchial asthma",
+    "budd chiari",
+    "bullous pemphigoid",
+    "c-reactive protein",
+    "cabozantinib",
+    "camrelizumab",
+    "candidiasis",
+    "cap",
+    "car t",
+    "carcinoma of prostate",
+    "carcinoma of the breast",
+    "carcinoma of the pancreas",
+    "carcinoma of the prostate",
+    "carcinomas",
+    "cardiac",
+    "catalase",
+    "categories of diabetes and dyslipidaemia",
+    "catheterization",
+    "causes and risk factors",
+    "causes ofshock followingtrauma",
+    "cefotaxime",
+    "ceftazidime",
+    "cha2ds2 vasc",
+    "chapter16 gastrointestinal infections",
+    "checkpoint inhibitor",
+    "chemical and drug injury",
+    "chemotherapy",
+    "chemotherapy and immunotherapies.",
+    "chemotherapyadministration",
+    "child pugh",
+    "child pugh score",
+    "cholangiocarcinoma",
+    "cholecystectomy",
+    "cholestasis",
+    "cholestatic diseases",
+    "choose the one correct answer.",
+    "chronic active hepatitis",
+    "chronic hepatitis and cirrhosis",
+    "chronic kidney disease",
+    "chronic kidney disease (ckd)",
+    "chronic liver failure",
+    "chronic liver failure and cirrhosis",
+    "chronic obstructive pulmonary disease",
+    "chronic obstructive pulmonary disease (copd)",
+    "chronic renal failure",
+    "ciprofloxacin",
+    "cirrhosis in autoimmune hepatitis",
+    "cirrhosis in non",
+    "cirrhosis of the liver",
+    "ckd",
+    "classification: current concepts",
+    "clindamycin",
+    "clinical description",
+    "clinical features",
+    "clinical features indicative of poor prognosis",
+    "clinical features of copd",
+    "clinical findings",
+    "clinical foms ofacne",
+    "clinical manifestations",
+    "clinical manifestations and complications of cirrhosis",
+    "clinical manifestations of renal diseases",
+    "clinical overview",
+    "clinical practice guidelines",
+    "clinical presentation",
+    "clinical question 2",
+    "clinicalassessment",
+    "clostridioides difficile",
+    "clostridium difficile",
+    "clostridium difficile infection",
+    "clostridium difficile.",
+    "cloxacillin",
+    "codeine",
+    "coding lymphoma",
+    "colectomy",
+    "colonoscopy",
+    "colorectal cancer",
+    "community",
+    "community acquired pneumonia",
+    "complications and prognosis",
+    "consequences and complications of myocardial infarction",
+    "considerations whenstarting antiretroviral therapy",
+    "context",
+    "context key facts and figures",
+    "copd",
+    "coronary artery disease",
+    "corticosteroid",
+    "covert hepatic encephalopathy",
+    "covid19",
+    "crease",
+    "crohn's disease",
+    "ct scan",
+    "curb65",
+    "cutaneous manifestations of hypo",
+    "cyclase",
+    "cyclophosphamide",
+    "d-dimer",
+    "d. clinical significance",
+    "de ritis ratio",
+    "deep vein thrombosis",
+    "deep vein thrombosis (dvt)",
+    "deep vein thrombosis and thrombophlebitis",
+    "definition 1",
+    "definition and classification",
+    "definition and pathophysiology",
+    "definition¹",
+    "dementia",
+    "dengue",
+    "dermatitis",
+    "dermatitis (eczema)",
+    "diabetes mellitus",
+    "diabetes mellitus type 2",
+    "diabetes type2",
+    "diagnosis: biochemical evaluation",
+    "diagnostic accuracy of non",
+    "dialysis",
+    "differential diagnosis",
+    "dihydrotesterone",
+    "diseases and disorders of the liver",
+    "disseminated intravascular coagulation",
+    "distribution",
+    "dm2",
+    "docetaxel",
+    "domperidone",
+    "dopamine",
+    "dosing and administration",
+    "dovitinib",
+    "doxorubicin",
+    "doxycycline",
+    "drainage",
+    "drug induced liver injury",
+    "drugs known to cause cholestasis",
+    "drugtherapiesforpsoriasis",
+    "dvt",
+    "dynamics of chemotherapy",
+    "dyslipidaemia",
+    "dyslipidemia",
+    "e. clinical significance: chronic disease",
+    "echocardiography",
+    "ectopic fat deposition",
+    "eczema",
+    "effects of fatty change",
+    "end stage liver disease",
+    "endocarditis",
+    "endocrine tumors of the pancreas",
+    "endoscopy",
+    "epilepsy",
+    "epilepsy: diagnosis",
+    "epilepsy: management",
+    "epinephrine",
+    "epo and rheumatoid arthritis",
+    "ercp",
+    "erythematotelangiectatic (vascular) rosacea",
+    "esld",
+    "esophageal varices",
+    "estro esur",
+    "etiology and pathogenesis",
+    "etiology.",
+    "f. treatment",
+    "failure of liver function can be:",
+    "fatty liver",
+    "fatty liver disease",
+    "fibropolycystic disease",
+    "fibroscan",
+    "fibrosis",
+    "figure 11. doac laboratory monitoring.",
+    "figure 9.10",
+    "fluoroquinolone",
+    "follow",
+    "freecirculatingtestosterone",
+    "future directions",
+    "gammaglutamyltranspeptidase",
+    "gastric varices",
+    "gastric varices bleeding",
+    "general",
+    "general principles",
+    "genetic testing",
+    "gentamicin",
+    "glasgow coma scale",
+    "glycopeptide",
+    "glycopeptide monitoring",
+    "haematemesis of oesophageal origin",
+    "haemodialysis",
+    "haemolytic hyperbilirubinaemias",
+    "haemorrhage",
+    "haloperidol",
+    "hcc",
+    "hcp241226rn106",
+    "heart attack",
+    "heart failure",
+    "heart. over",
+    "hemochromatosis",
+    "hemodialysis",
+    "heparin",
+    "hepatic cirrhosis",
+    "hepatic coma",
+    "hepatic encephalopathy",
+    "hepatic failure",
+    "hepatic fibrosis stage 4",
+    "hepaticencephalopathy",
+    "hepatitis a",
+    "hepatitis b",
+    "hepatitis c",
+    "hepatocellular carcinoma",
+    "hepatocellular carcinoma (hcc)",
+    "hepatorenal syndrome",
+    "hepatorenalsyndrome",
+    "hereditary non",
+    "herpes zoster",
+    "histology",
+    "histopathology",
+    "hiv",
+    "hiv aids",
+    "hodgkin lymphoma",
+    "hodgkin's lymphoma (hl)",
+    "hospital",
+    "hospital acquired pneumonia",
+    "hydrocortisone",
+    "hyperbilirubinaemia",
+    "hyperglycemia",
+    "hyperlipidaemia",
+    "hyperlipidemia",
+    "hyperprolactinaemia",
+    "hyperprolactinaemia and fertility",
+    "hyperprolactinemia",
+    "hypertensive vascular disease",
+    "hyperthyroidism",
+    "hypoglycaemia",
+    "hypoglycemia",
+    "hypothyroidism",
+    "hypothyroidism (myxoedema)",
+    "hypothyroidism: diagnosis and treatment",
+    "hysterectomy",
+    "i. introduction",
+    "i. predominantly unconjugated hyperbilirubinaemia",
+    "immunochemotherapy",
+    "immunology",
+    "immunoperoxidase",
+    "immunoprophylaxis",
+    "immunosuppressant",
+    "immunosuppression",
+    "immunotherapy",
+    "inclusion criteria",
+    "induced hepatotoxicity",
+    "induced hyperprolactinemia",
+    "induced liver injury",
+    "infective (bacterial) endocarditis",
+    "infective endocarditis",
+    "infective endocarditis (ie)",
+    "inflammations",
+    "insulin",
+    "intensesystemicin",
+    "introduction: prolactinoma and hyperprolactinemia",
+    "intubation",
+    "invasive tests (tables 4.4 and 4.5)",
+    "ipilimumab",
+    "jaundice",
+    "jeffrey r. starke",
+    "journal of hepatology",
+    "keith m. krasinski",
+    "key monitoring and safety information",
+    "key points",
+    "kidney stone",
+    "kidney stones",
+    "kinase",
+    "lamotrigine",
+    "lapatinib",
+    "leukaemia",
+    "leukemia",
+    "leukocyte",
+    "levetiracetam",
+    "levothyroxine",
+    "life-threatening infection",
+    "lisa saiman",
+    "lithium",
+    "liver biopsy",
+    "liver cirrhosis",
+    "liver failure",
+    "liver fibrosis",
+    "liver transplant",
+    "liver transplantation",
+    "liver transplantation: graft considerations",
+    "liver transplantation: transplant evaluation",
+    "liver tumours",
+    "lower respiratory tract infection",
+    "lower urinary tract symptoms",
+    "lumpectomy",
+    "lung cancer",
+    "lung tumours",
+    "lungcancer",
+    "lupoid hepatitis",
+    "luts",
+    "lymphoid neoplasms",
+    "lymphoma",
+    "lymphomas",
+    "macrolide",
+    "macroprolactinoma",
+    "maddrey",
+    "maddrey discriminant function",
+    "making the diagnosis of asthma",
+    "malaria",
+    "malignant melanoma",
+    "management of spontaneous bacterial peritonitis",
+    "management ofan acute varicealbleed",
+    "managementofvariants ofrosacea",
+    "mash",
+    "mastectomy",
+    "medications",
+    "melanin pigmentary disorders",
+    "melanoma at a glance",
+    "melanoma, malignant",
+    "meld",
+    "meld fib4",
+    "meld score",
+    "meningiitis",
+    "meningismus",
+    "meningitis",
+    "meningitis in infancy",
+    "metabolic associated steatohepatitis",
+    "methicillin",
+    "methimazole",
+    "methotrexate",
+    "metoclopramide",
+    "metronidazole",
+    "microprolactinoma",
+    "mild copd",
+    "minocycline",
+    "mohs surgery for basal cell carcinoma",
+    "mohs surgery for squamous cell carcinoma",
+    "mrsa",
+    "multiple myeloma",
+    "multiple myeloma (mm)",
+    "multiple myeloma (myelomatosis)",
+    "multiple myeloma, version 2.2024",
+    "myocardial infarction",
+    "nab-paclitaxel",
+    "nabpaclitaxel",
+    "nafld",
+    "naltrexone",
+    "nash",
+    "natural history of gastro",
+    "neonataljaundice",
+    "nephrolithiasis",
+    "neuropathy",
+    "neutropenia",
+    "nihss",
+    "nodular hyperplasia",
+    "non hodgkin lymphoma",
+    "non-alcoholic steatohepatitis",
+    "nonalcoholic fatty liver disease (nafld)",
+    "norfloxacin",
+    "nosocomial infections",
+    "nsaid",
+    "nstemi",
+    "obeticholic",
+    "octreotide",
+    "oesophageal variceal haemorrhage",
+    "oesophageal varices",
+    "oesophageal varices and variceal haemorrhage",
+    "oesophagealvarices",
+    "oncology treatments",
+    "opioid",
+    "oral therapy",
+    "organ dysfunction infection",
+    "osteoarthritis",
+    "other clostridia",
+    "ovarian cancer",
+    "oxcarbazepine",
+    "oxytetracycline",
+    "pancreatic\ncancer",
+    "pancreatic cancer",
+    "pancreatic carcinoma",
+    "pancreatic islet cell cancers",
+    "pancreatitis",
+    "paracentesis",
+    "paracetamol",
+    "part b: asthma",
+    "part c: chronic obstructive pulmonary disease",
+    "part h: pulmonary embolism",
+    "pathogenesis",
+    "pathogenesis of septic shock",
+    "pathophysiology of hyperbilirubinemia",
+    "pazopanib",
+    "pbc",
+    "pe",
+    "pembrolizumab",
+    "pemphigus vulgaris",
+    "penicillin",
+    "peritoneal dialysis",
+    "peritoneal infection",
+    "peritonitis",
+    "phase",
+    "phosphatase",
+    "pituitary adenoma prolactin",
+    "pituitary adenomas",
+    "platelet",
+    "pneumocystis",
+    "pneumonia",
+    "poor prognostic factors:",
+    "portal hypertension",
+    "prednisolone",
+    "primary biliary cholangitis",
+    "primary biliary cholangitis (pbc)",
+    "primary sclerosing cholangitis",
+    "producing pituitary tumors",
+    "prolactinoma",
+    "prostate cancer",
+    "prostate cancer eau",
+    "prostate conditions",
+    "prostatectomy",
+    "prostatomegaly",
+    "prothrombin time",
+    "psc",
+    "psoriasis",
+    "psoriasis vulgaris, chronic stationary psoriasis, plaque",
+    "psoriatic arthritis",
+    "pulmonary embolism",
+    "pulmonary embolism (pe)",
+    "pulmonary thromboembolism",
+    "pulmonary tuberculosis",
+    "pulmonaryembolism",
+    "purchase",
+    "radiotherapy",
+    "reductase",
+    "renal calculi",
+    "renal calculus",
+    "renal impairment",
+    "renal system",
+    "renalstones",
+    "resistant s. aureus introduction",
+    "resistant s. aureus.",
+    "rheumatoid arthritis",
+    "rheumatoid arthritis (ra)",
+    "rheumatoidarthritis",
+    "rifampicin",
+    "rosacea",
+    "rosacea type",
+    "sarcoma",
+    "scar formation and regression",
+    "seizure",
+    "sepsis",
+    "sepsis syndrome",
+    "sepsis-3",
+    "sepsisdefinitions",
+    "septic shock",
+    "septicaemia",
+    "shock",
+    "sorafenib",
+    "specific types of infective endocarditis",
+    "spontaneous bacterial peritonitis",
+    "squamous cell carcinoma",
+    "squamous cell carcinoma at a glance",
+    "squamous cell carcinoma morphologies",
+    "statin",
+    "steatohepatitis",
+    "stemi",
+    "sterility . see: infertility.",
+    "strained . see: athlete's heart.",
+    "stroke",
+    "sulfamethoxazole",
+    "summary of reviewed clinical studies",
+    "superficial basal cell carcinoma",
+    "table 6.1. types of renal stones",
+    "tacrolimus",
+    "targeted therapy",
+    "telengiectase",
+    "testosterone",
+    "thyroid disease",
+    "tinea",
+    "tips",
+    "tissue infection",
+    "topiramate",
+    "transpeptidase",
+    "trastuzumab",
+    "tuberculosis",
+    "tuberculosis (tb)",
+    "tuberculosis at a glance",
+    "type 2 : 85 %",
+    "type 2 diabetes",
+    "type 2 diabetes mellitus",
+    "type psoriasis.",
+    "ultrasound",
+    "urinary tract calculi (nephrolithiasis)",
+    "urinary tract infection",
+    "urinary tract infection (uti)",
+    "urinary tract infections",
+    "urinary tractinfection",
+    "urolithiasis",
+    "urolithiasis (renal calculi, stones)",
+    "ursodeoxycholic",
+    "valproate",
+    "vancomycin",
+    "vancomycin dosing",
+    "variceal bleeding",
+    "venous thrombosis",
+    "vii. scaling dermatoses",
+    "vitiligo",
+    "wells pe",
+    "what is known about asthma?",
+    "what should ilookfor?",
+    "when to biopsy",
+    "who should have surveillance for hcc?",
+    "wilson disease",
+    "· meningitis",
+    "· tuberculosis:",
+    "›› medical application"
+  ],
+  "cpt_family_map": {
+    "families": {
+      "office_visit": [
+        "99202",
+        "99203",
+        "99204",
+        "99205",
+        "99211",
+        "99212",
+        "99213",
+        "99214",
+        "99215"
+      ],
+      "liver_procedures": [
+        "47562",
+        "47563",
+        "47600",
+        "47610",
+        "47700",
+        "47780",
+        "91200"
+      ],
+      "endoscopy": [
+        "43235",
+        "43239",
+        "43243",
+        "43244",
+        "43247",
+        "43248",
+        "43249",
+        "43255",
+        "43266",
+        "43270"
+      ],
+      "biopsy": [
+        "47000",
+        "47001",
+        "47100",
+        "20206",
+        "19100",
+        "19101",
+        "19102"
+      ],
+      "lab_hepatology": [
+        "80076",
+        "82977",
+        "82248",
+        "82247",
+        "84155",
+        "86596",
+        "86039",
+        "86235"
+      ],
+      "lab_general": [
+        "80050",
+        "80053",
+        "80061",
+        "85025",
+        "85027",
+        "85610",
+        "86900",
+        "87340",
+        "87341"
+      ],
+      "imaging": [
+        "76700",
+        "76705",
+        "93306",
+        "93307",
+        "93308",
+        "71046",
+        "74177",
+        "74178"
+      ],
+      "oncology": [
+        "96365",
+        "96366",
+        "96367",
+        "96372",
+        "96374",
+        "96375",
+        "96401",
+        "96402",
+        "96409"
+      ],
+      "dermatology": [
+        "11100",
+        "11101",
+        "17000",
+        "17003",
+        "17004",
+        "17260",
+        "17270",
+        "17280"
+      ]
+    },
+    "code_to_family": {
+      "99202": "office_visit",
+      "99203": "office_visit",
+      "99204": "office_visit",
+      "99205": "office_visit",
+      "99211": "office_visit",
+      "99212": "office_visit",
+      "99213": "office_visit",
+      "99214": "office_visit",
+      "99215": "office_visit",
+      "47562": "liver_procedures",
+      "47563": "liver_procedures",
+      "47600": "liver_procedures",
+      "47610": "liver_procedures",
+      "47700": "liver_procedures",
+      "47780": "liver_procedures",
+      "91200": "liver_procedures",
+      "43235": "endoscopy",
+      "43239": "endoscopy",
+      "43243": "endoscopy",
+      "43244": "endoscopy",
+      "43247": "endoscopy",
+      "43248": "endoscopy",
+      "43249": "endoscopy",
+      "43255": "endoscopy",
+      "43266": "endoscopy",
+      "43270": "endoscopy",
+      "47000": "biopsy",
+      "47001": "biopsy",
+      "47100": "biopsy",
+      "20206": "biopsy",
+      "19100": "biopsy",
+      "19101": "biopsy",
+      "19102": "biopsy",
+      "80076": "lab_hepatology",
+      "82977": "lab_hepatology",
+      "82248": "lab_hepatology",
+      "82247": "lab_hepatology",
+      "84155": "lab_hepatology",
+      "86596": "lab_hepatology",
+      "86039": "lab_hepatology",
+      "86235": "lab_hepatology",
+      "80050": "lab_general",
+      "80053": "lab_general",
+      "80061": "lab_general",
+      "85025": "lab_general",
+      "85027": "lab_general",
+      "85610": "lab_general",
+      "86900": "lab_general",
+      "87340": "lab_general",
+      "87341": "lab_general",
+      "76700": "imaging",
+      "76705": "imaging",
+      "93306": "imaging",
+      "93307": "imaging",
+      "93308": "imaging",
+      "71046": "imaging",
+      "74177": "imaging",
+      "74178": "imaging",
+      "96365": "oncology",
+      "96366": "oncology",
+      "96367": "oncology",
+      "96372": "oncology",
+      "96374": "oncology",
+      "96375": "oncology",
+      "96401": "oncology",
+      "96402": "oncology",
+      "96409": "oncology",
+      "11100": "dermatology",
+      "11101": "dermatology",
+      "17000": "dermatology",
+      "17003": "dermatology",
+      "17004": "dermatology",
+      "17260": "dermatology",
+      "17270": "dermatology",
+      "17280": "dermatology"
+    }
+  }
+}

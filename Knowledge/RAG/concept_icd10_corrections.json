@@ -1,0 +1,12 @@
+{
+  "_description": "ICD-10 overrides for concept_specialty_map where Colab export has wrong codes. concept_id -> { icd10_codes }",
+  "C_HEP_PRIMARY_BILIARY_CHOLANGITIS": { "icd10_codes": ["K74.3"] },
+  "C_HEP_HEPATITIS_C": { "icd10_codes": ["B18.2"] },
+  "C_HEP_HEPATORENAL_SYNDROME": { "icd10_codes": ["K76.7"] },
+  "C_HEP_NASH": { "icd10_codes": ["K75.81"] },
+  "C_ONC_OVARIAN_CANCER": { "icd10_codes": ["C56"] },
+  "C_ONC_CML": { "icd10_codes": ["C92.10"] },
+  "C_DERM_PSORIASIS": { "icd10_codes": ["L40.0"] },
+  "C_SCORE_MADDREY": { "icd10_codes": ["K70.10"] },
+  "C_HEP_ALT_AST": { "icd10_codes": ["R94.5"] }
+}
