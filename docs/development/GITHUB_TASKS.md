@@ -6,11 +6,11 @@ Tasks to improve repo structure, hygiene, and maintainability based on branch an
 
 ## P1 — Immediate
 
-- [ ] **Merge feature branch into main**  
-  Merge `feature/layer2-rag-perceptual-state` into `main` when ready. Branch is 5 commits ahead with no conflicts (clean fast-forward).
+- [x] **Merge feature branch into main**  
+  ✅ Done (March 2026). `feature/layer2-rag-perceptual-state` merged into `main`.
 
-- [ ] **Delete merged feature branch**  
-  Remove `feature/knowledge-base-improvements-and-bug-fixes` from remote (already merged via PR #1):
+- [x] **Delete merged feature branch**  
+  ✅ Done. Removed `feature/knowledge-base-improvements-and-bug-fixes` from remote.
   ```bash
   git push origin --delete feature/knowledge-base-improvements-and-bug-fixes
   ```
@@ -29,8 +29,8 @@ Tasks to improve repo structure, hygiene, and maintainability based on branch an
   - Add Git LFS for `Knowledge/**` (`.gitattributes` + `git lfs track`)
   - Or move to external storage / data repo; document fetch in README
 
-- [ ] **Add .gitignore for medical-rag-api (if not submodule)**  
-  If dropping `medical-rag-api` from tracking:
+- [x] **Add .gitignore for medical-rag-api (if not submodule)**  
+  ✅ Done. Added `medical-rag-api/` to .gitignore and removed from tracking.
   ```
   medical-rag-api/
   ```
