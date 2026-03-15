@@ -17,7 +17,6 @@
         "embeddings:populate": "node scripts/populate-code-embeddings.js",
         "embeddings:refresh": "node scripts/populate-code-embeddings.js --incremental",
         "embeddings:backfill-specialty": "node scripts/populate-code-embeddings.js --backfill-specialty",
-        "test:layer2": "node tests/layer2-specialty-filter.test.js",
         "test:clinical-bert": "node scripts/test-clinical-bert.js",
         "test:perception": "node scripts/test-layer1-perception-full.js",
         "test:diagnostic": "node scripts/test-layer1-diagnostic.js",

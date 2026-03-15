@@ -1,6 +1,6 @@
 # DocLittle Platform Documentation
 
-**Last Updated**: February 2026
+**Last Updated**: March 2026
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.
 
@@ -30,6 +30,8 @@
 - **[Code Structure](./development/guides/CODE_STRUCTURE.md)** - Code organization
 - **[Reliability Guide](./development/guides/RELIABILITY.md)** - Reliability patterns
 - **[Template Variables](./development/templates.md)** - Automation email/SMS template variables
+- **[GitHub Tasks](./development/GITHUB_TASKS.md)** - Repo structure, branch hygiene
+- **[Master TODO](./development/MASTER_TODO_FULL.md)** - Full platform roadmap
 
 #### Admin Portal
 - **[Admin Portal Structure](./admin-portal/ADMIN_PORTAL_STRUCTURE.md)** - Admin dashboard structure and URLs
@@ -98,7 +100,10 @@ docs/
 │   ├── code-reviews/                 # Code review findings
 │   ├── guides/                       # Development guides
 │   ├── templates.md                  # Automation template variables
-│   └── IMPROVEMENT_PLAN.md           # Improvement roadmap
+│   ├── IMPROVEMENT_PLAN.md           # Improvement roadmap
+│   ├── GITHUB_TASKS.md               # Repo hygiene tasks
+│   ├── MASTER_TODO_FULL.md           # Full platform roadmap
+│   └── TECH_LEAD_CLEANUP.md          # Cleanup record
 │
 ├── admin-portal/                      # Admin Portal
 │   ├── ADMIN_PORTAL_STRUCTURE.md     # Structure and URLs
@@ -219,7 +224,7 @@ docs/
 
 ## 🧹 Cleanup record
 
-One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./TECH_LEAD_CLEANUP.md)** for details.
+One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./development/TECH_LEAD_CLEANUP.md)** for details.
 
 ---
 

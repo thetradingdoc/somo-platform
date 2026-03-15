@@ -32,12 +32,9 @@ One-time consolidation and cleanup of docs and references. No test files were de
 
 ## Tests and scripts
 
-### Test files (keep)
+### Test files (March 2026 update)
 
-- **middleware-platform/tests/video-consult-state.test.js** — Video consult graph + end_session (10 tests). Referenced in package.json.
-- **middleware-platform/tests/layer2-specialty-filter.test.js** — Layer 2 RAG / specialty filter. `npm run test:layer2`.
-
-No test folders or files were removed. There are no duplicate test suites.
+- **Tests removed** — All automated test files were removed: `tests/rcm-intelligence-layer.test.js`, `tests/stress-reconciliation.js`, `middleware-platform/tests/video-consult-state.test.js`, `middleware-platform/tests/layer2-specialty-filter.test.js`. The `test:layer2` script was removed from package.json.
 
 ### Scripts (manual / one-off)
 

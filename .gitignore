@@ -66,3 +66,5 @@ temp/
 # tests/
 # *.test.js
 
+# Embedded git repo (use submodule or clone separately)
+medical-rag-api/
