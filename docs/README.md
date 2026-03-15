@@ -60,11 +60,13 @@
 - **[Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)** - Invoice generation workflow
 - **[Clinic Onboarding](./onboarding/CLINIC_ONBOARDING_CHECKLIST.md)** - Clinic setup
 
-#### Voice Agent & Medical Coding
+#### Voice Agent, Video Consult & Medical Coding
+- **[Hybrid Architecture Overview](./architecture/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
+- **[Video Consult](./architecture/VIDEO_CONSULT.md)** - LiveKit video: flow, env, runbook
 - **[Voice Agent Config](./voice-agent/README.md)** - Voice agent setup
 - **[Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)** - Imports, evaluation, tools, configure-retell
 - **[Tool Schemas](./architecture/voice-agent/TOOL_SCHEMAS.md)** - Retell functions (suggest_codes_from_symptoms, extract_medical_text, etc.)
-- **[AI Agent Financial Layer TODO](./architecture/voice-agent/AI_AGENT_FINANCIAL_LAYER_TODO.md)** - Integration roadmap
+- **[LangGraph & LangSmith](./middleware-platform/LANGGRAPH_LANGSMITH.md)** - Tracing, what’s monitored, scripts
 
 ---
 
@@ -212,6 +214,12 @@ docs/
 - ✅ **Setup**: Complete
 - ✅ **User Guides**: Complete
 - ✅ **Integrations**: Complete
+
+---
+
+## 🧹 Cleanup record
+
+One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./TECH_LEAD_CLEANUP.md)** for details.
 
 ---
 

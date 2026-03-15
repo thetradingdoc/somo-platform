@@ -41,10 +41,11 @@
 
   // Auto-detect for external domains
   if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    // If accessing via ngrok (legacy - should not be used in production)
+    // If accessing via ngrok, use current origin so API calls hit your tunnel
     if (hostname.includes('ngrok') || hostname.includes('ngrok-free') || hostname.includes('ngrok.io')) {
-      console.warn('⚠️  Detected ngrok access. Please use production domain instead.');
-      window.API_BASE = 'https://api.doclittle.site';
+      // Use current origin when accessed via ngrok so API calls hit your tunnel
+      window.API_BASE = window.location.origin;
+      console.log('🌐 API Base URL (ngrok):', window.API_BASE);
     } else if (hostname.includes('netlify.app')) {
       // Netlify - use api.doclittle.site
       window.API_BASE = 'https://api.doclittle.site';

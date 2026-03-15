@@ -1,18 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Complete Your Payment</title>
     <script src="https://js.stripe.com/v3/"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -20,113 +14,67 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 16px;
         }
-
-        .container {
-            width: 100%;
-            max-width: 500px;
-        }
-
+        .container { width: 100%; max-width: 500px; }
         .card {
             background: white;
             border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 32px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
-
         .spinner {
-            width: 50px;
-            height: 50px;
+            width: 50px; height: 50px;
             border: 4px solid #f3f3f3;
             border-top: 4px solid #667eea;
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 20px;
         }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
-
-        h1 {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #1a202c;
-        }
-
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        h1 { font-size: 22px; margin-bottom: 16px; color: #1a202c; }
         .order-summary {
             background: #f7fafc;
             padding: 20px;
             border-radius: 12px;
             margin: 20px 0;
         }
-
-        .product-name {
-            font-weight: 600;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-
-        .total-amount {
-            font-size: 32px;
-            font-weight: 700;
-            color: #667eea;
-            margin: 20px 0;
-        }
-
+        .product-name { font-weight: 600; color: #2d3748; margin-bottom: 8px; font-size: 16px; }
+        .appointment-context { font-size: 14px; color: #4a5568; margin-top: 8px; }
+        .total-amount { font-size: 28px; font-weight: 700; color: #667eea; margin: 16px 0; }
         #card-element {
-            padding: 15px;
+            padding: 16px;
             border: 2px solid #e2e8f0;
             border-radius: 8px;
             margin: 20px 0;
         }
-
         .pay-button {
             width: 100%;
+            min-height: 48px;
+            padding: 16px 24px;
             background: #667eea;
             color: white;
             border: none;
-            padding: 16px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 600;
             cursor: pointer;
         }
-
-        .pay-button:hover {
-            background: #5568d3;
-        }
-
-        .pay-button:disabled {
-            background: #cbd5e0;
-            cursor: not-allowed;
-        }
-
-        .error-message {
-            color: #e53e3e;
-            margin-top: 10px;
-            font-size: 14px;
-        }
-
-        .success-icon {
-            font-size: 64px;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .hidden {
-            display: none;
+        .pay-button:hover { background: #5568d3; }
+        .pay-button:disabled { background: #cbd5e0; cursor: not-allowed; }
+        .error-message { color: #e53e3e; margin-top: 10px; font-size: 14px; }
+        .success-icon { font-size: 64px; text-align: center; margin-bottom: 20px; }
+        .hidden { display: none; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+        .test-hint { font-size: 12px; color: #718096; margin-top: 12px; }
+        @media (max-width: 480px) {
+            .card { padding: 24px; }
+            h1 { font-size: 20px; }
+            .total-amount { font-size: 24px; }
+            .pay-button { min-height: 52px; font-size: 18px; }
         }
     </style>
 </head>
-
 <body>
     <div class="container">
         <div id="loadingState" class="card">
@@ -134,29 +82,52 @@
             <p style="text-align: center;">Loading your order...</p>
         </div>
 
-        <div id="errorState" class="card hidden">
-            <h1>⚠️ Error</h1>
+        <div id="errorState" class="card hidden" role="alert" aria-live="polite">
+            <h1 id="errorTitle">⚠️ Error</h1>
             <p id="errorMessage" class="error-message"></p>
         </div>
 
-        <div id="paymentForm" class="card hidden">
-            <h1>Complete Your Order</h1>
+        <div id="verifyForm" class="card hidden" role="main" aria-label="Identity verification">
+            <h1>Verify Your Identity</h1>
+            <p style="color: #4a5568; margin: 16px 0;">Enter the 6-digit code sent to your email to continue.</p>
             <div class="order-summary">
-                <div class="product-name" id="productName"></div>
-                <div class="total-amount" id="totalAmount"></div>
+                <div class="product-name" id="verifyProductName"></div>
+                <div class="total-amount" id="verifyAmount"></div>
             </div>
-            <div id="card-element"></div>
-            <div id="card-errors" class="error-message"></div>
-            <button id="submitButton" class="pay-button">Pay Now</button>
+            <label for="verifyCode" class="sr-only">6-digit verification code</label>
+            <input type="text" id="verifyCode" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000"
+                style="width:100%; padding:16px; font-size:24px; letter-spacing:8px; text-align:center; border:2px solid #e2e8f0; border-radius:8px; margin:16px 0;"
+                aria-describedby="verifyCodeHint" autocomplete="one-time-code">
+            <p id="verifyCodeHint" class="error-message" role="alert"></p>
+            <button id="verifySubmitBtn" class="pay-button" type="button">Verify</button>
         </div>
 
-        <div id="successState" class="card hidden">
-            <div class="success-icon">✅</div>
+        <div id="paymentForm" class="card hidden" role="main" aria-label="Payment form">
+            <h1 id="formTitle">Complete Your Payment</h1>
+            <div class="order-summary" aria-describedby="formTitle">
+                <div class="product-name" id="productName"></div>
+                <div class="appointment-context" id="appointmentContext" aria-hidden="true"></div>
+                <div class="total-amount" id="totalAmount" aria-live="polite"></div>
+            </div>
+            <p id="card-label" class="sr-only">Card number, expiration date, and CVC</p>
+            <div id="card-element" role="group" aria-labelledby="card-label" aria-describedby="card-errors"></div>
+            <div id="card-errors" class="error-message" role="alert" aria-live="polite"></div>
+            <div id="errorRecovery" class="error-recovery hidden" role="group" aria-label="Error recovery options">
+                <button type="button" class="btn-link" id="tryAgainBtn">Try again</button>
+                <span aria-hidden="true">|</span>
+                <button type="button" class="btn-link" id="useAnotherCardBtn">Use another card</button>
+            </div>
+            <button id="submitButton" class="pay-button" type="button" aria-label="Submit payment">Pay Now</button>
+            <p id="testCardHint" class="test-hint hidden"></p>
+        </div>
+
+        <div id="successState" class="card hidden" role="status" aria-live="polite" aria-label="Payment successful">
+            <div class="success-icon" aria-hidden="true">✅</div>
             <h1>Payment Successful!</h1>
-            <p style="text-align: center; color: #4a5568; margin-top: 10px;">Your order has been confirmed.</p>
-            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 24px; flex-wrap: wrap;">
-                <a href="/wallet" style="display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">💳 View Wallet</a>
-                <a href="/customer/storefront.html" style="display: inline-block; padding: 12px 24px; background: #fff; color: #667eea; text-decoration: none; border-radius: 8px; font-weight: 600; border: 2px solid #667eea;">🛒 Continue Shopping</a>
+            <p style="text-align: center; color: #4a5568; margin-top: 10px;">Your payment has been confirmed.</p>
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 24px;">
+                <a id="successAppointmentsLink" href="/patients/appointments.html" style="display: block; padding: 16px 24px; background: #667eea; color: white; text-align: center; text-decoration: none; border-radius: 8px; font-weight: 600;">View my appointments</a>
+                <a id="successProfileLink" href="/patients/profile.html" style="display: block; padding: 16px 24px; background: #fff; color: #667eea; text-align: center; text-decoration: none; border-radius: 8px; font-weight: 600; border: 2px solid #667eea;">Patient portal</a>
             </div>
         </div>
     </div>
@@ -187,9 +158,22 @@
                 const paymentFormEl = document.getElementById('paymentForm');
 
                 if (productNameEl) productNameEl.textContent = checkout.product_name || 'Product';
+                const aptCtx = document.getElementById('appointmentContext');
+                if (aptCtx && (checkout.appointment_date || checkout.appointment_type)) {
+                    const parts = [];
+                    if (checkout.appointment_type) parts.push(checkout.appointment_type);
+                    if (checkout.appointment_date) parts.push(checkout.appointment_date + (checkout.appointment_time ? ' at ' + checkout.appointment_time : ''));
+                    aptCtx.textContent = parts.join(' • ');
+                    aptCtx.style.display = 'block';
+                } else if (aptCtx) aptCtx.style.display = 'none';
                 if (totalAmountEl) {
                     const amount = parseFloat(checkout.amount) || 0;
                     totalAmountEl.textContent = `$${amount.toFixed(2)}`;
+                }
+                const testHint = document.getElementById('testCardHint');
+                if (testHint && (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.includes('ngrok'))) {
+                    testHint.textContent = 'Test card: 4242 4242 4242 4242';
+                    testHint.classList.remove('hidden');
                 }
                 if (submitButtonEl) {
                     const amount = parseFloat(checkout.amount) || 0;
@@ -205,13 +189,21 @@
                 cardElement.on('change', e => {
                     if (cardErrorsEl) {
                         cardErrorsEl.textContent = e.error ? e.error.message : '';
+                        document.getElementById('errorRecovery')?.classList.add('hidden');
                     }
                 });
 
                 if (loadingStateEl) loadingStateEl.classList.add('hidden');
                 if (paymentFormEl) paymentFormEl.classList.remove('hidden');
+                paymentFormEl.setAttribute('aria-hidden', 'false');
 
-                if (submitButtonEl) submitButtonEl.onclick = handlePay;
+                if (submitButtonEl) {
+                    submitButtonEl.onclick = handlePay;
+                    submitButtonEl.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') { e.preventDefault(); handlePay(); }
+                    });
+                }
+                submitButtonEl && submitButtonEl.focus();
             } catch (err) {
                 showError(err.message);
             }
@@ -244,18 +236,53 @@
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error);
 
+                // Task 19: 3DS handling with retry on failure
+                if (data.requires_action && data.client_secret) {
+                    btn.textContent = 'Authenticating...';
+                    const { error: confirmError } = await stripe.confirmCardPayment(data.client_secret);
+                    if (confirmError) {
+                        const errEl = document.getElementById('card-errors');
+                        const recoveryEl = document.getElementById('errorRecovery');
+                        errEl.textContent = (confirmError.code === 'card_declined' ? 'Card was declined. ' : '') + (confirmError.message || '3D Secure failed.');
+                        if (recoveryEl) recoveryEl.classList.remove('hidden');
+                        document.getElementById('tryAgainBtn').onclick = function() { recoveryEl.classList.add('hidden'); errEl.textContent = ''; cardElement.focus && cardElement.focus(); };
+                        document.getElementById('useAnotherCardBtn').onclick = function() { recoveryEl.classList.add('hidden'); errEl.textContent = 'Enter a different card below.'; cardElement.clear && cardElement.clear(); cardElement.focus && cardElement.focus(); };
+                        btn.disabled = false;
+                        btn.textContent = 'Pay $' + parseFloat(checkout.amount).toFixed(2);
+                        return;
+                    }
+                }
+
                 await fetch(`/voice/checkout/complete/${checkout.id}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ payment_intent_id: data.payment_intent_id })
                 });
 
+                var origin = window.location.origin.replace(/\/$/, '');
+                document.getElementById('successAppointmentsLink').href = origin + '/patients/appointments.html';
+                document.getElementById('successProfileLink').href = origin + '/patients/profile.html';
                 document.getElementById('paymentForm').classList.add('hidden');
                 document.getElementById('successState').classList.remove('hidden');
             } catch (err) {
-                document.getElementById('card-errors').textContent = err.message;
+                const errEl = document.getElementById('card-errors');
+                const recoveryEl = document.getElementById('errorRecovery');
+                errEl.textContent = err.message || 'Payment failed. You can try again.';
+                errEl.setAttribute('role', 'alert');
+                if (recoveryEl) recoveryEl.classList.remove('hidden');
                 btn.disabled = false;
-                btn.textContent = `Pay $${checkout.amount.toFixed(2)}`;
+                btn.textContent = 'Pay $' + parseFloat(checkout.amount).toFixed(2);
+                document.getElementById('tryAgainBtn').onclick = function() {
+                    recoveryEl.classList.add('hidden');
+                    errEl.textContent = '';
+                    cardElement.focus && cardElement.focus();
+                };
+                document.getElementById('useAnotherCardBtn').onclick = function() {
+                    recoveryEl.classList.add('hidden');
+                    errEl.textContent = 'Enter a different card below.';
+                    cardElement.clear && cardElement.clear();
+                    cardElement.focus && cardElement.focus();
+                };
             }
         }
 
@@ -263,6 +290,54 @@
             document.getElementById('loadingState').classList.add('hidden');
             document.getElementById('errorState').classList.remove('hidden');
             document.getElementById('errorMessage').textContent = msg;
+        }
+
+        function showVerifyForm(checkout) {
+            const verifyForm = document.getElementById('verifyForm');
+            const verifyProduct = document.getElementById('verifyProductName');
+            const verifyAmount = document.getElementById('verifyAmount');
+            const verifyCode = document.getElementById('verifyCode');
+            const verifySubmit = document.getElementById('verifySubmitBtn');
+            const verifyHint = document.getElementById('verifyCodeHint');
+
+            if (verifyProduct) verifyProduct.textContent = checkout.product_name || 'Product';
+            if (verifyAmount) verifyAmount.textContent = '$' + (parseFloat(checkout.amount) || 0).toFixed(2);
+            verifyForm.classList.remove('hidden');
+
+            async function doVerify() {
+                const code = (verifyCode.value || '').trim();
+                if (code.length !== 6) {
+                    verifyHint.textContent = 'Please enter the 6-digit code from your email.';
+                    verifyCode.focus();
+                    return;
+                }
+                verifyHint.textContent = '';
+                verifySubmit.disabled = true;
+                verifySubmit.textContent = 'Verifying...';
+                try {
+                    const res = await fetch('/api/payment/verify-code', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ payment_token: token, verification_code: code })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        verifyForm.classList.add('hidden');
+                        init();
+                    } else {
+                        verifyHint.textContent = data.error || 'Invalid code. Try again.';
+                        verifySubmit.disabled = false;
+                        verifySubmit.textContent = 'Verify';
+                    }
+                } catch (e) {
+                    verifyHint.textContent = e.message || 'Verification failed. Try again.';
+                    verifySubmit.disabled = false;
+                    verifySubmit.textContent = 'Verify';
+                }
+            }
+            verifySubmit.onclick = doVerify;
+            verifyCode.onkeydown = function(e) { if (e.key === 'Enter') doVerify(); };
+            verifyCode.focus();
         }
 
         init();

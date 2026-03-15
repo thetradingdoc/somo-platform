@@ -376,13 +376,22 @@
 
             <div class="page-header">
                 <h1 class="page-title">Circle Wallets</h1>
-                <p class="page-subtitle">View and manage USDC wallets for Provider, Insurer, and Patient accounts</p>
+                <p class="page-subtitle">
+                    View and manage USDC wallets across rails. Standard = ACH; Priority = Instant (USDC/FedNow-style).
+                </p>
             </div>
 
             <div id="errorMessage" class="error-message" style="display: none;"></div>
             <div id="successMessage" class="success-message" style="display: none;"></div>
 
-            <div id="walletsContainer" class="wallets-grid">
+            <section style="margin-bottom: 24px;">
+                <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">Hybrid Liquidity Vault</h2>
+                <p style="font-size: 14px; color: var(--gray-600);">
+                    Unified balance across instant and standard rails. Use "Sweep to Bank" to off-ramp USDC when needed.
+                </p>
+            </section>
+
+            <div class="wallets-grid" id="walletsContainer">
                 <div class="loading">Loading wallets...</div>
             </div>
         </main>
@@ -506,11 +515,21 @@
                     }
                 }
 
+                const railLabel =
+                    wallet.entityType === 'provider'
+                        ? 'Priority Rail (USDC / Instant Settlement)'
+                        : wallet.entityType === 'patient'
+                        ? 'Patient Wallet (HSA/USDC eligible)'
+                        : 'Standard Rail (ACH / Card)';
+
+                const railBadgeClass =
+                    wallet.entityType === 'provider' ? 'wallet-badge active' : 'wallet-badge inactive';
+
                 return `
                     <div class="wallet-card">
                         <div class="wallet-header">
                             <div class="wallet-title">${wallet.icon} ${wallet.name}</div>
-                            <span class="wallet-badge ${wallet.exists ? 'active' : 'inactive'}">
+                            <span class="wallet-badge ${railBadgeClass}">
                                 ${wallet.exists ? 'Active' : 'Not Created'}
                             </span>
                         </div>
@@ -519,6 +538,9 @@
                             <div class="wallet-balance">
                                 <div class="balance-label">USDC Balance</div>
                                 <div class="balance-amount">$${balanceAmount.toFixed(2)}</div>
+                                <div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">
+                                    ${railLabel}
+                                </div>
                             </div>
 
                             <div class="wallet-info">
@@ -544,11 +566,21 @@
                                 <button class="btn btn-secondary" onclick="refreshBalance('${wallet.entityType}', '${wallet.entityId}')">
                                     🔄 Refresh Balance
                                 </button>
+                                ${
+                                    wallet.entityType === 'provider'
+                                        ? `<button class="btn btn-primary" style="background:#047857" onclick="sweepToBank('${wallet.entityId}')">
+                                            Sweep to Bank (Off-Ramp)
+                                           </button>`
+                                        : ''
+                                }
                             </div>
                         ` : `
                             <div class="wallet-balance">
                                 <div class="balance-label">USDC Balance</div>
                                 <div class="balance-amount" style="color: var(--gray-400);">$0.00</div>
+                                <div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">
+                                    ${railLabel}
+                                </div>
                             </div>
 
                             <div class="wallet-info">
@@ -567,6 +599,10 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function sweepToBank(entityId) {
+            alert('Sweep to bank is not yet wired. This will call the off-ramp service to move USDC to your bank.');
         }
 
         async function createWallet(entityType, entityId, name) {

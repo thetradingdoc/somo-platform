@@ -400,6 +400,65 @@ class EmailService {
   }
 
   /**
+   * Send appointment reminder email (24 hours before) - Task 52
+   */
+  static async sendAppointmentReminder24h(appointment) {
+    const dateTime = new Date(appointment.start_time).toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: appointment.timezone || 'America/New_York'
+    });
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #0891b2; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+          .appointment-details { background: white; padding: 15px; margin: 15px 0; border-radius: 8px; border-left: 4px solid #0891b2; }
+          .detail-row { margin: 10px 0; }
+          .label { font-weight: bold; color: #666; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>📅 Appointment Tomorrow</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${appointment.patient_name},</p>
+            <p><strong>Reminder: Your appointment is tomorrow at ${dateTime}</strong></p>
+            <div class="appointment-details">
+              <div class="detail-row"><span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}</div>
+              <div class="detail-row"><span class="label">Provider:</span> ${appointment.provider || 'DocLittle Mental Health Team'}</div>
+            </div>
+            <p>You will receive another reminder 1 hour before your appointment.</p>
+            <p>Best regards,<br>DocLittle Mental Health Team</p>
+          </div>
+          <div class="footer">
+            <p>Confirmation: ${appointment.id}</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    return await this.sendEmail({
+      to: appointment.patient_email,
+      subject: `Appointment Tomorrow - ${dateTime}`,
+      html: html
+    });
+  }
+
+  /**
    * Send checkout verification code to email
    */
   static async sendCheckoutVerificationCode(email, code) {
@@ -509,9 +568,15 @@ class EmailService {
   }
 
   /**
-   * Send payment link email after verification
+   * Send payment link email after verification (Task 37: include appointment details)
    */
   static async sendPaymentLinkEmail(email, paymentLink, order) {
+    const aptDetails = (order?.appointment_date || order?.appointment_type || order?.appointment_time)
+      ? `<div><strong>Appointment:</strong> ${order.appointment_type || 'Visit'}${order.appointment_date ? ` - ${order.appointment_date}${order.appointment_time ? ' at ' + order.appointment_time : ''}` : ''}</div>`
+      : '';
+    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://api.doclittle.site';
+    const appointmentsUrl = baseUrl.replace(/\/$/, '') + '/patients/appointments.html';
+
     const html = `
       <!DOCTYPE html>
       <html>
@@ -537,6 +602,7 @@ class EmailService {
             <p>Your email has been verified. Please use the secure link below to complete your payment.</p>
             <div class="order">
               <div><strong>Product:</strong> ${order?.product_name || 'Service'}</div>
+              ${aptDetails}
               <div><strong>Amount:</strong> $${(order?.amount || 0).toFixed(2)}</div>
             </div>
             <p>
@@ -545,8 +611,8 @@ class EmailService {
             <p>If the button doesn't work, copy and paste this URL into your browser:</p>
             <p>${paymentLink}</p>
             <p style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-              <strong>💳 Manage Your Wallet:</strong> After payment, you can view your wallet balance and transaction history at: 
-              <a href="${process.env.BASE_URL || 'https://api.doclittle.site'}/wallet" style="color: #16a34a;">View Wallet</a>
+              <strong>Next steps:</strong> After payment, you can view your appointment at
+              <a href="${appointmentsUrl}" style="color: #16a34a;">My Appointments</a>.
             </p>
             <p>Thank you for choosing DocLittle.</p>
           </div>
@@ -563,6 +629,92 @@ class EmailService {
       subject: 'Complete Your Payment',
       html: html
     });
+  }
+
+  /**
+   * Send post-payment receipt email (Task 12, 38: include appointment details)
+   * @param {Object} checkout - Voice checkout record
+   * @param {number} amount - Amount charged
+   * @param {string} paymentRef - Payment intent ID or transfer ID
+   * @param {Object} appointment - Optional { date, time, appointment_type }
+   */
+  static async sendPaymentReceipt(checkout, amount, paymentRef, appointment) {
+    const name = checkout.customer_name || 'Patient';
+    const product = checkout.product_name || 'Appointment';
+    const aptLine = (appointment?.date || appointment?.appointment_type)
+      ? `<div class="detail-row"><span class="label">Appointment:</span> ${appointment.appointment_type || product}${appointment.date ? ` - ${appointment.date}${appointment.time ? ' at ' + appointment.time : ''}` : ''}</div>`
+      : '';
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #16a34a; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+          .receipt { background: white; padding: 16px; border-radius: 8px; border-left: 4px solid #16a34a; margin: 16px 0; }
+          .detail-row { margin: 8px 0; }
+          .label { font-weight: bold; color: #666; }
+          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>✅ Payment Receipt</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${name},</p>
+            <p>Thank you for your payment. Here is your receipt:</p>
+            <div class="receipt">
+              <div class="detail-row"><span class="label">Product:</span> ${product}</div>
+              ${aptLine}
+              <div class="detail-row"><span class="label">Amount paid:</span> $${Number(amount || 0).toFixed(2)}</div>
+              <div class="detail-row"><span class="label">Order ID:</span> ${checkout.id || 'N/A'}</div>
+              <div class="detail-row"><span class="label">Transaction:</span> ${paymentRef || 'N/A'}</div>
+            </div>
+            <p>If you have any questions, please contact support.</p>
+            <p>Best regards,<br>DocLittle Team</p>
+          </div>
+          <div class="footer">
+            <p>This is your payment receipt. Please keep for your records.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    return await this.sendEmail({
+      to: checkout.customer_email,
+      subject: `Payment Receipt - $${Number(amount || 0).toFixed(2)}`,
+      html
+    });
+  }
+
+  /**
+   * Task 45: Send escrow timeout notification to provider
+   */
+  static async sendEscrowTimeoutNotification(providerEmail, attempt) {
+    const claimId = attempt.claim_id || 'N/A';
+    const amount = attempt.provider_amount ?? attempt.total_approved ?? 0;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head><style>body{font-family:Arial,sans-serif;line-height:1.6}.container{max-width:600px;margin:0 auto;padding:20px}.header{background:#dc2626;color:white;padding:20px;text-align:center}.content{background:#f9f9f9;padding:20px}</style></head>
+      <body>
+        <div class="container">
+          <div class="header"><h1>⚠️ Escrow Timeout</h1></div>
+          <div class="content">
+            <p>An escrow settlement has exceeded the timeout threshold and requires attention.</p>
+            <p><strong>Claim ID:</strong> ${claimId}<br><strong>Provider amount:</strong> $${Number(amount).toFixed(2)}</p>
+            <p>Please review and retry settlement via the admin recovery endpoint if needed.</p>
+            <p>DocLittle Finance Team</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+    return await this.sendEmail({ to: providerEmail, subject: 'Escrow Timeout – Action Required', html });
   }
 
   /**

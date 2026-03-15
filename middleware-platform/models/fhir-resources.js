@@ -546,6 +546,14 @@ class FHIRResources {
           errors.push('Observation must have a code');
         }
         break;
+      case 'DiagnosticReport':
+        if (!resource.subject) {
+          errors.push('DiagnosticReport must have a subject (patient reference)');
+        }
+        if (!resource.code) {
+          errors.push('DiagnosticReport must have a code');
+        }
+        break;
     }
 
     return {

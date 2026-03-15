@@ -1242,8 +1242,23 @@
         <main class="main-content">
             <div class="page-header">
                 <h1 class="page-title" id="dashboardTitle">Business Dashboard</h1>
-                <p class="page-subtitle" id="dashboardSubtitle">Overview of sales, orders, and AI voice agent activity
+                <p class="page-subtitle" id="dashboardSubtitle">
+                    Overview of sales, orders, AI voice activity, and revenue cycle performance.
                 </p>
+
+                <!-- Agent Throughput Header (Revenue Pulse Bar) -->
+                <div id="rcmThroughput" style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                    <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--gray-500);">
+                        Revenue Pulse
+                    </div>
+                    <div id="rcmThroughputCounts" style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--gray-700);">
+                        <span>Claims Sent: <strong id="rcmClaimsSent">–</strong></span>
+                        <span>Auto-Adjudicated: <strong id="rcmAutoAdjudicated">–</strong></span>
+                        <span>Settled: <strong id="rcmSettled">–</strong></span>
+                        <span>DSO: <strong id="rcmDso">–</strong> (Target: &lt; 48h)</span>
+                    </div>
+                    <div id="rcmGoldCarding" style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap;"></div>
+                </div>
             </div>
 
             <!-- Stats Grid -->
@@ -1600,6 +1615,41 @@
             }
         }
 
+        async function loadRcmThroughput() {
+            const sentEl = document.getElementById('rcmClaimsSent');
+            const autoEl = document.getElementById('rcmAutoAdjudicated');
+            const settledEl = document.getElementById('rcmSettled');
+            const dsoEl = document.getElementById('rcmDso');
+            const goldContainer = document.getElementById('rcmGoldCarding');
+            if (!sentEl || !autoEl || !settledEl || !dsoEl || !goldContainer) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/metrics/rcm/throughput`, { credentials: 'include' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const json = await res.json();
+                sentEl.textContent = json.claims_sent ?? '0';
+                autoEl.textContent = json.auto_adjudicated ?? '0';
+                settledEl.textContent = json.settled ?? '0';
+                dsoEl.textContent = json.dso_hours != null ? `${Math.round(json.dso_hours)}h` : '–';
+
+                goldContainer.innerHTML = '';
+                const payers = json.gold_carded_payers || [];
+                payers.forEach((p) => {
+                    const badge = document.createElement('div');
+                    badge.style.padding = '4px 10px';
+                    badge.style.borderRadius = '999px';
+                    badge.style.background = '#ecfdf5';
+                    badge.style.color = '#047857';
+                    badge.style.fontSize = '11px';
+                    badge.style.fontWeight = '600';
+                    badge.textContent = `${p.name || 'Payer'} – ${Math.round((p.compliance || 0) * 100)}% Gold-Carded`;
+                    goldContainer.appendChild(badge);
+                });
+            } catch (e) {
+                console.warn('RCM throughput metrics unavailable:', e.message);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', async () => {
             // Check authentication on page load
             const isAuthenticated = await checkAuth();
@@ -1634,6 +1684,10 @@
             // Navigation is now handled by navigation.js
             renderNavigation('dashboard');
             setupMobileNavClose();
+
+            // Load RCM throughput metrics (Revenue Pulse)
+            loadRcmThroughput();
+            setInterval(loadRcmThroughput, 60000);
             
             // Add event listeners to mobile menu button - MATCHING WORKING PATTERN FROM products.html
             const mobileMenuBtn = document.querySelector('.mobile-menu-toggle');

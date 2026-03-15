@@ -5,7 +5,7 @@ Documentation for the middleware-platform backend service.
 ## 📚 Documentation
 
 ### Configuration & Setup
-- **[LangGraph & LangSmith Developer Guide](./LANGGRAPH_LANGSMITH_DEVELOPER_GUIDE.md)** - Env vars, scripts, troubleshooting for LLM tracing and LangGraph
+- **[LangGraph & LangSmith](./LANGGRAPH_LANGSMITH.md)** — Config, what’s traced, progress, scripts, troubleshooting
 - **[SIP Authentication Troubleshooting](./SIP_AUTH_TROUBLESHOOTING.md)** - Guide for troubleshooting SIP authentication issues with Twilio and Retell
 - **[Retell Configuration Quick Reference](./RETELL_CONFIG_QUICK_REFERENCE.md)** - Quick reference for Retell SIP trunk configuration values
 - **[Retell SIP Config Final](./RETELL_SIP_CONFIG_FINAL.md)** - Final verified configuration values for Retell SIP trunking

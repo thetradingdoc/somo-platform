@@ -4,11 +4,15 @@
  * Calls the Colab RAG API (Pinecone-backed) to retrieve medical code candidates.
  * Used by getCandidatesForCoding in knowledge-service for PDF extraction and voice.
  * Returns null on failure to allow local fallback.
+ * Wrapped in a circuit breaker: after N failures in window, skip remote for resetTimeMs and use local-only.
  */
 
 const axios = require('axios');
+const circuitBreaker = require('../../utils/circuit-breaker');
 
-const RAG_API_URL = process.env.RAG_API_URL;
+// When using a single ngrok tunnel, route RAG via middleware proxy:
+// POST http://localhost:4000/api/rag/retrieve  ->  http://localhost:5000/api/retrieve
+const RAG_API_URL = process.env.RAG_API_URL || 'http://localhost:4000/api/rag';
 const RAG_TIMEOUT = parseInt(process.env.RAG_TIMEOUT || '10000', 10);
 const RAG_RETRIES = parseInt(process.env.RAG_RETRIES || '2', 10);
 
@@ -36,8 +40,13 @@ async function retrieveFromColabRAG(params) {
   }
 
   const startTime = Date.now();
+  const breaker = circuitBreaker.getOrCreate('remote_rag', {
+    failureThreshold: parseInt(process.env.RAG_CIRCUIT_FAILURE_THRESHOLD || '5', 10),
+    windowMs: parseInt(process.env.RAG_CIRCUIT_WINDOW_MS || '60000', 10),
+    resetTimeMs: parseInt(process.env.RAG_CIRCUIT_RESET_MS || '30000', 10)
+  });
 
-  try {
+  async function doCall() {
     const payload = {
       query: (params.query || '').toString().trim(),
       specialty: params.specialty || 'general',
@@ -60,7 +69,7 @@ async function retrieveFromColabRAG(params) {
     for (let attempt = 0; attempt <= RAG_RETRIES; attempt++) {
       try {
         response = await axios.post(
-          `${RAG_API_URL.replace(/\/$/, '')}/api/retrieve`,
+          `${RAG_API_URL.replace(/\/$/, '')}/retrieve`,
           payload,
           {
             timeout: RAG_TIMEOUT,
@@ -101,17 +110,31 @@ async function retrieveFromColabRAG(params) {
       confidence: typeof c.score === 'number' ? c.score : (c.confidence ?? 0.8)
     }));
 
+    const totalCodes = icd10.length + cpt.length + hcpcs.length;
     logger.info('Colab RAG response received', {
       icd10_count: icd10.length,
       cpt_count: cpt.length,
       hcpcs_count: hcpcs.length,
       duration_ms: duration
     });
+    if (totalCodes === 0) {
+      logger.warn('Colab RAG returned 0 codes (remote may have no code metadata; local knowledge merge will still run)', {
+        url: RAG_API_URL,
+        query_length: payload.query?.length
+      });
+    }
 
     return { icd10, cpt, hcpcs };
+  }
+
+  try {
+    return await breaker.execute(doCall, () => {
+      logger.warn('Colab RAG circuit open (using local knowledge only)', { url: RAG_API_URL });
+      return null;
+    });
   } catch (error) {
     const duration = Date.now() - startTime;
-    logger.warn('Colab RAG API call failed', {
+    logger.warn('Colab RAG API call failed (local knowledge fallback will be used)', {
       error: error.message,
       url: RAG_API_URL,
       duration_ms: duration,

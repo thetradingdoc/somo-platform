@@ -186,7 +186,7 @@
         let sessionId = localStorage.getItem('patient_session_id');
 
         if (!sessionId) {
-            window.location.href = 'login.html';
+            window.location.href = 'patient-login.html';
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -207,7 +207,7 @@
                     if (data.error && data.error.includes('session')) {
                         localStorage.removeItem('patient_session_id');
                         localStorage.removeItem('patient_phone');
-                        window.location.href = 'login.html';
+                        window.location.href = 'patient-login.html';
                     } else {
                         document.getElementById('profileCard').innerHTML = `
                             <div class="message message-error">Failed to load profile: ${data.error || 'Unknown error'}</div>

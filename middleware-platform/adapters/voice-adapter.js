@@ -90,6 +90,7 @@ class VoiceAdapter {
             }],
             payment: {
                 method: data.payment_method || 'link',
+                mandate_id: data.mandate_id || null,
                 save_for_future: false,
                 currency: 'USD'
             },
@@ -99,7 +100,8 @@ class VoiceAdapter {
                 input_type: 'voice'
             },
             metadata: {
-                original_request: rawRequest.call ? 'retell' : 'direct'
+                original_request: rawRequest.call ? 'retell' : 'direct',
+                mandate_id: data.mandate_id || null
             }
         };
     }

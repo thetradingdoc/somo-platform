@@ -25,6 +25,15 @@ try {
 }
 
 /**
+ * OPTIONS /api/livekit/token
+ * Handle CORS preflight
+ */
+router.options('/token', (req, res) => {
+  console.log('🔍 OPTIONS /api/livekit/token - CORS preflight from:', req.headers.origin);
+  res.status(204).end();
+});
+
+/**
  * POST /api/livekit/token
  * Get a token to join a LiveKit video room.
  *
@@ -35,6 +44,8 @@ try {
  *   name          - Display name (default: "Participant")
  */
 router.post('/token', async (req, res) => {
+  console.log('🔍 POST /api/livekit/token - Request from:', req.headers.origin || 'no origin', 'IP:', req.ip);
+  console.log('🔍 Request body:', JSON.stringify(req.body));
   if (!AccessToken) {
     return res.status(503).json({
       success: false,

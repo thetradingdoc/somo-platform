@@ -1,8 +1,5 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-if (!process.env.LANGSMITH_API_KEY && !process.env.AP_Langchain) {
-  require('dotenv').config({ path: path.resolve(__dirname, '../.env.bak2') });
-}
 
 // LangSmith: support AP_Langchain as fallback for LANGSMITH_API_KEY (MUST HAVE for tracking)
 if (!process.env.LANGSMITH_API_KEY && process.env.AP_Langchain) {
@@ -96,6 +93,62 @@ function computeOverallConfidence(icd10 = [], cpt = []) {
   if (all.length === 0) return 0.5;
   const confidences = all.map(c => knowledgeService.ensureCodeConfidence(c, 0.8));
   return Math.min(...confidences);
+}
+
+/**
+ * Build fallback result from knowledge service (extracted to avoid duplication).
+ * Used when Groq is unavailable, cost cap exceeded, or token budget exceeded.
+ * 
+ * @param {string} clinicalNote - Clinical note text
+ * @param {Object} perceptualState - Perceptual state (optional)
+ * @param {string} reason - Reason for fallback (e.g., 'Groq unavailable', 'cost cap exceeded')
+ * @param {Object} options - { costCapExceeded?: boolean }
+ * @returns {Promise<Object>} Coding result with ICD-10 and CPT codes
+ */
+async function buildFallbackResult(clinicalNote, perceptualState, reason, options = {}) {
+  const fallback = perceptualState
+    ? await knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
+    : {
+        cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }),
+        icd10: knowledgeService.getReferenceIcdCodes(3, options.costCapExceeded ? 0.65 : 0.7)
+      };
+  
+  const cptCandidates = fallback.cpt;
+  const icdReference = fallback.icd10;
+  const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({
+    ...c,
+    confidence: typeof c.confidence === 'number' ? c.confidence : (options.costCapExceeded ? 0.65 : 0.7)
+  }));
+  const icdWithConf = icdReference.map(icd => ({ 
+    ...icd, 
+    confidence: icd.confidence ?? (options.costCapExceeded ? 0.65 : 0.7) 
+  }));
+
+  const codesToValidate = {
+    icd10: icdWithConf.map(c => c.code).filter(Boolean),
+    cpt: cptWithConf.map(c => c.code).filter(Boolean)
+  };
+  const trustRag = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
+  const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRag });
+  let validIcd = icdWithConf;
+  let validCpt = cptWithConf;
+  if (!validation.valid) {
+    validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
+    validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
+  }
+  const conf = computeOverallConfidence(validIcd, validCpt);
+
+  return {
+    icd10: validIcd,
+    cpt: validCpt,
+    rationale: `${reason} Using knowledge-service fallback.`,
+    model: 'knowledge-service-fallback',
+    raw: null,
+    promptContext: { cptCandidates, icdReference },
+    codingConfidence: conf,
+    needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE,
+    ...(options.costCapExceeded && { costCapExceeded: true })
+  };
 }
 
 function buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidates, icdReference, perceptualState, retrievedGuidelines }) {
@@ -244,44 +297,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
 
   if (!groq) {
     console.warn('⚠️  Groq not available - using knowledge service fallback for medical coding');
-    const fallback = perceptualState
-      ? await knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
-      : {
-          cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }),
-          icd10: knowledgeService.getReferenceIcdCodes(3, 0.7)
-        };
-    const cptCandidates = fallback.cpt;
-    const icdReference = fallback.icd10;
-    const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({
-      ...c,
-      confidence: typeof c.confidence === 'number' ? c.confidence : 0.7
-    }));
-    const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.7 }));
-
-    const codesToValidate = {
-      icd10: icdWithConf.map(c => c.code).filter(Boolean),
-      cpt: cptWithConf.map(c => c.code).filter(Boolean)
-    };
-    const trustRag = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
-    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRag });
-    let validIcd = icdWithConf;
-    let validCpt = cptWithConf;
-    if (!validation.valid) {
-      validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
-      validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
-    }
-    const conf = computeOverallConfidence(validIcd, validCpt);
-
-    return {
-      icd10: validIcd,
-      cpt: validCpt,
-      rationale: 'Selected highest-ranked CPT candidate with reference ICD-10 list (Groq AI unavailable).',
-      model: 'knowledge-service-fallback',
-      raw: null,
-      promptContext: { cptCandidates, icdReference },
-      codingConfidence: conf,
-      needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE
-    };
+    return await buildFallbackResult(clinicalNote, perceptualState, 'Groq AI unavailable');
   }
 
   const MAX_NOTE_LENGTH = 4000;
@@ -317,31 +333,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
     const cap = db.getClinicMonthlyCostCap(clinicId);
     if (cap != null && cap > 0 && (costRow?.cost_usd ?? 0) >= cap) {
       console.warn(`⚠️  Clinic ${clinicId} monthly LLM cost cap exceeded (${costRow?.cost_usd ?? 0} >= ${cap}) - using knowledge-service fallback`);
-      const capFallback = perceptualState
-        ? await knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
-        : { cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
-      const cptFallback = capFallback.cpt;
-      const icdFallback = capFallback.icd10;
-      const cptWithConf = (cptFallback.slice(0, 1) || []).map(c => ({ ...c, confidence: c.confidence ?? 0.65 }));
-      const icdWithConf = icdFallback.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
-      const codesToValidate = { icd10: icdWithConf.map(c => c.code).filter(Boolean), cpt: cptWithConf.map(c => c.code).filter(Boolean) };
-      const trustRagCap = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
-      const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagCap });
-      let validIcd = icdWithConf, validCpt = cptWithConf;
-      if (!validation.valid) {
-        validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
-        validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
-      }
-      const conf = computeOverallConfidence(validIcd, validCpt);
-      return {
-        icd10: validIcd, cpt: validCpt,
-        rationale: 'Monthly cost cap exceeded; using knowledge-service fallback.',
-        model: 'knowledge-service-fallback', raw: null,
-        promptContext: { cptCandidates: cptFallback, icdReference: icdFallback },
-        codingConfidence: conf,
-        needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE,
-        costCapExceeded: true
-      };
+      return await buildFallbackResult(truncatedNote, perceptualState, 'Monthly cost cap exceeded', { costCapExceeded: true });
     }
   }
 
@@ -349,30 +341,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
   const estimatedTokens = tokenBudget.estimateTokens(prompt) + tokenBudget.estimateTokens(systemContent) + 2500; // ~2k output
   if (!tokenBudget.canProceed(callId, estimatedTokens)) {
     console.warn(`⚠️  Token budget exceeded for call ${callId || 'standalone'} - using knowledge-service fallback`);
-    const tokFallback = perceptualState
-      ? await knowledgeService.getCandidatesForCoding(truncatedNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
-      : { cpt: knowledgeService.getCandidateCptCodes(truncatedNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
-    const cptCandidates = tokFallback.cpt;
-    const icdReference = tokFallback.icd10;
-    const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({ ...c, confidence: c.confidence ?? 0.65 }));
-    const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
-    const codesToValidate = { icd10: icdWithConf.map(c => c.code).filter(Boolean), cpt: cptWithConf.map(c => c.code).filter(Boolean) };
-    const trustRagTok = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
-    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagTok });
-    let validIcd = icdWithConf, validCpt = cptWithConf;
-    if (!validation.valid) {
-      validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
-      validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
-    }
-    const conf = computeOverallConfidence(validIcd, validCpt);
-    return {
-      icd10: validIcd, cpt: validCpt,
-      rationale: 'Token budget exceeded; using knowledge-service fallback.',
-      model: 'knowledge-service-fallback', raw: null,
-      promptContext: { cptCandidates, icdReference },
-      codingConfidence: conf,
-      needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE
-    };
+    return await buildFallbackResult(truncatedNote, perceptualState, 'Token budget exceeded');
   }
 
   try {
@@ -502,42 +471,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
     }
 
     console.warn('⚠️  Falling back to knowledge service due to Groq error');
-    const errFallback = perceptualState
-      ? await knowledgeService.getCandidatesForCoding(clinicalNote, { perceptualState, limitCpt: 5, limitIcd10: 3 })
-      : { cpt: knowledgeService.getCandidateCptCodes(clinicalNote, { limit: 5 }), icd10: knowledgeService.getReferenceIcdCodes(3) };
-    const cptCandidates = errFallback.cpt;
-    const icdReference = errFallback.icd10;
-
-    const trustRagErr = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
-    const cptWithConf = (cptCandidates.slice(0, 1) || []).map(c => ({
-      ...c,
-      confidence: typeof c.confidence === 'number' ? c.confidence : 0.65
-    }));
-    const icdWithConf = icdReference.map(icd => ({ ...icd, confidence: icd.confidence ?? 0.65 }));
-
-    const codesToValidate = {
-      icd10: icdWithConf.map(c => c.code).filter(Boolean),
-      cpt: cptWithConf.map(c => c.code).filter(Boolean)
-    };
-    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagErr });
-    let validIcd = icdWithConf;
-    let validCpt = cptWithConf;
-    if (!validation.valid) {
-      validIcd = icdWithConf.filter(c => !validation.invalid.icd10.includes(c.code));
-      validCpt = cptWithConf.filter(c => !validation.invalid.cpt.includes(c.code));
-    }
-    const conf = computeOverallConfidence(validIcd, validCpt);
-
-    return {
-      icd10: validIcd,
-      cpt: validCpt,
-      rationale: `Groq AI error: ${error.message}. Using knowledge service fallback.`,
-      model: 'knowledge-service-fallback',
-      raw: null,
-      promptContext: { cptCandidates, icdReference },
-      codingConfidence: conf,
-      needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE
-    };
+    return await buildFallbackResult(clinicalNote, perceptualState, `Groq AI error: ${error.message}`);
   }
 }
 

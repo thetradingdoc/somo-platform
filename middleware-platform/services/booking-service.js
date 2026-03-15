@@ -17,6 +17,8 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const FHIRService = require('./fhir-service');
 const EmailService = require('./email-service');
+const { getClinicBusinessHours, isBusinessDay } = require('../config/clinic-business-hours');
+const { getClinicCalendarConfig, useSingleCalendarPerEnv } = require('../config/clinic-calendar-config');
 
 /**
  * Appointment Type Configuration
@@ -137,13 +139,19 @@ class BookingService {
   }
 
   /**
-   * Get Google Calendar client for a specific user
-   * @param {string} userEmail - Optional: User email to get their specific calendar. If not provided, uses first connected user.
+   * Get Google Calendar client (Tasks 1, 5)
+   * Task 1: Single calendar per env - clinicId is ignored for calendar selection.
+   * Uses GOOGLE_CALENDAR_ID (or primary) for all clinics when CALENDAR_SINGLE_PER_ENV=1.
+   * @param {string} clinicId - Ignored for calendar selection (single calendar per env)
+   * @param {string} userEmail - Optional: User email for OAuth calendar fallback
    * @returns {Object|null} - Calendar client context or null if not configured
    */
-  static getCalendarClient(userEmail = null) {
+  static getCalendarClient(clinicId = null, userEmail = null) {
     try {
-      // Option 1: Service Account (Recommended for single calendar/server-to-server)
+      const clinicConfig = useSingleCalendarPerEnv() ? null : (clinicId ? getClinicCalendarConfig(clinicId) : null);
+      const preferUserEmail = (clinicConfig?.userEmail || userEmail);
+
+      // Option 1: Service Account - single calendar ID from env (Task 1)
       if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
         const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
         if (!google || !google.auth) {
@@ -154,24 +162,22 @@ class BookingService {
           credentials,
           scopes: ['https://www.googleapis.com/auth/calendar']
         });
+        const calendarId = clinicConfig?.calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary';
         return {
           client: google ? google.calendar({ version: 'v3', auth }) : null,
-          calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+          calendarId,
           authType: 'service_account'
         };
       }
 
-      // Option 2: OAuth2 (for user-specific calendars)
-      // DocLittle platform uses ONE OAuth app, but stores tokens per user
+      // Option 2: OAuth2 - single calendar per env (Task 1)
       if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         let user = null;
 
-        // Get specific user's calendar if email provided
-        if (userEmail) {
-          user = db.getUserCalendarSettingsByEmail(userEmail);
+        if (preferUserEmail) {
+          user = db.getUserCalendarSettingsByEmail(preferUserEmail);
         }
 
-        // Fallback to first connected user (for backward compatibility)
         if (!user) {
           user = db.getFirstCalendarConnectedUser ? db.getFirstCalendarConnectedUser() : null;
         }
@@ -189,9 +195,10 @@ class BookingService {
             expiry_date: user.google_token_expiry || undefined
           });
 
+          const calendarId = clinicConfig?.calendarId || user.google_calendar_id || process.env.GOOGLE_CALENDAR_ID || 'primary';
           return {
             client: google ? google.calendar({ version: 'v3', auth: oauth2Client }) : null,
-            calendarId: user.google_calendar_id || 'primary',
+            calendarId,
             auth: oauth2Client,
             user,
             authType: 'oauth'
@@ -199,7 +206,7 @@ class BookingService {
         }
       }
 
-      console.warn('⚠️  Google Calendar credentials not configured. Running in mock mode.');
+      console.warn('⚠️  Google Calendar credentials not configured. Running in mock mode. External events ignored; double-booking risk (Task 2).');
       return null;
 
     } catch (error) {
@@ -229,15 +236,20 @@ class BookingService {
         'scheduling appointments'
       );
 
+      const clinicHours = getClinicBusinessHours(clinicId);
+      if (!isBusinessDay(appointmentData.date, clinicHours)) {
+        throw new Error('Appointments can only be scheduled on business days. Please select a weekday.');
+      }
+
       // Get appointment type configuration
       const appointmentType = appointmentData.appointment_type || 'Mental Health Consultation';
       const typeConfig = APPOINTMENT_TYPES[appointmentType] || APPOINTMENT_TYPES['Mental Health Consultation'];
 
-      // Parse date/time with timezone awareness
+      // Parse date/time with timezone awareness (Task 51: clinic timezone)
       const appointmentDateTime = this._parseDateTime(
         appointmentData.date,
         appointmentData.time,
-        appointmentData.timezone || BUSINESS_HOURS.timezone,
+        appointmentData.timezone || clinicHours.timezone,
         typeConfig.duration_minutes
       );
 
@@ -275,21 +287,22 @@ class BookingService {
           timezone: appointmentData.timezone || BUSINESS_HOURS.timezone
         }, true); // requirePhoneConfirmation = true
 
-        // Check if duplicate was detected
+        // Check if duplicate was detected (Task 8: phone or email confirmation)
         if (patientResult.duplicate && patientResult.requiresPhoneConfirmation) {
-          console.warn('🚨 DUPLICATE DETECTED: Similar name found, phone confirmation required');
+          console.warn('🚨 DUPLICATE DETECTED: Similar name found, confirmation required');
 
-          // Return error response indicating phone confirmation is needed
           return {
             success: false,
             duplicate: true,
             requiresPhoneConfirmation: true,
-            error: patientResult.message || 'Duplicate patient found. Phone number confirmation required.',
+            requiresEmailConfirmation: patientResult.requiresEmailConfirmation || false,
+            error: patientResult.message,
             duplicates: patientResult.duplicates || [],
             provided_name: patientResult.provided_name,
             provided_phone: patientResult.provided_phone,
-            message: `I found ${patientResult.duplicates.length} patient(s) with a similar name "${patientResult.provided_name}" in our system. To verify your identity and schedule your appointment, please confirm your phone number.`,
-            voice_agent_instruction: 'Ask the caller to confirm their phone number. If the phone number matches an existing patient, use that patient record. If not, ask the caller to verify their information before proceeding.'
+            provided_email: patientResult.provided_email,
+            message: patientResult.message,
+            voice_agent_instruction: patientResult.voice_agent_instruction || 'Ask the caller to confirm their phone number or email. If it matches an existing patient, use that record.'
           };
         }
 
@@ -326,7 +339,7 @@ class BookingService {
         patient_email: appointmentData.patient_email,
         patient_id: fhirPatientId || null,
         appointment_type: appointmentType,
-        video_room_name: isVideoConsult ? appointmentId : null, // appt-{uuid} for LiveKit room resolution
+        video_room_name: appointmentId, // Every appointment gets a stable room (appt-{uuid}) for video + agent tracking
         date: appointmentDateTime.date,
         time: appointmentDateTime.time,
         start_time: appointmentDateTime.startISO,
@@ -335,6 +348,7 @@ class BookingService {
         buffer_before_minutes: typeConfig.buffer_before_minutes,
         buffer_after_minutes: typeConfig.buffer_after_minutes,
         provider: appointmentData.provider || 'DocLittle Mental Health Team',
+        practitioner_id: appointmentData.practitioner_id || null,
         status: 'scheduled',
         notes: appointmentData.notes || '',
         reminder_sent: false,
@@ -350,8 +364,8 @@ class BookingService {
         datetime: appointmentDateTime.displayTime
       });
 
-      // Try to create Google Calendar event
-      const calendarContext = this.getCalendarClient();
+      // Try to create Google Calendar event (per-clinic calendar)
+      const calendarContext = this.getCalendarClient(clinicId);
       if (calendarContext && calendarContext.client) {
         const { client: calendar, calendarId } = calendarContext;
         try {
@@ -376,12 +390,31 @@ class BookingService {
         await db.createAppointment(appointment);
         console.log('✅ Appointment saved to database');
       } catch (dbError) {
-        // Check if it's a unique constraint violation (double booking)
+        // Task 9: Slot conflict - return alternative slots for retry
         if (dbError.message && dbError.message.includes('UNIQUE constraint')) {
           console.error('❌ Appointment conflict detected - slot may have been booked by another request');
-          throw new Error('This time slot was just booked by another patient. Please select a different time.');
+          let alternativeSlots = [];
+          let slotsWithDisplay = [];
+          try {
+            const alt = await this.getAvailableSlots(
+              appointmentData.date,
+              appointmentData.provider,
+              appointmentType,
+              appointmentData.timezone || clinicHours?.timezone || 'America/New_York',
+              clinicId,
+              appointmentData.practitioner_id || null
+            );
+            if (alt.success) {
+              alternativeSlots = alt.slots || alt.available_slots || [];
+              slotsWithDisplay = alt.slots_with_display || [];
+            }
+          } catch (_) {}
+          const err = new Error('This time slot was just booked by another patient. Please select a different time.');
+          err.slot_conflict = true;
+          err.alternative_slots = alternativeSlots;
+          err.slots_with_display = slotsWithDisplay;
+          throw err;
         }
-        // Re-throw other database errors
         throw dbError;
       }
 
@@ -686,16 +719,17 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
         };
       }
 
-      // Delete from Google Calendar if event exists
+      // Delete from Google Calendar if event exists (per-clinic)
       if (appointment.calendar_event_id) {
-        const calendarContext = this.getCalendarClient();
+        const calendarContext = this.getCalendarClient(scopedClinicId || appointment.clinic_id);
         if (calendarContext && calendarContext.client) {
           const { client: calendar, calendarId } = calendarContext;
           try {
-            await calendar.events.delete({
+            const { withRetry } = require('../utils/retry');
+            await withRetry(() => calendar.events.delete({
               calendarId: calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary',
               eventId: appointment.calendar_event_id
-            });
+            }), { maxAttempts: 3 });
             console.log('✅ Calendar event deleted');
 
             this._captureUpdatedCalendarCredentials(calendarContext);
@@ -735,30 +769,65 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
    * @param {String} provider - Provider name (optional)
    * @param {String} appointmentType - Type of appointment (optional, filters by duration)
    * @param {String} timezone - Timezone for the date (optional)
-   * @returns {Object} - Available slots
+   * @param {String} clinicId - Clinic ID (required)
+   * @param {String} practitionerId - Practitioner ID for provider-level availability (Task 4)
+   * @returns {Object} - Available slots with timezone-aware display (Task 51)
    */
-  static async getAvailableSlots(date, provider = null, appointmentType = null, timezone = null, clinicId = null) {
+  static async getAvailableSlots(date, provider = null, appointmentType = null, timezone = null, clinicId = null, practitionerId = null) {
     console.log('\n🕐 BOOKING SERVICE: Get Available Slots');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
       const scopedClinicId = this._ensureClinicId(clinicId, 'checking availability');
+      const clinicHours = getClinicBusinessHours(scopedClinicId);
+      const requestedTimezone = timezone || clinicHours.timezone;
 
-      // Parse date with timezone
-      const requestedTimezone = timezone || BUSINESS_HOURS.timezone;
+      // Task 2: Check if calendar is configured (affects double-booking risk)
+      const calendarContext = this.getCalendarClient(scopedClinicId);
+      const calendar_configured = !!(calendarContext && calendarContext.client);
+      const calendar_warning = calendar_configured ? null : 'Google Calendar not configured. Availability from DB only; external events ignored. Double-booking risk if provider has other calendars.';
+
+      // Task 51: timezone-aware; Task 3: business days
+      if (!isBusinessDay(date, clinicHours)) {
+        console.log('📅 Date is not a business day (weekend or holiday)');
+        return {
+          success: true,
+          date,
+          timezone: requestedTimezone,
+          appointment_type: appointmentType || 'Mental Health Consultation',
+          available_slots: [],
+          slots: [],
+          slots_with_display: [],
+          total_slots: 0,
+          booked_slots: 0,
+          slot_duration_minutes: 50,
+          buffer_before_minutes: 10,
+          buffer_after_minutes: 10,
+          is_business_day: false,
+          calendar_configured,
+          calendar_warning
+        };
+      }
+
       const requestedDate = this._parseDateWithTimezone(date, requestedTimezone);
-
       if (isNaN(requestedDate)) {
         throw new Error('Invalid date format. Use YYYY-MM-DD');
       }
 
       console.log('📅 Checking availability for:', date, `(${requestedTimezone})`);
+      if (provider) console.log('📋 Provider filter:', provider);
+      if (practitionerId) console.log('📋 Practitioner filter:', practitionerId);
       if (appointmentType) {
         console.log('📋 Appointment type:', appointmentType);
       }
 
-      // Get existing appointments for that date
-      const existingAppointments = await db.getAppointmentsByDate(date, scopedClinicId);
+      // Get existing appointments (Task 4: filter by practitioner_id when given)
+      let existingAppointments = await db.getAppointmentsByDate(date, scopedClinicId, practitionerId);
+      if (provider && !practitionerId) {
+        existingAppointments = existingAppointments.filter(
+          a => (a.provider || '').toLowerCase().includes(String(provider).toLowerCase())
+        );
+      }
       console.log('📋 Found', existingAppointments.length, 'existing appointments');
 
       const internalCalendarEventIds = new Set(
@@ -770,7 +839,8 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       const externalEvents = await this._getExternalCalendarEventsForDate(
         date,
         requestedTimezone,
-        internalCalendarEventIds
+        internalCalendarEventIds,
+        scopedClinicId
       );
 
       if (externalEvents.length > 0) {
@@ -782,16 +852,18 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
         ? APPOINTMENT_TYPES[appointmentType]
         : APPOINTMENT_TYPES['Mental Health Consultation'];
 
-      // Generate all possible slots (15-minute intervals)
+      // Generate slots using per-clinic business hours (Task 3)
+      const slotConfig = { ...clinicHours, slot_interval_minutes: clinicHours.slot_interval_minutes || 15 };
       const allSlots = this._generateTimeSlotsAdvanced(
-        BUSINESS_HOURS,
+        slotConfig,
         typeConfig.duration_minutes,
         typeConfig.buffer_before_minutes,
         typeConfig.buffer_after_minutes
       );
 
-      // Check each slot for conflicts
+      // Check each slot for conflicts; build timezone-aware display (Task 51)
       const availableSlots = [];
+      const slotsWithDisplay = [];
       const bookedSlots = [];
 
       for (const slotTime of allSlots) {
@@ -810,6 +882,20 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
 
         if (!hasConflict) {
           availableSlots.push(slotTime);
+          slotsWithDisplay.push({
+            time: slotTime,
+            slot_start_iso: slotStart.toISOString(),
+            slot_display: slotStart.toLocaleString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true,
+              timeZone: requestedTimezone
+            }),
+            timezone: requestedTimezone
+          });
         } else {
           bookedSlots.push(slotTime);
         }
@@ -817,6 +903,7 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
 
       console.log('✅ Available slots:', availableSlots.length);
       console.log('📊 Booked slots:', bookedSlots.length);
+      if (calendar_warning) console.warn('⚠️  ' + calendar_warning);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
       return {
@@ -825,13 +912,15 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
         timezone: requestedTimezone,
         appointment_type: appointmentType || 'Mental Health Consultation',
         available_slots: availableSlots,
-        // Alias for consumers expecting `slots`
         slots: availableSlots,
+        slots_with_display: slotsWithDisplay,
         total_slots: allSlots.length,
         booked_slots: bookedSlots.length,
         slot_duration_minutes: typeConfig.duration_minutes,
         buffer_before_minutes: typeConfig.buffer_before_minutes,
-        buffer_after_minutes: typeConfig.buffer_after_minutes
+        buffer_after_minutes: typeConfig.buffer_after_minutes,
+        calendar_configured,
+        calendar_warning
       };
 
     } catch (error) {
@@ -974,10 +1063,11 @@ Appointment ID: ${appointment.id}
       colorId: '9'  // Blue color for mental health appointments
     };
 
-    const response = await calendar.events.insert({
+    const { withRetry } = require('../utils/retry');
+    const response = await withRetry(() => calendar.events.insert({
       calendarId: calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary',
       resource: event
-    });
+    }), { maxAttempts: 3 });
 
     return response.data;
   }
@@ -988,7 +1078,7 @@ Appointment ID: ${appointment.id}
    */
   static _generateTimeSlotsAdvanced(businessHours, durationMinutes, bufferBefore, bufferAfter) {
     const slots = [];
-    const interval = BUSINESS_HOURS.slot_interval_minutes; // 15 minutes
+    const interval = businessHours.slot_interval_minutes || BUSINESS_HOURS.slot_interval_minutes || 15;
     const totalSlotMinutes = durationMinutes + bufferBefore + bufferAfter;
 
     // Generate slots starting from business start time
@@ -1054,6 +1144,8 @@ Appointment ID: ${appointment.id}
   static async _checkSlotAvailability(startISO, endISO, typeConfig, date, timezone = BUSINESS_HOURS.timezone, clinicId = null, excludeAppointmentId = null) {
     const slotStart = new Date(startISO);
     const slotEnd = new Date(endISO);
+    const clinicHours = clinicId ? getClinicBusinessHours(clinicId) : BUSINESS_HOURS;
+    const tz = timezone || clinicHours.timezone;
 
     // Get existing appointments for the date
     let existingAppointments = await db.getAppointmentsByDate(date, clinicId || null);
@@ -1074,7 +1166,8 @@ Appointment ID: ${appointment.id}
     const externalEvents = await this._getExternalCalendarEventsForDate(
       date,
       timezone,
-      internalCalendarEventIds
+      internalCalendarEventIds,
+      clinicId
     );
 
     const hasConflict = this._hasTimeConflict(
@@ -1092,14 +1185,14 @@ Appointment ID: ${appointment.id}
       };
     }
 
-    // Check if within business hours
-    // Note: We check the appointment end time (without buffer after) against business hours
-    // Buffer after can extend slightly past business hours, but the appointment itself must end by 17:00
+    // Check if within business hours (Task 3: per-clinic)
+    const hoursStart = clinicHours.start ?? BUSINESS_HOURS.start;
+    const hoursEnd = clinicHours.end ?? BUSINESS_HOURS.end;
     const businessStart = new Date(slotStart);
-    businessStart.setHours(BUSINESS_HOURS.start, 0, 0, 0);
+    businessStart.setHours(hoursStart, 0, 0, 0);
 
     const businessEnd = new Date(slotStart);
-    businessEnd.setHours(BUSINESS_HOURS.end, 0, 0, 0); // 17:00
+    businessEnd.setHours(hoursEnd, 0, 0, 0);
 
     // Calculate appointment end time (without buffer after)
     // slotStart is the actual appointment start time (after buffer before)
@@ -1110,24 +1203,23 @@ Appointment ID: ${appointment.id}
     if (slotStart < businessStart) {
       return {
         available: false,
-        reason: `Time slot is outside business hours (${BUSINESS_HOURS.start}:00 - ${BUSINESS_HOURS.end}:00)`
+        reason: `Time slot is outside business hours (${hoursStart}:00 - ${hoursEnd}:00)`
       };
     }
 
     // Check if appointment end (without buffer after) is after business hours
-    // Allow appointments that end exactly at or before 17:00
     if (appointmentEndTime > businessEnd) {
       return {
         available: false,
-        reason: `Time slot is outside business hours (${BUSINESS_HOURS.start}:00 - ${BUSINESS_HOURS.end}:00)`
+        reason: `Time slot is outside business hours (${hoursStart}:00 - ${hoursEnd}:00)`
       };
     }
 
     return { available: true };
   }
 
-  static async _getExternalCalendarEventsForDate(date, timezone = BUSINESS_HOURS.timezone, internalCalendarEventIds = new Set()) {
-    const calendarContext = this.getCalendarClient();
+  static async _getExternalCalendarEventsForDate(date, timezone = BUSINESS_HOURS.timezone, internalCalendarEventIds = new Set(), clinicId = null) {
+    const calendarContext = this.getCalendarClient(clinicId);
     if (!calendarContext || !calendarContext.client) {
       return [];
     }
@@ -1211,6 +1303,7 @@ Appointment ID: ${appointment.id}
   }
 
   static _formatAppointment(appointment) {
+    const tz = appointment.timezone || 'America/New_York';
     return {
       id: appointment.id,
       confirmation_number: appointment.id.substring(5, 13).toUpperCase(),
@@ -1227,7 +1320,8 @@ Appointment ID: ${appointment.id}
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        hour12: true
+        hour12: true,
+        timeZone: tz
       }),
       provider: appointment.provider,
       duration_minutes: appointment.duration_minutes,
@@ -1235,6 +1329,91 @@ Appointment ID: ${appointment.id}
       calendar_link: appointment.calendar_link,
       created_at: appointment.created_at
     };
+  }
+
+  /**
+   * Helper: Create a future appointment with simplified parameters
+   * Convenience wrapper around scheduleAppointment for programmatic use
+   * 
+   * @param {Object} options - Appointment options
+   * @param {string} options.patient_name - Patient name (required)
+   * @param {string} options.patient_phone - Patient phone (required)
+   * @param {string} [options.patient_email] - Patient email
+   * @param {string} [options.appointment_type] - Type (default: 'Mental Health Consultation')
+   * @param {Date|string} options.date - Appointment date (Date object or YYYY-MM-DD string)
+   * @param {string} options.time - Appointment time (HH:MM format, 24-hour)
+   * @param {string} [options.timezone] - Timezone (default: BUSINESS_HOURS.timezone)
+   * @param {string} [options.provider] - Provider name (default: 'DocLittle Mental Health Team')
+   * @param {string} [options.notes] - Appointment notes
+   * @param {string} [options.clinic_id] - Clinic ID (default: 'clinic-001')
+   * @param {string} [options.customer_id] - Customer ID for tenant isolation
+   * @returns {Promise<Object>} - Created appointment result
+   * 
+   * @example
+   * // Create appointment 1 week from now at 2 PM
+   * const nextWeek = new Date();
+   * nextWeek.setDate(nextWeek.getDate() + 7);
+   * const result = await BookingService.createFutureAppointment({
+   *   patient_name: 'John Doe',
+   *   patient_phone: '+1234567890',
+   *   patient_email: 'john@example.com',
+   *   date: nextWeek,
+   *   time: '14:00',
+   *   appointment_type: 'Follow-up Session'
+   * });
+   */
+  static async createFutureAppointment(options) {
+    if (!options.patient_name || !options.patient_phone) {
+      throw new Error('patient_name and patient_phone are required');
+    }
+
+    // Normalize date to YYYY-MM-DD string
+    let dateStr;
+    if (options.date instanceof Date) {
+      dateStr = options.date.toISOString().split('T')[0];
+    } else if (typeof options.date === 'string') {
+      // If already YYYY-MM-DD, use as-is; otherwise try to parse
+      if (/^\d{4}-\d{2}-\d{2}$/.test(options.date)) {
+        dateStr = options.date;
+      } else {
+        const parsed = new Date(options.date);
+        if (isNaN(parsed.getTime())) {
+          throw new Error(`Invalid date format: ${options.date}. Use Date object or YYYY-MM-DD string.`);
+        }
+        dateStr = parsed.toISOString().split('T')[0];
+      }
+    } else {
+      throw new Error('date must be a Date object or YYYY-MM-DD string');
+    }
+
+    // Normalize time to HH:MM format
+    let timeStr = options.time;
+    if (!timeStr || typeof timeStr !== 'string') {
+      throw new Error('time is required and must be a string in HH:MM format (24-hour)');
+    }
+    // Ensure HH:MM format
+    if (!/^\d{1,2}:\d{2}$/.test(timeStr)) {
+      throw new Error(`Invalid time format: ${timeStr}. Use HH:MM format (24-hour, e.g., "14:30").`);
+    }
+    // Normalize to HH:MM (pad hour if needed)
+    const [hour, minute] = timeStr.split(':');
+    timeStr = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+
+    const appointmentData = {
+      patient_name: options.patient_name,
+      patient_phone: options.patient_phone,
+      patient_email: options.patient_email || null,
+      appointment_type: options.appointment_type || 'Mental Health Consultation',
+      date: dateStr,
+      time: timeStr,
+      timezone: options.timezone || BUSINESS_HOURS.timezone,
+      provider: options.provider || 'DocLittle Mental Health Team',
+      notes: options.notes || '',
+      clinic_id: options.clinic_id || 'clinic-001',
+      customer_id: options.customer_id || null
+    };
+
+    return await this.scheduleAppointment(appointmentData);
   }
 }
 

@@ -7,6 +7,7 @@
  * impact_weight_multiplier boosts settlement for rare cases (e.g., cancer).
  */
 
+const crypto = require('crypto');
 const db = require('../database');
 const THETA_HIGH = parseFloat(process.env.THETA_HIGH || '0.95');
 const THETA_LOW = parseFloat(process.env.THETA_LOW || '0.70');
@@ -108,24 +109,95 @@ function computeSettlementAmount(R_plan, phi, config = {}) {
  */
 function getEffectiveConfidence(phi, providerNpi) {
   if (!providerNpi) return phi;
-  const tau = db.getProviderTrustScore?.(providerNpi);
-  if (tau == null) return phi;
+  
+  // Check if getProviderTrustScore exists (defensive)
+  if (typeof db.getProviderTrustScore !== 'function') {
+    console.warn(`⚠️  db.getProviderTrustScore not available - τ_provider feature inactive. Provider trust scores will not be applied.`);
+    return phi;
+  }
+  
+  const tau = db.getProviderTrustScore(providerNpi);
+  if (tau == null) {
+    // New provider: default to neutral trust (0.5) instead of full trust (1.0)
+    // This prevents new providers from gaming early claims
+    // IMPORTANT: τ = 0.5 means Φ_effective = Φ × 0.5
+    // Example: Φ = 0.95 → Φ_effective = 0.475 (below THETA_LOW = 0.70) → forces HOLD
+    // This is intentional probationary period - all new provider claims require manual review
+    // Document this in provider onboarding: "First N claims require manual review for trust establishment"
+    const defaultTau = parseFloat(process.env.DEFAULT_PROVIDER_TRUST_SCORE || '0.5');
+    console.log(`ℹ️  Provider ${providerNpi} has no trust score - using default τ=${defaultTau} (probationary period - all claims will be HOLD until trust score established)`);
+    return Math.min(1, phi * Math.max(0, defaultTau));
+  }
+  
   return Math.min(1, phi * Math.max(0, tau));
+}
+
+/**
+ * Generate proof-of-care hash (Tiba Spec 5.3, 5.4).
+ * V(E,C,π) = SHA256(encounter_notes|codes_json|timestamp)
+ * Used for blockchain escrow verification when enabled.
+ *
+ * @param {string} encounterNotes - Clinical notes or encounter summary
+ * @param {Object|Array} codes - ICD/CPT codes (object or array, will be JSON-stringified)
+ * @param {string|Date} timestamp - ISO timestamp
+ * @returns {string} SHA256 hex hash
+ */
+function generateProofOfCare(encounterNotes, codes, timestamp) {
+  const ts = typeof timestamp === 'string' ? timestamp : (timestamp ? new Date(timestamp).toISOString() : new Date().toISOString());
+  const notes = String(encounterNotes || '').trim();
+  const codesStr = typeof codes === 'object' ? JSON.stringify(codes) : String(codes || '');
+  const payload = `${notes}|${codesStr}|${ts}`;
+  return crypto.createHash('sha256').update(payload).digest('hex');
 }
 
 /**
  * Get settlement decision for a claim (Tiba spec 4).
  * Uses Φ_effective = Φ × τ_provider when providerNpi provided.
  *
+ * CRITICAL: If codingResult.needsReview === true, forces decision to 'hold' regardless of confidence.
+ * This prevents low-quality LLM coding results from triggering instant settlement before human review.
+ *
  * @param {Object} claim - Claim object (may have provider_npi or appointment)
- * @param {Object} codingResult - From runCodingPipeline or claimDetails.coding: { cpt, icd10 }
+ * @param {Object} codingResult - From runCodingPipeline or claimDetails.coding: { cpt, icd10, needsReview?, band? }
  * @param {Object} eob - EOB from calculateEOBFromClaim
  * @param {Object} config - { alpha, thetaHigh, thetaLow, providerNpi }
- * @returns {{ decision: string, amount: number, escrowRemainder: number, aggregateConfidence: number, effectiveConfidence?: number, weighted: number, min: number }}
+ * @returns {{ decision: string, amount: number, escrowRemainder: number, aggregateConfidence: number, effectiveConfidence?: number, weighted: number, min: number, blockedByReview?: boolean }}
  */
 function getSettlementDecision(claim, codingResult = {}, eob = {}, config = {}) {
+  // CRITICAL FIX: Block settlement if coding requires human review
+  const needsReview = codingResult.needsReview === true || codingResult.action === 'route_to_manual_review';
+  const isComplexBand = codingResult.band === 'COMPLEX';
+  
+  if (needsReview) {
+    const R_plan = parseFloat(eob.totals?.planPaid || 0);
+    console.warn(`🚨 Settlement BLOCKED: Coding requires human review (needsReview=${needsReview}, band=${codingResult.band})`);
+    return {
+      decision: 'hold',
+      amount: 0,
+      escrowRemainder: R_plan,
+      aggregateConfidence: 0,
+      weighted: 0,
+      min: 0,
+      blockedByReview: true,
+      reason: `Coding flagged for review (band: ${codingResult.band}, needsReview: ${needsReview})`
+    };
+  }
+  
+  // Note: COMPLEX claims with needsReview are already blocked above.
+  // This cap only applies to high-confidence COMPLEX claims that passed review threshold.
+  // Consider removing if it creates unnecessary manual review volume in production.
   const cpt = codingResult.cpt || [];
-  const conf = computeAggregateConfidence(cpt, eob, { alpha: config.alpha });
+  let conf = computeAggregateConfidence(cpt, eob, { alpha: config.alpha });
+  
+  // Only apply cap if feature flag enabled (default: disabled to avoid over-conservative holds)
+  const applyComplexCap = process.env.COMPLEX_CONFIDENCE_CAP_ENABLED === '1' || process.env.COMPLEX_CONFIDENCE_CAP_ENABLED === 'true';
+  if (applyComplexCap && isComplexBand && conf.aggregate < parseFloat(process.env.COMPLEX_CONFIDENCE_THRESHOLD || '0.85')) {
+    const phiAuthCap = parseFloat(process.env.PHI_AUTH_CAP || '0.6');
+    console.warn(`⚠️  COMPLEX coding confidence ${conf.aggregate.toFixed(2)} below threshold - capping at φ_auth_cap=${phiAuthCap}`);
+    conf.aggregate = Math.min(conf.aggregate, phiAuthCap);
+    conf.weighted = Math.min(conf.weighted, phiAuthCap);
+  }
+  
   const providerNpi = config.providerNpi || claim?.provider_npi || null;
   const phiEffective = getEffectiveConfidence(conf.aggregate, providerNpi);
   const R_plan = parseFloat(eob.totals?.planPaid || 0);
@@ -148,11 +220,27 @@ function getSettlementDecision(claim, codingResult = {}, eob = {}, config = {}) 
 
 /**
  * Compute 50/20/20/10 split amounts for impact-weighted escrow release.
+ * 
+ * ⚠️ RUNTIME GUARD: This function MUST ONLY be used for:
+ * - Research bounties (pharma data requests) - NOT insurance reimbursements
+ * - Escrow releases (when ESCROW_ENABLED=1) - NOT standard claim payments
+ * 
+ * DO NOT use this for standard insurance claim reimbursements. Insurance pays the provider directly.
+ * Splitting insurance reimbursements before provider payment reconciliation creates legal exposure.
+ * 
  * @param {number} totalAmount - Total settlement amount (USDC units)
  * @param {number} impactWeightMultiplier - Boost for rare cases (1.0 = no boost, 1.5 = 50% boost)
+ * @param {Object} options - { allowInsuranceClaims?: boolean, context?: string }
  * @returns {{ patientAmount: number, staffAmount: number, investorAmount: number, protocolAmount: number }}
  */
-function computeImpactWeightedSplits(totalAmount, impactWeightMultiplier = 1.0) {
+function computeImpactWeightedSplits(totalAmount, impactWeightMultiplier = 1.0, options = {}) {
+  // Runtime guard: prevent misuse on insurance claims unless explicitly allowed
+  const allowInsuranceClaims = options.allowInsuranceClaims === true;
+  const context = options.context || 'unknown';
+  
+  if (!allowInsuranceClaims && context.includes('insurance') && context.includes('claim')) {
+    throw new Error(`SECURITY: computeImpactWeightedSplits cannot be used for insurance claims. Context: ${context}. This function is only for research bounties and escrow releases.`);
+  }
   const base = Math.round(parseFloat(totalAmount || 0) * Math.max(0.5, Math.min(2, impactWeightMultiplier)) * 100) / 100;
   const bps = 10000;
   return {
@@ -181,6 +269,7 @@ module.exports = {
   computeSettlementAmount,
   getSettlementDecision,
   getEffectiveConfidence,
+  generateProofOfCare,
   computeImpactWeightedSplits,
   getImpactWeightMultiplier,
   IMPACT_SPLIT,

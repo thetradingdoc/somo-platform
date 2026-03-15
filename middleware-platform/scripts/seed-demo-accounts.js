@@ -191,6 +191,84 @@ async function seedFhirPatientsAndEligibility() {
   }
 }
 
+/**
+ * Seed at least one upcoming Video Consultation appointment for Bala (patient@doclittle.com)
+ * so she has a video visit to join from the patient portal / Expo app.
+ */
+async function seedBalaVideoAppointment() {
+  try {
+    const sqlite = db.db || db;
+
+    // Find Bala's FHIR patient (created in seedFhirPatientsAndEligibility)
+    const balaPatient = sqlite.prepare(
+      'SELECT resource_id FROM fhir_patients WHERE name = ? LIMIT 1'
+    ).get('Bala Jones');
+
+    if (!balaPatient || !balaPatient.resource_id) {
+      console.warn('   ⚠️  Bala FHIR patient not found. Skipping video appointment seed.');
+      return;
+    }
+
+    const patientId = balaPatient.resource_id;
+
+    // Check if a Video Consultation is already scheduled for Bala
+    const existing = sqlite.prepare(`
+      SELECT id FROM appointments
+      WHERE patient_id = ? 
+        AND appointment_type = 'Video Consultation'
+        AND status IN ('scheduled', 'confirmed')
+      LIMIT 1
+    `).get(patientId);
+
+    if (existing && existing.id) {
+      console.log('   ✅ Existing Video Consultation for Bala found (appointment:', existing.id + '). Skipping creation.');
+      return;
+    }
+
+    const now = new Date();
+    // Schedule for today at 3:00 PM local (or in 1 hour if past 2:30 PM) so it shows on "today"
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const threePM = new Date(today.getTime() + 15 * 60 * 60 * 1000);
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
+    const start = threePM > now ? threePM : oneHourFromNow;
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
+
+    const dateStr = start.toISOString().split('T')[0]; // YYYY-MM-DD
+    const timeStr = start.toISOString().substring(11, 16); // HH:MM
+
+    const appointmentId = `appt-${crypto.randomBytes(8).toString('hex')}`;
+    const clinicId = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'clinic-default';
+
+    const appointment = {
+      id: appointmentId,
+      clinic_id: clinicId,
+      customer_id: null,
+      patient_name: 'Bala Jones',
+      patient_phone: '+15550001001',
+      patient_email: 'patient@doclittle.com',
+      patient_id: patientId,
+      appointment_type: 'Video Consultation',
+      date: dateStr,
+      time: timeStr,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      duration_minutes: 30,
+      provider: 'DocLittle Mental Health Team',
+      status: 'scheduled',
+      notes: 'Seeded demo video consultation for Bala (patient@doclittle.com)',
+      calendar_event_id: null,
+      calendar_link: null,
+      video_room_name: `appt-${appointmentId}`,
+      created_at: now.toISOString()
+    };
+
+    await db.createAppointment(appointment);
+    console.log('   ✅ Seeded Video Consultation appointment for Bala (id:', appointmentId + ').');
+  } catch (err) {
+    console.warn('   ⚠️  Error seeding Bala video appointment:', err.message);
+  }
+}
+
 async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(RESET ? 'Reset & seed demo accounts (password: demo123)' : 'Seed demo accounts (password: demo123)');
@@ -227,6 +305,30 @@ async function main() {
     process.exit(1);
   }
   console.log('Using merchant:', merchant.id, merchant.name || '');
+
+  // Ensure clinic-default exists and is linked to merchant (for checkout/payment)
+  const clinicId = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'clinic-default';
+  const clinic = db.getClinicById ? await db.getClinicById(clinicId) : null;
+  if (!clinic) {
+    try {
+      if (db.createClinic) {
+        await db.createClinic({
+          clinic_id: clinicId,
+          name: 'Default Clinic',
+          slug: 'default',
+          phone_number: process.env.DEFAULT_CLINIC_PHONE || '+15550000000',
+          email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@doclittle.com',
+          merchant_id: merchant.id,
+        });
+        console.log('Created clinic-default with merchant_id:', merchant.id);
+      }
+    } catch (e) {
+      if (!e.message?.includes('UNIQUE') && !e.message?.includes('duplicate')) console.warn('Could not create clinic-default:', e.message);
+    }
+  } else if (!clinic.merchant_id && db.updateClinic) {
+    db.updateClinic(clinicId, { merchant_id: merchant.id });
+    console.log('Linked clinic-default to merchant:', merchant.id);
+  }
 
   for (const acc of DEMO_ACCOUNTS) {
     const existing = db.getCustomerByEmail(acc.email);
@@ -282,6 +384,8 @@ async function main() {
   console.log('\n🏥 Seeding FHIR patients (provider portal) + eligibility (copay, deductible)...');
   ensureInsurancePayers();
   await seedFhirPatientsAndEligibility();
+  console.log('\n📅 Seeding demo Video Consultation appointment for Bala (patient@doclittle.com)...');
+  await seedBalaVideoAppointment();
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('Demo accounts ready. Login with password: demo123');

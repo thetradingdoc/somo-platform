@@ -178,7 +178,7 @@ const RetellWebSocketHandler = require('./webhooks/retell-websocket');
 
 // Import middleware
 const { securityHeaders, sanitizeInput, requestLogger } = require('./middleware/security');
-const { apiLimiter, authLimiter, paymentLimiter, voiceLimiter } = require('./middleware/rate-limiter');
+const { apiLimiter, authLimiter, paymentLimiter, voiceLimiter, scheduleCheckoutLimiter } = require('./middleware/rate-limiter');
 const { check: clinicRateLimitCheck } = require('./utils/clinic-rate-limiter');
 const { usageLogger, logVoiceCall, logFunctionCall, logError } = require('./middleware/usage-logger');
 let errorHandler, asyncHandler, withTimeout, withRetry, logErrorHandler;
@@ -221,6 +221,12 @@ const logger = require('./services/logger');
 // Security middleware (must be first)
 app.use(securityHeaders);
 
+// Remove CSP for patient video page (Safari iOS blocks HTTP requests with strict CSP)
+app.use('/patients/video-call.html', (req, res, next) => {
+  res.removeHeader('Content-Security-Policy');
+  next();
+});
+
 // CORS
 // IMPORTANT: We must explicitly allow credentials and trusted origins,
 // otherwise browser requests with `credentials: 'include'` will fail
@@ -248,6 +254,19 @@ const corsOptions = {
     // Allow any subdomain of doclittle.site (e.g. akin-dunbar.doclittle.site)
     if (/^https?:\/\/([a-z0-9-]+\.)*doclittle\.site$/i.test(origin)) {
       return callback(null, true);
+    }
+
+    // Allow ngrok domains (for HTTPS testing: https://xxxx.ngrok-free.app)
+    if (/^https:\/\/[a-z0-9-]+\.ngrok-free\.app$/.test(origin) || /^https:\/\/[a-z0-9-]+\.ngrok\.io$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow local network IPs (for mobile testing: http://10.x.x.x:4000, http://192.168.x.x:4000)
+    // This is safe in development - restrict in production
+    if (process.env.NODE_ENV === 'development' || process.env.ALLOW_LIVE_KEYS_IN_DEV === 'true') {
+      if (/^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)[0-9.]+:\d+$/.test(origin)) {
+        return callback(null, true);
+      }
     }
 
     // Block everything else
@@ -836,6 +855,11 @@ app.use('/api/tenant', tenantConfigRoutes);
 // LiveKit video conferencing (token endpoint)
 const livekitRoutes = require('./routes/livekit');
 app.use('/api/livekit', livekitRoutes);
+
+// RAG proxy (Colab RAG via main tunnel)
+const ragProxyRoutes = require('./routes/rag-proxy');
+app.use('/api/rag', ragProxyRoutes);
+
 const videoConsultRoutes = require('./routes/video-consult');
 app.use('/api/video-consult', videoConsultRoutes);
 
@@ -856,6 +880,10 @@ app.use('/api/voice-agent', tenantContext({ requireTenant: false }), voiceAgentS
 // Payment routes (payment page and processing)
 const paymentRoutes = require('./routes/payment');
 app.use('/api/payment', paymentRoutes);
+
+// Visit pricing API (Task 16)
+const pricingRoutes = require('./routes/pricing');
+app.use('/api/pricing', pricingRoutes);
 
 // Customer wallet routes
 const customerWalletRoutes = require('./routes/customer-wallet');
@@ -900,6 +928,10 @@ app.use('/api/voice/outbound', outboundCallRoutes);
 // Voice Web Call (in-browser voice via Retell Web SDK)
 const voiceWebCallRoutes = require('./routes/voice-web-call');
 app.use('/api/voice', voiceWebCallRoutes);
+
+// RCM / Financial Intelligence APIs (EMPI-based)
+const rcmRoutes = require('./routes/rcm');
+app.use('/api/rcm', rcmRoutes);
 
 // Research Bounties (Pharma Data Requests - Impact-Weighted Escrow)
 const researchBountiesRoutes = require('./routes/research-bounties');
@@ -1185,7 +1217,8 @@ function calculateFraudScore(data) {
 // ============================================
 // TWILIO VOICE INCOMING HANDLER
 // ============================================
-app.post('/voice/incoming', voiceLimiter, async (req, res) => {
+// Twilio sends `application/x-www-form-urlencoded` by default, so we must parse it here.
+app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true }), async (req, res) => {
   try {
     console.log('\n📞 INCOMING CALL from Twilio');
     console.log('From:', req.body.From);
@@ -1598,9 +1631,14 @@ app.post('/voice/incoming', voiceLimiter, async (req, res) => {
       }
     } catch (retellError) {
       console.error('❌ Retell registration failed:', retellError.message);
+      console.error('   RETELL_API_KEY present:', !!process.env.RETELL_API_KEY);
       if (retellError.response) {
         console.error('   Status:', retellError.response.status);
-        console.error('   Data:', JSON.stringify(retellError.response.data));
+        try {
+          console.error('   Data:', JSON.stringify(retellError.response.data));
+        } catch (e) {
+          console.error('   Data: <unserializable>');
+        }
       } else if (retellError.request) {
         console.error('   No response received from Retell (request sent).');
       }
@@ -1906,7 +1944,7 @@ app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: 
 });
 
 // Create appointment checkout (appointment payment, not products)
-app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
+app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, async (req, res) => {
   try {
     console.log('\n💳 VOICE: Create Appointment Checkout');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -1916,7 +1954,7 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
 
     // Calculate amount based on insurance coverage if available
     // Default: fixed price per appointment if no insurance info
-    let amount = args.amount || 39.99; // Use provided amount or default
+    let amount = args.amount; // If provided, caller overrides pricing
 
     // Build a minimal checkout record tied to the appointment
     const checkoutId = require('uuid').v4();
@@ -1959,7 +1997,7 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
     }
 
     // If appointment_id is available, calculate patient responsibility based on insurance
-    if (appointmentId && !args.amount) {
+    if (appointmentId && amount == null) {
       try {
         const appointment = await db.getAppointment(appointmentId, clinicId || null);
         if (appointment && !clinicId) {
@@ -1989,6 +2027,26 @@ app.post('/voice/appointments/checkout', voiceLimiter, async (req, res) => {
         }
       } catch (error) {
         console.warn('⚠️  Could not calculate insurance-adjusted amount:', error.message);
+      }
+    }
+
+    // If still no amount, use visit_pricing (Task 17: same source as GET /api/pricing)
+    if (amount == null) {
+      try {
+        let appointmentType = args.appointment_type || null;
+        if (!appointmentType && appointmentId) {
+          const appointment = await db.getAppointment(appointmentId, clinicId || null);
+          appointmentType = appointment?.appointment_type || appointmentType;
+          if (appointment && !clinicId) {
+            clinicId = appointment.clinic_id || clinicId;
+          }
+        }
+        const pricing = db.getEffectiveVisitPrice(clinicId, appointmentType || 'General Consult');
+        amount = pricing.effective_price;
+        console.log(`💰 Visit pricing: clinic=${clinicId} type="${pricing.canonicalType}" base=$${pricing.base_price} surge_enabled=${pricing.surge_enabled} mult=${pricing.surge_multiplier} => $${amount.toFixed(2)}`);
+      } catch (e) {
+        const { DEFAULT_FALLBACK } = require('./config/pricing-fallbacks');
+        amount = DEFAULT_FALLBACK;
       }
     }
 
@@ -2300,11 +2358,18 @@ app.post('/voice/checkout/verify', async (req, res) => {
     if (checkout.customer_email) {
       try {
         const EmailService = require('./services/email-service');
+        let appt = null;
+        if (checkout.appointment_id) {
+          appt = await db.getAppointment(checkout.appointment_id);
+        }
         emailResult = await EmailService.sendPaymentLinkEmail(checkout.customer_email, paymentLink, {
           product_name: checkout.product_name,
           amount: checkout.amount,
           wallet_balance: walletInfo?.balance,
-          can_pay_from_wallet: walletInfo?.sufficient_balance
+          can_pay_from_wallet: walletInfo?.sufficient_balance,
+          appointment_date: appt?.date,
+          appointment_time: appt?.time,
+          appointment_type: appt?.appointment_type || checkout.product_name
         });
       } catch (emailError) {
         console.error('⚠️  Email service error:', emailError.message);
@@ -2312,8 +2377,8 @@ app.post('/voice/checkout/verify', async (req, res) => {
       }
     }
 
-    // Mark token as verified
-    db.updatePaymentToken(token, { status: 'verified' });
+    // Task 53: Mark token as identity-verified (required before payment redemption)
+    db.updatePaymentToken(token, { status: 'verified', identity_verified_at: new Date().toISOString() });
 
     return res.json({
       success: true,
@@ -2472,7 +2537,7 @@ app.post('/voice/orders/tracking', async (req, res) => {
 });
 
 // Create checkout for voice purchase - FIXED WITH ORCHESTRATOR
-app.post('/voice/checkout/create', async (req, res) => {
+app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => {
   try {
     console.log('\n💳 VOICE: Creating Checkout via Orchestrator');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -2701,253 +2766,29 @@ app.post('/voice/checkout/create', async (req, res) => {
   }
 });
 
-// Payment page
-app.get('/payment/:token', async (req, res) => {
-  try {
-    const { token } = req.params;
-
-    // Get token and checkout
-    const tokenRecord = db.getPaymentToken(token);
-    if (!tokenRecord) {
-      return res.status(404).send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Payment Not Found</title>
-          <style>
-            body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
-            h1 { color: #e53e3e; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>❌ Payment Link Invalid</h1>
-            <p>This payment link is invalid or has expired.</p>
-          </div>
-        </body>
-        </html>
-      `);
-    }
-
-    const checkout = await db.getVoiceCheckout(tokenRecord.checkout_id);
-    if (!checkout) {
-      return res.status(404).send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Checkout Not Found</title>
-          <style>
-            body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
-            h1 { color: #e53e3e; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>❌ Checkout Not Found</h1>
-            <p>This checkout session could not be found.</p>
-          </div>
-        </body>
-        </html>
-      `);
-    }
-
-    if (checkout.status === 'completed') {
-      return res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Already Paid</title>
-          <style>
-            body { font-family: system-ui; max-width: 600px; margin: 100px auto; padding: 20px; text-align: center; }
-            h1 { color: #48bb78; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>✅ Already Paid</h1>
-            <p>This order has already been completed.</p>
-            <p><strong>Order ID:</strong> ${checkout.id}</p>
-          </div>
-        </body>
-        </html>
-      `);
-    }
-
-    // Render payment page
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Complete Payment</title>
-        <script src="https://js.stripe.com/v3/"></script>
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
-          .container { max-width: 500px; margin: 40px auto; }
-          #payment-form { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-          .header { text-align: center; margin-bottom: 32px; }
-          .header h1 { font-size: 28px; color: #2d3748; margin-bottom: 8px; }
-          .header p { color: #718096; font-size: 14px; }
-          .order-summary { background: #f7fafc; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
-          .order-item { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
-          .order-item:last-child { border-bottom: none; }
-          .order-label { color: #718096; font-size: 14px; }
-          .order-value { color: #2d3748; font-weight: 600; }
-          .order-value.total { color: #667eea; font-size: 20px; }
-          #card-element { border: 2px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 8px; }
-          #card-errors { color: #e53e3e; font-size: 14px; margin-bottom: 16px; min-height: 20px; }
-          .btn { width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 16px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
-          .btn:hover { transform: translateY(-2px); }
-          .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-          .hidden { display: none; }
-          .success-message { text-align: center; background: white; border-radius: 16px; padding: 32px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-          .success-icon { font-size: 64px; margin-bottom: 16px; }
-          .success-title { font-size: 24px; color: #48bb78; margin-bottom: 12px; }
-          .success-text { color: #718096; line-height: 1.6; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div id="payment-form">
-            <div class="header">
-              <h1>💳 Complete Payment</h1>
-              <p>Secure checkout powered by Stripe</p>
-            </div>
-
-            <div class="order-summary">
-              <div class="order-item">
-                <span class="order-label">Product:</span>
-                <span class="order-value">${checkout.product_name}</span>
-              </div>
-              <div class="order-item">
-                <span class="order-label">Quantity:</span>
-                <span class="order-value">${checkout.quantity}</span>
-              </div>
-              <div class="order-item">
-                <span class="order-label">Customer:</span>
-                <span class="order-value">${checkout.customer_name || 'Guest'}</span>
-              </div>
-              <div class="order-item">
-                <span class="order-label">Total:</span>
-                <span class="order-value total">$${checkout.amount.toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div id="card-element"></div>
-            <div id="card-errors"></div>
-
-            <button id="submit-button" class="btn">
-              Pay $${checkout.amount.toFixed(2)}
-            </button>
-
-            <p style="text-align: center; color: #a0aec0; font-size: 12px; margin-top: 16px;">
-              Test card: 4242 4242 4242 4242
-            </p>
-          </div>
-
-          <div id="success-message" class="hidden">
-            <div class="success-message">
-              <div class="success-icon">✅</div>
-              <h2 class="success-title">Payment Successful!</h2>
-              <p class="success-text">
-                Your order has been confirmed.<br>
-                Order ID: <strong>${checkout.id}</strong>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <script>
-          const stripe = Stripe('${process.env.STRIPE_PUBLISHABLE_KEY}');
-          const elements = stripe.elements();
-          const cardElement = elements.create('card', {
-            style: {
-              base: {
-                fontSize: '16px',
-                color: '#2d3748',
-                '::placeholder': {
-                  color: '#a0aec0'
-                }
-              }
-            }
-          });
-
-          cardElement.mount('#card-element');
-
-          cardElement.on('change', (event) => {
-            const displayError = document.getElementById('card-errors');
-            if (event.error) {
-              displayError.textContent = event.error.message;
-            } else {
-              displayError.textContent = '';
-            }
-          });
-
-          const form = document.getElementById('payment-form');
-          const submitButton = document.getElementById('submit-button');
-
-          submitButton.addEventListener('click', async (e) => {
-            e.preventDefault();
-            submitButton.disabled = true;
-            submitButton.textContent = 'Processing...';
-
-            const { paymentMethod, error } = await stripe.createPaymentMethod({
-              type: 'card',
-              card: cardElement,
-              billing_details: {
-                name: '${checkout.customer_name || 'Guest'}',
-                phone: '${checkout.customer_phone}',
-                email: '${checkout.customer_email || ''}'
-              }
-            });
-
-            if (error) {
-              document.getElementById('card-errors').textContent = error.message;
-              submitButton.disabled = false;
-              submitButton.textContent = 'Pay $${checkout.amount.toFixed(2)}';
-            } else {
-              const response = await fetch('/process-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  payment_method_id: paymentMethod.id,
-                  checkout_id: '${checkout.id}',
-                  amount: ${checkout.amount}
-                })
-              });
-
-              const result = await response.json();
-
-              if (result.success) {
-                document.getElementById('payment-form').classList.add('hidden');
-                document.getElementById('success-message').classList.remove('hidden');
-              } else {
-                document.getElementById('card-errors').textContent = result.error || 'Payment failed';
-                submitButton.disabled = false;
-                submitButton.textContent = 'Pay $${checkout.amount.toFixed(2)}';
-              }
-            }
-          });
-        </script>
-      </body>
-      </html>
-    `);
-
-  } catch (error) {
-    console.error('Error rendering payment page:', error);
-    res.status(500).send('Error loading payment page');
-  }
+// Payment page (Task 11: unified - redirect to /api/payment for single flow)
+app.get('/payment/:token', (req, res) => {
+  return res.redirect(302, `/api/payment/${req.params.token}`);
 });
 
-// Process payment
+// Process payment (Task 11, 14: unified flow; amount from checkout)
 app.post('/process-payment', paymentLimiter, async (req, res) => {
+  const PaymentProcessorService = require('./services/payment-processor-service');
+  let idemKey;
+  const claimOpType = 'process_payment';
   try {
-    const { payment_method_id, checkout_id, amount, payment_method = 'stripe', idempotency_key } = req.body;
-    const idemKey = idempotency_key || req.headers['idempotency-key'] || `process_${checkout_id}_${payment_method}`;
+    const { payment_method_id, checkout_id, amount, payment_method = 'stripe', idempotency_key, payment_token } = req.body;
 
-    console.log(`\n💳 Processing payment for checkout: ${checkout_id}`);
+    // Task 11: Resolve checkout from payment_token or checkout_id (unified with /api/payment/process)
+    const checkout = await PaymentProcessorService.resolveCheckout(req.body);
+    if (!checkout) {
+      return res.status(400).json({ success: false, error: 'Checkout not found. Provide payment_token or checkout_id.' });
+    }
+    const resolvedCheckoutId = checkout.id;
+    idemKey = idempotency_key || req.headers['idempotency-key'] || `process_${resolvedCheckoutId}_${payment_method}`;
 
-    const claimOpType = 'process_payment';
+    console.log(`\n💳 Processing payment for checkout: ${resolvedCheckoutId}`);
+
     const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
     if (cached) {
       return res.json({ ...cached.result, idempotent: true });
@@ -2960,14 +2801,11 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
       const c2 = db.getIdempotentResult(idemKey, claimOpType);
       if (c2) return res.json({ ...c2.result, idempotent: true });
     }
-    console.log(`   Method: ${payment_method}`);
-    console.log(`   Amount: $${amount}`);
 
-    // Get checkout to check for linked appointment and patient
-    const checkout = await db.getVoiceCheckout(checkout_id);
-    if (!checkout) {
-      throw new Error('Checkout not found');
-    }
+    // Task 14: Use checkout amount, never trust req.body.amount
+    const chargeAmount = parseFloat(checkout.amount) || 0;
+    console.log(`   Method: ${payment_method}`);
+    console.log(`   Amount: $${chargeAmount}`);
 
     // Handle wallet payment
     if (payment_method === 'wallet') {
@@ -3037,11 +2875,11 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           }
         }
 
-        if (walletBalance < amount) {
+        if (walletBalance < chargeAmount) {
           if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
           return res.status(400).json({
             success: false,
-            error: `Insufficient wallet balance. Available: $${walletBalance.toFixed(2)}, Required: $${amount.toFixed(2)}`
+            error: `Insufficient wallet balance. Available: $${walletBalance.toFixed(2)}, Required: $${chargeAmount.toFixed(2)}`
           });
         }
 
@@ -3061,7 +2899,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         const transferResult = await CircleService.createTransfer({
           fromWalletId: walletResult.account.circle_wallet_id,
           toWalletId: providerWalletId,
-          amount: amount,
+          amount: chargeAmount,
           currency: 'USDC',
           claimId: checkout.appointment_id || checkout.id,
           description: `Payment for ${checkout.product_name || 'appointment'} - Checkout ${checkout_id}`
@@ -3089,7 +2927,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           null,
           walletResult.account.circle_wallet_id,
           providerWalletId,
-          amount,
+          chargeAmount,
           'USDC',
           transferResult.transferId || transferResult.id,
           'completed',
@@ -3100,16 +2938,22 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         console.log(`✅ Wallet payment successful: ${transferResult.transferId}`);
         console.log(`   From: ${walletResult.account.circle_wallet_id}`);
         console.log(`   To: ${providerWalletId}`);
-        console.log(`   Amount: $${amount} USDC`);
+        console.log(`   Amount: $${chargeAmount} USDC`);
 
         // Update checkout status
-        await db.updateVoiceCheckout(checkout_id, {
+        await db.updateVoiceCheckout(resolvedCheckoutId, {
           status: 'completed',
           payment_method: 'wallet',
           payment_intent_id: transferResult.transferId || transferResult.id
         });
 
-        console.log(`✅ Checkout ${checkout_id} marked as completed`);
+        console.log(`✅ Checkout ${resolvedCheckoutId} marked as completed`);
+
+        // Task 12, 15, 16: Financial audit, ledger, receipt
+        await PaymentProcessorService.completePaymentSuccess({
+          checkout, amount: chargeAmount, paymentMethod: 'wallet',
+          transferId: transferResult.transferId || transferResult.id
+        });
 
         // Auto-confirm appointment if linked
         if (checkout.appointment_id) {
@@ -3133,9 +2977,9 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           success: true,
           payment_method: 'wallet',
           transfer_id: transferResult.transferId || transferResult.id,
-          checkout_id: checkout_id,
+          checkout_id: resolvedCheckoutId,
           appointment_confirmed: checkout.appointment_id ? true : false,
-          wallet_balance_after: walletBalance - amount
+          wallet_balance_after: walletBalance - chargeAmount
         };
         if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
         return res.json(result);
@@ -3159,7 +3003,7 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
       });
     }
 
-    // Create Stripe payment intent
+    // Create Stripe payment intent (1.1–1.6: metadata, requires_action, error handling)
     if (!stripe) {
       if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
       return res.status(503).json({
@@ -3168,26 +3012,86 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
       });
     }
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: 'usd',
-      payment_method: payment_method_id,
-      confirm: true,
-      automatic_payment_methods: {
-        enabled: true,
-        allow_redirects: 'never'
-      }
-    });
+    // Task 15: Use capture_method: 'manual' for appointment deposit holds
+    const visitChargeTiming = require('./config/visit-charge-timing');
+    const useManualCapture = checkout.appointment_id && visitChargeTiming.shouldAuthorizeOnlyForAppointment();
 
-    console.log(`✅ Stripe payment successful: ${paymentIntent.id}`);
+    let paymentIntent;
+    try {
+      const createParams = {
+        amount: Math.round(chargeAmount * 100),
+        currency: 'usd',
+        payment_method: payment_method_id,
+        confirm: true,
+        return_url: `${process.env.BASE_URL || 'http://localhost:4000'}/payment/success`,
+        automatic_payment_methods: { enabled: true, allow_redirects: 'always' },
+        metadata: {
+          checkout_id: resolvedCheckoutId,
+          merchant_id: String(checkout.merchant_id || ''),
+          payment_token: payment_token || ''
+        }
+      };
+      if (useManualCapture) {
+        createParams.capture_method = 'manual';
+      }
+      const { withRetry } = require('./utils/retry');
+      paymentIntent = await withRetry(() => stripe.paymentIntents.create(createParams), { maxAttempts: 3 });
+    } catch (stripeErr) {
+      console.error('❌ Stripe API error:', stripeErr.message, stripeErr.type, stripeErr.code);
+      if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
+      const isDecline = stripeErr.type === 'StripeCardError' || stripeErr.code === 'card_declined';
+      const isNetwork = stripeErr.type === 'StripeConnectionError';
+      return res.status(400).json({
+        success: false,
+        error: isDecline ? (stripeErr.message || 'Card was declined') : isNetwork ? 'Network error. Please try again.' : (stripeErr.message || 'Payment failed'),
+        stripe_error_type: stripeErr.type,
+        stripe_error_code: stripeErr.code
+      });
+    }
+
+    // 1.3: Handle requires_action (3DS)
+    if (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_source_action') {
+      console.log(`⚠️  Payment requires 3DS: ${paymentIntent.id}`);
+      const result = {
+        success: true,
+        requires_action: true,
+        client_secret: paymentIntent.client_secret,
+        payment_intent_id: paymentIntent.id,
+        checkout_id: resolvedCheckoutId
+      };
+      if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
+      return res.json(result);
+    }
+
+    // succeeded, processing = immediate capture; requires_capture = auth-only (Task 15)
+    const terminalSuccess = ['succeeded', 'processing', 'requires_capture'].includes(paymentIntent.status);
+    if (!terminalSuccess) {
+      console.error(`❌ Payment unexpected status: ${paymentIntent.status}`);
+      if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
+      return res.status(400).json({
+        success: false,
+        error: `Payment ${paymentIntent.status}`,
+        payment_intent_id: paymentIntent.id
+      });
+    }
+
+    const authorizedOnly = paymentIntent.status === 'requires_capture';
+    console.log(`✅ Stripe payment ${authorizedOnly ? 'authorized (requires_capture)' : 'successful'}: ${paymentIntent.id}`);
 
     // Update checkout status
-    await db.updateVoiceCheckout(checkout_id, {
+    await db.updateVoiceCheckout(resolvedCheckoutId, {
       status: 'completed',
-      payment_intent_id: paymentIntent.id
+      payment_intent_id: paymentIntent.id,
+      payment_method: 'stripe'
     });
 
-    console.log(`✅ Checkout ${checkout_id} marked as completed`);
+    console.log(`✅ Checkout ${resolvedCheckoutId} marked as completed`);
+
+    // Task 12, 15, 16: Financial audit, ledger, receipt
+    await PaymentProcessorService.completePaymentSuccess({
+      checkout, amount: chargeAmount, paymentMethod: 'stripe',
+      paymentIntentId: paymentIntent.id
+    });
 
     // Auto-confirm appointment if linked
     if (checkout.appointment_id) {
@@ -3204,7 +3108,6 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
         }
       } catch (confirmError) {
         console.warn(`⚠️  Error auto-confirming appointment: ${confirmError.message}`);
-        // Don't fail the payment if confirmation fails
       }
     }
 
@@ -3212,8 +3115,9 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
       success: true,
       payment_method: 'stripe',
       payment_intent_id: paymentIntent.id,
-      checkout_id: checkout_id,
-      appointment_confirmed: checkout.appointment_id ? true : false
+      checkout_id: resolvedCheckoutId,
+      appointment_confirmed: !!checkout.appointment_id,
+      requires_capture: authorizedOnly
     };
     if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
     res.json(result);
@@ -4423,6 +4327,9 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
 
 app.use('/api/admin', requireAdminAuth);
 
+// Visit pricing admin (Task 16)
+app.post('/api/admin/pricing', pricingRoutes.postPricing);
+
 function createMerchantForClinic(name) {
   const merchantId = `merchant-${uuidv4()}`;
   const placeholderKey = generateApiKey('managed');
@@ -5509,17 +5416,38 @@ function resolveClinicIdFromRequest(req, args = {}) {
     args?.clinic_id ||
     req.headers['x-clinic-id'] ||
     req.query?.clinic_id ||
-    req.body?.clinic_id ||
+    (req.body && !req.body.args ? req.body.clinic_id : (req.body?.args?.clinic_id || req.body?.clinic_id)) ||
     null;
 
   if (directClinicId) {
     return directClinicId;
   }
 
+  // Task 6: Fallback when Retell/API doesn't provide clinic_id
   if (FALLBACK_CLINIC_ID) {
-    console.warn('⚠️  Using fallback clinic_id from DEFAULT_CLINIC_ID');
     return FALLBACK_CLINIC_ID;
   }
+
+  const fromPhone = req.body?.From || req.body?.from_number || req.body?.patient_phone || args?.patient_phone;
+  if (fromPhone && db && db.getClinicPhoneNumber) {
+    try {
+      let normalized = fromPhone;
+      try {
+        const SMSService = require('./services/sms-service');
+        normalized = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(fromPhone) : fromPhone.replace(/\D/g, '');
+      } catch { normalized = fromPhone.replace(/\D/g, ''); }
+      const row = db.getClinicPhoneNumber(normalized);
+      if (row?.clinic_id) return row.clinic_id;
+    } catch (_) {}
+  }
+
+  try {
+    const conn = db.db || db;
+    const first = conn.prepare('SELECT clinic_id FROM clinics WHERE is_active = 1 LIMIT 1').get();
+    if (first?.clinic_id) {
+      return first.clinic_id;
+    }
+  } catch (_) {}
 
   return null;
 }
@@ -5527,7 +5455,7 @@ function resolveClinicIdFromRequest(req, args = {}) {
 const FALLBACK_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || null;
 
 // Schedule new appointment (for voice agent)
-app.post('/voice/appointments/schedule', async (req, res) => {
+app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, res) => {
   try {
     console.log('\n📅 VOICE: Schedule Appointment');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
@@ -5568,21 +5496,50 @@ app.post('/voice/appointments/schedule', async (req, res) => {
       time: args.time,  // HH:MM or "2:00 PM"
       duration_minutes: args.duration_minutes || 50,
       provider: args.provider,
+      practitioner_id: args.practitioner_id || null,
       notes: args.notes,
       timezone: args.timezone || 'America/New_York',
       clinic_id: clinicId,
-      customer_id: customerId // Add customer_id for tenant isolation
+      customer_id: customerId
     };
 
     const result = await BookingService.scheduleAppointment(appointmentData);
 
+    // Task 10: Auto-checkout fallback when agent skips create_appointment_checkout
+    if (result.success && result.appointment?.id) {
+      try {
+        const axios = require('axios');
+        const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
+        const checkoutRes = await axios.post(`${base}/voice/appointments/checkout`, {
+          appointment_id: result.appointment.id,
+          patient_phone: args.patient_phone || result.appointment.patient_phone,
+          patient_email: args.patient_email || result.appointment.patient_email,
+          patient_name: args.patient_name || result.appointment.patient_name,
+          clinic_id: clinicId,
+          appointment_type: args.appointment_type
+        }, { timeout: 10000 });
+        if (checkoutRes.data && checkoutRes.data.success) {
+          result.checkout = {
+            checkout_id: checkoutRes.data.checkout_id,
+            payment_token: checkoutRes.data.payment_token,
+            amount: checkoutRes.data.amount,
+            requires_verification: !!checkoutRes.data.requires_verification
+          };
+        }
+      } catch (e) {
+        console.warn('⚠️  Auto-checkout failed (agent can still call create_appointment_checkout):', e.message);
+      }
+    }
+
     res.json(result);
   } catch (error) {
     console.error('❌ Error scheduling appointment:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    const payload = { success: false, error: error.message };
+    if (error.slot_conflict && Array.isArray(error.alternative_slots)) {
+      payload.slot_conflict = true;
+      payload.alternative_slots = error.alternative_slots;
+    }
+    res.status(500).json(payload);
   }
 });
 
@@ -5706,14 +5663,15 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
       });
     }
 
+    const practitionerId = args.practitioner_id || null;
     const cache = require('./services/cache-service');
-    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone].join('|');
+    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone || '', practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) {
       return res.json(cached);
     }
 
-    const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId);
+    const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId, practitionerId);
     if (result.success) {
       cache.set('slot_availability', result, cacheKey);
     }
@@ -5753,6 +5711,194 @@ app.post('/voice/appointments/search', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// ============================================
+// API APPOINTMENTS (Task 7: Non-voice parity)
+// ============================================
+
+function apiAppointmentArgs(req) {
+  if (req.method === 'GET') {
+    return req.query;
+  }
+  return req.body?.args || req.body;
+}
+
+app.post('/api/appointments/schedule', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    }
+    const appointmentData = {
+      patient_name: args.patient_name,
+      patient_phone: args.patient_phone,
+      patient_email: args.patient_email,
+      appointment_type: args.appointment_type || 'Mental Health Consultation',
+      date: args.date,
+      time: args.time,
+      duration_minutes: args.duration_minutes || 50,
+      provider: args.provider,
+      practitioner_id: args.practitioner_id || null,
+      notes: args.notes,
+      timezone: args.timezone || 'America/New_York',
+      clinic_id: clinicId,
+      customer_id: args.customer_id || null
+    };
+    const result = await BookingService.scheduleAppointment(appointmentData);
+
+    // Task 10: Auto-checkout fallback
+    if (result.success && result.appointment?.id) {
+      try {
+        const axios = require('axios');
+        const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
+        const checkoutRes = await axios.post(`${base}/voice/appointments/checkout`, {
+          appointment_id: result.appointment.id,
+          patient_phone: args.patient_phone,
+          patient_email: args.patient_email,
+          patient_name: args.patient_name,
+          clinic_id: clinicId,
+          appointment_type: args.appointment_type
+        }, { timeout: 10000 });
+        if (checkoutRes.data && checkoutRes.data.success) {
+          result.checkout = {
+            checkout_id: checkoutRes.data.checkout_id,
+            payment_token: checkoutRes.data.payment_token,
+            amount: checkoutRes.data.amount,
+            requires_verification: !!checkoutRes.data.requires_verification
+          };
+        }
+      } catch (e) {
+        console.warn('⚠️  Auto-checkout failed:', e.message);
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API schedule error:', error);
+    const payload = { success: false, error: error.message };
+    if (error.slot_conflict) {
+      payload.slot_conflict = true;
+      payload.alternative_slots = error.alternative_slots || [];
+      payload.slots_with_display = error.slots_with_display || [];
+    }
+    res.status(500).json(payload);
+  }
+});
+
+app.get('/api/appointments/available-slots', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    }
+    const date = args.date;
+    if (!date) {
+      return res.status(400).json({ success: false, error: 'date is required' });
+    }
+    const practitionerId = args.practitioner_id || null;
+    const cache = require('./services/cache-service');
+    const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', args.timezone || 'America/New_York', practitionerId || ''].join('|');
+    const cached = cache.get('slot_availability', cacheKey);
+    if (cached) return res.json(cached);
+    const result = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, args.timezone || 'America/New_York', clinicId, practitionerId);
+    if (result.success) cache.set('slot_availability', result, cacheKey);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API available-slots error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/appointments/available-slots', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    }
+    const date = args.date;
+    if (!date) {
+      return res.status(400).json({ success: false, error: 'date is required' });
+    }
+    const practitionerId = args.practitioner_id || null;
+    const cache = require('./services/cache-service');
+    const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', args.timezone || 'America/New_York', practitionerId || ''].join('|');
+    const cached = cache.get('slot_availability', cacheKey);
+    if (cached) return res.json(cached);
+    const result = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, args.timezone || 'America/New_York', clinicId, practitionerId);
+    if (result.success) cache.set('slot_availability', result, cacheKey);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API available-slots error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/appointments/confirm', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    const appointmentId = args.appointment_id || args.confirmation_number;
+    if (!appointmentId) return res.status(400).json({ success: false, error: 'appointment_id is required' });
+    const result = await BookingService.confirmAppointment(appointmentId, clinicId);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API confirm error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/appointments/reschedule', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    const appointmentId = args.appointment_id || args.confirmation_number;
+    const newDate = args.new_date || args.date;
+    const newTime = args.new_time || args.time;
+    if (!appointmentId || !newDate || !newTime) {
+      return res.status(400).json({ success: false, error: 'appointment_id, new_date and new_time are required' });
+    }
+    const result = await BookingService.rescheduleAppointment(appointmentId, newDate, newTime, args.reason, args.timezone, clinicId);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API reschedule error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/appointments/cancel', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    const appointmentId = args.appointment_id || args.confirmation_number;
+    if (!appointmentId) return res.status(400).json({ success: false, error: 'appointment_id is required' });
+    const result = await BookingService.cancelAppointment(appointmentId, args.reason, clinicId);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API cancel error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/appointments/search', async (req, res) => {
+  try {
+    const args = apiAppointmentArgs(req);
+    const clinicId = resolveClinicIdFromRequest(req, args);
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    const searchTerm = args.phone || args.email || args.patient_phone || args.patient_email;
+    if (!searchTerm) return res.status(400).json({ success: false, error: 'phone, email, patient_phone or patient_email is required' });
+    const result = await BookingService.searchAppointments(searchTerm, clinicId);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ API search error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -6610,7 +6756,13 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
     // Create claim ID
     const claimId = `claim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Prepare claim data
+    // Prepare claim data (proof_of_care_hash for Tiba Spec 5.3, 5.4)
+    const SettlementService = require('./services/settlement-service');
+    const proofOfCareHash = SettlementService.generateProofOfCare(
+      pdfText?.substring(0, 2000) || '',
+      { icd10: icd10Codes, cpt: cptCodes },
+      new Date().toISOString()
+    );
     const claimData = {
       id: claimId,
       appointment_id: null, // No appointment for PDF-based claims
@@ -6623,6 +6775,7 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
       copay_amount: latestEligibility?.copay_amount || 0,
       insurance_amount: latestEligibility?.allowed_amount || 0,
       status: 'draft', // Start as draft, can be submitted later
+      proof_of_care_hash: proofOfCareHash,
       response_data: JSON.stringify({
         coding: {
           ...coding,
@@ -8282,39 +8435,62 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
       }
     }
 
-    // Try to create Circle transfer if wallets exist (optional)
-    let transferId = null;
+    // Instant Settlement: Execute 3-way split (Insurer → Escrow → Provider + Revenue)
+    let settlementResult = null;
     let circleTransferId = null;
     const providerAccount = db.getCircleAccountByEntity('provider', 'default');
     const insurerAccount = db.getCircleAccountByEntity('insurer', claim.payer_id);
 
-    if (providerAccount && insurerAccount) {
+    if (providerAccount && insurerAccount && providerAccount.circle_wallet_id && insurerAccount.circle_wallet_id) {
       try {
-        const CircleService = require('./services/circle-service');
-        const transferResult = await CircleService.createTransfer({
-          fromWalletId: insurerAccount.circle_wallet_id,
-          toWalletId: providerAccount.circle_wallet_id,
-          amount: paymentAmount,
-          currency: 'USDC',
+        const InstantSettlementService = require('./services/instant-settlement-service');
+        
+        // Ensure platform wallets exist (create if missing)
+        await InstantSettlementService.ensurePlatformWallets();
+        
+        // Execute instant settlement with 3-way split
+        settlementResult = await InstantSettlementService.executeInstantSettlement({
           claimId: claimId,
-          description: `Payment for claim ${claimId}`
+          totalApproved: paymentAmount,
+          insurerWalletId: insurerAccount.circle_wallet_id,
+          providerWalletId: providerAccount.circle_wallet_id,
+          description: `Settlement for claim ${claimId}`
         });
 
-        if (transferResult.success) {
-          transferId = `transfer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          circleTransferId = transferResult.transferId;
-
-          db.createCircleTransfer({
-            id: transferId,
-            claim_id: claimId,
-            from_wallet_id: insurerAccount.circle_wallet_id,
-            to_wallet_id: providerAccount.circle_wallet_id,
-            amount: paymentAmount,
-            currency: 'USDC',
-            circle_transfer_id: transferResult.transferId,
-            status: transferResult.status || 'pending'
-          });
-          console.log(`💰 Circle transfer created: ${transferResult.transferId}`);
+        if (settlementResult.success) {
+          // Use the first transfer ID (insurer → escrow) as the primary transfer ID
+          circleTransferId = settlementResult.transfers[0]?.circleTransferId || null;
+          console.log(`💰 Instant settlement completed: ${settlementResult.transfers.length} transfers`);
+          console.log(`   Provider received: $${settlementResult.providerAmount.toFixed(2)}`);
+          console.log(`   Platform fee: $${settlementResult.revenueAmount.toFixed(2)} (${settlementResult.platformFeePercent}%)`);
+        } else {
+          console.warn(`⚠️  Instant settlement failed: ${settlementResult.error}`);
+          // Fallback: Try direct transfer if instant settlement fails
+          if (settlementResult.error?.includes('Platform escrow wallet not found')) {
+            console.log('ℹ️  Falling back to direct transfer (platform wallets not set up)');
+            const CircleService = require('./services/circle-service');
+            const fallbackResult = await CircleService.createTransfer({
+              fromWalletId: insurerAccount.circle_wallet_id,
+              toWalletId: providerAccount.circle_wallet_id,
+              amount: paymentAmount,
+              currency: 'USDC',
+              claimId: claimId,
+              description: `Payment for claim ${claimId} (fallback - direct transfer)`
+            });
+            if (fallbackResult.success) {
+              circleTransferId = fallbackResult.transferId;
+              db.createCircleTransfer({
+                id: `transfer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                claim_id: claimId,
+                from_wallet_id: insurerAccount.circle_wallet_id,
+                to_wallet_id: providerAccount.circle_wallet_id,
+                amount: paymentAmount,
+                currency: 'USDC',
+                circle_transfer_id: fallbackResult.transferId,
+                status: fallbackResult.status || 'pending'
+              });
+            }
+          }
         }
       } catch (error) {
         console.warn('⚠️  Circle transfer failed (continuing without it):', error.message);
@@ -8365,7 +8541,7 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
 
     console.log(`✅ Claim ${claimId} approved: Payment $${paymentAmount.toFixed(2)}, Deductible used: $${deductibleUsed.toFixed(2)}, Patient owes: $${(eobCalculation?.totals?.whatYouOwe || 0).toFixed(2)}`);
 
-    // Record insurance payment to related invoices so it shows in Payment History
+    // Record insurance payment to related invoices (split if instant settlement succeeded)
     if (planPaidAmount > 0) {
       const amountBilled = eobCalculation?.totals?.amountBilled || 0;
       const invoices = db.getInvoicesByClaim(claimId);
@@ -8374,15 +8550,37 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
         (inv) => amountBilled > 0 && inv.amount >= amountBilled * 0.99
       );
       if (target) {
-        db.addInvoicePayment({
-          invoice_id: target.id,
-          payment_date: new Date().toISOString().split('T')[0],
-          amount: planPaidAmount,
-          payment_method: 'insurance',
-          reference_number: `claim-${claimId}`,
-          notes: 'Insurance payment - claim approved'
-        });
-        console.log(`📋 Recorded insurance payment $${planPaidAmount.toFixed(2)} for invoice ${target.invoice_number}`);
+        if (settlementResult && settlementResult.success) {
+          // Record split payments: provider amount + platform fee
+          db.addInvoicePayment({
+            invoice_id: target.id,
+            payment_date: new Date().toISOString().split('T')[0],
+            amount: settlementResult.providerAmount,
+            payment_method: 'insurance',
+            reference_number: `claim-${claimId}`,
+            notes: `Insurance payment - claim approved (provider portion: $${settlementResult.providerAmount.toFixed(2)})`
+          });
+          db.addInvoicePayment({
+            invoice_id: target.id,
+            payment_date: new Date().toISOString().split('T')[0],
+            amount: settlementResult.revenueAmount,
+            payment_method: 'platform_fee',
+            reference_number: `claim-${claimId}-fee`,
+            notes: `Platform fee (${settlementResult.platformFeePercent}%): $${settlementResult.revenueAmount.toFixed(2)}`
+          });
+          console.log(`📋 Recorded split payments: Provider $${settlementResult.providerAmount.toFixed(2)} + Platform Fee $${settlementResult.revenueAmount.toFixed(2)}`);
+        } else {
+          // Fallback: single payment entry (direct transfer or no Circle)
+          db.addInvoicePayment({
+            invoice_id: target.id,
+            payment_date: new Date().toISOString().split('T')[0],
+            amount: planPaidAmount,
+            payment_method: 'insurance',
+            reference_number: `claim-${claimId}`,
+            notes: 'Insurance payment - claim approved'
+          });
+          console.log(`📋 Recorded insurance payment $${planPaidAmount.toFixed(2)} for invoice ${target.invoice_number}`);
+        }
       }
     }
 
@@ -8413,13 +8611,370 @@ app.post('/api/claims/:claimId/approve-payment', async (req, res) => {
         matchedRuleId: settlementEvaluation.matchedRuleId
       },
       proofOfCare: poc ? { verified: poc.verified, evidence: poc.evidence } : undefined,
-      settlementRoute: settlementRoute.route
+      settlementRoute: settlementRoute.route,
+      instantSettlement: settlementResult ? {
+        success: settlementResult.success,
+        providerAmount: settlementResult.providerAmount,
+        revenueAmount: settlementResult.revenueAmount,
+        platformFeePercent: settlementResult.platformFeePercent,
+        transfers: settlementResult.transfers,
+        message: settlementResult.message
+      } : undefined
     });
   } catch (error) {
     console.error('❌ Error approving claim payment:', error);
     res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+});
+
+/**
+ * Recover Stuck Escrow (Admin Endpoint)
+ * POST /api/admin/recover-stuck-escrow/:claimId
+ * 
+ * Manually trigger recovery for a stuck escrow settlement.
+ * Finds settlement attempt where Transfer 1 completed but Transfer 2/3 failed,
+ * then retries failed transfers using idempotency keys.
+ */
+app.post('/api/admin/recover-stuck-escrow/:claimId', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    
+    const EscrowRecoveryService = require('./services/escrow-recovery-service');
+    const result = await EscrowRecoveryService.recoverStuckEscrow(claimId);
+    
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Recovery failed',
+        recovered: result.recovered || [],
+        errors: result.errors || []
+      });
+    }
+    
+    res.json({
+      success: true,
+      claimId: claimId,
+      message: result.message,
+      recovered: result.recovered,
+      errors: result.errors
+    });
+  } catch (error) {
+    console.error('❌ Error recovering stuck escrow:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to recover stuck escrow'
+    });
+  }
+});
+
+/**
+ * Recover All Stuck Escrows (Admin/Scheduled Job Endpoint)
+ * POST /api/admin/recover-all-stuck-escrows
+ * 
+ * Finds all stuck escrows (Transfer 1 completed, Transfer 2 not completed, older than 1 hour)
+ * and attempts recovery for each.
+ * 
+ * Query params: ?olderThanHours=1 (default: 1)
+ */
+app.post('/api/admin/recover-all-stuck-escrows', async (req, res) => {
+  try {
+    const olderThanHours = parseFloat(req.query.olderThanHours || '1');
+    
+    const EscrowRecoveryService = require('./services/escrow-recovery-service');
+    const result = await EscrowRecoveryService.recoverAllStuckEscrows(olderThanHours);
+    
+    res.json({
+      success: true,
+      found: result.found,
+      recovered: result.recovered,
+      errors: result.errors,
+      message: `Found ${result.found} stuck escrows, recovered ${result.recovered}`
+    });
+  } catch (error) {
+    console.error('❌ Error recovering all stuck escrows:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to recover stuck escrows'
+    });
+  }
+});
+
+/**
+ * Task 45: Escrow timeout check and provider notification
+ * POST /api/admin/escrow-timeout-notify
+ * Call from cron when ESCROW_NOTIFY_ON_TIMEOUT=1
+ */
+app.post('/api/admin/escrow-timeout-notify', async (req, res) => {
+  try {
+    const EscrowOrchestrator = require('./services/escrow-orchestrator-service');
+    const result = await EscrowOrchestrator.checkEscrowTimeoutAndNotify(db);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('❌ Escrow timeout notify error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get Fee Schedule Freshness (Admin Endpoint)
+ * GET /api/admin/fee-schedules/freshness?payerId=BCBS
+ * 
+ * Returns freshness summary for a payer's fee schedule.
+ * Shows total rates, stale rates, oldest/newest update dates.
+ */
+app.get('/api/admin/fee-schedules/freshness', (req, res) => {
+  try {
+    const { payerId } = req.query;
+    
+    if (!payerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'payerId query parameter is required'
+      });
+    }
+    
+    const FeeScheduleService = require('./services/fee-schedule-service');
+    const freshness = FeeScheduleService.getFeeScheduleFreshness(payerId);
+    
+    res.json({
+      success: true,
+      ...freshness
+    });
+  } catch (error) {
+    console.error('❌ Error getting fee schedule freshness:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get fee schedule freshness'
+    });
+  }
+});
+
+/**
+ * Get Stale Fee Schedules (Admin Endpoint)
+ * GET /api/admin/fee-schedules/stale?payerId=BCBS&olderThanDays=90
+ * 
+ * Lists all stale fee schedule rates (older than threshold).
+ */
+app.get('/api/admin/fee-schedules/stale', (req, res) => {
+  try {
+    const { payerId, olderThanDays } = req.query;
+    const days = olderThanDays ? parseFloat(olderThanDays) : null;
+    
+    const FeeScheduleService = require('./services/fee-schedule-service');
+    const staleRates = FeeScheduleService.getStaleFeeSchedules(payerId || null, days);
+    
+    res.json({
+      success: true,
+      count: staleRates.length,
+      staleRates: staleRates.map(rate => ({
+        payer_id: rate.payer_id,
+        cpt_code: rate.cpt_code,
+        allowed_amount: rate.allowed_amount,
+        updated_at: rate.updated_at,
+        effective_date: rate.effective_date,
+        days_old: rate.updated_at ? Math.floor((Date.now() - new Date(rate.updated_at).getTime()) / (24 * 60 * 60 * 1000)) : null
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error getting stale fee schedules:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get stale fee schedules'
+    });
+  }
+});
+
+/**
+ * Mark Fee Schedule Refreshed (Admin Endpoint)
+ * POST /api/admin/fee-schedules/mark-refreshed
+ * 
+ * Updates updated_at timestamp for fee schedule rates after refresh.
+ * Body: { payerId: "BCBS", cptCodes: ["90837", "90834"] } (cptCodes optional)
+ */
+app.post('/api/admin/fee-schedules/mark-refreshed', (req, res) => {
+  try {
+    const { payerId, cptCodes } = req.body;
+    
+    if (!payerId) {
+      return res.status(400).json({
+        success: false,
+        error: 'payerId is required'
+      });
+    }
+    
+    const FeeScheduleService = require('./services/fee-schedule-service');
+    const updated = FeeScheduleService.markFeeScheduleRefreshed(payerId, cptCodes || []);
+    
+    res.json({
+      success: true,
+      payerId: payerId,
+      updated: updated,
+      message: `Marked ${updated} fee schedule rate(s) as refreshed`
+    });
+  } catch (error) {
+    console.error('❌ Error marking fee schedule refreshed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to mark fee schedule refreshed'
+    });
+  }
+});
+
+/**
+ * Simulate Stedi Approval (Testing Endpoint)
+ * POST /api/test/simulate-stedi-approval
+ * 
+ * This endpoint simulates Stedi's claim approval webhook.
+ * It updates the claim status to APPROVED and automatically triggers
+ * the instant settlement flow (3-way split: Insurer → Escrow → Provider + Revenue).
+ * 
+ * Body: { "claimId": "CLAIM-12345" }
+ */
+app.post('/api/test/simulate-stedi-approval', async (req, res) => {
+  try {
+    const { claimId } = req.body;
+
+    if (!claimId) {
+      return res.status(400).json({
+        success: false,
+        error: 'claimId is required'
+      });
+    }
+
+    // Debug: Check all claims to see what's in the database
+    console.log(`🔍 Looking for claim: ${claimId}`);
+    const allClaims = db.db.prepare('SELECT id, status, payment_status FROM insurance_claims LIMIT 10').all();
+    console.log(`📋 Found ${allClaims.length} claims in database:`, allClaims.map(c => c.id));
+    
+    // Also check if the exact claim ID exists (case-insensitive)
+    const exactMatch = db.db.prepare('SELECT id FROM insurance_claims WHERE id = ? COLLATE NOCASE').get(claimId);
+    console.log(`🔍 Exact match (case-insensitive):`, exactMatch);
+    
+    // Check database path - get the actual file path
+    try {
+      const dbInfo = db.db.prepare('PRAGMA database_list').all();
+      console.log(`📁 Database file(s):`, dbInfo);
+    } catch (e) {
+      console.log(`📁 Could not get database path:`, e.message);
+    }
+
+    // Get claim
+    const claim = db.getClaimById(claimId);
+    if (!claim) {
+      return res.status(404).json({
+        success: false,
+        error: `Claim ${claimId} not found`,
+        debug: {
+          totalClaims: allClaims.length,
+          sampleClaimIds: allClaims.map(c => c.id)
+        }
+      });
+    }
+
+    // For testing: allow resetting approved claims back to submitted
+    const isAlreadyApproved = claim.status === 'approved' && claim.payment_status === 'paid';
+    
+    if (isAlreadyApproved) {
+      console.log(`🔄 Resetting claim ${claimId} from approved to submitted for testing...`);
+      // Reset to submitted status for testing
+      db.updateInsuranceClaim(claimId, {
+        status: 'submitted',
+        payment_status: 'pending',
+        approved_at: null,
+        paid_at: null,
+        payment_amount: null,
+        circle_transfer_id: null
+      });
+      // Reload the claim
+      const resetClaim = db.getClaimById(claimId);
+      if (resetClaim) {
+        claim = resetClaim;
+      }
+    }
+
+    console.log(`🎯 Simulating Stedi approval for claim ${claimId}...`);
+    console.log(`   Current status: ${claim.status}, Payment status: ${claim.payment_status}`);
+
+    // Update claim status to approved (simulating Stedi webhook)
+    db.updateInsuranceClaim(claimId, {
+      status: 'approved',
+      approved_at: new Date().toISOString()
+    });
+
+    // Trigger the approve-payment endpoint via internal HTTP request
+    const http = require('http');
+    const port = process.env.PORT || 4000;
+    const host = 'localhost';
+    
+    return new Promise((resolve, reject) => {
+      const postData = JSON.stringify({});
+      const options = {
+        hostname: host,
+        port: port,
+        path: `/api/claims/${claimId}/approve-payment`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+          'Authorization': req.headers.authorization || ''
+        }
+      };
+
+      const approveReq = http.request(options, (approveRes) => {
+        let data = '';
+        approveRes.on('data', (chunk) => {
+          data += chunk;
+        });
+        approveRes.on('end', () => {
+          try {
+            const approveData = JSON.parse(data);
+            if (!approveData.success) {
+              return res.status(approveRes.statusCode || 500).json({
+                success: false,
+                error: `Failed to approve payment: ${approveData.error}`,
+                claimId: claimId
+              });
+            }
+
+            res.json({
+              success: true,
+              message: `Stedi approval simulated - Claim ${claimId} approved and instant settlement triggered`,
+              claimId: claimId,
+              approval: approveData,
+              simulation: {
+                source: 'Stedi (simulated)',
+                timestamp: new Date().toISOString()
+              }
+            });
+          } catch (parseError) {
+            res.status(500).json({
+              success: false,
+              error: `Failed to parse approve-payment response: ${parseError.message}`
+            });
+          }
+        });
+      });
+
+      approveReq.on('error', (error) => {
+        console.error('❌ Error calling approve-payment:', error);
+        res.status(500).json({
+          success: false,
+          error: `Failed to trigger approve-payment: ${error.message}`
+        });
+      });
+
+      approveReq.write(postData);
+      approveReq.end();
+    });
+
+  } catch (error) {
+    console.error('❌ Error simulating Stedi approval:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to simulate Stedi approval'
     });
   }
 });
@@ -8476,6 +9031,84 @@ app.post('/api/claims/:claimId/reject', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+/**
+ * Task 46: Provider coding review queue for held / low-confidence claims
+ * GET /api/admin/claims/review-queue?limit=50
+ */
+app.get('/api/admin/claims/review-queue', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const raw = db.getClaimsForReviewQueue ? db.getClaimsForReviewQueue({ limit }) : [];
+    const SettlementRulesService = require('./services/settlement-rules-service');
+    const claims = raw.map(c => {
+      let claimDetails = {};
+      try {
+        claimDetails = c.response_data ? (typeof c.response_data === 'string' ? JSON.parse(c.response_data) : c.response_data) : {};
+      } catch (_) {}
+      const codingConfidence = claimDetails?.coding?.codingConfidence ?? claimDetails?.pricing?.codingConfidence ?? null;
+      const evaluation = SettlementRulesService.evaluateSettlementRules({
+        claim: c,
+        claimDetails,
+        eobCalculation: {},
+        eligibility: {}
+      });
+      return {
+        ...c,
+        codingConfidence,
+        needsReview: evaluation.action === 'manual_review',
+        evaluationReason: evaluation.reason
+      };
+    }).filter(c => c.needsReview || (c.codingConfidence != null && parseFloat(c.codingConfidence) < 0.75));
+    res.json({ success: true, claims, count: claims.length });
+  } catch (error) {
+    console.error('❌ Review queue error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Task 47: Claim resubmission after rejection
+ * POST /api/admin/claims/:claimId/resubmit
+ */
+app.post('/api/admin/claims/:claimId/resubmit', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const claim = db.getClaimById(claimId);
+    if (!claim) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+    if (claim.status !== 'rejected') {
+      return res.status(400).json({
+        success: false,
+        error: `Claim must be rejected to resubmit. Current status: ${claim.status}`
+      });
+    }
+    db.updateInsuranceClaim(claimId, {
+      status: 'draft',
+      payment_status: 'pending',
+      response_data: (() => {
+        let rd = {};
+        try {
+          rd = claim.response_data ? (typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data) : {};
+        } catch (_) {}
+        delete rd.rejectedAt;
+        delete rd.rejectionReason;
+        rd.resubmittedAt = new Date().toISOString();
+        return JSON.stringify(rd);
+      })()
+    });
+    res.json({
+      success: true,
+      claimId,
+      status: 'draft',
+      message: 'Claim reset for resubmission. Call POST /voice/insurance/submit-claim with corrected data.'
+    });
+  } catch (error) {
+    console.error('❌ Resubmit error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -9616,6 +10249,83 @@ app.get('/api/admin/appointments/upcoming', async (req, res) => {
 });
 
 // Send video link via SMS to patient for telehealth appointment
+// Create appointment manually (for provider/admin UI)
+app.post('/api/admin/appointments/create', async (req, res) => {
+  try {
+    const {
+      patient_name,
+      patient_phone,
+      patient_email,
+      appointment_type,
+      date,
+      time,
+      provider,
+      notes,
+      timezone,
+      clinic_id,
+      customer_id
+    } = req.body;
+
+    if (!patient_name || !patient_phone || !date || !time) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: patient_name, patient_phone, date, and time are required'
+      });
+    }
+
+    let clinicId = clinic_id || resolveClinicIdFromRequest(req);
+    if (!clinicId && db.db) {
+      try {
+        const firstClinic = db.db.prepare('SELECT clinic_id FROM clinics LIMIT 1').get();
+        clinicId = firstClinic?.clinic_id || null;
+        if (!clinicId) {
+          clinicId = 'clinic-default';
+          try {
+            await db.createClinic({
+              clinic_id: clinicId,
+              name: 'Default Clinic',
+              slug: 'default',
+              phone_number: process.env.DEFAULT_CLINIC_PHONE || '+15550000000',
+              email: process.env.DEFAULT_CLINIC_EMAIL || 'clinic@doclittle.com'
+            });
+          } catch (e) {
+            if (!e.message?.includes('UNIQUE') && !e.message?.includes('duplicate')) throw e;
+            /* clinic already exists */
+          }
+        }
+      } catch (_) { /* clinics table may not exist */ }
+    }
+    if (!clinicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'clinic_id is required. Set DEFAULT_CLINIC_ID in .env or add a clinic in Admin.'
+      });
+    }
+
+    const result = await BookingService.createFutureAppointment({
+      patient_name,
+      patient_phone,
+      patient_email,
+      appointment_type: appointment_type || 'Mental Health Consultation',
+      date,
+      time,
+      provider: provider || 'DocLittle Mental Health Team',
+      notes: notes || '',
+      timezone: timezone || 'America/New_York',
+      clinic_id: clinicId,
+      customer_id: customer_id || null
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ Error creating appointment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 app.post('/api/admin/appointments/:id/send-video-link', async (req, res) => {
   try {
     const appointmentId = req.params.id;
@@ -9628,7 +10338,8 @@ app.post('/api/admin/appointments/:id/send-video-link', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Patient has no phone number on file' });
     }
     const baseUrl = process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || `https://${req.headers.host || 'doclittle.site'}`;
-    const videoUrl = `${baseUrl.replace(/\/$/, '')}/business/video-call.html?room=appt-${encodeURIComponent(appointmentId)}`;
+    const roomName = appointment.video_room_name || `appt-${appointmentId}`;
+    const videoUrl = `${baseUrl.replace(/\/$/, '')}/patients/video-call.html?room=${encodeURIComponent(roomName)}`;
     const message = `Your telehealth video visit: ${videoUrl}\n\nClick to join when it\'s time for your appointment.`;
     const result = await SMSService.sendSMS(phone, message);
     if (!result.success) {
@@ -10521,8 +11232,6 @@ app.get('/api/patient/profile', async (req, res) => {
 // Dashboard: Billing summary by patient (derived from appointments)
 app.get('/api/admin/billing', async (req, res) => {
   try {
-    const PRICE_PER_APPOINTMENT = 39.99; // cash price per appointment
-
     const appointments = db.getAllAppointments({});
 
     // Helper: start of current ISO week (Monday)
@@ -10567,9 +11276,13 @@ app.get('/api/admin/billing', async (req, res) => {
         record.week_appointments += 1;
       }
 
-      // Every appointment is billed as cash at the fixed price
-      record.total_amount = Number((record.total_appointments * PRICE_PER_APPOINTMENT).toFixed(2));
-      record.week_amount = Number((record.week_appointments * PRICE_PER_APPOINTMENT).toFixed(2));
+      // Estimated billed amount using visit_pricing (falls back to defaults if missing)
+      const { DEFAULT_FALLBACK } = require('./config/pricing-fallbacks');
+      const price = db.getEffectiveVisitPrice(appt.clinic_id || null, appt.appointment_type || 'General Consult')?.effective_price ?? DEFAULT_FALLBACK;
+      record.total_amount = Number((record.total_amount + price).toFixed(2));
+      if (apptDate && apptDate >= monday) {
+        record.week_amount = Number((record.week_amount + price).toFixed(2));
+      }
 
       if (!record.last_appointment_at || (apptDate && apptDate > new Date(record.last_appointment_at))) {
         record.last_appointment_at = apptDate ? apptDate.toISOString() : record.last_appointment_at;
@@ -10580,7 +11293,7 @@ app.get('/api/admin/billing', async (req, res) => {
 
     res.json({
       success: true,
-      price_per_appointment: PRICE_PER_APPOINTMENT,
+      pricing_source: 'visit_pricing',
       patients: results,
       count: results.length
     });
@@ -11160,6 +11873,31 @@ app.post('/webhook/stripe', async (req, res) => {
             console.log(`✅ Checkout ${checkoutId} marked as cancelled`);
           } catch (error) {
             console.error(`❌ Error updating cancelled checkout:`, error);
+          }
+        }
+        break;
+
+      case 'charge.refunded':
+        const charge = event.data.object;
+        console.log(`↩️  Charge ${charge.id} refunded`);
+        const paymentIntentId = charge.payment_intent;
+        if (paymentIntentId) {
+          try {
+            const refundAmount = (charge.amount_refunded || 0) / 100;
+            db.insertFinancialEvent({
+              event_type: 'refund',
+              actor_type: 'system',
+              actor_id: null,
+              amount: -refundAmount,
+              currency: (charge.currency || 'usd').toUpperCase(),
+              rail_type: 'stripe',
+              status: 'succeeded',
+              cause: 'charge_refunded',
+              metadata: { charge_id: charge.id, payment_intent_id: paymentIntentId }
+            });
+            console.log(`✅ Refund event recorded: $${refundAmount}`);
+          } catch (e) {
+            console.warn('⚠️  insertFinancialEvent for refund failed:', e.message);
           }
         }
         break;
@@ -12712,13 +13450,27 @@ const server = app.listen(PORT, HOST, () => {
 
 // Handle WebSocket upgrades for Retell LLM
 server.on('upgrade', (request, socket, head) => {
-  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+  const host = request.headers.host;
+  const url = request.url;
+  let pathname;
+
+  try {
+    pathname = new URL(url, `http://${host}`).pathname;
+  } catch (e) {
+    console.error('❌ WS upgrade URL parse error:', e.message, { url, host });
+    socket.destroy();
+    return;
+  }
+
+  console.log('🔌 WS upgrade requested', { url, host, pathname });
 
   if (pathname === '/webhook/retell/llm') {
     wss.handleUpgrade(request, socket, head, (ws) => {
+      console.log('✅ WS upgrade accepted for Retell LLM');
       wss.emit('connection', ws, request);
     });
   } else {
+    console.warn('⚠️ WS upgrade rejected: invalid path', { pathname });
     socket.destroy();
   }
 });

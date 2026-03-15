@@ -233,6 +233,71 @@ class InsuranceService {
         }
       }
 
+      // Eligibility Re-verification at Claim Submission
+      // Coverage can change between appointment time and claim submission
+      // Re-verify eligibility to prevent denials due to expired coverage
+      let eligibilityReverified = false;
+      let eligibilityWarning = null;
+      
+      if (claimData.patientId && claimData.memberId && claimData.payerId && claimData.serviceCode) {
+        try {
+          // Check for existing eligibility check
+          const existingChecks = db.getEligibilityChecksByPatient ? db.getEligibilityChecksByPatient(claimData.patientId) : [];
+          const relevantCheck = existingChecks.find(check => 
+            check.member_id === claimData.memberId && 
+            check.payer_id === claimData.payerId &&
+            check.service_code === claimData.serviceCode
+          );
+
+          // Grace period: eligibility valid for 30 days from check date (configurable)
+          const ELIGIBILITY_GRACE_DAYS = parseFloat(process.env.ELIGIBILITY_GRACE_DAYS || '30');
+          const needsRecheck = !relevantCheck || 
+            (relevantCheck.created_at && 
+             new Date(relevantCheck.created_at) < new Date(Date.now() - ELIGIBILITY_GRACE_DAYS * 24 * 60 * 60 * 1000));
+
+          if (needsRecheck) {
+            console.log(`🔄 Re-verifying eligibility at claim submission (${relevantCheck ? 'expired' : 'not found'})...`);
+            
+            const eligibilityData = {
+              patientId: claimData.patientId,
+              patientName: claimData.patientName || 'Patient',
+              dateOfBirth: claimData.dateOfBirth || '1990-01-01',
+              memberId: claimData.memberId,
+              payerId: claimData.payerId,
+              serviceCode: claimData.serviceCode,
+              dateOfService: claimData.dateOfService
+            };
+
+            const eligibilityResult = await this.checkEligibility(eligibilityData);
+            eligibilityReverified = true;
+
+            if (!eligibilityResult.eligible) {
+              // Warn but allow submission - some payers allow retroactive eligibility
+              eligibilityWarning = {
+                message: `Eligibility re-verification failed: ${eligibilityResult.message || 'Not eligible'}`,
+                eligible: false,
+                action: 'claim_submission_allowed',
+                reason: 'Some payers allow retroactive eligibility or coverage may be restored'
+              };
+              console.warn(`⚠️  Eligibility re-verification failed - allowing claim submission with warning`);
+              console.warn(`   Reason: ${eligibilityWarning.reason}`);
+            } else {
+              console.log(`✅ Eligibility re-verified: Eligible (copay: $${eligibilityResult.copay || 0})`);
+            }
+          } else {
+            console.log(`✅ Using existing eligibility check (still valid, checked ${ELIGIBILITY_GRACE_DAYS} days ago)`);
+          }
+        } catch (eligError) {
+          // Don't block claim submission if eligibility re-check fails
+          console.warn(`⚠️  Eligibility re-verification error (continuing with claim submission): ${eligError.message}`);
+          eligibilityWarning = {
+            message: `Eligibility re-verification failed: ${eligError.message}`,
+            action: 'claim_submission_allowed',
+            reason: 'Eligibility check error - claim submission proceeding'
+          };
+        }
+      }
+
       // Build X12 837 claim
       const x12Claim = this._buildClaimRequest(claimData);
 
@@ -277,7 +342,16 @@ class InsuranceService {
         idempotency_key: idemKey || null,
         blockchain_proof: claimData.blockchainProof || null,
         submitted_at: new Date().toISOString(),
-        response_data: JSON.stringify(claimResponse)
+        response_data: JSON.stringify(claimResponse),
+        provider_npi: claimData.providerNpi || null,
+        proof_of_care_hash: (() => {
+          try {
+            const SettlementService = require('./settlement-service');
+            const notes = claimData.clinicalNote || claimData.encounterNotes || '';
+            const codes = { icd10: claimData.diagnosisCode, cpt: claimData.serviceCode };
+            return SettlementService.generateProofOfCare(notes, codes, new Date().toISOString());
+          } catch (_) { return null; }
+        })()
       };
 
       db.createInsuranceClaim(claimRecord);
@@ -327,6 +401,12 @@ class InsuranceService {
         result.settled = false;
         result.manualReview = true;
         result.stediFallback = true;
+      }
+      if (eligibilityReverified) {
+        result.eligibilityReverified = true;
+      }
+      if (eligibilityWarning) {
+        result.eligibilityWarning = eligibilityWarning;
       }
       return result;
 

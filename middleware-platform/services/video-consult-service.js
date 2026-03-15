@@ -10,16 +10,61 @@ const MAX_FRAMES = parseInt(process.env.VIDEO_CONSULT_MAX_FRAMES_PER_SESSION || 
 const ENABLE_VISION = process.env.VIDEO_CONSULT_ENABLE_VISION === 'true' || process.env.VIDEO_CONSULT_ENABLE_VISION === '1';
 
 const liveTranscripts = new Map();
-const roomParticipants = new Map(); // room_id -> Set of participant_identity
+const roomParticipants = new Map();
+const roomRiskSeenRules = new Map(); // room_id -> Set of rule_id (idempotency)
 
+/**
+ * Append a live transcript event for a room.
+ *
+ * Normalizes different payload shapes from agents into a unified structure:
+ * {
+ *   text,          // string
+ *   speaker,       // 'patient' | 'provider' | 'system' | 'unknown'
+ *   timestamp,     // ISO string
+ *   source,        // 'agent_stt' | 'chat' | 'note' | 'manual' | 'unknown'
+ *   participant_identity, // LiveKit identity when available
+ *   raw            // original payload for debugging
+ * }
+ */
 function appendLiveTranscript(roomId, payload) {
   const arr = liveTranscripts.get(roomId) || [];
-  arr.push({
-    text: typeof payload === 'string' ? payload : (payload?.text || payload?.content || ''),
+  const now = new Date().toISOString();
+  const isString = typeof payload === 'string';
+  const normalized = {
+    text: isString ? payload : (payload?.text || payload?.content || ''),
     speaker: payload?.speaker || 'unknown',
-    timestamp: payload?.timestamp || new Date().toISOString()
-  });
+    timestamp: payload?.timestamp || now,
+    source: payload?.source || (payload?.event_source || 'agent_stt'),
+    participant_identity: payload?.participant_identity || null,
+    raw: isString ? undefined : payload
+  };
+  arr.push(normalized);
   liveTranscripts.set(roomId, arr);
+  
+  // Incremental persistence to database
+  try {
+    const db = require('../database');
+    // Resolve appointment_id from room_id if it's appt-xxx format
+    let appointmentId = payload?.appointment_id || null;
+    if (!appointmentId && roomId && roomId.startsWith('appt-')) {
+      const aptId = roomId.replace(/^appt-/, '');
+      try {
+        const apt = db.getAppointment(aptId);
+        if (apt) appointmentId = apt.id;
+      } catch (_) {}
+    }
+    db.insertVideoConsultTranscript(roomId, {
+      appointment_id: appointmentId,
+      participant_identity: normalized.participant_identity,
+      speaker: normalized.speaker,
+      text: normalized.text,
+      timestamp: normalized.timestamp,
+      source: normalized.source
+    });
+  } catch (e) {
+    console.warn('⚠️  Failed to persist transcript incrementally:', e.message);
+  }
+  
   return arr;
 }
 
@@ -62,6 +107,17 @@ function shouldProcessFrameForParticipant(roomId, framePayload) {
 
 function clearRoomParticipants(roomId) {
   roomParticipants.delete(roomId);
+  roomRiskSeenRules.delete(roomId);
+}
+
+function getRiskSeenRules(roomId) {
+  if (!roomRiskSeenRules.has(roomId)) roomRiskSeenRules.set(roomId, new Set());
+  return roomRiskSeenRules.get(roomId);
+}
+
+function markRiskSeen(roomId, ruleIds) {
+  const set = getRiskSeenRules(roomId);
+  (ruleIds || []).forEach((id) => set.add(id));
 }
 
 /**
@@ -114,14 +170,24 @@ function endSession(roomId, metadata = null) {
  * @returns {Promise<{session, transcript, findings, status}>}
  */
 async function getSessionState(roomId) {
-  const session = db.getVideoConsultSession(roomId);
+  let session = null;
+  try {
+    session = db.getVideoConsultSession(roomId);
+  } catch (e) {
+    if (!e.message?.includes('no such table')) console.warn('[video-consult] getSessionState:', e.message);
+  }
   const meta = session?.metadata || {};
   const transcript = liveTranscripts.get(roomId) || meta.audio_transcript || [];
+  const rag = meta.rag_context;
+  const suggested_codes = rag
+    ? { icd10: rag.icd10 || [], cpt: rag.cpt || [], hcpcs: rag.hcpcs || [] }
+    : null;
   return {
     session: session || null,
     transcript,
     findings: meta.visual_findings || [],
-    status: session?.session_status || 'unknown'
+    status: session?.session_status || 'unknown',
+    ...(suggested_codes && { suggested_codes })
   };
 }
 
@@ -156,6 +222,8 @@ module.exports = {
   clearRoomParticipants,
   canProcessFrame,
   logAiDecision,
+  getRiskSeenRules,
+  markRiskSeen,
   ENABLE_VISION,
   MAX_FRAMES
 };

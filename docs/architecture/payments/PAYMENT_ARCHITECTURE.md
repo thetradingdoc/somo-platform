@@ -25,8 +25,8 @@
 **Current Status**:
 - ✅ **Link-based payment** (working) - Email verification → Payment page
 - ❌ **Direct Stripe** (TODO) - Direct payment intent
-- ❌ **Mastercard Agent Pay** (TODO) - Voice commerce integration
-- ❌ **Visa Agent Toolkit** (TODO) - Voice commerce integration
+- 🔄 **Mastercard Agent Pay** (Implemented – requires credentials) - Voice commerce integration
+- 🔄 **Visa Agent Toolkit** (Implemented – requires credentials) - Voice commerce integration
 
 **These are for**:
 - Patient pays for appointments ($39.99)
@@ -84,56 +84,41 @@ static async _handleStripePayment(checkout, merchant, paymentRequest) {
 
 ---
 
-### TODO 2: Mastercard Agent Pay
+### Mastercard Agent Pay ✅ (Implemented)
 
 **What it does**: Voice commerce payment protocol from Mastercard
 
-**Requirements**:
-- Mastercard Agent Pay API credentials
-- Integration with Mastercard's voice commerce SDK
-- Mandate verification
+**Implementation** (in `payment-orchestrator.js` + `mastercard-agent-pay-service.js`):
+- `_handleMastercardPayment`: mandate verification → authorization → payment
+- Fallback to link payment when not configured or mandate missing
+- Env: `MASTERCARD_AGENT_PAY_API_URL`, `MASTERCARD_AGENT_PAY_API_KEY`, `MASTERCARD_AGENT_PAY_MERCHANT_ID`
 
-**Implementation**:
-```javascript
-static async _handleMastercardPayment(checkout, merchant, paymentRequest) {
-    // 1. Verify Mastercard mandate
-    // 2. Create payment authorization
-    // 3. Process payment via Mastercard API
-    // 4. Return payment result
-}
-```
-
-**When to use**: Voice agent purchases via Mastercard
+**Usage**: Voice agent calls `create_checkout` with `payment_method: "mastercard"` and `mandate_id`
 
 ---
 
-### TODO 3: Visa Agent Toolkit
+### Visa Agent Toolkit ✅ (Implemented)
 
 **What it does**: Voice commerce payment protocol from Visa
 
-**Requirements**:
-- Visa Agent Toolkit API credentials
-- Integration with Visa's voice commerce SDK
-- Mandate verification
+**Implementation** (in `payment-orchestrator.js` + `visa-agent-toolkit-service.js`):
+- `_handleVisaPayment`: mandate verification → authorization → payment
+- Fallback to link payment when not configured or mandate missing
+- Env: `VISA_AGENT_TOOLKIT_API_URL`, `VISA_AGENT_TOOLKIT_API_KEY`, `VISA_AGENT_TOOLKIT_MERCHANT_ID`
 
-**Implementation**:
-```javascript
-static async _handleVisaPayment(checkout, merchant, paymentRequest) {
-    // 1. Verify Visa mandate
-    // 2. Create payment authorization
-    // 3. Process payment via Visa API
-    // 4. Return payment result
-}
-```
-
-**When to use**: Voice agent purchases via Visa
+**Usage**: Voice agent calls `create_checkout` with `payment_method: "visa"` and `mandate_id`
 
 ---
 
 ## Summary
 
 **Circle API Wallets** = ✅ Done (for insurance claims)
-**Payment Methods** = Partially done (link-based works, others are TODOs)
+**Payment Methods** = Link ✅, Stripe ✅, Mastercard 🔄, Visa 🔄
 
-The TODOs are for **enhancing** the appointment/product payment flow, not replacing Circle.
+### Shared / Infrastructure (4.x)
+
+- **4.1 Payment method selection:** `PAYMENT_METHODS_ALLOWED` env; `GET /api/payment/methods`
+- **4.2 Retell function:** `get_available_payment_methods` – returns configured methods for voice
+- **4.3 Documentation:** See [PAYMENT_ENV_AND_FLOWS.md](./PAYMENT_ENV_AND_FLOWS.md) for env vars and flow diagrams
+- **4.4 Security:** `payment-security.js` – log sanitization, credential checks, PCI scope
 

@@ -13,6 +13,14 @@ const router = express.Router();
 // For now, we'll simulate payment processing
 
 /**
+ * Task 32, 33: Payment success page (Stripe 3DS redirect target)
+ * Serves success.html with appointment context and links to appointments
+ */
+router.get('/success', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/payment/success.html'));
+});
+
+/**
  * Serve payment page
  * GET /payment/:token
  */
@@ -24,7 +32,7 @@ router.get('/:token', (req, res) => {
  * Get checkout details by token
  * GET /api/payment/checkout/:token
  */
-router.get('/checkout/:token', (req, res) => {
+router.get('/checkout/:token', async (req, res) => {
     try {
         const { token } = req.params;
         const result = PaymentService.getCheckoutByToken(token);
@@ -33,9 +41,22 @@ router.get('/checkout/:token', (req, res) => {
             return res.status(400).json(result);
         }
 
+        let checkout = result.checkout;
+        const requires_verification = result.requires_verification;
+        const identity_verified = result.identity_verified;
+        if (checkout.appointment_id) {
+            const db = require('../database');
+            const appt = db.getAppointment ? await db.getAppointment(checkout.appointment_id) : null;
+            if (appt) {
+                checkout = { ...checkout, appointment_date: appt.date, appointment_time: appt.time, appointment_type: appt.appointment_type || checkout.product_name };
+            }
+        }
+
         res.json({
             success: true,
-            checkout: result.checkout,
+            checkout,
+            requires_verification: !!requires_verification,
+            identity_verified: !!identity_verified,
             stripe_publishable_key: PaymentService.getStripePublishableKey()
         });
 
@@ -46,6 +67,85 @@ router.get('/checkout/:token', (req, res) => {
             error: error.message
         });
     }
+});
+
+/**
+ * Task 53: Verify 6-digit code before payment (web payment page)
+ * POST /api/payment/verify-code
+ */
+router.post('/verify-code', async (req, res) => {
+  try {
+    const { payment_token, verification_code } = req.body;
+    const token = payment_token || req.body.token;
+    const code = verification_code || req.body.code;
+
+    if (!token || !code) {
+      return res.status(400).json({ success: false, error: 'payment_token and verification_code are required' });
+    }
+
+    const db = require('../database');
+    const tokenRecord = db.getPaymentToken(token);
+    if (!tokenRecord) {
+      return res.status(404).json({ success: false, error: 'Invalid payment link' });
+    }
+
+    if (tokenRecord.verification_code_expires) {
+      const exp = new Date(tokenRecord.verification_code_expires);
+      if (new Date() > exp) {
+        return res.status(400).json({ success: false, error: 'Verification code expired' });
+      }
+    }
+
+    if ((tokenRecord.verification_code || '').trim() !== String(code).trim()) {
+      return res.status(400).json({ success: false, error: 'Invalid verification code' });
+    }
+
+    db.updatePaymentToken(token, { status: 'verified', identity_verified_at: new Date().toISOString() });
+
+    res.json({ success: true, message: 'Identity verified. You can now complete payment.' });
+  } catch (error) {
+    console.error('Verify code error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get available payment methods (4.1)
+ * GET /api/payment/methods
+ * Query: merchant_id (optional)
+ */
+router.get('/methods', (req, res) => {
+  try {
+    const PaymentMethodConfig = require('../services/payment-method-config');
+    const merchantId = req.query.merchant_id || null;
+    const { methods, details } = PaymentMethodConfig.getAvailablePaymentMethods(merchantId);
+    res.json({ success: true, payment_methods: methods, details });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Create Stripe Payment Intent only (Direct Stripe - no confirmation).
+ * Returns client_secret for client-side Stripe.js confirmation.
+ * POST /api/payment/create-intent
+ */
+router.post('/create-intent', async (req, res) => {
+  try {
+    const { checkout_id, amount, merchant_id } = req.body;
+    if (!checkout_id) {
+      return res.status(400).json({ success: false, error: 'checkout_id is required' });
+    }
+    const PaymentOrchestrator = require('../services/payment-orchestrator');
+    const result = await PaymentOrchestrator.createStripePaymentIntent(checkout_id, amount, merchant_id);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    console.error('Create intent error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 /**
@@ -71,6 +171,14 @@ router.post('/process', async (req, res) => {
         if (!checkoutResult.success) {
             return res.status(400).json(checkoutResult);
         }
+        // Task 53: Reject payment until identity verified
+        if (checkoutResult.requires_verification && !checkoutResult.identity_verified) {
+            return res.status(403).json({
+                success: false,
+                error: 'Identity verification required. Enter the 6-digit code from your email to continue.',
+                requires_verification: true
+            });
+        }
         const claimOpType = 'payment_process';
         const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
         if (cached) {
@@ -85,7 +193,7 @@ router.post('/process', async (req, res) => {
             if (c2) return res.json({ ...c2.result, idempotent: true });
         }
 
-        // SECURITY: Validate amount matches checkout amount (prevent tampering)
+        // Task 28: Amount revalidation - always use server-side checkout amount, never client
         const checkoutAmount = parseFloat(checkoutResult.checkout.amount);
         const requestAmount = parseFloat(amount);
         const amountDifference = Math.abs(checkoutAmount - requestAmount);
@@ -124,10 +232,9 @@ router.post('/process', async (req, res) => {
         }
 
         try {
-            // Create and confirm Stripe Payment Intent
-            // Use checkout amount (already validated) and convert to cents
+            const { withRetry } = require('../utils/retry');
             const amountInCents = Math.round(checkoutAmount * 100);
-            const paymentIntent = await stripe.paymentIntents.create({
+            const paymentIntent = await withRetry(() => stripe.paymentIntents.create({
                 amount: amountInCents, // Convert dollars to cents
                 currency: currency || 'usd',
                 payment_method: payment_method_id,
@@ -139,7 +246,7 @@ router.post('/process', async (req, res) => {
                     customer_email: checkoutResult.checkout.customer_email || '',
                     customer_phone: checkoutResult.checkout.customer_phone || ''
                 }
-            });
+            }), { maxAttempts: 3 });
 
             console.log('✅ Stripe Payment Intent created:', paymentIntent.id);
             console.log('   Status:', paymentIntent.status);
@@ -172,6 +279,19 @@ router.post('/process', async (req, res) => {
                         success: false,
                         error: processResult.error || 'Failed to process payment'
                     });
+                }
+
+                // Task 11, 12, 15, 16: Financial audit, ledger, receipt (unified with /process-payment)
+                const PaymentProcessorService = require('../services/payment-processor-service');
+                try {
+                  await PaymentProcessorService.completePaymentSuccess({
+                    checkout: checkoutResult.checkout,
+                    amount: checkoutAmount,
+                    paymentMethod: 'stripe',
+                    paymentIntentId: paymentIntent.id
+                  });
+                } catch (e) {
+                  console.warn('⚠️  completePaymentSuccess failed:', e.message);
                 }
 
                 console.log('✅ Payment processed successfully');
@@ -214,6 +334,193 @@ router.post('/process', async (req, res) => {
             error: error.message
         });
     }
+});
+
+/**
+ * Task 18: Cancel payment token (invalidates link before use)
+ * POST /api/payment/token/cancel
+ * Body: { payment_token }
+ */
+router.post('/token/cancel', (req, res) => {
+  try {
+    const { payment_token } = req.body;
+    if (!payment_token) {
+      return res.status(400).json({ success: false, error: 'payment_token is required' });
+    }
+    const db = require('../database');
+    const result = db.cancelPaymentToken ? db.cancelPaymentToken(payment_token) : { success: false, error: 'Not supported' };
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    res.json({ success: true, message: 'Payment link cancelled' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/**
+ * Task 15: Capture authorized Payment Intent (e.g. when visit session starts)
+ * POST /api/payment/capture
+ * Body: { payment_intent_id }
+ */
+router.post('/capture', async (req, res) => {
+  try {
+    const { payment_intent_id } = req.body;
+    if (!payment_intent_id) {
+      return res.status(400).json({ success: false, error: 'payment_intent_id is required' });
+    }
+    const stripeConfig = require('../utils/stripe-config');
+    let stripe;
+    try {
+      stripe = stripeConfig.initializeStripe();
+    } catch (_) {
+      return res.status(503).json({ success: false, error: 'Stripe not configured' });
+    }
+    const pi = await stripe.paymentIntents.capture(payment_intent_id);
+    res.json({
+      success: true,
+      payment_intent_id: pi.id,
+      status: pi.status
+    });
+  } catch (error) {
+    console.error('Capture error:', error.message);
+    res.status(400).json({
+      success: false,
+      error: error.message,
+      stripe_error_type: error.type,
+      stripe_error_code: error.code
+    });
+  }
+});
+
+/**
+ * Task 17/22: Refund API for cancellations, no-shows, overcharges, partial refunds
+ * POST /api/payment/refund
+ * Body: { checkout_id?, payment_intent_id?, amount?, reason }
+ */
+router.post('/refund', async (req, res) => {
+  try {
+    const { checkout_id, payment_intent_id, amount, reason = 'refund' } = req.body;
+    const db = require('../database');
+
+    let checkout = null;
+    let piId = payment_intent_id;
+
+    if (checkout_id) {
+      checkout = await db.getVoiceCheckout(checkout_id);
+      if (!checkout) {
+        return res.status(404).json({ success: false, error: 'Checkout not found' });
+      }
+      piId = piId || checkout.payment_intent_id;
+    }
+    if (!piId) {
+      return res.status(400).json({ success: false, error: 'payment_intent_id or checkout_id with completed payment required' });
+    }
+
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+    const refundCents = amount != null ? Math.round(parseFloat(amount) * 100) : undefined;
+    const refundOpts = {
+      payment_intent: piId,
+      reason: ['requested_by_customer', 'duplicate', 'fraudulent'].includes(reason) ? reason : 'requested_by_customer'
+    };
+    if (refundCents != null && refundCents > 0) refundOpts.amount = refundCents;
+
+    const refund = await stripe.refunds.create(refundOpts);
+    const amtRefunded = (refund.amount || 0) / 100;
+
+    if (checkout) {
+      try {
+        const PaymentProcessorService = require('../services/payment-processor-service');
+        await PaymentProcessorService.recordRefundEvent({ checkout, amount: amtRefunded, refundId: refund.id });
+      } catch (e) {
+        console.warn('Record refund event failed:', e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      refund_id: refund.id,
+      amount_refunded: amtRefunded,
+      status: refund.status
+    });
+  } catch (error) {
+    console.error('Refund error:', error.message);
+    res.status(400).json({
+      success: false,
+      error: error.message,
+      stripe_error_code: error.code
+    });
+  }
+});
+
+/**
+ * Task 15: Cancel authorized Payment Intent (e.g. no-show – release hold)
+ * POST /api/payment/cancel
+ * Body: { payment_intent_id }
+ */
+router.post('/cancel', async (req, res) => {
+  try {
+    const { payment_intent_id } = req.body;
+    if (!payment_intent_id) {
+      return res.status(400).json({ success: false, error: 'payment_intent_id is required' });
+    }
+    const stripeConfig = require('../utils/stripe-config');
+    let stripe;
+    try {
+      stripe = stripeConfig.initializeStripe();
+    } catch (_) {
+      return res.status(503).json({ success: false, error: 'Stripe not configured' });
+    }
+    const pi = await stripe.paymentIntents.cancel(payment_intent_id);
+    res.json({
+      success: true,
+      payment_intent_id: pi.id,
+      status: pi.status
+    });
+  } catch (error) {
+    console.error('Cancel error:', error.message);
+    res.status(400).json({
+      success: false,
+      error: error.message,
+      stripe_error_type: error.type,
+      stripe_error_code: error.code
+    });
+  }
+});
+
+/**
+ * Task 44: Circle payment status polling
+ * POST /api/payment/circle/poll-status
+ * Polls Circle API for pending transfers and updates DB.
+ */
+router.post('/circle/poll-status', async (req, res) => {
+  try {
+    const db = require('../database');
+    const CircleService = require('../services/circle-service');
+    const pending = db.getCircleTransfersPending ? db.getCircleTransfersPending(20) : [];
+    const results = { updated: 0, failed: 0 };
+    for (const t of pending) {
+      const circleId = t.circle_transfer_id;
+      if (!circleId) continue;
+      try {
+        const statusResult = CircleService.getTransferStatus ? await CircleService.getTransferStatus(circleId) : null;
+        if (!statusResult || !statusResult.success) continue;
+        const status = (statusResult.status || '').toLowerCase();
+        if (status === 'complete' || status === 'completed' || status === 'settled') {
+          db.updateCircleTransfer(t.id, { status: 'completed', completed_at: new Date().toISOString() });
+          results.updated++;
+        } else if (status === 'failed') {
+          db.updateCircleTransfer(t.id, { status: 'failed', error_message: 'Polled: transfer failed' });
+          results.updated++;
+        }
+      } catch (_) {
+        results.failed++;
+      }
+    }
+    res.json({ success: true, ...results });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 module.exports = router;

@@ -8,7 +8,7 @@
 const db = require('../database');
 const FHIRService = require('./fhir-service');
 const tokenBudget = require('../utils/token-budget');
-const { retrieveFromColabRAG } = require('./layer2-rag/remote-rag-client');
+const knowledgeService = require('./knowledge-service');
 const reviewTaskService = require('./review-task-service');
 
 const SLOW_NODE_MS = parseInt(process.env.VIDEO_CONSULT_SLOW_NODE_MS || '5000', 10);
@@ -71,8 +71,11 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     event_type: Annotation({ reducer: (a, b) => b ?? a }),
     audio_transcript: Annotation({
       reducer: (prev, next) => {
+        // Normalize into an array of transcript events
         const p = Array.isArray(prev) ? prev : [];
-        const n = Array.isArray(next) ? next : [next].filter(Boolean);
+        const n = Array.isArray(next)
+          ? next
+          : [next].filter(Boolean);
         return [...p, ...n];
       }
     }),
@@ -107,7 +110,19 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     };
   }
 
+  // Dual-source RAG: Pinecone (clinical context / optional codes) + local knowledge-service (72K ICD-10, CPT). Codes are merged and deduped; local is primary when Pinecone has no code metadata.
   async function retrieveContextNode(state) {
+    const emptyRagContext = () => ({
+      icd10: [],
+      cpt: [],
+      hcpcs: [],
+      merged_codes: { icd10: [], cpt: [], hcpcs: [] },
+      remote_knowledge: { icd10: [], cpt: [], hcpcs: [] },
+      local_knowledge: { icd10: [], cpt: [], hcpcs: [] },
+      query: '',
+      specialty: 'general'
+    });
+
     try {
       const transcript = state.audio_transcript || [];
       const text = transcript
@@ -115,29 +130,62 @@ async function processEvent(roomId, eventType, payload, options = {}) {
         .filter(Boolean)
         .join(' ')
         .slice(0, 2000);
+
       if (!text.trim()) {
-        return { rag_context: { icd10: [], cpt: [], hcpcs: [] }, current_stage: 'RAG_SKIPPED_NO_TEXT' };
+        return { rag_context: emptyRagContext(), current_stage: 'RAG_SKIPPED_NO_TEXT' };
       }
-      const result = await retrieveFromColabRAG({
-        query: text,
-        specialty: state.perceptual_state?.specialty_tag || 'general',
-        top_k: 10
+
+      const specialty = state.perceptual_state?.specialty_tag || 'general';
+      const queryPreview = text.slice(0, 120);
+      console.log(`[video-consult][RAG] Querying (${specialty}): "${queryPreview}${text.length > 120 ? '…' : ''}"`);
+
+      // §6 Optional: for non-English consults, translate text here (e.g. perception extractAndNormalizeText) before RAG
+      const dual = await knowledgeService.getCodeCandidatesDualSource(text, {
+        specialty,
+        useSemantic: true,
+        maxIcd10: 20,
+        maxCpt: 15,
+        maxHcpcs: 10
       });
-      if (!result) {
-        return { rag_context: { icd10: [], cpt: [], hcpcs: [] }, current_stage: 'RAG_FALLBACK_EMPTY' };
-      }
+
+      const remote = dual.remote_knowledge || { icd10: [], cpt: [], hcpcs: [] };
+      const local = dual.local_knowledge || { icd10: [], cpt: [], hcpcs: [] };
+      const merged = dual.merged_codes || { icd10: dual.icd10 || [], cpt: dual.cpt || [], hcpcs: dual.hcpcs || [] };
+
+      const mergedCount = (merged.icd10?.length || 0) + (merged.cpt?.length || 0) + (merged.hcpcs?.length || 0);
+      const ragCoverage = Math.min(mergedCount / 15, 1.0);
+      const remoteCount = (remote.icd10 || []).length + (remote.cpt || []).length + (remote.hcpcs || []).length;
+      const localCount = (local.icd10 || []).length + (local.cpt || []).length + (local.hcpcs || []).length;
+
+      console.log(`[video-consult][RAG] Remote: ${(remote.icd10 || []).length} ICD-10, ${(remote.cpt || []).length} CPT; Local: ${(local.icd10 || []).length} ICD-10, ${(local.cpt || []).length} CPT; Merged (validated): ${mergedCount}`);
+
+      // §3 Observability: pipeline summary in node output so LangSmith trace shows remote/local/merged counts
       return {
         rag_context: {
-          icd10: result.icd10 || [],
-          cpt: result.cpt || [],
-          hcpcs: result.hcpcs || []
+          remote_knowledge: remote,
+          local_knowledge: local,
+          merged_codes: merged,
+          icd10: merged.icd10,
+          cpt: merged.cpt,
+          hcpcs: merged.hcpcs,
+          query: text,
+          specialty,
+          invalid_codes: dual.invalid_codes
         },
-        current_stage: 'RAG_COMPLETE'
+        current_stage: mergedCount > 0 ? 'RAG_COMPLETE' : 'RAG_FALLBACK_EMPTY',
+        confidence_scores: { rag_coverage: ragCoverage },
+        processing_metadata: {
+          colab_success: remote.metadata?.source !== 'remote_error',
+          local_success: local.metadata?.source !== 'local_error',
+          remote_count: remoteCount,
+          local_count: localCount,
+          merged_count: mergedCount
+        }
       };
     } catch (err) {
       console.warn('[video-consult-graph] retrieveContextNode error (continuing without RAG):', err.message);
       return {
-        rag_context: { icd10: [], cpt: [], hcpcs: [] },
+        rag_context: emptyRagContext(),
         current_stage: 'RAG_ERROR_FALLBACK',
         error: { message: err.message, recoverable: true }
       };
@@ -154,50 +202,74 @@ async function processEvent(roomId, eventType, payload, options = {}) {
         };
       }
       const transcript = state.audio_transcript || [];
-      const messages = transcript.map(t => ({
-        text: typeof t === 'string' ? t : (t.text || t.content || ''),
-        speaker: t.speaker || 'unknown',
-        timestamp: t.timestamp || new Date().toISOString()
-      })).filter(m => m.text);
+      const messages = transcript
+        .map(t => ({
+          text: typeof t === 'string' ? t : (t.text || t.content || ''),
+          speaker: t.speaker || 'unknown',
+          timestamp: t.timestamp || new Date().toISOString(),
+          source: t.source || 'agent_stt'
+        }))
+        .filter(m => m.text);
 
       if (messages.length === 0) {
         return { current_stage: 'FHIR_SKIPPED_NO_TRANSCRIPT', error: null };
       }
 
-      let patientId = state.patient_id || 'unknown';
+      let patientId = state.patient_id;
       let encounterId = state.encounter_id || state.room_id;
       const patientName = state.patient_name || options.patientName || 'Video Consult Patient';
 
-      // Ensure patient exists in FHIR (required for fhir_communications FK)
-      const patientExists = patientId && patientId !== 'unknown' && db.getFHIRPatient?.(patientId);
-      if (!patientExists) {
+      // Ensure patient exists for FK (local testing: create placeholder when unknown)
+      if (!patientId || patientId === 'unknown') {
         try {
-          const patientResult = await FHIRService.getOrCreatePatient({
-            name: patientName,
-            phone: `+1555${String(Date.now()).slice(-7)}` // Placeholder for video-consult sessions
-          }, false);
+          const patientResult = await FHIRService.getOrCreatePatient(
+            { name: patientName, firstName: patientName.split(' ')[0] || 'Video', lastName: patientName.split(' ').slice(1).join(' ') || 'Patient' },
+            false
+          );
           const p = patientResult?.patient;
-          patientId = p?.id ?? p?.resource_id ?? patientId;
+          if (p?.id) patientId = p.id;
+          else if (p?.resource_id) patientId = p.resource_id;
+          else if (p?.subject?.reference) patientId = p.subject.reference.replace('Patient/', '');
         } catch (e) {
           console.warn('[video-consult-graph] getOrCreatePatient failed:', e.message);
+          return { current_stage: 'FHIR_SKIPPED_NO_PATIENT', error: { message: 'Could not create patient for transcript', recoverable: true } };
         }
       }
+      if (!patientId) {
+        return { current_stage: 'FHIR_SKIPPED_NO_PATIENT', error: null };
+      }
 
-      // Ensure encounter exists (FK required when provided)
-      if (encounterId && !db.getFHIREncounter?.(encounterId)) {
-        try {
+      // Ensure encounter exists for FK
+      try {
+        const existingEnc = db.getFHIREncounter && db.getFHIREncounter(encounterId);
+        if (!existingEnc) {
           const enc = await FHIRService.createEncounter({
             patientId,
             patientName,
             callId: state.room_id,
             status: 'finished',
-            type: 'Video consultation'
+            startTime: new Date().toISOString(),
+            type: 'Video consultation',
+            reasonText: `Video consult room ${state.room_id}`
           });
-          encounterId = enc?.id ?? enc?.resource_id ?? encounterId;
-        } catch (e) {
-          console.warn('[video-consult-graph] createEncounter failed, storing without encounter:', e.message);
-          encounterId = null; // Omit encounter link
+          if (enc?.id) encounterId = enc.id;
         }
+      } catch (e) {
+        console.warn('[video-consult-graph] createEncounter failed, storing transcript without encounter:', e.message);
+        encounterId = undefined; // createCommunication allows no encounter
+      }
+
+      const notes = [{ text: `Video consult transcript (room: ${state.room_id})`, time: new Date().toISOString() }];
+      const rag = state.rag_context || {};
+      const icd10 = rag.icd10 || rag.merged_codes?.icd10 || [];
+      const cpt = rag.cpt || rag.merged_codes?.cpt || [];
+      const icdStr = icd10.map((c) => (c.code || c)).filter(Boolean).join(', ');
+      const cptStr = cpt.map((c) => (c.code || c)).filter(Boolean).join(', ');
+      if (icdStr || cptStr) {
+        notes.push({
+          text: `Suggested codes: ICD-10: ${icdStr || 'none'}; CPT: ${cptStr || 'none'}`,
+          time: new Date().toISOString()
+        });
       }
 
       await FHIRService.storeTranscript({
@@ -206,7 +278,7 @@ async function processEvent(roomId, eventType, payload, options = {}) {
         encounterId,
         messages,
         sentTime: new Date().toISOString(),
-        notes: [{ text: `Video consult transcript (room: ${state.room_id})`, time: new Date().toISOString() }]
+        notes
       });
 
       db.insertVideoConsultAiDecision(
@@ -304,14 +376,18 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     return {
       success: true,
       stage: result.current_stage,
-      requires_review: result.error?.recoverable || false
+      requires_review: result.error?.recoverable || false,
+      rag_context: result.rag_context || null,
+      error: result.error || null,
+      audio_transcript: result.audio_transcript || null
     };
   } catch (err) {
     console.error('[video-consult-graph] invoke error:', err);
     return {
       success: false,
       error: err.message,
-      stage: 'ERROR'
+      stage: 'ERROR',
+      rag_context: null
     };
   }
 }

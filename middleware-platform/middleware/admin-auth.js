@@ -1,8 +1,8 @@
 const crypto = require('crypto');
+const db = require('../database');
 
 const COOKIE_NAME = 'admin_session';
 const SESSION_TTL_MS = parseInt(process.env.ADMIN_SESSION_TTL_MS || '3600000', 10);
-const sessions = new Map();
 let warnedAboutMissingSecret = false;
 
 function parseCookies(req) {
@@ -35,24 +35,41 @@ function createSessionRecord(req) {
     user_agent: req.headers['user-agent'] || 'unknown',
     expiresAt
   };
-  sessions.set(token, record);
+  // Persist session so it survives restarts (Azure)
+  db.createAdminSession({
+    id: record.id,
+    issued_at: record.issued_at,
+    expires_at: record.expires_at,
+    ip: record.ip,
+    user_agent: record.user_agent,
+    last_seen_at: record.issued_at
+  });
   return record;
 }
 
 function validateSessionToken(token) {
   if (!token) return null;
-  const record = sessions.get(token);
+  // Cleanup expired sessions opportunistically
+  try { db.deleteExpiredAdminSessions(); } catch (_) {}
+
+  const record = db.getAdminSession(token);
   if (!record) return null;
-  if (record.expiresAt < Date.now()) {
-    sessions.delete(token);
+  const expiresAt = new Date(record.expires_at).getTime();
+  if (Number.isFinite(expiresAt) && expiresAt < Date.now()) {
+    db.deleteAdminSession(token);
     return null;
   }
-  return record;
+  // Touch last seen for basic auditability
+  try { db.touchAdminSession(token); } catch (_) {}
+  return {
+    ...record,
+    expiresAt: expiresAt
+  };
 }
 
 function destroySessionToken(token) {
   if (token) {
-    sessions.delete(token);
+    db.deleteAdminSession(token);
   }
 }
 

@@ -255,11 +255,17 @@ async function healthCheckHandler(req, res) {
       status = 'degraded';
       langsmith.warning = 'Production should have LangSmith tracing enabled for LLM traceability';
     }
+    let colab_export = { loaded: false };
+    try {
+      const ks = require('../services/knowledge-service');
+      if (typeof ks.getExportStats === 'function') colab_export = ks.getExportStats();
+    } catch (e) { colab_export.error = e.message; }
     return res.json({
       success: true,
       ...fullHealth,
       status,
       dependencies,
+      colab_export,
       metrics: healthMetrics,
       langsmith,
       environment: {

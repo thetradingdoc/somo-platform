@@ -7,9 +7,6 @@
 
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-if (!process.env.LANGSMITH_API_KEY && !process.env.AP_Langchain) {
-  require('dotenv').config({ path: path.resolve(__dirname, '../.env.bak2') });
-}
 
 if (process.env.AP_Langchain && !process.env.LANGSMITH_API_KEY) {
   process.env.LANGSMITH_API_KEY = process.env.AP_Langchain;

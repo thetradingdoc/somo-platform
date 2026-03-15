@@ -9,9 +9,9 @@
   <script src="../assets/js/auth-utils.js"></script>
   <script src="../assets/js/navigation.js"></script>
   <style>
-    :root { --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6; }
-    .layout { display: flex; min-height: 100vh; }
-    .sidebar { width: 260px; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.05); position: fixed; height: 100vh; overflow-y: auto; }
+  :root { --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6; }
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: 260px; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.05); position: fixed; height: 100vh; overflow-y: auto; }
     .sidebar-header { padding: 24px; border-bottom: 1px solid var(--gray-200, #e2e8f0); }
     .sidebar-logo { font-size: 32px; line-height: 1; letter-spacing: -3px; color: #2d3748; margin-bottom: 4px; }
     .sidebar-logo .doc { font-family: 'Times New Roman', serif; font-style: italic; }
@@ -31,7 +31,7 @@
     .user-role { font-size: 12px; color: var(--gray-500, #718096); }
     .logout-btn { background: none; border: none; color: var(--gray-500, #718096); cursor: pointer; padding: 8px; border-radius: 4px; transition: all 0.2s; }
     .logout-btn:hover { background: var(--danger-light, #fed7d7); color: var(--danger, #f56565); }
-    .main-content { margin-left: 260px; padding: 24px; flex: 1; background: #f7fafc; min-height: 100vh; }
+  .main-content { margin-left: 260px; padding: 24px; flex: 1; background: #f7fafc; min-height: 100vh; }
     .video-container { background: #1a1a2e; border-radius: 16px; aspect-ratio: 16/10; max-height: 70vh; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
     .video-container video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
     .video-placeholder { color: #94a3b8; text-align: center; padding: 48px; }
@@ -53,7 +53,245 @@
     .room-input[readonly] { background: #f1f5f9; color: #475569; cursor: default; }
     .status { margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; color: #166534; font-size: 14px; }
     .status.error { background: #fef2f2; color: #991b1b; }
-    .status.connecting { background: #fefce8; color: #854d0e; }
+  .status.connecting { background: #fefce8; color: #854d0e; }
+
+  /* AI assistant HUD overlay (inspired by smart glasses UI) */
+  .assistant-overlay {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 280px;
+    max-width: 40%;
+    background: rgba(5, 10, 25, 0.92);
+    border-radius: 12px;
+    border: 1px solid #4ade80;
+    box-shadow: 0 0 12px rgba(74, 222, 128, 0.5);
+    color: #bbf7d0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    padding: 10px 12px;
+    font-size: 12px;
+    z-index: 20;
+    pointer-events: auto;
+  }
+
+  .assistant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .assistant-badge {
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid #4ade80;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .assistant-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #bef264;
+  }
+
+  .assistant-section {
+    border-top: 1px dashed rgba(74, 222, 128, 0.4);
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .assistant-section-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #a3e635;
+    margin-bottom: 4px;
+  }
+
+  .assistant-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .assistant-list li {
+    margin-bottom: 2px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+
+  .assistant-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .assistant-chip {
+    border-radius: 999px;
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    padding: 1px 6px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .assistant-chip-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-right: 4px;
+    margin-bottom: 4px;
+  }
+  .assistant-chip-wrap .confirm-btn, .assistant-chip-wrap .dismiss-btn {
+    padding: 0 4px;
+    font-size: 10px;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    opacity: 0.8;
+  }
+  .assistant-chip-wrap .confirm-btn:hover { color: #4ade80; }
+  .assistant-chip-wrap .dismiss-btn:hover { color: #f87171; }
+
+  .assistant-footer {
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    color: #86efac;
+    opacity: 0.9;
+  }
+  .status-pill {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .status-pill[data-status="listening"] { background: #166534; color: #dcfce7; }
+  .status-pill[data-status="processing"] { background: #854d0e; color: #fef3c7; animation: pulse 1s infinite; }
+  .status-pill[data-status="codes_updated"] { background: #1e40af; color: #dbeafe; }
+  .status-pill[data-status="idle"] { background: #374151; color: #9ca3af; }
+  @keyframes pulse { 50% { opacity: 0.7; } }
+  .risk-pill { padding: 2px 8px; border-radius: 999px; font-size: 9px; font-weight: 600; }
+  .risk-low { background: #166534; color: #dcfce7; }
+  .risk-moderate { background: #854d0e; color: #fef3c7; }
+  .risk-high { background: #7f1d1d; color: #fecaca; }
+
+  /* Transcript panel - collapsible left slide-out */
+  .transcript-panel-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-width: 0;
+  }
+  .transcript-panel {
+    width: 280px;
+    min-width: 280px;
+    max-width: 90vw;
+    background: #0f172a;
+    border-radius: 12px;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: margin-left 0.2s, min-width 0.2s, opacity 0.2s;
+  }
+  .transcript-panel.collapsed {
+    margin-left: -284px;
+    min-width: 0;
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .transcript-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(74, 222, 128, 0.3);
+    flex-shrink: 0;
+  }
+  .transcript-panel-title { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+  .transcript-toggle-btn {
+    background: rgba(74, 222, 128, 0.2);
+    border: 1px solid rgba(74, 222, 128, 0.5);
+    color: #bbf7d0;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .transcript-toggle-btn:hover { background: rgba(74, 222, 128, 0.3); }
+  .transcript-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    font-size: 13px;
+  }
+  .transcript-line {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .transcript-line:hover { background: rgba(255,255,255,0.05); }
+  .transcript-line[data-speaker="patient"] .transcript-speaker { color: #60a5fa; }
+  .transcript-line[data-speaker="provider"] .transcript-speaker { color: #34d399; }
+  .transcript-line[data-speaker="unknown"] .transcript-speaker { color: #94a3b8; }
+  .transcript-ts { font-size: 10px; color: #64748b; flex-shrink: 0; }
+  .transcript-speaker { font-weight: 600; flex-shrink: 0; }
+  .transcript-text { color: #e2e8f0; word-break: break-word; }
+  .transcript-footer {
+    padding: 8px 12px;
+    border-top: 1px solid rgba(74, 222, 128, 0.2);
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .transcript-footer button {
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    border: 1px solid rgba(74, 222, 128, 0.4);
+    background: rgba(74, 222, 128, 0.1);
+    color: #bbf7d0;
+  }
+  .transcript-footer button:hover { background: rgba(74, 222, 128, 0.2); }
+
+  /* Mobile layout: hide sidebar, make video UI full-width */
+  @media (max-width: 768px) {
+    .layout {
+      flex-direction: column;
+    }
+    .sidebar {
+      display: none;
+    }
+    .main-content {
+      margin-left: 0;
+      padding: 16px;
+    }
+    .video-container {
+      aspect-ratio: auto;
+      max-height: none;
+      height: 60vh;
+    }
+    .room-input {
+      width: 100%;
+      max-width: none;
+    }
+    .controls {
+      justify-content: space-between;
+    }
+  }
   </style>
 </head>
 <body>
@@ -78,17 +316,37 @@
 
     <main class="main-content">
       <h1 style="margin-bottom: 8px;">Video Call</h1>
-      <p style="color: #64748b; margin-bottom: 24px;">Start or join a telehealth video room. Share the room name with the other participant.</p>
+      <p style="color: #64748b; margin-bottom: 8px;">Start or join a telehealth video room.</p>
+      <p id="roomTip" style="color: #0f766e; font-size: 14px; margin-bottom: 16px; padding: 10px 12px; background: #ecfdf5; border-radius: 8px; border-left: 4px solid #0d9488;">
+        <strong>To see the patient:</strong> open <strong>Calendar</strong> → click the appointment → <strong>Join</strong>. The room (e.g. appt-xxx) will be set automatically so you're in the same room as the patient.
+      </p>
 
       <div id="joinSection">
         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px;">
-          <input type="text" id="roomInput" class="room-input" placeholder="Room name (e.g. consult-abc123)" value="">
+          <input type="text" id="roomInput" class="room-input" placeholder="Room (e.g. appt-xxx from Calendar)" value="">
           <input type="text" id="nameInput" class="room-input" placeholder="Your name" value="">
           <button id="joinBtn" class="btn btn-primary">Join Room</button>
         </div>
+        <p id="roomError" style="display: none; color: #b91c1c; font-size: 14px; margin-top: 8px;"></p>
       </div>
 
       <div id="videoSection" style="display: none;">
+        <div class="transcript-panel-wrap" style="display:flex;gap:16px;">
+          <aside id="transcriptPanel" class="transcript-panel" aria-label="Live transcript">
+            <div class="transcript-panel-header">
+              <span class="transcript-panel-title">Transcript</span>
+              <button type="button" id="transcriptToggleBtn" class="transcript-toggle-btn" title="Collapse (T)">⟨</button>
+            </div>
+            <ul id="transcriptList" class="transcript-list" role="log"></ul>
+            <div class="transcript-footer">
+              <label style="display:flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" id="transcriptTranslateToggle" /> Translate</label>
+              <button type="button" id="transcriptJumpBtn" title="Jump to latest">↓ Latest</button>
+              <button type="button" id="transcriptPauseBtn" title="Pause autoscroll">Pause</button>
+              <button type="button" id="transcriptCopyBtn" title="Copy to clipboard">Copy</button>
+              <button type="button" id="transcriptExportBtn" title="Export as text">Export</button>
+            </div>
+          </aside>
+          <div style="flex:1;min-width:0;">
         <div class="video-container" id="videoContainer">
           <div class="video-placeholder" id="placeholder">
             <div class="icon">📹</div>
@@ -98,13 +356,57 @@
           <div class="local-video" id="localVideo" style="display: none;">
             <video id="localVideoEl" autoplay muted playsinline></video>
           </div>
+          <!-- AI assistant HUD overlay -->
+          <div id="riskBanner" style="display:none;position:absolute;top:16px;left:16px;right:16px;z-index:21;padding:12px 16px;border-radius:8px;background:#7f1d1d;color:#fecaca;font-size:13px;font-weight:600;border:1px solid #b91c1c;align-items:center;justify-content:space-between;gap:12px;flex-direction:row;flex-wrap:nowrap;" title="Click to scroll to transcript">
+            <span id="riskBannerText" style="cursor:pointer;flex:1;">⚠️ High-risk symptom detected</span>
+            <button type="button" id="riskBannerDismiss" style="padding:4px 10px;border-radius:6px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fecaca;font-size:11px;cursor:pointer;">Dismiss</button>
+          </div>
+          <div class="assistant-overlay" id="assistantOverlay" style="display:none;">
+            <div class="assistant-header">
+              <div class="assistant-title">Doctor Little Listening</div>
+              <div class="assistant-badge" id="assistantStatusBadge">Idle</div>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Summary</div>
+              <div id="assistantSummary" style="font-size:11px; line-height:1.3; max-height:60px; overflow:hidden;"></div>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Key Problems</div>
+              <ul class="assistant-list" id="assistantProblems"></ul>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Next Questions</div>
+              <ul class="assistant-list" id="assistantFollowups"></ul>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Codes (RAG)</div>
+              <div class="assistant-chip-row" id="assistantCodes"></div>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">YOLO Tracking</div>
+              <div id="assistantYolo" style="font-size:10px; line-height:1.4; max-height:50px; overflow-y:auto;">
+                <div style="color:#94a3b8;">No visual detections yet...</div>
+              </div>
+            </div>
+            <div class="assistant-footer">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <span id="assistantStatusPill" class="status-pill" data-status="idle">Idle</span>
+                <span id="assistantRiskPill" class="risk-pill risk-low" style="display:none;">Risk: Low</span>
+                <span id="assistantRoomLabel">Room: -</span>
+                <span id="assistantUpdatedAt">—</span>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="connection-status" id="connectionStatus" style="margin-bottom:12px;font-size:14px;color:#94a3b8;"></div>
+        <div id="sseStatusBadge" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;padding:4px 10px;border-radius:999px;background:#166534;color:#dcfce7;" title="Real-time updates">● Live</div>
         <div class="controls">
           <button id="toggleVideoBtn" class="btn btn-primary">Stop Video</button>
           <button id="toggleMicBtn" class="btn btn-primary">Mute</button>
           <button id="leaveBtn" class="btn btn-danger">Leave Call</button>
           <button id="endAndClaimBtn" class="btn" style="background:#059669;color:#fff;display:none;">End & Create Claim</button>
+        </div>
+          </div>
         </div>
       </div>
 
@@ -116,13 +418,13 @@
     const API_BASE = window.API_BASE || 'http://localhost:4000';
 
     // Auth check
-    if (!requireAuth('../login.html')) {
+    if (!window.requireAuth || !window.requireAuth('../login.html')) {
       // Redirect handled
     }
 
     document.addEventListener('DOMContentLoaded', () => {
       renderNavigation('video');
-      const userData = requireAuth('../login.html');
+      const userData = (window.requireAuth && window.requireAuth('../login.html')) || null;
       if (userData) {
         const nameEl = document.getElementById('userName');
         const avatarEl = document.getElementById('userAvatar');
@@ -133,21 +435,140 @@
       }
       const params = new URLSearchParams(window.location.search);
       const roomFromUrl = params.get('room');
+      const nameFromUrl = params.get('name');
+      const autoJoin = params.get('auto') === '1';
+
       if (roomFromUrl) {
         const roomInput = document.getElementById('roomInput');
         roomInput.value = roomFromUrl;
         roomInput.readOnly = roomFromUrl.startsWith('appt-');
         if (roomInput.readOnly) roomInput.title = 'Room is linked to an appointment';
+        const tip = document.getElementById('roomTip');
+        if (tip) tip.style.display = 'none';
+      }
+
+      if (nameFromUrl) {
+        const nameInput = document.getElementById('nameInput');
+        nameInput.value = nameFromUrl;
+      }
+
+      if (roomFromUrl && autoJoin) {
+        // Small delay to ensure inputs and listeners are ready before joining
+        setTimeout(() => {
+          joinRoom();
+        }, 100);
       }
     });
 
-    // Dynamic import for livekit-client (ESM from CDN)
-    const { Room, RoomEvent, Track } = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.17.1/dist/livekit-client.esm.mjs');
+    // Dynamic import for livekit-client (ESM from CDN) - wrap in async to avoid top-level await compatibility issues
+    const livekitModule = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.17.1/dist/livekit-client.esm.mjs');
+    const { Room, RoomEvent, Track } = livekitModule;
 
     let room = null;
     let localVideoEnabled = true;
     let localMicEnabled = true;
     let currentRoomName = '';
+    let assistantInterval = null;
+    let sseAbortController = null;
+    let sseReconnectTimeout = null;
+    let transcriptLines = [];
+    let transcriptPauseAutoscroll = false;
+
+    function formatTs(ts) {
+      if (!ts) return '--:--';
+      try {
+        const d = new Date(ts);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } catch (_) { return '--:--'; }
+    }
+
+    function appendTranscriptLine(item) {
+      transcriptLines.push(item);
+      const list = document.getElementById('transcriptList');
+      if (!list) return;
+      const li = document.createElement('li');
+      li.className = 'transcript-line';
+      li.setAttribute('data-ts', item.ts || '');
+      li.setAttribute('data-speaker', item.speaker || 'unknown');
+      li.id = 'transcript-' + (item.id || transcriptLines.length);
+      li.innerHTML = '<span class="transcript-ts">' + formatTs(item.ts) + '</span><span class="transcript-speaker">' + (item.speaker || 'unknown') + '</span><span class="transcript-text">' + (item.text || '').replace(/</g, '&lt;') + '</span>';
+      list.appendChild(li);
+      if (!transcriptPauseAutoscroll) li.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function loadTranscriptFromSession(transcript) {
+      if (!Array.isArray(transcript)) return;
+      transcript.forEach((t, i) => appendTranscriptLine({
+        id: 't-' + i,
+        ts: t.timestamp || t.ts,
+        speaker: t.speaker || 'unknown',
+        text: typeof t === 'string' ? t : (t.text || t.content || '')
+      }));
+    }
+
+    function clearTranscript() {
+      transcriptLines = [];
+      const list = document.getElementById('transcriptList');
+      if (list) list.innerHTML = '';
+    }
+
+    function transcriptJumpToLatest() {
+      const list = document.getElementById('transcriptList');
+      if (list && list.lastChild) list.lastChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function transcriptCopy() {
+      const text = transcriptLines.map(t => `[${formatTs(t.ts)}] ${t.speaker}: ${t.text}`).join('\n');
+      navigator.clipboard.writeText(text || 'No transcript yet.').then(() => { /* ok */ }).catch(() => {});
+    }
+
+    function transcriptExport() {
+      const text = transcriptLines.map(t => `[${formatTs(t.ts)}] ${t.speaker}: ${t.text}`).join('\n');
+      const blob = new Blob([text || 'No transcript yet.'], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'transcript-' + (currentRoomName || 'export') + '-' + new Date().toISOString().slice(0, 10) + '.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function initTranscriptPanel() {
+      const panel = document.getElementById('transcriptPanel');
+      const toggleBtn = document.getElementById('transcriptToggleBtn');
+      const jumpBtn = document.getElementById('transcriptJumpBtn');
+      const pauseBtn = document.getElementById('transcriptPauseBtn');
+      const copyBtn = document.getElementById('transcriptCopyBtn');
+      const exportBtn = document.getElementById('transcriptExportBtn');
+      if (toggleBtn) toggleBtn.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        toggleBtn.textContent = panel.classList.contains('collapsed') ? '⟩' : '⟨';
+        toggleBtn.title = panel.classList.contains('collapsed') ? 'Expand (T)' : 'Collapse (T)';
+      });
+      if (jumpBtn) jumpBtn.addEventListener('click', transcriptJumpToLatest);
+      if (pauseBtn) pauseBtn.addEventListener('click', () => {
+        transcriptPauseAutoscroll = !transcriptPauseAutoscroll;
+        pauseBtn.textContent = transcriptPauseAutoscroll ? 'Resume' : 'Pause';
+      });
+      if (copyBtn) copyBtn.addEventListener('click', transcriptCopy);
+      if (exportBtn) exportBtn.addEventListener('click', transcriptExport);
+      const translateToggle = document.getElementById('transcriptTranslateToggle');
+      if (translateToggle) {
+        translateToggle.checked = localStorage.getItem('videoConsultTranslate') === 'true';
+        translateToggle.addEventListener('change', () => localStorage.setItem('videoConsultTranslate', translateToggle.checked));
+      }
+      document.addEventListener('keydown', (e) => {
+        if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey && panel) {
+          panel.classList.toggle('collapsed');
+          if (toggleBtn) toggleBtn.textContent = panel.classList.contains('collapsed') ? '⟩' : '⟨';
+        }
+      });
+    }
+    initTranscriptPanel();
+    document.getElementById('riskBannerDismiss')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rb = document.getElementById('riskBanner');
+      if (rb) rb.style.display = 'none';
+    });
 
     function showStatus(msg, type = '') {
       const el = document.getElementById('status');
@@ -177,12 +598,258 @@
       return data;
     }
 
+    function showRiskBanner(risk) {
+      const banner = document.getElementById('riskBanner');
+      const riskPill = document.getElementById('assistantRiskPill');
+      if (riskPill) {
+        riskPill.style.display = 'inline';
+        riskPill.className = 'risk-pill risk-' + (risk?.level || 'low');
+        riskPill.textContent = 'Risk: ' + (risk?.level || 'low');
+      }
+      if (!banner) return;
+      if (!risk || !risk.level || risk.level === 'low') { banner.style.display = 'none'; return; }
+      const msg = (risk.flags && risk.flags[0]) ? `⚠️ High-risk: ${(risk.flags[0].rule_id || '').replace(/_/g, ' ')} detected` : '⚠️ High-risk symptom detected';
+      const textEl = document.getElementById('riskBannerText');
+      if (textEl) textEl.textContent = msg;
+      if (textEl) textEl.onclick = () => transcriptJumpToLatest();
+      banner.style.display = 'flex';
+      banner.style.background = risk.level === 'high' ? '#7f1d1d' : '#854d0e';
+      banner.style.color = risk.level === 'high' ? '#fecaca' : '#fef3c7';
+      banner.onclick = () => transcriptJumpToLatest();
+    }
+
+    function setSseStatus(connected) {
+      const badge = document.getElementById('sseStatusBadge');
+      if (!badge) return;
+      if (connected) {
+        badge.style.background = '#166534';
+        badge.style.color = '#dcfce7';
+        badge.textContent = '● Live';
+        badge.title = 'Real-time updates connected';
+      } else {
+        badge.style.background = '#991b1b';
+        badge.style.color = '#fecaca';
+        badge.textContent = '● Disconnected';
+        badge.title = 'Real-time stream dropped – reconnecting...';
+      }
+    }
+
+    function applyAssistantUpdate(payload) {
+      const statusBadge = document.getElementById('assistantStatusBadge');
+      const statusPill = document.getElementById('assistantStatusPill');
+      const riskPill = document.getElementById('assistantRiskPill');
+      const s = payload.status || 'listening';
+      if (statusBadge) statusBadge.textContent = s === 'listening' ? 'Listening' : s === 'processing' ? 'Processing…' : s === 'codes_updated' ? 'Codes' : s;
+      if (statusPill) {
+        statusPill.setAttribute('data-status', s);
+        statusPill.textContent = s === 'listening' ? 'Listening' : s === 'processing' ? 'Processing' : s === 'codes_updated' ? 'Codes updated' : 'Idle';
+      }
+      if (riskPill && payload.risk) {
+        riskPill.style.display = 'inline';
+        riskPill.className = 'risk-pill risk-' + (payload.risk.level || 'low');
+        riskPill.textContent = 'Risk: ' + (payload.risk.level || 'low');
+      }
+      const codesEl = document.getElementById('assistantCodes');
+      if (payload.codes && codesEl) {
+        codesEl.innerHTML = '';
+        const codes = (payload.codes.icd10 || []).slice(0, 5);
+        codes.forEach((c) => {
+          const code = (c.code || c) + '';
+          const wrap = document.createElement('span');
+          wrap.className = 'assistant-chip-wrap';
+              wrap.innerHTML = '<span class="assistant-chip" title="Click to jump to transcript">' + code.replace(/</g, '&lt;') + '</span><button type="button" class="confirm-btn" title="Confirm">✓</button><button type="button" class="dismiss-btn" title="Dismiss">✕</button>';
+              wrap.querySelector('.assistant-chip').onclick = () => transcriptJumpToLatest();
+              wrap.querySelector('.confirm-btn').onclick = () => { wrap.style.opacity = '0.6'; wrap.querySelector('.confirm-btn').style.color = '#4ade80'; };
+              wrap.querySelector('.dismiss-btn').onclick = () => { wrap.style.display = 'none'; };
+              codesEl.appendChild(wrap);
+            });
+          }
+      const yoloEl = document.getElementById('assistantYolo');
+      if (payload.yolo_findings && yoloEl) {
+        if (payload.yolo_findings.length > 0) {
+          yoloEl.innerHTML = payload.yolo_findings.map(det => {
+            const confPercent = Math.round((det.confidence || 0) * 100);
+            return `<div style="margin-bottom:2px;"><span style="color:#22c55e;font-weight:600;">${det.finding || det.class || 'unknown'}</span> <span style="color:#94a3b8;font-size:9px;">(${confPercent}%)</span></div>`;
+          }).join('');
+        }
+      }
+      const updatedEl = document.getElementById('assistantUpdatedAt');
+      if (updatedEl) updatedEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function startSseAndAssistant() {
+      const overlay = document.getElementById('assistantOverlay');
+      if (!overlay || !currentRoomName) return;
+      overlay.style.display = 'block';
+      const statusBadge = document.getElementById('assistantStatusBadge');
+      const roomLabel = document.getElementById('assistantRoomLabel');
+      if (roomLabel) roomLabel.textContent = 'Room: ' + currentRoomName;
+      if (statusBadge) statusBadge.textContent = 'Listening';
+
+      const sseUrl = `${API_BASE}/api/video-consult/sse/${encodeURIComponent(currentRoomName)}`;
+
+      function connectSse() {
+        if (sseAbortController) sseAbortController.abort();
+        sseAbortController = new AbortController();
+        fetch(sseUrl, { credentials: 'include', signal: sseAbortController.signal })
+          .then(res => {
+            if (!res.ok) throw new Error(res.status);
+            setSseStatus(true);
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buf = '';
+            function read() {
+              reader.read().then(({ done, value }) => {
+                if (done) { setSseStatus(false); reconnectSse(); return; }
+                buf += decoder.decode(value, { stream: true });
+                const lines = buf.split('\n');
+                buf = lines.pop() || '';
+                let eventType = '';
+                let data = '';
+                for (const line of lines) {
+                  if (line.startsWith('event:')) eventType = line.slice(6).trim();
+                  else if (line.startsWith('data:')) data = line.slice(5).trim();
+                  else if (line === '' && data) {
+                    try {
+                      const obj = JSON.parse(data);
+                      const ev = obj.event || eventType;
+                      const pl = obj.payload || {};
+                      if (ev === 'assistant_update') {
+                        applyAssistantUpdate(pl);
+                        if (pl.transcript_delta) (pl.transcript_delta || []).forEach((item) => appendTranscriptLine(item));
+                        if (pl.risk) showRiskBanner(pl.risk);
+                      }
+                      else if (ev === 'transcript_delta' && pl.transcript_delta) {
+                        (pl.transcript_delta || []).forEach((item) => appendTranscriptLine(item));
+                      }
+                      else if (ev === 'codes_updated' && pl) applyAssistantUpdate({ codes: pl });
+                      else if (ev === 'risk_alert' && pl) showRiskBanner(pl);
+                      else if (ev === 'connected' || ev === 'heartbeat') setSseStatus(true);
+                    } catch (_) {}
+                    data = '';
+                  }
+                }
+                read();
+              }).catch(() => { setSseStatus(false); reconnectSse(); });
+            }
+            read();
+          })
+          .catch(() => { setSseStatus(false); reconnectSse(); });
+      }
+
+      function reconnectSse() {
+        if (!currentRoomName) return;
+        sseReconnectTimeout = setTimeout(connectSse, 3000);
+      }
+      connectSse();
+
+      async function fetchAssistant() {
+        try {
+          const res = await fetch(`${API_BASE}/api/video-consult/assistant/${encodeURIComponent(currentRoomName)}`, { credentials: 'include' });
+          const json = await res.json();
+          if (!json.success) return;
+          const view = json.view || {};
+          const summaryEl = document.getElementById('assistantSummary');
+          const problemsEl = document.getElementById('assistantProblems');
+          const followupsEl = document.getElementById('assistantFollowups');
+          const codesEl = document.getElementById('assistantCodes');
+          const yoloEl = document.getElementById('assistantYolo');
+          const updatedEl = document.getElementById('assistantUpdatedAt');
+          if (summaryEl) summaryEl.textContent = view.summary || '';
+          if (problemsEl) {
+            problemsEl.innerHTML = '';
+            (view.key_problems || []).slice(0, 4).forEach((p) => { const li = document.createElement('li'); li.textContent = '• ' + p; problemsEl.appendChild(li); });
+          }
+          if (followupsEl) {
+            followupsEl.innerHTML = '';
+            (view.followups || []).slice(0, 4).forEach((q) => { const li = document.createElement('li'); li.textContent = '• ' + q; followupsEl.appendChild(li); });
+          }
+          if (codesEl) {
+            codesEl.innerHTML = '';
+            ((view.codes && view.codes.icd10) || []).slice(0, 5).forEach((c) => {
+              const code = (c.code || c) + '';
+              const wrap = document.createElement('span');
+              wrap.className = 'assistant-chip-wrap';
+              wrap.innerHTML = '<span class="assistant-chip" title="Click to jump to transcript">' + code.replace(/</g, '&lt;') + '</span><button type="button" class="confirm-btn" title="Confirm">✓</button><button type="button" class="dismiss-btn" title="Dismiss">✕</button>';
+              wrap.querySelector('.assistant-chip').onclick = () => transcriptJumpToLatest();
+              wrap.querySelector('.confirm-btn').onclick = () => { wrap.style.opacity = '0.6'; wrap.querySelector('.confirm-btn').style.color = '#4ade80'; };
+              wrap.querySelector('.dismiss-btn').onclick = () => { wrap.style.display = 'none'; };
+              codesEl.appendChild(wrap);
+            });
+          }
+          if (yoloEl) {
+            const dets = view.yolo_tracking || [];
+            if (dets.length > 0) yoloEl.innerHTML = dets.map(d => `<div style="margin-bottom:2px;display:flex;align-items:center;gap:4px;"><span style="color:#22c55e;font-weight:600;">${(d.finding || d.class || 'unknown').replace(/</g, '&lt;')}</span> <span style="color:#94a3b8;font-size:9px;">(${Math.round((d.confidence||0)*100)}%)</span><button type="button" class="confirm-btn" style="font-size:9px;" title="Confirm">✓</button><button type="button" class="dismiss-btn" style="font-size:9px;" title="Dismiss">✕</button></div>`).join('');
+            else if (view.yolo_frame_count > 0) yoloEl.innerHTML = '<div style="color:#94a3b8;">Processing frames…</div>';
+            else yoloEl.innerHTML = '<div style="color:#94a3b8;">No visual detections yet…</div>';
+          }
+          if (updatedEl) updatedEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch (e) { console.warn('[assistantOverlay] fetch error', e); }
+      }
+      fetchAssistant();
+      clearTranscript();
+      try {
+        const sessionRes = await fetch(`${API_BASE}/api/video-consult/session/${encodeURIComponent(currentRoomName)}`, { credentials: 'include' });
+        const sessionJson = await sessionRes.json();
+        if (sessionJson.transcript && Array.isArray(sessionJson.transcript)) loadTranscriptFromSession(sessionJson.transcript);
+      } catch (_) {}
+      if (assistantInterval) clearInterval(assistantInterval);
+      assistantInterval = setInterval(fetchAssistant, 15000);
+    }
+
+    function stopAssistantPolling() {
+      if (assistantInterval) { clearInterval(assistantInterval); assistantInterval = null; }
+      if (sseReconnectTimeout) { clearTimeout(sseReconnectTimeout); sseReconnectTimeout = null; }
+      if (sseAbortController) { sseAbortController.abort(); sseAbortController = null; }
+      setSseStatus(false);
+      clearTranscript();
+      const rb = document.getElementById('riskBanner');
+      if (rb) rb.style.display = 'none';
+      const overlay = document.getElementById('assistantOverlay');
+      if (overlay) overlay.style.display = 'none';
+    }
+
+    function attachExistingRemoteVideos(r) {
+      if (!r) return;
+      const container = document.getElementById('remoteVideos');
+      if (!container) return;
+      r.remoteParticipants.forEach((participant) => {
+        participant.trackPublications.forEach((publication) => {
+          if (publication.kind !== 'video' || !publication.track) return;
+          const videoId = 'remote-' + participant.identity;
+          let div = document.getElementById(videoId);
+          if (!div) {
+            div = document.createElement('div');
+            div.className = 'remote-video';
+            div.id = videoId;
+            div.innerHTML = '<video autoplay playsinline></video><span class="label">' + (participant.name || participant.identity) + '</span>';
+            container.appendChild(div);
+          }
+          const videoEl = div.querySelector('video');
+          if (videoEl) {
+            publication.track.attach(videoEl);
+            videoEl.play().catch(() => {});
+          }
+        });
+      });
+      if (r) updateConnectionStatus(r.remoteParticipants.size);
+    }
+
     async function joinRoom() {
       const roomInput = document.getElementById('roomInput');
       const nameInput = document.getElementById('nameInput');
-      const roomName = roomInput.value.trim() || 'consult-' + Math.random().toString(36).slice(2, 8);
+      const roomErrorEl = document.getElementById('roomError');
+      const roomName = roomInput.value.trim();
       const name = nameInput.value.trim() || 'Participant';
 
+      if (!roomName) {
+        if (roomErrorEl) {
+          roomErrorEl.style.display = 'block';
+          roomErrorEl.textContent = 'Enter a room name. To join a patient\'s visit: open Calendar, click the appointment, then Join — the room will be filled in.';
+        }
+        return;
+      }
+      if (roomErrorEl) { roomErrorEl.style.display = 'none'; roomErrorEl.textContent = ''; }
       roomInput.value = roomName;
 
       showStatus('Connecting...', 'connecting');
@@ -202,12 +869,14 @@
           showStatus('Connected to ' + roomName, '');
           document.getElementById('joinSection').style.display = 'none';
           document.getElementById('videoSection').style.display = 'block';
-          updateConnectionStatus(0);
+          updateConnectionStatus(room ? room.remoteParticipants.size : 0);
           if (roomName.startsWith('appt-')) {
             document.getElementById('endAndClaimBtn').style.display = 'inline-block';
             document.getElementById('endAndClaimBtn').onclick = () => handleEndAndCreateClaim(roomName);
           }
           enableCameraAndMic();
+          attachExistingRemoteVideos(room);
+          startSseAndAssistant();
         });
 
         room.on(RoomEvent.Disconnected, () => {
@@ -217,22 +886,48 @@
           document.getElementById('joinSection').style.display = 'block';
           document.getElementById('videoSection').style.display = 'none';
           document.getElementById('joinBtn').disabled = false;
+          stopAssistantPolling();
+        });
+
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
+          console.log('[Video] Remote participant joined:', participant.identity, participant.name);
         });
 
         room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          // Only create video elements for video tracks (camera, screen share)
+          if (publication.kind !== 'video') return;
+          console.log('[Video] Remote video track subscribed:', participant.identity);
+
           const container = document.getElementById('remoteVideos');
-          const div = document.createElement('div');
-          div.className = 'remote-video';
-          div.id = 'remote-' + participant.identity;
-          div.innerHTML = '<video autoplay playsinline></video><span class="label">' + (participant.name || participant.identity) + '</span>';
-          container.appendChild(div);
-          track.attach(div.querySelector('video'));
+          const videoId = 'remote-' + participant.identity;
+          
+          // Check if video element already exists for this participant
+          let div = document.getElementById(videoId);
+          if (!div) {
+            // Create new video element for this participant
+            div = document.createElement('div');
+            div.className = 'remote-video';
+            div.id = videoId;
+            div.innerHTML = '<video autoplay playsinline></video><span class="label">' + (participant.name || participant.identity) + '</span>';
+            container.appendChild(div);
+          }
+          
+          // Attach the track to the video element and ensure playback (Safari)
+          const videoEl = div.querySelector('video');
+          if (videoEl) {
+            track.attach(videoEl);
+            videoEl.play().catch(() => {});
+          }
+          
           if (room) updateConnectionStatus(room.remoteParticipants.size);
         });
 
         room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
-          const el = document.getElementById('remote-' + participant.identity);
-          if (el) el.remove();
+          // Only remove video elements for video tracks
+          if (publication.kind === 'video') {
+            const el = document.getElementById('remote-' + participant.identity);
+            if (el) el.remove();
+          }
           if (room) updateConnectionStatus(room.remoteParticipants.size);
         });
 
@@ -245,7 +940,11 @@
 
     async function enableCameraAndMic() {
       if (!room) return;
-      await room.localParticipant.enableCameraAndMicrophone();
+      try {
+        await room.localParticipant.enableCameraAndMicrophone();
+      } catch (e) {
+        console.warn('Camera/mic enable failed:', e);
+      }
       const track = room.localParticipant.getTrackPublication(Track.Source.Camera);
       if (track?.track) {
         document.getElementById('placeholder').style.display = 'none';
@@ -253,6 +952,13 @@
         localEl.style.display = 'block';
         track.track.attach(document.getElementById('localVideoEl'));
       }
+      // Keep button labels in sync (camera and mic are on after enable)
+      localVideoEnabled = true;
+      localMicEnabled = true;
+      const tv = document.getElementById('toggleVideoBtn');
+      const tm = document.getElementById('toggleMicBtn');
+      if (tv) tv.textContent = 'Stop Video';
+      if (tm) tm.textContent = 'Mute';
     }
 
     function toggleVideo() {
@@ -287,10 +993,19 @@
       if (!roomName.startsWith('appt-')) return;
       const appointmentId = roomName.replace(/appt-/, '');
       if (room) { room.disconnect(); room = null; }
+      const codes = [];
+      document.querySelectorAll('#assistantCodes .assistant-chip-wrap').forEach((wrap) => {
+        if (wrap.style.display !== 'none') {
+          const chip = wrap.querySelector('.assistant-chip');
+          if (chip) { const t = chip.textContent?.trim(); if (t) codes.push(t); }
+        }
+      });
       const base = (typeof window.resolveBusinessPath === 'function')
         ? window.location.origin + window.resolveBusinessPath('billing.html')
         : window.location.origin + '/business/billing.html';
-      window.location.href = base + '?section=scan&appointment_id=' + encodeURIComponent(appointmentId);
+      let url = base + '?section=scan&appointment_id=' + encodeURIComponent(appointmentId);
+      if (codes.length) url += '&suggested_codes=' + encodeURIComponent(codes.join(','));
+      window.location.href = url;
     }
 
     document.getElementById('joinBtn').addEventListener('click', joinRoom);

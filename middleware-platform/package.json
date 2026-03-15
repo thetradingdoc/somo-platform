@@ -42,7 +42,7 @@
     "license": "MIT",
     "dependencies": {
         "@azure/communication-email": "^1.0.0",
-        "@circle-fin/developer-controlled-wallets": "^9.2.1",
+        "@circle-fin/developer-controlled-wallets": "^9.6.0",
         "@huggingface/transformers": "^3.8.1",
         "@langchain/core": "^1.1.19",
         "@langchain/groq": "^1.0.4",

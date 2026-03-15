@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Visit - DocLittle Patient</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <script src="../assets/js/config.js"></script>
+  <style>
+    :root { --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .header {
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #9ca3af;
+    }
+    .card {
+      background: #020617;
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.9);
+    }
+    .video-container {
+      background: #020617;
+      border-radius: 12px;
+      height: 60vh;
+      max-height: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    video {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: cover;
+    }
+    .placeholder {
+      text-align: center;
+      color: #9ca3af;
+    }
+    .placeholder .icon {
+      font-size: 48px;
+      margin-bottom: 8px;
+    }
+    .local-video {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      width: 120px;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      background: #020617;
+    }
+    .remote-videos {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .remote-video {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #020617;
+      position: relative;
+    }
+    .remote-video .label {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      background: rgba(15, 23, 42, 0.8);
+      color: #e5e7eb;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: none;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: #16a34a;
+      color: white;
+    }
+    .btn-primary:hover { background: #15803d; }
+    .btn-muted {
+      background: #111827;
+      color: #e5e7eb;
+    }
+    .btn-muted:hover {
+      background: #020617;
+    }
+    .btn-danger {
+      background: #b91c1c;
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #7f1d1d;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      text-align: center;
+      color: #9ca3af;
+    }
+    .status.error { color: #fecaca; }
+    .status.connected { color: #bbf7d0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">Your Video Visit</div>
+      <div class="subtitle" id="subtitleText">Connecting you securely to your clinician…</div>
+    </div>
+    <div class="card">
+      <div class="video-container" id="videoContainer">
+        <div class="placeholder" id="placeholder">
+          <div class="icon">📹</div>
+          <div>Waiting for connection…</div>
+        </div>
+        <div class="remote-videos" id="remoteVideos"></div>
+        <div class="local-video" id="localVideo" style="display:none;">
+          <video id="localVideoEl" autoplay muted playsinline></video>
+        </div>
+      </div>
+      <div id="joinControls" style="text-align:center;margin-top:16px;">
+        <button id="joinNowBtn" class="btn btn-primary" style="padding:14px 28px;font-size:16px;">Join Video Visit</button>
+      </div>
+      <div class="controls" id="videoControls" style="display:none;">
+        <button id="toggleVideoBtn" class="btn btn-muted">Stop Video</button>
+        <button id="toggleMicBtn" class="btn btn-muted">Mute</button>
+        <button id="leaveBtn" class="btn btn-danger">Leave</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get('room');
+    const nameFromUrl = params.get('name') || 'Patient';
+
+    if (!roomFromUrl) {
+      document.getElementById('status').textContent = 'Missing room information. Please open the link from your appointment.';
+      document.getElementById('status').classList.add('error');
+      throw new Error('Missing room');
+    }
+
+    document.getElementById('subtitleText').textContent = 'Joining your visit as ' + nameFromUrl + '…';
+
+    let Room, RoomEvent, Track;
+    try {
+      showStatus('Loading video library...', '');
+      const livekitModule = await import('https://cdn.jsdelivr.net/npm/livekit-client@2.17.1/dist/livekit-client.esm.mjs');
+      Room = livekitModule.Room;
+      RoomEvent = livekitModule.RoomEvent;
+      Track = livekitModule.Track;
+      console.log('✅ LiveKit client loaded');
+    } catch (importErr) {
+      console.error('❌ Failed to load LiveKit client:', importErr);
+      showStatus(`Failed to load video library: ${importErr.message}`, 'error');
+      throw new Error(`Cannot load video library: ${importErr.message}`);
+    }
+
+    let room = null;
+    let localVideoEnabled = true;
+    let localMicEnabled = true;
+
+    function showStatus(msg, type = '') {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status ' + type;
+    }
+
+    async function fetchToken(roomName, identity, name) {
+      const body = { room: roomName, identity, name };
+      if (roomName.startsWith('appt-')) {
+        const appointmentId = roomName.replace(/^appt-/, '');
+        body.appointment_id = appointmentId;
+      }
+      
+      const fullUrl = window.location.origin + '/api/livekit/token';
+      console.log('🔗 Fetching token from:', fullUrl);
+      console.log('📦 Request body:', body);
+      console.log('📍 Current origin:', window.location.origin);
+      
+      // Try fetch first, fallback to XMLHttpRequest for Safari iOS compatibility
+      let res;
+      try {
+        res = await fetch(fullUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        console.log('✅ Fetch completed. Status:', res.status, res.statusText);
+      } catch (fetchErr) {
+        console.warn('⚠️ Fetch failed, trying XMLHttpRequest:', fetchErr.message);
+        // Fallback to XMLHttpRequest for Safari iOS
+        res = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', fullUrl, true);
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.onload = () => {
+            // Create a Response-like object
+            const response = {
+              ok: xhr.status >= 200 && xhr.status < 300,
+              status: xhr.status,
+              statusText: xhr.statusText,
+              text: () => Promise.resolve(xhr.responseText),
+              json: () => Promise.resolve(JSON.parse(xhr.responseText))
+            };
+            resolve(response);
+          };
+          xhr.onerror = () => reject(new Error(`XMLHttpRequest failed: ${xhr.statusText || 'Network error'}`));
+          xhr.send(JSON.stringify(body));
+        });
+        console.log('✅ XMLHttpRequest completed. Status:', res.status);
+      }
+      
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text || res.statusText}`);
+      }
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        throw new Error(`Invalid response from server: ${parseErr.message}`);
+      }
+      
+      if (!data.success) throw new Error(data.error || 'Failed to get token');
+      return data;
+    }
+
+    function attachExistingRemoteVideos(r) {
+      if (!r) return;
+      const container = document.getElementById('remoteVideos');
+      if (!container) return;
+      r.remoteParticipants.forEach((participant) => {
+        participant.trackPublications.forEach((publication) => {
+          if (publication.kind !== 'video' || !publication.track) return;
+          const videoId = 'remote-' + participant.identity;
+          let div = document.getElementById(videoId);
+          if (!div) {
+            div = document.createElement('div');
+            div.className = 'remote-video';
+            div.id = videoId;
+            div.innerHTML = '<video autoplay playsinline></video><span class="label">' + (participant.name || 'Clinician') + '</span>';
+            container.appendChild(div);
+            const ph = document.getElementById('placeholder');
+            if (ph) ph.style.display = 'none';
+          }
+          const videoEl = div.querySelector('video');
+          if (videoEl) {
+            publication.track.attach(videoEl);
+            videoEl.play().catch(() => {});
+          }
+        });
+      });
+    }
+
+    async function joinRoom() {
+      const roomName = roomFromUrl.trim();
+      const displayName = nameFromUrl || 'Patient';
+
+      showStatus('Connecting…', '');
+
+      try {
+        // First verify backend is reachable
+        showStatus('Testing connection...', '');
+        try {
+          const healthCheck = await fetch('/health', { method: 'GET' });
+          console.log('Health check:', healthCheck.status);
+          if (healthCheck.ok) {
+            showStatus('Connection OK. Getting video token...', '');
+          }
+        } catch (healthErr) {
+          console.error('Health check failed:', healthErr);
+          showStatus(`Connection test failed: ${healthErr.message}`, 'error');
+          throw new Error(`Cannot reach backend: ${healthErr.message}`);
+        }
+
+        const { token, url } = await fetchToken(roomName, 'patient-' + Date.now(), displayName);
+
+        room = new Room({
+          adaptiveStream: true,
+          dynacast: true
+        });
+
+        room.on(RoomEvent.Connected, () => {
+          showStatus('Connected. Enabling camera...', 'connected');
+          document.getElementById('joinControls').style.display = 'none';
+          document.getElementById('videoControls').style.display = 'flex';
+          enableCameraAndMic();
+          attachExistingRemoteVideos(room);
+        });
+
+        // Listen for local track published (camera/mic ready)
+        room.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
+          console.log('📹 Local track published:', publication.source);
+          if (publication.source === Track.Source.Camera) {
+            const track = publication.track;
+            if (track) {
+              document.getElementById('placeholder').style.display = 'none';
+              const localEl = document.getElementById('localVideo');
+              localEl.style.display = 'block';
+              track.attach(document.getElementById('localVideoEl'));
+              console.log('✅ Camera video attached');
+            }
+          }
+        });
+
+        room.on(RoomEvent.Disconnected, () => {
+          showStatus('You left the visit.', 'error');
+        });
+
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
+          console.log('[Video] Remote participant joined:', participant.identity, participant.name);
+        });
+
+        room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          if (publication.kind !== 'video') return;
+          console.log('[Video] Remote video track subscribed:', participant.identity);
+
+          const container = document.getElementById('remoteVideos');
+          const videoId = 'remote-' + participant.identity;
+          
+          // Check if video element already exists for this participant
+          let div = document.getElementById(videoId);
+          if (!div) {
+            // Create new video element for this participant
+            div = document.createElement('div');
+            div.className = 'remote-video';
+            div.id = videoId;
+            div.innerHTML = '<video autoplay playsinline></video><span class="label">' +
+              (participant.name || 'Clinician') + '</span>';
+            container.appendChild(div);
+            document.getElementById('placeholder').style.display = 'none';
+          }
+          
+          // Attach the track to the video element and ensure playback (Safari)
+          const videoEl = div.querySelector('video');
+          if (videoEl) {
+            track.attach(videoEl);
+            videoEl.play().catch(() => {});
+          }
+        });
+
+        room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+          // Only remove video elements for video tracks
+          if (publication.kind === 'video') {
+            const el = document.getElementById('remote-' + participant.identity);
+            if (el) el.remove();
+          }
+        });
+
+        await room.connect(url, token);
+      } catch (err) {
+        console.error('Join room error:', err);
+        const errorMsg = err.message || 'Unknown error';
+        const fullError = `Error joining visit: ${errorMsg}. Server: ${window.location.origin}`;
+        showStatus(fullError, 'error');
+        // Also log to help debug
+        document.getElementById('subtitleText').textContent = 'Connection failed - see error below';
+      }
+    }
+
+    async function enableCameraAndMic() {
+      if (!room) {
+        console.error('Cannot enable camera/mic: room not connected');
+        return;
+      }
+      
+      // Check if getUserMedia is available (Safari iOS requires HTTPS)
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const isHttp = window.location.protocol === 'http:';
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        
+        if (isHttp && !isLocalhost) {
+          showStatus('⚠️ Safari iOS requires HTTPS for camera/mic. Connection works but video is disabled. To enable video, use HTTPS (e.g., ngrok tunnel).', 'error');
+          console.warn('getUserMedia not available on HTTP - Safari iOS security restriction');
+          // Don't return - let them stay connected without video
+          showStatus('Connected (video disabled - requires HTTPS). Waiting for clinician...', 'connected');
+          return;
+        } else {
+          showStatus('⚠️ Camera/mic not supported in this browser.', 'error');
+          console.error('getUserMedia not available');
+          return;
+        }
+      }
+      
+      try {
+        showStatus('Requesting camera and microphone permissions...', '');
+        
+        // Let LiveKit handle permissions - it will prompt the user
+        await room.localParticipant.enableCameraAndMicrophone();
+        
+        // Wait a moment for tracks to be published
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const track = room.localParticipant.getTrackPublication(Track.Source.Camera);
+        if (track?.track) {
+          document.getElementById('placeholder').style.display = 'none';
+          const localEl = document.getElementById('localVideo');
+          localEl.style.display = 'block';
+          track.track.attach(document.getElementById('localVideoEl'));
+          console.log('✅ Camera enabled and attached');
+          showStatus('Connected. Waiting for your clinician…', 'connected');
+        } else {
+          console.warn('⚠️ Camera track not available yet - user may need to grant permissions');
+          showStatus('Waiting for camera permission... Please allow when prompted.', '');
+        }
+      } catch (err) {
+        console.error('Failed to enable camera/mic:', err);
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          showStatus('Camera/mic permission denied. Please allow in Safari Settings → Camera/Microphone.', 'error');
+        } else {
+          showStatus(`Camera/mic error: ${err.message}`, 'error');
+        }
+      }
+    }
+
+    async function toggleVideo() {
+      if (!room) {
+        showStatus('Not connected to room', 'error');
+        return;
+      }
+      
+      try {
+        localVideoEnabled = !localVideoEnabled;
+        await room.localParticipant.setCameraEnabled(localVideoEnabled);
+        document.getElementById('toggleVideoBtn').textContent = localVideoEnabled ? 'Stop Video' : 'Start Video';
+        
+        // Update local video display
+        const localEl = document.getElementById('localVideo');
+        if (localVideoEnabled) {
+          const track = room.localParticipant.getTrackPublication(Track.Source.Camera);
+          if (track?.track) {
+            localEl.style.display = 'block';
+            track.track.attach(document.getElementById('localVideoEl'));
+          }
+        } else {
+          localEl.style.display = 'none';
+        }
+        
+        console.log('✅ Video toggled:', localVideoEnabled ? 'ON' : 'OFF');
+      } catch (err) {
+        console.error('Failed to toggle video:', err);
+        showStatus(`Video toggle failed: ${err.message}`, 'error');
+        // Revert state
+        localVideoEnabled = !localVideoEnabled;
+      }
+    }
+
+    async function toggleMic() {
+      if (!room) {
+        showStatus('Not connected to room', 'error');
+        return;
+      }
+      
+      try {
+        localMicEnabled = !localMicEnabled;
+        await room.localParticipant.setMicrophoneEnabled(localMicEnabled);
+        document.getElementById('toggleMicBtn').textContent = localMicEnabled ? 'Mute' : 'Unmute';
+        console.log('✅ Mic toggled:', localMicEnabled ? 'ON' : 'OFF');
+      } catch (err) {
+        console.error('Failed to toggle mic:', err);
+        showStatus(`Mic toggle failed: ${err.message}`, 'error');
+        // Revert state
+        localMicEnabled = !localMicEnabled;
+      }
+    }
+
+    function leaveCall() {
+      if (room) {
+        room.disconnect();
+        room = null;
+      }
+      showStatus('You left the visit.', 'error');
+    }
+
+    document.getElementById('toggleVideoBtn').addEventListener('click', toggleVideo);
+    document.getElementById('toggleMicBtn').addEventListener('click', toggleMic);
+    document.getElementById('leaveBtn').addEventListener('click', leaveCall);
+    // Test connection - skip health check, go straight to token endpoint
+    async function testConnection() {
+      try {
+        showStatus('Testing video endpoint...', '');
+        
+        // Test /api/livekit/token (POST) directly
+        const tokenUrl = window.location.origin + '/api/livekit/token';
+        const testRes = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', tokenUrl, true);
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.onload = () => {
+            resolve({
+              ok: xhr.status >= 200 && xhr.status < 300,
+              status: xhr.status,
+              statusText: xhr.statusText,
+              text: () => Promise.resolve(xhr.responseText),
+              json: () => {
+                try {
+                  return Promise.resolve(JSON.parse(xhr.responseText));
+                } catch {
+                  return Promise.resolve({});
+                }
+              }
+            });
+          };
+          xhr.onerror = () => reject(new Error(`Network error: Cannot connect to ${tokenUrl}`));
+          xhr.ontimeout = () => reject(new Error('Request timeout after 10 seconds'));
+          xhr.timeout = 10000;
+          xhr.send(JSON.stringify({ room: 'test-room', identity: 'test', name: 'Test' }));
+        });
+        
+        console.log('✅ Token endpoint test:', testRes.status);
+        if (testRes.ok) {
+          showStatus('Connection OK. Ready to join.', '');
+        } else {
+          const text = await testRes.text();
+          showStatus(`Token endpoint returned ${testRes.status}: ${text.substring(0, 100)}`, 'error');
+        }
+      } catch (testErr) {
+        console.error('❌ Connection test failed:', testErr);
+        showStatus(`Connection test failed: ${testErr.message}`, 'error');
+      }
+    }
+
+    document.getElementById('joinNowBtn').addEventListener('click', () => {
+      document.getElementById('joinControls').style.display = 'none';
+      document.getElementById('videoControls').style.display = 'flex';
+      joinRoom();
+    });
+
+    // Show join button (user-initiated action helps with Safari security)
+    showStatus('Ready to join. Tap "Join Video Visit" below.', '');
+    
+    // Test connection on load (non-blocking)
+    testConnection();
+  </script>
+</body>
+</html>
+

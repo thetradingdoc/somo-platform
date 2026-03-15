@@ -18,7 +18,7 @@ const securityHeaders = helmet({
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
       workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // Allow PDF.js worker and blob URLs
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net", "https://cdn.jsdelivr.net", "https://esm.sh"],
+      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net", "https://cdn.jsdelivr.net", "https://esm.sh", "https://*.livekit.cloud", "wss://*.livekit.cloud"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"], // Allow Stripe iframes for card input
     },
   },

@@ -148,6 +148,11 @@
             color: #0c5460;
         }
 
+        .status-pending-payment {
+            background: #fff3cd;
+            color: #856404;
+        }
+
         .appointment-actions {
             display: flex;
             gap: 8px;
@@ -333,10 +338,11 @@
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
+        const API_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
         let sessionId = localStorage.getItem('patient_session_id');
 
         if (!sessionId) {
-            window.location.href = 'login.html';
+            window.location.href = 'patient-login.html';
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -346,7 +352,7 @@
         async function loadAppointments() {
             try {
                 const response = await fetch(`${API_BASE}/api/patient/appointments`, {
-                    headers: { 'x-session-id': sessionId }
+                    headers: { ...API_HEADERS, 'x-session-id': sessionId }
                 });
 
                 const data = await response.json();
@@ -358,7 +364,7 @@
                         // Session expired
                         localStorage.removeItem('patient_session_id');
                         localStorage.removeItem('patient_phone');
-                        window.location.href = 'login.html';
+                        window.location.href = 'patient-login.html';
                     } else {
                         showMessage('Failed to load appointments: ' + (data.error || 'Unknown error'), 'error');
                     }
@@ -384,16 +390,19 @@
             }
 
             container.innerHTML = appointments.map(apt => {
-                const statusClass = `status-${apt.status}`;
+                const statusClass = apt.payment_status === 'pending' ? 'status-pending-payment' : `status-${apt.status}`;
+                const statusLabel = apt.payment_status === 'pending' ? 'Payment pending' : apt.status;
+                const payBtn = apt.payment_link ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
                 return `
                     <div class="appointment-card">
                         <div class="appointment-header">
                             <div class="appointment-info">
                                 <div class="appointment-type">${apt.appointment_type || 'Consultation'}</div>
-                                <div class="appointment-datetime">${apt.datetime_display || `${apt.date} at ${apt.time}`}</div>
-                                <span class="appointment-status ${statusClass}">${apt.status}</span>
+                                <div class="appointment-datetime">${apt.datetime_display || apt.date + ' at ' + apt.time}</div>
+                                <span class="appointment-status ${statusClass}">${statusLabel}</span>
                             </div>
                             <div class="appointment-actions">
+                                ${payBtn}
                                 ${apt.can_reschedule ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${apt.id}', '${apt.date}', '${apt.time}')">Reschedule</button>` : ''}
                                 ${apt.can_cancel ? `<button class="btn btn-secondary btn-sm" onclick="openCancelModal('${apt.id}')">Cancel</button>` : ''}
                             </div>
@@ -433,7 +442,7 @@
                 const response = await fetch(`${API_BASE}/api/patient/appointments/${apptId}/reschedule`, {
                     method: 'PUT',
                     headers: {
-                        'Content-Type': 'application/json',
+                        ...API_HEADERS,
                         'x-session-id': sessionId
                     },
                     body: JSON.stringify({
@@ -469,7 +478,7 @@
                 const response = await fetch(`${API_BASE}/api/patient/appointments/${apptId}`, {
                     method: 'DELETE',
                     headers: {
-                        'Content-Type': 'application/json',
+                        ...API_HEADERS,
                         'x-session-id': sessionId
                     },
                     body: JSON.stringify({ reason })
@@ -500,7 +509,7 @@
         function logout() {
             localStorage.removeItem('patient_session_id');
             localStorage.removeItem('patient_phone');
-            window.location.href = 'login.html';
+            window.location.href = 'patient-login.html';
         }
     </script>
 </body>

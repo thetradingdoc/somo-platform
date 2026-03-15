@@ -23,7 +23,7 @@ node scripts/test-langgraph.js
 ## Related Documentation
 
 - [Architecture Voice Agent](../architecture/voice-agent/RUNBOOK.md) — medical coding runbook
-- [LangGraph Developer Guide](../middleware-platform/LANGGRAPH_LANGSMITH_DEVELOPER_GUIDE.md)
+- [LangGraph & LangSmith](../middleware-platform/LANGGRAPH_LANGSMITH.md)
 - [Main Docs](../README.md)
 
 ---

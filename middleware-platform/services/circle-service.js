@@ -320,11 +320,13 @@ class CircleService {
                 amount,
                 currency = 'USDC',
                 claimId,
-                description
+                description,
+                idempotencyKey: providedIdempotencyKey // Allow caller to provide idempotency key for retries
             } = params;
 
-            // Generate idempotency key (must be UUID format)
-            const idempotencyKey = uuidv4();
+            // Use provided idempotency key or generate new one (must be UUID format)
+            // CRITICAL: For retries, use same idempotency key to prevent double-payment
+            const idempotencyKey = providedIdempotencyKey || uuidv4();
 
             // First, get the destination wallet to get its address
             const toWallet = await this.client.getWallet({ id: toWalletId });

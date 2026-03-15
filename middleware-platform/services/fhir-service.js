@@ -223,22 +223,55 @@ class FHIRService {
             }
           }
 
-          // Phone doesn't match or wasn't provided - require confirmation
-          console.log(`[FHIR] 🚨 DUPLICATE DETECTED: Similar name found but phone number ${patientData.phone ? 'does not match' : 'not provided'}`);
+          // Task 8: If email was provided, check if it uniquely matches one duplicate
+          const normEmail = (e) => (e || '').toLowerCase().trim();
+          if (patientData.email) {
+            const providedEmail = normEmail(patientData.email);
+            const emailMatches = duplicates.filter(d => providedEmail && normEmail(d.email) === providedEmail);
+            if (emailMatches.length === 1) {
+              const m = emailMatches[0];
+              console.log(`[FHIR] ✅ Email matches unique patient: ${m.resource_id}`);
+              const existingPatient = db.getFHIRPatient(m.resource_id);
+              if (existingPatient) {
+                return {
+                  patient: existingPatient.resource_data,
+                  duplicate: false,
+                  foundBy: 'name_and_email'
+                };
+              }
+            }
+          }
+
+          // Phone/email don't resolve - require confirmation (Task 8: support email-only identity)
+          const hasEmail = !!patientData.email;
+          const hasPhone = !!patientData.phone;
+          const confirmMsg = hasPhone
+            ? 'Please confirm your phone number to verify your identity.'
+            : hasEmail
+              ? 'Please confirm your email address to verify your identity.'
+              : 'Please confirm your phone number or email to verify your identity.';
+          console.log(`[FHIR] 🚨 DUPLICATE DETECTED: Similar name found, ${hasPhone ? 'phone does not match' : hasEmail ? 'email does not match' : 'phone/email not provided'}`);
           return {
             duplicate: true,
             requiresPhoneConfirmation: true,
+            requiresEmailConfirmation: !hasPhone && hasEmail,
             duplicates: duplicates.map(d => ({
               patient_id: d.resource_id,
               name: d.name,
-              phone: d.phone ? this.maskPhone(d.phone) : null, // Mask phone for privacy
-              email: d.email ? this.maskEmail(d.email) : null, // Mask email for privacy
+              phone: d.phone ? this.maskPhone(d.phone) : null,
+              email: d.email ? this.maskEmail(d.email) : null,
               has_phone: !!d.phone,
               has_email: !!d.email
             })),
-            message: `Found ${duplicates.length} patient(s) with similar name "${fullName}". Please confirm your phone number to verify your identity.`,
+            message: `Found ${duplicates.length} patient(s) with similar name "${fullName}". ${confirmMsg}`,
             provided_name: fullName,
-            provided_phone: patientData.phone || null
+            provided_phone: patientData.phone || null,
+            provided_email: patientData.email || null,
+            voice_agent_instruction: hasPhone
+              ? 'Ask the caller to confirm their phone number. If it matches an existing patient, use that record.'
+              : hasEmail
+                ? 'Ask the caller to confirm their email address. If it matches an existing patient, use that record.'
+                : 'Ask the caller to confirm their phone number or email. If it matches an existing patient, use that record.'
           };
         }
       }
@@ -510,6 +543,79 @@ class FHIRService {
       return observationResource;
     } catch (error) {
       console.error('[FHIR] Error in createObservation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a clinical observation (dermatology, imaging, AI findings)
+   * vc-p0-1: Extends createObservation for video consult clinical findings
+   * @param {Object} data - { patientId, patientName, encounterId, text, snomedCode, bodySite, valueString, interpretation, ... }
+   * @returns {Object} FHIR Observation resource
+   */
+  static async createClinicalObservation(data) {
+    try {
+      const observationResource = FHIRResources.createClinicalObservation({
+        id: `observation-${uuidv4()}`,
+        patientId: data.patientId,
+        patientName: data.patientName,
+        encounterId: data.encounterId,
+        text: data.text,
+        snomedCode: data.snomedCode || data.code,
+        bodySite: data.bodySite,
+        valueString: data.valueString,
+        valueInteger: data.valueInteger,
+        interpretation: data.interpretation,
+        effectiveDateTime: data.effectiveDateTime || new Date().toISOString()
+      });
+
+      const validation = FHIRResources.validate(observationResource);
+      if (!validation.valid) {
+        throw new Error(`Clinical observation validation failed: ${validation.errors.join(', ')}`);
+      }
+
+      db.createFHIRObservation(observationResource);
+      console.log(`[FHIR] Created clinical observation: ${observationResource.id}`);
+      return observationResource;
+    } catch (error) {
+      console.error('[FHIR] Error in createClinicalObservation:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a DiagnosticReport (video consult AI assessment summary)
+   * vc-p0-1: Links transcript + AI findings for claim flow
+   * @param {Object} data - { patientId, patientName, encounterId, conclusion, results[], loincCode, display, ... }
+   * @returns {Object} FHIR DiagnosticReport resource
+   */
+  static async createDiagnosticReport(data) {
+    try {
+      const reportResource = FHIRResources.createDiagnosticReport({
+        id: `diagnosticreport-${uuidv4()}`,
+        patientId: data.patientId,
+        patientName: data.patientName,
+        encounterId: data.encounterId,
+        conclusion: data.conclusion || '',
+        results: data.results || [],
+        loincCode: data.loincCode || '58410-2',
+        display: data.display || 'Video consult AI assessment',
+        effectiveDateTime: data.effectiveDateTime || new Date().toISOString(),
+        issued: data.issued || new Date().toISOString()
+      });
+
+      const validation = FHIRResources.validate(reportResource);
+      if (!validation.valid) {
+        throw new Error(`DiagnosticReport validation failed: ${validation.errors.join(', ')}`);
+      }
+
+      if (db.createFHIRDiagnosticReport) {
+        db.createFHIRDiagnosticReport(reportResource);
+      }
+      console.log(`[FHIR] Created DiagnosticReport: ${reportResource.id}`);
+      return reportResource;
+    } catch (error) {
+      console.error('[FHIR] Error in createDiagnosticReport:', error);
       throw error;
     }
   }

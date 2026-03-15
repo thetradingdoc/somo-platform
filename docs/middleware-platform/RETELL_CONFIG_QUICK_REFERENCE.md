@@ -46,6 +46,37 @@ Twilio SIP Trunk
 
 ---
 
+## 🌐 Using ngrok with Retell (local dev)
+
+When your middleware runs locally and is exposed via ngrok (e.g. `ngrok http 4000`), use your **public ngrok URL** in the Retell dashboard so Retell can reach your server.
+
+**Example base URL:** `https://3fc2-65-88-88-201.ngrok-free.app`  
+*(Replace with the Forwarding URL shown in your ngrok terminal; use the full URL including `.ngrok-free.app`.)*
+
+### In Retell Dashboard → Your phone number → Call Agent settings
+
+| Setting | Value |
+|--------|--------|
+| **Custom LLM URL** | `wss://3fc2-65-88-88-201.ngrok-free.app/webhook/retell/llm` |
+| **Agent Level Webhook URL** | `https://3fc2-65-88-88-201.ngrok-free.app/webhook/retell/events` |
+
+- **Custom LLM URL** must be **WebSocket** (`wss://`). Retell uses this to connect to your middleware for the AI conversation.
+- **Agent Level Webhook URL** is **HTTPS**. Retell sends call lifecycle events (call_started, call_ended, etc.) here.
+
+If you use a different ngrok URL, replace the host in both URLs (e.g. `https://YOUR-SUBDOMAIN.ngrok-free.app` and `wss://YOUR-SUBDOMAIN.ngrok-free.app`).
+
+### Optional: middleware .env
+
+So the server knows its public URL (e.g. for links in `/health`), set in `middleware-platform/.env`:
+
+```bash
+NGROK_URL=https://3fc2-65-88-88-201.ngrok-free.app
+# or BASE_URL when using ngrok for testing
+BASE_URL=https://3fc2-65-88-88-201.ngrok-free.app
+```
+
+---
+
 ## 🧪 TEST AFTER CONFIGURING
 
 ```bash

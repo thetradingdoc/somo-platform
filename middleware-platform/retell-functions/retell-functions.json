@@ -42,7 +42,7 @@
     {
       "type": "function",
       "name": "get_available_slots",
-      "description": "Get available appointment time slots for a specific date and appointment type.",
+      "description": "Get available appointment time slots for a specific date and appointment type. Supports provider-level availability via practitioner_id.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -57,6 +57,10 @@
           "timezone": {
             "type": "string",
             "description": "Timezone (default: America/New_York)"
+          },
+          "practitioner_id": {
+            "type": "string",
+            "description": "Practitioner ID for provider-specific availability. When set, only shows slots available for that provider."
           }
         },
         "required": ["date"]
@@ -100,6 +104,14 @@
           "notes": {
             "type": "string",
             "description": "Optional notes about the appointment, insurance information, or patient preferences"
+          },
+          "practitioner_id": {
+            "type": "string",
+            "description": "Practitioner ID to assign this appointment to a specific provider"
+          },
+          "provider_override_emergency": {
+            "type": "boolean",
+            "description": "Set to true only when a provider confirms an EMERGENT block was a false positive and scheduling should proceed despite emergency symptoms"
           }
         },
         "required": ["patient_name", "patient_phone", "patient_email", "date", "time"]
@@ -215,6 +227,14 @@
           "amount": {
             "type": "number",
             "description": "Amount the patient owes after insurance coverage"
+          },
+          "payment_method": {
+            "type": "string",
+            "description": "Payment method: 'link' (default), 'mastercard', 'visa' (voice commerce; mandate_id required)"
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Voice commerce mandate ID (required when payment_method is 'mastercard' or 'visa')"
           }
         },
         "required": ["appointment_id", "customer_email"]
@@ -334,9 +354,32 @@
           "merchant_id": {
             "type": "string",
             "description": "Merchant ID (optional, will use default if not provided)"
+          },
+          "payment_method": {
+            "type": "string",
+            "description": "Payment method: 'link' (default), 'mastercard', 'visa' (voice commerce; mandate_id required)"
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Voice commerce mandate ID (required when payment_method is 'mastercard' or 'visa')"
           }
         },
         "required": ["product_id", "quantity", "customer_name", "customer_email"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_available_payment_methods",
+      "description": "Get available payment options (link, Stripe, Mastercard, Visa). Call before checkout when caller asks how they can pay, or to offer 'pay with Mastercard' / 'pay with Visa' when supported.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "merchant_id": {
+            "type": "string",
+            "description": "Merchant ID (optional)"
+          }
+        },
+        "required": []
       }
     },
     {

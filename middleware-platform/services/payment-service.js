@@ -47,19 +47,26 @@ class PaymentService {
             };
         }
 
-        // Check if token expired (1 hour)
+        // Task 18: Configurable expiry (default 1 hour)
+        const expiryHours = parseFloat(process.env.PAYMENT_TOKEN_EXPIRY_HOURS || '1');
         const createdAt = new Date(paymentToken.created_at);
         const now = new Date();
         const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
 
-        if (hoursSinceCreated > 1) {
+        if (expiryHours > 0 && hoursSinceCreated > expiryHours) {
             return {
                 success: false,
                 error: 'Payment link expired'
             };
         }
 
-        // Check if already used
+        // Check if cancelled or already used
+        if (paymentToken.status === 'cancelled') {
+            return {
+                success: false,
+                error: 'Payment link was cancelled'
+            };
+        }
         if (paymentToken.status === 'used') {
             return {
                 success: false,
@@ -67,7 +74,7 @@ class PaymentService {
             };
         }
 
-        // Get checkout details
+        // Get checkout details (Task 53: return checkout with requires_verification when pending)
         const checkout = db.getVoiceCheckout(paymentToken.checkout_id);
 
         if (!checkout) {
@@ -80,13 +87,19 @@ class PaymentService {
         // Get merchant details
         const merchant = db.getMerchant(checkout.merchant_id);
 
+        // Task 53: require verification when token has verification_code and not yet verified
+        const identity_verified = !!(paymentToken.identity_verified_at || paymentToken.status === 'verified');
+        const requires_verification = !identity_verified && !!paymentToken.verification_code;
+
         return {
             success: true,
             checkout: {
                 ...checkout,
                 merchant_name: merchant ? merchant.name : 'Unknown Merchant'
             },
-            token: paymentToken
+            token: paymentToken,
+            requires_verification,
+            identity_verified
         };
     }
 
@@ -114,21 +127,28 @@ class PaymentService {
             };
         }
 
-        // Check if token expired (1 hour)
+        // Task 18: Configurable expiry
+        const expiryHours = parseFloat(process.env.PAYMENT_TOKEN_EXPIRY_HOURS || '1');
         const createdAt = new Date(tokenRecord.created_at);
         const now = new Date();
         const hoursSinceCreated = (now - createdAt) / (1000 * 60 * 60);
 
-        if (hoursSinceCreated > 1) {
+        if (expiryHours > 0 && hoursSinceCreated > expiryHours) {
             return {
                 success: false,
                 error: 'Payment link expired'
             };
         }
+        if (tokenRecord.status === 'cancelled') {
+            return {
+                success: false,
+                error: 'Payment link was cancelled'
+            };
+        }
 
-        // ATOMIC: Update token to 'used' only if it's still 'pending' or 'verified'
-        // This prevents double payment processing
-        const updateResult = db.updatePaymentTokenAtomic(token, 'pending', 'used');
+        // ATOMIC: Update token to 'used' only if 'verified' (Task 53) or 'pending' (legacy)
+        let updateResult = db.updatePaymentTokenAtomic(token, 'verified', 'used');
+        if (!updateResult.success) updateResult = db.updatePaymentTokenAtomic(token, 'pending', 'used');
         
         if (!updateResult.success) {
             // Token was already used or in wrong state

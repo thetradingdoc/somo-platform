@@ -18,6 +18,8 @@
 
 ## 1. Executive Overview
 
+**FHIR‑native RCM (2026):** For the Financial Intelligence Layer roadmap (EMPI + EDI→FHIR normalization into `ExplanationOfBenefit`), see **[FHIR_NATIVE_RCM_MAPPING.md](./FHIR_NATIVE_RCM_MAPPING.md)**.
+
 ### 1.1 Purpose
 
 The Financial Layer orchestrates healthcare revenue operations: insurance eligibility verification, claim submission, medical coding, EOB (Explanation of Benefits) calculation, invoicing, and patient payments. It integrates external APIs (Stedi for X12 EDI), internal knowledge bases (ICD-10, CPT, coding rules), and AI-assisted medical coding.

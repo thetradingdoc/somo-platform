@@ -6,6 +6,12 @@
 
 const db = require('../database');
 const EmailService = require('./email-service');
+let SMSService;
+try {
+  SMSService = require('./sms-service');
+} catch (_) {
+  SMSService = null;
+}
 
 class ReminderScheduler {
   static intervalId = null;
@@ -48,64 +54,80 @@ class ReminderScheduler {
   }
 
   /**
-   * Check for appointments needing reminders and send them
+   * Check for appointments needing reminders and send them (Task 52: 24h + 1h, optional SMS)
    */
   static async checkAndSendReminders() {
     try {
       const now = new Date();
       console.log(`\n⏰ Reminder Scheduler Check: ${now.toISOString()}`);
 
-      // Get all upcoming appointments in the next hour
       const allAppointments = db.getAllAppointments({});
       console.log(`📋 Total appointments in database: ${allAppointments.length}`);
 
+      // 24h reminders
+      const needs24h = allAppointments.filter(appt => {
+        if (!appt.status || !['scheduled', 'confirmed'].includes(appt.status)) return false;
+        if (!appt.patient_email) return false;
+        if (appt.reminder_24h_sent) return false;
+        if (!appt.start_time) return false;
+        const startTime = new Date(appt.start_time);
+        const timeUntil = startTime.getTime() - now.getTime();
+        const hoursUntil = timeUntil / (60 * 60 * 1000);
+        return hoursUntil >= 23.5 && hoursUntil <= 24.5;
+      });
+
+      for (const appt of needs24h) {
+        try {
+          console.log(`📧 Sending 24h reminder for ${appt.id} (${appt.patient_name})`);
+          const result = await EmailService.sendAppointmentReminder24h(appt);
+          if (result.success) {
+            if (db.markReminder24hSent) db.markReminder24hSent(appt.id);
+            console.log(`✅ 24h reminder sent to ${appt.patient_email}`);
+            if (SMSService && appt.patient_phone) {
+              const tz = appt.timezone || 'America/New_York';
+              const dt = new Date(appt.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+              const smsResult = await SMSService.sendSMS(appt.patient_phone, `DocLittle: Your appointment is tomorrow at ${dt}. Reply CANCEL to cancel.`);
+              if (smsResult && smsResult.success) console.log(`   📱 SMS 24h reminder sent`);
+            }
+          } else {
+            console.error(`❌ 24h reminder failed: ${result.error}`);
+          }
+        } catch (err) {
+          console.error(`❌ 24h reminder error for ${appt.id}:`, err.message);
+        }
+      }
+
+      // 1h reminders
       const appointmentsNeedingReminders = allAppointments.filter(appt => {
-        // Must be scheduled or confirmed
-        if (!appt.status || !['scheduled', 'confirmed'].includes(appt.status)) {
-          return false;
-        }
-
-        // Must have email
-        if (!appt.patient_email) {
-          return false;
-        }
-
-        // Must not have reminder sent already
-        if (appt.reminder_sent) {
-          return false;
-        }
-
-        // Must have start_time
-        if (!appt.start_time) {
-          return false;
-        }
-
+        if (!appt.status || !['scheduled', 'confirmed'].includes(appt.status)) return false;
+        if (!appt.patient_email) return false;
+        if (appt.reminder_sent) return false;
+        if (!appt.start_time) return false;
         const startTime = new Date(appt.start_time);
         const timeUntil = startTime.getTime() - now.getTime();
         const minutesUntil = Math.floor(timeUntil / (60 * 1000));
-
-        // Check if appointment is between 55 minutes and 65 minutes away
-        // (5-minute window to account for scheduler timing)
         const needsReminder = timeUntil >= 55 * 60 * 1000 && timeUntil <= 65 * 60 * 1000;
-
         if (needsReminder) {
-          console.log(`   📅 Found: ${appt.patient_name} - ${appt.date} at ${appt.time} (${minutesUntil} minutes away)`);
+          console.log(`   📅 Found 1h: ${appt.patient_name} - ${appt.date} at ${appt.time} (${minutesUntil} min away)`);
         }
-
         return needsReminder;
       });
 
-      console.log(`📧 Reminder Check: Found ${appointmentsNeedingReminders.length} appointments needing reminders`);
+      console.log(`📧 1h Reminder Check: Found ${appointmentsNeedingReminders.length} appointments`);
 
       for (const appt of appointmentsNeedingReminders) {
         try {
-          console.log(`📧 Sending reminder for appointment ${appt.id} (${appt.patient_name})`);
+          console.log(`📧 Sending 1h reminder for appointment ${appt.id} (${appt.patient_name})`);
           const result = await EmailService.sendAppointmentReminder(appt);
 
           if (result.success) {
-            // Mark reminder as sent
             db.markReminderSent(appt.id);
-            console.log(`✅ Reminder sent to ${appt.patient_email} for appointment on ${appt.date} at ${appt.time}`);
+            console.log(`✅ Reminder sent to ${appt.patient_email} for ${appt.date} at ${appt.time}`);
+            if (SMSService && appt.patient_phone) {
+              const tz = appt.timezone || 'America/New_York';
+              const dt = new Date(appt.start_time).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
+              await SMSService.sendSMS(appt.patient_phone, `DocLittle: Appointment reminder - you have an appointment at ${dt} today.`);
+            }
           } else {
             console.error(`❌ Failed to send reminder to ${appt.patient_email}: ${result.error}`);
           }
@@ -114,7 +136,7 @@ class ReminderScheduler {
         }
       }
 
-      if (appointmentsNeedingReminders.length === 0) {
+      if (needs24h.length === 0 && appointmentsNeedingReminders.length === 0) {
         console.log('   ℹ️  No appointments needing reminders at this time');
       }
 

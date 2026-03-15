@@ -169,9 +169,11 @@ class PatientPortalService {
 
       // Get appointments by email or phone
       let appointments = [];
-      if (session.email) {
-        // Try to find patient by email first
-        const patient = db.getFHIRPatientByEmail(session.email);
+      const normEmail = (session.email || '').toLowerCase().trim();
+
+      if (normEmail) {
+        // 1) Try FHIR patient_id (appointments linked to longitudinal patient record)
+        const patient = db.getFHIRPatientByEmail(normEmail);
         if (patient) {
           const patientId = patient.resource_id;
           appointments = db.db.prepare(`
@@ -181,9 +183,19 @@ class PatientPortalService {
             LIMIT 50
           `).all(patientId);
         }
+
+        // 2) Fallback: by patient_email (calendar-created appointments often lack patient_id)
+        if (appointments.length === 0) {
+          appointments = db.db.prepare(`
+            SELECT * FROM appointments 
+            WHERE LOWER(TRIM(patient_email)) = ? 
+            ORDER BY date DESC, time DESC
+            LIMIT 50
+          `).all(normEmail);
+        }
       }
 
-      // Fallback to phone if no appointments found
+      // 3) Fallback to phone if session has phone (e.g. future session enhancements)
       if (appointments.length === 0 && session.phone) {
         appointments = db.db.prepare(`
           SELECT * FROM appointments 
@@ -193,19 +205,37 @@ class PatientPortalService {
         `).all(session.phone);
       }
 
+      const pendingByAppt = {};
+      for (const apt of appointments) {
+        const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(apt.id);
+        if (pending) {
+          pendingByAppt[apt.id] = {
+            payment_status: pending.payment_status,
+            payment_link: pending.payment_link
+          };
+        }
+      }
+
       return {
         success: true,
-        appointments: appointments.map(apt => ({
-          id: apt.id,
-          patient_name: apt.patient_name,
-          appointment_type: apt.appointment_type,
-          date: apt.date,
-          time: apt.time,
-          status: apt.status,
-          datetime_display: this._formatDateTime(apt.date, apt.time),
-          can_reschedule: ['scheduled', 'confirmed'].includes(apt.status),
-          can_cancel: ['scheduled', 'confirmed'].includes(apt.status)
-        }))
+        appointments: appointments.map(apt => {
+          const video_room = apt.video_room_name || apt.id;
+          const payInfo = pendingByAppt[apt.id] || {};
+          return {
+            id: apt.id,
+            patient_name: apt.patient_name,
+            appointment_type: apt.appointment_type,
+            date: apt.date,
+            time: apt.time,
+            status: apt.status,
+            datetime_display: this._formatDateTime(apt.date, apt.time),
+            can_reschedule: ['scheduled', 'confirmed'].includes(apt.status),
+            can_cancel: ['scheduled', 'confirmed'].includes(apt.status),
+            video_room,
+            payment_status: payInfo.payment_status || null,
+            payment_link: payInfo.payment_link || null
+          };
+        })
       };
     } catch (error) {
       console.error('Error getting patient appointments:', error);

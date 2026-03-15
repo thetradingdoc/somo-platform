@@ -9,10 +9,13 @@ const WebSocket = require('ws');
 const axios = require('axios');
 const { fetchCallCosts } = require('../utils/cost-tracker');
 const { check: clinicRateLimitCheck } = require('../utils/clinic-rate-limiter');
+const tokenBudget = require('../utils/token-budget');
 const SMSService = require('../services/sms-service');
 const { processTurn: processCodingStateTurn } = require('../services/coding-state-service');
 const CodingGraph = require('../services/coding-graph');
 const { detectRedFlags, checkBeforeScheduling } = require('../services/triage-service');
+const AgentBrainService = require('../services/agent-brain-service');
+const CallSessionService = require('../services/call-session-service');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -39,6 +42,16 @@ class RetellWebSocketHandler {
             }
         }
 
+        // Create call session for this Retell call
+        const session = CallSessionService.startSession({
+            callId,
+            clinicId: existingState?.clinic_id || null,
+            metadata: {
+                channel: 'voice',
+                transport: 'retell'
+            }
+        });
+
         // Store connection
         const connection = {
             ws,
@@ -52,7 +65,8 @@ class RetellWebSocketHandler {
             nameProvidedAt: null, // Timestamp when name was first provided
             clinic_id: existingState?.clinic_id || null, // Restore from persisted state
             _codingState: existingState?.current_stage || 'INTAKE',
-            _codingStateData: existingState?.state_data || {}
+            _codingStateData: existingState?.state_data || {},
+            session
         };
         this.activeConnections.set(callId, connection);
 
@@ -217,10 +231,32 @@ class RetellWebSocketHandler {
                 }
             }
 
+            // Task 48: Link FHIR encounter completion to claim/payment on call end
+            try {
+                const enc = this.db.getFHIREncounterByCallId && this.db.getFHIREncounterByCallId(callId);
+                if (enc) {
+                    const rd = enc.resource_data || (typeof enc.resource_data === 'string' ? JSON.parse(enc.resource_data) : {});
+                    if (rd.status !== 'finished' && rd.status !== 'completed') {
+                        rd.status = 'finished';
+                        if (rd.period) rd.period.end = new Date().toISOString();
+                        this.db.updateFHIREncounter && this.db.updateFHIREncounter(enc.resource_id, rd);
+                        console.log(`✅ FHIR encounter ${enc.resource_id} completed on call end`);
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️  FHIR encounter completion on call end:', e.message);
+            }
+
             // Token budget: reset per-call usage when call ends (Section 10)
             try {
-                const tokenBudget = require('../utils/token-budget');
                 tokenBudget.reset(callId);
+            } catch (_) { /* ignore */ }
+
+            // End call session (for tracing / audit)
+            try {
+                CallSessionService.endSession(callId, {
+                    ended_at: new Date().toISOString()
+                });
             } catch (_) { /* ignore */ }
 
             this.activeConnections.delete(callId);
@@ -297,6 +333,29 @@ class RetellWebSocketHandler {
                 }
             }
 
+            // Task 6: Final fallback when Retell doesn't provide clinic_id
+            if (!connection.clinic_id) {
+                const fallback = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID;
+                if (fallback) {
+                    connection.clinic_id = fallback;
+                    console.log(`⚠️  Using fallback clinic_id from env: ${connection.clinic_id}`);
+                } else {
+                    try {
+                        const first = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE is_active = 1 LIMIT 1').get();
+                        if (first?.clinic_id) {
+                            connection.clinic_id = first.clinic_id;
+                            console.log(`⚠️  Using first active clinic as fallback: ${connection.clinic_id}`);
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            // Keep session in sync with resolved clinic_id
+            if (connection.session && connection.clinic_id && !connection.session.clinicId) {
+                CallSessionService.updateSession(callId, { clinicId: connection.clinic_id });
+                connection.session.clinicId = connection.clinic_id;
+            }
+
             // Persist call state once clinic_id is available (medical coding agent)
             if (connection.clinic_id && typeof this.db.upsertCallState === 'function') {
                 try {
@@ -365,6 +424,15 @@ class RetellWebSocketHandler {
             timestamp: Date.now()
         });
 
+        // Conversation history cap for token budget (simple turn-based limit)
+        const MAX_TURNS = 20;
+        if (connection.conversationHistory.length > MAX_TURNS) {
+            connection.conversationHistory.splice(
+                0,
+                connection.conversationHistory.length - MAX_TURNS
+            );
+        }
+
         // Persist to voice_conversation_memory (medical coding agent)
         if (typeof this.db.appendConversationMemory === 'function') {
             try {
@@ -415,8 +483,91 @@ class RetellWebSocketHandler {
             }
         }
 
-        // For healthcare, we let Retell LLM handle the conversation
-        // and call functions as needed. No intent detection here.
+        // Agent brain handles high-level reasoning and reply text
+        try {
+            const session = connection.session || CallSessionService.getSession(callId) || null;
+            const historyForBrain = (connection.conversationHistory || []).map((turn) => ({
+                role: turn.role === 'user' ? 'user' : 'assistant',
+                content: turn.content
+            }));
+
+            const turnIndex = connection.conversationHistory.length;
+
+            const brainInput = {
+                channel: 'voice',
+                sessionId: session?.traceId || callId,
+                callId,
+                clinicId: connection?.clinic_id || null,
+                speaker: 'user',
+                text: userSaid,
+                history: historyForBrain,
+                context: {
+                    clinicName: connection.callMetadata?.agent_name || null
+                }
+            };
+
+            let brainResult;
+
+            if (AgentBrainService.isStreamingAvailable && AgentBrainService.isStreamingAvailable()) {
+                brainResult = await AgentBrainService.streamTurn(brainInput, (partialText) => {
+                    if (!partialText) return;
+                    this.sendToRetell(connection.ws, {
+                        type: 'response',
+                        response: {
+                            content: partialText,
+                            end_call: false
+                        }
+                    });
+                });
+            } else {
+                brainResult = await AgentBrainService.processTurn(brainInput);
+            }
+
+            if (brainResult && brainResult.text) {
+                const agentReply = brainResult.text;
+
+                connection.conversationHistory.push({
+                    role: 'assistant',
+                    content: agentReply,
+                    timestamp: Date.now()
+                });
+
+                // Log agent turn to database if helper exists
+                if (this.db && typeof this.db.insertAgentTurn === 'function') {
+                    try {
+                        this.db.insertAgentTurn({
+                            call_id: callId,
+                            clinic_id: connection?.clinic_id || null,
+                            turn_index: turnIndex,
+                            role: 'assistant',
+                            text: agentReply,
+                            actions_json: brainResult.actions || [],
+                            prompt_profile_id: brainResult.meta?.promptProfileId,
+                            prompt_version: brainResult.meta?.promptVersion,
+                            prompt_checksum: brainResult.meta?.promptChecksum,
+                            model: brainResult.meta?.model,
+                            latency_ms: brainResult.meta?.latencyMs,
+                            trace_id: session?.traceId || null
+                        });
+                    } catch (e) {
+                        console.warn('⚠️  Failed to insert agent turn:', e.message);
+                    }
+                }
+
+                // For non-streaming path, send full reply once
+                if (!(AgentBrainService.isStreamingAvailable && AgentBrainService.isStreamingAvailable())) {
+                    this.sendToRetell(connection.ws, {
+                        type: 'response',
+                        response: {
+                            content: agentReply,
+                            end_call: brainResult.actions?.some(a => a.type === 'end_call') || false
+                        }
+                    });
+                }
+            }
+        } catch (e) {
+            console.warn('⚠️  Agent brain failed:', e.message);
+        }
     }
 
     // Handle function calls from Retell LLM
@@ -530,6 +681,9 @@ class RetellWebSocketHandler {
 
                 case 'create_checkout':
                     result = await this.handleCreateCheckout(callId, functionArgs);
+                    break;
+                case 'get_available_payment_methods':
+                    result = await this.handleGetAvailablePaymentMethods(callId, functionArgs);
                     break;
 
                 case 'search_icd10_codes':
@@ -1334,7 +1488,8 @@ class RetellWebSocketHandler {
             return {
                 success: false,
                 error: 'customer_email is required. Please provide your email address.',
-                requires_email: true
+                requires_email: true,
+                voice_agent_instruction: 'Ask the caller for their email address, then retry create_checkout with customer_email included.'
             };
         }
 
@@ -1380,14 +1535,16 @@ class RetellWebSocketHandler {
             
             const apiBaseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
 
-            // Create checkout request payload
+            // Create checkout request payload (payment_method for Mastercard Agent Pay / Stripe / link)
             const checkoutPayload = {
                 merchant_id: merchantId,
                 product_id: productId,
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_email: customerEmail,
-                quantity: quantity
+                quantity: quantity,
+                payment_method: functionArgs.payment_method || 'link',
+                mandate_id: functionArgs.mandate_id || null
             };
             
             console.log(`📤 Sending checkout request:`, JSON.stringify({
@@ -1467,6 +1624,32 @@ class RetellWebSocketHandler {
                 success: false,
                 error: error.message || 'Failed to create checkout'
             };
+        }
+    }
+
+    // Handle get_available_payment_methods (4.2)
+    async handleGetAvailablePaymentMethods(callId, functionArgs) {
+        try {
+            const PaymentMethodConfig = require('../services/payment-method-config');
+            const conn = this.activeConnections?.get(callId);
+            const merchantId = functionArgs?.merchant_id || conn?.merchant_id || null;
+            const { methods, details } = PaymentMethodConfig.getAvailablePaymentMethods(merchantId);
+
+            const labels = { link: 'payment link (email)', stripe: 'card (Stripe)', mastercard: 'Mastercard voice pay', visa: 'Visa voice pay' };
+            const available = methods.map(m => labels[m] || m);
+
+            return {
+                success: true,
+                payment_methods: methods,
+                available_options: available,
+                message: available.length > 0
+                    ? `You can pay via: ${available.join(', ')}.`
+                    : 'Payment link will be sent to your email.',
+                details: details
+            };
+        } catch (error) {
+            console.error('get_available_payment_methods error:', error);
+            return { success: false, error: error.message, payment_methods: ['link'] };
         }
     }
 
@@ -1814,7 +1997,7 @@ class RetellWebSocketHandler {
     getClinicId(callId) {
         const connection = this.activeConnections.get(callId);
         if (!connection) {
-            return null;
+            return this._resolveFallbackClinicId();
         }
 
         if (connection.clinic_id) {
@@ -1828,7 +2011,27 @@ class RetellWebSocketHandler {
             connection.callMetadata?.dynamic_variables?.customer_id ||
             null;
 
-        return metadataClinic || null;
+        if (metadataClinic) return metadataClinic;
+
+        // Task 6: Fallback when Retell doesn't provide clinic_id
+        return this._resolveFallbackClinicId();
+    }
+
+    _resolveFallbackClinicId() {
+        const envId = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID;
+        if (envId) {
+            console.warn(`⚠️  Using fallback clinic_id from env: ${envId}`);
+            return envId;
+        }
+        try {
+            const conn = this.db.db || this.db;
+            const first = conn.prepare('SELECT clinic_id FROM clinics WHERE is_active = 1 LIMIT 1').get();
+            if (first?.clinic_id) {
+                console.warn(`⚠️  Using first clinic as fallback: ${first.clinic_id}`);
+                return first.clinic_id;
+            }
+        } catch (_) {}
+        return null;
     }
 
     // ==========================================
@@ -1872,7 +2075,9 @@ class RetellWebSocketHandler {
             const connection = this.activeConnections.get(callId);
 
             // SAFETY: Red-flag check before scheduling (emergency symptoms → block scheduling)
-            if (typeof this.db.getConversationHistory === 'function') {
+            // Task 50: Provider override for incorrectly blocked EMERGENT bookings
+            const providerOverrideEmergency = args.provider_override_emergency === true || args.provider_override_emergency === 'true';
+            if (!providerOverrideEmergency && typeof this.db.getConversationHistory === 'function') {
                 const recentTurns = this.db.getConversationHistory(callId, 10);
                 const { blockScheduling, assessment } = checkBeforeScheduling(recentTurns);
                 if (blockScheduling && assessment?.isEmergency) {
@@ -1883,9 +2088,11 @@ class RetellWebSocketHandler {
                         isEmergency: true,
                         urgency: 'EMERGENT',
                         message: assessment.suggestedResponse,
-                        voice_agent_instruction: `CRITICAL: Do NOT schedule an appointment. The caller has described emergency symptoms. You MUST say: "${assessment.suggestedResponse}" and advise them to call 911 or go to the ER immediately.`
+                        voice_agent_instruction: `CRITICAL: Do NOT schedule an appointment. The caller has described emergency symptoms. You MUST say: "${assessment.suggestedResponse}" and advise them to call 911 or go to the ER immediately. If a provider confirms this is a false positive, retry with provider_override_emergency=true.`
                     };
                 }
+            } else if (providerOverrideEmergency) {
+                console.warn(`⚠️  Provider override: EMERGENT booking block bypassed for schedule_appointment`);
             }
 
             // Store the initial name when first provided (for fraud detection)
@@ -2019,6 +2226,8 @@ class RetellWebSocketHandler {
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/available-slots`, {
                 date: args.date,
                 appointment_type: args.appointment_type,
+                provider: args.provider || null,
+                practitioner_id: args.practitioner_id || null,
                 timezone: args.timezone || 'America/New_York',
                 clinic_id: clinicId
             });
@@ -2155,7 +2364,9 @@ class RetellWebSocketHandler {
                 customer_phone: args.customer_phone ? SMSService.formatPhoneNumber(args.customer_phone) : this.getCustomerPhone(callId),
                 appointment_type: args.appointment_type,
                 amount: args.amount,
-                clinic_id: clinicId
+                clinic_id: clinicId,
+                payment_method: args.payment_method || 'link',
+                mandate_id: args.mandate_id || null
             });
 
             return response.data;
@@ -2181,7 +2392,8 @@ class RetellWebSocketHandler {
         } catch (error) {
             return {
                 success: false,
-                error: error.message
+                error: error.message || error.response?.data?.error || 'Verification failed',
+                voice_agent_instruction: 'Ask the caller to re-read the 6-digit code from their email and retry verify_checkout_code. If they do not have the code, offer to resend it.'
             };
         }
     }

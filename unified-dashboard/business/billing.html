@@ -836,9 +836,13 @@
 
             // Check URL for section parameter - always show section, never card menu
             const urlParams = new URLSearchParams(window.location.search);
-            const section = urlParams.get('section') || 'overview';
+            let section = urlParams.get('section') || 'overview';
             const appointmentId = urlParams.get('appointment_id');
-            showSection(section, appointmentId);
+            const suggestedCodesParam = urlParams.get('suggested_codes');
+            if (suggestedCodesParam) {
+              section = 'scan';
+            }
+            showSection(section, appointmentId, suggestedCodesParam);
         }
 
         // Check if medical billing features are available
@@ -972,8 +976,8 @@
             window.history.pushState({}, '', 'billing.html');
         }
 
-        // Show specific section (appointmentId optional - for video visit -> create claim flow)
-        function showSection(sectionId, appointmentIdFromUrl) {
+        // Show specific section (appointmentId optional - for video visit -> create claim flow; suggestedCodesParam for video consult codes)
+        function showSection(sectionId, appointmentIdFromUrl, suggestedCodesParam) {
             // Hide nav cards
             document.getElementById('navCards').style.display = 'none';
 
@@ -1004,22 +1008,24 @@
             currentSection = sectionId;
 
             // Load section content
-            loadSectionContent(sectionId, appointmentId);
+            const suggestedCodes = suggestedCodesParam || new URLSearchParams(window.location.search).get('suggested_codes');
+            loadSectionContent(sectionId, appointmentId, suggestedCodes);
 
-            // Update URL (preserve appointment_id when on scan)
+            // Update URL (preserve appointment_id and suggested_codes when on scan)
             let url = `billing.html?section=${sectionId}`;
             if (appointmentId && sectionId === 'scan') url += `&appointment_id=${encodeURIComponent(appointmentId)}`;
+            if (suggestedCodes && sectionId === 'scan') url += `&suggested_codes=${encodeURIComponent(suggestedCodes)}`;
             window.history.pushState({}, '', url);
         }
 
         // Load content for specific section
-        async function loadSectionContent(sectionId, appointmentId) {
+        async function loadSectionContent(sectionId, appointmentId, suggestedCodes) {
             switch (sectionId) {
                 case 'overview':
                     await loadOverview();
                     break;
                 case 'scan':
-                    initializeScan(appointmentId);
+                    initializeScan(appointmentId, suggestedCodes);
                     break;
                 case 'claims':
                     await loadClaims();
@@ -1167,8 +1173,18 @@
             }
         }
 
+        // Classify code as ICD-10 (letter+digits) or CPT/HCPCS (5-digit or alphanumeric)
+        function classifyCode(code) {
+            const s = String(code || '').trim();
+            if (!s) return null;
+            if (/^[A-Z]\d/.test(s) || /^[A-Z]\d[A-Z]/.test(s)) return 'icd10';
+            if (/^\d{5}$/.test(s)) return 'cpt';
+            if (/^[A-Z]\d+/.test(s) && s.length <= 6) return 'cpt'; // HCPCS like G0438
+            return 'icd10'; // Default to ICD-10 for ambiguous
+        }
+
         // Initialize scan section
-        function initializeScan(appointmentId) {
+        function initializeScan(appointmentId, suggestedCodesParam) {
             const uploadArea = document.getElementById('uploadArea');
             const fileInput = document.getElementById('fileInput');
             const videoBanner = document.getElementById('videoVisitBanner');
@@ -1180,6 +1196,14 @@
             document.getElementById('pdfPreviewContainer').style.display = 'none';
             selectedCodes = { icd10: new Set(), cpt: new Set() };
             selectedPatientId = '';
+
+            if (suggestedCodesParam) {
+                const codes = String(suggestedCodesParam).split(',').map(c => c.trim()).filter(Boolean);
+                if (codes.length) {
+                    displaySuggestedCodesFromVideo(codes);
+                    return;
+                }
+            }
 
             // Set up file input
             uploadArea.onclick = () => fileInput.click();
@@ -1204,6 +1228,25 @@
                     handleFileUpload(e.dataTransfer.files[0]);
                 }
             };
+        }
+
+        function displaySuggestedCodesFromVideo(codes) {
+            const icd10 = [];
+            const cpt = [];
+            codes.forEach((code) => {
+                const type = classifyCode(code);
+                const obj = { code, description: 'Video consult suggestion' };
+                if (type === 'icd10') icd10.push(obj);
+                else cpt.push(obj);
+            });
+            const result = {
+                coding: { icd10 },
+                pricing: { breakdown: cpt.map(c => ({ code: c.code })) },
+                extractedText: ''
+            };
+            document.getElementById('scanResults').style.display = 'block';
+            document.getElementById('claimBuilder').style.display = 'block';
+            displayScanResults(result, null);
         }
 
         // Handle PDF file upload
@@ -1677,7 +1720,16 @@
             content.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏳</div><p>Loading invoices...</p></div>';
 
             try {
-                const response = await fetch(`${API_BASE}/api/invoices`, {
+                // If navigated from Patients "View Bill", scope to that patient's invoices
+                const urlParams = new URLSearchParams(window.location.search);
+                const patientId = urlParams.get('patient');
+                let invoicesUrl = `${API_BASE}/api/invoices`;
+                if (patientId) {
+                    const query = new URLSearchParams({ patient_id: patientId });
+                    invoicesUrl += `?${query.toString()}`;
+                }
+
+                const response = await fetch(invoicesUrl, {
                     credentials: 'include'
                 });
 
@@ -1694,10 +1746,13 @@
                 const invoices = data.invoices || [];
 
                 if (invoices.length === 0) {
+                    const scopedMsg = patientId
+                        ? 'No invoices found for this patient.'
+                        : 'No invoices found';
                     content.innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">🧾</div>
-                            <p>No invoices found</p>
+                            <p>${scopedMsg}</p>
                             <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
                                 Create invoices from claims or scan a PDF.
                             </p>

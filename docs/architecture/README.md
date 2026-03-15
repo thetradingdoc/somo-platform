@@ -14,6 +14,11 @@ System architecture, design decisions, and technical documentation.
 - **[multi-tenant/MULTI_TENANT_VOICE_AGENT.md](./multi-tenant/MULTI_TENANT_VOICE_AGENT.md)** — Multi-tenant architecture
 - **[payments/PAYMENT_ARCHITECTURE.md](./payments/PAYMENT_ARCHITECTURE.md)** — Payment processing, orchestrator
 
+### Hybrid (Voice + Video + PDF)
+- **[HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md)** — One-page: entry points, how codes are obtained, shared RAG/FHIR, boundaries
+- **[HYBRID_ARCHITECTURE_IMPROVEMENTS.md](./HYBRID_ARCHITECTURE_IMPROVEMENTS.md)** — Implemented improvements summary
+- **[VIDEO_CONSULT.md](./VIDEO_CONSULT.md)** — Video consult: flow, env vars, runbook (single doc)
+
 ### Layer-Specific
 - **[intelligence-layer/README.md](./intelligence-layer/README.md)** — Multimodal medical AI (Layers 1–4), perception, RAG, coding agents
 - **[financial/FINANCIAL_LAYER_ARCHITECTURE.md](./financial/FINANCIAL_LAYER_ARCHITECTURE.md)** — Insurance, claims, EOB, coding, settlement, Tiba
@@ -61,4 +66,4 @@ System architecture, design decisions, and technical documentation.
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** February 2026

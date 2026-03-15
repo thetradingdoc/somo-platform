@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .success-icon { font-size: 64px; text-align: center; margin-bottom: 20px; }
+        h1 { font-size: 24px; margin-bottom: 12px; color: #1a202c; }
+        .subtitle { color: #4a5568; margin-bottom: 24px; font-size: 16px; }
+        .appointment-info {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+        .appointment-info p { margin: 8px 0; color: #2d3748; }
+        .next-steps { margin: 20px 0; }
+        .next-steps h3 { font-size: 14px; color: #718096; margin-bottom: 12px; text-transform: uppercase; }
+        .btn {
+            display: block; width: 100%; padding: 16px 24px; border-radius: 8px;
+            font-size: 16px; font-weight: 600; text-align: center; text-decoration: none;
+            margin-bottom: 12px; cursor: pointer; border: none; transition: opacity 0.2s;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-secondary { background: #f7fafc; color: #667eea; border: 2px solid #667eea; }
+        .btn-secondary:hover { background: #edf2f7; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="success-icon">✅</div>
+        <h1>Payment Successful!</h1>
+        <p class="subtitle">Your payment has been confirmed.</p>
+        <div id="appointmentContext" class="appointment-info hidden"></div>
+        <div class="next-steps">
+            <h3>Next steps</h3>
+            <a id="appointmentsLink" href="/patients/appointments.html" class="btn btn-primary">View my appointments</a>
+            <a id="profileLink" href="/patients/profile.html" class="btn btn-secondary">Patient portal</a>
+        </div>
+    </div>
+    <script>
+        (function() {
+            var origin = window.location.origin;
+            document.getElementById('appointmentsLink').href = origin.replace(/\/$/, '') + '/patients/appointments.html';
+            document.getElementById('profileLink').href = origin.replace(/\/$/, '') + '/patients/profile.html';
+        })();
+    </script>
+</body>
+</html>

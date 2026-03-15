@@ -165,8 +165,8 @@ Keep responses short and natural for voice conversation.`;
             voice_id: 'openai-Alloy',
             language: 'en-US',
             response_engine: {
-                type: 'retell-llm',
-                llm_model: 'gpt-4'
+                // Use custom LLM mode so Retell connects to our WebSocket
+                type: 'custom_llm'
             },
             enable_backchannel: true,
             ambient_sound: 'office',

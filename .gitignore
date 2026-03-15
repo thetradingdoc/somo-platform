@@ -10,6 +10,8 @@ yarn-error.log*
 .env.*.local
 .env.bak
 *.env.bak
+.env.bak2
+*.env.bak2
 
 # Database files
 *.db
@@ -39,6 +41,12 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
 
 # Build outputs
 dist/

@@ -341,6 +341,7 @@
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
+        const API_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
         let currentEmail = '';
         let sessionId = '';
 
@@ -397,7 +398,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/patient/verify/send`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: API_HEADERS,
                     body: JSON.stringify({ email })
                 });
 
@@ -438,7 +439,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/patient/verify/confirm`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: API_HEADERS,
                     body: JSON.stringify({ email: currentEmail, code })
                 });
 
@@ -476,7 +477,7 @@
             try {
                 const response = await fetch(`${API_BASE}/api/patient/verify/send`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: API_HEADERS,
                     body: JSON.stringify({ email: currentEmail })
                 });
 
@@ -496,7 +497,7 @@
             const existingSession = localStorage.getItem('patient_session_id');
             if (existingSession) {
                 // Validate session
-                fetch(`${API_BASE}/api/patient/appointments?session_id=${existingSession}`)
+                fetch(`${API_BASE}/api/patient/appointments?session_id=${existingSession}`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
                     .then(r => r.json())
                     .then(data => {
                         if (data.success) {

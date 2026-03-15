@@ -94,7 +94,11 @@ async function shouldTriggerEscrowRelease(claimId, db) {
   const planPaidAmount = eobCalculation?.totals?.planPaid ?? claim.insurance_amount;
   const impactTier = claim.impact_tier ?? 1;
   const multiplier = SettlementService.getImpactWeightMultiplier(impactTier);
-  const splits = SettlementService.computeImpactWeightedSplits(planPaidAmount, multiplier);
+  // Safe: escrow releases are NOT standard insurance claim payments
+  const splits = SettlementService.computeImpactWeightedSplits(planPaidAmount, multiplier, {
+    context: 'escrow-release',
+    allowInsuranceClaims: false
+  });
 
   const patient = claim.patient_id && db.getFHIRPatient ? db.getFHIRPatient(claim.patient_id) : null;
   const patientHSA = patient?.patient_wallet_address || claim.patient_hsa_address || null;
@@ -151,9 +155,51 @@ async function getDataRequestSettlementRoute({ bounty, fulfillmentCount = 0, pro
   };
 }
 
+/**
+ * Task 45: Find stuck escrows past timeout and notify providers
+ * @param {Object} db - Database instance
+ * @returns {{ timedOut: Array, notified: number }}
+ */
+async function checkEscrowTimeoutAndNotify(db) {
+  const escrowTimeout = require('../config/escrow-timeout');
+  if (!escrowTimeout.shouldNotifyOnTimeout()) {
+    return { timedOut: [], notified: 0 };
+  }
+  const hours = escrowTimeout.getEscrowTimeoutHours();
+  const timedOut = [];
+  let notified = 0;
+  try {
+    const stuck = (db.getStuckEscrows || db.getStuckSettlementAttempts)
+      ? (db.getStuckEscrows(hours) || db.getStuckSettlementAttempts?.(hours) || [])
+      : [];
+    for (const attempt of stuck) {
+      if (escrowTimeout.isEscrowTimedOut(attempt.created_at)) {
+        timedOut.push(attempt);
+        const claim = attempt.claim_id && db.getClaimById ? db.getClaimById(attempt.claim_id) : null;
+        const clinicId = claim?.clinic_id || null;
+        const clinic = clinicId && db.getClinicById ? await db.getClinicById(clinicId) : null;
+        const providerEmail = clinic?.email || null;
+        if (providerEmail) {
+          try {
+            const EmailService = require('./email-service');
+            if (EmailService.sendEscrowTimeoutNotification) {
+              await EmailService.sendEscrowTimeoutNotification(providerEmail, attempt);
+              notified++;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('checkEscrowTimeoutAndNotify failed:', e.message);
+  }
+  return { timedOut, notified };
+}
+
 module.exports = {
   getSettlementRoute,
   shouldTriggerEscrowRelease,
   buildReleasePayload,
-  getDataRequestSettlementRoute
+  getDataRequestSettlementRoute,
+  checkEscrowTimeoutAndNotify
 };

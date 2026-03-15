@@ -424,6 +424,17 @@
                     <p>Loading claim details...</p>
                 </div>
             </div>
+
+            <!-- AI Exception Inbox (Reasoning Cards) -->
+            <section style="margin-top: 32px;">
+                <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">AI Exception Inbox</h2>
+                <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 16px;">
+                    Claims that require human-in-the-loop review, with AI-drafted reasoning and proposed fixes.
+                </p>
+                <div id="rcmExceptionContainer" style="display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+                    <div style="color: var(--gray-500); font-size: 14px;">Loading exceptions...</div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -451,7 +462,105 @@
             } else {
                 showError('No claim ID provided');
             }
+            loadRcmExceptions();
         });
+
+        async function loadRcmExceptions() {
+            const container = document.getElementById('rcmExceptionContainer');
+            if (!container) return;
+            container.innerHTML = '<div style="color: var(--gray-500); font-size: 14px;">Loading exceptions...</div>';
+            try {
+                const url = new URL(`${API_BASE}/api/rcm/exceptions`);
+                const customer = JSON.parse(sessionStorage.getItem('customer') || '{}');
+                if (customer.merchant_id) url.searchParams.set('merchant_id', customer.merchant_id);
+                if (customer.clinic_id) url.searchParams.set('clinic_id', customer.clinic_id);
+                const res = await fetch(url.toString(), { credentials: 'include' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const json = await res.json();
+                if (!json.success || !Array.isArray(json.items) || json.items.length === 0) {
+                    container.innerHTML = '<div style="color: var(--gray-500); font-size: 14px;">No AI exceptions requiring review.</div>';
+                    return;
+                }
+                container.innerHTML = json.items
+                    .map((d) => {
+                        const out = d.output_snapshot || {};
+                        const claimRef = out.claim_id || d.input_ref?.claim_id || 'Unknown';
+                        const payer = out.payer_name || 'Payer';
+                        const revenue = typeof d.revenue_impact === 'number' ? d.revenue_impact.toFixed(2) : '0.00';
+                        const explanation = d.explanation || 'AI flagged this claim for review.';
+                        const confidence = d.confidence != null ? Math.round(d.confidence * 100) : null;
+                        const daysRemaining = out.days_remaining_to_timely_filing;
+                        const tier =
+                            typeof daysRemaining === 'number' && daysRemaining <= 2
+                                ? 'critical'
+                                : d.revenue_impact >= 5000
+                                ? 'high'
+                                : 'normal';
+                        const tierLabel =
+                            tier === 'critical' ? '🔴 Critical' : tier === 'high' ? '🟠 High' : '🟡 Review';
+                        return `
+                        <article class="exception-card" data-decision-id="${d.id}" style="
+                            background: white;
+                            border-radius: 12px;
+                            padding: 16px;
+                            box-shadow: var(--shadow-sm);
+                            border: 1px solid var(--gray-200);
+                            display: flex;
+                            flex-direction: column;
+                            gap: 8px;
+                        ">
+                            <header style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                <div>
+                                    <div style="font-size:13px;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">${tierLabel}</div>
+                                    <h3 style="margin:4px 0 0;font-size:16px;font-weight:700;">Claim ${claimRef}</h3>
+                                    <div style="font-size:13px;color:var(--gray-600);">Payer: ${payer}</div>
+                                </div>
+                                <div style="text-align:right;font-size:13px;color:var(--gray-700);">
+                                    <div>Impact: <strong>$${revenue}</strong></div>
+                                    ${
+                                        typeof daysRemaining === 'number'
+                                            ? `<div style="color:${daysRemaining <= 2 ? '#b91c1c' : '#92400e'};">${daysRemaining} days to file</div>`
+                                            : ''
+                                    }
+                                    ${
+                                        confidence != null
+                                            ? `<div style="margin-top:4px;font-size:12px;color:var(--gray-500);">Trust: ${confidence}%</div>`
+                                            : ''
+                                    }
+                                </div>
+                            </header>
+                            <p style="font-size:14px;color:var(--gray-800);margin-top:4px;">${explanation}</p>
+                            <footer style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <button class="btn btn-primary" onclick="handleRcmDraftFix('${d.id}')" style="padding:8px 12px;border-radius:8px;border:none;background:var(--primary);color:white;font-size:13px;font-weight:600;cursor:pointer;">
+                                    ${out.action || 'Apply Drafted Fix'}
+                                </button>
+                                <button class="btn btn-secondary" onclick="handleViewEob('${d.id}')" style="padding:8px 12px;border-radius:8px;border:none;background:var(--gray-200);color:var(--gray-800);font-size:13px;font-weight:500;cursor:pointer;">
+                                    View Full EOB
+                                </button>
+                                <span style="margin-left:auto;font-size:11px;color:var(--gray-500);display:flex;align-items:center;gap:4px;">
+                                    <span>AI-assisted</span>
+                                </span>
+                            </footer>
+                        </article>
+                        `;
+                    })
+                    .join('');
+            } catch (e) {
+                console.error('Failed to load RCM exceptions:', e);
+                container.innerHTML =
+                    '<div style="color:var(--gray-500);font-size:14px;">RCM exception feed unavailable.</div>';
+            }
+        }
+
+        function handleRcmDraftFix(decisionId) {
+            console.log('Draft fix requested for decision', decisionId);
+            alert('Drafted fix execution is not yet wired. This will call the RCM resubmit API.');
+        }
+
+        function handleViewEob(decisionId) {
+            console.log('View EOB for decision', decisionId);
+            alert('Full EOB viewer is not yet wired. This will open the associated FHIR EOB.');
+        }
 
         async function loadClaim(claimId) {
             try {

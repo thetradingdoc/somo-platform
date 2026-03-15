@@ -364,6 +364,26 @@
       margin: 0;
       color: #374151;
     }
+
+    /* Side drawer for appointment details (replaces full-screen overlay) */
+    .details-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 420px;
+      max-width: 90vw;
+      height: 100vh;
+      background: #ffffff;
+      box-shadow: -16px 0 40px rgba(15, 23, 42, 0.18);
+      border-left: 1px solid var(--border);
+      z-index: 30;
+      display: none;
+      overflow-y: auto;
+    }
+
+    .details-panel-inner {
+      padding: 20px;
+    }
   </style>
 </head>
 
@@ -402,6 +422,7 @@
             <option value="cancelled">Cancelled</option>
           </select>
           <input id="providerFilter" placeholder="Provider" class="input" />
+          <button id="createApptBtn" class="btn btn-primary" style="background:#10b981;">+ Create Appointment</button>
           <button id="refreshBtn" class="btn btn-primary">Refresh</button>
         </div>
       </div>
@@ -418,11 +439,67 @@
     </main>
   </div>
 
-  <!-- Details Modal -->
-  <div id="detailsModal"
-    style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
-    <div
-      style="background:#fff; border-radius:16px; max-width:720px; width:100%; padding:20px; box-shadow:0 20px 60px rgba(8,145,178,0.25);">
+  <!-- Create Appointment Modal -->
+  <div id="createApptModal" class="details-panel" style="display:none;">
+    <div class="details-panel-inner">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div style="font-weight:700; color:#0e7490; font-size:18px;">Create New Appointment</div>
+        <button onclick="closeCreateModal()" style="border:none;background:none;font-size:20px;cursor:pointer">✖</button>
+      </div>
+      <form id="createApptForm" style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Patient name *</label>
+          <input type="text" id="createPatientSearch" class="input" required placeholder="Type name to search or enter manually" style="width:100%;" autocomplete="off" />
+          <div id="createPatientSearchResults" style="display:none; margin-top:4px; max-height:160px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; background:#fff;"></div>
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Patient Phone *</label>
+          <input type="tel" id="createPatientPhone" class="input" required style="width:100%;" placeholder="+1234567890" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Patient Email</label>
+          <input type="email" id="createPatientEmail" class="input" style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Appointment Type</label>
+          <select id="createApptType" class="select" style="width:100%;">
+            <option value="Mental Health Consultation">Mental Health Consultation</option>
+            <option value="Video Consultation">Video Consultation</option>
+            <option value="Follow-up Session">Follow-up Session</option>
+            <option value="Initial Assessment">Initial Assessment</option>
+            <option value="Crisis Intervention">Crisis Intervention</option>
+            <option value="Group Therapy">Group Therapy</option>
+            <option value="Medication Review">Medication Review</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Date *</label>
+          <input type="date" id="createApptDate" class="input" required style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Time *</label>
+          <input type="time" id="createApptTime" class="input" required style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Provider</label>
+          <input type="text" id="createProvider" class="input" style="width:100%;" placeholder="DocLittle Mental Health Team" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Notes</label>
+          <textarea id="createNotes" class="input" style="width:100%;min-height:60px;resize:vertical;"></textarea>
+        </div>
+        <div id="createApptError" style="color:#ef4444;font-size:14px;display:none;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+          <button type="button" onclick="closeCreateModal()" class="btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background:#10b981;">Create Appointment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Details Side Panel (replaces full-screen overlay) -->
+  <div id="detailsModal" class="details-panel">
+    <div class="details-panel-inner">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
         <div style="font-weight:700; color:#0e7490">Appointment Details</div>
         <button onclick="closeModal()" style="border:none;background:none;font-size:20px;cursor:pointer">✖</button>
@@ -499,7 +576,8 @@
       if (date) params.append('date', date);
       if (provider) params.append('provider', provider);
 
-      const res = await fetch(`${API_BASE}/api/admin/appointments?${params.toString()}`);
+      const url = `${API_BASE}/api/admin/appointments?${params.toString()}`;
+      const res = await fetch(url, { credentials: 'include' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to load appointments');
       return data.appointments || [];
@@ -513,9 +591,10 @@
     function toCalendarEvents(appts) {
       return appts.map(a => {
         const meta = parseBufferFromNotes(a.notes);
+        const patientLabel = (a.patient_name || 'Unknown').trim();
         return ({
           id: a.id,
-          title: `${a.appointment_type || 'Consultation'} • ${a.status}`,
+          title: `${patientLabel} • ${a.appointment_type || 'Consultation'}`,
           start: a.start_time || `${a.date}T${a.time}:00`,
           end: a.end_time || undefined,
           backgroundColor: statusColor(a.status),
@@ -541,25 +620,54 @@
             start_time: a.start_time,
             end_time: a.end_time,
             notes: a.notes || '',
-            video_room: `appt-${a.id}`
+            video_room: a.video_room_name || (a.id ? (String(a.id).startsWith('appt-') ? a.id : 'appt-' + a.id) : null)
           }
         });
       });
     }
 
-    function getVideoJoinUrl(appointmentId) {
+    function getVideoJoinUrl(roomName) {
       const base = (typeof window.resolveBusinessPath === 'function')
         ? window.location.origin + window.resolveBusinessPath('video-call.html')
         : window.location.origin + '/business/video-call.html';
-      return base + '?room=appt-' + encodeURIComponent(appointmentId);
+
+      const params = new URLSearchParams();
+      const room = (typeof roomName === 'string' && roomName.trim()) ? roomName.trim() : '';
+      if (room) {
+        params.set('room', room);
+      }
+
+      // Pass provider name through to the video UI so it can show up in LiveKit
+      if (typeof window.getUserData === 'function') {
+        try {
+          const user = window.getUserData() || {};
+          if (user.name) {
+            params.set('name', user.name);
+          }
+        } catch (_) {
+          // ignore parsing errors and continue without name
+        }
+      }
+
+      // Auto-join when coming from an appointment so the provider lands directly in the room
+      params.set('auto', '1');
+
+      const query = params.toString();
+      return query ? `${base}?${query}` : base;
     }
 
-    function handleJoinVideo(appointmentId) {
-      window.location.href = getVideoJoinUrl(appointmentId);
+    function handleJoinVideo(roomName) {
+      let room = roomName || (currentApptId ? (String(currentApptId).startsWith('appt-') ? currentApptId : 'appt-' + currentApptId) : '');
+      if (!room || room === 'appt-undefined' || room === 'appt-null') {
+        alert('This appointment does not have a video room. Please refresh the calendar or create the appointment again.');
+        return;
+      }
+      window.location.href = getVideoJoinUrl(room);
     }
 
     function handleCopyVideoLink(appointmentId) {
-      const url = getVideoJoinUrl(appointmentId);
+      const room = currentVideoRoom || (appointmentId ? 'appt-' + appointmentId : '');
+      const url = getVideoJoinUrl(room);
       navigator.clipboard.writeText(url).then(() => {
         const btn = document.getElementById('btnCopyVideoLink');
         if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy Link'; }, 2000); }
@@ -592,13 +700,18 @@
     }
 
     let currentApptId = null;
+    let currentVideoRoom = null;
     let showPHI = false;
 
     function openModal(contentHtml, apptId, status, extProps) {
       currentApptId = apptId;
+      const rawRoom = extProps && extProps.video_room ? extProps.video_room : null;
+      const fallbackRoom = (apptId && String(apptId) !== 'undefined') ? (String(apptId).startsWith('appt-') ? apptId : 'appt-' + apptId) : null;
+      currentVideoRoom = (rawRoom && rawRoom !== 'appt-undefined' && rawRoom !== 'appt-null') ? rawRoom : fallbackRoom;
+      showPHI = false;
       document.getElementById('modalContent').innerHTML = contentHtml;
       const modal = document.getElementById('detailsModal');
-      modal.style.display = 'flex';
+      modal.style.display = 'block';
 
       // Enable/disable action buttons based on status
       const btnConfirm = document.getElementById('btnConfirm');
@@ -616,7 +729,7 @@
       const btnJoinVideo = document.getElementById('btnJoinVideo');
       const btnCopyVideoLink = document.getElementById('btnCopyVideoLink');
       const btnSendVideoLink = document.getElementById('btnSendVideoLink');
-      btnJoinVideo.onclick = () => handleJoinVideo(currentApptId);
+      btnJoinVideo.onclick = () => handleJoinVideo(currentVideoRoom);
       btnCopyVideoLink.onclick = () => handleCopyVideoLink(currentApptId);
       btnSendVideoLink.onclick = () => handleSendVideoLink(currentApptId);
       btnJoinVideo.disabled = s === 'cancelled';
@@ -660,8 +773,32 @@
       document.getElementById('detailsModal').style.display = 'none';
     }
 
+    function openCreateModal() {
+      const modal = document.getElementById('createApptModal');
+      modal.style.display = 'block';
+      const today = new Date();
+      document.getElementById('createApptDate').value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      const nextHour = new Date();
+      nextHour.setHours(nextHour.getHours() + 1);
+      document.getElementById('createApptTime').value = String(nextHour.getHours()).padStart(2, '0') + ':' + String(nextHour.getMinutes()).padStart(2, '0');
+      document.getElementById('createApptError').style.display = 'none';
+      document.getElementById('createApptForm').reset();
+      document.getElementById('createPatientSearch').value = '';
+      document.getElementById('createPatientSearchResults').style.display = 'none';
+      document.getElementById('createPatientSearchResults').innerHTML = '';
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createApptModal').style.display = 'none';
+      document.getElementById('createApptError').style.display = 'none';
+    }
+
     async function initCalendar() {
       renderNavigation('calendar');
+      // Default date filter empty = show ALL appointments (past + future); user can filter by date if needed
+      const dateInput = document.getElementById('dateFilter');
+      dateInput.placeholder = 'All dates';
+
       const calendarEl = document.getElementById('calendar');
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
@@ -680,9 +817,112 @@
       }
 
       document.getElementById('refreshBtn').addEventListener('click', refresh);
+      document.getElementById('createApptBtn').addEventListener('click', openCreateModal);
       document.getElementById('statusFilter').addEventListener('change', refresh);
       document.getElementById('dateFilter').addEventListener('change', refresh);
       document.getElementById('providerFilter').addEventListener('keydown', (e) => { if (e.key === 'Enter') refresh(); });
+
+      // Patient search for create appointment
+      let searchTimeout = null;
+      document.getElementById('createPatientSearch').addEventListener('input', function () {
+        const q = this.value.trim();
+        const resultsEl = document.getElementById('createPatientSearchResults');
+        clearTimeout(searchTimeout);
+        if (q.length < 2) {
+          resultsEl.style.display = 'none';
+          resultsEl.innerHTML = '';
+          return;
+        }
+        searchTimeout = setTimeout(async () => {
+          try {
+            const res = await fetch(`${API_BASE}/fhir/Patient?name=${encodeURIComponent(q)}&_count=10`, { credentials: 'include' });
+            const bundle = await res.json();
+            const patients = (bundle.entry || []).map(e => e.resource).map(r => {
+              const nameObj = r.name && r.name[0] ? r.name[0] : {};
+              const name = `${(nameObj.given || []).join(' ')} ${nameObj.family || ''}`.trim() || 'Unknown';
+              const telecom = r.telecom || [];
+              const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
+              const email = (telecom.find(t => t.system === 'email') || {}).value || '';
+              return { id: r.id, name, phone, email };
+            });
+            if (patients.length === 0) {
+              resultsEl.innerHTML = '<div style="padding:12px;color:#6b7280;">No patients found. Enter details manually below.</div>';
+            } else {
+              resultsEl.innerHTML = patients.map(p => {
+                const label = [p.name, p.phone, p.email].filter(Boolean).join(' • ');
+                return `<div class="patient-search-item" data-name="${(p.name || '').replace(/"/g, '&quot;')}" data-phone="${(p.phone || '').replace(/"/g, '&quot;')}" data-email="${(p.email || '').replace(/"/g, '&quot;')}" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">${label || p.id}</div>`;
+              }).join('');
+              resultsEl.querySelectorAll('.patient-search-item').forEach(el => {
+                el.addEventListener('click', () => {
+                  document.getElementById('createPatientSearch').value = el.dataset.name || '';
+                  document.getElementById('createPatientPhone').value = el.dataset.phone || '';
+                  document.getElementById('createPatientEmail').value = el.dataset.email || '';
+                  resultsEl.style.display = 'none';
+                  resultsEl.innerHTML = '';
+                });
+              });
+            }
+            resultsEl.style.display = 'block';
+          } catch (e) {
+            resultsEl.innerHTML = '<div style="padding:12px;color:#ef4444;">Search failed. Enter details manually.</div>';
+            resultsEl.style.display = 'block';
+          }
+        }, 300);
+      });
+      document.getElementById('createPatientSearch').addEventListener('blur', function () {
+        setTimeout(() => {
+          document.getElementById('createPatientSearchResults').style.display = 'none';
+        }, 200);
+      });
+
+      // Handle create appointment form submission
+      document.getElementById('createApptForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errorDiv = document.getElementById('createApptError');
+        errorDiv.style.display = 'none';
+        
+        const formData = {
+          patient_name: document.getElementById('createPatientSearch').value.trim(),
+          patient_phone: document.getElementById('createPatientPhone').value.trim(),
+          patient_email: document.getElementById('createPatientEmail').value.trim() || null,
+          appointment_type: document.getElementById('createApptType').value,
+          date: document.getElementById('createApptDate').value,
+          time: document.getElementById('createApptTime').value,
+          provider: document.getElementById('createProvider').value.trim() || 'DocLittle Mental Health Team',
+          notes: document.getElementById('createNotes').value.trim() || ''
+        };
+
+        if (!formData.patient_name || !formData.patient_phone || !formData.date || !formData.time) {
+          errorDiv.textContent = 'Please fill in all required fields (Name, Phone, Date, Time)';
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        try {
+          const res = await fetch(`${API_BASE}/api/admin/appointments/create`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+          });
+
+          const result = await res.json();
+          
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to create appointment');
+          }
+
+          // Success - close modal and refresh calendar
+          closeCreateModal();
+          await refresh();
+          
+          // Show success message (optional)
+          alert(`Appointment created successfully! Confirmation: ${result.appointment?.id || 'N/A'}`);
+        } catch (err) {
+          errorDiv.textContent = err.message || 'Failed to create appointment. Please try again.';
+          errorDiv.style.display = 'block';
+          console.error('Create appointment error:', err);
+        }
+      });
 
       calendar.render();
       await refresh();

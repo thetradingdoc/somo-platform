@@ -1163,6 +1163,20 @@ try {
   console.warn('⚠️  provider_npi migration failed:', migrationError.message);
 }
 
+// Migration: proof_of_care_hash (Tiba Spec 5.3, 5.4)
+try {
+  const ic4 = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='insurance_claims'`).get();
+  if (ic4) {
+    const info4 = db.prepare(`PRAGMA table_info(insurance_claims)`).all();
+    if (!info4.some(c => c.name === 'proof_of_care_hash')) {
+      db.exec(`ALTER TABLE insurance_claims ADD COLUMN proof_of_care_hash TEXT;`);
+      console.log('✅ Migration complete: proof_of_care_hash added to insurance_claims');
+    }
+  }
+} catch (migrationError) {
+  console.warn('⚠️  proof_of_care_hash migration failed:', migrationError.message);
+}
+
 // Migration: provider_trust_metrics (Tiba Phase 3.7)
 try {
   db.exec(`
@@ -1175,6 +1189,16 @@ try {
       last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  const ptm = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='provider_trust_metrics'`).get();
+  if (ptm) {
+    const info = db.prepare('PRAGMA table_info(provider_trust_metrics)').all();
+    if (!info.some(c => c.name === 'coding_variance')) {
+      db.exec('ALTER TABLE provider_trust_metrics ADD COLUMN coding_variance REAL DEFAULT 0;');
+    }
+    if (!info.some(c => c.name === 'volume_anomaly_score')) {
+      db.exec('ALTER TABLE provider_trust_metrics ADD COLUMN volume_anomaly_score REAL DEFAULT 0;');
+    }
+  }
 } catch (migrationError) {
   console.warn('⚠️  provider_trust_metrics migration failed:', migrationError.message);
 }
@@ -1207,6 +1231,20 @@ try {
       console.log('📦 Adding video_room_name column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN video_room_name TEXT;`);
       console.log('✅ Migration complete: video_room_name added to appointments');
+    }
+    // Backfill: every appointment gets a stable video room (appt-{id} or id if already appt-*)
+    try {
+      const backfill = db.prepare(`
+        UPDATE appointments SET video_room_name = CASE
+          WHEN id LIKE 'appt-%' THEN id
+          ELSE 'appt-' || id
+        END WHERE video_room_name IS NULL
+      `).run();
+      if (backfill.changes > 0) {
+        console.log('✅ Migration complete: video_room_name backfilled for', backfill.changes, 'appointments');
+      }
+    } catch (e) {
+      console.warn('⚠️  video_room_name backfill skipped:', e.message);
     }
   }
 } catch (migrationError) {
@@ -1259,6 +1297,7 @@ db.exec(`
     retell_agent_status TEXT DEFAULT 'pending',
     merchant_id TEXT,
     is_active BOOLEAN DEFAULT 1,
+    surge_enabled BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -1275,6 +1314,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_clinics_phone ON clinics(phone_number);
   CREATE INDEX IF NOT EXISTS idx_clinic_phone_numbers_clinic ON clinic_phone_numbers(clinic_id);
   CREATE INDEX IF NOT EXISTS idx_clinic_phone_numbers_phone ON clinic_phone_numbers(phone_number);
+
+  -- ============================================
+  -- VISIT PRICING (per clinic + appointment type)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS visit_pricing (
+    clinic_id TEXT NOT NULL,
+    appointment_type TEXT NOT NULL,
+    base_price REAL NOT NULL,
+    surge_multiplier REAL DEFAULT 1.0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (clinic_id, appointment_type),
+    FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_visit_pricing_clinic ON visit_pricing(clinic_id);
+  CREATE INDEX IF NOT EXISTS idx_visit_pricing_appt_type ON visit_pricing(appointment_type);
 
   -- ============================================
   -- STRIPE ISSUING: CARDHOLDERS AND CARDS
@@ -1350,6 +1406,96 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_stripe_card_transactions_patient ON stripe_card_transactions(patient_id);
   CREATE INDEX IF NOT EXISTS idx_stripe_card_transactions_clinic ON stripe_card_transactions(clinic_id);
 `);
+
+// Migration: Add surge_enabled to clinics table (legal safety before dynamic pricing)
+try {
+  const clinicInfo = db.prepare(`PRAGMA table_info(clinics)`).all();
+  const hasSurgeEnabled = clinicInfo.some(c => c.name === 'surge_enabled');
+  if (!hasSurgeEnabled) {
+    console.log('📦 Adding surge_enabled column to clinics table...');
+    db.exec(`ALTER TABLE clinics ADD COLUMN surge_enabled BOOLEAN DEFAULT 0;`);
+    console.log('✅ Migration complete: surge_enabled added to clinics');
+  }
+} catch (migrationError) {
+  console.warn('⚠️  Clinics surge_enabled migration failed:', migrationError.message);
+}
+
+// Migration: Add per-clinic calendar and business hours (Tasks 1, 3, 51)
+try {
+  const clinicCols = db.prepare(`PRAGMA table_info(clinics)`).all();
+  const addCol = (name, sql) => {
+    if (!clinicCols.some(c => c.name === name)) {
+      db.exec(`ALTER TABLE clinics ADD COLUMN ${name} ${sql}`);
+      console.log(`✅ Migration: clinics.${name} added`);
+    }
+  };
+  addCol('timezone', "TEXT DEFAULT 'America/New_York'");
+  addCol('business_hours_start', 'INTEGER DEFAULT 9');
+  addCol('business_hours_end', 'INTEGER DEFAULT 19');
+  addCol('business_days', "TEXT DEFAULT '[1,2,3,4,5]'"); // Mon-Fri
+  addCol('holidays', 'TEXT'); // JSON array of YYYY-MM-DD
+  addCol('calendar_user_email', 'TEXT');
+  addCol('google_calendar_id', 'TEXT');
+} catch (e) {
+  console.warn('⚠️  Clinics calendar/business_hours migration failed:', e.message);
+}
+
+// Migration: reminder_24h_sent for 24h appointment reminders (Task 52)
+try {
+  const apptInfo = db.prepare(`PRAGMA table_info(appointments)`).all();
+  if (!apptInfo.some(c => c.name === 'reminder_24h_sent')) {
+    db.exec(`ALTER TABLE appointments ADD COLUMN reminder_24h_sent BOOLEAN DEFAULT 0;`);
+    console.log('✅ Migration: appointments.reminder_24h_sent added');
+  }
+} catch (e) {
+  console.warn('⚠️  appointments reminder_24h_sent migration failed:', e.message);
+}
+
+// ============================================
+// ADMIN SESSIONS (DB-backed, survives restarts)
+// ============================================
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_sessions (
+    id TEXT PRIMARY KEY,
+    issued_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    ip TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at DATETIME
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions(expires_at);
+`);
+
+// Seed base visit prices per clinic (idempotent) - Task 24: use config fallbacks
+try {
+  const { FALLBACKS } = require('./config/pricing-fallbacks');
+  const clinics = db.prepare(`SELECT clinic_id FROM clinics`).all();
+  if (Array.isArray(clinics) && clinics.length > 0) {
+    const seed = db.prepare(`
+      INSERT OR IGNORE INTO visit_pricing (clinic_id, appointment_type, base_price, surge_multiplier)
+      VALUES (?, ?, ?, ?)
+    `);
+    const apptTypes = [
+      { appointment_type: 'General Consult', base_price: FALLBACKS['General Consult'] },
+      { appointment_type: 'Therapy', base_price: FALLBACKS['Therapy'] },
+      { appointment_type: 'Psychiatry Initial', base_price: FALLBACKS['Psychiatry Initial'] },
+      { appointment_type: 'Psychiatry Follow-up', base_price: FALLBACKS['Psychiatry Follow-up'] },
+      { appointment_type: 'Mental Health Consultation', base_price: FALLBACKS['Mental Health Consultation'] }
+    ];
+    const tx = db.transaction(() => {
+      for (const c of clinics) {
+        for (const row of apptTypes) {
+          seed.run(c.clinic_id, row.appointment_type, row.base_price, 1.0);
+        }
+      }
+    });
+    tx();
+  }
+} catch (e) {
+  console.warn('⚠️  visit_pricing seeding skipped:', e.message);
+}
 
 // Add clinic_id to users table (multi-tenant migration)
 try {
@@ -1648,6 +1794,78 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice_id ON invoice_payments(invoice_id);
 
   -- ============================================
+  -- LEDGER ACCOUNTS & ENTRIES
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS ledger_accounts (
+    id TEXT PRIMARY KEY,
+    owner_type TEXT NOT NULL, -- patient|provider|insurer|system
+    owner_id TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    rail_type TEXT NOT NULL, -- stripe|circle|internal
+    status TEXT DEFAULT 'active',
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_accounts_owner
+    ON ledger_accounts(owner_type, owner_id, currency, rail_type);
+
+  CREATE TABLE IF NOT EXISTS ledger_entries (
+    id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    debit REAL DEFAULT 0,
+    credit REAL DEFAULT 0,
+    currency TEXT NOT NULL,
+    external_ref_type TEXT,
+    external_ref_id TEXT,
+    description TEXT,
+    status TEXT DEFAULT 'pending', -- pending|settled|void
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    settled_at DATETIME,
+    FOREIGN KEY (account_id) REFERENCES ledger_accounts(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ledger_entries_account ON ledger_entries(account_id);
+  CREATE INDEX IF NOT EXISTS idx_ledger_entries_status ON ledger_entries(status);
+
+  CREATE TABLE IF NOT EXISTS financial_events (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL, -- payment_intent|circle_transfer|claim|refund|adjustment
+    actor_type TEXT,
+    actor_id TEXT,
+    amount REAL,
+    currency TEXT,
+    rail_type TEXT,
+    status TEXT,
+    cause TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_financial_events_actor ON financial_events(actor_type, actor_id);
+  CREATE INDEX IF NOT EXISTS idx_financial_events_type ON financial_events(event_type);
+
+  -- ============================================
+  -- AUDIT LOG (SECURITY & COMPLIANCE)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    actor_type TEXT,
+    actor_id TEXT,
+    action TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    ip TEXT,
+    user_agent TEXT,
+    details TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_type, actor_id);
+  CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log(target_type, target_id);
+
+  -- ============================================
   -- CIRCLE PAYMENT INTEGRATION TABLES
   -- ============================================
 
@@ -1683,6 +1901,39 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_circle_transfers_claim_id ON circle_transfers(claim_id);
   CREATE INDEX IF NOT EXISTS idx_circle_transfers_status ON circle_transfers(status);
   CREATE INDEX IF NOT EXISTS idx_circle_transfers_circle_transfer_id ON circle_transfers(circle_transfer_id);
+
+  -- Settlement Attempts State Machine - tracks triple jump transfers for recovery
+  CREATE TABLE IF NOT EXISTS settlement_attempts (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT NOT NULL UNIQUE,
+    total_approved REAL NOT NULL,
+    provider_amount REAL NOT NULL,
+    revenue_amount REAL NOT NULL,
+    insurer_wallet_id TEXT NOT NULL,
+    escrow_wallet_id TEXT NOT NULL,
+    provider_wallet_id TEXT NOT NULL,
+    revenue_wallet_id TEXT NOT NULL,
+    transfer_1_status TEXT DEFAULT 'pending', -- pending, completed, failed
+    transfer_2_status TEXT DEFAULT 'pending',
+    transfer_3_status TEXT DEFAULT 'pending',
+    transfer_1_id TEXT, -- Circle transfer ID
+    transfer_2_id TEXT,
+    transfer_3_id TEXT,
+    transfer_1_circle_id TEXT, -- Circle transaction ID
+    transfer_2_circle_id TEXT,
+    transfer_3_circle_id TEXT,
+    error_message TEXT,
+    recovery_attempts INTEGER DEFAULT 0,
+    last_recovery_attempt DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    FOREIGN KEY (claim_id) REFERENCES insurance_claims(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_settlement_attempts_claim_id ON settlement_attempts(claim_id);
+  CREATE INDEX IF NOT EXISTS idx_settlement_attempts_transfer_1_status ON settlement_attempts(transfer_1_status);
+  CREATE INDEX IF NOT EXISTS idx_settlement_attempts_stuck ON settlement_attempts(transfer_1_status, transfer_2_status, created_at);
 
   -- EOB Calculation Audit - full transparency of inputs/outputs for each calculation
   CREATE TABLE IF NOT EXISTS eob_calculation_audit (
@@ -1861,6 +2112,49 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_agent_state_snapshots_call_id ON agent_state_snapshots(call_id);
+
+  CREATE TABLE IF NOT EXISTS prompt_profiles (
+    id TEXT PRIMARY KEY,
+    clinic_id TEXT,
+    name TEXT NOT NULL,
+    specialty TEXT,
+    system_prompt TEXT NOT NULL,
+    allowed_tools TEXT,
+    version TEXT DEFAULT 'v1',
+    status TEXT DEFAULT 'active', -- draft|active|archived
+    metadata TEXT,
+    created_by TEXT,
+    updated_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_prompt_profiles_clinic_id ON prompt_profiles(clinic_id);
+
+  CREATE TABLE IF NOT EXISTS prompt_audit_logs (
+    id TEXT PRIMARY KEY,
+    prompt_id TEXT NOT NULL,
+    user_id TEXT,
+    change_diff TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS agent_turns (
+    id TEXT PRIMARY KEY,
+    call_id TEXT NOT NULL,
+    clinic_id TEXT,
+    turn_index INTEGER,
+    role TEXT NOT NULL,
+    text TEXT,
+    actions_json TEXT,
+    prompt_profile_id TEXT,
+    prompt_version TEXT,
+    prompt_checksum TEXT,
+    model TEXT,
+    latency_ms INTEGER,
+    trace_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_turns_call_id ON agent_turns(call_id);
 
   CREATE TABLE IF NOT EXISTS sms_usage_log (
     id TEXT PRIMARY KEY,
@@ -3608,7 +3902,136 @@ migrateFHIRPatientsMerchantId(); // Link FHIR patients to merchants (tenants)
 migrateCircleAccountsMerchantId(); // Link wallets to merchants (tenants)
 migrateLeadLabels(); // Create lead labels system
 migrateResearchBounties(); // Pharma data requests for impact-weighted escrow
+migrateEmpiTables(); // Enterprise Master Patient Index (FHIR-native financial layer)
+migrateRcmPremiumTables(); // Premium billed/paid (Safe Harbor 2026)
+migrateRcmAiDecisions(); // Financial agent audit (FHIR-native RCM layer)
 migrateVideoConsultSessions(); // Video consult multimodal AI sessions
+
+/**
+ * Migration: Enterprise Master Patient Index (EMPI)
+ *
+ * empi_persons: canonical patient/person identifier used across systems
+ * empi_links: links EMPI IDs to source systems (EHR, FHIR, billing, wallet, claims, etc.)
+ */
+function migrateEmpiTables() {
+  try {
+    const empiExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='empi_persons'`).get();
+    if (!empiExists) {
+      console.log('🔄 Migrating: Creating EMPI tables (empi_persons, empi_links)');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS empi_persons (
+          id TEXT PRIMARY KEY,
+          primary_patient_id TEXT, -- optional internal patient/customer id
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS empi_links (
+          id TEXT PRIMARY KEY,
+          empi_id TEXT NOT NULL,
+          source_system TEXT NOT NULL, -- e.g. 'ehr', 'fhir', 'billing', 'rcm', 'wallet'
+          source_id TEXT NOT NULL,     -- id in that source system
+          entity_type TEXT,            -- e.g. 'patient', 'claim', 'coverage'
+          confidence REAL DEFAULT 1.0, -- 0-1 confidence of the match
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (empi_id) REFERENCES empi_persons(id)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_empi_link_source ON empi_links(source_system, source_id);
+        CREATE INDEX IF NOT EXISTS idx_empi_link_empi ON empi_links(empi_id);
+      `);
+      console.log('✅ Migration complete: EMPI tables created');
+    }
+  } catch (e) {
+    console.warn('⚠️  EMPI migration failed:', e.message);
+  }
+}
+
+/**
+ * Migration: RCM AI Decisions (financial agent audit)
+ *
+ * Stores agentic decisions for claims / reconciliation / patient liaison workflows.
+ * This is the financial analogue of video_consult_ai_decisions, but keyed for RCM.
+ */
+function migrateRcmAiDecisions() {
+  try {
+    const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='ai_decisions_rcm'`).get();
+    if (!exists) {
+      console.log('🔄 Migrating: Creating ai_decisions_rcm audit table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ai_decisions_rcm (
+          id TEXT PRIMARY KEY,
+          merchant_id TEXT,         -- tenant
+          clinic_id TEXT,
+          empi_id TEXT,             -- longitudinal patient identity (optional but preferred)
+          patient_id TEXT,          -- fallback when empi not resolved
+          agent_type TEXT NOT NULL, -- claims_specialist | reconciliation | patient_liaison | prior_auth
+          operation TEXT NOT NULL,  -- e.g. 'classify_denial', 'match_deposit', 'create_payment_plan'
+          input_ref TEXT,           -- JSON: claim_id/eob_id/deposit_id/etc
+          input_snapshot TEXT,      -- JSON: minimal structured input (avoid raw PHI if possible)
+          output_snapshot TEXT,     -- JSON: proposed decision/result
+          explanation TEXT,         -- JSON/text rationale suitable for audit (not patient-facing)
+          confidence REAL,
+          requires_human_review INTEGER DEFAULT 0,
+          human_review_status TEXT DEFAULT 'pending', -- pending|approved|rejected|n/a
+          reviewed_by TEXT,
+          reviewed_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_ai_rcm_merchant_created ON ai_decisions_rcm(merchant_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_ai_rcm_agent_created ON ai_decisions_rcm(agent_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_ai_rcm_empi_created ON ai_decisions_rcm(empi_id, created_at);
+      `);
+      console.log('✅ Migration complete: ai_decisions_rcm table created');
+    }
+  } catch (e) {
+    console.warn('⚠️  RCM AI decisions migration failed:', e.message);
+  }
+}
+
+/**
+ * Migration: RCM premium obligations + payments (Safe Harbor inputs)
+ *
+ * rcm_premium_obligations: billed premium per EMPI per month (YYYY-MM)
+ * rcm_premium_payments: payments applied toward premium per EMPI per month
+ */
+function migrateRcmPremiumTables() {
+  try {
+    const obExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='rcm_premium_obligations'`).get();
+    if (!obExists) {
+      console.log('🔄 Migrating: Creating rcm_premium_obligations / rcm_premium_payments');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS rcm_premium_obligations (
+          id TEXT PRIMARY KEY,
+          empi_id TEXT NOT NULL,
+          billing_month TEXT NOT NULL, -- YYYY-MM
+          billed_amount REAL NOT NULL,
+          currency TEXT DEFAULT 'USD',
+          payer_name TEXT,
+          plan_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (empi_id) REFERENCES empi_persons(id)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_rcm_premium_ob_unique ON rcm_premium_obligations(empi_id, billing_month);
+
+        CREATE TABLE IF NOT EXISTS rcm_premium_payments (
+          id TEXT PRIMARY KEY,
+          empi_id TEXT NOT NULL,
+          billing_month TEXT NOT NULL, -- YYYY-MM
+          paid_amount REAL NOT NULL,
+          currency TEXT DEFAULT 'USD',
+          rail TEXT, -- 'ach'|'card'|'usdc'|'hsa' etc.
+          reference TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (empi_id) REFERENCES empi_persons(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rcm_premium_pay_empi_month ON rcm_premium_payments(empi_id, billing_month);
+      `);
+      console.log('✅ Migration complete: RCM premium tables created');
+    }
+  } catch (e) {
+    console.warn('⚠️  RCM premium tables migration failed:', e.message);
+  }
+}
 
 /**
  * Migration: Create video_consult_sessions table (multimodal telehealth)
@@ -3694,6 +4117,132 @@ function migrateVideoConsultSessions() {
       if (!e.message?.includes('already exists')) console.warn('⚠️  Video consult composite indexes:', e.message);
     }
 
+    // vc-p0-1: fhir_diagnostic_reports for video consult AI assessment
+    const drExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='fhir_diagnostic_reports'`).get();
+    if (!drExists) {
+      console.log('🔄 Migrating: Creating fhir_diagnostic_reports table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS fhir_diagnostic_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          resource_id TEXT NOT NULL UNIQUE,
+          resource_data TEXT NOT NULL,
+          patient_id TEXT NOT NULL,
+          encounter_id TEXT,
+          effective_date DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          is_deleted INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_fhir_diagnostic_reports_patient ON fhir_diagnostic_reports(patient_id);
+        CREATE INDEX IF NOT EXISTS idx_fhir_diagnostic_reports_encounter ON fhir_diagnostic_reports(encounter_id);
+      `);
+      console.log('✅ Migration complete: fhir_diagnostic_reports table created');
+    }
+
+    // vc-db-5: Incremental transcript storage (real-time persistence)
+    const transcriptsExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_transcripts'`).get();
+    if (!transcriptsExists) {
+      console.log('🔄 Migrating: Creating video_consult_transcripts table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS video_consult_transcripts (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL,
+          appointment_id TEXT,
+          participant_identity TEXT,
+          speaker TEXT,
+          text TEXT NOT NULL,
+          timestamp DATETIME,
+          source TEXT DEFAULT 'agent_stt',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_vc_transcripts_room ON video_consult_transcripts(room_id);
+        CREATE INDEX IF NOT EXISTS idx_vc_transcripts_appointment ON video_consult_transcripts(appointment_id);
+        CREATE INDEX IF NOT EXISTS idx_vc_transcripts_speaker ON video_consult_transcripts(speaker);
+        CREATE INDEX IF NOT EXISTS idx_vc_transcripts_timestamp ON video_consult_transcripts(timestamp);
+      `);
+      console.log('✅ Migration complete: video_consult_transcripts table created');
+    }
+
+    // vc-db-6: Frame-level visual data storage
+    const framesExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_frames'`).get();
+    if (!framesExists) {
+      console.log('🔄 Migrating: Creating video_consult_frames table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS video_consult_frames (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL,
+          appointment_id TEXT,
+          participant_identity TEXT,
+          frame_url TEXT,
+          yolo_detections TEXT,
+          timestamp DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_vc_frames_room ON video_consult_frames(room_id);
+        CREATE INDEX IF NOT EXISTS idx_vc_frames_appointment ON video_consult_frames(appointment_id);
+        CREATE INDEX IF NOT EXISTS idx_vc_frames_timestamp ON video_consult_frames(timestamp);
+      `);
+      console.log('✅ Migration complete: video_consult_frames table created');
+    }
+
+    // vc-db-7: Add appointment_id links to video_consult_sessions
+    try {
+      const vcInfo = db.prepare(`PRAGMA table_info(video_consult_sessions)`).all();
+      const hasAppointmentId = vcInfo.some(c => c.name === 'appointment_id');
+      if (!hasAppointmentId) {
+        console.log('🔄 Migrating: Adding appointment_id to video_consult_sessions');
+        db.exec(`ALTER TABLE video_consult_sessions ADD COLUMN appointment_id TEXT;`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_vc_sessions_appointment ON video_consult_sessions(appointment_id);`);
+        console.log('✅ Migration complete: appointment_id added to video_consult_sessions');
+      }
+    } catch (e) {
+      if (!e.message?.includes('duplicate column')) console.warn('⚠️  appointment_id migration:', e.message);
+    }
+
+    // vc-db-8: Add appointment outcome fields
+    try {
+      const apptInfo = db.prepare(`PRAGMA table_info(appointments)`).all();
+      const addIfMissing = (col, sql) => {
+        if (!apptInfo.some(c => c.name === col)) {
+          console.log(`📦 Adding ${col} column to appointments table...`);
+          db.exec(sql);
+        }
+      };
+      addIfMissing('visit_summary', `ALTER TABLE appointments ADD COLUMN visit_summary TEXT;`);
+      addIfMissing('diagnosis_codes', `ALTER TABLE appointments ADD COLUMN diagnosis_codes TEXT;`);
+      addIfMissing('prescribed_medications', `ALTER TABLE appointments ADD COLUMN prescribed_medications TEXT;`);
+      addIfMissing('follow_up_notes', `ALTER TABLE appointments ADD COLUMN follow_up_notes TEXT;`);
+      addIfMissing('video_session_id', `ALTER TABLE appointments ADD COLUMN video_session_id TEXT;`);
+      addIfMissing('total_cost', `ALTER TABLE appointments ADD COLUMN total_cost REAL DEFAULT 0;`);
+      addIfMissing('llm_tokens_used', `ALTER TABLE appointments ADD COLUMN llm_tokens_used INTEGER DEFAULT 0;`);
+      console.log('✅ Migration complete: Appointment outcome fields added');
+    } catch (e) {
+      if (!e.message?.includes('duplicate column')) console.warn('⚠️  Appointment outcome fields migration:', e.message);
+    }
+
+    // vc-db-9: Risk events (symptom triage audit)
+    const riskEventsExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='video_consult_risk_events'`).get();
+    if (!riskEventsExists) {
+      console.log('🔄 Migrating: Creating video_consult_risk_events table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS video_consult_risk_events (
+          id TEXT PRIMARY KEY,
+          room_id TEXT NOT NULL,
+          appointment_id TEXT,
+          patient_id TEXT,
+          provider_id TEXT,
+          rule_id TEXT NOT NULL,
+          level TEXT NOT NULL,
+          match_snippet TEXT,
+          timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+          source TEXT DEFAULT 'symptom_triage'
+        );
+        CREATE INDEX IF NOT EXISTS idx_vc_risk_room ON video_consult_risk_events(room_id);
+        CREATE INDEX IF NOT EXISTS idx_vc_risk_timestamp ON video_consult_risk_events(timestamp);
+      `);
+      console.log('✅ Migration complete: video_consult_risk_events table created');
+    }
+
     db.pragma('foreign_keys = ON');
   } catch (error) {
     console.error('❌ Video consult migration failed:', error.message);
@@ -3751,10 +4300,279 @@ function safeStringify(data) {
   return JSON.stringify(data);
 }
 
+/**
+ * Task 23: Run versioned migrations from middleware-platform/migrations/
+ */
+function runMigrations() {
+  const migrationsDir = path.join(__dirname, 'migrations');
+  if (!fs.existsSync(migrationsDir)) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  const files = fs.readdirSync(migrationsDir).filter(f => /^\d+_.*\.js$/.test(f)).sort();
+  for (const f of files) {
+    const version = f.replace(/\.js$/, '');
+    const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version);
+    if (applied) continue;
+    try {
+      const m = require(path.join(migrationsDir, f));
+      if (typeof m.up === 'function') {
+        m.up(db);
+        db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)').run(version);
+        console.log(`✅ Migration applied: ${version}`);
+      }
+    } catch (e) {
+      console.warn(`⚠️  Migration ${version} failed:`, e.message);
+    }
+  }
+}
+runMigrations();
 
 module.exports = {
   // Expose the database instance for direct access when needed
   db: db,
+
+  // ============================================
+  // ADMIN SESSIONS (persistent admin auth)
+  // ============================================
+  createAdminSession: (session) => {
+    return db.prepare(`
+      INSERT INTO admin_sessions (id, issued_at, expires_at, ip, user_agent, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      session.id,
+      session.issued_at,
+      session.expires_at,
+      session.ip || null,
+      session.user_agent || null,
+      session.last_seen_at || session.issued_at
+    );
+  },
+  getAdminSession: (id) => {
+    try {
+      return db.prepare(`SELECT * FROM admin_sessions WHERE id = ?`).get(id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  touchAdminSession: (id) => {
+    try {
+      db.prepare(`UPDATE admin_sessions SET last_seen_at = datetime('now') WHERE id = ?`).run(id);
+    } catch (_) {}
+  },
+  deleteAdminSession: (id) => {
+    try {
+      db.prepare(`DELETE FROM admin_sessions WHERE id = ?`).run(id);
+    } catch (_) {}
+  },
+  deleteExpiredAdminSessions: () => {
+    try {
+      db.prepare(`DELETE FROM admin_sessions WHERE expires_at <= datetime('now')`).run();
+    } catch (_) {}
+  },
+
+  // ============================================
+  // VISIT PRICING (clinic + appointment type)
+  // ============================================
+  upsertVisitPricing: (row) => {
+    return db.prepare(`
+      INSERT INTO visit_pricing (clinic_id, appointment_type, base_price, surge_multiplier, updated_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+      ON CONFLICT (clinic_id, appointment_type) DO UPDATE SET
+        base_price = excluded.base_price,
+        surge_multiplier = excluded.surge_multiplier,
+        updated_at = datetime('now')
+    `).run(
+      row.clinic_id,
+      row.appointment_type,
+      row.base_price,
+      row.surge_multiplier ?? 1.0
+    );
+  },
+  getVisitPricing: (clinicId, appointmentType) => {
+    try {
+      return db.prepare(`
+        SELECT * FROM visit_pricing
+        WHERE clinic_id = ? AND appointment_type = ?
+        LIMIT 1
+      `).get(clinicId, appointmentType) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  insertPricingAuditLog: (record) => {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const id = record.id || `pal_${uuidv4()}`;
+      db.prepare(`
+        INSERT INTO pricing_audit_log (id, actor_id, actor_role, clinic_id, appointment_type, action, old_base_price, new_base_price, old_surge_multiplier, new_surge_multiplier, ip, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        id,
+        record.actor_id || null,
+        record.actor_role || 'admin',
+        record.clinic_id,
+        record.appointment_type,
+        record.action || 'update',
+        record.old_base_price ?? null,
+        record.new_base_price ?? null,
+        record.old_surge_multiplier ?? null,
+        record.new_surge_multiplier ?? 1.0,
+        record.ip || null
+      );
+      return id;
+    } catch (e) {
+      console.warn('insertPricingAuditLog failed:', e.message);
+      return null;
+    }
+  },
+  getClinic: (clinicId) => {
+    try {
+      return db.prepare(`SELECT * FROM clinics WHERE clinic_id = ? LIMIT 1`).get(clinicId) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  /**
+   * Return effective visit price for an appointment type at a clinic.
+   * - Falls back to sensible defaults when not configured.
+   * - Applies surge multiplier only when clinics.surge_enabled is true.
+   */
+  getEffectiveVisitPrice: (clinicId, appointmentType) => {
+    const normalizeType = (t) => {
+      const s = (t || '').toString().trim();
+      const l = s.toLowerCase();
+      if (!s) return 'General Consult';
+      if (l.includes('psychiatry') && (l.includes('follow') || l.includes('follow-up') || l.includes('follow up'))) return 'Psychiatry Follow-up';
+      if (l.includes('psychiatry')) return 'Psychiatry Initial';
+      if (l.includes('therapy') || l.includes('mental health')) return 'Therapy';
+      if (l.includes('consult')) return 'General Consult';
+      return s;
+    };
+
+    const clinic = clinicId ? (db.prepare(`SELECT * FROM clinics WHERE clinic_id = ?`).get(clinicId) || null) : null;
+    const surgeEnabled = !!clinic?.surge_enabled;
+    const canonical = normalizeType(appointmentType);
+
+    // Try exact match, then canonical match
+    const exact = clinicId && appointmentType ? (db.prepare(`
+      SELECT * FROM visit_pricing WHERE clinic_id = ? AND appointment_type = ? LIMIT 1
+    `).get(clinicId, appointmentType) || null) : null;
+    const row = exact || (clinicId ? (db.prepare(`
+      SELECT * FROM visit_pricing WHERE clinic_id = ? AND appointment_type = ? LIMIT 1
+    `).get(clinicId, canonical) || null) : null);
+
+    const { getPricingFallback } = require('./config/pricing-fallbacks');
+    const base = row?.base_price ?? getPricingFallback(canonical);
+    const mult = surgeEnabled ? (row?.surge_multiplier ?? 1.0) : 1.0;
+    const effective = Math.round((Number(base) * Number(mult)) * 100) / 100;
+    return { clinicId, appointmentType, canonicalType: canonical, base_price: Number(base), surge_multiplier: Number(mult), surge_enabled: surgeEnabled, effective_price: effective };
+  },
+
+  // ============================================
+  // LEDGER ACCOUNTS & ENTRIES
+  // ============================================
+  getOrCreateLedgerAccount: (ownerType, ownerId, currency, railType, metadata) => {
+    const existing = db.prepare(`
+      SELECT * FROM ledger_accounts
+      WHERE owner_type = ? AND owner_id = ? AND currency = ? AND rail_type = ?
+      LIMIT 1
+    `).get(ownerType, ownerId, currency, railType);
+    if (existing) return existing;
+    const id = `acct_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO ledger_accounts (id, owner_type, owner_id, currency, rail_type, status, metadata)
+      VALUES (?, ?, ?, ?, ?, 'active', ?)
+    `).run(id, ownerType, ownerId, currency, railType, safeStringify(metadata || {}));
+    return db.prepare(`SELECT * FROM ledger_accounts WHERE id = ?`).get(id);
+  },
+  getLedgerAccount: (id) => {
+    try {
+      return db.prepare(`SELECT * FROM ledger_accounts WHERE id = ?`).get(id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  insertLedgerEntry: (entry) => {
+    const id = entry.id || `le_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO ledger_entries (
+        id, account_id, debit, credit, currency,
+        external_ref_type, external_ref_id, description, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+    `).run(
+      id,
+      entry.account_id,
+      entry.debit || 0,
+      entry.credit || 0,
+      entry.currency,
+      entry.external_ref_type || null,
+      entry.external_ref_id || null,
+      entry.description || null,
+      entry.status || 'pending',
+      entry.created_at || null
+    );
+    return db.prepare(`SELECT * FROM ledger_entries WHERE id = ?`).get(id);
+  },
+  markLedgerEntrySettled: (id) => {
+    db.prepare(`
+      UPDATE ledger_entries
+      SET status = 'settled', settled_at = datetime('now')
+      WHERE id = ?
+    `).run(id);
+  },
+  getLedgerEntriesByRef: (externalRefType, externalRefId) => {
+    return db.prepare(`
+      SELECT * FROM ledger_entries
+      WHERE external_ref_type = ? AND external_ref_id = ?
+      ORDER BY created_at ASC
+    `).all(externalRefType, externalRefId);
+  },
+
+  // ============================================
+  // FINANCIAL EVENTS & AUDIT LOG
+  // ============================================
+  insertFinancialEvent: (event) => {
+    const id = event.id || `fe_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO financial_events (
+        id, event_type, actor_type, actor_id, amount, currency,
+        rail_type, status, cause, metadata, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+    `).run(
+      id,
+      event.event_type,
+      event.actor_type || null,
+      event.actor_id || null,
+      event.amount || null,
+      event.currency || null,
+      event.rail_type || null,
+      event.status || null,
+      event.cause || null,
+      safeStringify(event.metadata || {}),
+      event.created_at || null
+    );
+    return db.prepare(`SELECT * FROM financial_events WHERE id = ?`).get(id);
+  },
+  writeAuditLog: (log) => {
+    const id = log.id || `audit_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO audit_log (
+        id, actor_type, actor_id, action, target_type, target_id,
+        ip, user_agent, details, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+    `).run(
+      id,
+      log.actor_type || null,
+      log.actor_id || null,
+      log.action,
+      log.target_type || null,
+      log.target_id || null,
+      log.ip || null,
+      log.user_agent || null,
+      safeStringify(log.details || {}),
+      log.created_at || null
+    );
+    return id;
+  },
 
   // ============================================
   // POSTGRES SYNC RETRY QUEUE (Section 2.2)
@@ -3834,6 +4652,131 @@ module.exports = {
     try {
       return db.prepare('SELECT COUNT(*) as n FROM dlq_tool_calls').get()?.n ?? 0;
     } catch (_) { return 0; }
+  },
+
+  // ============================================
+  // PROMPT PROFILES & AUDIT
+  // ============================================
+  getClinicPromptProfile: (clinicId) => {
+    try {
+      const row = db.prepare(`
+        SELECT *
+        FROM prompt_profiles
+        WHERE clinic_id = ? AND status = 'active'
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `).get(clinicId);
+      return row || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  listPromptProfiles: (clinicId) => {
+    try {
+      return db.prepare(`
+        SELECT *
+        FROM prompt_profiles
+        WHERE clinic_id = ?
+        ORDER BY created_at DESC
+      `).all(clinicId);
+    } catch (_) {
+      return [];
+    }
+  },
+  upsertPromptProfile: (profile) => {
+    const id = profile.id || require('crypto').randomBytes(16).toString('hex');
+    const allowedToolsJson = Array.isArray(profile.allowed_tools)
+      ? JSON.stringify(profile.allowed_tools)
+      : profile.allowed_tools || null;
+    const metadataJson =
+      typeof profile.metadata === 'string'
+        ? profile.metadata
+        : profile.metadata
+        ? JSON.stringify(profile.metadata)
+        : null;
+    db.prepare(
+      `
+      INSERT INTO prompt_profiles (
+        id, clinic_id, name, specialty, system_prompt,
+        allowed_tools, version, status, metadata,
+        created_by, updated_by, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        clinic_id = excluded.clinic_id,
+        name = excluded.name,
+        specialty = excluded.specialty,
+        system_prompt = excluded.system_prompt,
+        allowed_tools = excluded.allowed_tools,
+        version = excluded.version,
+        status = excluded.status,
+        metadata = excluded.metadata,
+        updated_by = excluded.updated_by,
+        updated_at = datetime('now')
+    `
+    ).run(
+      id,
+      profile.clinic_id || null,
+      profile.name,
+      profile.specialty || null,
+      profile.system_prompt,
+      allowedToolsJson,
+      profile.version || 'v1',
+      profile.status || 'active',
+      metadataJson,
+      profile.created_by || null,
+      profile.updated_by || null
+    );
+    return id;
+  },
+  insertPromptAuditLog: (log) => {
+    const id = log.id || require('crypto').randomBytes(16).toString('hex');
+    db.prepare(
+      `
+      INSERT INTO prompt_audit_logs (id, prompt_id, user_id, change_diff, created_at)
+      VALUES (?, ?, ?, ?, datetime('now'))
+    `
+    ).run(
+      id,
+      log.prompt_id,
+      log.user_id || null,
+      typeof log.change_diff === 'string' ? log.change_diff : JSON.stringify(log.change_diff || {})
+    );
+    return id;
+  },
+
+  // ============================================
+  // AGENT TURNS LOG
+  // ============================================
+  insertAgentTurn: (turn) => {
+    const id = turn.id || require('crypto').randomBytes(16).toString('hex');
+    db.prepare(
+      `
+      INSERT INTO agent_turns (
+        id, call_id, clinic_id, turn_index, role, text,
+        actions_json, prompt_profile_id, prompt_version,
+        prompt_checksum, model, latency_ms, trace_id, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `
+    ).run(
+      id,
+      turn.call_id,
+      turn.clinic_id || null,
+      turn.turn_index || null,
+      turn.role,
+      turn.text || null,
+      typeof turn.actions_json === 'string'
+        ? turn.actions_json
+        : JSON.stringify(turn.actions_json || []),
+      turn.prompt_profile_id || null,
+      turn.prompt_version || null,
+      turn.prompt_checksum || null,
+      turn.model || null,
+      typeof turn.latency_ms === 'number' ? turn.latency_ms : null,
+      turn.trace_id || null
+    );
+    return id;
   },
   getDlqToolCalls: (limit = 50) => {
     try {
@@ -4531,6 +5474,34 @@ module.exports = {
     }
   },
 
+  /** Tasks 29–31: Get pending checkout and payment link for an appointment */
+  getPendingCheckoutForAppointment: (appointmentId) => {
+    if (!appointmentId) return null;
+    try {
+      const checkout = db.prepare(`
+        SELECT vc.* FROM voice_checkouts vc
+        WHERE vc.appointment_id = ? AND vc.status IN ('pending', 'completed')
+        ORDER BY vc.created_at DESC LIMIT 1
+      `).get(appointmentId);
+      if (!checkout) return null;
+      if (checkout.status === 'completed') return { checkout, payment_status: 'paid', payment_link: null };
+      const tokenRow = db.prepare(`
+        SELECT token FROM payment_tokens 
+        WHERE checkout_id = ? AND status IN ('pending', 'verified')
+        LIMIT 1
+      `).get(checkout.id);
+      if (!tokenRow) return { checkout, payment_status: 'pending', payment_link: null };
+      const base = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+      return {
+        checkout,
+        payment_status: 'pending',
+        payment_link: `${base.replace(/\/$/, '')}/payment/${tokenRow.token}`
+      };
+    } catch (_) {
+      return null;
+    }
+  },
+
   // Wallet transactions
   async createWalletTransaction(tx) {
     const id = tx.id || require('uuid').v4();
@@ -4689,12 +5660,29 @@ module.exports = {
         fields.push('used_at = CURRENT_TIMESTAMP');
       }
     }
+    if (updates.identity_verified_at !== undefined) {
+      try {
+        const info = db.prepare('PRAGMA table_info(payment_tokens)').all();
+        if (info.some(c => c.name === 'identity_verified_at')) {
+          fields.push('identity_verified_at = ?');
+          values.push(updates.identity_verified_at);
+        }
+      } catch (_) {}
+    }
 
     if (fields.length === 0) return;
 
     values.push(token);
     const query = `UPDATE payment_tokens SET ${fields.join(', ')} WHERE token = ?`;
     return db.prepare(query).run(...values);
+  },
+
+  cancelPaymentToken: (token) => {
+    const row = db.prepare('SELECT status FROM payment_tokens WHERE token = ?').get(token);
+    if (!row) return { success: false, error: 'Token not found' };
+    if (row.status === 'used') return { success: false, error: 'Token already used' };
+    db.prepare('UPDATE payment_tokens SET status = ? WHERE token = ?').run('cancelled', token);
+    return { success: true };
   },
 
   /**
@@ -5330,6 +6318,25 @@ module.exports = {
       resource_data: JSON.parse(row.resource_data),
       value: JSON.parse(row.value)
     }));
+  },
+
+  // Create FHIR DiagnosticReport (vc-p0-1: video consult AI assessment)
+  createFHIRDiagnosticReport(reportResource) {
+    const tableInfo = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all();
+    if (tableInfo.length === 0) return null;
+    const patientId = reportResource.subject?.reference?.replace('Patient/', '');
+    const encounterId = reportResource.encounter?.reference?.replace('Encounter/', '');
+    db.prepare(`
+      INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      reportResource.id,
+      JSON.stringify(reportResource),
+      patientId,
+      encounterId,
+      reportResource.effectiveDateTime || reportResource.issued
+    );
+    return reportResource.id;
   },
 
   // Create FHIR Audit Log
@@ -5978,7 +6985,7 @@ module.exports = {
     }
 
     if (usePostgres && pgPool) {
-      // Postgres path
+      // Postgres path (practitioner_id, timezone require ALTER TABLE if not in schema)
       await pgPool`
         INSERT INTO appointments (
           id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
@@ -6010,45 +7017,38 @@ module.exports = {
       `;
       return { changes: 1, lastInsertRowid: appointment.id };
     } else {
-      // SQLite path
-      const stmt = db.prepare(`
-        INSERT INTO appointments (
-          id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
-          appointment_type, date, time, start_time, end_time,
-          duration_minutes, provider, status, notes,
-          calendar_event_id, calendar_link, video_room_name, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      return stmt.run(
-        appointment.id,
-        appointment.clinic_id || null,
-        appointment.customer_id || null,
-        appointment.patient_name,
-        appointment.patient_phone,
-        appointment.patient_email,
-        appointment.patient_id || null,
-        appointment.appointment_type,
-        appointment.date,
-        appointment.time,
-        appointment.start_time,
-        appointment.end_time,
-        appointment.duration_minutes,
-        appointment.provider,
-        appointment.status,
-        notes,
-        appointment.calendar_event_id,
-        appointment.calendar_link,
-        appointment.video_room_name || null,
-        appointment.created_at
-      );
+      // SQLite path (Task 4: practitioner_id, Task 51: timezone) - optional columns from migration
+      const info = db.prepare('PRAGMA table_info(appointments)').all();
+      const hasPractitioner = info.some(c => c.name === 'practitioner_id');
+      const hasTimezone = info.some(c => c.name === 'timezone');
+      const baseCols = 'id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id, appointment_type, date, time, start_time, end_time, duration_minutes, provider';
+      const baseVals = [appointment.id, appointment.clinic_id || null, appointment.customer_id || null, appointment.patient_name, appointment.patient_phone, appointment.patient_email, appointment.patient_id || null, appointment.appointment_type, appointment.date, appointment.time, appointment.start_time, appointment.end_time, appointment.duration_minutes, appointment.provider];
+      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + ', created_at';
+      let vals = [...baseVals];
+      if (hasPractitioner) vals.push(appointment.practitioner_id || null);
+      vals.push(appointment.status, notes, appointment.calendar_event_id, appointment.calendar_link, appointment.video_room_name || null);
+      if (hasTimezone) vals.push(appointment.timezone || 'America/New_York');
+      vals.push(appointment.created_at);
+      const placeholders = vals.map(() => '?').join(', ');
+      const stmt = db.prepare(`INSERT INTO appointments (${cols}) VALUES (${placeholders})`);
+      return stmt.run(...vals);
     }
+  },
+
+  // Normalize appointment so video_room_name is always set (for agent + patient/provider UI)
+  _normalizeAppointmentVideoRoom(row) {
+    if (!row) return row;
+    if (!row.video_room_name && row.id) {
+      row.video_room_name = row.id.toString().startsWith('appt-') ? row.id : `appt-${row.id}`;
+    }
+    return row;
   },
 
   // Get appointment by ID
   // Get appointment by ID (supports both clinicId and customerId for tenant isolation)
   async getAppointment(id, clinicId = null, customerId = null) {
+    let row;
     if (usePostgres && pgPool) {
-      // Postgres path
       let query;
       if (customerId) {
         query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND customer_id = ${customerId}`;
@@ -6058,36 +7058,33 @@ module.exports = {
         query = pgPool`SELECT * FROM appointments WHERE id = ${id}`;
       }
       const results = await query;
-      return results[0] || null;
+      row = results[0] || null;
     } else {
-      // SQLite path
       let query = 'SELECT * FROM appointments WHERE (id = ? OR id LIKE ?)';
       const params = [id, `%${id}%`];
-
-      if (customerId) {
-        query += ' AND customer_id = ?';
-        params.push(customerId);
-      } else if (clinicId) {
-        query += ' AND clinic_id = ?';
-        params.push(clinicId);
-      }
-
+      if (customerId) { query += ' AND customer_id = ?'; params.push(customerId); }
+      else if (clinicId) { query += ' AND clinic_id = ?'; params.push(clinicId); }
       const stmt = db.prepare(query);
-      return stmt.get(...params);
+      row = stmt.get(...params);
     }
+    return this._normalizeAppointmentVideoRoom(row);
   },
 
-  // Get appointments by date
-  async getAppointmentsByDate(date, clinicId = null) {
+  // Get appointments by date (Task 4: optional practitionerId for provider-level availability)
+  // When practitionerId given: return only appointments that block that provider (same practitioner_id or null)
+  async getAppointmentsByDate(date, clinicId = null, practitionerId = null) {
     if (usePostgres && pgPool) {
-      // Postgres path
       let query;
       if (clinicId) {
         query = pgPool`SELECT * FROM appointments WHERE date = ${date} AND clinic_id = ${clinicId} ORDER BY time ASC`;
       } else {
         query = pgPool`SELECT * FROM appointments WHERE date = ${date} ORDER BY time ASC`;
       }
-      return await query;
+      let rows = await query;
+      if (practitionerId) {
+        rows = rows.filter(r => r.practitioner_id == null || r.practitioner_id === practitionerId);
+      }
+      return rows.map(r => this._normalizeAppointmentVideoRoom(r));
     } else {
       // SQLite path
       let query = 'SELECT * FROM appointments WHERE date = ?';
@@ -6101,7 +7098,14 @@ module.exports = {
       query += ' ORDER BY time ASC';
 
       const stmt = db.prepare(query);
-      return stmt.all(...params);
+      let rows = stmt.all(...params);
+      if (practitionerId) {
+        const hasCol = db.prepare("PRAGMA table_info(appointments)").all().some(c => c.name === 'practitioner_id');
+        if (hasCol) {
+          rows = rows.filter(r => !r.practitioner_id || r.practitioner_id === practitionerId);
+        }
+      }
+      return rows.map(r => this._normalizeAppointmentVideoRoom(r));
     }
   },
 
@@ -6132,7 +7136,8 @@ module.exports = {
           ORDER BY date DESC, time DESC
         `;
       }
-      return await query;
+      const results = await query;
+      return results.map(r => this._normalizeAppointmentVideoRoom(r));
     } else {
       // SQLite path
       let query = `
@@ -6152,7 +7157,8 @@ module.exports = {
       query += ' ORDER BY date DESC, time DESC';
 
       const stmt = db.prepare(query);
-      return stmt.all(...params);
+      const rows = stmt.all(...params);
+      return rows.map(r => this._normalizeAppointmentVideoRoom(r));
     }
   },
 
@@ -6190,7 +7196,27 @@ module.exports = {
     query += ' ORDER BY date DESC, time DESC';
 
     const stmt = db.prepare(query);
-    return stmt.all(...params);
+    const rows = stmt.all(...params);
+    return rows.map(r => this._normalizeAppointmentVideoRoom(r));
+  },
+
+  /**
+   * Get appointments for a set of FHIR patient ids (appointments.patient_id).
+   * @param {string[]} patientIds
+   * @param {object} [options]
+   * @returns {Array}
+   */
+  getAppointmentsByPatientIds(patientIds = [], options = {}) {
+    const ids = Array.isArray(patientIds) ? patientIds.filter(Boolean) : [];
+    if (ids.length === 0) return [];
+
+    // Postgres path (if enabled)
+    // SQLite / default path
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = db
+      .prepare(`SELECT * FROM appointments WHERE patient_id IN (${placeholders}) ORDER BY start_time DESC`)
+      .all(...ids);
+    return rows.map(r => this._normalizeAppointmentVideoRoom(r));
   },
 
   // Update appointment status (supports both clinicId and customerId for tenant isolation)
@@ -6287,7 +7313,7 @@ module.exports = {
     return result;
   },
 
-  // Update appointment reminder sent flag
+  // Update appointment reminder sent flag (1h)
   markReminderSent(id, clinicId = null) {
     let query = `
       UPDATE appointments
@@ -6309,6 +7335,21 @@ module.exports = {
       syncAppointmentToPostgres(updatedAppointment);
     }
     return result;
+  },
+
+  // Update 24h reminder sent flag (Task 52)
+  markReminder24hSent(id, clinicId = null) {
+    try {
+      let query = 'UPDATE appointments SET reminder_24h_sent = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+      const params = [id];
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+      db.prepare(query).run(...params);
+    } catch (_) {
+      // reminder_24h_sent column may not exist yet
+    }
   },
 
   // Delete appointment (hard delete)
@@ -6406,16 +7447,16 @@ module.exports = {
   // Create insurance claim
   createInsuranceClaim(claim) {
     try {
-      const stmt = db.prepare(`
-        INSERT INTO insurance_claims (
-          id, appointment_id, patient_id, member_id, payer_id,
-          service_code, diagnosis_code, total_amount, copay_amount,
-          insurance_amount, status, x12_claim_id, blockchain_proof,
-          submitted_at, response_data, circle_transfer_id, payment_status, payment_amount,
-          provider_npi
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      const result = stmt.run(
+      const proofHash = claim.proof_of_care_hash || null;
+      const hasProofCol = db.prepare(`PRAGMA table_info(insurance_claims)`).all().some(c => c.name === 'proof_of_care_hash');
+      const cols = [
+        'id', 'appointment_id', 'patient_id', 'member_id', 'payer_id',
+        'service_code', 'diagnosis_code', 'total_amount', 'copay_amount',
+        'insurance_amount', 'status', 'x12_claim_id', 'blockchain_proof',
+        'submitted_at', 'response_data', 'circle_transfer_id', 'payment_status', 'payment_amount',
+        'provider_npi'
+      ];
+      const vals = [
         claim.id,
         claim.appointment_id || null,
         claim.patient_id || null,
@@ -6435,7 +7476,14 @@ module.exports = {
         claim.payment_status || 'pending',
         claim.payment_amount || null,
         claim.provider_npi || null
-      );
+      ];
+      if (hasProofCol) {
+        cols.push('proof_of_care_hash');
+        vals.push(proofHash);
+      }
+      const placeholders = cols.map(() => '?').join(', ');
+      const stmt = db.prepare(`INSERT INTO insurance_claims (${cols.join(', ')}) VALUES (${placeholders})`);
+      const result = stmt.run(...vals);
       return result;
     } catch (error) {
       console.error('❌ Error creating insurance claim:', error);
@@ -6577,13 +7625,15 @@ module.exports = {
     if (!tableExists) return;
     const npi = String(providerNpi || '').trim();
     if (!npi) return;
-    const existing = db.prepare('SELECT trust_score FROM provider_trust_metrics WHERE provider_npi = ?').get(npi);
+    const existing = db.prepare('SELECT trust_score, denial_rate, coding_variance, volume_anomaly_score FROM provider_trust_metrics WHERE provider_npi = ?').get(npi);
     const tau = updates.trust_score != null ? updates.trust_score : (existing?.trust_score ?? 1.0);
-    const deny = updates.denial_rate != null ? updates.denial_rate : (existing ? db.prepare('SELECT denial_rate FROM provider_trust_metrics WHERE provider_npi = ?').get(npi)?.denial_rate : 0);
+    const deny = updates.denial_rate != null ? updates.denial_rate : (existing?.denial_rate ?? 0);
+    const cv = updates.coding_variance != null ? updates.coding_variance : (existing?.coding_variance ?? 0);
+    const va = updates.volume_anomaly_score != null ? updates.volume_anomaly_score : (existing?.volume_anomaly_score ?? 0);
     if (existing) {
-      db.prepare('UPDATE provider_trust_metrics SET trust_score = ?, denial_rate = ?, last_updated = datetime("now") WHERE provider_npi = ?').run(tau, deny, npi);
+      db.prepare('UPDATE provider_trust_metrics SET trust_score = ?, denial_rate = ?, coding_variance = ?, volume_anomaly_score = ?, last_updated = datetime("now") WHERE provider_npi = ?').run(tau, deny, cv, va, npi);
     } else {
-      db.prepare('INSERT OR REPLACE INTO provider_trust_metrics (provider_npi, trust_score, denial_rate, last_updated) VALUES (?, ?, ?, datetime("now"))').run(npi, tau, deny);
+      db.prepare('INSERT OR REPLACE INTO provider_trust_metrics (provider_npi, trust_score, denial_rate, coding_variance, volume_anomaly_score, last_updated) VALUES (?, ?, ?, ?, ?, datetime("now"))').run(npi, tau, deny, cv, va);
     }
   },
 
@@ -6594,6 +7644,15 @@ module.exports = {
     if (!npi) return null;
     const row = db.prepare('SELECT trust_score FROM provider_trust_metrics WHERE provider_npi = ?').get(npi);
     return row?.trust_score;
+  },
+
+  getProviderDenialRate(providerNpi) {
+    const tableExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='provider_trust_metrics'`).get();
+    if (!tableExists) return null;
+    const npi = String(providerNpi || '').trim();
+    if (!npi) return null;
+    const row = db.prepare('SELECT denial_rate FROM provider_trust_metrics WHERE provider_npi = ?').get(npi);
+    return row?.denial_rate ?? 0;
   },
 
   // Record EOB calculation audit (full transparency of inputs/outputs)
@@ -6990,6 +8049,16 @@ module.exports = {
     return stmt.get(circleTransferId);
   },
 
+  getCircleTransfersPending(limit = 50) {
+    const stmt = db.prepare(`
+      SELECT * FROM circle_transfers
+      WHERE status = 'pending' AND circle_transfer_id IS NOT NULL
+      ORDER BY created_at ASC
+      LIMIT ?
+    `);
+    return stmt.all(limit);
+  },
+
   // Get Circle transfers by claim ID
   getCircleTransfersByClaim(claimId) {
     const stmt = db.prepare(`
@@ -6998,6 +8067,95 @@ module.exports = {
       ORDER BY created_at DESC
     `);
     return stmt.all(claimId);
+  },
+
+  // Settlement Attempts State Machine (for stuck escrow recovery)
+  createSettlementAttempt(attempt) {
+    const stmt = db.prepare(`
+      INSERT INTO settlement_attempts (
+        id, claim_id, total_approved, provider_amount, revenue_amount,
+        insurer_wallet_id, escrow_wallet_id, provider_wallet_id, revenue_wallet_id,
+        transfer_1_status, transfer_2_status, transfer_3_status,
+        transfer_1_id, transfer_2_id, transfer_3_id,
+        transfer_1_circle_id, transfer_2_circle_id, transfer_3_circle_id,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      attempt.id,
+      attempt.claim_id,
+      attempt.total_approved,
+      attempt.provider_amount,
+      attempt.revenue_amount,
+      attempt.insurer_wallet_id,
+      attempt.escrow_wallet_id,
+      attempt.provider_wallet_id,
+      attempt.revenue_wallet_id,
+      attempt.transfer_1_status || 'pending',
+      attempt.transfer_2_status || 'pending',
+      attempt.transfer_3_status || 'pending',
+      attempt.transfer_1_id || null,
+      attempt.transfer_2_id || null,
+      attempt.transfer_3_id || null,
+      attempt.transfer_1_circle_id || null,
+      attempt.transfer_2_circle_id || null,
+      attempt.transfer_3_circle_id || null,
+      attempt.created_at || new Date().toISOString(),
+      attempt.updated_at || new Date().toISOString()
+    );
+  },
+
+  getSettlementAttemptByClaimId(claimId) {
+    const stmt = db.prepare(`
+      SELECT * FROM settlement_attempts
+      WHERE claim_id = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    return stmt.get(claimId);
+  },
+
+  updateSettlementAttempt(claimId, updates) {
+    const fields = [];
+    const values = [];
+    
+    const allowedFields = [
+      'transfer_1_status', 'transfer_2_status', 'transfer_3_status',
+      'transfer_1_id', 'transfer_2_id', 'transfer_3_id',
+      'transfer_1_circle_id', 'transfer_2_circle_id', 'transfer_3_circle_id',
+      'error_message', 'recovery_attempts', 'last_recovery_attempt',
+      'completed_at'
+    ];
+    
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+    
+    if (fields.length === 0) return { changes: 0 };
+    
+    // Always update updated_at
+    fields.push('updated_at = ?');
+    values.push(new Date().toISOString());
+    
+    values.push(claimId);
+    const query = `UPDATE settlement_attempts SET ${fields.join(', ')} WHERE claim_id = ?`;
+    return db.prepare(query).run(...values);
+  },
+
+  // Find stuck escrows: Transfer 1 completed but Transfer 2 not completed, older than 1 hour
+  getStuckEscrows(olderThanHours = 1) {
+    const stmt = db.prepare(`
+      SELECT * FROM settlement_attempts
+      WHERE transfer_1_status = 'completed'
+        AND transfer_2_status != 'completed'
+        AND datetime(created_at) < datetime('now', '-' || ? || ' hours')
+        AND (completed_at IS NULL OR completed_at = '')
+      ORDER BY created_at ASC
+    `);
+    return stmt.all(olderThanHours);
   },
 
   // Update insurance claim
@@ -7073,6 +8231,10 @@ module.exports = {
       fields.push('provider_npi = ?');
       values.push(updates.provider_npi);
     }
+    if (updates.proof_of_care_hash !== undefined) {
+      fields.push('proof_of_care_hash = ?');
+      values.push(updates.proof_of_care_hash);
+    }
 
     if (fields.length === 0) {
       return { changes: 0 };
@@ -7114,6 +8276,18 @@ module.exports = {
 
     const stmt = db.prepare(query);
     return stmt.all(...params);
+  },
+
+  // Task 46: Get claims for provider coding review queue (held, low-confidence, manual_review)
+  getClaimsForReviewQueue(filters = {}) {
+    const limit = Math.min(parseInt(filters.limit, 10) || 50, 100);
+    const stmt = db.prepare(`
+      SELECT * FROM insurance_claims
+      WHERE status IN ('submitted', 'pending', 'draft')
+      ORDER BY COALESCE(submitted_at, created_at) DESC
+      LIMIT ?
+    `);
+    return stmt.all(limit);
   },
 
   // ============================================
@@ -7753,18 +8927,33 @@ module.exports = {
   createVideoConsultSession(roomId, options = {}) {
     const id = require('crypto').randomBytes(16).toString('hex');
     const metaJson = options.metadata ? JSON.stringify(options.metadata) : null;
+    // Resolve appointment_id from room_id if it's appt-xxx format
+    let appointmentId = options.appointment_id || null;
+    if (!appointmentId && roomId && roomId.startsWith('appt-')) {
+      const aptId = roomId.replace(/^appt-/, '');
+      try {
+        const apt = this.getAppointment(aptId);
+        if (apt) appointmentId = apt.id;
+      } catch (_) {}
+    }
     try {
       db.prepare(`
-        INSERT INTO video_consult_sessions (id, room_id, encounter_id, clinic_id, patient_id, provider_id, session_status, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+        INSERT INTO video_consult_sessions (id, room_id, appointment_id, encounter_id, clinic_id, patient_id, provider_id, session_status, metadata)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
       `).run(
-        id, roomId,
+        id, roomId, appointmentId,
         options.encounter_id ?? null,
         options.clinic_id ?? null,
         options.patient_id ?? null,
         options.provider_id ?? null,
         metaJson
       );
+      // Link appointment to session
+      if (appointmentId) {
+        try {
+          db.prepare(`UPDATE appointments SET video_session_id = ? WHERE id = ?`).run(id, appointmentId);
+        } catch (_) {}
+      }
       return this.getVideoConsultSession(roomId);
     } catch (e) {
       if (e.message && e.message.includes('UNIQUE')) {
@@ -7807,6 +8996,348 @@ module.exports = {
       console.warn('⚠️  video_consult_ai_decisions insert failed:', e.message);
       return null;
     }
+  },
+
+  /**
+   * Insert an audit record for an RCM/financial agent decision.
+   * @param {object} payload
+   * @returns {string|null} id
+   */
+  insertRcmAiDecision(payload = {}) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const inputRef = payload.input_ref ? JSON.stringify(payload.input_ref) : null;
+    const inputSnapshot = payload.input_snapshot ? JSON.stringify(payload.input_snapshot) : null;
+    const outputSnapshot = payload.output_snapshot ? JSON.stringify(payload.output_snapshot) : null;
+    const explanation = payload.explanation
+      ? (typeof payload.explanation === 'string' ? payload.explanation : JSON.stringify(payload.explanation))
+      : null;
+    try {
+      db.prepare(`
+        INSERT INTO ai_decisions_rcm (
+          id, merchant_id, clinic_id, empi_id, patient_id,
+          agent_type, operation, input_ref, input_snapshot, output_snapshot,
+          explanation, confidence, requires_human_review, human_review_status,
+          reviewed_by, reviewed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        payload.merchant_id ?? null,
+        payload.clinic_id ?? null,
+        payload.empi_id ?? null,
+        payload.patient_id ?? null,
+        payload.agent_type,
+        payload.operation,
+        inputRef,
+        inputSnapshot,
+        outputSnapshot,
+        explanation,
+        payload.confidence ?? null,
+        payload.requires_human_review ? 1 : 0,
+        payload.human_review_status ?? (payload.requires_human_review ? 'pending' : 'n/a'),
+        payload.reviewed_by ?? null,
+        payload.reviewed_at ?? null
+      );
+      return id;
+    } catch (e) {
+      console.warn('⚠️  ai_decisions_rcm insert failed:', e.message);
+      return null;
+    }
+  },
+
+  /**
+   * List recent RCM AI decisions for a tenant/patient/EMPI.
+   * @param {object} options
+   * @returns {Array}
+   */
+  listRcmAiDecisions(options = {}) {
+    const limit = Math.min(parseInt(options.limit || '50', 10) || 50, 200);
+    const where = [];
+    const args = [];
+    if (options.merchant_id) {
+      where.push('merchant_id = ?');
+      args.push(options.merchant_id);
+    }
+    if (options.clinic_id) {
+      where.push('clinic_id = ?');
+      args.push(options.clinic_id);
+    }
+    if (options.empi_id) {
+      where.push('empi_id = ?');
+      args.push(options.empi_id);
+    }
+    if (options.patient_id) {
+      where.push('patient_id = ?');
+      args.push(options.patient_id);
+    }
+    if (options.agent_type) {
+      where.push('agent_type = ?');
+      args.push(options.agent_type);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const rows = db
+      .prepare(`
+        SELECT * FROM ai_decisions_rcm
+        ${whereSql}
+        ORDER BY created_at DESC
+        LIMIT ?
+      `)
+      .all(...args, limit);
+    return rows.map((r) => ({
+      ...r,
+      input_ref: r.input_ref ? JSON.parse(r.input_ref) : null,
+      input_snapshot: r.input_snapshot ? JSON.parse(r.input_snapshot) : null,
+      output_snapshot: r.output_snapshot ? JSON.parse(r.output_snapshot) : null,
+      explanation: (() => {
+        if (!r.explanation) return null;
+        try {
+          return JSON.parse(r.explanation);
+        } catch (_) {
+          return r.explanation;
+        }
+      })()
+    }));
+  },
+
+  /**
+   * Upsert billed premium obligation for an EMPI/month.
+   * @param {object} payload
+   * @returns {string|null} id
+   */
+  upsertRcmPremiumObligation(payload = {}) {
+    const empiId = payload.empi_id;
+    const billingMonth = payload.billing_month;
+    if (!empiId || !billingMonth) return null;
+    const id = payload.id || require('crypto').randomBytes(16).toString('hex');
+    try {
+      db.prepare(`
+        INSERT INTO rcm_premium_obligations (id, empi_id, billing_month, billed_amount, currency, payer_name, plan_id, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(empi_id, billing_month) DO UPDATE SET
+          billed_amount = excluded.billed_amount,
+          currency = excluded.currency,
+          payer_name = excluded.payer_name,
+          plan_id = excluded.plan_id,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(
+        id,
+        empiId,
+        billingMonth,
+        parseFloat(payload.billed_amount || 0),
+        payload.currency || 'USD',
+        payload.payer_name || null,
+        payload.plan_id || null
+      );
+      const row = db.prepare('SELECT id FROM rcm_premium_obligations WHERE empi_id = ? AND billing_month = ?').get(empiId, billingMonth);
+      return row?.id || id;
+    } catch (e) {
+      console.warn('⚠️  rcm_premium_obligations upsert failed:', e.message);
+      return null;
+    }
+  },
+
+  /**
+   * Add a premium payment record for an EMPI/month.
+   * @param {object} payload
+   * @returns {string|null} id
+   */
+  addRcmPremiumPayment(payload = {}) {
+    const empiId = payload.empi_id;
+    const billingMonth = payload.billing_month;
+    if (!empiId || !billingMonth) return null;
+    const id = payload.id || require('crypto').randomBytes(16).toString('hex');
+    try {
+      db.prepare(`
+        INSERT INTO rcm_premium_payments (id, empi_id, billing_month, paid_amount, currency, rail, reference)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        empiId,
+        billingMonth,
+        parseFloat(payload.paid_amount || 0),
+        payload.currency || 'USD',
+        payload.rail || null,
+        payload.reference || null
+      );
+      return id;
+    } catch (e) {
+      console.warn('⚠️  rcm_premium_payments insert failed:', e.message);
+      return null;
+    }
+  },
+
+  /**
+   * Get total billed vs paid premium for an EMPI/month.
+   * @param {string} empiId
+   * @param {string} billingMonth - YYYY-MM
+   * @returns {{ billed_amount: number, paid_amount: number, currency: string }}
+   */
+  getRcmPremiumTotalsForMonth(empiId, billingMonth) {
+    if (!empiId || !billingMonth) return { billed_amount: 0, paid_amount: 0, currency: 'USD' };
+    try {
+      const ob = db
+        .prepare('SELECT billed_amount, currency FROM rcm_premium_obligations WHERE empi_id = ? AND billing_month = ?')
+        .get(empiId, billingMonth);
+      const pay = db
+        .prepare('SELECT COALESCE(SUM(paid_amount), 0) as total_paid FROM rcm_premium_payments WHERE empi_id = ? AND billing_month = ?')
+        .get(empiId, billingMonth);
+      return {
+        billed_amount: parseFloat(ob?.billed_amount || 0),
+        paid_amount: parseFloat(pay?.total_paid || 0),
+        currency: ob?.currency || 'USD'
+      };
+    } catch (e) {
+      if (!e.message?.includes('no such table')) console.warn('⚠️  getRcmPremiumTotalsForMonth:', e.message);
+      return { billed_amount: 0, paid_amount: 0, currency: 'USD' };
+    }
+  },
+
+  // Incremental transcript persistence (real-time)
+  insertVideoConsultTranscript(roomId, transcriptData) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const { appointment_id, participant_identity, speaker, text, timestamp, source } = transcriptData;
+    try {
+      db.prepare(`
+        INSERT INTO video_consult_transcripts (id, room_id, appointment_id, participant_identity, speaker, text, timestamp, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, roomId, appointment_id || null, participant_identity || null,
+        speaker || 'unknown', text || '', timestamp || new Date().toISOString(), source || 'agent_stt'
+      );
+      return id;
+    } catch (e) {
+      console.warn('⚠️  video_consult_transcripts insert failed:', e.message);
+      return null;
+    }
+  },
+
+  //
+  // EMPI (Enterprise Master Patient Index) helpers
+  //
+
+  /**
+   * Create a new EMPI person and optional primary_patient_id.
+   * @param {string|null} primaryPatientId
+   * @returns {{id: string, primary_patient_id: string|null, created_at: string, updated_at: string}}
+   */
+  createEmpiPerson(primaryPatientId = null) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO empi_persons (id, primary_patient_id)
+      VALUES (?, ?)
+    `).run(id, primaryPatientId || null);
+    return db.prepare('SELECT * FROM empi_persons WHERE id = ?').get(id);
+  },
+
+  /**
+   * Find EMPI by a linked source id (e.g. FHIR Patient, internal patient).
+   * @param {string} sourceSystem
+   * @param {string} sourceId
+   * @returns {{id: string, primary_patient_id: string|null}|null}
+   */
+  getEmpiBySource(sourceSystem, sourceId) {
+    const link = db
+      .prepare('SELECT empi_id FROM empi_links WHERE source_system = ? AND source_id = ?')
+      .get(sourceSystem, sourceId);
+    if (!link) return null;
+    return db.prepare('SELECT * FROM empi_persons WHERE id = ?').get(link.empi_id);
+  },
+
+  /**
+   * Link a source id to an EMPI person (idempotent on source_system+source_id).
+   * @param {string} empiId
+   * @param {string} sourceSystem
+   * @param {string} sourceId
+   * @param {string} [entityType]
+   * @param {number} [confidence]
+   * @returns {string} link id
+   */
+  addEmpiLink(empiId, sourceSystem, sourceId, entityType = null, confidence = 1.0) {
+    const existing = db
+      .prepare('SELECT id FROM empi_links WHERE source_system = ? AND source_id = ?')
+      .get(sourceSystem, sourceId);
+    if (existing) {
+      return existing.id;
+    }
+    const id = require('crypto').randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO empi_links (id, empi_id, source_system, source_id, entity_type, confidence)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, empiId, sourceSystem, sourceId, entityType || null, confidence ?? 1.0);
+    return id;
+  },
+
+  /**
+   * Get all links for an EMPI person.
+   * @param {string} empiId
+   * @returns {Array<{id: string, empi_id: string, source_system: string, source_id: string, entity_type: string|null, confidence: number}>}
+   */
+  getEmpiLinks(empiId) {
+    return db
+      .prepare('SELECT * FROM empi_links WHERE empi_id = ? ORDER BY created_at ASC')
+      .all(empiId);
+  },
+
+  // Get transcripts for a room/appointment
+  getVideoConsultTranscripts(roomId, appointmentId = null) {
+    let query = 'SELECT * FROM video_consult_transcripts WHERE room_id = ?';
+    const params = [roomId];
+    if (appointmentId) {
+      query += ' OR appointment_id = ?';
+      params.push(appointmentId);
+    }
+    query += ' ORDER BY timestamp ASC, created_at ASC';
+    return db.prepare(query).all(...params);
+  },
+
+  // Incremental frame persistence (real-time)
+  insertVideoConsultFrame(roomId, frameData) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const { appointment_id, participant_identity, frame_url, yolo_detections, timestamp } = frameData;
+    const detectionsJson = yolo_detections ? JSON.stringify(yolo_detections) : null;
+    try {
+      db.prepare(`
+        INSERT INTO video_consult_frames (id, room_id, appointment_id, participant_identity, frame_url, yolo_detections, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, roomId, appointment_id || null, participant_identity || null,
+        frame_url || null, detectionsJson, timestamp || new Date().toISOString()
+      );
+      return id;
+    } catch (e) {
+      console.warn('⚠️  video_consult_frames insert failed:', e.message);
+      return null;
+    }
+  },
+
+  insertVideoConsultRiskEvent(roomId, riskData) {
+    const id = require('crypto').randomBytes(16).toString('hex');
+    const { appointment_id, patient_id, provider_id, rule_id, level, match_snippet } = riskData;
+    try {
+      db.prepare(`
+        INSERT INTO video_consult_risk_events (id, room_id, appointment_id, patient_id, provider_id, rule_id, level, match_snippet)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, roomId, appointment_id || null, patient_id || null, provider_id || null, rule_id || 'unknown', level || 'moderate', (match_snippet || '').slice(0, 80));
+      return id;
+    } catch (e) {
+      console.warn('⚠️  video_consult_risk_events insert failed:', e.message);
+      return null;
+    }
+  },
+
+  // Get frames for a room/appointment
+  getVideoConsultFrames(roomId, appointmentId = null) {
+    let query = 'SELECT * FROM video_consult_frames WHERE room_id = ?';
+    const params = [roomId];
+    if (appointmentId) {
+      query += ' OR appointment_id = ?';
+      params.push(appointmentId);
+    }
+    query += ' ORDER BY timestamp ASC, created_at ASC';
+    const rows = db.prepare(query).all(...params);
+    return rows.map(r => ({
+      ...r,
+      yolo_detections: r.yolo_detections ? JSON.parse(r.yolo_detections) : null
+    }));
   },
 
   insertCodingDecision({ call_id, clinic_id, patient_id, clinical_note, proposed_icd10, proposed_cpt, reasoning, confidence_score, validation_status, validation_reason, rule_version, rule_hash }) {

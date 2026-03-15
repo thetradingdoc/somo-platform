@@ -125,11 +125,31 @@ async function processIncoming(from, to, body) {
       });
       clearSession(from);
       if (result.success && result.appointment) {
-        return `Booked! Confirmation: ${result.appointment.id || 'see email'}. We'll send a reminder.`;
+        // Task 13: Auto-checkout on appointment creation (non-voice flow)
+        try {
+          const axios = require('axios');
+          const base = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+          const checkoutRes = await axios.post(`${base}/voice/appointments/checkout`, {
+            appointment_id: result.appointment.id,
+            patient_phone: from,
+            patient_email: null,
+            patient_name: 'SMS Booking',
+            clinic_id: session.clinicId,
+            appointment_type: 'Mental Health Consultation'
+          }, { timeout: 8000 });
+          if (checkoutRes.data && checkoutRes.data.payment_token && checkoutRes.data.amount) {
+            const payUrl = `${base}/api/payment/${checkoutRes.data.payment_token}`;
+            return `Booked! Pay here: ${payUrl} ($${checkoutRes.data.amount}). We'll send a reminder.`;
+          }
+        } catch (_) {}
+        return `Booked! Confirmation: ${result.appointment.id || result.appointment.confirmation_number || 'see email'}. We'll send a reminder.`;
       }
       return result.message || result.error || "Booking failed. Please call us.";
     } catch (e) {
       clearSession(from);
+      if (e.slot_conflict && Array.isArray(e.alternative_slots) && e.alternative_slots.length > 0) {
+        return `Sorry, that slot was taken. Try: ${e.alternative_slots.slice(0, 4).join(', ')}. Reply BOOK for more.`;
+      }
       return `Sorry, ${e.message}. Please call to book.`;
     }
   }

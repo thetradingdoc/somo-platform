@@ -107,7 +107,10 @@ router.get('/:id/release-check', async (req, res) => {
     });
 
     const splits = bounty.escrow_hash
-      ? SettlementService.computeImpactWeightedSplits(bounty.total_bounty_amount, SettlementService.getImpactWeightMultiplier(bounty.impact_tier || 1))
+      ? SettlementService.computeImpactWeightedSplits(bounty.total_bounty_amount, SettlementService.getImpactWeightMultiplier(bounty.impact_tier || 1), {
+          context: 'research-bounty',
+          allowInsuranceClaims: false
+        })
       : null;
 
     res.json({

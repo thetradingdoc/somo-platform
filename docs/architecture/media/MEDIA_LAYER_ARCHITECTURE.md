@@ -217,7 +217,7 @@ User speaks on call
 3. `end_session` → full pipeline (RAG → HITL check → FHIR)
 4. Transcript stored as FHIR Communication
 
-See [VIDEO_CONSULT_ARCHITECTURE.md](../VIDEO_CONSULT_ARCHITECTURE.md) and [VIDEO_CONSULT_ENV.md](../VIDEO_CONSULT_ENV.md).
+See [VIDEO_CONSULT.md](../VIDEO_CONSULT.md).
 
 ---
 

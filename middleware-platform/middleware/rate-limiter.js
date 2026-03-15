@@ -159,6 +159,21 @@ const voiceLimiter = rateLimit({
   skip: shouldSkipInternalJob
 });
 
+// Task 27: Strict rate limiting for schedule and checkout (voice agent abuse prevention)
+const scheduleCheckoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // 15 requests per 15 min per IP
+  message: {
+    error: 'Too many scheduling or checkout requests. Please try again later.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: { trustProxy: false, ip: false },
+  skip: shouldSkipInternalJob
+});
+
 // Chat commands - moderate (allows quick actions but prevents abuse)
 const chatLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
@@ -185,6 +200,7 @@ module.exports = {
   adminLimiter,
   paymentLimiter,
   voiceLimiter,
-  chatLimiter
+  chatLimiter,
+  scheduleCheckoutLimiter
 };
 

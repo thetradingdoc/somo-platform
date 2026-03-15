@@ -117,6 +117,4 @@ Middleware requires `VIDEO_CONSULT_AGENT_SECRET`. Agents must send:
 
 ## Related
 
-- [VIDEO_CONSULT_ARCHITECTURE.md](../docs/architecture/VIDEO_CONSULT_ARCHITECTURE.md)
-- [VIDEO_CONSULT_ENV.md](../docs/architecture/VIDEO_CONSULT_ENV.md)
-- [VIDEO_CONSULT_RUNBOOK.md](../docs/architecture/VIDEO_CONSULT_RUNBOOK.md)
+- [VIDEO_CONSULT.md](../docs/architecture/VIDEO_CONSULT.md) — flow, env vars, runbook

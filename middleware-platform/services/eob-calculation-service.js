@@ -250,7 +250,8 @@ class EOBCalculationService {
             description: `CPT Code ${code}`,
             charge: amountPerService,
             allowed_amount: allowedAmount,
-            date_of_service: claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+            date_of_service: claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            modifiers: []
           };
         });
       } else {
@@ -260,7 +261,8 @@ class EOBCalculationService {
           description: 'Medical Service',
           charge: claim.total_amount || 0,
           allowed_amount: claimDetails.allowed_amount ? parseFloat(claimDetails.allowed_amount) : null,
-          date_of_service: claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+          date_of_service: claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          modifiers: []
         }];
       }
     }
@@ -282,7 +284,8 @@ class EOBCalculationService {
           description: item.description || item.name || '',
           charge: item.charge || item.amount || item.billed_amount || 0,
           allowed_amount: item.allowed_amount || null,
-          date_of_service: item.date_of_service || (claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
+          date_of_service: item.date_of_service || (claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
+          modifiers: Array.isArray(item.modifiers) ? item.modifiers : []
         }));
         
         console.log(`✅ EOB: Generated ${lineItems.length} service line items from diagnosis codes`);
@@ -296,7 +299,8 @@ class EOBCalculationService {
         description: 'Medical Service',
         charge: claim.total_amount || 0,
         allowed_amount: claimDetails.allowed_amount ? parseFloat(claimDetails.allowed_amount) : null,
-        date_of_service: claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+        date_of_service: claim.submitted_at ? new Date(claim.submitted_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        modifiers: []
       }];
     }
 
