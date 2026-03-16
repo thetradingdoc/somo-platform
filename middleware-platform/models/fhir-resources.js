@@ -467,32 +467,32 @@ class FHIRResources {
 
   /**
    * Create a DiagnosticReport (clinical assessment summary)
-   * @param {Object} data - { patientId, patientName, encounterId, conclusion, results[], ... }
+   * Phase 8 Task 57: Supports LOINC 11488-4 Consult note, conclusion, presentedForm (base64 markdown).
+   * @param {Object} data - { patientId, patientName, encounterId, conclusion, results[], presentedFormMarkdown, loincCode (default 11488-4), ... }
    */
   static createDiagnosticReport(data) {
     const id = data.id || `diagnosticreport-${uuidv4()}`;
-    return {
+    const subject = data.subject || (data.patientId ? { reference: `Patient/${data.patientId}`, display: data.patientName } : null);
+    const encounter = data.encounter || (data.encounterId ? { reference: `Encounter/${data.encounterId}` } : null);
+    const issued = data.issued || new Date().toISOString();
+    const conclusion = data.conclusion || '';
+    const resource = {
       resourceType: 'DiagnosticReport',
       id,
       status: data.status || 'final',
       code: {
         coding: [{
           system: 'http://loinc.org',
-          code: data.loincCode || '58410-2',
-          display: data.display || 'Summary clinical note'
+          code: data.loincCode || '11488-4',
+          display: data.display || 'Consult note'
         }],
-        text: data.text || 'Video consult AI assessment'
+        text: data.text || 'Consult note'
       },
-      subject: {
-        reference: `Patient/${data.patientId}`,
-        display: data.patientName
-      },
-      ...(data.encounterId && {
-        encounter: { reference: `Encounter/${data.encounterId}` }
-      }),
+      subject: subject || {},
+      ...(encounter && { encounter }),
       effectiveDateTime: data.effectiveDateTime || new Date().toISOString(),
-      issued: data.issued || new Date().toISOString(),
-      conclusion: data.conclusion || '',
+      issued,
+      conclusion,
       ...(data.results && data.results.length > 0 && {
         result: data.results.map((r, i) => ({
           reference: typeof r === 'string' ? r : `Observation/obs-${i}`
@@ -500,6 +500,16 @@ class FHIRResources {
       }),
       meta: { lastUpdated: new Date().toISOString(), versionId: '1', source: 'https://doclittle.health' }
     };
+    const markdown = data.presentedFormMarkdown || (data.presentedForm && typeof data.presentedForm === 'string' ? data.presentedForm : null);
+    if (markdown) {
+      try {
+        resource.presentedForm = [{
+          contentType: 'text/markdown',
+          data: Buffer.from(markdown, 'utf8').toString('base64')
+        }];
+      } catch (_) {}
+    }
+    return resource;
   }
 
   /**

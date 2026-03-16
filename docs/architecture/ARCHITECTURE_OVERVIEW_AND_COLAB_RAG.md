@@ -568,11 +568,9 @@ Twilio receives call → POST /voice/incoming
 | `docs/architecture/voice-agent/STATE_FLOW.md` | Medical coding state machine |
 | `docs/architecture/voice-agent/IMPLEMENTATION_STATUS.md` | Implementation status |
 | `docs/middleware-platform/VOICE_AGENT_FUNCTIONS_AND_DYNAMIC_VARIABLES.md` | Voice tools and dynamic variables |
-
----
-
-## 12. Related Documentation
+| `todos/PRODUCTION_READINESS_TASKS.md` | Production readiness checklist, Azure setup, compliance |
 
 - [FINANCIAL_LAYER_ARCHITECTURE.md](./financial/FINANCIAL_LAYER_ARCHITECTURE.md) — Stedi, coding pipeline, EOB, settlement, voice tools
 - [STATE_FLOW.md](./voice-agent/STATE_FLOW.md) — Medical coding state machine
 - [VOICE_AGENT_FUNCTIONS_AND_DYNAMIC_VARIABLES.md](../middleware-platform/VOICE_AGENT_FUNCTIONS_AND_DYNAMIC_VARIABLES.md) — All Retell functions and dynamic variables
+- [PRODUCTION_READINESS_TASKS.md](../../todos/PRODUCTION_READINESS_TASKS.md) — Tasks to be production-ready, including Azure setup

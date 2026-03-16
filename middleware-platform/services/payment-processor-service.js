@@ -134,8 +134,79 @@ async function recordRefundEvent({ checkout, amount, refundId }) {
   }
 }
 
+/**
+ * Refund a completed checkout (e.g. on appointment cancellation).
+ * Stripe only; wallet (USDC) refund not implemented.
+ * @param {Object} checkout - voice_checkout row (status 'completed', with payment_intent_id for Stripe)
+ * @param {Object} options - { reason?: string, amount?: number } full refund if amount omitted
+ * @returns {Promise<{ success: boolean, refund_id?: string, amount_refunded?: number, error?: string }>}
+ */
+async function refundCheckout(checkout, options = {}) {
+  const reason = options.reason || 'requested_by_customer';
+  const amount = options.amount != null ? parseFloat(options.amount) : null;
+
+  if (!checkout || checkout.status !== 'completed') {
+    return { success: false, error: 'Checkout not found or not completed' };
+  }
+
+  if (checkout.payment_method === 'wallet') {
+    console.warn('⚠️  Wallet (USDC) refund not implemented for checkout:', checkout.id);
+    return { success: false, error: 'Wallet refund not implemented' };
+  }
+
+  const piId = checkout.payment_intent_id;
+  if (!piId) {
+    return { success: false, error: 'No payment intent to refund' };
+  }
+
+  let stripe;
+  try {
+    const stripeConfig = require('../utils/stripe-config');
+    stripe = stripeConfig.initializeStripe();
+  } catch (e) {
+    return { success: false, error: 'Stripe not configured' };
+  }
+
+  try {
+    const refundCents = amount != null && amount > 0 ? Math.round(amount * 100) : undefined;
+    const refundOpts = {
+      payment_intent: piId,
+      reason: ['requested_by_customer', 'duplicate', 'fraudulent'].includes(reason) ? reason : 'requested_by_customer'
+    };
+    if (refundCents) refundOpts.amount = refundCents;
+
+    const refund = await stripe.refunds.create(refundOpts);
+    const amtRefunded = (refund.amount || 0) / 100;
+
+    await recordRefundEvent({ checkout, amount: amtRefunded, refundId: refund.id });
+
+    if (db.updateVoiceCheckout) {
+      try {
+        await db.updateVoiceCheckout(checkout.id, { status: 'refunded' });
+      } catch (_) {
+        // Schema may not have 'refunded'; leave status as 'completed'
+      }
+    }
+
+    return {
+      success: true,
+      refund_id: refund.id,
+      amount_refunded: amtRefunded,
+      status: refund.status
+    };
+  } catch (e) {
+    console.error('Refund error:', e.message);
+    return {
+      success: false,
+      error: e.message,
+      stripe_error_code: e.code
+    };
+  }
+}
+
 module.exports = {
   resolveCheckout,
   completePaymentSuccess,
-  recordRefundEvent
+  recordRefundEvent,
+  refundCheckout
 };

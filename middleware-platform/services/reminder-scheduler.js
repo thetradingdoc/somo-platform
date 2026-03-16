@@ -1,11 +1,12 @@
 /**
- * REMINDER SCHEDULER
- * Sends appointment reminders 1 hour before appointments
- * Runs every 5 minutes to check for upcoming appointments
+ * REMINDER SCHEDULER (Telemedicine Phase 5 — Tasks 34–37)
+ * Runs every 5 minutes. Sends 24h reminder (upload link) and 1h reminder (join link).
+ * No PHI in message bodies: only appointment time and links.
  */
 
 const db = require('../database');
 const EmailService = require('./email-service');
+const TelemedicineReminders = require('./telemedicine-reminders');
 let SMSService;
 try {
   SMSService = require('./sms-service');
@@ -61,8 +62,19 @@ class ReminderScheduler {
       const now = new Date();
       console.log(`\n⏰ Reminder Scheduler Check: ${now.toISOString()}`);
 
-      const allAppointments = db.getAllAppointments({});
-      console.log(`📋 Total appointments in database: ${allAppointments.length}`);
+      // Limit query to a time window around now to avoid scanning all rows.
+      const windowStart = new Date(now.getTime() - 25 * 60 * 60 * 1000); // 25h ago
+      const windowEnd = new Date(now.getTime() + 2 * 60 * 60 * 1000);    // 2h ahead
+
+      const allAppointments = db.db.prepare(`
+        SELECT *
+        FROM appointments
+        WHERE status IN ('scheduled', 'confirmed')
+          AND start_time IS NOT NULL
+          AND datetime(start_time) BETWEEN datetime(?) AND datetime(?)
+      `).all(windowStart.toISOString(), windowEnd.toISOString());
+
+      console.log(`📋 Appointments in reminder window: ${allAppointments.length}`);
 
       // 24h reminders
       const needs24h = allAppointments.filter(appt => {
@@ -79,14 +91,21 @@ class ReminderScheduler {
       for (const appt of needs24h) {
         try {
           console.log(`📧 Sending 24h reminder for ${appt.id} (${appt.patient_name})`);
-          const result = await EmailService.sendAppointmentReminder24h(appt);
+          const uploadBuilt = appt.patient_id
+            ? TelemedicineReminders.buildUploadLinkForAppointment(appt.patient_id, appt.id, 26 * 60 * 60 * 1000)
+            : null;
+          const uploadLink = uploadBuilt ? uploadBuilt.uploadUrl : null;
+          const result = await EmailService.sendAppointmentReminder24h(appt, { uploadLink });
           if (result.success) {
             if (db.markReminder24hSent) db.markReminder24hSent(appt.id);
             console.log(`✅ 24h reminder sent to ${appt.patient_email}`);
             if (SMSService && appt.patient_phone) {
               const tz = appt.timezone || 'America/New_York';
               const dt = new Date(appt.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
-              const smsResult = await SMSService.sendSMS(appt.patient_phone, `DocLittle: Your appointment is tomorrow at ${dt}. Reply CANCEL to cancel.`);
+              const smsText = uploadLink
+                ? `DocLittle: Reminder: appointment tomorrow at ${dt}. Upload documents: ${uploadLink}`
+                : `DocLittle: Reminder: appointment tomorrow at ${dt}.`;
+              const smsResult = await SMSService.sendSMS(appt.patient_phone, smsText);
               if (smsResult && smsResult.success) console.log(`   📱 SMS 24h reminder sent`);
             }
           } else {
@@ -97,7 +116,7 @@ class ReminderScheduler {
         }
       }
 
-      // 1h reminders
+      // 1h reminders (Phase 5 Task 37, D4: use reminder_sent only — no reminder_1h_sent column)
       const appointmentsNeedingReminders = allAppointments.filter(appt => {
         if (!appt.status || !['scheduled', 'confirmed'].includes(appt.status)) return false;
         if (!appt.patient_email) return false;
@@ -118,15 +137,15 @@ class ReminderScheduler {
       for (const appt of appointmentsNeedingReminders) {
         try {
           console.log(`📧 Sending 1h reminder for appointment ${appt.id} (${appt.patient_name})`);
-          const result = await EmailService.sendAppointmentReminder(appt);
+          const joinLink = TelemedicineReminders.buildJoinLink(appt);
+          const result = await EmailService.sendAppointmentReminder(appt, { joinLink });
 
           if (result.success) {
             db.markReminderSent(appt.id);
             console.log(`✅ Reminder sent to ${appt.patient_email} for ${appt.date} at ${appt.time}`);
             if (SMSService && appt.patient_phone) {
-              const tz = appt.timezone || 'America/New_York';
-              const dt = new Date(appt.start_time).toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: tz });
-              await SMSService.sendSMS(appt.patient_phone, `DocLittle: Appointment reminder - you have an appointment at ${dt} today.`);
+              const smsText = `DocLittle: Your appointment is in 1 hour. Join here: ${joinLink}`;
+              await SMSService.sendSMS(appt.patient_phone, smsText);
             }
           } else {
             console.error(`❌ Failed to send reminder to ${appt.patient_email}: ${result.error}`);

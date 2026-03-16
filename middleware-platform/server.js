@@ -11,6 +11,21 @@ try {
 const { validateAndExitIfInvalid } = require('./utils/env-validator');
 validateAndExitIfInvalid();
 
+// Enforce JWT for FHIR/DiagnosticReport in production to avoid accidental open PHI endpoints.
+const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+if (isProd) {
+  const requireJwtForFhir = process.env.REQUIRE_JWT_FOR_FHIR === '1' || process.env.REQUIRE_JWT_FOR_FHIR === 'true';
+  const jwtSecret = process.env.JWT_SECRET || '';
+  if (!requireJwtForFhir) {
+    console.error('❌ REQUIRE_JWT_FOR_FHIR must be set to \"1\" in production. Refusing to start.');
+    process.exit(1);
+  }
+  if (!jwtSecret || jwtSecret.length < 32) {
+    console.error('❌ JWT_SECRET must be set (min 32 chars) in production. Refusing to start.');
+    process.exit(1);
+  }
+}
+
 // LangSmith: route traces to Doctor Little project
 try {
   require('./utils/langsmith-config');
@@ -92,6 +107,7 @@ const EHRAggregatorService = require('./services/ehr-aggregator-service');
 const EHRSyncService = require('./services/ehr-sync-service');
 const EpicAdapter = require('./services/epic-adapter');
 const RetellService = require('./services/retell-service');
+const authTokenRoutes = require('./routes/auth-tokens');
 
 // Import Stripe Issuing Service (optional)
 let StripeIssuingService;
@@ -1100,10 +1116,12 @@ wss.on('connection', (ws, req) => {
 console.log('✅ Retell LLM WebSocket handler ready');
 
 // ============================================
-// FHIR API Routes
+// FHIR API Routes (Telemedicine Phase 1 — Task 6 JWT, Task 7–8 resource access)
 // ============================================
+const { jwtFhirAuth } = require('./middleware/jwt-fhir-auth');
+const { fhirResourceAccess } = require('./middleware/fhir-resource-access');
 const fhirRoutes = require('./routes/fhir');
-app.use('/fhir', fhirRoutes);
+app.use('/fhir', jwtFhirAuth, fhirResourceAccess, fhirRoutes);
 
 // ============================================
 // PDF Medical Coding Routes
@@ -7235,6 +7253,26 @@ app.get('/api/circle/accounts/:entityType/:entityId', async (req, res) => {
   }
 });
 
+// ─── Patient document upload (telemedicine) — NOT part of patient wallet ─────────────────────
+// Upload = token-based document upload (lab results, photos before visit). Stored in patient_uploads/Azure.
+// Patient wallet (below) = payments (HSA/Circle, deposit, pay-claim). Separate feature, same /api/patient prefix.
+// Telemedicine Phase 3 — POST /api/patient/send-upload-link (upload link email)
+const { sendUploadLinkHandler } = require('./routes/patient-upload-link');
+app.post('/api/patient/send-upload-link', sendUploadLinkHandler);
+
+// Telemedicine Phase 4 — Patient upload portal (Tasks 25–33). Router: GET /upload, POST /upload
+const uploadPortalRouter = require('./routes/upload-portal');
+app.use('/', uploadPortalRouter);           // GET /upload?token=...
+app.use('/api/patient', uploadPortalRouter); // POST /api/patient/upload
+
+// Telemedicine Phase 7 — Case report: internal transcript + callback (Tasks 53, 55, 56)
+const caseReportRoutes = require('./routes/case-report');
+app.use(caseReportRoutes);
+
+// Telemedicine Phase 8 — DiagnosticReport API (Tasks 58–60: clinician/patient JWT, audit)
+const diagnosticReportRoutes = require('./routes/diagnostic-report');
+app.use('/api', diagnosticReportRoutes);
+
 /**
  * Patient HSA Wallet - Link wallet address (for Privy/Magic client-created wallets)
  * PATCH /api/patient/:patientId/hsa-wallet
@@ -10511,6 +10549,9 @@ app.post('/api/patient/verify/confirm', async (req, res) => {
   }
 });
 
+// AUTH TOKEN ENDPOINTS (patient / clinician JWT issuers)
+app.use('/api/auth', authTokenRoutes);
+
 // Patient: Get my appointments (requires session)
 app.get('/api/patient/appointments', async (req, res) => {
   try {
@@ -11433,6 +11474,51 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
     } catch (e) {
       console.error('Failed to send response:', e.message);
     }
+  }
+});
+
+// Patient: Get my DiagnosticReports (requires session)
+app.get('/api/patient/my-records', async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+
+    if (!sessionId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Session ID required'
+      });
+    }
+
+    const session = PatientPortalService.getSession(sessionId);
+    if (!session || !session.patient_id) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session'
+      });
+    }
+
+    const patientId = session.patient_id;
+    const rows = db.getDiagnosticReportsByPatientId
+      ? db.getDiagnosticReportsByPatientId(patientId, 50)
+      : [];
+
+    return res.json({
+      success: true,
+      patient_id: patientId,
+      records: rows.map(r => ({
+        id: r.resource_id || r.id,
+        encounter_id: r.encounter_id,
+        status: r.status || 'unknown',
+        created_at: r.created_at,
+        summary: (r.case_report_text || '').slice(0, 200)
+      }))
+    });
+  } catch (error) {
+    console.error('[api/patient/my-records] error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal error'
+    });
   }
 });
 
@@ -13394,6 +13480,8 @@ const server = app.listen(PORT, HOST, () => {
   try {
     ReminderScheduler.start();
     ReminderScheduler.startScheduledActivities(); // Start email follow-up scheduler
+    const caseReportTimeoutWorker = require('./services/case-report-timeout-worker');
+    caseReportTimeoutWorker.start();
   } catch (error) {
     console.error('⚠️  Failed to start reminder scheduler:', error.message);
     console.log('   Reminders will be disabled, but server will continue');

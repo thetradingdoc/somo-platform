@@ -584,32 +584,54 @@ class FHIRService {
   }
 
   /**
-   * Create a DiagnosticReport (video consult AI assessment summary)
-   * vc-p0-1: Links transcript + AI findings for claim flow
-   * @param {Object} data - { patientId, patientName, encounterId, conclusion, results[], loincCode, display, ... }
+   * Create a DiagnosticReport (Phase 8 Task 57).
+   * Builds FHIR DiagnosticReport: resourceType, status: final, code LOINC 11488-4 Consult note,
+   * subject (Patient ref), encounter ref, issued, conclusion (summary), presentedForm (base64 markdown).
+   * Accepts payload shape: { subject, encounter, issued, conclusion, presentedForm (markdown or base64) } or legacy data shape.
+   * @param {Object} payload - { subject: { reference: 'Patient/...' }, encounter: { reference: 'Encounter/...' }, issued, conclusion, presentedForm?, results[]? } or legacy { patientId, patientName, encounterId, ... }
+   * @param {Object} [options] - { persist: true } to insert into DB
    * @returns {Object} FHIR DiagnosticReport resource
    */
-  static async createDiagnosticReport(data) {
+  static async createDiagnosticReport(payload, options = {}) {
+    const data = payload?.subject?.reference
+      ? {
+          id: payload.id || `diagnosticreport-${uuidv4()}`,
+          subject: payload.subject,
+          encounter: payload.encounter,
+          patientId: (payload.subject.reference || '').replace(/^Patient\//, ''),
+          patientName: payload.subject.display || '',
+          encounterId: (payload.encounter?.reference || '').replace(/^Encounter\//, ''),
+          conclusion: payload.conclusion || '',
+          issued: payload.issued || new Date().toISOString(),
+          effectiveDateTime: payload.effectiveDateTime || payload.issued || new Date().toISOString(),
+          loincCode: payload.loincCode || '11488-4',
+          display: payload.display || 'Consult note',
+          presentedFormMarkdown: payload.presentedFormMarkdown || (typeof payload.presentedForm === 'string' ? payload.presentedForm : null),
+          results: payload.results || [],
+          status: payload.status || 'final'
+        }
+      : {
+          id: payload?.id || `diagnosticreport-${uuidv4()}`,
+          patientId: payload.patientId,
+          patientName: payload.patientName,
+          encounterId: payload.encounterId,
+          conclusion: payload.conclusion || '',
+          results: payload.results || [],
+          loincCode: payload.loincCode || '11488-4',
+          display: payload.display || 'Consult note',
+          effectiveDateTime: payload.effectiveDateTime || new Date().toISOString(),
+          issued: payload.issued || new Date().toISOString(),
+          presentedFormMarkdown: payload.presentedFormMarkdown || payload.presentedForm,
+          status: payload.status || 'final'
+        };
+    if (payload?.presentedFormMarkdown) data.presentedFormMarkdown = payload.presentedFormMarkdown;
     try {
-      const reportResource = FHIRResources.createDiagnosticReport({
-        id: `diagnosticreport-${uuidv4()}`,
-        patientId: data.patientId,
-        patientName: data.patientName,
-        encounterId: data.encounterId,
-        conclusion: data.conclusion || '',
-        results: data.results || [],
-        loincCode: data.loincCode || '58410-2',
-        display: data.display || 'Video consult AI assessment',
-        effectiveDateTime: data.effectiveDateTime || new Date().toISOString(),
-        issued: data.issued || new Date().toISOString()
-      });
-
+      const reportResource = FHIRResources.createDiagnosticReport(data);
       const validation = FHIRResources.validate(reportResource);
       if (!validation.valid) {
         throw new Error(`DiagnosticReport validation failed: ${validation.errors.join(', ')}`);
       }
-
-      if (db.createFHIRDiagnosticReport) {
+      if (options.persist !== false && db.createFHIRDiagnosticReport) {
         db.createFHIRDiagnosticReport(reportResource);
       }
       console.log(`[FHIR] Created DiagnosticReport: ${reportResource.id}`);
@@ -618,6 +640,37 @@ class FHIRService {
       console.error('[FHIR] Error in createDiagnosticReport:', error);
       throw error;
     }
+  }
+
+  /**
+   * Phase 7 Task 55: Build FHIR DiagnosticReport from case report callback (no DB insert).
+   * Used to set resource_data on the pending row. LOINC 11488-4 Consult note.
+   */
+  static createDiagnosticReportFromCaseReport(data) {
+    const patientId = data.patient_id;
+    const encounterId = data.encounter_id;
+    const conclusion = (data.case_report_text || '').slice(0, 4000);
+    const reportId = `diagnosticreport-${data.job_id || uuidv4()}`;
+    const reportResource = FHIRResources.createDiagnosticReport({
+      id: reportId,
+      patientId,
+      patientName: '',
+      encounterId,
+      conclusion,
+      loincCode: '11488-4',
+      display: 'Consult note',
+      effectiveDateTime: new Date().toISOString(),
+      issued: new Date().toISOString()
+    });
+    if (data.case_report_text) {
+      try {
+        reportResource.presentedForm = [{
+          contentType: 'text/markdown',
+          data: Buffer.from(data.case_report_text, 'utf8').toString('base64')
+        }];
+      } catch (_) {}
+    }
+    return reportResource;
   }
 
   /**
@@ -1094,6 +1147,30 @@ class FHIRService {
       console.error('[FHIR] Error in getEncounterTranscript:', error);
       throw error;
     }
+  }
+
+  /**
+   * Task 52: Get transcript as plain text with speaker labels for case report service.
+   * Query fhir_communications for encounter; extract payload[].contentString; concatenate chronologically.
+   * Speaker from extension https://doclittle.health/extension/speaker (agent -> Doctor, patient -> Patient).
+   */
+  static getTranscriptText(encounterId) {
+    const communications = db.getEncounterCommunications(encounterId);
+    const lines = [];
+    for (const row of communications) {
+      const res = row.resource_data || {};
+      const payload = res.payload || [];
+      for (const p of payload) {
+        const text = p.contentString || '';
+        if (!text.trim()) continue;
+        const ext = p.extension || [];
+        const speakerExt = ext.find(e => e.url === 'https://doclittle.health/extension/speaker');
+        const speakerRaw = speakerExt?.valueString || 'unknown';
+        const label = speakerRaw === 'agent' ? 'Doctor' : speakerRaw === 'patient' ? 'Patient' : speakerRaw;
+        lines.push(`${label}: ${text.trim()}`);
+      }
+    }
+    return lines.join('\n');
   }
 
   /**

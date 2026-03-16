@@ -224,8 +224,11 @@ class EmailService {
 
   /**
    * Send appointment confirmation email
+   * @param {Object} appointment - appointment record
+   * @param {Object} [options] - { uploadLink } (Phase 5: upload portal link)
    */
-  static async sendAppointmentConfirmation(appointment) {
+  static async sendAppointmentConfirmation(appointment, options = {}) {
+    const { uploadLink } = options;
     // Format confirmation number (matches booking service format)
     const confirmationNumber = appointment.id && appointment.id.length > 13
       ? appointment.id.substring(5, 13).toUpperCase()
@@ -240,6 +243,10 @@ class EmailService {
       minute: '2-digit',
       timeZone: appointment.timezone || 'America/New_York'
     });
+
+    const uploadBlock = uploadLink
+      ? `<p>You can upload documents (labs, images) before your visit using this link: <a href="${uploadLink}">Upload documents</a>.</p>`
+      : '';
 
     const html = `
       <!DOCTYPE html>
@@ -288,7 +295,7 @@ class EmailService {
             </div>
 
             <p><strong>Confirmation Number:</strong> ${confirmationNumber}</p>
-            
+            ${uploadBlock}
             <p>You will receive a reminder email 1 hour before your appointment.</p>
             
             <p>If you need to reschedule or cancel, please contact us or use the link in your reminder email.</p>
@@ -313,8 +320,10 @@ class EmailService {
 
   /**
    * Send appointment reminder email (1 hour before)
+   * @param {Object} [options] - { joinLink } (Phase 5: video/join link for "Join here")
    */
-  static async sendAppointmentReminder(appointment) {
+  static async sendAppointmentReminder(appointment, options = {}) {
+    const { joinLink } = options;
     const dateTime = new Date(appointment.start_time).toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -328,6 +337,9 @@ class EmailService {
     const baseUrl = process.env.BASE_URL || 'http://localhost:4000';
     const cancelLink = `${baseUrl}/api/appointments/${appointment.id}/cancel?token=${this._generateCancelToken(appointment.id)}`;
     const rescheduleLink = `${baseUrl}/api/appointments/${appointment.id}/reschedule?token=${this._generateCancelToken(appointment.id)}`;
+    const joinBlock = joinLink
+      ? `<p><strong>Join here:</strong> <a href="${joinLink}">${joinLink}</a></p>`
+      : '';
 
     const html = `
       <!DOCTYPE html>
@@ -358,8 +370,8 @@ class EmailService {
           </div>
           <div class="content">
             <p>Dear ${appointment.patient_name},</p>
-            <p><strong>This is a reminder that you have an appointment in 1 hour:</strong></p>
-            
+            <p><strong>Your appointment is in 1 hour.</strong></p>
+            ${joinBlock}
             <div class="appointment-details">
               <div class="detail-row">
                 <span class="label">Date & Time:</span> ${dateTime}
@@ -377,8 +389,6 @@ class EmailService {
               <a href="${rescheduleLink}" class="button button-warning">🔄 Reschedule</a>
               <a href="${cancelLink}" class="button button-danger">❌ Cancel</a>
             </p>
-            
-            <p>If you need to reschedule, please check available slots before confirming your new time.</p>
             
             <p>We look forward to seeing you soon!</p>
             <p>Best regards,<br>DocLittle Mental Health Team</p>
@@ -400,9 +410,11 @@ class EmailService {
   }
 
   /**
-   * Send appointment reminder email (24 hours before) - Task 52
+   * Send appointment reminder email (24 hours before) - Task 52 / Phase 5 Task 36
+   * @param {Object} [options] - { uploadLink } (Phase 5: upload documents link)
    */
-  static async sendAppointmentReminder24h(appointment) {
+  static async sendAppointmentReminder24h(appointment, options = {}) {
+    const { uploadLink } = options;
     const dateTime = new Date(appointment.start_time).toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -412,6 +424,10 @@ class EmailService {
       minute: '2-digit',
       timeZone: appointment.timezone || 'America/New_York'
     });
+
+    const uploadBlock = uploadLink
+      ? `<p>Upload documents before your visit: <a href="${uploadLink}">${uploadLink}</a></p>`
+      : '';
 
     const html = `
       <!DOCTYPE html>
@@ -436,6 +452,7 @@ class EmailService {
           <div class="content">
             <p>Dear ${appointment.patient_name},</p>
             <p><strong>Reminder: Your appointment is tomorrow at ${dateTime}</strong></p>
+            ${uploadBlock}
             <div class="appointment-details">
               <div class="detail-row"><span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}</div>
               <div class="detail-row"><span class="label">Provider:</span> ${appointment.provider || 'DocLittle Mental Health Team'}</div>

@@ -418,17 +418,20 @@ class BookingService {
         throw dbError;
       }
 
-      // Send confirmation email if email provided
-      if (appointment.patient_email) {
-        try {
-          await EmailService.sendAppointmentConfirmation(appointment);
-          console.log('✅ Confirmation email sent');
-        } catch (emailError) {
-          console.warn('⚠️  Email confirmation failed:', emailError.message);
-          // Continue even if email fails
+      // Phase 5 Task 35: Send SMS + email with appointment time and upload portal link; set reminder_booking_sent
+      try {
+        const TelemedicineReminders = require('./telemedicine-reminders');
+        await TelemedicineReminders.sendBookingConfirmationWithUploadLink(appointment);
+      } catch (reminderError) {
+        console.warn('⚠️  Booking confirmation (Phase 5) failed:', reminderError.message);
+        if (appointment.patient_email) {
+          try {
+            await EmailService.sendAppointmentConfirmation(appointment);
+            console.log('✅ Confirmation email sent (fallback)');
+          } catch (emailError) {
+            console.warn('⚠️  Email confirmation failed:', emailError.message);
+          }
         }
-      } else {
-        console.log('⚠️  No email provided - skipping confirmation email');
       }
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
@@ -525,6 +528,34 @@ class BookingService {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  /**
+   * Mark an appointment as completed (used by video consult end_session).
+   * Safe to call multiple times; if status is already 'completed', it is a no-op.
+   * @param {String} appointmentId
+   * @param {String|null} clinicId
+   */
+  static async completeAppointment(appointmentId, clinicId = null) {
+    if (!appointmentId) return;
+    try {
+      const appointment = await db.getAppointment(appointmentId, clinicId || null);
+      if (!appointment) {
+        console.warn(`[BookingService.completeAppointment] Appointment not found: ${appointmentId}`);
+        return;
+      }
+
+      const scopedClinicId = appointment.clinic_id || clinicId || null;
+
+      if ((appointment.status || '').toLowerCase() === 'completed') {
+        return;
+      }
+
+      db.updateAppointmentStatus(appointmentId, 'completed', null, scopedClinicId);
+      console.log(`✅ Appointment ${appointmentId} marked completed`);
+    } catch (error) {
+      console.warn(`[BookingService.completeAppointment] Failed for ${appointmentId}:`, error.message);
     }
   }
 
@@ -743,16 +774,41 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       db.updateAppointmentStatus(appointmentId, 'cancelled', reason, scopedClinicId);
       console.log('✅ Appointment cancelled');
 
+      // Refund any completed payment for this appointment (Stripe only)
+      let refundResult = null;
+      try {
+        const PaymentProcessorService = require('./payment-processor-service');
+        const checkout = await db.getCompletedCheckoutByAppointmentId(appointmentId);
+        if (checkout) {
+          refundResult = await PaymentProcessorService.refundCheckout(checkout, {
+            reason: 'requested_by_customer',
+            amount: parseFloat(checkout.amount) || undefined
+          });
+          if (refundResult.success) {
+            console.log(`✅ Refund issued: ${refundResult.refund_id}, $${refundResult.amount_refunded}`);
+          } else {
+            console.warn('⚠️  Refund skipped or failed:', refundResult.error);
+          }
+        }
+      } catch (refundErr) {
+        console.warn('⚠️  Refund on cancel failed:', refundErr.message);
+        refundResult = { success: false, error: refundErr.message };
+      }
+
       const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-      return {
+      const result = {
         success: true,
         message: 'Appointment cancelled successfully',
         appointment: this._formatAppointment(updatedAppointment),
         cancellation_reason: reason
       };
+      if (refundResult !== null) {
+        result.refund = refundResult;
+      }
+      return result;
 
     } catch (error) {
       console.error('❌ Error cancelling appointment:', error);

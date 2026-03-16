@@ -11,6 +11,7 @@ const videoConsultGraph = require('../services/video-consult-graph');
 const videoConsultAssistant = require('../services/video-consult-assistant-service');
 const { mapYoloToClinical } = videoConsultAssistant;
 const videoConsultSse = require('../services/video-consult-sse');
+const BookingService = require('../services/booking-service');
 const symptomTriage = require('../services/symptom-triage-service');
 const { buildTranscriptDeltaItem, buildAssistantUpdatePayload } = require('../services/video-consult-sse-schema');
 const knowledgeService = require('../services/knowledge-service');
@@ -252,6 +253,17 @@ router.post('/agent-events', async (req, res) => {
         if (durationMs > 5 * 60 * 1000) {
           console.warn(`⚠️  [video-consult] Long session: room ${room} active ${Math.round(durationMs / 60000)}min (alert threshold: 5min)`);
         }
+      }
+      // Mark linked appointment as completed before running LangGraph so trigger_case_report can fire.
+      let appointmentId = options.appointment_id || null;
+      if (!appointmentId && room && room.startsWith('appt-')) {
+        appointmentId = room.replace(/^appt-/, '');
+      }
+      if (appointmentId) {
+        const clinicId = options.clinic_id || req.body.clinic_id || null;
+        await BookingService.completeAppointment(appointmentId, clinicId);
+        // Also expose appointment_id in session_metadata for downstream nodes.
+        options.session_metadata.appointment_id = appointmentId;
       }
     }
     if (event === 'end_session' && !tokenBudget.canProceedVideoConsult(room, 0.05)) {

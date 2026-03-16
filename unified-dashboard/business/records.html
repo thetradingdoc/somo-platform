@@ -318,6 +318,20 @@
         </div>
 
         <div class="card" style="grid-column:1 / -1;">
+          <h3>Diagnostic Reports</h3>
+          <div id="diagReportsList">Loading…</div>
+          <div id="diagReportDetail"
+               style="margin-top:16px;border-top:1px solid var(--gray-200);padding-top:12px;display:none;">
+            <h4 style="margin:0 0 8px 0;font-size:15px;">Report Detail</h4>
+            <div id="diagReportMeta"
+                 style="font-size:13px;color:var(--gray-600);margin-bottom:8px;"></div>
+            <pre id="diagReportMarkdown"
+                 style="white-space:pre-wrap;font-family:system-ui,-apple-system,sans-serif;font-size:14px;margin:0;"></pre>
+            <button class="btn" style="margin-top:8px;" onclick="window.print()">Print report</button>
+          </div>
+        </div>
+
+        <div class="card" style="grid-column:1 / -1;">
           <h3>Appointments</h3>
           <div id="apptList">Loading…</div>
         </div>
@@ -345,6 +359,9 @@
 
       // Load insurance & eligibility
       await loadInsuranceAndEligibility(fhirId);
+
+      // Load DiagnosticReports
+      await loadDiagnosticReports(fhirId);
     });
 
     async function fetchPatient(id) {
@@ -425,6 +442,70 @@
         }
       } catch (e) {
         // Silent fail on UI
+      }
+    }
+
+    async function loadDiagnosticReports(patientId) {
+      const listEl = document.getElementById('diagReportsList');
+      const detailEl = document.getElementById('diagReportDetail');
+      const detailMeta = document.getElementById('diagReportMeta');
+      const detailMd = document.getElementById('diagReportMarkdown');
+      detailEl.style.display = 'none';
+
+      try {
+        const r = await fetch(`${API_BASE}/api/patients/${encodeURIComponent(patientId)}/diagnostic-reports`);
+        if (!r.ok) {
+          listEl.textContent = 'No DiagnosticReports found or access denied.';
+          return;
+        }
+        const body = await r.json();
+        const entries = Array.isArray(body.entry) ? body.entry : [];
+        if (!entries.length) {
+          listEl.textContent = 'No DiagnosticReports yet.';
+          return;
+        }
+
+        listEl.innerHTML = entries.map((e, idx) => {
+          const rsc = e.resource || e;
+          const issued = rsc.issued || rsc.effectiveDateTime || '—';
+          const status = (rsc.status || '').toUpperCase() || '—';
+          const encRef = rsc.encounter && rsc.encounter.reference;
+          const encId = encRef && encRef.startsWith('Encounter/')
+            ? encRef.slice('Encounter/'.length)
+            : (encRef || '');
+          return `
+            <div class="appt">
+              <div>
+                <strong>${rsc.code?.text || 'Case report'}</strong>
+                <span class="badge" style="margin-left:6px;">${status}</span>
+              </div>
+              <div style="font-size:12px;color:var(--gray-600);">
+                Issued: ${issued}
+                ${encId ? `<br><a href="#" data-view-report="${idx}" data-encounter-id="${encId}">View detail</a>` : ''}
+              </div>
+            </div>`;
+        }).join('');
+
+        listEl.addEventListener('click', async (ev) => {
+          const link = ev.target.closest('[data-view-report]');
+          if (!link) return;
+          ev.preventDefault();
+          const encId = link.getAttribute('data-encounter-id');
+          if (!encId) return;
+          try {
+            const r2 = await fetch(`${API_BASE}/api/encounters/${encodeURIComponent(encId)}/diagnostic-report`);
+            if (!r2.ok) return;
+            const dr = await r2.json();
+            detailMeta.textContent =
+              `Encounter: ${encId} • Status: ${(dr.status || '').toUpperCase() || '—'}`;
+            detailMd.textContent = dr.case_report_text || '(No report text)';
+            detailEl.style.display = 'block';
+          } catch {
+            // ignore errors in detail loading
+          }
+        }, { once: true });
+      } catch (e) {
+        listEl.textContent = 'Failed to load DiagnosticReports.';
       }
     }
 

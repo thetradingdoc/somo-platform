@@ -199,6 +199,32 @@
     },
     {
       "type": "function",
+      "name": "send_document_upload_link",
+      "description": "Send the patient a secure link to upload documents (lab results, photos) before their visit. Use when the patient mentions they have lab results, reports, photos, or documents they want to share before the appointment.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_email": {
+            "type": "string",
+            "description": "Patient's email address (to send the upload link)"
+          },
+          "patient_phone": {
+            "type": "string",
+            "description": "Patient's phone number (if email not available)"
+          },
+          "patient_id": {
+            "type": "string",
+            "description": "FHIR patient ID if already known from context"
+          },
+          "appointment_id": {
+            "type": "string",
+            "description": "Optional appointment ID to associate uploads with a specific visit"
+          }
+        }
+      }
+    },
+    {
+      "type": "function",
       "name": "create_appointment_checkout",
       "description": "Create a checkout for appointment payment. This sends a 6-digit verification code to the patient's email. Amount should be the patient's responsibility after insurance coverage.",
       "parameters": {

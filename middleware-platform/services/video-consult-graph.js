@@ -10,6 +10,8 @@ const FHIRService = require('./fhir-service');
 const tokenBudget = require('../utils/token-budget');
 const knowledgeService = require('./knowledge-service');
 const reviewTaskService = require('./review-task-service');
+const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
 
 const SLOW_NODE_MS = parseInt(process.env.VIDEO_CONSULT_SLOW_NODE_MS || '5000', 10);
 
@@ -302,6 +304,82 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     }
   }
 
+  /**
+   * Phase 7 Task 54: trigger_case_report — runs after store_fhir.
+   * If appointment.status === 'completed': insert pending row, fire-and-forget POST to case report service.
+   */
+  async function triggerCaseReportNode(state) {
+    const caseReportUrl = process.env.CASE_REPORT_SERVICE_URL;
+    const callbackToken = process.env.CASE_REPORT_SERVICE_TOKEN;
+    if (!caseReportUrl || !callbackToken) {
+      return {};
+    }
+    const encounterId = state.encounter_id;
+    const patientId = state.patient_id;
+    if (!encounterId || !patientId) return {};
+
+    // Double-trigger guard: if a case report already exists for this encounter, skip.
+    if (db.getCaseReportByEncounterId) {
+      try {
+        const existing = db.getCaseReportByEncounterId(encounterId);
+        if (existing && existing.status && ['pending', 'completed', 'failed'].includes(existing.status)) {
+          return {};
+        }
+      } catch (e) {
+        console.warn('[video-consult-graph] getCaseReportByEncounterId failed:', e.message);
+      }
+    }
+    const appointmentId = state.session_metadata?.appointment_id ||
+      (state.room_id && state.room_id.startsWith('appt-') ? state.room_id.replace(/^appt-/, '') : null);
+    if (appointmentId) {
+      try {
+        const appointment = await db.getAppointment(appointmentId);
+        if (!appointment || (appointment.status || '').toLowerCase() !== 'completed') return {};
+      } catch (_) {
+        return {};
+      }
+    }
+    if (!db.insertPendingCaseReport) return {};
+    let priorReportId = null;
+    if (db.getDiagnosticReportsByPatientId) {
+      const priorReports = db.getDiagnosticReportsByPatientId(patientId, 10);
+      const prior = priorReports.find(r => r.encounter_id && r.encounter_id !== encounterId);
+      if (prior && (prior.resource_id || prior.resource_data?.id)) priorReportId = prior.resource_id || prior.resource_data?.id;
+    }
+    const jobId = `job-${uuidv4()}`;
+    db.insertPendingCaseReport({ job_id: jobId, patient_id: patientId, encounter_id: encounterId });
+
+    // Backfill encounter_id onto any existing uploads for this appointment.
+    if (appointmentId && db.db && db.db.prepare) {
+      try {
+        db.db.prepare(`
+          UPDATE patient_uploads
+          SET encounter_id = ?
+          WHERE appointment_id = ? AND (encounter_id IS NULL OR encounter_id = '')
+        `).run(encounterId, appointmentId);
+      } catch (e) {
+        console.warn('[video-consult-graph] patient_uploads backfill failed:', e.message);
+      }
+    }
+    const baseUrl = (process.env.API_BASE_URL || process.env.BASE_URL || '').replace(/\/$/, '');
+    const transcriptEndpoint = `${baseUrl}/internal/communications/${encounterId}/text`;
+    const callbackUrl = `${baseUrl}/api/case-report/callback`;
+    const payload = {
+      job_id: jobId,
+      patient_id: patientId,
+      encounter_id: encounterId,
+      appointment_id: appointmentId || null,
+      transcript_endpoint: transcriptEndpoint,
+      transcript_endpoint_token: callbackToken,
+      prior_report_id: priorReportId,
+      callback_url: callbackUrl,
+      callback_token: callbackToken
+    };
+    axios.post(`${caseReportUrl.replace(/\/$/, '')}/report`, payload, { timeout: 10000 })
+      .catch(err => console.warn('[video-consult-graph] trigger_case_report POST failed:', err.message));
+    return {};
+  }
+
   function accumulateNode(state) {
     try {
       return {}; // State already merged via reducers; this ensures checkpoint is written
@@ -339,11 +417,13 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     .addNode('retrieve_context', withTelemetry('retrieve_context', retrieveContextNode))
     .addNode('human_review', humanReviewNode)
     .addNode('store_fhir', withTelemetry('store_fhir', storeFhirNode))
+    .addNode('trigger_case_report', triggerCaseReportNode)
     .addEdge(START, 'accumulate')
     .addConditionalEdges('accumulate', routeByEvent, { retrieve_context: 'retrieve_context', __end__: END })
     .addEdge('retrieve_context', 'human_review')
     .addEdge('human_review', 'store_fhir')
-    .addEdge('store_fhir', END);
+    .addEdge('store_fhir', 'trigger_case_report')
+    .addEdge('trigger_case_report', END);
 
   compiledGraph = workflow.compile({ checkpointer });
 

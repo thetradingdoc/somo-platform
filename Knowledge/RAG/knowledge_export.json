@@ -1,24 +1,22 @@
 {
   "_meta": {
-    "version": "3.0",
-    "generated_at": "2026-03-14T18:46:09.682236",
+    "version": "4.0",
+    "generated_at": "2026-03-14T21:33:23.114694",
     "pinecone_index": "doctorlittle",
     "total_vectors": 271369,
     "embed_model": "text-embedding-3-small",
-    "elapsed_seconds": 133.2,
-    "validation_passed": false,
-    "fixes_from_v2": [
-      "FIX1: concept ICD codes now from chunk vectors (concept vectors have none)",
-      "FIX2: KNOWN_ICD_EXPANSIONS is primary source — corpus is supplementary",
-      "FIX3: CPT codes from TERM_CPT_TABLE (64 terms) — Pinecone has no CPT metadata",
-      "FIX4: expanded SYNONYM_NOISE_WORDS covers all high-freq offenders from audit"
+    "elapsed_seconds": 112.2,
+    "validation_passed": true,
+    "fixes_from_v3": [
+      "FIX1: concept ICD codes from CONCEPT_ICD10_MAP (static, 112 entries) — Pinecone chunk text mining produced wrong codes (S-codes for liver disease)",
+      "FIX2: \"t2dm\" and other 4-char medical acronyms added to ACRONYM_WHITELIST — was failing min length 5 check"
     ],
-    "description": "DocLittle knowledge base export v3. No patient data. Copy to middleware-platform/Knowledge/RAG/knowledge_export.json",
+    "description": "DocLittle knowledge base export v4. No patient data. Copy to middleware-platform/Knowledge/RAG/knowledge_export.json",
     "field_summary": {
       "concept_specialty_map": 115,
-      "concepts_with_icd10_codes": 26,
-      "icd10_code_expansions": 78,
-      "total_icd10_children": 524,
+      "concepts_with_icd10_codes": 113,
+      "icd10_code_expansions": 102,
+      "total_icd10_children": 581,
       "term_to_codes": 163,
       "terms_with_cpt": 91,
       "phrase_expansions": 89,
@@ -30,7 +28,12 @@
   "concept_specialty_map": {
     "C_HEP_CHOLESTASIS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K71.0",
+        "K76.89",
+        "K83.1",
+        "R17"
+      ],
       "cpt_codes": [],
       "label": "cholestasis",
       "description": "Impairment of bile formation or flow causing accumulation of bile acids, bilirubin, and cholesterol. Presents with jaundice, pruritus, pale stools, dark urine. Biochemically: elevated ALP, GGT, direct"
@@ -38,8 +41,7 @@
     "C_HEP_PRIMARY_BILIARY_CHOLANGITIS": {
       "specialty": "hepatology",
       "icd10_codes": [
-        "S25",
-        "S37"
+        "K74.3"
       ],
       "cpt_codes": [],
       "label": "primary biliary cholangitis",
@@ -47,21 +49,29 @@
     },
     "C_HEP_PRIMARY_SCLEROSING_CHOLANGITIS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K83.01"
+      ],
       "cpt_codes": [],
       "label": "primary sclerosing cholangitis",
       "description": "Chronic fibro-inflammatory obliterative disease of intra- and extrahepatic bile ducts causing multifocal strictures. Strong association with inflammatory bowel disease (especially UC). MRCP shows bead"
     },
     "C_HEP_ERCP": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K80.5",
+        "K83.09"
+      ],
       "cpt_codes": [],
       "label": "ercp",
       "description": "Endoscopic procedure combining fluoroscopy and endoscopy to diagnose and treat biliary and pancreatic duct pathology. Indications: choledocholithiasis, biliary strictures, PSC, post-surgical bile leak"
     },
     "C_HEP_CIRRHOSIS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K74.60",
+        "K74.69"
+      ],
       "cpt_codes": [],
       "label": "cirrhosis",
       "description": "Irreversible end-stage hepatic fibrosis with nodule formation causing distorted liver architecture. Complications include portal hypertension, ascites, variceal bleeding, hepatic encephalopathy, spont"
@@ -69,7 +79,8 @@
     "C_HEP_HEPATITIS_C": {
       "specialty": "hepatology",
       "icd10_codes": [
-        "C22"
+        "B18.2",
+        "B17.10"
       ],
       "cpt_codes": [],
       "label": "hepatitis c",
@@ -77,28 +88,39 @@
     },
     "C_HEP_PORTAL_HYPERTENSION": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K76.6"
+      ],
       "cpt_codes": [],
       "label": "portal hypertension",
       "description": "Increased pressure in the portal venous system (>5 mmHg gradient) resulting from intrahepatic resistance in cirrhosis. Drives formation of esophageal and gastric varices, ascites, splenomegaly, caput "
     },
     "C_HEP_VARICEAL_BLEEDING": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I85.01",
+        "I85.11"
+      ],
       "cpt_codes": [],
       "label": "variceal bleeding",
       "description": "Life-threatening haemorrhage from rupture of portal hypertension-induced varices (oesophageal or gastric). Initial management: IV terlipressin or octreotide, prophylactic antibiotics, urgent endoscopy"
     },
     "C_HEP_ASCITES": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "R18.8",
+        "K70.31",
+        "K71.51"
+      ],
       "cpt_codes": [],
       "label": "ascites",
       "description": "Accumulation of fluid in the peritoneal cavity, most commonly due to portal hypertension from cirrhosis. SAAG ≥1.1 g/dL confirms portal hypertensive aetiology. Managed with sodium restriction and diur"
     },
     "C_HEP_HEPATOCELLULAR_CARCINOMA": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C22.0"
+      ],
       "cpt_codes": [],
       "label": "hepatocellular carcinoma",
       "description": "Primary malignancy of hepatocytes; most common primary liver cancer. Arises in 80–90% of cases on background of cirrhosis or chronic viral hepatitis. Surveillance with ultrasound ± AFP every 6 months."
@@ -112,28 +134,38 @@
     },
     "C_HEP_HEPATIC_ENCEPHALOPATHY": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K72.90",
+        "K72.91"
+      ],
       "cpt_codes": [],
       "label": "hepatic encephalopathy",
       "description": "Neuropsychiatric dysfunction from impaired hepatic detoxification of nitrogenous waste (ammonia). Grades 0–4 (West Haven criteria). Precipitants: infection, GI bleeding, electrolyte disturbance, const"
     },
     "C_HEP_BUDD_CHIARI": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I82.0"
+      ],
       "cpt_codes": [],
       "label": "budd chiari",
       "description": "Obstruction of hepatic venous outflow at the level of hepatic veins or IVC. Causes: myeloproliferative disorders (JAK2 V617F), thrombophilia, OCP. Acute: RUQ pain, ascites, hepatomegaly. Doppler ultra"
     },
     "C_HEP_TIPS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K76.6",
+        "I85.01"
+      ],
       "cpt_codes": [],
       "label": "tips",
       "description": "Radiologically placed intrahepatic shunt connecting portal vein to hepatic vein, decompressing portal hypertension. Indications: refractory ascites, recurrent variceal bleeding, Budd-Chiari, hepatic h"
     },
     "C_HEP_SPONTANEOUS_BACTERIAL_PERITONITIS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K65.2"
+      ],
       "cpt_codes": [],
       "label": "spontaneous bacterial peritonitis",
       "description": "Bacterial infection of ascitic fluid without an identifiable intra-abdominal source. Diagnostic: ascitic fluid PMN ≥250 cells/mm³. Most common organisms: E. coli, Klebsiella, Streptococcus. Treatment:"
@@ -141,7 +173,7 @@
     "C_HEP_HEPATORENAL_SYNDROME": {
       "specialty": "hepatology",
       "icd10_codes": [
-        "R23"
+        "K76.7"
       ],
       "cpt_codes": [],
       "label": "hepatorenal syndrome",
@@ -149,21 +181,28 @@
     },
     "C_HEP_HEPATITIS_B": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B18.1",
+        "B16.9"
+      ],
       "cpt_codes": [],
       "label": "hepatitis b",
       "description": "Viral hepatitis caused by hepatitis B virus (HBV); transmitted parenterally and sexually. Acute infection may resolve or progress to chronic hepatitis (HBsAg >6 months), cirrhosis, and hepatocellular "
     },
     "C_HEP_AUTOIMMUNE_HEPATITIS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K75.4"
+      ],
       "cpt_codes": [],
       "label": "autoimmune hepatitis",
       "description": "Chronic inflammatory liver disease caused by immune-mediated hepatocyte destruction. Predominantly affects women. Characterized by elevated ALT, AST, IgG, ANA, anti-SMA (Type 1) or anti-LKM1 (Type 2)."
     },
     "C_HEP_NAFLD": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K76.0"
+      ],
       "cpt_codes": [],
       "label": "nafld",
       "description": "Spectrum of liver disease from simple steatosis to NASH, fibrosis, and cirrhosis in patients without significant alcohol intake. Strongly associated with obesity, insulin resistance, type 2 diabetes, "
@@ -171,7 +210,7 @@
     "C_HEP_NASH": {
       "specialty": "hepatology",
       "icd10_codes": [
-        "M30"
+        "K75.81"
       ],
       "cpt_codes": [],
       "label": "nash",
@@ -179,7 +218,13 @@
     },
     "C_HEP_ALCOHOLIC_LIVER_DISEASE": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K70.0",
+        "K70.1",
+        "K70.3",
+        "K70.30",
+        "K70.31"
+      ],
       "cpt_codes": [],
       "label": "alcoholic liver disease",
       "description": "Spectrum from alcoholic fatty liver to alcoholic hepatitis and cirrhosis due to chronic heavy alcohol use. Alcoholic hepatitis: acute onset jaundice, fever, elevated AST:ALT ratio >2, neutrophilia. Ma"
@@ -187,7 +232,9 @@
     "C_SCORE_MADDREY": {
       "specialty": "hepatology",
       "icd10_codes": [
-        "S67"
+        "K70.1",
+        "K70.30",
+        "K70.31"
       ],
       "cpt_codes": [],
       "label": "maddrey",
@@ -196,7 +243,8 @@
     "C_HEP_ALT_AST": {
       "specialty": "hepatology",
       "icd10_codes": [
-        "A11"
+        "R74.01",
+        "R74.8"
       ],
       "cpt_codes": [],
       "label": "alt ast",
@@ -212,8 +260,8 @@
     "C_SCORE_APACHE_II": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "I63",
-        "R29.7"
+        "R65.20",
+        "R65.21"
       ],
       "cpt_codes": [],
       "label": "apache ii",
@@ -221,105 +269,153 @@
     },
     "C_SCORE_CURB65": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "J18.9",
+        "J15.9"
+      ],
       "cpt_codes": [],
       "label": "curb65",
       "description": "Severity scoring for community-acquired pneumonia. CURB-65: Confusion (1), Urea >7 mmol/L (1), Respiratory rate ≥30 (1), Blood pressure systolic <90 or diastolic ≤60 (1), age ≥65 (1). Score 0–1: low r"
     },
     "C_HEP_DRUG_INDUCED_LIVER_INJURY": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K71.2",
+        "K71.6",
+        "K71.9"
+      ],
       "cpt_codes": [],
       "label": "drug induced liver injury",
       "description": "Liver injury caused by medications, herbal products, or dietary supplements. Patterns: hepatocellular (ALT elevation), cholestatic (ALP/GGT elevation), mixed. Acetaminophen (paracetamol) is most commo"
     },
     "C_HEP_AFP": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "R77.8"
+      ],
       "cpt_codes": [],
       "label": "afp",
       "description": "Oncofetal protein used in HCC surveillance and diagnosis. AFP >20 ng/mL in high-risk patient raises concern for HCC; >400 ng/mL strongly suggests it. Also elevated in non-seminomatous germ cell tumour"
     },
     "C_SCORE_MELD": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K74.60",
+        "K72.90"
+      ],
       "cpt_codes": [],
       "label": "meld",
       "description": "MELD (Model for End-stage Liver Disease) predicts 90-day mortality in cirrhosis. Original: 3.8×log(bilirubin) + 11.2×log(INR) + 9.6×log(creatinine) + 6.4. MELD-Na adds serum sodium. MELD 3.0 includes "
     },
     "C_HEP_LIVER_TRANSPLANT": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z94.4",
+        "T86.40"
+      ],
       "cpt_codes": [],
       "label": "liver transplant",
       "description": "Definitive treatment for end-stage liver disease, acute liver failure, and early HCC (Milan criteria). Donor organs: deceased donor (cadaveric) or living donor. MELD score determines waitlist priority"
     },
     "C_SCORE_CHILD_PUGH": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K74.60",
+        "K74.69"
+      ],
       "cpt_codes": [],
       "label": "child pugh",
       "description": "Cirrhosis severity score based on 5 parameters: bilirubin, albumin, INR/prothrombin time, ascites, and hepatic encephalopathy. Class A (5–6 points): well-compensated, 1–2% 1-year mortality. Class B (7"
     },
     "C_HEP_ALBUMIN_INR": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "E88.09",
+        "R79.89"
+      ],
       "cpt_codes": [],
       "label": "albumin inr",
       "description": "Albumin and INR/prothrombin time reflect hepatic synthetic function. Hypoalbuminaemia and prolonged PT/INR indicate significant parenchymal dysfunction. Both are components of Child-Pugh and MELD scor"
     },
     "C_SCORE_MELD_FIB4": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K74.0",
+        "K74.60"
+      ],
       "cpt_codes": [],
       "label": "meld fib4",
       "description": "Non-invasive fibrosis assessment: FIB-4 = (Age × AST) / (Platelets × √ALT). FIB-4 <1.30: low risk of advanced fibrosis (F0–F2); >2.67: high risk (F3–F4). Validated in NAFLD, hepatitis B and C. First-l"
     },
     "C_SCORE_CHA2DS2_VASC": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I48.91",
+        "I48.19"
+      ],
       "cpt_codes": [],
       "label": "cha2ds2 vasc",
       "description": "Stroke risk stratification in non-valvular atrial fibrillation. Variables: Congestive heart failure (1), Hypertension (1), Age ≥75 (2), Diabetes (1), prior Stroke/TIA (2), Vascular disease (1), Age 65"
     },
     "C_HEP_FIBROSCAN": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K74.0",
+        "K74.1",
+        "K74.2"
+      ],
       "cpt_codes": [],
       "label": "fibroscan",
       "description": "Non-invasive ultrasound-based tool measuring liver stiffness in kilopascals (kPa) as a surrogate for fibrosis. Values interpreted as F0–F4 stages. Also measures controlled attenuation parameter (CAP) "
     },
     "C_HEP_LIVER_BIOPSY": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K74.60",
+        "K75.9"
+      ],
       "cpt_codes": [],
       "label": "liver biopsy",
       "description": "Gold standard for diagnosing and staging hepatic fibrosis and inflammation. Performed percutaneously, transjugularly (in coagulopathic patients), or laparoscopically. METAVIR (F0–F4) and Ishak (0–6) s"
     },
     "C_HEP_BILIRUBIN": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "R17",
+        "E80.7"
+      ],
       "cpt_codes": [],
       "label": "bilirubin",
       "description": "Bilirubin is a haemoglobin breakdown product. Elevated total bilirubin causes jaundice (clinically visible >2–3 mg/dL). Conjugated (direct) hyperbilirubinemia indicates hepatocellular or cholestatic d"
     },
     "C_HEP_ALP_GGT": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "R74.8",
+        "R74.01"
+      ],
       "cpt_codes": [],
       "label": "alp ggt",
       "description": "ALP and GGT elevation reflects biliary tract disease. Elevated in cholestatic conditions: PBC, PSC, biliary obstruction, drug cholestasis. GGT elevation also indicates alcohol use and enzyme induction"
     },
     "C_HEP_HEMOCHROMATOSIS": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "E83.110",
+        "E83.111",
+        "E83.118",
+        "E83.119"
+      ],
       "cpt_codes": [],
       "label": "hemochromatosis",
       "description": "Autosomal recessive iron overload disorder; most common: HFE gene C282Y homozygosity. Excess iron deposits in liver, heart, pancreas, joints, and pituitary. Presents with fatigue, arthralgia, liver di"
     },
     "C_HEP_ACUTE_LIVER_FAILURE": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "K72.00",
+        "K72.01"
+      ],
       "cpt_codes": [],
       "label": "acute liver failure",
       "description": "Rapid loss of hepatic function in previously healthy liver, presenting with coagulopathy (INR ≥1.5) and hepatic encephalopathy within 26 weeks of symptom onset. Causes: acetaminophen, viral hepatitis,"
@@ -327,9 +423,9 @@
     "C_ID_SEPSIS": {
       "specialty": "infectious_disease",
       "icd10_codes": [
-        "R65.2",
-        "R65.21",
-        "T81.12"
+        "A41.9",
+        "R65.20",
+        "R65.21"
       ],
       "cpt_codes": [],
       "label": "sepsis",
@@ -338,8 +434,8 @@
     "C_SCORE_SOFA": {
       "specialty": "infectious_disease",
       "icd10_codes": [
-        "R31",
-        "R82"
+        "R65.20",
+        "R65.21"
       ],
       "cpt_codes": [],
       "label": "sofa",
@@ -347,21 +443,30 @@
     },
     "C_ID_MENINGITIS": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "G00.9",
+        "G03.9"
+      ],
       "cpt_codes": [],
       "label": "meningitis",
       "description": "Medical emergency from bacterial inflammation of meninges. Triad: fever, severe headache, neck stiffness. Petechial rash suggests Neisseria meningitidis. LP: elevated opening pressure, turbid CSF, neu"
     },
     "C_ID_HIV_AIDS": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B20",
+        "Z21"
+      ],
       "cpt_codes": [],
       "label": "hiv aids",
       "description": "Retroviral infection (HIV-1/2) causing progressive CD4+ T-cell depletion leading to AIDS (CD4 <200 cells/µL or AIDS-defining illness). Transmission: sexual, parenteral, vertical. Diagnosis: 4th-genera"
     },
     "C_DRUG_ANTIRETROVIRAL": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B20",
+        "Z79.899"
+      ],
       "cpt_codes": [],
       "label": "antiretroviral",
       "description": "Combination antiretroviral therapy (ART) for HIV; current standard: 2 NRTIs (backbone: tenofovir alafenamide + emtricitabine) + integrase strand transfer inhibitor (INSTI: dolutegravir, bictegravir). "
@@ -369,14 +474,7 @@
     "C_ID_COVID19": {
       "specialty": "infectious_disease",
       "icd10_codes": [
-        "J12.8",
-        "J12.82",
-        "J20.8",
-        "J40",
-        "R05",
-        "R05.9",
-        "R06.02",
-        "R50.9"
+        "U07.1"
       ],
       "cpt_codes": [],
       "label": "covid19",
@@ -384,28 +482,40 @@
     },
     "C_ID_TUBERCULOSIS": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "A15.0",
+        "A15.9"
+      ],
       "cpt_codes": [],
       "label": "tuberculosis",
       "description": "Infection by Mycobacterium tuberculosis, primarily pulmonary but can affect any organ. Spread by respiratory droplets. Active TB: productive cough, haemoptysis, night sweats, weight loss, CXR cavitati"
     },
     "C_ID_MALARIA": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B54",
+        "B50.9"
+      ],
       "cpt_codes": [],
       "label": "malaria",
       "description": "Parasitic infection by Plasmodium species transmitted by Anopheles mosquito. P. falciparum: most lethal; causes cerebral malaria, severe anaemia, ARDS, renal failure, blackwater fever. Cyclical fever,"
     },
     "C_ID_DENGUE": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "A97.9",
+        "A90"
+      ],
       "cpt_codes": [],
       "label": "dengue",
       "description": "Arboviral infection (dengue virus serotypes 1–4) transmitted by Aedes mosquito. High fever, severe headache, retroorbital pain, myalgia, rash, thrombocytopenia, and leukopenia. Dengue haemorrhagic fev"
     },
     "C_ID_CLOSTRIDIUM_DIFFICILE": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "A04.72",
+        "A04.71"
+      ],
       "cpt_codes": [],
       "label": "clostridium difficile",
       "description": "Toxin-mediated colitis from C. difficile overgrowth, usually following antibiotic disruption of colonic flora. Watery diarrhoea, abdominal cramps, fever, leukocytosis. Pseudomembranes on colonoscopy. "
@@ -414,11 +524,7 @@
       "specialty": "infectious_disease",
       "icd10_codes": [
         "A41.02",
-        "B95.62",
-        "J15.212",
-        "Z16.11",
-        "Z22.321",
-        "Z22.322"
+        "B95.62"
       ],
       "cpt_codes": [],
       "label": "mrsa",
@@ -426,63 +532,90 @@
     },
     "C_DRUG_GLYCOPEPTIDE": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "A41.02",
+        "Z79.899"
+      ],
       "cpt_codes": [],
       "label": "glycopeptide",
       "description": "Antibiotics inhibiting cell wall synthesis by binding D-Ala-D-Ala terminal peptide. Vancomycin: key agent for MRSA, C. difficile (oral), gram-positive infections. IV vancomycin: AUC-guided dosing (AUC"
     },
     "C_ID_CANDIDIASIS": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B37.9",
+        "B37.3"
+      ],
       "cpt_codes": [],
       "label": "candidiasis",
       "description": "Fungal infection caused by Candida species. Mucocutaneous forms: oral thrush (pseudomembranous plaques), oesophageal candidiasis, vulvovaginal candidiasis. Invasive candidiasis: candidemia, hepatosple"
     },
     "C_ID_ASPERGILLOSIS": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B44.1",
+        "B44.9"
+      ],
       "cpt_codes": [],
       "label": "aspergillosis",
       "description": "Spectrum of infections by Aspergillus species. Invasive pulmonary aspergillosis (IPA) in neutropenic/transplant patients: angioinvasion, infarction, haematogenous spread. CT: halo sign, air-crescent s"
     },
     "C_ID_PNEUMOCYSTIS": {
       "specialty": "infectious_disease",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B59"
+      ],
       "cpt_codes": [],
       "label": "pneumocystis",
       "description": "Life-threatening pneumonia from Pneumocystis jirovecii in immunocompromised patients (HIV CD4 <200, transplant, haematological malignancy, long-term steroids). Presents with progressive dyspnoea, dry "
     },
     "C_ONC_BREAST_CANCER": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C50.911",
+        "C50.912",
+        "C50.919"
+      ],
       "cpt_codes": [],
       "label": "breast cancer",
       "description": "Most common cancer in women. Subtypes by receptor status: ER/PR-positive (most common, endocrine therapy — tamoxifen, aromatase inhibitors), HER2-positive (trastuzumab, pertuzumab), triple-negative TN"
     },
     "C_ONC_LUNG_CANCER": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C34.10",
+        "C34.11",
+        "C34.12"
+      ],
       "cpt_codes": [],
       "label": "lung cancer",
       "description": "Leading cause of cancer death. NSCLC (85%): adenocarcinoma (most common, peripheral, EGFR/ALK/ROS1/KRAS mutations), squamous cell, large cell. SCLC: central, rapid growth, paraneoplastic syndromes. Mo"
     },
     "C_ONC_COLORECTAL_CANCER": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C18.9",
+        "C20"
+      ],
       "cpt_codes": [],
       "label": "colorectal cancer",
       "description": "Third most common cancer globally. Most arise from adenomatous polyps. Risk factors: IBD, Lynch syndrome (MMR gene mutations), FAP. Symptoms: rectal bleeding, change in bowel habit, iron-deficiency an"
     },
     "C_ONC_PANCREATIC_CANCER": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C25.9",
+        "C25.0"
+      ],
       "cpt_codes": [],
       "label": "pancreatic cancer",
       "description": "Most lethal GI malignancy; 5-year survival ~12%. Most are PDAC from ductal epithelium. Head of pancreas (most common): presents with painless obstructive jaundice, weight loss. Body/tail: often late p"
     },
     "C_ONC_PROSTATE_CANCER": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C61"
+      ],
       "cpt_codes": [],
       "label": "prostate cancer",
       "description": "Most common cancer in men. PSA screening debated. Gleason/Grade Group scoring from biopsy determines risk stratification. Localised: active surveillance, radical prostatectomy, or radiotherapy per ris"
@@ -490,7 +623,9 @@
     "C_ONC_OVARIAN_CANCER": {
       "specialty": "oncology",
       "icd10_codes": [
-        "P53"
+        "C56.1",
+        "C56.2",
+        "C56.9"
       ],
       "cpt_codes": [],
       "label": "ovarian cancer",
@@ -498,7 +633,10 @@
     },
     "C_ONC_AML": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C92.00",
+        "C92.01"
+      ],
       "cpt_codes": [],
       "label": "aml",
       "description": "Aggressive haematologic malignancy from clonal expansion of myeloid precursors. Blasts ≥20% in bone marrow. WHO molecular risk stratification: favourable (core binding factor AML, NPM1+), intermediate"
@@ -506,7 +644,8 @@
     "C_ONC_CML": {
       "specialty": "oncology",
       "icd10_codes": [
-        "B12"
+        "C92.10",
+        "C92.11"
       ],
       "cpt_codes": [],
       "label": "cml",
@@ -514,49 +653,67 @@
     },
     "C_ONC_HODGKIN_LYMPHOMA": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C81.90",
+        "C81.99"
+      ],
       "cpt_codes": [],
       "label": "hodgkin lymphoma",
       "description": "Lymphoid malignancy characterised by Reed-Sternberg cells (CD30+, CD15+) in an inflammatory background. Bimodal age distribution. Painless lymphadenopathy, B symptoms (fever, night sweats, weight loss"
     },
     "C_ONC_NON_HODGKIN_LYMPHOMA": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C85.90",
+        "C85.99"
+      ],
       "cpt_codes": [],
       "label": "non hodgkin lymphoma",
       "description": "Heterogeneous group of lymphoid malignancies. Indolent (follicular, MZL, CLL/SLL) vs aggressive (DLBCL, MCL, Burkitt). DLBCL: most common NHL; GCB vs ABC subtype by cell of origin. R-CHOP (rituximab +"
     },
     "C_ONC_MULTIPLE_MYELOMA": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C90.00",
+        "C90.01"
+      ],
       "cpt_codes": [],
       "label": "multiple myeloma",
       "description": "Clonal plasma cell malignancy producing monoclonal immunoglobulin (M protein). CRAB criteria: hyperCalcaemia, Renal failure, Anaemia, Bone lesions (lytic). Diagnosis: SPEP, serum free light chains, bo"
     },
     "C_ONC_IMMUNOTHERAPY": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.899"
+      ],
       "cpt_codes": [],
       "label": "immunotherapy",
       "description": "Systemic cancer treatment leveraging the immune system. Checkpoint inhibitors block PD-1 (pembrolizumab, nivolumab), PD-L1 (atezolizumab, durvalumab), or CTLA-4 (ipilimumab). Approved across NSCLC, me"
     },
     "C_ONC_CAR_T": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.899"
+      ],
       "cpt_codes": [],
       "label": "car t",
       "description": "Adoptive cell therapy where patient's T cells are genetically engineered to express tumour-targeting CARs. CD19-directed CAR-T for B-cell ALL and diffuse large B-cell lymphoma; BCMA-directed for multi"
     },
     "C_ONC_CHEMOTHERAPY": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.899",
+        "Z51.11"
+      ],
       "cpt_codes": [],
       "label": "chemotherapy",
       "description": "Cytotoxic agents that kill rapidly dividing cells, used as neoadjuvant, adjuvant, or palliative treatment. Mechanism classes: alkylating agents, antimetabolites (5-FU, methotrexate), topoisomerase inh"
     },
     "C_ONC_TARGETED_THERAPY": {
       "specialty": "oncology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.899"
+      ],
       "cpt_codes": [],
       "label": "targeted therapy",
       "description": "Cancer drugs targeting specific molecular drivers identified by tumour profiling. Examples: EGFR-mutated NSCLC → osimertinib; BRAF V600E melanoma → vemurafenib; HER2+ breast → trastuzumab, pertuzumab,"
@@ -564,7 +721,8 @@
     "C_DERM_PSORIASIS": {
       "specialty": "dermatology",
       "icd10_codes": [
-        "K17"
+        "L40.0",
+        "L40.9"
       ],
       "cpt_codes": [],
       "label": "psoriasis",
@@ -572,84 +730,112 @@
     },
     "C_DERM_ATOPIC_DERMATITIS": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "L20.9",
+        "L20.89"
+      ],
       "cpt_codes": [],
       "label": "atopic dermatitis",
       "description": "Chronic relapsing pruritic inflammatory skin disorder; part of the atopic triad (with asthma and allergic rhinitis). Mediated by Th2 immune response, barrier dysfunction (filaggrin mutations), and IgE"
     },
     "C_DERM_MELANOMA": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C43.9"
+      ],
       "cpt_codes": [],
       "label": "melanoma",
       "description": "Malignant neoplasm of melanocytes with highest mortality of skin cancers. ABCDE criteria (Asymmetry, Border, Colour, Diameter, Evolution). Breslow thickness is primary prognostic factor. BRAF V600E mu"
     },
     "C_DERM_BASAL_CELL_CARCINOMA": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C44.91"
+      ],
       "cpt_codes": [],
       "label": "basal cell carcinoma",
       "description": "Most common human malignancy; arises from basal keratinocytes. UV radiation main risk factor. Subtypes: nodular (pearly papule with telangiectasia), superficial, morphoeic (aggressive). Rarely metasta"
     },
     "C_DERM_SQUAMOUS_CELL_CARCINOMA": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "C44.92"
+      ],
       "cpt_codes": [],
       "label": "squamous cell carcinoma",
       "description": "Second most common skin cancer; arises from keratinocytes. Risk: chronic UV exposure, immunosuppression, HPV, chronic wounds, precursor lesions (actinic keratosis, Bowen's disease). Can metastasise (e"
     },
     "C_DERM_ACNE_VULGARIS": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "L70.0",
+        "L70.9"
+      ],
       "cpt_codes": [],
       "label": "acne vulgaris",
       "description": "Multifactorial pilosebaceous unit disorder from sebum overproduction, follicular hyperkeratinisation, Cutibacterium acnes colonisation, and inflammation. Presents as comedones, papules, pustules, nodu"
     },
     "C_DERM_ROSACEA": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "L71.9"
+      ],
       "cpt_codes": [],
       "label": "rosacea",
       "description": "Chronic inflammatory facial dermatosis characterised by flushing, erythema, telangiectasia, inflammatory papulopustules, and phymatous changes. Triggers: heat, alcohol, spicy food, UV. Ocular rosacea:"
     },
     "C_DERM_TINEA": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B35.9"
+      ],
       "cpt_codes": [],
       "label": "tinea",
       "description": "Superficial fungal infection of keratinised structures (skin, hair, nails) caused by dermatophytes (Trichophyton, Microsporum, Epidermophyton). KOH microscopy demonstrates hyphae. Topical imidazoles o"
     },
     "C_DERM_HERPES_ZOSTER": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B02.9"
+      ],
       "cpt_codes": [],
       "label": "herpes zoster",
       "description": "Reactivation of latent varicella-zoster virus (VZV) in dorsal root ganglia causing unilateral dermatomal painful vesicular rash. Prodrome: burning pain before rash. Complications: postherpetic neuralg"
     },
     "C_DERM_VITILIGO": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "L80"
+      ],
       "cpt_codes": [],
       "label": "vitiligo",
       "description": "Autoimmune destruction of melanocytes causing well-demarcated achromic patches. Koebner phenomenon (new lesions at sites of trauma). Associated with thyroid disease, T1DM, alopecia areata. Wood's lamp"
     },
     "C_DERM_PEMPHIGUS_VULGARIS": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "L10.0"
+      ],
       "cpt_codes": [],
       "label": "pemphigus vulgaris",
       "description": "Life-threatening autoimmune blistering disorder from IgG antibodies against desmoglein-1/3, causing intraepidermal acantholysis. Flaccid bullae that rupture easily; painful mucosal erosions often prec"
     },
     "C_DERM_BULLOUS_PEMPHIGOID": {
       "specialty": "dermatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "L12.0"
+      ],
       "cpt_codes": [],
       "label": "bullous pemphigoid",
       "description": "Most common autoimmune blistering disease, predominantly in elderly. IgG antibodies target BP180/BP230 (hemidesmosomal proteins), causing subepidermal blistering. Tense, pruritic bullae on normal or u"
     },
     "C_GEN_HEART_FAILURE": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I50.9",
+        "I50.30",
+        "I50.40"
+      ],
       "cpt_codes": [],
       "label": "heart failure",
       "description": "Syndrome of inadequate cardiac output relative to metabolic demands. HFrEF (EF <40%): GDMT — ACEi/ARB/ARNi, beta-blocker, MRA, SGLT2 inhibitor. HFpEF (EF ≥50%): manage comorbidities + SGLT2 inhibitors"
@@ -657,8 +843,8 @@
     "C_GEN_MYOCARDIAL_INFARCTION": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "I21",
-        "I25.2"
+        "I21.9",
+        "I21.3"
       ],
       "cpt_codes": [],
       "label": "myocardial infarction",
@@ -666,21 +852,29 @@
     },
     "C_GEN_ATRIAL_FIBRILLATION": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I48.91",
+        "I48.19"
+      ],
       "cpt_codes": [],
       "label": "atrial fibrillation",
       "description": "Most common cardiac arrhythmia. Irregularly irregular pulse, absent P-waves, irregular RR intervals on ECG. Stroke risk stratification: CHA2DS2-VASc score (anticoagulate if ≥2 in men, ≥3 in women). An"
     },
     "C_GEN_HYPERTENSION": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I10"
+      ],
       "cpt_codes": [],
       "label": "hypertension",
       "description": "Systolic BP ≥130 mmHg or diastolic ≥80 mmHg (AHA 2017). Primary hypertension in 90-95%. Secondary causes: renal artery stenosis, primary hyperaldosteronism (Conn), phaeochromocytoma, Cushing. First-li"
     },
     "C_GEN_PULMONARY_EMBOLISM": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I26.09",
+        "I26.99"
+      ],
       "cpt_codes": [],
       "label": "pulmonary embolism",
       "description": "Obstruction of pulmonary arterial system by thrombus (usually DVT). Symptoms: pleuritic chest pain, dyspnoea, haemoptysis, tachycardia. Diagnosis: Wells score risk stratification, D-dimer (high sensit"
@@ -688,7 +882,8 @@
     "C_GEN_COPD": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "S49"
+        "J44.1",
+        "J44.9"
       ],
       "cpt_codes": [],
       "label": "copd",
@@ -696,7 +891,10 @@
     },
     "C_GEN_ASTHMA": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "J45.50",
+        "J45.909"
+      ],
       "cpt_codes": [],
       "label": "asthma",
       "description": "Chronic inflammatory airway disease with reversible airflow obstruction, bronchial hyperreactivity. Episodic wheeze, dyspnoea, chest tightness, cough (nocturnal/exercise). Peak flow and spirometry (FE"
@@ -704,8 +902,8 @@
     "C_GEN_ACUTE_KIDNEY_INJURY": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "R23",
-        "R31"
+        "N17.9",
+        "N17.0"
       ],
       "cpt_codes": [],
       "label": "acute kidney injury",
@@ -714,12 +912,11 @@
     "C_GEN_CHRONIC_KIDNEY_DISEASE": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "N18.2",
         "N18.3",
-        "N18.30",
-        "N18.32",
         "N18.4",
-        "N18.6"
+        "N18.5",
+        "N18.6",
+        "N18.9"
       ],
       "cpt_codes": [],
       "label": "chronic kidney disease",
@@ -728,7 +925,8 @@
     "C_GEN_DIABETES_TYPE2": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "B12"
+        "E11.9",
+        "E11.65"
       ],
       "cpt_codes": [],
       "label": "diabetes type2",
@@ -736,21 +934,30 @@
     },
     "C_DRUG_ANTIDIABETIC": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "E11.9",
+        "Z79.84"
+      ],
       "cpt_codes": [],
       "label": "antidiabetic",
       "description": "Pharmacological agents for glycaemic control in diabetes. Metformin: first-line (biguanide, reduces hepatic glucose output, hold with iodinated contrast, eGFR <30 contraindicated). SGLT2 inhibitors (e"
     },
     "C_GEN_STROKE": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I63.9",
+        "I64"
+      ],
       "cpt_codes": [],
       "label": "stroke",
       "description": "Acute focal neurological deficit from brain infarction (ischaemic, 87%) or haemorrhage (intracerebral, subarachnoid). FAST: Face, Arm, Speech, Time. Ischaemic: IV alteplase (tPA) within 4.5h of onset;"
     },
     "C_GEN_SEIZURE": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "G40.909",
+        "R56.9"
+      ],
       "cpt_codes": [],
       "label": "seizure",
       "description": "Epilepsy: recurrent unprovoked seizures from abnormal brain electrical activity. Classification: focal (aware/impaired), generalised (tonic-clonic, absence, myoclonic). EEG and MRI brain for investiga"
@@ -758,8 +965,8 @@
     "C_GEN_ANAEMIA": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "B12",
-        "B19"
+        "D64.9",
+        "D50.9"
       ],
       "cpt_codes": [],
       "label": "anaemia",
@@ -767,35 +974,50 @@
     },
     "C_DRUG_STATIN": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "E78.00",
+        "E78.5",
+        "Z79.899"
+      ],
       "cpt_codes": [],
       "label": "statin",
       "description": "HMG-CoA reductase inhibitors; reduce LDL cholesterol and cardiovascular events. High-intensity: atorvastatin 40–80 mg, rosuvastatin 20–40 mg. Primary and secondary prevention of ASCVD. Adverse effects"
     },
     "C_DRUG_ANTICOAGULANT": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "I26.09",
+        "I48.91",
+        "Z79.01"
+      ],
       "cpt_codes": [],
       "label": "anticoagulant",
       "description": "Anticoagulants prevent thrombus formation. Parenteral: unfractionated heparin (UFH, aPTT-guided), LMWH (enoxaparin, renal dosing). Oral: warfarin (vitamin K antagonist, INR 2–3 for AF/VTE, narrow TW, "
     },
     "C_DRUG_CORTICOSTEROID": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.52"
+      ],
       "cpt_codes": [],
       "label": "corticosteroid",
       "description": "Synthetic glucocorticoids with potent anti-inflammatory and immunosuppressive effects. Doses: physiological replacement (hydrocortisone 20 mg/day), anti-inflammatory, pulse (IV methylprednisolone). Ad"
     },
     "C_DRUG_NSAID": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.1"
+      ],
       "cpt_codes": [],
       "label": "nsaid",
       "description": "Anti-inflammatory analgesics inhibiting COX-1 and COX-2 enzymes, reducing prostaglandin synthesis. Indications: pain, fever, inflammatory arthritis, gout. Adverse effects: GI ulceration/bleeding (use "
     },
     "C_DRUG_OPIOID": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z79.891",
+        "F11.20"
+      ],
       "cpt_codes": [],
       "label": "opioid",
       "description": "Pain management agents acting on mu, kappa, and delta opioid receptors. Stepwise WHO analgesic ladder. Adverse effects: constipation (prevent routinely), respiratory depression (reverse with naloxone)"
@@ -803,10 +1025,8 @@
     "C_DRUG_BIOLOGIC": {
       "specialty": "pharmacology",
       "icd10_codes": [
-        "P13",
-        "R19",
-        "R20",
-        "R42"
+        "Z79.899",
+        "L40.0"
       ],
       "cpt_codes": [],
       "label": "biologic",
@@ -815,7 +1035,8 @@
     "C_DRUG_IMMUNOSUPPRESSANT": {
       "specialty": "pharmacology",
       "icd10_codes": [
-        "S15"
+        "Z79.899",
+        "Z94.4"
       ],
       "cpt_codes": [],
       "label": "immunosuppressant",
@@ -823,28 +1044,40 @@
     },
     "C_DRUG_ANTIFUNGAL": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "B37.9",
+        "B44.9"
+      ],
       "cpt_codes": [],
       "label": "antifungal",
       "description": "Antifungal drug classes: azoles (ergosterol synthesis inhibition — fluconazole for Candida/Cryptococcus, voriconazole for Aspergillus), echinocandins (beta-glucan synthase inhibition — caspofungin, mi"
     },
     "C_DRUG_BETA_LACTAM": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "A41.9",
+        "J15.9"
+      ],
       "cpt_codes": [],
       "label": "beta lactam",
       "description": "Largest antibiotic class; inhibit cell wall synthesis by binding penicillin-binding proteins (PBPs). Subclasses: penicillins, cephalosporins (1st–5th generation), carbapenems, monobactams. Broad-spect"
     },
     "C_DRUG_FLUOROQUINOLONE": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "A41.9",
+        "J18.9"
+      ],
       "cpt_codes": [],
       "label": "fluoroquinolone",
       "description": "Bactericidal antibiotics inhibiting bacterial DNA gyrase and topoisomerase IV. Broad spectrum: gram-negative, atypicals, mycobacteria. Ciprofloxacin: gram-negative (UTI, anthrax). Levofloxacin: respir"
     },
     "C_DRUG_MACROLIDE": {
       "specialty": "pharmacology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "J18.9",
+        "J15.9"
+      ],
       "cpt_codes": [],
       "label": "macrolide",
       "description": "Bacteriostatic antibiotics inhibiting bacterial protein synthesis at 50S ribosomal subunit. Active against atypicals (Mycoplasma, Legionella, Chlamydia), H. pylori (clarithromycin), NTM (clarithromyci"
@@ -852,7 +1085,7 @@
     "C_SCORE_GLASGOW_COMA_SCALE": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "R40.2",
+        "R40.20",
         "R40.24"
       ],
       "cpt_codes": [],
@@ -862,7 +1095,8 @@
     "C_SCORE_WELLS_PE": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "D12"
+        "I26.09",
+        "I26.99"
       ],
       "cpt_codes": [],
       "label": "wells pe",
@@ -871,10 +1105,8 @@
     "C_SCORE_NIHSS": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "I63",
-        "R29.7",
-        "Z55",
-        "Z65"
+        "I63.9",
+        "R29.7"
       ],
       "cpt_codes": [],
       "label": "nihss",
@@ -882,21 +1114,28 @@
     },
     "C_SCORE_APGAR": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "Z38.00",
+        "Z38.01"
+      ],
       "cpt_codes": [],
       "label": "apgar",
       "description": "Neonatal assessment at 1 and 5 minutes post-delivery. Five criteria: Appearance (skin colour), Pulse (heart rate), Grimace (reflex irritability), Activity (muscle tone), Respiration. Each 0–2; total 0"
     },
     "C_HEP_WILSON_DISEASE": {
       "specialty": "hepatology",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "E83.01"
+      ],
       "cpt_codes": [],
       "label": "wilson disease",
       "description": ""
     },
     "C_GEN_ARDS": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "J80"
+      ],
       "cpt_codes": [],
       "label": "ards",
       "description": ""
@@ -904,8 +1143,8 @@
     "C_GEN_THYROID_DISEASE": {
       "specialty": "general_medicine",
       "icd10_codes": [
-        "R13",
-        "R20"
+        "E03.9",
+        "E05.90"
       ],
       "cpt_codes": [],
       "label": "thyroid disease",
@@ -913,7 +1152,10 @@
     },
     "C_GEN_SHOCK": {
       "specialty": "general_medicine",
-      "icd10_codes": [],
+      "icd10_codes": [
+        "R57.9",
+        "R57.0"
+      ],
       "cpt_codes": [],
       "label": "shock",
       "description": ""
@@ -1005,6 +1247,7 @@
       "K76.6",
       "K76.7",
       "K76.8",
+      "K76.89",
       "K76.9"
     ],
     "K77": [
@@ -1140,7 +1383,10 @@
       "C50.8",
       "C50.81",
       "C50.9",
-      "C50.91"
+      "C50.91",
+      "C50.911",
+      "C50.912",
+      "C50.919"
     ],
     "C34": [
       "C34",
@@ -1389,6 +1635,20 @@
       "N18.6",
       "N18.9"
     ],
+    "N20": [
+      "N20",
+      "N20.0",
+      "N20.1",
+      "N20.2",
+      "N20.9"
+    ],
+    "N40": [
+      "N40",
+      "N40.0",
+      "N40.1",
+      "N40.2",
+      "N40.3"
+    ],
     "J44": [
       "J44",
       "J44.0",
@@ -1415,6 +1675,7 @@
       "J45.52",
       "J45.9",
       "J45.90",
+      "J45.909",
       "J45.91",
       "J45.99"
     ],
@@ -1476,129 +1737,215 @@
       "M05.8",
       "M05.9"
     ],
-    "N20": [
-      "N20",
-      "N20.0",
-      "N20.1",
-      "N20.2",
-      "N20.9"
+    "K83": [
+      "K83.01",
+      "K83.09",
+      "K83.1"
     ],
-    "N40": [
-      "N40",
-      "N40.0",
-      "N40.1",
-      "N40.2",
-      "N40.3"
+    "R17": [
+      "R17"
     ],
-    "S25": [
-      "S25"
+    "I85": [
+      "I85.01",
+      "I85.11"
     ],
-    "S37": [
-      "S37"
+    "R18": [
+      "R18.8"
     ],
-    "R23": [
-      "R23"
+    "I82": [
+      "I82.0"
     ],
-    "M30": [
-      "M30"
+    "K65": [
+      "K65.2"
     ],
-    "S67": [
-      "S67"
-    ],
-    "A11": [
-      "A11"
-    ],
-    "I63": [
-      "I63"
-    ],
-    "R29": [
-      "R29.7"
+    "R74": [
+      "R74.01",
+      "R74.8"
     ],
     "R65": [
-      "R65.2",
+      "R65.20",
       "R65.21"
     ],
-    "T81": [
-      "T81.12"
+    "J18": [
+      "J18.9"
     ],
-    "R31": [
-      "R31"
+    "R77": [
+      "R77.8"
     ],
-    "R82": [
-      "R82"
+    "Z94": [
+      "Z94.4"
     ],
-    "J12": [
-      "J12.8",
-      "J12.82"
+    "T86": [
+      "T86.40"
     ],
-    "J20": [
-      "J20.8"
+    "E88": [
+      "E88.09"
     ],
-    "J40": [
-      "J40"
+    "R79": [
+      "R79.89"
     ],
-    "R05": [
-      "R05",
-      "R05.9"
+    "E80": [
+      "E80.7"
     ],
-    "R06": [
-      "R06.02"
+    "E83": [
+      "E83.01",
+      "E83.110",
+      "E83.111",
+      "E83.118",
+      "E83.119"
     ],
-    "R50": [
-      "R50.9"
+    "G00": [
+      "G00.9"
+    ],
+    "G03": [
+      "G03.9"
+    ],
+    "Z21": [
+      "Z21"
+    ],
+    "Z79": [
+      "Z79.01",
+      "Z79.1",
+      "Z79.52",
+      "Z79.84",
+      "Z79.891",
+      "Z79.899"
+    ],
+    "U07": [
+      "U07.1"
+    ],
+    "A15": [
+      "A15.0",
+      "A15.9"
+    ],
+    "B54": [
+      "B54"
+    ],
+    "B50": [
+      "B50.9"
+    ],
+    "A97": [
+      "A97.9"
+    ],
+    "A90": [
+      "A90"
+    ],
+    "A04": [
+      "A04.71",
+      "A04.72"
     ],
     "B95": [
       "B95.62"
     ],
-    "Z16": [
-      "Z16.11"
+    "B37": [
+      "B37.3",
+      "B37.9"
     ],
-    "Z22": [
-      "Z22.321",
-      "Z22.322"
+    "B44": [
+      "B44.1",
+      "B44.9"
     ],
-    "P53": [
-      "P53"
+    "B59": [
+      "B59"
     ],
-    "B12": [
-      "B12"
+    "C20": [
+      "C20"
     ],
-    "K17": [
-      "K17"
+    "C25": [
+      "C25.0",
+      "C25.9"
     ],
-    "S49": [
-      "S49"
+    "C56": [
+      "C56.1",
+      "C56.2",
+      "C56.9"
     ],
-    "P13": [
-      "P13"
+    "C92": [
+      "C92.00",
+      "C92.01",
+      "C92.10",
+      "C92.11"
     ],
-    "R19": [
-      "R19"
+    "C81": [
+      "C81.90",
+      "C81.99"
     ],
-    "R20": [
-      "R20"
+    "C85": [
+      "C85.90",
+      "C85.99"
     ],
-    "R42": [
-      "R42"
+    "C90": [
+      "C90.00",
+      "C90.01"
     ],
-    "S15": [
-      "S15"
+    "Z51": [
+      "Z51.11"
+    ],
+    "C43": [
+      "C43.9"
+    ],
+    "C44": [
+      "C44.91",
+      "C44.92"
+    ],
+    "L70": [
+      "L70.0",
+      "L70.9"
+    ],
+    "L71": [
+      "L71.9"
+    ],
+    "B35": [
+      "B35.9"
+    ],
+    "B02": [
+      "B02.9"
+    ],
+    "L80": [
+      "L80"
+    ],
+    "L10": [
+      "L10.0"
+    ],
+    "L12": [
+      "L12.0"
+    ],
+    "I63": [
+      "I63.9"
+    ],
+    "I64": [
+      "I64"
+    ],
+    "R56": [
+      "R56.9"
+    ],
+    "E78": [
+      "E78.00",
+      "E78.5"
+    ],
+    "F11": [
+      "F11.20"
     ],
     "R40": [
-      "R40.2",
+      "R40.20",
       "R40.24"
     ],
-    "D12": [
-      "D12"
+    "R29": [
+      "R29.7"
     ],
-    "Z55": [
-      "Z55"
+    "Z38": [
+      "Z38.00",
+      "Z38.01"
     ],
-    "Z65": [
-      "Z65"
+    "J80": [
+      "J80"
     ],
-    "R13": [
-      "R13"
+    "E05": [
+      "E05.90"
+    ],
+    "R57": [
+      "R57.0",
+      "R57.9"
     ]
   },
   "term_to_codes": {
@@ -1617,7 +1964,9 @@
       ]
     },
     "portal hypertension": {
-      "icd10": [],
+      "icd10": [
+        "K76.6"
+      ],
       "cpt": [
         "37182",
         "37183",
@@ -1625,21 +1974,31 @@
       ]
     },
     "ascites": {
-      "icd10": [],
+      "icd10": [
+        "K70.31",
+        "K71.51",
+        "R18.8"
+      ],
       "cpt": [
         "49082",
         "49083"
       ]
     },
     "hepatic encephalopathy": {
-      "icd10": [],
+      "icd10": [
+        "K72.90",
+        "K72.91"
+      ],
       "cpt": [
         "99232",
         "99233"
       ]
     },
     "variceal bleeding": {
-      "icd10": [],
+      "icd10": [
+        "I85.01",
+        "I85.11"
+      ],
       "cpt": [
         "43243",
         "43244",
@@ -1654,7 +2013,9 @@
       ]
     },
     "spontaneous bacterial peritonitis": {
-      "icd10": [],
+      "icd10": [
+        "K65.2"
+      ],
       "cpt": [
         "49082",
         "49083"
@@ -1662,6 +2023,7 @@
     },
     "hepatorenal syndrome": {
       "icd10": [
+        "K76.7",
         "R23"
       ],
       "cpt": [
@@ -1678,7 +2040,13 @@
       ]
     },
     "alcoholic liver disease": {
-      "icd10": [],
+      "icd10": [
+        "K70.0",
+        "K70.1",
+        "K70.3",
+        "K70.30",
+        "K70.31"
+      ],
       "cpt": [
         "80076",
         "91200"
@@ -1709,7 +2077,9 @@
       ]
     },
     "nafld": {
-      "icd10": [],
+      "icd10": [
+        "K76.0"
+      ],
       "cpt": [
         "76700",
         "76705",
@@ -1723,7 +2093,9 @@
       "cpt": []
     },
     "autoimmune hepatitis": {
-      "icd10": [],
+      "icd10": [
+        "K75.4"
+      ],
       "cpt": [
         "86039",
         "86235",
@@ -1732,8 +2104,7 @@
     },
     "primary biliary cholangitis": {
       "icd10": [
-        "S25",
-        "S37"
+        "K74.3"
       ],
       "cpt": [
         "86003",
@@ -1745,7 +2116,9 @@
       "cpt": []
     },
     "primary sclerosing cholangitis": {
-      "icd10": [],
+      "icd10": [
+        "K83.01"
+      ],
       "cpt": []
     },
     "psc": {
@@ -1753,7 +2126,12 @@
       "cpt": []
     },
     "cholestasis": {
-      "icd10": [],
+      "icd10": [
+        "K71.0",
+        "K76.89",
+        "K83.1",
+        "R17"
+      ],
       "cpt": [
         "80076",
         "82247",
@@ -1761,7 +2139,9 @@
       ]
     },
     "hepatocellular carcinoma": {
-      "icd10": [],
+      "icd10": [
+        "C22.0"
+      ],
       "cpt": [
         "47370",
         "47371",
@@ -1779,7 +2159,10 @@
       ]
     },
     "liver biopsy": {
-      "icd10": [],
+      "icd10": [
+        "K74.60",
+        "K75.9"
+      ],
       "cpt": [
         "47000",
         "47001",
@@ -1787,7 +2170,11 @@
       ]
     },
     "fibroscan": {
-      "icd10": [],
+      "icd10": [
+        "K74.0",
+        "K74.1",
+        "K74.2"
+      ],
       "cpt": [
         "91200"
       ]
@@ -1801,7 +2188,10 @@
       ]
     },
     "acute liver failure": {
-      "icd10": [],
+      "icd10": [
+        "K72.00",
+        "K72.01"
+      ],
       "cpt": [
         "80076",
         "84155",
@@ -1809,14 +2199,21 @@
       ]
     },
     "liver transplant": {
-      "icd10": [],
+      "icd10": [
+        "T86.40",
+        "Z94.4"
+      ],
       "cpt": [
         "47135",
         "47136"
       ]
     },
     "drug induced liver injury": {
-      "icd10": [],
+      "icd10": [
+        "K71.2",
+        "K71.6",
+        "K71.9"
+      ],
       "cpt": [
         "80076",
         "82977"
@@ -1888,9 +2285,9 @@
     },
     "sepsis": {
       "icd10": [
-        "R65.2",
-        "R65.21",
-        "T81.12"
+        "A41.9",
+        "R65.20",
+        "R65.21"
       ],
       "cpt": [
         "86003",
@@ -1940,7 +2337,10 @@
       ]
     },
     "meningitis": {
-      "icd10": [],
+      "icd10": [
+        "G00.9",
+        "G03.9"
+      ],
       "cpt": [
         "62270",
         "87070"
@@ -1951,7 +2351,10 @@
       "cpt": []
     },
     "tuberculosis": {
-      "icd10": [],
+      "icd10": [
+        "A15.0",
+        "A15.9"
+      ],
       "cpt": [
         "71046",
         "86580",
@@ -1991,7 +2394,11 @@
       ]
     },
     "breast cancer": {
-      "icd10": [],
+      "icd10": [
+        "C50.911",
+        "C50.912",
+        "C50.919"
+      ],
       "cpt": [
         "19100",
         "19101",
@@ -2000,7 +2407,11 @@
       ]
     },
     "lung cancer": {
-      "icd10": [],
+      "icd10": [
+        "C34.10",
+        "C34.11",
+        "C34.12"
+      ],
       "cpt": [
         "32668",
         "32669",
@@ -2009,7 +2420,10 @@
       ]
     },
     "colorectal cancer": {
-      "icd10": [],
+      "icd10": [
+        "C18.9",
+        "C20"
+      ],
       "cpt": [
         "45380",
         "45385",
@@ -2017,7 +2431,10 @@
       ]
     },
     "pancreatic cancer": {
-      "icd10": [],
+      "icd10": [
+        "C25.0",
+        "C25.9"
+      ],
       "cpt": [
         "48100",
         "48105",
@@ -2025,7 +2442,9 @@
       ]
     },
     "prostate cancer": {
-      "icd10": [],
+      "icd10": [
+        "C61"
+      ],
       "cpt": [
         "55700",
         "84153",
@@ -2056,7 +2475,10 @@
       ]
     },
     "multiple myeloma": {
-      "icd10": [],
+      "icd10": [
+        "C90.00",
+        "C90.01"
+      ],
       "cpt": [
         "86596",
         "88305"
@@ -2070,7 +2492,9 @@
       ]
     },
     "immunotherapy": {
-      "icd10": [],
+      "icd10": [
+        "Z79.899"
+      ],
       "cpt": [
         "96365",
         "96366",
@@ -2081,16 +2505,14 @@
       "icd10": [],
       "cpt": [
         "96365",
-        "96366",
-        "J9271"
+        "96366"
       ]
     },
     "trastuzumab": {
       "icd10": [],
       "cpt": [
         "96365",
-        "96366",
-        "J9355"
+        "96366"
       ]
     },
     "sorafenib": {
@@ -2098,7 +2520,10 @@
       "cpt": []
     },
     "chemotherapy": {
-      "icd10": [],
+      "icd10": [
+        "Z51.11",
+        "Z79.899"
+      ],
       "cpt": [
         "96365",
         "96401",
@@ -2109,7 +2534,8 @@
     },
     "psoriasis": {
       "icd10": [
-        "K17"
+        "L40.0",
+        "L40.9"
       ],
       "cpt": [
         "11100",
@@ -2118,7 +2544,10 @@
       ]
     },
     "atopic dermatitis": {
-      "icd10": [],
+      "icd10": [
+        "L20.89",
+        "L20.9"
+      ],
       "cpt": [
         "96372",
         "99213"
@@ -2136,11 +2565,15 @@
       ]
     },
     "rosacea": {
-      "icd10": [],
+      "icd10": [
+        "L71.9"
+      ],
       "cpt": []
     },
     "melanoma": {
-      "icd10": [],
+      "icd10": [
+        "C43.9"
+      ],
       "cpt": [
         "11600",
         "11601",
@@ -2150,7 +2583,9 @@
       ]
     },
     "basal cell carcinoma": {
-      "icd10": [],
+      "icd10": [
+        "C44.91"
+      ],
       "cpt": [
         "17260",
         "17261",
@@ -2161,7 +2596,9 @@
       ]
     },
     "squamous cell carcinoma": {
-      "icd10": [],
+      "icd10": [
+        "C44.92"
+      ],
       "cpt": [
         "17270",
         "17271",
@@ -2172,7 +2609,11 @@
       ]
     },
     "heart failure": {
-      "icd10": [],
+      "icd10": [
+        "I50.30",
+        "I50.40",
+        "I50.9"
+      ],
       "cpt": [
         "93306",
         "93307",
@@ -2182,8 +2623,8 @@
     },
     "myocardial infarction": {
       "icd10": [
-        "I21",
-        "I25.2"
+        "I21.3",
+        "I21.9"
       ],
       "cpt": [
         "93000",
@@ -2192,7 +2633,10 @@
       ]
     },
     "atrial fibrillation": {
-      "icd10": [],
+      "icd10": [
+        "I48.19",
+        "I48.91"
+      ],
       "cpt": [
         "93000",
         "93010",
@@ -2200,7 +2644,10 @@
       ]
     },
     "pulmonary embolism": {
-      "icd10": [],
+      "icd10": [
+        "I26.09",
+        "I26.99"
+      ],
       "cpt": [
         "71275",
         "93970",
@@ -2215,7 +2662,9 @@
       ]
     },
     "hypertension": {
-      "icd10": [],
+      "icd10": [
+        "I10"
+      ],
       "cpt": [
         "93000",
         "99213",
@@ -2233,12 +2682,11 @@
     },
     "chronic kidney disease": {
       "icd10": [
-        "N18.2",
         "N18.3",
-        "N18.30",
-        "N18.32",
         "N18.4",
-        "N18.6"
+        "N18.5",
+        "N18.6",
+        "N18.9"
       ],
       "cpt": [
         "81001",
@@ -2248,7 +2696,8 @@
     },
     "acute kidney injury": {
       "icd10": [
-        "R23",
+        "N17.0",
+        "N17.9",
         "R31"
       ],
       "cpt": [
@@ -2265,7 +2714,10 @@
       ]
     },
     "asthma": {
-      "icd10": [],
+      "icd10": [
+        "J45.50",
+        "J45.909"
+      ],
       "cpt": [
         "94010",
         "94060",
@@ -2273,7 +2725,10 @@
       ]
     },
     "stroke": {
-      "icd10": [],
+      "icd10": [
+        "I63.9",
+        "I64"
+      ],
       "cpt": [
         "70553",
         "93971"
@@ -2356,12 +2811,16 @@
       ]
     },
     "cirrhosis": {
-      "icd10": [],
+      "icd10": [
+        "K74.60",
+        "K74.69"
+      ],
       "cpt": []
     },
     "hepatitis c": {
       "icd10": [
-        "C22"
+        "B18.2",
+        "B17.10"
       ],
       "cpt": [
         "86803",
@@ -2374,11 +2833,16 @@
       "cpt": []
     },
     "budd chiari": {
-      "icd10": [],
+      "icd10": [
+        "I82.0"
+      ],
       "cpt": []
     },
     "hepatitis b": {
-      "icd10": [],
+      "icd10": [
+        "B18.1",
+        "B16.9"
+      ],
       "cpt": [
         "86704",
         "86705",
@@ -2388,13 +2852,16 @@
     },
     "maddrey": {
       "icd10": [
-        "S67"
+        "K70.1",
+        "K70.30",
+        "K70.31"
       ],
       "cpt": []
     },
     "alt ast": {
       "icd10": [
-        "A11"
+        "R74.01",
+        "R74.8"
       ],
       "cpt": []
     },
@@ -2404,247 +2871,359 @@
     },
     "apache ii": {
       "icd10": [
-        "I63",
-        "R29.7"
+        "R65.20",
+        "R65.21"
       ],
       "cpt": []
     },
     "curb65": {
-      "icd10": [],
+      "icd10": [
+        "J18.9",
+        "J15.9"
+      ],
       "cpt": []
     },
     "child pugh": {
-      "icd10": [],
+      "icd10": [
+        "K74.60",
+        "K74.69"
+      ],
       "cpt": []
     },
     "albumin inr": {
-      "icd10": [],
+      "icd10": [
+        "E88.09",
+        "R79.89"
+      ],
       "cpt": []
     },
     "meld fib4": {
-      "icd10": [],
+      "icd10": [
+        "K74.0",
+        "K74.60"
+      ],
       "cpt": []
     },
     "cha2ds2 vasc": {
-      "icd10": [],
+      "icd10": [
+        "I48.91",
+        "I48.19"
+      ],
       "cpt": []
     },
     "bilirubin": {
-      "icd10": [],
+      "icd10": [
+        "R17",
+        "E80.7"
+      ],
       "cpt": []
     },
     "alp ggt": {
-      "icd10": [],
+      "icd10": [
+        "R74.8",
+        "R74.01"
+      ],
       "cpt": []
     },
     "hemochromatosis": {
-      "icd10": [],
+      "icd10": [
+        "E83.110",
+        "E83.111",
+        "E83.118",
+        "E83.119"
+      ],
       "cpt": []
     },
     "hiv aids": {
-      "icd10": [],
+      "icd10": [
+        "B20",
+        "Z21"
+      ],
       "cpt": []
     },
     "antiretroviral": {
-      "icd10": [],
+      "icd10": [
+        "B20",
+        "Z79.899"
+      ],
       "cpt": []
     },
     "covid19": {
       "icd10": [
-        "J12.8",
-        "J12.82",
-        "J20.8",
-        "J40",
-        "R05",
-        "R05.9"
+        "U07.1"
       ],
       "cpt": []
     },
     "malaria": {
-      "icd10": [],
+      "icd10": [
+        "B54",
+        "B50.9"
+      ],
       "cpt": []
     },
     "dengue": {
-      "icd10": [],
+      "icd10": [
+        "A97.9",
+        "A90"
+      ],
       "cpt": []
     },
     "clostridium difficile": {
-      "icd10": [],
+      "icd10": [
+        "A04.72",
+        "A04.71"
+      ],
       "cpt": []
     },
     "glycopeptide": {
-      "icd10": [],
+      "icd10": [
+        "A41.02",
+        "Z79.899"
+      ],
       "cpt": []
     },
     "candidiasis": {
-      "icd10": [],
+      "icd10": [
+        "B37.9",
+        "B37.3"
+      ],
       "cpt": []
     },
     "aspergillosis": {
-      "icd10": [],
+      "icd10": [
+        "B44.1",
+        "B44.9"
+      ],
       "cpt": []
     },
     "pneumocystis": {
-      "icd10": [],
+      "icd10": [
+        "B59"
+      ],
       "cpt": []
     },
     "ovarian cancer": {
       "icd10": [
-        "P53"
+        "C56.1",
+        "C56.2",
+        "C56.9"
       ],
       "cpt": []
     },
     "hodgkin lymphoma": {
-      "icd10": [],
+      "icd10": [
+        "C81.90",
+        "C81.99"
+      ],
       "cpt": []
     },
     "non hodgkin lymphoma": {
-      "icd10": [],
+      "icd10": [
+        "C85.90",
+        "C85.99"
+      ],
       "cpt": []
     },
     "car t": {
-      "icd10": [],
+      "icd10": [
+        "Z79.899"
+      ],
       "cpt": []
     },
     "targeted therapy": {
-      "icd10": [],
+      "icd10": [
+        "Z79.899"
+      ],
       "cpt": []
     },
     "acne vulgaris": {
-      "icd10": [],
+      "icd10": [
+        "L70.0",
+        "L70.9"
+      ],
       "cpt": []
     },
     "tinea": {
-      "icd10": [],
+      "icd10": [
+        "B35.9"
+      ],
       "cpt": []
     },
     "herpes zoster": {
-      "icd10": [],
+      "icd10": [
+        "B02.9"
+      ],
       "cpt": []
     },
     "vitiligo": {
-      "icd10": [],
+      "icd10": [
+        "L80"
+      ],
       "cpt": []
     },
     "pemphigus vulgaris": {
-      "icd10": [],
+      "icd10": [
+        "L10.0"
+      ],
       "cpt": []
     },
     "bullous pemphigoid": {
-      "icd10": [],
+      "icd10": [
+        "L12.0"
+      ],
       "cpt": []
     },
     "diabetes type2": {
       "icd10": [
-        "B12"
+        "E11.9",
+        "E11.65"
       ],
       "cpt": []
     },
     "antidiabetic": {
-      "icd10": [],
+      "icd10": [
+        "E11.9",
+        "Z79.84"
+      ],
       "cpt": []
     },
     "seizure": {
-      "icd10": [],
+      "icd10": [
+        "G40.909",
+        "R56.9"
+      ],
       "cpt": []
     },
     "anaemia": {
       "icd10": [
-        "B12",
-        "B19"
+        "D64.9",
+        "D50.9"
       ],
       "cpt": []
     },
     "statin": {
-      "icd10": [],
+      "icd10": [
+        "E78.00",
+        "E78.5",
+        "Z79.899"
+      ],
       "cpt": []
     },
     "anticoagulant": {
-      "icd10": [],
+      "icd10": [
+        "I26.09",
+        "I48.91",
+        "Z79.01"
+      ],
       "cpt": []
     },
     "corticosteroid": {
-      "icd10": [],
+      "icd10": [
+        "Z79.52"
+      ],
       "cpt": []
     },
     "nsaid": {
-      "icd10": [],
+      "icd10": [
+        "Z79.1"
+      ],
       "cpt": []
     },
     "opioid": {
-      "icd10": [],
+      "icd10": [
+        "Z79.891",
+        "F11.20"
+      ],
       "cpt": []
     },
     "biologic": {
       "icd10": [
-        "P13",
-        "R19",
-        "R20",
-        "R42"
+        "Z79.899",
+        "L40.0"
       ],
       "cpt": []
     },
     "immunosuppressant": {
       "icd10": [
-        "S15"
+        "Z79.899",
+        "Z94.4"
       ],
       "cpt": []
     },
     "antifungal": {
-      "icd10": [],
+      "icd10": [
+        "B37.9",
+        "B44.9"
+      ],
       "cpt": []
     },
     "beta lactam": {
-      "icd10": [],
+      "icd10": [
+        "A41.9",
+        "J15.9"
+      ],
       "cpt": []
     },
     "fluoroquinolone": {
-      "icd10": [],
+      "icd10": [
+        "A41.9",
+        "J18.9"
+      ],
       "cpt": []
     },
     "macrolide": {
-      "icd10": [],
+      "icd10": [
+        "J18.9",
+        "J15.9"
+      ],
       "cpt": []
     },
     "glasgow coma scale": {
       "icd10": [
-        "R40.2",
+        "R40.20",
         "R40.24"
       ],
       "cpt": []
     },
     "wells pe": {
       "icd10": [
-        "D12"
+        "I26.09",
+        "I26.99"
       ],
       "cpt": []
     },
     "nihss": {
       "icd10": [
-        "I63",
-        "R29.7",
-        "Z55",
-        "Z65"
+        "I63.9",
+        "R29.7"
       ],
       "cpt": []
     },
     "apgar": {
-      "icd10": [],
+      "icd10": [
+        "Z38.00",
+        "Z38.01"
+      ],
       "cpt": []
     },
     "wilson disease": {
-      "icd10": [],
+      "icd10": [
+        "E83.01"
+      ],
       "cpt": []
     },
     "thyroid disease": {
       "icd10": [
-        "R13",
-        "R20"
+        "E03.9",
+        "E05.90"
       ],
       "cpt": []
     },
     "shock": {
-      "icd10": [],
+      "icd10": [
+        "R57.9",
+        "R57.0"
+      ],
       "cpt": []
     },
     "ercp": {
@@ -2686,13 +3265,13 @@
       "chronic active hepatitis",
       "chronic hepatitis and cirrhosis",
       "chronic liver failure and cirrhosis",
-      "cirrhosis of the liver",
       "clinical features",
       "clinical manifestations and complications of cirrhosis",
       "end stage liver disease",
       "esld",
       "hepatic cirrhosis",
-      "hepatic fibrosis stage 4"
+      "hepatic fibrosis stage 4",
+      "hepatitis b"
     ],
     "hepatic cirrhosis": [
       "acute kidney injury",
@@ -2976,9 +3555,9 @@
       "chemical and drug injury",
       "clinical features",
       "clinicalassessment",
-      "hiv",
       "induced hepatotoxicity",
-      "induced liver injury"
+      "induced liver injury",
+      "inducedhepatitis"
     ],
     "jaundice": [
       "biopsy",
@@ -3034,14 +3613,14 @@
       "hydrocortisone",
       "i. introduction",
       "leukaemia",
-      "life-threatening infection",
       "organ dysfunction infection",
       "pancreatitis",
       "sepsis syndrome",
       "sepsis-3",
       "sepsisdefinitions",
       "septic shock",
-      "shock"
+      "shock",
+      "sirs"
     ],
     "septic shock": [
       "acute respiratory distress syndrome",
@@ -3141,7 +3720,6 @@
     ],
     "tuberculosis": [
       "chemotherapy",
-      "hiv",
       "jeffrey r. starke",
       "pulmonary tuberculosis",
       "tuberculosis (tb)",
@@ -3154,8 +3732,7 @@
     "antiretroviral therapy": [
       "antiretroviral",
       "antiretroviral therapy 100",
-      "considerations whenstarting antiretroviral therapy",
-      "hiv"
+      "considerations whenstarting antiretroviral therapy"
     ],
     "clostridioides difficile": [
       "clostridium difficile",
@@ -3233,13 +3810,13 @@
       "aspiration",
       "breast cancer",
       "coding lymphoma",
-      "hiv",
       "hodgkin lymphoma",
       "hodgkin's lymphoma (hl)",
       "leukaemia",
       "leukemia",
       "lymphoid neoplasms",
-      "lymphomas"
+      "lymphomas",
+      "lymphomas and leukemias"
     ],
     "acute myeloid leukaemia": [
       "acute myeloblastic leukaemia",
@@ -3317,7 +3894,6 @@
     "psoriasis": [
       "clinical description",
       "drugtherapiesforpsoriasis",
-      "hiv",
       "lithium",
       "psoriasis vulgaris, chronic stationary psoriasis, plaque",
       "psoriatic arthritis",
@@ -3360,9 +3936,9 @@
     ],
     "rosacea": [
       "clinical description",
+      "cyclophosphamide",
       "differential diagnosis",
       "doxycycline",
-      "erythematotelangiectatic (vascular) rosacea",
       "managementofvariants ofrosacea",
       "metronidazole",
       "oral therapy",
@@ -3417,7 +3993,6 @@
       "consequences and complications of myocardial infarction",
       "definition 1",
       "heart attack",
-      "hiv",
       "nstemi",
       "stemi",
       "tuberculosis"
@@ -3473,7 +4048,6 @@
       "categories of diabetes and dyslipidaemia",
       "diabetes mellitus",
       "diabetes mellitus type 2",
-      "dm2",
       "dyslipidemia",
       "hyperglycemia",
       "insulin",
@@ -3493,8 +4067,8 @@
       "dialysis",
       "haemodialysis",
       "heart failure",
-      "hiv",
-      "renal impairment"
+      "renal impairment",
+      "tenofovir"
     ],
     "acute kidney injury": [
       "acute kidneyinjury",
@@ -3810,7 +4384,6 @@
     "ciprofloxacin",
     "cirrhosis in autoimmune hepatitis",
     "cirrhosis in non",
-    "cirrhosis of the liver",
     "ckd",
     "classification: current concepts",
     "clindamycin",
@@ -3879,10 +4452,10 @@
     "dialysis",
     "differential diagnosis",
     "dihydrotesterone",
+    "dili",
     "diseases and disorders of the liver",
     "disseminated intravascular coagulation",
     "distribution",
-    "dm2",
     "docetaxel",
     "domperidone",
     "dopamine",
@@ -3913,7 +4486,6 @@
     "epinephrine",
     "epo and rheumatoid arthritis",
     "ercp",
-    "erythematotelangiectatic (vascular) rosacea",
     "esld",
     "esophageal varices",
     "estro esur",
@@ -3947,7 +4519,6 @@
     "haemolytic hyperbilirubinaemias",
     "haemorrhage",
     "haloperidol",
-    "hcc",
     "hcp241226rn106",
     "heart attack",
     "heart failure",
@@ -3972,7 +4543,6 @@
     "herpes zoster",
     "histology",
     "histopathology",
-    "hiv",
     "hiv aids",
     "hodgkin lymphoma",
     "hodgkin's lymphoma (hl)",
@@ -4007,6 +4577,7 @@
     "induced hepatotoxicity",
     "induced hyperprolactinemia",
     "induced liver injury",
+    "inducedhepatitis",
     "infective (bacterial) endocarditis",
     "infective endocarditis",
     "infective endocarditis (ie)",
@@ -4033,7 +4604,6 @@
     "leukocyte",
     "levetiracetam",
     "levothyroxine",
-    "life-threatening infection",
     "lisa saiman",
     "lithium",
     "liver biopsy",
@@ -4056,6 +4626,7 @@
     "lymphoid neoplasms",
     "lymphoma",
     "lymphomas",
+    "lymphomas and leukemias",
     "macrolide",
     "macroprolactinoma",
     "maddrey",
@@ -4208,6 +4779,7 @@
     "septic shock",
     "septicaemia",
     "shock",
+    "sirs",
     "sorafenib",
     "specific types of infective endocarditis",
     "spontaneous bacterial peritonitis",
@@ -4223,10 +4795,12 @@
     "sulfamethoxazole",
     "summary of reviewed clinical studies",
     "superficial basal cell carcinoma",
+    "t2dm",
     "table 6.1. types of renal stones",
     "tacrolimus",
     "targeted therapy",
     "telengiectase",
+    "tenofovir",
     "testosterone",
     "thyroid disease",
     "tinea",

@@ -17,7 +17,8 @@ const BUDGET_BY_FUNCTION = {
   search_hcpcs_codes: 1500,
   get_code_pricing: 2000,
   collect_insurance: 3000,
-  schedule_appointment: 5000
+  schedule_appointment: 5000,
+  send_document_upload_link: 6000
 };
 
 let violations = 0;

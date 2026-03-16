@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Records - DocLittle</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <script src="../assets/js/config.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <span class="doc">Doc</span><span class="little">Little</span>.
+        </div>
+        <div class="sidebar-subtitle">Medical Coding Assistant</div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="patient-dashboard.html" class="nav-item">
+          <span class="nav-icon">🏠</span><span>Dashboard</span>
+        </a>
+        <a href="wallet.html" class="nav-item">
+          <span class="nav-icon">💰</span><span>My Wallet</span>
+        </a>
+        <a href="appointments.html" class="nav-item">
+          <span class="nav-icon">📅</span><span>Appointments</span>
+        </a>
+        <a href="my-records.html" class="nav-item active">
+          <span class="nav-icon">📄</span><span>My Records</span>
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">My Records</h1>
+        <p class="page-subtitle">Visit summaries and case reports</p>
+      </div>
+
+      <div id="errorMessage" class="error-message" style="display:none;"></div>
+
+      <div class="dashboard-card">
+        <h2 class="card-title">Case reports</h2>
+        <div id="recordsList">Loading…</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const storedSession = localStorage.getItem('patient_session_id') || '';
+      const sessionId = storedSession || params.get('session_id') || '';
+      const errorEl = document.getElementById('errorMessage');
+      const listEl = document.getElementById('recordsList');
+
+      if (!sessionId) {
+        errorEl.textContent = 'Missing session. Please log in again.';
+        errorEl.style.display = 'block';
+        listEl.textContent = '';
+        return;
+      }
+
+      try {
+        const r = await fetch(`${API_BASE}/api/patient/my-records?session_id=${encodeURIComponent(sessionId)}`);
+        const body = await r.json();
+        if (!r.ok || !body.success) {
+          errorEl.textContent = body.error || 'Failed to load records.';
+          errorEl.style.display = 'block';
+          listEl.textContent = '';
+          return;
+        }
+
+        const records = body.records || [];
+        if (!records.length) {
+          listEl.textContent = 'No case reports are available yet.';
+          return;
+        }
+
+        listEl.innerHTML = records.map(rec => {
+          const dt = rec.created_at ? new Date(rec.created_at).toLocaleString() : '—';
+          return `
+            <div class="appt">
+              <div>
+                <strong>Visit summary</strong>
+                <span class="badge" style="margin-left:6px;">${(rec.status || 'unknown').toUpperCase()}</span>
+              </div>
+              <div style="font-size:12px;color:var(--gray-600);">
+                Created: ${dt}<br>
+                ${rec.summary || ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        errorEl.textContent = 'Network error loading records.';
+        errorEl.style.display = 'block';
+        listEl.textContent = '';
+      }
+    });
+  </script>
+</body>
+</html>
+

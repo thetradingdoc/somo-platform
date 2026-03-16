@@ -64,6 +64,7 @@ class RetellWebSocketHandler {
             initialName: null, // Store the FIRST name provided by the caller (for fraud detection)
             nameProvidedAt: null, // Timestamp when name was first provided
             clinic_id: existingState?.clinic_id || null, // Restore from persisted state
+            appointment_id: null, // Task 52 (D2): set from room name (appt-{id}) when message.call arrives
             _codingState: existingState?.current_stage || 'INTAKE',
             _codingStateData: existingState?.state_data || {},
             session
@@ -348,6 +349,15 @@ class RetellWebSocketHandler {
                         }
                     } catch (_) {}
                 }
+            }
+
+            // Task 52 (Decision D2): Derive appointment_id from room name (appt-{id}) for trigger_case_report
+            const roomName = message.call.room_name || message.call.room || '';
+            if (roomName.startsWith('appt-')) {
+                connection.appointment_id = roomName.slice(5);
+                console.log(`✅ Extracted appointment_id from room "${roomName}": ${connection.appointment_id}`);
+            } else if (roomName) {
+                console.log(`ℹ️  Room "${roomName}" does not follow appt-{id} convention — no appointment_id extracted.`);
             }
 
             // Keep session in sync with resolved clinic_id
@@ -720,6 +730,10 @@ class RetellWebSocketHandler {
 
                 case 'get_code_pricing':
                     result = await this.handleGetCodePricing(callId, functionArgs);
+                    break;
+
+                case 'send_document_upload_link':
+                    result = await this.handleSendDocumentUploadLink(callId, functionArgs);
                     break;
 
                 default:
@@ -1423,6 +1437,51 @@ class RetellWebSocketHandler {
         } catch (error) {
             console.error('get_code_pricing error:', error);
             return { success: false, error: error.message, pricing: {} };
+        }
+    }
+
+    // Telemedicine Phase 3 — Task 23: send_document_upload_link (voice tool)
+    async handleSendDocumentUploadLink(callId, functionArgs) {
+        const baseUrl = this.config.apiBaseUrl || 'http://localhost:4000';
+        const payload = {};
+        if (functionArgs.patient_id) payload.patient_id = functionArgs.patient_id;
+        if (functionArgs.patient_email) payload.patient_email = functionArgs.patient_email;
+        if (functionArgs.patient_phone) payload.patient_phone = functionArgs.patient_phone;
+        if (functionArgs.appointment_id) payload.appointment_id = functionArgs.appointment_id;
+        if (!payload.patient_id && !payload.patient_email && !payload.patient_phone) {
+            return {
+                success: false,
+                error: 'Provide patient_email or patient_phone (or patient_id) to send the upload link.',
+                voice_agent_instruction: "Ask the caller for their email address so we can send them a secure link to upload their documents."
+            };
+        }
+        try {
+            const res = await axios.post(`${baseUrl}/api/patient/send-upload-link`, payload, {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 15000
+            });
+            const data = res.data || {};
+            if (data.sent && data.success) {
+                return {
+                    success: true,
+                    sent: true,
+                    channel: data.channel || 'email',
+                    expires_at: data.expires_at,
+                    voice_agent_instruction: "I've sent a secure link to the email we have on file. You can use it to upload your lab results or any photos before your visit."
+                };
+            }
+            return {
+                success: false,
+                error: data.error || 'Failed to send link',
+                voice_agent_instruction: "I wasn't able to send the link right now — please ask the clinic to send it directly."
+            };
+        } catch (err) {
+            const msg = err.response?.data?.error || err.message;
+            return {
+                success: false,
+                error: msg,
+                voice_agent_instruction: "I wasn't able to send the link right now — please ask the clinic to send it directly."
+            };
         }
     }
 

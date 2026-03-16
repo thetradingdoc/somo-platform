@@ -4574,6 +4574,39 @@ module.exports = {
     return id;
   },
 
+  /**
+   * Telemedicine Phase 1 — Task 5: Compliance audit log.
+   * Schema: id, timestamp, actor_type, actor_id, action, resource_type, resource_id, ip_address, user_agent, result.
+   */
+  auditLog: (actorType, actorId, action, resourceType, resourceId, ipAddress, userAgent, result) => {
+    const id = `audit_${require('crypto').randomBytes(12).toString('hex')}`;
+    const info = db.prepare('PRAGMA table_info(audit_log)').all();
+    const has = (name) => info.some(c => c.name === name);
+    if (!has('resource_type')) {
+      try {
+        db.prepare(`
+          INSERT INTO audit_log (id, actor_type, actor_id, action, ip, user_agent, details, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(id, actorType || null, actorId || null, action, ipAddress || null, userAgent || null, result || null);
+      } catch (e) {
+        console.warn('[auditLog] fallback insert failed:', e.message);
+      }
+      return id;
+    }
+    if (has('timestamp')) {
+      db.prepare(`
+        INSERT INTO audit_log (id, actor_type, actor_id, action, resource_type, resource_id, ip_address, user_agent, result, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, actorType || null, actorId || null, action, resourceType || null, resourceId || null, ipAddress || null, userAgent || null, result || null);
+    } else {
+      db.prepare(`
+        INSERT INTO audit_log (id, actor_type, actor_id, action, resource_type, resource_id, ip_address, user_agent, result)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, actorType || null, actorId || null, action, resourceType || null, resourceId || null, ipAddress || null, userAgent || null, result || null);
+    }
+    return id;
+  },
+
   // ============================================
   // POSTGRES SYNC RETRY QUEUE (Section 2.2)
   // ============================================
@@ -5474,6 +5507,25 @@ module.exports = {
     }
   },
 
+  /** Get most recent completed checkout for an appointment (for refund-on-cancel) */
+  getCompletedCheckoutByAppointmentId: async (appointmentId) => {
+    if (!appointmentId) return null;
+    if (usePostgres && pgPool) {
+      const results = await pgPool`
+        SELECT * FROM voice_checkouts
+        WHERE appointment_id = ${appointmentId} AND status = 'completed'
+        ORDER BY completed_at DESC NULLS LAST, created_at DESC
+        LIMIT 1
+      `;
+      return results[0] || null;
+    }
+    return db.prepare(`
+      SELECT * FROM voice_checkouts
+      WHERE appointment_id = ? AND status = 'completed'
+      ORDER BY created_at DESC LIMIT 1
+    `).get(appointmentId);
+  },
+
   /** Tasks 29–31: Get pending checkout and payment link for an appointment */
   getPendingCheckoutForAppointment: (appointmentId) => {
     if (!appointmentId) return null;
@@ -6087,10 +6139,13 @@ module.exports = {
     db.prepare('UPDATE fhir_patients SET patient_wallet_address = ?, updated_at = datetime("now") WHERE resource_id = ?').run(walletAddress, resourceId);
   },
 
-  // Search FHIR Patients
+  // Search FHIR Patients (Telemedicine Task 8: clinic_id limits to patients with appointments in that clinic)
   searchFHIRPatients(params = {}) {
-    let query = 'SELECT * FROM fhir_patients WHERE is_deleted = 0';
-    const queryParams = [];
+    const hasClinicFilter = !!params.clinic_id;
+    let query = hasClinicFilter
+      ? 'SELECT DISTINCT p.* FROM fhir_patients p INNER JOIN appointments a ON a.patient_id = p.resource_id WHERE p.is_deleted = 0 AND a.clinic_id = ?'
+      : 'SELECT * FROM fhir_patients WHERE is_deleted = 0';
+    const queryParams = hasClinicFilter ? [params.clinic_id] : [];
 
     if (params.name) {
       // Search by name column (case-insensitive)
@@ -6326,17 +6381,216 @@ module.exports = {
     if (tableInfo.length === 0) return null;
     const patientId = reportResource.subject?.reference?.replace('Patient/', '');
     const encounterId = reportResource.encounter?.reference?.replace('Encounter/', '');
-    db.prepare(`
-      INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `).run(
-      reportResource.id,
-      JSON.stringify(reportResource),
-      patientId,
-      encounterId,
-      reportResource.effectiveDateTime || reportResource.issued
-    );
+    const hasStatus = tableInfo.some(c => c.name === 'status');
+    const hasJobId = tableInfo.some(c => c.name === 'job_id');
+    if (hasStatus && hasJobId) {
+      db.prepare(`
+        INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'final', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(
+        reportResource.id,
+        JSON.stringify(reportResource),
+        patientId,
+        encounterId,
+        reportResource.effectiveDateTime || reportResource.issued
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(
+        reportResource.id,
+        JSON.stringify(reportResource),
+        patientId,
+        encounterId,
+        reportResource.effectiveDateTime || reportResource.issued
+      );
+    }
     return reportResource.id;
+  },
+
+  // -------- Phase 7: Case report pending row + update by job_id --------
+  insertPendingCaseReport(row) {
+    const tableInfo = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all();
+    const hasStatus = tableInfo.some(c => c.name === 'status');
+    const hasJobId = tableInfo.some(c => c.name === 'job_id');
+    if (!hasStatus || !hasJobId) return null;
+    try {
+      if (!tableInfo.some(c => c.name === 'retry_of_job_id')) {
+        db.exec(`ALTER TABLE fhir_diagnostic_reports ADD COLUMN retry_of_job_id TEXT`);
+      }
+    } catch (_) {}
+    const resourceId = `pending-${row.job_id}`;
+    const hasRetry = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all().some(c => c.name === 'retry_of_job_id');
+    if (hasRetry) {
+      db.prepare(`
+        INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, job_id, retry_of_job_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'), 'pending', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(resourceId, '{}', row.patient_id, row.encounter_id || null, row.job_id, row.retry_of_job_id || null);
+    } else {
+      db.prepare(`
+        INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, job_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'), 'pending', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(resourceId, '{}', row.patient_id, row.encounter_id || null, row.job_id);
+    }
+    return row.job_id;
+  },
+  getPendingCaseReportsOlderThanMs(ageMs) {
+    try {
+      const tableInfo = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all();
+      if (!tableInfo.some(c => c.name === 'job_id') || !tableInfo.some(c => c.name === 'status')) return [];
+      const cutoff = new Date(Date.now() - ageMs).toISOString().slice(0, 19).replace('T', ' ');
+      return db.prepare(`
+        SELECT * FROM fhir_diagnostic_reports
+        WHERE status = 'pending' AND created_at < ?
+        ORDER BY created_at ASC
+      `).all(cutoff);
+    } catch (e) {
+      return [];
+    }
+  },
+  hasRetryForJobId(jobId) {
+    try {
+      const tableInfo = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all();
+      if (!tableInfo.some(c => c.name === 'retry_of_job_id')) return false;
+      const row = db.prepare('SELECT 1 FROM fhir_diagnostic_reports WHERE retry_of_job_id = ? LIMIT 1').get(jobId);
+      return !!row;
+    } catch (_) {
+      return false;
+    }
+  },
+  getTimedOutCaseReportsReadyForRetry(olderThanMs) {
+    try {
+      const cutoff = new Date(Date.now() - olderThanMs).toISOString().slice(0, 19).replace('T', ' ');
+      return db.prepare(`
+        SELECT * FROM fhir_diagnostic_reports
+        WHERE status = 'failed' AND error_message LIKE 'Callback timeout%' AND created_at < ?
+        ORDER BY created_at ASC
+      `).all(cutoff);
+    } catch (_) {
+      return [];
+    }
+  },
+  getCaseReportByJobId(jobId) {
+    try {
+      const tableInfo = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all();
+      if (!tableInfo.some(c => c.name === 'job_id')) return null;
+      return db.prepare('SELECT * FROM fhir_diagnostic_reports WHERE job_id = ? LIMIT 1').get(jobId);
+    } catch (e) {
+      return null;
+    }
+  },
+  updateCaseReportByJobId(jobId, updates) {
+    const tableInfo = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all();
+    const cols = [];
+    const vals = [];
+    if (updates.status != null) { cols.push('status = ?'); vals.push(updates.status); }
+    if (updates.case_report_text != null) { cols.push('case_report_text = ?'); vals.push(updates.case_report_text); }
+    if (updates.reasoning_chain != null) {
+      cols.push('reasoning_chain = ?');
+      vals.push(typeof updates.reasoning_chain === 'string' ? updates.reasoning_chain : JSON.stringify(updates.reasoning_chain || {}));
+    }
+    if (updates.error_message != null) { cols.push('error_message = ?'); vals.push(updates.error_message); }
+    if (updates.resource_id != null) { cols.push('resource_id = ?'); vals.push(updates.resource_id); }
+    if (updates.resource_data != null) { cols.push('resource_data = ?'); vals.push(typeof updates.resource_data === 'string' ? updates.resource_data : JSON.stringify(updates.resource_data || {})); }
+    if (cols.length === 0) return null;
+    vals.push(jobId);
+    db.prepare(`UPDATE fhir_diagnostic_reports SET ${cols.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?`).run(...vals);
+    return db.prepare('SELECT * FROM fhir_diagnostic_reports WHERE job_id = ? LIMIT 1').get(jobId);
+  },
+
+  // -------- Phase 8: DiagnosticReport read by encounter / patient --------
+  getDiagnosticReportByEncounterId(encounterId) {
+    try {
+      const row = db.prepare('SELECT * FROM fhir_diagnostic_reports WHERE encounter_id = ? AND (status IS NULL OR status = ? OR status = ?) ORDER BY created_at DESC LIMIT 1').get(encounterId, 'final', 'completed');
+      return row ? { ...row, resource_data: row.resource_data ? JSON.parse(row.resource_data) : null } : null;
+    } catch (e) {
+      return null;
+    }
+  },
+  getDiagnosticReportsByPatientId(patientId, limit = 50) {
+    try {
+      const rows = db.prepare('SELECT * FROM fhir_diagnostic_reports WHERE patient_id = ? ORDER BY created_at DESC LIMIT ?').all(patientId, limit);
+      return rows.map(r => ({ ...r, resource_data: r.resource_data ? JSON.parse(r.resource_data) : null }));
+    } catch (e) {
+      return [];
+    }
+  },
+
+  // -------- Telemedicine Phase 2: patient_uploads (Task 14) --------
+  createPatientUpload(row) {
+    try {
+      db.prepare(`
+        INSERT INTO patient_uploads (id, patient_id, appointment_id, encounter_id, filename, storage_path, file_type, mime_type, size_bytes, source, uploaded_at, uploaded_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        row.id,
+        row.patient_id,
+        row.appointment_id || null,
+        row.encounter_id || null,
+        row.filename,
+        row.storage_path,
+        row.file_type || null,
+        row.mime_type || null,
+        row.size_bytes || null,
+        row.source || 'portal',
+        row.uploaded_at || null,
+        row.uploaded_by || null
+      );
+      return row.id;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+  getPatientUploadsByPatient(patientId, appointmentId = null) {
+    try {
+      if (appointmentId) {
+        return db.prepare('SELECT * FROM patient_uploads WHERE patient_id = ? AND appointment_id = ? ORDER BY uploaded_at DESC').all(patientId, appointmentId);
+      }
+      return db.prepare('SELECT * FROM patient_uploads WHERE patient_id = ? ORDER BY uploaded_at DESC').all(patientId);
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return [];
+    }
+  },
+
+  // -------- Telemedicine Phase 2: upload_tokens (Task 15) --------
+  createUploadToken(row) {
+    try {
+      db.prepare(`
+        INSERT INTO upload_tokens (token, patient_id, appointment_id, expires_at, used, max_files, max_bytes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        row.token,
+        row.patient_id,
+        row.appointment_id || null,
+        row.expires_at,
+        row.used ?? 0,
+        row.max_files ?? 10,
+        row.max_bytes ?? 52428800
+      );
+      return row.token;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+  getUploadToken(token) {
+    try {
+      return db.prepare('SELECT * FROM upload_tokens WHERE token = ?').get(token);
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+  markUploadTokenUsed(token) {
+    try {
+      return db.prepare('UPDATE upload_tokens SET used = 1 WHERE token = ?').run(token);
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
   },
 
   // Create FHIR Audit Log
@@ -7219,6 +7473,22 @@ module.exports = {
     return rows.map(r => this._normalizeAppointmentVideoRoom(r));
   },
 
+  /**
+   * Telemedicine Phase 1 — Task 8: Clinician scope.
+   * Returns distinct clinic_ids that have appointments for this FHIR patient (resource_id).
+   */
+  getPatientClinicIds(patientId) {
+    if (!patientId) return [];
+    try {
+      const rows = db.prepare(
+        'SELECT DISTINCT clinic_id FROM appointments WHERE patient_id = ? AND clinic_id IS NOT NULL'
+      ).all(patientId);
+      return rows.map(r => r.clinic_id);
+    } catch (e) {
+      return [];
+    }
+  },
+
   // Update appointment status (supports both clinicId and customerId for tenant isolation)
   updateAppointmentStatus(id, status, reason = null, clinicId = null, customerId = null) {
     let query = `
@@ -7350,6 +7620,37 @@ module.exports = {
     } catch (_) {
       // reminder_24h_sent column may not exist yet
     }
+  },
+
+  // Telemedicine Phase 5 — Task 35: booking confirmation sent
+  markReminderBookingSent(id, clinicId = null) {
+    try {
+      const info = db.prepare('PRAGMA table_info(appointments)').all();
+      if (!info.some(c => c.name === 'reminder_booking_sent')) return;
+      let query = 'UPDATE appointments SET reminder_booking_sent = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
+      const params = [id];
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+      db.prepare(query).run(...params);
+    } catch (_) {}
+  },
+
+  // Telemedicine Phase 5 — Task 37: 1h reminder sent
+  markReminder1hSent(id, clinicId = null) {
+    try {
+      const info = db.prepare('PRAGMA table_info(appointments)').all();
+      const has1h = info.some(c => c.name === 'reminder_1h_sent');
+      const setCols = has1h ? 'reminder_1h_sent = 1, reminder_sent = 1' : 'reminder_sent = 1';
+      let query = `UPDATE appointments SET ${setCols}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      const params = [id];
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+      db.prepare(query).run(...params);
+    } catch (_) {}
   },
 
   // Delete appointment (hard delete)

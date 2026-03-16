@@ -9,6 +9,9 @@ const express = require('express');
 const router = express.Router();
 const FHIRService = require('../services/fhir-service');
 const FHIRAdapter = require('../adapters/fhir-adapter');
+const db = require('../database');
+const { jwtFhirAuth } = require('../middleware/jwt-fhir-auth');
+const { fhirResourceAccess } = require('../middleware/fhir-resource-access');
 
 /**
  * Middleware to log all FHIR API requests
@@ -19,12 +22,38 @@ router.use((req, res, next) => {
 });
 
 /**
+ * Telemedicine Phase 1 — Task 13: Compliance audit_log (table from task 5) for every FHIR read/write/delete.
+ */
+router.use((req, res, next) => {
+  res.on('finish', () => {
+    if (req.path === '/metadata' || req.path === '/health') return;
+    const pathParts = req.path.split('/').filter(Boolean);
+    const resourceType = pathParts[0];
+    if (!['Patient', 'Encounter', 'Communication', 'Observation', 'DiagnosticReport'].includes(resourceType)) return;
+    const action = { GET: 'READ', POST: 'CREATE', PUT: 'UPDATE', DELETE: 'DELETE' }[req.method] || req.method;
+    const resourceId = req.params.id || (pathParts[1] && pathParts[1] !== '$everything' ? pathParts[1] : null);
+    const actorId = req.user?.sub || 'system';
+    const actorType = req.user?.scope === 'patient' ? 'patient' : req.user?.scope === 'clinician' ? 'clinician' : 'system';
+    try {
+      db.auditLog(actorType, actorId, action, resourceType, resourceId, req.ip, req.get('User-Agent'), String(res.statusCode));
+    } catch (e) {
+      console.warn('[FHIR] compliance audit log failed:', e.message);
+    }
+  });
+  next();
+});
+
+/**
  * Middleware to set FHIR-compliant response headers
  */
 router.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/fhir+json');
   next();
 });
+
+// Telemedicine Phase 1 — Tasks 6–8: JWT auth + resource-level access control.
+router.use(jwtFhirAuth);
+router.use(fhirResourceAccess);
 
 // ==========================================
 // PATIENT ENDPOINTS
@@ -68,16 +97,6 @@ router.post('/Patient', async (req, res) => {
       });
     }
 
-    // Audit log
-    await FHIRService.auditLog(
-      'CREATE',
-      'Patient',
-      patient.id || patient.resource_id,
-      req.body.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
-
     res.status(201).json(patient);
   } catch (error) {
     console.error('[FHIR API] Error creating patient:', error);
@@ -99,16 +118,6 @@ router.post('/Patient', async (req, res) => {
 router.get('/Patient/:id', async (req, res) => {
   try {
     const patient = await FHIRService.getPatient(req.params.id);
-
-    // Audit log
-    await FHIRService.auditLog(
-      'READ',
-      'Patient',
-      req.params.id,
-      req.query.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
 
     res.json(patient);
   } catch (error) {
@@ -132,6 +141,9 @@ router.get('/Patient/:id', async (req, res) => {
 router.get('/Patient', async (req, res) => {
   try {
     const searchParams = FHIRAdapter.parseSearchParams(req.query);
+    if (req.user && req.user.scope === 'clinician' && req.user.clinic_id) {
+      searchParams.clinic_id = req.user.clinic_id;
+    }
     const patients = await FHIRService.searchPatients(searchParams);
 
     const bundle = FHIRAdapter.createBundle(patients, 'searchset');
@@ -156,16 +168,6 @@ router.get('/Patient', async (req, res) => {
 router.get('/Patient/:id/$everything', async (req, res) => {
   try {
     const bundle = await FHIRService.getPatientEverything(req.params.id);
-
-    // Audit log
-    await FHIRService.auditLog(
-      'READ',
-      'Patient',
-      req.params.id,
-      req.query.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
 
     res.json(bundle);
   } catch (error) {
@@ -193,16 +195,6 @@ router.post('/Encounter', async (req, res) => {
   try {
     const encounter = await FHIRService.createEncounter(req.body);
 
-    // Audit log
-    await FHIRService.auditLog(
-      'CREATE',
-      'Encounter',
-      encounter.id,
-      req.body.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
-
     res.status(201).json(encounter);
   } catch (error) {
     console.error('[FHIR API] Error creating encounter:', error);
@@ -225,16 +217,6 @@ router.get('/Encounter/:id', async (req, res) => {
   try {
     const encounter = await FHIRService.getEncounter(req.params.id);
 
-    // Audit log
-    await FHIRService.auditLog(
-      'READ',
-      'Encounter',
-      req.params.id,
-      req.query.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
-
     res.json(encounter);
   } catch (error) {
     console.error('[FHIR API] Error getting encounter:', error);
@@ -256,16 +238,6 @@ router.get('/Encounter/:id', async (req, res) => {
 router.put('/Encounter/:id', async (req, res) => {
   try {
     const encounter = await FHIRService.updateEncounter(req.params.id, req.body);
-
-    // Audit log
-    await FHIRService.auditLog(
-      'UPDATE',
-      'Encounter',
-      req.params.id,
-      req.body.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
 
     res.json(encounter);
   } catch (error) {
@@ -331,16 +303,6 @@ router.post('/Communication', async (req, res) => {
   try {
     const communication = await FHIRService.storeTranscript(req.body);
 
-    // Audit log
-    await FHIRService.auditLog(
-      'CREATE',
-      'Communication',
-      communication.id,
-      req.body.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
-
     res.status(201).json(communication);
   } catch (error) {
     console.error('[FHIR API] Error creating communication:', error);
@@ -362,16 +324,6 @@ router.post('/Communication', async (req, res) => {
 router.get('/Communication/:id', async (req, res) => {
   try {
     const communication = await FHIRService.getEncounterTranscript(req.params.id);
-
-    // Audit log
-    await FHIRService.auditLog(
-      'READ',
-      'Communication',
-      req.params.id,
-      req.query.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
 
     res.json(communication);
   } catch (error) {
@@ -433,16 +385,6 @@ router.get('/Communication', async (req, res) => {
 router.post('/Observation', async (req, res) => {
   try {
     const observation = await FHIRService.createObservation(req.body);
-
-    // Audit log
-    await FHIRService.auditLog(
-      'CREATE',
-      'Observation',
-      observation.id,
-      req.body.userId || 'system',
-      req.ip,
-      req.get('User-Agent')
-    );
 
     res.status(201).json(observation);
   } catch (error) {
