@@ -1,0 +1,292 @@
+@import url('https://rsms.me/inter/inter.css');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter var', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #ffffff;
+  color: #0f172a;
+  overflow: hidden;
+}
+
+canvas {
+  opacity: 0;
+  touch-action: none;
+  animation: fade-in 2s ease 0.5s forwards;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: auto;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ui-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40px 24px 32px;
+  pointer-events: none; /* enable only for child controls */
+  z-index: 1;
+}
+
+.brand {
+  text-align: center;
+  animation: slide-down 0.8s ease 0.25s both;
+}
+
+.brand h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.4rem, 5.4vw, 3.8rem);
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #111827 20%, #e8b059);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand p {
+  font-size: 0.8rem;
+  color: rgba(55, 65, 81, 0.75);
+  margin-top: 6px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  pointer-events: all;
+  animation: slide-up 0.8s ease 0.45s both;
+  width: min(560px, 92vw);
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  padding: 12px 18px;
+  gap: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(14px);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.search-box:focus-within {
+  border-color: rgba(37, 99, 235, 0.75);
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.22);
+}
+
+.search-icon {
+  width: 18px;
+  height: 18px;
+  color: rgba(148, 163, 184, 0.95);
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  color: #111827;
+  font-size: 0.96rem;
+}
+
+.search-input::placeholder {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.search-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(232, 176, 89, 0.25);
+  border-top-color: #e8b059;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.search-clear {
+  background: none;
+  border: none;
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: rgba(248, 250, 252, 0.9);
+}
+
+.search-hint {
+  font-size: 0.78rem;
+  color: rgba(148, 163, 184, 0.95);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.role-select {
+  display: flex;
+  gap: 14px;
+  pointer-events: all;
+  animation: slide-up 0.8s ease 0.65s both;
+}
+
+.role-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 26px;
+  border-radius: 16px;
+  text-decoration: none;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  backdrop-filter: blur(16px);
+  min-width: 170px;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+  position: relative;
+}
+
+.role-btn:hover {
+  transform: translateY(-3px);
+  border-color: rgba(37, 99, 235, 0.85);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.16);
+}
+
+.role-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px rgba(37, 99, 235, 0.9),
+    0 16px 40px rgba(15, 23, 42, 0.2);
+  transform: translateY(-2px);
+}
+
+.role-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.18);
+  filter: brightness(0.97);
+}
+
+.role-btn--patient {
+  background: linear-gradient(135deg, #ecfdf3, #e0f2fe);
+}
+
+.role-btn--provider {
+  background: linear-gradient(135deg, #eff6ff, #f5f3ff);
+}
+
+.role-icon {
+  font-size: 1.6rem;
+}
+
+.role-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.role-sub {
+  font-size: 0.8rem;
+  color: rgba(75, 85, 99, 0.95);
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .ui-layer {
+    padding: 24px 16px 24px;
+  }
+
+  .role-select {
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .role-btn {
+    width: min(260px, 90vw);
+  }
+}
+
+@media (max-width: 480px) {
+  .brand h1 {
+    font-size: 2.1rem;
+  }
+
+  .search-wrapper {
+    width: 94vw;
+  }
+
+  .ui-layer {
+    padding-top: 18px;
+    padding-bottom: 20px;
+    gap: 12px;
+  }
+
+  .search-box {
+    padding-inline: 14px;
+  }
+
+  .role-btn {
+    padding: 14px 20px;
+  }
+}
+

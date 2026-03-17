@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e40af" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <title>Schedule a Visit - LittleLab</title>
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="../assets/js/config.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      try {
+        const flags = (window.TENANT_CONFIG && window.TENANT_CONFIG.feature_flags) || {};
+        const enabled = flags.FEATURE_PATIENT_SELF_SCHEDULING || false;
+        const navItem = document.getElementById('navScheduleItem');
+        if (navItem) {
+          navItem.style.display = enabled ? 'flex' : 'none';
+          if (!enabled) {
+            navItem.classList.remove('active');
+            var appointmentsLink = document.querySelector('.sidebar-nav a[href="appointments.html"]');
+            if (appointmentsLink) appointmentsLink.classList.add('active');
+          }
+        }
+        if (!enabled) {
+          const main = document.querySelector('.main-content');
+          if (main) {
+            main.innerHTML = '<div class="card"><h2>Scheduling coming soon</h2><p>Self-scheduling is not yet enabled for this clinic.</p></div>';
+          }
+        }
+      } catch (e) {
+        console.warn('FEATURE_PATIENT_SELF_SCHEDULING check failed:', e.message);
+      }
+    });
+  </script>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-dark: #1e3a8a;
+      --primary-light: #3b82f6;
+    }
+    body {
+      background: #f7fafc;
+      min-height: 100vh;
+    }
+    .layout {
+      display: flex;
+      min-height: 100vh;
+      background: #f7fafc;
+    }
+    .sidebar {
+      width: 260px;
+      background: white;
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .sidebar-header {
+      padding: 24px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .sidebar-logo {
+      font-size: 32px;
+      line-height: 1;
+      letter-spacing: -3px;
+      color: #2d3748;
+      margin-bottom: 4px;
+    }
+    .sidebar-subtitle {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-top: 4px;
+    }
+    .sidebar-nav {
+      padding: 16px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--gray-700);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 4px;
+      text-decoration: none;
+    }
+    .nav-item:hover {
+      background: var(--gray-50);
+      color: var(--primary);
+    }
+    .nav-item.active {
+      background: var(--primary);
+      color: white;
+    }
+    .nav-icon {
+      font-size: 20px;
+    }
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--gray-200);
+      position: absolute;
+      bottom: 0;
+      width: 260px;
+      background: white;
+    }
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+    }
+    .user-details { flex: 1; }
+    .user-name { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+    .user-role { font-size: 12px; color: var(--gray-500); }
+    .logout-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .mobile-menu-toggle {
+      display: none;
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1001;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      width: 48px;
+      height: 48px;
+      align-items: center;
+      justify-content: center;
+    }
+    .mobile-menu-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+    }
+    @media (max-width: 768px) {
+      .mobile-menu-toggle { display: flex; }
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 1000;
+      }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .mobile-menu-overlay.active { display: block; }
+      .main-content { margin-left: 0; padding: 16px; padding-top: 80px; }
+    }
+    .main-content {
+      margin-left: 260px;
+      padding: 32px;
+      flex: 1;
+      max-width: 900px;
+    }
+    .page-header {
+      margin-bottom: 24px;
+    }
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin: 0 0 6px 0;
+    }
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--gray-600);
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: var(--shadow-md);
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 2px solid var(--gray-200);
+      font-size: 14px;
+    }
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-secondary {
+      background: var(--gray-100);
+      color: var(--gray-700);
+    }
+    .slots {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .slot-btn {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--gray-300);
+      background: white;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .slot-btn.selected {
+      border-color: var(--primary);
+      background: #eff6ff;
+      color: var(--primary-dark);
+    }
+    .message {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .message-error {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+    .message-success {
+      background: #ecfdf3;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+  </style>
+</head>
+<body>
+  <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">☰</button>
+  <div class="mobile-menu-overlay" onclick="toggleMobileMenu()"></div>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">LittleLab</div>
+        <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="patient-dashboard.html" class="nav-item">
+          <span class="nav-icon">🏠</span><span>Dashboard</span>
+        </a>
+        <a href="patient-dashboard.html#benefits" class="nav-item">
+          <span class="nav-icon">🏥</span><span>My Benefits</span>
+        </a>
+        <a href="wallet.html" class="nav-item">
+          <span class="nav-icon">💰</span><span>My Wallet</span>
+        </a>
+        <a href="patient-dashboard.html#claims" class="nav-item">
+          <span class="nav-icon">💳</span><span>Bills & Claims</span>
+        </a>
+        <a href="appointments.html" class="nav-item">
+          <span class="nav-icon">📅</span><span>Appointments</span>
+        </a>
+        <a href="my-records.html" class="nav-item">
+          <span class="nav-icon">📄</span><span>My Records</span>
+        </a>
+        <a href="schedule.html" class="nav-item active" id="navScheduleItem" style="display:none;">
+          <span class="nav-icon">➕</span><span>Schedule</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="userAvatar">P</div>
+          <div class="user-details">
+            <div class="user-name" id="userName">Patient</div>
+            <div class="user-role">Patient Account</div>
+          </div>
+          <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title">Schedule a Visit</h1>
+        <p class="page-subtitle">Pick a time that works for you.</p>
+      </div>
+
+      <div class="card">
+        <div id="msg" class="message" style="display:none;"></div>
+
+        <div class="form-group">
+          <label class="form-label">Appointment type</label>
+          <select id="apptTypeInput" class="form-select">
+            <option value="Mental Health Consultation">Mental Health Consultation</option>
+            <option value="Telemedicine Visit">Telemedicine Visit</option>
+            <option value="Follow-up Visit">Follow-up Visit</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input id="dateInput" type="date" class="form-input" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Available times</label>
+          <button id="loadSlotsBtn" class="btn btn-secondary" style="margin-bottom:8px;">Check availability</button>
+          <div id="slots" class="slots"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Your name</label>
+          <input id="nameInput" class="form-input" placeholder="Full name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your phone</label>
+          <input id="phoneInput" class="form-input" placeholder="+1 555 555 1212" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Your email</label>
+          <input id="emailInput" class="form-input" placeholder="you@example.com" />
+        </div>
+
+        <button id="scheduleBtn" class="btn btn-primary">Schedule appointment</button>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+    const API_HEADERS = {
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true'
+    };
+    const sessionId = localStorage.getItem('patient_session_id') || null;
+
+    const msgEl = document.getElementById('msg');
+    const slotsEl = document.getElementById('slots');
+
+    function showMsg(text, type) {
+      msgEl.textContent = text;
+      msgEl.className = 'message message-' + type;
+      msgEl.style.display = 'block';
+    }
+
+    function clearMsg() {
+      msgEl.style.display = 'none';
+    }
+
+    function getSelectedSlot() {
+      const selected = slotsEl.querySelector('.slot-btn.selected');
+      return selected ? selected.dataset.time : null;
+    }
+
+    async function loadSlots() {
+      clearMsg();
+      slotsEl.innerHTML = 'Loading...';
+
+      const date = document.getElementById('dateInput').value;
+      const apptType = document.getElementById('apptTypeInput').value;
+      if (!date) {
+        showMsg('Please choose a date first.', 'error');
+        slotsEl.textContent = '';
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({
+          date,
+          appointment_type: apptType
+        });
+        const res = await fetch(`${API_BASE}/api/appointments/available-slots?${params.toString()}`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showMsg(data.error || 'Unable to load slots.', 'error');
+          slotsEl.textContent = '';
+          return;
+        }
+        const slots = data.slots_with_display || data.slots || [];
+        if (!slots.length) {
+          slotsEl.textContent = 'No slots available for this date.';
+          return;
+        }
+        slotsEl.innerHTML = '';
+        slots.forEach(s => {
+          const label = s.display || s.time || s;
+          const timeVal = s.time || s.value || s;
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'slot-btn';
+          btn.textContent = label;
+          btn.dataset.time = timeVal;
+          btn.addEventListener('click', () => {
+            Array.from(slotsEl.querySelectorAll('.slot-btn')).forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+          });
+          slotsEl.appendChild(btn);
+        });
+      } catch (e) {
+        console.error('Error loading slots:', e);
+        showMsg('Network error while loading slots.', 'error');
+        slotsEl.textContent = '';
+      }
+    }
+
+    async function scheduleAppointment() {
+      clearMsg();
+      const apptType = document.getElementById('apptTypeInput').value;
+      const date = document.getElementById('dateInput').value;
+      const time = getSelectedSlot();
+      const name = document.getElementById('nameInput').value.trim();
+      const phone = document.getElementById('phoneInput').value.trim();
+      const email = document.getElementById('emailInput').value.trim();
+
+      if (!date || !time || !name || !email) {
+        showMsg('Name, email, date, and time are required.', 'error');
+        return;
+      }
+
+      try {
+        const body = {
+          appointment_type: apptType,
+          date,
+          time,
+          patient_name: name,
+          patient_phone: phone,
+          patient_email: email
+        };
+        const res = await fetch(`${API_BASE}/api/appointments/schedule`, {
+          method: 'POST',
+          headers: API_HEADERS,
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showMsg(data.error || 'Unable to schedule appointment.', 'error');
+          return;
+        }
+        showMsg('Appointment scheduled successfully! A confirmation has been sent to your email.', 'success');
+        setTimeout(() => {
+          window.location.href = 'appointments.html';
+        }, 1500);
+      } catch (e) {
+        console.error('Error scheduling appointment:', e);
+        showMsg('Network error while scheduling appointment.', 'error');
+      }
+    }
+
+    document.getElementById('loadSlotsBtn').addEventListener('click', loadSlots);
+    document.getElementById('scheduleBtn').addEventListener('click', scheduleAppointment);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!sessionId) {
+        window.location.href = 'patient-login.html';
+        return;
+      }
+      // Default date = today
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('dateInput').value = today;
+    });
+
+    function toggleMobileMenu() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.querySelector('.mobile-menu-overlay');
+      if (sidebar) sidebar.classList.toggle('mobile-open');
+      if (overlay) overlay.classList.toggle('active');
+    }
+
+    function logout() {
+      localStorage.removeItem('patient_session_id');
+      localStorage.removeItem('patient_phone');
+      window.location.href = 'patient-login.html';
+    }
+  </script>
+</body>
+</html>
+

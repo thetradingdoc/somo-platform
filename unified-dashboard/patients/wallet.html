@@ -2,22 +2,24 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Wallet - Patient Portal</title>
-    <link rel="stylesheet" href="../assets/css/global.css">
-    <script src="../assets/js/config.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1e40af">
+<link rel="manifest" href="../manifest.webmanifest">
+<title>My Wallet - Patient Portal</title>
+<link rel="stylesheet" href="../assets/css/global.css">
+<script src="../assets/js/config.js" defer></script>
     <style>
         :root {
-            --primary: #6fff63;
-            --primary-dark: #33b86a;
-            --primary-light: #d4ffd2;
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
         }
 
         .layout {
             display: flex;
             min-height: 100vh;
-            background: linear-gradient(180deg, #f0ffe3 0%, #c9f7b6 100%);
+            background: #f7fafc;
         }
 
         /* Override background for wallet app container */
@@ -1715,9 +1717,9 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <strong>Billy</strong>
+                    LittleLab
                 </div>
-                <div class="sidebar-subtitle">Medical Coding Assistant</div>
+                <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
             </div>
 
             <nav class="sidebar-nav">
@@ -1743,6 +1745,10 @@
                     <span class="nav-icon">📅</span>
                     <span>Appointments</span>
                 </a>
+                <a href="my-records.html" class="nav-item">
+                    <span class="nav-icon">📄</span>
+                    <span>My Records</span>
+                </a>
             </nav>
 
             <div class="sidebar-footer">
@@ -1750,7 +1756,7 @@
                     <div class="user-avatar" id="userAvatar">P</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Patient</div>
-                        <div class="user-role">Patient</div>
+                        <div class="user-role">Patient Account</div>
                     </div>
                     <button class="logout-btn" onclick="logout()" title="Logout">
                         🚪
@@ -2256,10 +2262,9 @@
         }
 
         async function updateBalance() {
+            const balanceEl = document.getElementById('currentBalance');
             if (!walletId) {
-                // Fallback to local storage balance
-                const balance = parseFloat(localStorage.getItem('wallet_balance') || '0');
-                document.getElementById('currentBalance').textContent = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                balanceEl.textContent = 'Wallet unavailable';
                 return;
             }
 
@@ -2270,20 +2275,17 @@
                     if (data.success && data.balances && data.balances.length > 0) {
                         const usdcBalance = data.balances.find(b => b.token?.symbol === 'USDC') || data.balances[0];
                         const amount = parseFloat(usdcBalance.amount || usdcBalance.balance || 0) / 1000000; // USDC has 6 decimals
-                        document.getElementById('currentBalance').textContent = `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                        balanceEl.textContent = `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                     } else {
-                        document.getElementById('currentBalance').textContent = '$0.00';
+                        balanceEl.textContent = '$0.00';
                     }
                 } else {
-                    // Fallback to local storage
-                    const balance = parseFloat(localStorage.getItem('wallet_balance') || '0');
-                    document.getElementById('currentBalance').textContent = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    console.warn('Circle wallet balance API returned non-OK status:', response.status);
+                    balanceEl.textContent = 'Wallet currently unavailable';
                 }
             } catch (error) {
                 console.error('Error updating balance:', error);
-                // Fallback to local storage
-                const balance = parseFloat(localStorage.getItem('wallet_balance') || '0');
-                document.getElementById('currentBalance').textContent = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                balanceEl.textContent = 'Wallet currently unavailable';
             }
         }
 

@@ -107,13 +107,13 @@
     shop: ECOMMERCE_NAV_ITEMS
   };
 
-  // Default config (fallback) - clinic for medical coding
+  // Default config (fallback) - clinic for LittleLab
   const defaultConfig = {
     hostname,
     subdomain,
     tenant_type: 'clinic',
     navItems: NAV_BY_TENANT.clinic,
-    sidebarSubtitle: 'Medical Coding Assistant'
+    sidebarSubtitle: 'LittleLab \u2022 Virtual Care'
   };
 
   window.MEDICAL_NAV_ITEMS = MEDICAL_NAV_ITEMS;
@@ -137,7 +137,7 @@
             subdomain: data.subdomain,
             tenant_type: tenantType,
             navItems: data.navItems || (window.NAV_BY_TENANT && window.NAV_BY_TENANT[tenantType]) || MEDICAL_NAV_ITEMS,
-            sidebarSubtitle: data.sidebarSubtitle || 'Medical Coding Assistant',
+            sidebarSubtitle: data.sidebarSubtitle || 'LittleLab \u2022 Virtual Care',
             merchant_id: data.merchant_id,
             clinic_id: data.clinic_id
           };
@@ -219,3 +219,84 @@
 
   console.log('✅ Path utilities loaded (sustainable URL-based resolution)');
 })();
+
+// Lightweight global patient alert helper for error/info banners
+(function () {
+  function ensureContainer() {
+    let el = document.getElementById('patient-global-alert');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'patient-global-alert';
+    el.style.position = 'fixed';
+    el.style.zIndex = '9999';
+    el.style.left = '50%';
+    el.style.top = '16px';
+    el.style.transform = 'translateX(-50%)';
+    el.style.maxWidth = '480px';
+    el.style.width = 'calc(100% - 32px)';
+    el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
+    el.style.borderRadius = '8px';
+    el.style.padding = '12px 16px';
+    el.style.fontSize = '14px';
+    el.style.display = 'none';
+    el.style.background = '#fee2e2';
+    el.style.color = '#b91c1c';
+    el.style.border = '1px solid #fecaca';
+    el.style.boxSizing = 'border-box';
+    el.setAttribute('role', 'alert');
+    el.setAttribute('aria-live', 'polite');
+    document.body.appendChild(el);
+    return el;
+  }
+
+  window.showPatientAlert = function ({ type = 'error', message, retry } = {}) {
+    if (!message) return;
+    const el = ensureContainer();
+    const isError = type === 'error';
+    el.style.background = isError ? '#fee2e2' : '#dbebff';
+    el.style.color = isError ? '#b91c1c' : '#1d4ed8';
+    el.style.border = isError ? '1px solid #fecaca' : '1px solid #bfdbfe';
+
+    const btnHtml = retry
+      ? `<button style="margin-left:12px;padding:4px 10px;font-size:12px;border-radius:999px;border:none;cursor:pointer;background:#111827;color:#f9fafb;">Try again</button>`
+      : '';
+
+    el.innerHTML = `<span>${message}</span>${btnHtml}`;
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'space-between';
+
+    if (retry) {
+      const btn = el.querySelector('button');
+      if (btn) {
+        btn.onclick = function () {
+          el.style.display = 'none';
+          try {
+            retry();
+          } catch (e) {
+            console.warn('Retry handler threw:', e);
+          }
+        };
+      }
+    }
+
+    setTimeout(() => {
+      el.style.display = 'none';
+    }, 8000);
+  };
+})();
+
+// Register service worker for PWA (installability + basic offline shell)
+(function () {
+  if ('serviceWorker' in navigator) {
+    const swUrl = new URL('../sw.js', window.location.href).pathname;
+    navigator.serviceWorker
+      .register(swUrl)
+      .then(() => {
+        console.log('✅ Service worker registered:', swUrl);
+      })
+      .catch((err) => {
+        console.warn('⚠️  Service worker registration failed:', err.message);
+      });
+  }
+})(); 

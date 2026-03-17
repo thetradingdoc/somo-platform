@@ -9,6 +9,114 @@ const router = express.Router();
 const db = require('../database');
 const FHIRService = require('../services/fhir-service');
 const EmailService = require('../services/email-service');
+
+/**
+ * GET /api/patient/:patientId/case-report
+ * Aggregate longitudinal view for a single patient.
+ * Protected by admin auth to ensure only staff can view longitudinal data.
+ */
+router.get('/api/patient/:patientId/case-report', async (req, res) => {
+  try {
+    // Basic RBAC: ensure caller has a valid admin session (provider/staff).
+    // In server.js, caseReportRoutes should be mounted behind requireAdminAuth for UI calls.
+    const { patientId } = req.params;
+    if (!patientId) {
+      return res.status(400).json({ success: false, error: 'patientId is required' });
+    }
+
+    const patientRow = db.getFHIRPatient ? db.getFHIRPatient(patientId) : null;
+    if (!patientRow) {
+      return res.status(404).json({ success: false, error: 'Patient not found' });
+    }
+
+    const patientResource = patientRow.resource_data;
+    const encounters = db.getFHIRPatientEncounters
+      ? db.getFHIRPatientEncounters(patientId)
+      : [];
+    const appointments = db.getAppointmentsByPatientIds
+      ? db.getAppointmentsByPatientIds([patientId])
+      : [];
+    const claims = db.getClaimsByPatient ? db.getClaimsByPatient(patientId) : [];
+    const eligibility = db.getEligibilityChecksByPatient
+      ? db.getEligibilityChecksByPatient(patientId)
+      : [];
+    const documents = db.getPatientDocuments ? db.getPatientDocuments(patientId) : [];
+
+    // Coding decisions may be linked via call_id or patient_id in state_data; for now, return recent rows
+    let codingDecisions = [];
+    try {
+      codingDecisions = db.db.prepare(`
+        SELECT * FROM coding_decisions
+        WHERE patient_id = ? OR patient_id IS NULL
+        ORDER BY created_at DESC
+        LIMIT 200
+      `).all(patientId);
+    } catch (_) {
+      codingDecisions = [];
+    }
+
+    // Financials: invoices & payments
+    let invoices = [];
+    try {
+      invoices = db.db.prepare(`
+        SELECT * FROM invoices
+        WHERE patient_id = ?
+        ORDER BY created_at DESC
+      `).all(patientId);
+    } catch (_) {
+      invoices = [];
+    }
+
+    // For each invoice, attach payments
+    const invoicePaymentsById = {};
+    if (invoices.length && db.getInvoicePayments) {
+      invoices.forEach(inv => {
+        invoicePaymentsById[inv.id] = db.getInvoicePayments(inv.id) || [];
+      });
+    }
+
+    // Circle wallet transactions & card transactions, if available
+    let walletTx = [];
+    let cardTx = [];
+    try {
+      if (db.getWalletTransactionsByPatientId) {
+        walletTx = db.getWalletTransactionsByPatientId(patientId) || [];
+      }
+    } catch (_) {}
+    try {
+      if (db.getCardTransactionsByPatientId) {
+        cardTx = db.getCardTransactionsByPatientId(patientId) || [];
+      }
+    } catch (_) {}
+
+    const result = {
+      success: true,
+      patient: {
+        id: patientId,
+        resource: patientResource
+      },
+      encounters,
+      appointments,
+      claims,
+      eligibility,
+      coding_decisions: codingDecisions,
+      financials: {
+        invoices: invoices.map(inv => ({
+          ...inv,
+          payments: invoicePaymentsById[inv.id] || []
+        })),
+        wallet_transactions: walletTx,
+        card_transactions: cardTx
+      },
+      documents
+    };
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[case-report] error building case-report:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to build case report' });
+  }
+});
 let SMSService;
 try {
   SMSService = require('../services/sms-service');

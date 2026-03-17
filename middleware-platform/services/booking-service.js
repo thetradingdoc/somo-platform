@@ -554,6 +554,18 @@ class BookingService {
 
       db.updateAppointmentStatus(appointmentId, 'completed', null, scopedClinicId);
       console.log(`✅ Appointment ${appointmentId} marked completed`);
+
+      // Trigger downstream FHIR DiagnosticReport creation (non-blocking best-effort).
+      try {
+        if (FHIRService && typeof FHIRService.createDiagnosticReportForAppointment === 'function') {
+          await FHIRService.createDiagnosticReportForAppointment(appointmentId);
+        }
+      } catch (e) {
+        console.warn(
+          `[BookingService.completeAppointment] Failed to create DiagnosticReport for ${appointmentId}:`,
+          e.message
+        );
+      }
     } catch (error) {
       console.warn(`[BookingService.completeAppointment] Failed for ${appointmentId}:`, error.message);
     }

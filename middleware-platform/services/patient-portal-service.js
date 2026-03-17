@@ -17,7 +17,7 @@ class PatientPortalService {
    * @param {string} email - Patient email address
    * @returns {Object} Session ID and success status
    */
-  async sendVerificationCode(email) {
+  async sendVerificationCode(email, reqMeta = {}) {
     if (!email) {
       return { success: false, error: 'Email address required' };
     }
@@ -29,6 +29,8 @@ class PatientPortalService {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    const ip = (reqMeta.ip || '').toString();
+    const ua = (reqMeta.userAgent || '').toString();
 
     // Generate 6-digit verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -48,9 +50,10 @@ class PatientPortalService {
         // Update existing session
         db.db.prepare(`
           UPDATE patient_portal_sessions 
-          SET verification_code = ?, expires_at = ?, created_at = datetime('now')
+          SET verification_code = ?, expires_at = ?, created_at = datetime('now'),
+              ip_address = ?, user_agent = ?, failed_attempts = 0, locked_until = NULL
           WHERE id = ?
-        `).run(verificationCode, expiresAt.toISOString(), existing.id);
+        `).run(verificationCode, expiresAt.toISOString(), ip || null, ua || null, existing.id);
 
         // Send email
         await this._sendEmail(normalizedEmail, verificationCode);
@@ -64,9 +67,9 @@ class PatientPortalService {
         // Create new session
         db.db.prepare(`
           INSERT INTO patient_portal_sessions 
-          (id, email, verification_code, expires_at, verified)
-          VALUES (?, ?, ?, ?, 0)
-        `).run(sessionId, normalizedEmail, verificationCode, expiresAt.toISOString());
+          (id, email, verification_code, expires_at, verified, ip_address, user_agent, failed_attempts, locked_until)
+          VALUES (?, ?, ?, ?, 0, ?, ?, 0, NULL)
+        `).run(sessionId, normalizedEmail, verificationCode, expiresAt.toISOString(), ip || null, ua || null);
 
         // Send email
         await this._sendEmail(normalizedEmail, verificationCode);
@@ -104,16 +107,47 @@ class PatientPortalService {
     }
 
     try {
-      // Find valid session
+      // Soft lock: check for locked sessions for this email
+      const lockRow = db.db.prepare(`
+        SELECT locked_until FROM patient_portal_sessions
+        WHERE email = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(normalizedEmail);
+      if (lockRow && lockRow.locked_until && new Date(lockRow.locked_until) > new Date()) {
+        console.log('[PatientPortal] 🔒 Soft lock active for email', { email: normalizedEmail });
+        return { success: false, error: 'Too many invalid codes. Please wait a few minutes before trying again.' };
+      }
+
+      // Find valid session for this email + code
       const session = db.db.prepare(`
         SELECT * FROM patient_portal_sessions 
         WHERE email = ? 
-          AND verification_code = ? 
           AND verified = 0 
           AND datetime(expires_at) > datetime('now')
-      `).get(normalizedEmail, code);
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(normalizedEmail);
 
-      if (!session) {
+      if (!session || session.verification_code !== code) {
+        // Increment failed_attempts and possibly set locked_until
+        if (session) {
+          const now = new Date();
+          const tooMany = (session.failed_attempts || 0) + 1 >= 5;
+          const lockedUntil = tooMany
+            ? new Date(now.getTime() + 5 * 60 * 1000).toISOString() // 5 minutes lock
+            : session.locked_until;
+          db.db.prepare(`
+            UPDATE patient_portal_sessions
+            SET failed_attempts = failed_attempts + 1,
+                locked_until = COALESCE(?, locked_until)
+            WHERE id = ?
+          `).run(lockedUntil || null, session.id);
+        }
+        console.log('[PatientPortal] ❌ Invalid or expired verification code', {
+          email: normalizedEmail,
+          merchant_id: merchantId || null
+        });
         return { success: false, error: 'Invalid or expired verification code' };
       }
 
@@ -138,10 +172,41 @@ class PatientPortalService {
         };
       }
 
+      const patientId = patient ? patient.resource_id : null;
+
+      // Create or update persistent patient_sessions mapping (email → patient_id)
+      try {
+        const longLivedExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+        const existingPatientSession = db.getPatientSession && db.getPatientSession(session.id);
+        if (!existingPatientSession) {
+          if (db.createPatientSession) {
+            db.createPatientSession({
+              session_id: session.id,
+              email: normalizedEmail,
+              patient_id: patientId,
+              expires_at: longLivedExpires.toISOString()
+            });
+          }
+        } else if (db.updatePatientSession) {
+          db.updatePatientSession(session.id, {
+            email: normalizedEmail,
+            patient_id: patientId,
+            expires_at: existingPatientSession.expires_at || longLivedExpires.toISOString()
+          });
+        }
+        console.log('[PatientPortal] 🪪 Session verified + mapped', {
+          session_id: session.id,
+          email: normalizedEmail,
+          patient_id: patientId || null
+        });
+      } catch (e) {
+        console.warn('⚠️  Failed to upsert patient_sessions mapping:', e.message);
+      }
+
       return {
         success: true,
         session_id: session.id,
-        patient_id: patient ? patient.resource_id : null,
+        patient_id: patientId,
         email: normalizedEmail,
         merchant_id: merchantId || (patient ? patient.merchant_id : null)
       };
@@ -207,11 +272,21 @@ class PatientPortalService {
 
       const pendingByAppt = {};
       for (const apt of appointments) {
+        // Prefer explicit helper for pending/paid checkout with payment link
         const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(apt.id);
         if (pending) {
           pendingByAppt[apt.id] = {
             payment_status: pending.payment_status,
             payment_link: pending.payment_link
+          };
+          continue;
+        }
+        // Fallback: check latest checkout-only to infer payment_state if needed
+        const latest = db.getLatestCheckoutForAppointment && db.getLatestCheckoutForAppointment(apt.id);
+        if (latest && latest.status === 'completed') {
+          pendingByAppt[apt.id] = {
+            payment_status: 'paid',
+            payment_link: null
           };
         }
       }
@@ -232,7 +307,7 @@ class PatientPortalService {
             can_reschedule: ['scheduled', 'confirmed'].includes(apt.status),
             can_cancel: ['scheduled', 'confirmed'].includes(apt.status),
             video_room,
-            payment_status: payInfo.payment_status || null,
+            payment_status: payInfo.payment_status || apt.payment_status || null,
             payment_link: payInfo.payment_link || null
           };
         })
@@ -278,18 +353,20 @@ class PatientPortalService {
   }
 
   /**
-   * Get patient profile
+   * Get patient profile + flags, insurance and basic eligibility
    * @param {string} sessionId - Valid session ID
    * @returns {Object} Patient profile data
    */
   getPatientProfile(sessionId) {
     try {
-      const session = this.validateSession(sessionId);
-      if (!session.valid) {
+      const sessionValidation = this.validateSession(sessionId);
+      if (!sessionValidation.valid) {
         return { success: false, error: 'Invalid session' };
       }
 
-      // Get patient from FHIR (by email or phone)
+      const session = sessionValidation;
+
+      // Resolve FHIR patient by email or phone
       let patient = null;
       if (session.email) {
         patient = db.getFHIRPatientByEmail(session.email);
@@ -301,27 +378,45 @@ class PatientPortalService {
         return { success: false, error: 'Patient not found' };
       }
 
-      const patientData = JSON.parse(patient.resource_data);
+      const patientData = typeof patient.resource_data === 'string'
+        ? JSON.parse(patient.resource_data)
+        : patient.resource_data;
       const nameObj = (patientData.name && patientData.name[0]) || {};
       const telecom = patientData.telecom || [];
       const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
       const email = (telecom.find(t => t.system === 'email') || {}).value || '';
       const addr = (patientData.address && patientData.address[0]) || {};
 
+      // Insurance + eligibility summary for onboarding
+      const insurance = db.getPrimaryPatientInsurance
+        ? db.getPrimaryPatientInsurance(patient.resource_id)
+        : null;
+      const eligibilityRow = db.getLatestEligibilityForPatient
+        ? db.getLatestEligibilityForPatient(patient.resource_id)
+        : null;
+
+      const flags = {
+        profile_verified: !!patient.profile_verified,
+        insurance_verified: !!patient.insurance_verified
+      };
+
       return {
         success: true,
-        profile: {
+        patient: {
           name: `${(nameObj.given || [''])[0]} ${nameObj.family || ''}`.trim(),
-          phone: phone,
-          email: email,
-          birth_date: patientData.birthDate || null,
+          phone,
+          email,
+          dob: patientData.birthDate || null,
           address: {
-            line: addr.line && addr.line[0] || '',
+            line: (addr.line && addr.line[0]) || '',
             city: addr.city || '',
             state: addr.state || '',
             postal_code: addr.postalCode || ''
           }
-        }
+        },
+        insurance: insurance || null,
+        eligibility: eligibilityRow || null,
+        flags
       };
     } catch (error) {
       console.error('Error getting patient profile:', error);

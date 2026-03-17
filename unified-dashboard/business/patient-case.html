@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Patient Case Report - DocLittle</title>
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="../assets/js/config.js"></script>
+  <style>
+    body {
+      background: var(--gray-50);
+      min-height: 100vh;
+    }
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+    .sidebar {
+      width: 260px;
+      background: white;
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+      position: fixed;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .main-content {
+      margin-left: 260px;
+      padding: 24px 32px;
+      flex: 1;
+    }
+    .page-header {
+      margin-bottom: 16px;
+    }
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 4px 0;
+    }
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--gray-600);
+    }
+    .filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .timeline {
+      border-left: 2px solid var(--gray-200);
+      margin-top: 12px;
+      padding-left: 16px;
+    }
+    .event {
+      margin-bottom: 16px;
+      position: relative;
+      padding-left: 4px;
+    }
+    .event::before {
+      content: '';
+      position: absolute;
+      left: -19px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--primary);
+    }
+    .event-type {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 2px;
+    }
+    .event-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .event-meta {
+      font-size: 12px;
+      color: var(--gray-600);
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      background: #e5e7eb;
+      color: #374151;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <span class="doc">Doc</span><span class="little">Little</span>.
+        </div>
+        <div class="sidebar-subtitle">Medical Coding Assistant</div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="business-dashboard.html" class="nav-item">
+          <span class="nav-icon">📊</span><span>Dashboard</span>
+        </a>
+        <a href="patients.html" class="nav-item">
+          <span class="nav-icon">👥</span><span>Patients</span>
+        </a>
+        <a href="#" class="nav-item active">
+          <span class="nav-icon">🩺</span><span>Patient Case</span>
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="page-header">
+        <h1 class="page-title" id="patientTitle">Patient Case</h1>
+        <p class="page-subtitle" id="patientSubtitle">Loading patient details…</p>
+      </div>
+
+      <div class="filters">
+        <label style="font-size:13px;color:var(--gray-600);">Patient ID:</label>
+        <input id="patientIdInput" class="form-input" style="max-width:260px;padding:6px 10px;font-size:13px;" />
+        <button id="loadCaseBtn" class="btn btn-primary" style="padding:6px 14px;font-size:13px;">Load case</button>
+      </div>
+
+      <div id="msg" class="message" style="display:none;"></div>
+
+      <div class="timeline" id="timeline"></div>
+    </main>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+
+    function showMsg(text, type) {
+      const el = document.getElementById('msg');
+      el.textContent = text;
+      el.className = 'message message-' + type;
+      el.style.display = 'block';
+    }
+
+    function clearMsg() {
+      const el = document.getElementById('msg');
+      el.style.display = 'none';
+    }
+
+    function addEvent(timelineEl, type, title, meta, badge) {
+      const div = document.createElement('div');
+      div.className = 'event';
+      div.innerHTML = `
+        <div class="event-type">${type}${badge ? ` <span class="badge">${badge}</span>` : ''}</div>
+        <div class="event-title">${title}</div>
+        <div class="event-meta">${meta || ''}</div>
+      `;
+      timelineEl.appendChild(div);
+    }
+
+    async function loadCase() {
+      clearMsg();
+      const patientId = document.getElementById('patientIdInput').value.trim();
+      if (!patientId) {
+        showMsg('Enter a patient ID to load case.', 'error');
+        return;
+      }
+      const timelineEl = document.getElementById('timeline');
+      timelineEl.innerHTML = 'Loading…';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/patient/${encodeURIComponent(patientId)}/case-report`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          timelineEl.textContent = '';
+          showMsg(data.error || 'Unable to load case report.', 'error');
+          return;
+        }
+
+        const { patient, encounters, appointments, claims, eligibility, financials, documents } = data;
+        const resource = patient && patient.resource ? patient.resource : {};
+        const nameObj = (resource.name && resource.name[0]) || {};
+        const fullName = `${(nameObj.given || [''])[0]} ${nameObj.family || ''}`.trim() || 'Unknown patient';
+        document.getElementById('patientTitle').textContent = fullName;
+        document.getElementById('patientSubtitle').textContent = `FHIR ID: ${patient.id}`;
+
+        timelineEl.innerHTML = '';
+
+        // Encounters
+        (encounters || []).forEach(enc => {
+          const dt = enc.start_time || enc.created_at || '';
+          addEvent(
+            timelineEl,
+            'Encounter',
+            'Voice or telehealth encounter',
+            dt ? new Date(dt).toLocaleString() : ''
+          );
+        });
+
+        // Appointments
+        (appointments || []).forEach(appt => {
+          const dt = appt.start_time || (appt.date && appt.time ? `${appt.date}T${appt.time}` : appt.date);
+          const status = appt.status || 'unknown';
+          const type = appt.appointment_type || 'Visit';
+          addEvent(
+            timelineEl,
+            'Appointment',
+            type,
+            (dt ? new Date(dt).toLocaleString() : '') + ` | Status: ${status}`,
+            status.toUpperCase()
+          );
+        });
+
+        // Claims
+        (claims || []).forEach(claim => {
+          const dt = claim.submitted_at || claim.created_at;
+          addEvent(
+            timelineEl,
+            'Claim',
+            `Claim ${claim.id || ''}`,
+            `Status: ${claim.status || 'unknown'} | Submitted: ${dt ? new Date(dt).toLocaleString() : ''}`
+          );
+        });
+
+        // Eligibility (latest)
+        const latestElig = (eligibility && eligibility[0]) || null;
+        if (latestElig) {
+          addEvent(
+            timelineEl,
+            'Eligibility',
+            'Eligibility check',
+            `Eligible: ${latestElig.eligible ? 'Yes' : 'No'} | Copay: $${(latestElig.copay_amount || 0).toFixed(2)}`
+          );
+        }
+
+        // Invoices & payments
+        const invoices = (financials && financials.invoices) || [];
+        invoices.forEach(inv => {
+          const dt = inv.created_at ? new Date(inv.created_at).toLocaleString() : '';
+          const total = inv.amount || inv.total || 0;
+          const payments = inv.payments || [];
+          const paidTotal = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+          addEvent(
+            timelineEl,
+            'Invoice',
+            `Invoice ${inv.invoice_number || inv.id}`,
+            `Created: ${dt} | Amount: $${total.toFixed(2)} | Paid: $${paidTotal.toFixed(2)}`
+          );
+        });
+
+        // Documents
+        (documents || []).forEach(doc => {
+          const dt = doc.created_at ? new Date(doc.created_at).toLocaleString() : '';
+          addEvent(
+            timelineEl,
+            'Document',
+            doc.file_name || 'Document',
+            `Uploaded: ${dt} | By: ${doc.uploaded_by || 'unknown'}`
+          );
+        });
+      } catch (err) {
+        console.error('Error loading case-report:', err);
+        document.getElementById('timeline').textContent = '';
+        showMsg('Network error while loading case report.', 'error');
+      }
+    }
+
+    document.getElementById('loadCaseBtn').addEventListener('click', loadCase);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      const pid = params.get('patient_id');
+      if (pid) {
+        document.getElementById('patientIdInput').value = pid;
+        loadCase();
+      }
+    });
+  </script>
+</body>
+</html>
+

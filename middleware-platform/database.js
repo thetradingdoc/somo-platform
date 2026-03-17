@@ -851,6 +851,10 @@ db.exec(`
     email TEXT,
     name TEXT,
     is_deleted BOOLEAN DEFAULT 0,
+    profile_verified INTEGER DEFAULT 0,
+    insurance_verified INTEGER DEFAULT 0,
+    profile_verified_at DATETIME,
+    insurance_verified_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -1631,6 +1635,7 @@ db.exec(`
     duration_minutes INTEGER DEFAULT 50,
     provider TEXT DEFAULT 'DocLittle Mental Health Team',
     status TEXT DEFAULT 'scheduled',
+    payment_status TEXT DEFAULT 'unpaid',
     notes TEXT,
     reminder_sent BOOLEAN DEFAULT 0,
     calendar_event_id TEXT,
@@ -1947,6 +1952,18 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_eob_audit_claim_id ON eob_calculation_audit(claim_id);
 
+  -- Persistent patient sessions (email + resolved patient_id)
+  CREATE TABLE IF NOT EXISTS patient_sessions (
+    session_id   TEXT PRIMARY KEY,
+    email        TEXT NOT NULL,
+    patient_id   TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at   DATETIME NOT NULL,
+    last_used    DATETIME,
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_patient_sessions_email ON patient_sessions(email);
+
   CREATE TABLE IF NOT EXISTS patient_portal_sessions (
     id TEXT PRIMARY KEY,
     patient_id TEXT,
@@ -1957,12 +1974,46 @@ db.exec(`
     verified_at DATETIME,
     expires_at DATETIME NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ip_address TEXT,
+    user_agent TEXT,
+    failed_attempts INTEGER DEFAULT 0,
+    locked_until DATETIME,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_portal_sessions_phone ON patient_portal_sessions(phone);
   CREATE INDEX IF NOT EXISTS idx_portal_sessions_verified ON patient_portal_sessions(verified);
   -- Note: email index will be created in migration if column is added
+
+  -- Patient-uploaded and staff-uploaded documents
+  CREATE TABLE IF NOT EXISTS patient_documents (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT NOT NULL,
+    encounter_id TEXT,
+    appointment_id TEXT,
+    file_name TEXT NOT NULL,
+    file_type TEXT,
+    storage_path TEXT NOT NULL,
+    uploaded_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_patient_documents_patient ON patient_documents(patient_id);
+
+  CREATE TABLE IF NOT EXISTS patient_merge_events (
+    id TEXT PRIMARY KEY,
+    primary_id TEXT NOT NULL,
+    secondary_id TEXT NOT NULL,
+    reason TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+    reviewed INTEGER DEFAULT 0,
+    reviewed_at DATETIME,
+    FOREIGN KEY (primary_id) REFERENCES fhir_patients(resource_id),
+    FOREIGN KEY (secondary_id) REFERENCES fhir_patients(resource_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_patient_merge_primary ON patient_merge_events(primary_id);
+  CREATE INDEX IF NOT EXISTS idx_patient_merge_secondary ON patient_merge_events(secondary_id);
 
   CREATE TABLE IF NOT EXISTS cpt_codes (
     code TEXT PRIMARY KEY,
@@ -2678,6 +2729,41 @@ function migratePatientPortalSessionsEmail() {
   } catch (migrationError) {
     console.warn('⚠️  Patient portal sessions email migration failed:', migrationError.message);
     // Re-enable foreign keys even if migration fails
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add security metadata columns to patient_portal_sessions if they don't exist
+function migratePatientPortalSessionsSecurityMeta() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const cols = db.prepare(`PRAGMA table_info(patient_portal_sessions)`).all();
+    const hasIp = cols.some((c) => c.name === 'ip_address');
+    const hasUa = cols.some((c) => c.name === 'user_agent');
+    const hasFailed = cols.some((c) => c.name === 'failed_attempts');
+    const hasLocked = cols.some((c) => c.name === 'locked_until');
+
+    if (!hasIp) {
+      console.log('📦 Adding ip_address column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN ip_address TEXT;`);
+    }
+    if (!hasUa) {
+      console.log('📦 Adding user_agent column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN user_agent TEXT;`);
+    }
+    if (!hasFailed) {
+      console.log('📦 Adding failed_attempts column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN failed_attempts INTEGER DEFAULT 0;`);
+    }
+    if (!hasLocked) {
+      console.log('📦 Adding locked_until column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN locked_until DATETIME;`);
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (e) {
+    console.warn('⚠️  Patient portal sessions security meta migration failed:', e.message);
     db.pragma('foreign_keys = ON');
   }
 }
@@ -3869,6 +3955,7 @@ function migrateLeadLabels() {
 migrateInsuranceClaimsTable();
 migrateFHIRPatientsWalletAddress();
 migratePatientPortalSessionsEmail();
+migratePatientPortalSessionsSecurityMeta();
 migrateMonthlyInvoicesJobCalls();
 migrateOrderTracking();
 migrateLeadsPipeline();
@@ -4367,6 +4454,204 @@ module.exports = {
     try {
       db.prepare(`DELETE FROM admin_sessions WHERE expires_at <= datetime('now')`).run();
     } catch (_) {}
+  },
+
+  // ============================================
+  // PATIENT SESSIONS (email → FHIR patient_id mapping)
+  // ============================================
+  createPatientSession: ({ session_id, email, patient_id = null, expires_at }) => {
+    if (!session_id || !email || !expires_at) return;
+    try {
+      db.prepare(`
+        INSERT INTO patient_sessions (session_id, email, patient_id, expires_at, created_at, last_used)
+        VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(session_id, email.toLowerCase().trim(), patient_id || null, expires_at);
+    } catch (e) {
+      console.error('❌ Failed to create patient_session:', e.message);
+    }
+  },
+  getPatientSession: (session_id) => {
+    if (!session_id) return null;
+    try {
+      return db.prepare(`
+        SELECT * FROM patient_sessions
+        WHERE session_id = ?
+      `).get(session_id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  updatePatientSession: (session_id, fields = {}) => {
+    if (!session_id || !fields || Object.keys(fields).length === 0) return;
+    const sets = [];
+    const values = [];
+    if (fields.email !== undefined) {
+      sets.push('email = ?');
+      values.push(fields.email.toLowerCase().trim());
+    }
+    if (fields.patient_id !== undefined) {
+      sets.push('patient_id = ?');
+      values.push(fields.patient_id || null);
+    }
+    if (fields.expires_at !== undefined) {
+      sets.push('expires_at = ?');
+      values.push(fields.expires_at);
+    }
+    // Always bump last_used when we update
+    sets.push('last_used = datetime(\'now\')');
+    if (sets.length === 0) return;
+    values.push(session_id);
+    try {
+      db.prepare(`
+        UPDATE patient_sessions
+        SET ${sets.join(', ')}
+        WHERE session_id = ?
+      `).run(...values);
+    } catch (e) {
+      console.error('❌ Failed to update patient_session:', e.message);
+    }
+  },
+  deletePatientSession: (session_id) => {
+    if (!session_id) return;
+    try {
+      db.prepare(`DELETE FROM patient_sessions WHERE session_id = ?`).run(session_id);
+    } catch (_) {}
+  },
+
+  // Revoke all patient_sessions for an email or patient_id
+  revokePatientSessionsByEmail: (email) => {
+    if (!email) return;
+    try {
+      db.prepare(`DELETE FROM patient_sessions WHERE LOWER(email) = LOWER(?)`).run(email);
+    } catch (_) {}
+  },
+  revokePatientSessionsByPatientId: (patient_id) => {
+    if (!patient_id) return;
+    try {
+      db.prepare(`DELETE FROM patient_sessions WHERE patient_id = ?`).run(patient_id);
+    } catch (_) {}
+  },
+
+  // ============================================
+  // PATIENT DOCUMENTS
+  // ============================================
+  createPatientDocument: (doc) => {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const id = doc.id || uuidv4();
+      db.prepare(`
+        INSERT INTO patient_documents (
+          id, patient_id, encounter_id, appointment_id,
+          file_name, file_type, storage_path, uploaded_by, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        id,
+        doc.patient_id,
+        doc.encounter_id || null,
+        doc.appointment_id || null,
+        doc.file_name,
+        doc.file_type || null,
+        doc.storage_path,
+        doc.uploaded_by || 'patient'
+      );
+      return { id };
+    } catch (e) {
+      console.error('❌ Failed to create patient_document:', e.message);
+      throw e;
+    }
+  },
+  getPatientDocuments: (patientId) => {
+    if (!patientId) return [];
+    try {
+      return db.prepare(`
+        SELECT id, patient_id, encounter_id, appointment_id,
+               file_name, file_type, storage_path, uploaded_by, created_at
+        FROM patient_documents
+        WHERE patient_id = ?
+        ORDER BY created_at DESC
+      `).all(patientId);
+    } catch (e) {
+      console.error('❌ Failed to fetch patient_documents:', e.message);
+      return [];
+    }
+  },
+
+  // ============================================
+  // PATIENT MERGE EVENTS
+  // ============================================
+  createPatientMergeEvent: ({ id, primary_id, secondary_id, reason, created_by }) => {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const mergeId = id || uuidv4();
+      db.prepare(`
+        INSERT INTO patient_merge_events (
+          id, primary_id, secondary_id, reason, created_at, created_by
+        ) VALUES (?, ?, ?, ?, datetime('now'), ?)
+      `).run(mergeId, primary_id, secondary_id, reason || null, created_by || null);
+      return { id: mergeId };
+    } catch (e) {
+      console.error('❌ Failed to create patient_merge_event:', e.message);
+      throw e;
+    }
+  },
+  getRecentPatientMergeEvents: (limit = 50) => {
+    try {
+      return db.prepare(`
+        SELECT id, primary_id, secondary_id, reason, created_at, created_by, reviewed, reviewed_at
+        FROM patient_merge_events
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(limit);
+    } catch (e) {
+      console.error('❌ Failed to fetch patient_merge_events:', e.message);
+      return [];
+    }
+  },
+  markPatientMergeEventReviewed: (id, reviewer) => {
+    if (!id) return;
+    try {
+      db.prepare(`
+        UPDATE patient_merge_events
+        SET reviewed = 1,
+            reviewed_at = datetime('now'),
+            created_by = COALESCE(created_by, ?)
+        WHERE id = ?
+      `).run(reviewer || null, id);
+    } catch (e) {
+      console.error('❌ Failed to mark patient_merge_event reviewed:', e.message);
+    }
+  },
+
+  // ============================================
+  // APPOINTMENT PAYMENT HELPERS
+  // ============================================
+  getLatestCheckoutForAppointment: (appointmentId) => {
+    if (!appointmentId) return null;
+    try {
+      const checkout = db.prepare(`
+        SELECT vc.* FROM voice_checkouts vc
+        WHERE vc.appointment_id = ?
+        ORDER BY vc.created_at DESC
+        LIMIT 1
+      `).get(appointmentId);
+      return checkout || null;
+    } catch (e) {
+      console.error('❌ Failed to fetch latest checkout for appointment:', e.message);
+      return null;
+    }
+  },
+  updateAppointmentPaymentStatus: (appointmentId, status) => {
+    if (!appointmentId || !status) return;
+    try {
+      db.prepare(`
+        UPDATE appointments
+        SET payment_status = ?
+        WHERE id = ?
+      `).run(status, appointmentId);
+    } catch (e) {
+      console.error('❌ Failed to update appointment payment_status:', e.message);
+    }
   },
 
   // ============================================

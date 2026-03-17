@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Patient Merge Review - DocLittle</title>
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="../assets/js/config.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <span class="doc">Doc</span><span class="little">Little</span>.
+        </div>
+        <div class="sidebar-subtitle">Admin Console</div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="business-dashboard.html" class="nav-item">
+          <span class="nav-icon">📊</span><span>Dashboard</span>
+        </a>
+        <a href="merge-review.html" class="nav-item active">
+          <span class="nav-icon">🔀</span><span>Merge Review</span>
+        </a>
+      </nav>
+    </aside>
+    <main class="main-content">
+      <h1 style="margin-bottom: 16px;">Patient Merge Review</h1>
+      <p style="margin-bottom: 24px; color: var(--gray-600);">
+        Recent merges between patient records. Review and confirm that merges look correct.
+      </p>
+      <div id="mergeContainer" class="card" style="padding: 16px;"></div>
+    </main>
+  </div>
+  <script>
+    const API_BASE = window.API_BASE || window.location.origin;
+    const ADMIN_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
+
+    async function loadMerges() {
+      const container = document.getElementById('mergeContainer');
+      container.innerHTML = '<p>Loading merge events...</p>';
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/patient-merge-events`, { headers: ADMIN_HEADERS });
+        const data = await res.json();
+        if (!data.success) {
+          container.innerHTML = '<p style="color:#b91c1c;">Failed to load merge events.</p>';
+          return;
+        }
+        const events = data.events || [];
+        if (!events.length) {
+          container.innerHTML = '<p>No recent merges.</p>';
+          return;
+        }
+        const rows = events.map(ev => {
+          const reviewedBadge = ev.reviewed
+            ? '<span style="font-size:11px;padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;">Reviewed</span>'
+            : '<span style="font-size:11px;padding:2px 6px;border-radius:999px;background:#fee2e2;color:#b91c1c;">Pending</span>';
+          return `
+            <div style="padding:10px 0;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div style="flex:1;">
+                <div style="font-size:13px;color:var(--gray-500);">${ev.created_at}</div>
+                <div style="margin-top:4px;">
+                  <strong>Primary:</strong> ${ev.primary_id}<br/>
+                  <strong>Secondary:</strong> ${ev.secondary_id}
+                </div>
+                <div style="margin-top:4px;font-size:13px;color:var(--gray-600);">
+                  <strong>Reason:</strong> ${ev.reason || 'profile_update'}
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                ${reviewedBadge}
+                ${!ev.reviewed ? `<button data-id="${ev.id}" class="btn-review" style="padding:4px 10px;font-size:12px;border-radius:999px;border:none;cursor:pointer;background:#111827;color:#f9fafb;">Mark reviewed</button>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+        container.innerHTML = rows;
+        container.querySelectorAll('.btn-review').forEach(btn => {
+          btn.addEventListener('click', onMarkReviewed);
+        });
+      } catch (e) {
+        container.innerHTML = '<p style="color:#b91c1c;">Error loading merge events.</p>';
+      }
+    }
+
+    async function onMarkReviewed(e) {
+      const id = e.target.getAttribute('data-id');
+      if (!id) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/patient-merge-events/${id}/review`, {
+          method: 'POST',
+          headers: ADMIN_HEADERS
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showPatientAlert && showPatientAlert({ type: 'error', message: data.error || 'Failed to mark reviewed' });
+        } else {
+          loadMerges();
+        }
+      } catch (err) {
+        showPatientAlert && showPatientAlert({ type: 'error', message: 'Network error updating merge event' });
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadMerges);
+  </script>
+</body>
+</html>
+

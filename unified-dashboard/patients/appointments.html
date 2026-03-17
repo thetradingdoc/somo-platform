@@ -4,43 +4,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Appointments - DocLittle Patient Portal</title>
+    <meta name="theme-color" content="#1e40af">
+    <link rel="manifest" href="../manifest.webmanifest">
+    <title>My Appointments - LittleLab Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
-    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
-            --primary: #0891b2;
-            --primary-dark: #0e7490;
+            --primary: #1e40af;
+            --primary-dark: #1e3a8a;
+            --primary-light: #3b82f6;
         }
 
-        body {
-            background: var(--gray-50);
-            min-height: 100vh;
-            padding: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .header {
-            max-width: 900px;
-            margin: 0 auto 24px;
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: var(--shadow-md);
+        .layout {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            min-height: 100vh;
+            background: #f7fafc;
         }
 
-        .header-title {
-            font-size: 28px;
+        .sidebar {
+            width: 260px;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .sidebar-logo {
+            font-size: 32px;
+            line-height: 1;
+            letter-spacing: -3px;
+            color: #2d3748;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-subtitle {
+            font-size: 12px;
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+
+        .sidebar-nav {
+            padding: 16px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: var(--gray-700);
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 4px;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--gray-50);
+            color: var(--primary);
+        }
+
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .nav-icon {
+            font-size: 20px;
+        }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--gray-200);
+            position: absolute;
+            bottom: 0;
+            width: 260px;
+            background: white;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: 700;
+            font-size: 16px;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-size: 14px;
+            font-weight: 600;
             color: var(--gray-900);
         }
 
-        .header-actions {
-            display: flex;
-            gap: 12px;
+        .user-role {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .logout-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .main-content {
+            margin-left: 260px;
+            padding: 32px;
+            flex: 1;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+            margin-top: 24px;
+        }
+
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 16px;
+            color: var(--gray-600);
+        }
+
+        .mobile-menu-toggle {
+            display: none;
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 1001;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            width: 48px;
+            height: 48px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mobile-menu-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-menu-toggle {
+                display: flex;
+            }
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+            }
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+            .mobile-menu-overlay.active {
+                display: block;
+            }
+            .main-content {
+                margin-left: 0;
+                padding: 16px;
+                padding-top: 80px;
+            }
         }
 
         .btn {
@@ -51,12 +219,12 @@
             transition: all 0.2s;
             text-decoration: none;
             display: inline-block;
+            border: none;
         }
 
         .btn-primary {
             background: var(--primary);
             color: white;
-            border: none;
         }
 
         .btn-primary:hover {
@@ -66,7 +234,6 @@
         .btn-secondary {
             background: var(--gray-100);
             color: var(--gray-700);
-            border: none;
         }
 
         .btn-secondary:hover {
@@ -75,7 +242,6 @@
 
         .container {
             max-width: 900px;
-            margin: 0 auto;
         }
 
         .appointments-list {
@@ -267,24 +433,66 @@
 </head>
 
 <body>
-    <div class="header">
-        <div>
-            <h1 class="header-title">My Appointments</h1>
-        </div>
-        <div class="header-actions">
-            <a href="profile.html" class="btn btn-secondary">Profile</a>
-            <button class="btn btn-secondary" onclick="logout()">Logout</button>
-        </div>
-    </div>
+    <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">☰</button>
+    <div class="mobile-menu-overlay" onclick="toggleMobileMenu()"></div>
 
-    <div class="container">
-        <div id="messageContainer"></div>
-        <div id="appointmentsContainer" class="appointments-list">
+    <div class="layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">LittleLab</div>
+                <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="patient-dashboard.html" class="nav-item">
+                    <span class="nav-icon">🏠</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="patient-dashboard.html#benefits" class="nav-item">
+                    <span class="nav-icon">🏥</span>
+                    <span>My Benefits</span>
+                </a>
+                <a href="wallet.html" class="nav-item">
+                    <span class="nav-icon">💰</span>
+                    <span>My Wallet</span>
+                </a>
+                <a href="patient-dashboard.html#claims" class="nav-item">
+                    <span class="nav-icon">💳</span>
+                    <span>Bills & Claims</span>
+                </a>
+                <a href="appointments.html" class="nav-item active">
+                    <span class="nav-icon">📅</span>
+                    <span>Appointments</span>
+                </a>
+                <a href="my-records.html" class="nav-item">
+                    <span class="nav-icon">📄</span>
+                    <span>My Records</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">P</div>
+                    <div class="user-details">
+                        <div class="user-name" id="userName">Patient</div>
+                        <div class="user-role">Patient Account</div>
+                    </div>
+                    <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="page-header">
+                <h1 class="page-title">My Appointments</h1>
+                <p class="page-subtitle">View and manage your upcoming visits</p>
+            </div>
+            <div id="messageContainer"></div>
+            <div id="appointmentsContainer" class="appointments-list">
             <div class="empty-state">
                 <div class="empty-state-icon">⏳</div>
                 <p>Loading appointments...</p>
             </div>
         </div>
+        </main>
     </div>
 
     <!-- Reschedule Modal -->
@@ -298,11 +506,14 @@
                 <input type="hidden" id="rescheduleApptId">
                 <div class="form-group">
                     <label class="form-label">New Date</label>
-                    <input type="date" id="rescheduleDate" class="form-input" required>
+                    <input type="date" id="rescheduleDate" class="form-input" required onchange="loadRescheduleSlots()" />
                 </div>
                 <div class="form-group">
-                    <label class="form-label">New Time</label>
-                    <input type="time" id="rescheduleTime" class="form-input" required>
+                    <label class="form-label">Available Times</label>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="loadRescheduleSlots()" style="margin-bottom:8px;">
+                        Check availability
+                    </button>
+                    <div id="rescheduleSlots" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
                 </div>
                 <div style="display: flex; gap: 8px; margin-top: 20px;">
                     <button type="button" class="btn btn-secondary" style="flex: 1;"
@@ -393,6 +604,9 @@
                 const statusClass = apt.payment_status === 'pending' ? 'status-pending-payment' : `status-${apt.status}`;
                 const statusLabel = apt.payment_status === 'pending' ? 'Payment pending' : apt.status;
                 const payBtn = apt.payment_link ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
+                const room = apt.video_room || `appt-${apt.id}`;
+                const joinUrl = `video-call.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent('Patient')}`;
+                const joinBtn = `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
                 return `
                     <div class="appointment-card">
                         <div class="appointment-header">
@@ -402,6 +616,7 @@
                                 <span class="appointment-status ${statusClass}">${statusLabel}</span>
                             </div>
                             <div class="appointment-actions">
+                                ${joinBtn}
                                 ${payBtn}
                                 ${apt.can_reschedule ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${apt.id}', '${apt.date}', '${apt.time}')">Reschedule</button>` : ''}
                                 ${apt.can_cancel ? `<button class="btn btn-secondary btn-sm" onclick="openCancelModal('${apt.id}')">Cancel</button>` : ''}
@@ -415,7 +630,10 @@
         function openRescheduleModal(apptId, currentDate, currentTime) {
             document.getElementById('rescheduleApptId').value = apptId;
             document.getElementById('rescheduleDate').value = currentDate;
-            document.getElementById('rescheduleTime').value = currentTime.split(':').slice(0, 2).join(':');
+            const slotsContainer = document.getElementById('rescheduleSlots');
+            if (slotsContainer) {
+                slotsContainer.innerHTML = '';
+            }
             document.getElementById('rescheduleModal').classList.add('active');
         }
 
@@ -432,11 +650,70 @@
             document.getElementById('cancelModal').classList.remove('active');
         }
 
+        async function loadRescheduleSlots() {
+            const date = document.getElementById('rescheduleDate').value;
+            const slotsContainer = document.getElementById('rescheduleSlots');
+            if (!slotsContainer) return;
+            slotsContainer.innerHTML = '';
+
+            if (!date) {
+                return;
+            }
+
+            try {
+                // We don't know clinic_id on the client; backend will resolve it from tenant context
+                const params = new URLSearchParams({ date });
+                const res = await fetch(`${API_BASE}/api/appointments/available-slots?${params.toString()}`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    showMessage(data.error || 'Unable to load available times for this date.', 'error');
+                    return;
+                }
+                const slots = data.slots_with_display || data.slots || [];
+                if (!slots.length) {
+                    slotsContainer.textContent = 'No slots available for this date.';
+                    return;
+                }
+                slotsContainer.innerHTML = '';
+                slots.forEach(s => {
+                    const label = s.display || s.time || s;
+                    const timeVal = s.time || s.value || s;
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'slot-btn';
+                    btn.textContent = label;
+                    btn.dataset.time = timeVal;
+                    btn.style.padding = '6px 10px';
+                    btn.style.borderRadius = '999px';
+                    btn.style.border = '1px solid var(--gray-300)';
+                    btn.style.background = '#fff';
+                    btn.style.fontSize = '13px';
+                    btn.addEventListener('click', () => {
+                        Array.from(slotsContainer.querySelectorAll('.slot-btn')).forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                    });
+                    slotsContainer.appendChild(btn);
+                });
+            } catch (error) {
+                console.error('Error loading reschedule slots:', error);
+                showMessage('Network error while loading available times.', 'error');
+            }
+        }
+
         async function handleReschedule(e) {
             e.preventDefault();
             const apptId = document.getElementById('rescheduleApptId').value;
             const newDate = document.getElementById('rescheduleDate').value;
-            const newTime = document.getElementById('rescheduleTime').value + ':00';
+            const slotsContainer = document.getElementById('rescheduleSlots');
+            const selected = slotsContainer ? slotsContainer.querySelector('.slot-btn.selected') : null;
+            const newTime = selected ? (selected.dataset.time || '') : '';
+
+            if (!newDate || !newTime) {
+                showMessage('Please choose a new date and time from the available slots.', 'error');
+                return;
+            }
 
             try {
                 const response = await fetch(`${API_BASE}/api/patient/appointments/${apptId}/reschedule`, {
@@ -462,6 +739,12 @@
                 }
             } catch (error) {
                 showMessage('Network error. Please try again.', 'error');
+                if (window.showPatientAlert) {
+                    window.showPatientAlert({
+                        type: 'error',
+                        message: 'We could not cancel your appointment due to a network issue. Please try again.'
+                    });
+                }
             }
         }
 
@@ -504,6 +787,13 @@
             setTimeout(() => {
                 container.innerHTML = '';
             }, 5000);
+        }
+
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.querySelector('.mobile-menu-overlay');
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('active');
         }
 
         function logout() {

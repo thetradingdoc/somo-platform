@@ -107,6 +107,7 @@ const EHRAggregatorService = require('./services/ehr-aggregator-service');
 const EHRSyncService = require('./services/ehr-sync-service');
 const EpicAdapter = require('./services/epic-adapter');
 const RetellService = require('./services/retell-service');
+const livekitTokenRoutes = require('./routes/livekit');
 const authTokenRoutes = require('./routes/auth-tokens');
 
 // Import Stripe Issuing Service (optional)
@@ -469,9 +470,17 @@ app.get('/', (req, res) => {
 
   // Localhost - serve voice agent marketing landing page (same as doclittle.site)
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    const landingPath = path.join(__dirname, 'public', 'landing.html');
-    if (require('fs').existsSync(landingPath)) {
-      return res.sendFile(landingPath);
+    // Prefer LittleLab React landing build when available
+    const fs = require('fs');
+    const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'index.html');
+    if (fs.existsSync(landingBuild)) {
+      console.log('[ROOT ROUTE] Serving LittleLab landing build (localhost)');
+      return res.sendFile(landingBuild);
+    }
+
+    const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
+    if (fs.existsSync(legacyLandingPath)) {
+      return res.sendFile(legacyLandingPath);
     }
     // Fallback to admin if landing page doesn't exist
     return res.redirect('/admin');
@@ -509,11 +518,17 @@ app.get('/', (req, res) => {
     return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
 
-  // Root domain - serve voice agent marketing landing page (same as localhost)
+  // Root domain - prefer LittleLab React landing build, otherwise legacy marketing page
   if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname === 'doclittle.azurewebsites.net') {
-    const landingPath = path.join(__dirname, 'public', 'landing.html');
-    if (require('fs').existsSync(landingPath)) {
-      return res.sendFile(landingPath);
+    const fs = require('fs');
+    const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'index.html');
+    if (fs.existsSync(landingBuild)) {
+      console.log('[ROOT ROUTE] Serving LittleLab landing build (doclittle.site)');
+      return res.sendFile(landingBuild);
+    }
+    const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
+    if (fs.existsSync(legacyLandingPath)) {
+      return res.sendFile(legacyLandingPath);
     }
   }
 
@@ -551,9 +566,6 @@ app.get('/', (req, res) => {
       }
     }
   }
-  // Only serve API signup page if we're on API subdomain or unknown domain
-  console.log('[ROOT ROUTE] Serving API signup page as default fallback');
-  res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
 });
 
 // ============================================
@@ -563,6 +575,12 @@ app.get('/', (req, res) => {
 // Serve unified-dashboard static assets
 app.use('/assets', express.static(getUnifiedDashboardPath('assets'), {
   maxAge: '1d' // Cache static assets for 1 day
+}));
+
+// Serve LittleLab React landing static assets
+app.use('/static', express.static(path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'static'), {
+  maxAge: '1y',
+  immutable: true
 }));
 
 // Serve unified-dashboard HTML pages
@@ -869,12 +887,14 @@ const tenantConfigRoutes = require('./routes/tenant-config');
 app.use('/api/tenant', tenantConfigRoutes);
 
 // LiveKit video conferencing (token endpoint)
-const livekitRoutes = require('./routes/livekit');
-app.use('/api/livekit', livekitRoutes);
+// (mounted above) app.use('/api/livekit', livekitTokenRoutes);
 
 // RAG proxy (Colab RAG via main tunnel)
 const ragProxyRoutes = require('./routes/rag-proxy');
+// RAG search (LittleLab landing search -> code candidates)
+const ragSearchRoutes = require('./routes/rag-search');
 app.use('/api/rag', ragProxyRoutes);
+app.use('/api/rag', ragSearchRoutes);
 
 const videoConsultRoutes = require('./routes/video-consult');
 app.use('/api/video-consult', videoConsultRoutes);
@@ -9608,6 +9628,32 @@ app.post('/api/admin/feature-flags', express.json(), async (req, res) => {
   }
 });
 
+// Patient merge events review
+app.get('/api/admin/patient-merge-events', async (req, res) => {
+  try {
+    const events = db.getRecentPatientMergeEvents ? db.getRecentPatientMergeEvents(100) : [];
+    return res.json({ success: true, events });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/admin/patient-merge-events/:id/review', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'id required' });
+    }
+    if (db.markPatientMergeEventReviewed) {
+      const reviewer = req.admin && req.admin.email ? req.admin.email : 'admin';
+      db.markPatientMergeEventReviewed(id, reviewer);
+    }
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Get patient insurance records
 app.get('/api/admin/patients/:id/insurance', async (req, res) => {
   try {
@@ -9817,6 +9863,112 @@ app.get('/api/patient/insurance', async (req, res) => {
   } catch (error) {
     console.error('Error fetching patient insurance:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Patient: Update insurance (onboarding)
+app.put('/api/patient/insurance', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session ID required' });
+    }
+
+    const { payer_name, payer_id, member_id, plan_name } = req.body || {};
+    if (!member_id && !payer_name && !payer_id) {
+      return res.status(400).json({ success: false, error: 'At least payer or member_id required' });
+    }
+
+    // Resolve patient via profile API
+    const profileResult = PatientPortalService.getPatientProfile(sessionId);
+    if (!profileResult.success) {
+      return res.status(401).json({ success: false, error: 'Invalid session or patient not found' });
+    }
+
+    // We need the FHIR patient_id; get from underlying db using email/phone again
+    const sessionValidation = PatientPortalService.validateSession(sessionId);
+    if (!sessionValidation.valid) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    let patient = null;
+    if (sessionValidation.email) {
+      patient = db.getFHIRPatientByEmail(sessionValidation.email);
+    }
+    if (!patient && sessionValidation.phone) {
+      patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    }
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient not found for insurance update' });
+    }
+    const patientId = patient.resource_id;
+
+    // Resolve payer_id if missing
+    let finalPayerId = payer_id || null;
+    if (!finalPayerId && payer_name && PayerCacheService && PayerCacheService.searchPayer) {
+      try {
+        const payerMatch = await PayerCacheService.searchPayer(payer_name);
+        if (payerMatch && payerMatch.payer_id) {
+          finalPayerId = payerMatch.payer_id;
+        }
+      } catch (e) {
+        console.warn('⚠️  Failed to search payer by name:', e.message);
+      }
+    }
+
+    // Upsert patient_insurance
+    try {
+      if (db.upsertPatientInsurance) {
+        db.upsertPatientInsurance({
+          patient_id: patientId,
+          payer_id: finalPayerId,
+          payer_name,
+          member_id,
+          plan_name,
+          is_primary: 1
+        });
+      } else {
+        db.db.prepare(`
+          INSERT INTO patient_insurance (patient_id, payer_id, payer_name, member_id, plan_name, is_primary)
+          VALUES (?, ?, ?, ?, ?, 1)
+          ON CONFLICT(patient_id, payer_id, member_id) DO UPDATE SET
+            payer_name = excluded.payer_name,
+            plan_name = excluded.plan_name,
+            is_primary = 1
+        `).run(patientId, finalPayerId, payer_name || null, member_id || null, plan_name || null);
+      }
+    } catch (e) {
+      console.error('❌ Failed to upsert patient_insurance:', e.message);
+      return res.status(500).json({ success: false, error: 'Failed to update insurance' });
+    }
+
+    // Optionally: re-run eligibility if we have payer + member
+    if (finalPayerId && member_id) {
+      try {
+        await InsuranceService.checkEligibility({
+          patientId,
+          memberId: member_id,
+          payerId: finalPayerId
+          // additional fields (serviceCode, dateOfService) can be added later
+        });
+      } catch (e) {
+        console.warn('⚠️  Eligibility re-check failed during insurance update:', e.message);
+      }
+    }
+
+    // Mark insurance_verified on fhir_patients
+    try {
+      db.db.prepare(`
+        UPDATE fhir_patients
+        SET insurance_verified = 1,
+            insurance_verified_at = datetime('now')
+        WHERE resource_id = ?
+      `).run(patientId);
+    } catch (_) {}
+
+    return res.json({ success: true, patient_id: patientId });
+  } catch (error) {
+    console.error('❌ Error updating patient insurance:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -10496,7 +10648,10 @@ app.post('/api/patient/verify/send', authLimiter, async (req, res) => {
       });
     }
 
-    const result = await PatientPortalService.sendVerificationCode(email);
+    const result = await PatientPortalService.sendVerificationCode(email, {
+      ip: req.ip || req.connection?.remoteAddress || '',
+      userAgent: req.get('User-Agent') || ''
+    });
 
     if (result.success) {
       res.json({
@@ -10516,8 +10671,29 @@ app.post('/api/patient/verify/send', authLimiter, async (req, res) => {
   }
 });
 
+// Admin: revoke patient sessions by email or patient_id (basic security/admin tool)
+app.post('/api/admin/patient-sessions/revoke', async (req, res) => {
+  try {
+    const { email, patient_id } = req.body || {};
+    if (!email && !patient_id) {
+      return res.status(400).json({ success: false, error: 'email or patient_id required' });
+    }
+    if (email) {
+      db.revokePatientSessionsByEmail && db.revokePatientSessionsByEmail(email);
+    }
+    if (patient_id) {
+      db.revokePatientSessionsByPatientId && db.revokePatientSessionsByPatientId(patient_id);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Error revoking patient sessions:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to revoke sessions' });
+  }
+});
+
 // Patient: Verify code and login
-app.post('/api/patient/verify/confirm', async (req, res) => {
+// Use authLimiter to protect against brute-force code guessing
+app.post('/api/patient/verify/confirm', authLimiter, async (req, res) => {
   try {
     const { email, code } = req.body;
 
@@ -10549,11 +10725,164 @@ app.post('/api/patient/verify/confirm', async (req, res) => {
   }
 });
 
+// Patient: Logout (invalidate session)
+app.post('/api/patient/logout', async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || req.body?.session_id;
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Session ID required'
+      });
+    }
+
+    try {
+      if (db.deletePatientSession) {
+        db.deletePatientSession(sessionId);
+      }
+    } catch (_) {
+      // ignore delete errors for logout
+    }
+
+    try {
+      // Also delete any legacy patient_portal_sessions row
+      db.db.prepare(`DELETE FROM patient_portal_sessions WHERE id = ?`).run(sessionId);
+    } catch (_) {}
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error logging out patient session:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Patient: Get documents list
+app.get('/api/patient/documents', apiLimiter, async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session ID required' });
+    }
+    const sessionValidation = PatientPortalService.validateSession(sessionId);
+    if (!sessionValidation.valid) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    // Resolve patient via email/phone
+    let patient = null;
+    if (sessionValidation.email) {
+      patient = db.getFHIRPatientByEmail(sessionValidation.email);
+    }
+    if (!patient && sessionValidation.phone) {
+      patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    }
+    if (!patient) {
+      return res.status(404).json({ success: false, error: 'Patient not found' });
+    }
+    const docs = db.getPatientDocuments ? db.getPatientDocuments(patient.resource_id) : [];
+    res.json({ success: true, documents: docs });
+  } catch (error) {
+    console.error('❌ Error fetching patient documents:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Patient: Upload documents (multipart)
+app.post('/api/patient/documents', apiLimiter, async (req, res, next) => {
+  // Defer to multer middleware; require it here to avoid startup failure if not installed
+  let multer;
+  try {
+    multer = require('multer');
+  } catch (e) {
+    console.error('❌ Multer is required for file uploads. Install with "npm install multer".');
+    return res.status(500).json({ success: false, error: 'File upload backend not configured' });
+  }
+
+  const uploadDir = path.join(__dirname, 'uploads', 'patients');
+  try {
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+  } catch (e) {
+    console.error('❌ Failed to ensure upload directory:', e.message);
+  }
+
+  const storage = multer.diskStorage({
+    destination: (req2, file, cb) => cb(null, uploadDir),
+    filename: (req2, file, cb) => {
+      const { v4: uuidv4 } = require('uuid');
+      const ext = path.extname(file.originalname || '');
+      cb(null, `${uuidv4()}${ext}`);
+    }
+  });
+
+  const upload = multer({ storage }).array('files', 10);
+
+  upload(req, res, async (err) => {
+    if (err) {
+      console.error('❌ Error handling upload:', err);
+      return res.status(400).json({ success: false, error: 'Upload failed' });
+    }
+
+    try {
+      const sessionId = req.headers['x-session-id'] || req.query.session_id;
+      if (!sessionId) {
+        return res.status(401).json({ success: false, error: 'Session ID required' });
+      }
+      const sessionValidation = PatientPortalService.validateSession(sessionId);
+      if (!sessionValidation.valid) {
+        return res.status(401).json({ success: false, error: 'Invalid session' });
+      }
+
+      let patient = null;
+      if (sessionValidation.email) {
+        patient = db.getFHIRPatientByEmail(sessionValidation.email);
+      }
+      if (!patient && sessionValidation.phone) {
+        patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+      }
+      if (!patient) {
+        return res.status(404).json({ success: false, error: 'Patient not found' });
+      }
+      const patientId = patient.resource_id;
+
+      const saved = [];
+      if (req.files && db.createPatientDocument) {
+        for (const f of req.files) {
+          try {
+            const result = db.createPatientDocument({
+              patient_id: patientId,
+              file_name: f.originalname,
+              file_type: f.mimetype,
+              storage_path: f.path,
+              uploaded_by: 'patient'
+            });
+            saved.push(result.id);
+          } catch (e2) {
+            console.error('❌ Failed to save patient_document record:', e2.message);
+          }
+        }
+      }
+
+      res.json({ success: true, uploaded: saved.length, document_ids: saved });
+    } catch (error) {
+      console.error('❌ Error processing uploaded documents:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+});
+
 // AUTH TOKEN ENDPOINTS (patient / clinician JWT issuers)
 app.use('/api/auth', authTokenRoutes);
 
+// LiveKit video token routes (used by patient video-call.html and provider HUD)
+app.use('/api/livekit', livekitTokenRoutes);
+
 // Patient: Get my appointments (requires session)
-app.get('/api/patient/appointments', async (req, res) => {
+// Protected by general API rate limiter
+app.get('/api/patient/appointments', apiLimiter, async (req, res) => {
   try {
     const sessionId = req.headers['x-session-id'] || req.query.session_id;
 
@@ -10580,8 +10909,74 @@ app.get('/api/patient/appointments', async (req, res) => {
   }
 });
 
+// Patient: Mark appointment as completed (end of video visit)
+app.post('/api/patient/appointments/:id/complete', apiLimiter, async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session ID required' });
+    }
+    const sessionValidation = PatientPortalService.validateSession(sessionId);
+    if (!sessionValidation.valid) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+
+    const appointmentId = req.params.id;
+    const appointment = await db.getAppointment(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ success: false, error: 'Appointment not found' });
+    }
+
+    // Optional: ensure this appointment belongs to this patient (email/phone match)
+    const sessionEmail = (sessionValidation.email || '').toLowerCase().trim();
+    const sessionPhone = sessionValidation.phone || null;
+    if (
+      appointment.patient_id &&
+      sessionValidation.patient_id &&
+      appointment.patient_id !== sessionValidation.patient_id
+    ) {
+      return res.status(403).json({ success: false, error: 'Not allowed to modify this appointment' });
+    }
+    if (!appointment.patient_id) {
+      const emailMatches = appointment.patient_email && sessionEmail &&
+        appointment.patient_email.toLowerCase().trim() === sessionEmail;
+      const phoneMatches = appointment.patient_phone && sessionPhone &&
+        appointment.patient_phone === sessionPhone;
+      if (!emailMatches && !phoneMatches) {
+        return res.status(403).json({ success: false, error: 'Not allowed to modify this appointment' });
+      }
+    }
+
+    // Mark as completed
+    try {
+      db.updateAppointmentStatus(appointmentId, 'completed', null, appointment.clinic_id || null);
+        console.log('[Appointments] ✅ Appointment completed', {
+          appointment_id: appointmentId,
+          patient_id: appointment.patient_id || null
+        });
+    } catch (e) {
+      console.warn('⚠️  Failed to update appointment status to completed:', e.message);
+    }
+
+    // Optionally trigger FHIR DiagnosticReport creation for this appointment.
+    try {
+      if (FHIRService && typeof FHIRService.createDiagnosticReportForAppointment === 'function') {
+        await FHIRService.createDiagnosticReportForAppointment(appointmentId);
+      }
+    } catch (e) {
+      console.warn('⚠️  Failed to create DiagnosticReport for completed appointment:', e.message);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Error completing appointment:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Patient: Get benefits data (for patient dashboard)
-app.get('/api/patient/benefits', async (req, res) => {
+// Protected by general API rate limiter
+app.get('/api/patient/benefits', apiLimiter, async (req, res) => {
   try {
     const { patientName, patientPhone, patientId, memberId } = req.query;
 
@@ -11243,7 +11638,7 @@ app.delete('/api/patient/appointments/:id', async (req, res) => {
 });
 
 // Patient: Get profile
-app.get('/api/patient/profile', async (req, res) => {
+app.get('/api/patient/profile', apiLimiter, async (req, res) => {
   try {
     const sessionId = req.headers['x-session-id'] || req.query.session_id;
 
@@ -11267,6 +11662,168 @@ app.get('/api/patient/profile', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Patient: Update profile (onboarding)
+app.put('/api/patient/profile', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session ID required' });
+    }
+
+    const {
+      name,
+      first_name: firstNameRaw,
+      last_name: lastNameRaw,
+      dob,
+      phone,
+      email: emailRaw
+    } = req.body || {};
+
+    const firstName = firstNameRaw || (name ? name.split(' ')[0] : null);
+    const lastName =
+      lastNameRaw || (name ? name.split(' ').slice(1).join(' ') || null : null);
+
+    if (!firstName && !lastName && !dob && !phone && !emailRaw) {
+      return res.status(400).json({ success: false, error: 'No profile fields provided' });
+    }
+
+    // Resolve existing FHIR patient via portal session
+    const sessionValidation = PatientPortalService.validateSession(sessionId);
+    if (!sessionValidation.valid) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+
+    let patient = null;
+    let emailPatient = null;
+    let phonePatient = null;
+    if (sessionValidation.email) {
+      emailPatient = db.getFHIRPatientByEmail(sessionValidation.email);
+    }
+    if (sessionValidation.phone) {
+      phonePatient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    }
+
+    // Decide primary vs secondary when email/phone resolve different patients
+    if (emailPatient && phonePatient && emailPatient.resource_id !== phonePatient.resource_id) {
+      const primary = emailPatient; // prefer email-based identity
+      const secondary = phonePatient;
+      console.warn('[PatientPortal] ⚠️ Email/phone map to different patients, merging', {
+        primary_id: primary.resource_id,
+        secondary_id: secondary.resource_id
+      });
+      try {
+        if (FHIRService && typeof FHIRService.mergePatients === 'function') {
+          FHIRService.mergePatients(primary.resource_id, secondary.resource_id);
+        }
+      } catch (e) {
+        console.warn('[PatientPortal] ⚠️ mergePatients failed:', e.message);
+      }
+      patient = primary;
+    } else {
+      patient = emailPatient || phonePatient || null;
+    }
+
+    // Canonical email: always prefer verified email from session
+    const email = sessionValidation.email || emailRaw || null;
+
+    // If no patient exists yet, create via FHIRService.getOrCreatePatient
+    let patientId;
+    if (!patient) {
+      const getOrCreateResult = await FHIRService.getOrCreatePatient(
+        {
+          name: name || [firstName, lastName].filter(Boolean).join(' '),
+          firstName,
+          lastName,
+          phone,
+          email
+        },
+        false
+      );
+      const fhirPatient = getOrCreateResult.patient;
+      patientId = fhirPatient.id || getOrCreateResult.resource_id || null;
+    } else {
+      patientId = patient.resource_id;
+    }
+
+    if (!patientId) {
+      return res.status(500).json({ success: false, error: 'Unable to resolve or create patient record' });
+    }
+
+    // Update FHIR Patient record in DB
+    try {
+      const existing = db.getFHIRPatient(patientId);
+      let resource = existing && existing.resource_data
+        ? (typeof existing.resource_data === 'string'
+          ? JSON.parse(existing.resource_data)
+          : existing.resource_data)
+        : { resourceType: 'Patient' };
+
+      // Name
+      if (firstName || lastName) {
+        resource.name = resource.name || [{}];
+        resource.name[0].given = [firstName || resource.name[0].given?.[0] || ''];
+        resource.name[0].family = lastName || resource.name[0].family || '';
+      }
+
+      // Birth date
+      if (dob) {
+        resource.birthDate = dob;
+      }
+
+      // Telecom
+      resource.telecom = resource.telecom || [];
+      const upsertTelecom = (system, value) => {
+        if (!value) return;
+        const existingEntry = resource.telecom.find(t => t.system === system);
+        if (existingEntry) {
+          existingEntry.value = value;
+        } else {
+          resource.telecom.push({ system, value });
+        }
+      };
+      if (phone) upsertTelecom('phone', phone);
+      if (email) upsertTelecom('email', email);
+
+      const displayName = name || [firstName, lastName].filter(Boolean).join(' ');
+
+      db.upsertFHIRPatient
+        ? db.upsertFHIRPatient(patientId, resource, { phone, email, name: displayName })
+        : db.db.prepare(`
+            UPDATE fhir_patients
+            SET resource_data = ?, phone = COALESCE(?, phone), email = COALESCE(?, email), name = COALESCE(?, name),
+                profile_verified = 1,
+                profile_verified_at = datetime('now'),
+                updated_at = datetime('now')
+            WHERE resource_id = ?
+          `).run(JSON.stringify(resource), phone || null, email || null, displayName || null, patientId);
+    } catch (e) {
+      console.error('❌ Failed to update FHIR patient profile:', e.message);
+      return res.status(500).json({ success: false, error: 'Failed to update profile' });
+    }
+
+    console.log('[PatientPortal] ✅ Profile updated', {
+      session_id: sessionId,
+      patient_id: patientId,
+      has_phone: !!phone,
+      has_email: !!email
+    });
+
+    // Update patient_sessions mapping if present
+    try {
+      if (db.updatePatientSession) {
+        db.updatePatientSession(sessionId, { patient_id: patientId, email: email || sessionValidation.email });
+      }
+    } catch (e) {
+      console.warn('⚠️  Failed to update patient_sessions from profile update:', e.message);
+    }
+
+    return res.json({ success: true, patient_id: patientId });
+  } catch (error) {
+    console.error('❌ Error updating patient profile:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

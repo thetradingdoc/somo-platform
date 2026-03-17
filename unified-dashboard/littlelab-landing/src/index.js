@@ -1,0 +1,35 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import './styles.css';
+import { App } from './App';
+import { Search } from './Search';
+import { RoleSelect } from './RoleSelect';
+import { useRAGSearch } from './useRAGSearch';
+
+function Root() {
+  const { query, setQuery, cards, loading, error, empty } = useRAGSearch();
+
+  return (
+    <>
+      <App cards={cards} />
+      <div className="ui-layer">
+        <header className="brand">
+          <h1>LittleLab</h1>
+          <p>Your virtual care companion</p>
+        </header>
+        <Search
+          query={query}
+          setQuery={setQuery}
+          loading={loading}
+          error={error}
+          empty={empty}
+        />
+        <RoleSelect query={query} />
+      </div>
+    </>
+  );
+}
+
+const container = document.getElementById('root');
+createRoot(container).render(<Root />);
+

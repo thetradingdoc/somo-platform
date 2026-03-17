@@ -295,6 +295,8 @@ async function postUpload(req, res) {
       }
       const uploadId = uuidv4();
       const now = new Date().toISOString();
+
+      // Legacy table: patient_uploads
       db.createPatientUpload({
         id: uploadId,
         patient_id: patientId,
@@ -309,6 +311,24 @@ async function postUpload(req, res) {
         uploaded_at: now,
         uploaded_by: null
       });
+
+      // New unified table: patient_documents (for portal visibility)
+      if (db.createPatientDocument) {
+        try {
+          db.createPatientDocument({
+            patient_id: patientId,
+            appointment_id: appointmentId,
+            encounter_id: null,
+            file_name: filename,
+            file_type: contentType,
+            storage_path: storagePath || '',
+            uploaded_by: 'patient'
+          });
+        } catch (e) {
+          console.warn('[upload-portal] Failed to mirror upload into patient_documents:', e.message);
+        }
+      }
+
       uploadedIds.push(uploadId);
       if (db.auditLog) {
         db.auditLog('patient', patientId, 'upload', 'Upload', uploadId, ip, ua, 'success');

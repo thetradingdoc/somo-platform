@@ -15,6 +15,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const PatientPortalService = require('../services/patient-portal-service');
 
 let AccessToken;
 try {
@@ -120,3 +121,101 @@ router.post('/token', async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * Patient-scoped helper for LiveKit token issuance.
+ * Validates x-session-id + room belongs to patient's upcoming appointment.
+ */
+router.get('/patient/video/token', async (req, res) => {
+  try {
+    if (!AccessToken) {
+      return res.status(503).json({ success: false, error: 'LiveKit not configured' });
+    }
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    const livekitUrl = process.env.LIVEKIT_URL;
+    if (!apiKey || !apiSecret || !livekitUrl) {
+      return res.status(503).json({ success: false, error: 'LiveKit credentials missing' });
+    }
+
+    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    const room = (req.query.room || '').toString().trim();
+    const journeyId = (req.headers['x-journey-id'] || req.query.journey_id || '').toString().trim() || null;
+    if (!sessionId || !room) {
+      return res.status(400).json({ success: false, error: 'session_id and room are required' });
+    }
+
+    const sessionValidation = PatientPortalService.validateSession(sessionId);
+    if (!sessionValidation.valid) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+
+    // Resolve appointment from room naming convention appt-{id}
+    let appointmentId = null;
+    if (room.startsWith('appt-')) {
+      appointmentId = room.substring('appt-'.length);
+    }
+
+    if (!appointmentId) {
+      return res.status(400).json({ success: false, error: 'Unsupported room name for patient join' });
+    }
+
+    const appointment = await db.getAppointment(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ success: false, error: 'Appointment not found' });
+    }
+
+    // Ensure this appointment belongs to this patient (by patient_id/email/phone)
+    const sessionEmail = (sessionValidation.email || '').toLowerCase().trim();
+    const sessionPhone = sessionValidation.phone || null;
+    if (
+      appointment.patient_id &&
+      sessionValidation.patient_id &&
+      appointment.patient_id !== sessionValidation.patient_id
+    ) {
+      return res.status(403).json({ success: false, error: 'Not allowed to join this appointment' });
+    }
+    if (!appointment.patient_id) {
+      const emailMatches =
+        appointment.patient_email &&
+        sessionEmail &&
+        appointment.patient_email.toLowerCase().trim() === sessionEmail;
+      const phoneMatches =
+        appointment.patient_phone && sessionPhone && appointment.patient_phone === sessionPhone;
+      if (!emailMatches && !phoneMatches) {
+        return res.status(403).json({ success: false, error: 'Not allowed to join this appointment' });
+      }
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    const identity = `patient-${sessionValidation.patient_id || sessionEmail || uuidv4().slice(0, 8)}`;
+    const name = 'Patient';
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity,
+      name,
+      ttl: '2h'
+    });
+
+    at.addGrant({
+      roomJoin: true,
+      room,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true
+    });
+
+    const token = await at.toJwt();
+    const url = livekitUrl.startsWith('http') ? livekitUrl.replace(/^https?/, 'wss') : livekitUrl;
+    console.log('[LiveKit] 🎥 patient/video/token issued', {
+      room,
+      appointment_id: appointmentId,
+      patient_id: sessionValidation.patient_id || null,
+      journey_id: journeyId
+    });
+    return res.json({ success: true, token, url, room });
+  } catch (err) {
+    console.error('[LiveKit] patient/video/token error:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to create token' });
+  }
+});

@@ -4,9 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Patient Portal - DocLittle</title>
+    <meta name="theme-color" content="#1e40af">
+    <link rel="manifest" href="../manifest.webmanifest">
+    <title>LittleLab Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
-    <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -278,15 +280,15 @@
     <div class="login-container">
         <div class="logo">
             <div class="logo-brand">
-                <span class="doc">Doc</span><span class="little">Little</span>
+                LittleLab
             </div>
-            <div class="logo-subtitle">Patient Portal</div>
+            <div class="logo-subtitle">Access your LittleLab portal</div>
         </div>
 
         <!-- Step 1: Enter Email -->
         <div class="step active" id="stepEmail">
-            <h2 class="step-title">Sign In</h2>
-            <p class="step-description">Enter your email address to receive a verification code</p>
+            <h2 class="step-title">Sign in to LittleLab</h2>
+            <p class="step-description">New or returning patient? Enter your email to get a secure 6-digit sign-in code.</p>
 
             <div id="emailMessage"></div>
 
@@ -417,6 +419,13 @@
                 }
             } catch (error) {
                 showMessage('emailMessage', 'Network error. Please try again.', 'error');
+                if (window.showPatientAlert) {
+                    window.showPatientAlert({
+                        type: 'error',
+                        message: 'We could not send a code due to a network issue. Please check your connection and try again.',
+                        retry: () => handleEmailSubmit(new Event('submit'))
+                    });
+                }
                 btn.disabled = false;
                 btn.textContent = 'Send Verification Code';
             }
@@ -452,10 +461,34 @@
                     localStorage.setItem('patient_email', currentEmail);
 
                     showStep('stepLoading');
-                    // Redirect to appointments page
-                    setTimeout(() => {
-                        window.location.href = 'appointments.html';
-                    }, 1000);
+
+                    // After login, decide whether to show onboarding or dashboard
+                    const tenantFlags = (window.TENANT_CONFIG && window.TENANT_CONFIG.feature_flags) || {};
+                    const onboardingEnabled = tenantFlags.FEATURE_PATIENT_ONBOARDING !== false;
+
+                    if (!onboardingEnabled) {
+                        window.location.href = 'wallet.html';
+                    } else {
+                        fetch(`${API_BASE}/api/patient/profile`, {
+                            headers: { ...API_HEADERS, 'x-session-id': sessionId }
+                        })
+                        .then(r => r.json())
+                        .then(profileData => {
+                            if (profileData.success && profileData.flags) {
+                                const { profile_verified, insurance_verified } = profileData.flags;
+                                if (profile_verified && insurance_verified) {
+                                    window.location.href = 'wallet.html';
+                                } else {
+                                    window.location.href = 'onboarding.html';
+                                }
+                            } else {
+                                window.location.href = 'onboarding.html';
+                            }
+                        })
+                        .catch(() => {
+                            window.location.href = 'onboarding.html';
+                        });
+                    }
                 } else {
                     showMessage('codeMessage', data.error || 'Invalid verification code', 'error');
                     // Clear code inputs
@@ -466,6 +499,13 @@
                 }
             } catch (error) {
                 showMessage('codeMessage', 'Network error. Please try again.', 'error');
+                if (window.showPatientAlert) {
+                    window.showPatientAlert({
+                        type: 'error',
+                        message: 'We could not verify your code due to a network issue. Please try again.',
+                        retry: () => handleCodeSubmit(new Event('submit'))
+                    });
+                }
                 btn.disabled = false;
                 btn.textContent = 'Verify & Sign In';
             }
@@ -489,6 +529,12 @@
                 }
             } catch (error) {
                 showMessage('codeMessage', 'Network error. Please try again.', 'error');
+                if (window.showPatientAlert) {
+                    window.showPatientAlert({
+                        type: 'error',
+                        message: 'We could not resend your code due to a network issue. Please try again.'
+                    });
+                }
             }
         }
 
@@ -501,7 +547,7 @@
                     .then(r => r.json())
                     .then(data => {
                         if (data.success) {
-                            window.location.href = 'appointments.html';
+                            window.location.href = 'wallet.html';
                         } else {
                             localStorage.removeItem('patient_session_id');
                             localStorage.removeItem('patient_phone');

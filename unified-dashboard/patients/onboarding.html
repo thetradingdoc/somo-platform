@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e40af" />
+  <link rel="manifest" href="../manifest.webmanifest" />
+  <title>Onboarding - LittleLab Patient Portal</title>
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="../assets/js/config.js" defer></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    .steps {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .step-pill {
+      flex: 1;
+      padding: 6px 8px;
+      border-radius: 999px;
+      text-align: center;
+      background: #e5e7eb;
+      color: #4b5563;
+      font-weight: 600;
+    }
+    .step-pill.active {
+      background: #1e40af;
+      color: white;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 2px solid #e5e7eb;
+      font-size: 14px;
+    }
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #1e40af;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+    .btn-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .btn {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #1e40af;
+      color: white;
+      flex: 1;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+    .message {
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .message-error {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+    .message-success {
+      background: #ecfdf3;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="steps">
+      <div class="step-pill active" id="step-pill-1">1. Your details</div>
+      <div class="step-pill" id="step-pill-2">2. Insurance</div>
+      <div class="step-pill" id="step-pill-3">3. Documents</div>
+    </div>
+    <h2 style="margin: 0 0 8px 0; font-size: 22px;">Finish setting up your account</h2>
+    <p style="margin: 0 0 16px 0; font-size: 14px; color: #4b5563;">
+      We use this information to link your visits, insurance, and records securely.
+    </p>
+
+    <div id="msg" class="message hidden"></div>
+
+    <!-- Step 1: Profile -->
+    <div id="step-1">
+      <div class="form-group">
+        <label class="form-label">First name</label>
+        <input id="firstNameInput" class="form-input" placeholder="e.g. Bala" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Last name</label>
+        <input id="lastNameInput" class="form-input" placeholder="e.g. Jones" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date of birth</label>
+        <input id="dobInput" type="date" class="form-input" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <div style="display:flex; gap:8px;">
+          <select id="countryCodeInput" class="form-input" style="max-width:180px;">
+            <option value="+1">+1 (United States / Canada)</option>
+            <option value="+7">+7 (Russia / Kazakhstan)</option>
+            <option value="+20">+20 (Egypt)</option>
+            <option value="+27">+27 (South Africa)</option>
+            <option value="+30">+30 (Greece)</option>
+            <option value="+31">+31 (Netherlands)</option>
+            <option value="+32">+32 (Belgium)</option>
+            <option value="+33">+33 (France)</option>
+            <option value="+34">+34 (Spain)</option>
+            <option value="+36">+36 (Hungary)</option>
+            <option value="+39">+39 (Italy)</option>
+            <option value="+40">+40 (Romania)</option>
+            <option value="+41">+41 (Switzerland)</option>
+            <option value="+43">+43 (Austria)</option>
+            <option value="+44">+44 (United Kingdom)</option>
+            <option value="+45">+45 (Denmark)</option>
+            <option value="+46">+46 (Sweden)</option>
+            <option value="+47">+47 (Norway)</option>
+            <option value="+48">+48 (Poland)</option>
+            <option value="+49">+49 (Germany)</option>
+            <option value="+51">+51 (Peru)</option>
+            <option value="+52">+52 (Mexico)</option>
+            <option value="+53">+53 (Cuba)</option>
+            <option value="+54">+54 (Argentina)</option>
+            <option value="+55">+55 (Brazil)</option>
+            <option value="+56">+56 (Chile)</option>
+            <option value="+57">+57 (Colombia)</option>
+            <option value="+58">+58 (Venezuela)</option>
+            <option value="+60">+60 (Malaysia)</option>
+            <option value="+61">+61 (Australia)</option>
+            <option value="+62">+62 (Indonesia)</option>
+            <option value="+63">+63 (Philippines)</option>
+            <option value="+64">+64 (New Zealand)</option>
+            <option value="+65">+65 (Singapore)</option>
+            <option value="+66">+66 (Thailand)</option>
+            <option value="+81">+81 (Japan)</option>
+            <option value="+82">+82 (South Korea)</option>
+            <option value="+84">+84 (Vietnam)</option>
+            <option value="+86">+86 (China)</option>
+            <option value="+90">+90 (Türkiye)</option>
+            <option value="+91">+91 (India)</option>
+            <option value="+92">+92 (Pakistan)</option>
+            <option value="+93">+93 (Afghanistan)</option>
+            <option value="+94">+94 (Sri Lanka)</option>
+            <option value="+95">+95 (Myanmar)</option>
+            <option value="+98">+98 (Iran)</option>
+            <option value="+211">+211 (South Sudan)</option>
+            <option value="+212">+212 (Morocco)</option>
+            <option value="+213">+213 (Algeria)</option>
+            <option value="+216">+216 (Tunisia)</option>
+            <option value="+218">+218 (Libya)</option>
+            <option value="+220">+220 (Gambia)</option>
+            <option value="+221">+221 (Senegal)</option>
+            <option value="+222">+222 (Mauritania)</option>
+            <option value="+223">+223 (Mali)</option>
+            <option value="+224">+224 (Guinea)</option>
+            <option value="+225">+225 (Ivory Coast)</option>
+            <option value="+226">+226 (Burkina Faso)</option>
+            <option value="+227">+227 (Niger)</option>
+            <option value="+228">+228 (Togo)</option>
+            <option value="+229">+229 (Benin)</option>
+            <option value="+230">+230 (Mauritius)</option>
+            <option value="+231">+231 (Liberia)</option>
+            <option value="+232">+232 (Sierra Leone)</option>
+            <option value="+233">+233 (Ghana)</option>
+            <option value="+234">+234 (Nigeria)</option>
+            <option value="+235">+235 (Chad)</option>
+            <option value="+236">+236 (Central African Republic)</option>
+            <option value="+237">+237 (Cameroon)</option>
+            <option value="+238">+238 (Cape Verde)</option>
+            <option value="+239">+239 (São Tomé and Príncipe)</option>
+            <option value="+240">+240 (Equatorial Guinea)</option>
+            <option value="+241">+241 (Gabon)</option>
+            <option value="+242">+242 (Congo)</option>
+            <option value="+243">+243 (DR Congo)</option>
+            <option value="+244">+244 (Angola)</option>
+            <option value="+245">+245 (Guinea‑Bissau)</option>
+            <option value="+246">+246 (British Indian Ocean Territory)</option>
+            <option value="+248">+248 (Seychelles)</option>
+            <option value="+249">+249 (Sudan)</option>
+            <option value="+250">+250 (Rwanda)</option>
+            <option value="+251">+251 (Ethiopia)</option>
+            <option value="+252">+252 (Somalia)</option>
+            <option value="+253">+253 (Djibouti)</option>
+            <option value="+254">+254 (Kenya)</option>
+            <option value="+255">+255 (Tanzania)</option>
+            <option value="+256">+256 (Uganda)</option>
+            <option value="+257">+257 (Burundi)</option>
+            <option value="+258">+258 (Mozambique)</option>
+            <option value="+260">+260 (Zambia)</option>
+            <option value="+261">+261 (Madagascar)</option>
+            <option value="+262">+262 (Réunion/Mayotte)</option>
+            <option value="+263">+263 (Zimbabwe)</option>
+            <option value="+264">+264 (Namibia)</option>
+            <option value="+265">+265 (Malawi)</option>
+            <option value="+266">+266 (Lesotho)</option>
+            <option value="+267">+267 (Botswana)</option>
+            <option value="+268">+268 (Eswatini)</option>
+            <option value="+269">+269 (Comoros)</option>
+            <option value="+290">+290 (Saint Helena)</option>
+            <option value="+297">+297 (Aruba)</option>
+            <option value="+298">+298 (Faroe Islands)</option>
+            <option value="+299">+299 (Greenland)</option>
+            <option value="+350">+350 (Gibraltar)</option>
+            <option value="+351">+351 (Portugal)</option>
+            <option value="+352">+352 (Luxembourg)</option>
+            <option value="+353">+353 (Ireland)</option>
+            <option value="+354">+354 (Iceland)</option>
+            <option value="+355">+355 (Albania)</option>
+            <option value="+356">+356 (Malta)</option>
+            <option value="+357">+357 (Cyprus)</option>
+            <option value="+358">+358 (Finland)</option>
+            <option value="+359">+359 (Bulgaria)</option>
+            <option value="+370">+370 (Lithuania)</option>
+            <option value="+371">+371 (Latvia)</option>
+            <option value="+372">+372 (Estonia)</option>
+            <option value="+373">+373 (Moldova)</option>
+            <option value="+374">+374 (Armenia)</option>
+            <option value="+375">+375 (Belarus)</option>
+            <option value="+376">+376 (Andorra)</option>
+            <option value="+377">+377 (Monaco)</option>
+            <option value="+378">+378 (San Marino)</option>
+            <option value="+380">+380 (Ukraine)</option>
+            <option value="+381">+381 (Serbia)</option>
+            <option value="+382">+382 (Montenegro)</option>
+            <option value="+385">+385 (Croatia)</option>
+            <option value="+386">+386 (Slovenia)</option>
+            <option value="+387">+387 (Bosnia and Herzegovina)</option>
+            <option value="+389">+389 (North Macedonia)</option>
+            <option value="+420">+420 (Czech Republic)</option>
+            <option value="+421">+421 (Slovakia)</option>
+            <option value="+423">+423 (Liechtenstein)</option>
+            <option value="+501">+501 (Belize)</option>
+            <option value="+502">+502 (Guatemala)</option>
+            <option value="+503">+503 (El Salvador)</option>
+            <option value="+504">+504 (Honduras)</option>
+            <option value="+505">+505 (Nicaragua)</option>
+            <option value="+506">+506 (Costa Rica)</option>
+            <option value="+507">+507 (Panama)</option>
+            <option value="+508">+508 (Saint Pierre and Miquelon)</option>
+            <option value="+509">+509 (Haiti)</option>
+            <option value="+590">+590 (Guadeloupe)</option>
+            <option value="+591">+591 (Bolivia)</option>
+            <option value="+592">+592 (Guyana)</option>
+            <option value="+593">+593 (Ecuador)</option>
+            <option value="+594">+594 (French Guiana)</option>
+            <option value="+595">+595 (Paraguay)</option>
+            <option value="+596">+596 (Martinique)</option>
+            <option value="+597">+597 (Suriname)</option>
+            <option value="+598">+598 (Uruguay)</option>
+            <option value="+599">+599 (Caribbean Netherlands/Curaçao)</option>
+            <option value="+670">+670 (Timor‑Leste)</option>
+            <option value="+673">+673 (Brunei)</option>
+            <option value="+674">+674 (Nauru)</option>
+            <option value="+675">+675 (Papua New Guinea)</option>
+            <option value="+676">+676 (Tonga)</option>
+            <option value="+677">+677 (Solomon Islands)</option>
+            <option value="+678">+678 (Vanuatu)</option>
+            <option value="+679">+679 (Fiji)</option>
+            <option value="+680">+680 (Palau)</option>
+            <option value="+681">+681 (Wallis and Futuna)</option>
+            <option value="+682">+682 (Cook Islands)</option>
+            <option value="+683">+683 (Niue)</option>
+            <option value="+685">+685 (Samoa)</option>
+            <option value="+686">+686 (Kiribati)</option>
+            <option value="+687">+687 (New Caledonia)</option>
+            <option value="+688">+688 (Tuvalu)</option>
+            <option value="+689">+689 (French Polynesia)</option>
+            <option value="+690">+690 (Tokelau)</option>
+            <option value="+691">+691 (Micronesia)</option>
+            <option value="+692">+692 (Marshall Islands)</option>
+          </select>
+          <input id="phoneLocalInput" class="form-input" placeholder="555 555 1212" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm your email address</label>
+        <input id="emailInput" class="form-input" placeholder="you@example.com" readonly />
+        <p style="font-size:12px;color:#6b7280;margin-top:4px;">
+          This email has been verified. We&apos;ll use it to send visit summaries and receipts.
+        </p>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="saveProfileBtn">Save &amp; continue</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Insurance -->
+    <div id="step-2" class="hidden">
+      <div class="form-group">
+        <label class="form-label">Insurance company</label>
+        <input id="payerNameInput" class="form-input" placeholder="e.g. Blue Cross Blue Shield" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Member ID</label>
+        <input id="memberIdInput" class="form-input" placeholder="On your insurance card" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Plan name (optional)</label>
+        <input id="planNameInput" class="form-input" placeholder="e.g. PPO Bronze" />
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="backToProfileBtn">Back</button>
+        <button class="btn btn-primary" id="saveInsuranceBtn">Save &amp; continue</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Documents -->
+    <div id="step-3" class="hidden">
+      <p style="font-size: 14px; color: #4b5563; margin-bottom: 12px;">
+        Upload a photo of your insurance card or any important records you want us to have before your visit.
+      </p>
+      <div class="form-group">
+        <input id="docInput" type="file" multiple />
+      </div>
+      <div id="docList" style="font-size: 13px; margin-bottom: 12px;"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="backToInsuranceBtn">Back</button>
+        <button class="btn btn-primary" id="finishBtn">Finish</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+    const API_HEADERS = {
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true'
+    };
+    let sessionId = localStorage.getItem('patient_session_id') || null;
+
+    function setStep(step) {
+      for (let i = 1; i <= 3; i++) {
+        document.getElementById('step-' + i).classList.toggle('hidden', i !== step);
+        document.getElementById('step-pill-' + i).classList.toggle('active', i === step);
+      }
+      document.getElementById('msg').classList.add('hidden');
+    }
+
+    function showMsg(text, type) {
+      const el = document.getElementById('msg');
+      el.textContent = text;
+      el.className = 'message message-' + type;
+      el.classList.remove('hidden');
+    }
+
+    async function loadProfile() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/patient/profile`, {
+          headers: {
+            ...API_HEADERS,
+            'x-session-id': sessionId
+          }
+        });
+        const data = await res.json();
+        if (!data.success) return;
+        const p = data.patient || data.profile || {};
+        if (p.first_name) document.getElementById('firstNameInput').value = p.first_name;
+        if (p.last_name) document.getElementById('lastNameInput').value = p.last_name;
+        if (!p.first_name && !p.last_name && p.name) {
+          const parts = p.name.split(' ');
+          document.getElementById('firstNameInput').value = parts[0] || '';
+          document.getElementById('lastNameInput').value = parts.slice(1).join(' ');
+        }
+        if (p.dob || p.birth_date) {
+          document.getElementById('dobInput').value = (p.dob || p.birth_date);
+        }
+        if (p.phone) {
+          const ccSel = document.getElementById('countryCodeInput');
+          const localInput = document.getElementById('phoneLocalInput');
+          const match = p.phone.match(/^\+(\d+)(.*)$/);
+          if (match) {
+            const cc = '+' + match[1];
+            const rest = match[2].trim();
+            if ([...ccSel.options].some(o => o.value === cc)) {
+              ccSel.value = cc;
+            }
+            localInput.value = rest.replace(/[^0-9]/g, '');
+          } else {
+            localInput.value = p.phone;
+          }
+        }
+        const storedEmail = localStorage.getItem('patient_email');
+        if (storedEmail) {
+          document.getElementById('emailInput').value = storedEmail;
+        } else if (p.email) {
+          document.getElementById('emailInput').value = p.email;
+        }
+        // Keep email read-only to reflect verified address
+        document.getElementById('emailInput').readOnly = true;
+      } catch (e) {
+        // ignore; onboarding can still work without prefill
+      }
+    }
+
+    async function saveProfile() {
+      const firstName = document.getElementById('firstNameInput').value.trim();
+      const lastName = document.getElementById('lastNameInput').value.trim();
+      const dob = document.getElementById('dobInput').value.trim();
+      const cc = document.getElementById('countryCodeInput').value;
+      const phoneLocal = document.getElementById('phoneLocalInput').value.replace(/[^0-9]/g, '');
+      const email = document.getElementById('emailInput').value.trim();
+      if (!firstName || !lastName || !dob || !email) {
+        showMsg('First name, last name, date of birth, and email are required.', 'error');
+        return;
+      }
+      let phone = null;
+      if (phoneLocal) {
+        phone = `${cc}${phoneLocal}`;
+      }
+      const name = `${firstName} ${lastName}`.trim();
+      try {
+        const res = await fetch(`${API_BASE}/api/patient/profile`, {
+          method: 'PUT',
+          headers: {
+            ...API_HEADERS,
+            'x-session-id': sessionId
+          },
+          body: JSON.stringify({ name, first_name: firstName, last_name: lastName, dob, phone, email })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showMsg(data.error || 'Unable to save profile.', 'error');
+          return;
+        }
+        setStep(2);
+      } catch (e) {
+        showMsg('Network error while saving profile.', 'error');
+      }
+    }
+
+    async function saveInsurance() {
+      const payer_name = document.getElementById('payerNameInput').value.trim();
+      const member_id = document.getElementById('memberIdInput').value.trim();
+      const plan_name = document.getElementById('planNameInput').value.trim();
+      if (!payer_name && !member_id) {
+        showMsg('Please provide at least your insurance company or member ID.', 'error');
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/patient/insurance`, {
+          method: 'PUT',
+          headers: {
+            ...API_HEADERS,
+            'x-session-id': sessionId
+          },
+          body: JSON.stringify({ payer_name, member_id, plan_name })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showMsg(data.error || 'Unable to save insurance.', 'error');
+          return;
+        }
+        setStep(3);
+      } catch (e) {
+        showMsg('Network error while saving insurance.', 'error');
+      }
+    }
+
+    async function loadDocuments() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/patient/documents`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            'x-session-id': sessionId
+          }
+        });
+        const data = await res.json();
+        if (!data.success) return;
+        const list = document.getElementById('docList');
+        if (!data.documents || data.documents.length === 0) {
+          list.textContent = 'No documents uploaded yet.';
+          return;
+        }
+        list.innerHTML = data.documents
+          .map(
+            (d) =>
+              `<div>📄 ${d.file_name} <span style="color:#6b7280;font-size:12px;">(${new Date(
+                d.created_at
+              ).toLocaleDateString()})</span></div>`
+          )
+          .join('');
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    async function uploadDocuments() {
+      const input = document.getElementById('docInput');
+      if (!input.files || input.files.length === 0) {
+        // Nothing to upload; treat as success
+        window.location.href = 'patient-dashboard.html';
+        return;
+      }
+      const formData = new FormData();
+      Array.from(input.files).forEach((file) => formData.append('files', file));
+      try {
+        const res = await fetch(`${API_BASE}/api/patient/documents`, {
+          method: 'POST',
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+            'x-session-id': sessionId
+          },
+          body: formData
+        });
+        const data = await res.json();
+        if (!data.success) {
+          showMsg(data.error || 'Unable to upload documents.', 'error');
+          return;
+        }
+        window.location.href = 'patient-dashboard.html';
+      } catch (e) {
+        showMsg('Network error while uploading documents.', 'error');
+      }
+    }
+
+    document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
+    document.getElementById('saveInsuranceBtn').addEventListener('click', saveInsurance);
+    document.getElementById('backToProfileBtn').addEventListener('click', () => setStep(1));
+    document.getElementById('backToInsuranceBtn').addEventListener('click', () => setStep(2));
+    document.getElementById('finishBtn').addEventListener('click', uploadDocuments);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!sessionId) {
+        window.location.href = 'patient-login.html';
+        return;
+      }
+      loadProfile();
+      loadDocuments();
+    });
+  </script>
+</body>
+</html>
+

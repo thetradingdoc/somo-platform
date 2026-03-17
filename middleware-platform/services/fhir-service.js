@@ -378,6 +378,114 @@ class FHIRService {
   }
 
   /**
+   * Merge two FHIR patients into a single longitudinal record.
+   * NOTE: This is a conservative merge:
+   * - Moves dependent rows where safe.
+   * - Marks secondary as is_deleted = 1 and sets merged_into.
+   * - Does NOT hard-delete data.
+   *
+   * @param {string} primaryId - Patient ID to keep.
+   * @param {string} secondaryId - Patient ID to merge into primary and deactivate.
+   */
+  static mergePatients(primaryId, secondaryId, reason = 'profile_update') {
+    if (!primaryId || !secondaryId || primaryId === secondaryId) {
+      return;
+    }
+    try {
+      const d = db;
+
+      const primary = d.getFHIRPatient ? d.getFHIRPatient(primaryId) : null;
+      const secondary = d.getFHIRPatient ? d.getFHIRPatient(secondaryId) : null;
+      if (!primary || !secondary) {
+        console.warn('[FHIR] mergePatients: one or both patients not found', { primaryId, secondaryId });
+        return;
+      }
+
+      console.log('[FHIR] 🔀 mergePatients start', { primaryId, secondaryId });
+
+      // 1. Move appointments
+      try {
+        d.db.prepare(
+          `UPDATE appointments SET patient_id = ? WHERE patient_id = ?`
+        ).run(primaryId, secondaryId);
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to move appointments:', e.message);
+      }
+
+      // 2. Move insurance + eligibility
+      try {
+        if (d.db) {
+          d.db.prepare(`UPDATE patient_insurance SET patient_id = ? WHERE patient_id = ?`).run(primaryId, secondaryId);
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to move patient_insurance:', e.message);
+      }
+      try {
+        if (d.db) {
+          d.db.prepare(`UPDATE eligibility_checks SET patient_id = ? WHERE patient_id = ?`).run(primaryId, secondaryId);
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to move eligibility_checks:', e.message);
+      }
+
+      // 3. Move encounters / communications / documents
+      try {
+        if (d.db) {
+          d.db.prepare(`UPDATE fhir_encounters SET patient_id = ? WHERE patient_id = ?`).run(primaryId, secondaryId);
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to move fhir_encounters:', e.message);
+      }
+      try {
+        if (d.db) {
+          d.db.prepare(`UPDATE fhir_communications SET patient_id = ? WHERE patient_id = ?`).run(primaryId, secondaryId);
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to move fhir_communications:', e.message);
+      }
+      try {
+        if (d.db) {
+          d.db.prepare(`UPDATE patient_documents SET patient_id = ? WHERE patient_id = ?`).run(primaryId, secondaryId);
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to move patient_documents:', e.message);
+      }
+
+      // 4. Mark secondary as merged/deleted
+      try {
+        if (d.db) {
+          d.db.prepare(
+            `UPDATE fhir_patients
+             SET is_deleted = 1,
+                 merged_into = ?,
+                 updated_at = datetime('now')
+             WHERE resource_id = ?`
+          ).run(primaryId, secondaryId);
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to mark secondary as merged:', e.message);
+      }
+
+      try {
+        if (d.createPatientMergeEvent) {
+          d.createPatientMergeEvent({
+            primary_id: primaryId,
+            secondary_id: secondaryId,
+            reason,
+            created_by: 'system'
+          });
+        }
+      } catch (e) {
+        console.warn('[FHIR] mergePatients: failed to record merge event:', e.message);
+      }
+
+      console.log('[FHIR] 🔀 mergePatients complete', { primaryId, secondaryId });
+    } catch (error) {
+      console.error('[FHIR] Error in mergePatients:', error);
+    }
+  }
+
+  /**
    * Mask phone number for privacy (show last 4 digits)
    */
   static maskPhone(phone) {
@@ -640,6 +748,70 @@ class FHIRService {
       console.error('[FHIR] Error in createDiagnosticReport:', error);
       throw error;
     }
+  }
+
+  /**
+   * Convenience helper: Create a DiagnosticReport for a completed appointment.
+   * Uses appointment + patient context to build subject/encounter references and a basic conclusion.
+   * @param {string} appointmentId
+   * @returns {Promise<Object>} FHIR DiagnosticReport resource
+   */
+  static async createDiagnosticReportForAppointment(appointmentId) {
+    if (!appointmentId) {
+      throw new Error('appointmentId is required');
+    }
+
+    const appt = db.getAppointment ? db.getAppointment(appointmentId) : null;
+    if (!appt) {
+      throw new Error(`Appointment not found: ${appointmentId}`);
+    }
+
+    const patientId = appt.patient_id || null;
+    let patientName = appt.patient_name || '';
+
+    if (patientId && db.getFHIRPatient) {
+      try {
+        const patientRow = db.getFHIRPatient(patientId);
+        const res = patientRow?.resource_data || {};
+        if (Array.isArray(res.name) && res.name.length > 0) {
+          patientName =
+            res.name[0].text ||
+            [res.name[0].given?.[0], res.name[0].family].filter(Boolean).join(' ') ||
+            patientName;
+        }
+      } catch (_) {
+        // fall back to appointment patient_name
+      }
+    }
+
+    const subject = patientId
+      ? {
+          reference: `Patient/${patientId}`,
+          display: patientName
+        }
+      : {
+          reference: 'Patient/unknown',
+          display: patientName || 'Unknown patient'
+        };
+
+    const encounter = {
+      reference: `Encounter/${appointmentId}`,
+      display: appt.appointment_type || 'Telemedicine visit'
+    };
+
+    const when = appt.start_time || `${appt.date || ''} ${appt.time || ''}`.trim() || new Date().toISOString();
+    const conclusion = `Telemedicine visit (${appt.appointment_type || 'consultation'}) completed on ${appt.date || ''} at ${appt.time || ''}.`;
+
+    return this.createDiagnosticReport(
+      {
+        subject,
+        encounter,
+        effectiveDateTime: when,
+        issued: new Date().toISOString(),
+        conclusion
+      },
+      { persist: true }
+    );
   }
 
   /**

@@ -6,6 +6,7 @@
 
 const db = require('../database');
 const LedgerService = require('./ledger-service');
+const Metrics = require('./metrics');
 
 /**
  * Resolve checkout from request body (supports payment_token or checkout_id)
@@ -29,7 +30,7 @@ async function resolveCheckout(body) {
 /**
  * Task 12, 15, 16: Post-payment completion - financial audit, ledger, receipt email
  */
-async function completePaymentSuccess({ checkout, amount, paymentMethod, paymentIntentId, transferId }) {
+async function completePaymentSuccess({ checkout, amount, paymentMethod, paymentIntentId, transferId, journey_id }) {
   const results = { financialEvent: null, ledgerSettled: 0 };
   const amt = parseFloat(amount) || parseFloat(checkout.amount) || 0;
   const currency = 'USD';
@@ -60,12 +61,15 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
       metadata: {
         checkout_id: checkout.id,
         payment_intent_id: paymentIntentId || null,
-        transfer_id: transferId || null
+        transfer_id: transferId || null,
+        journey_id: journey_id || checkout.journey_id || null
       }
     });
     results.financialEvent = true;
+    Metrics.increment('payments_success_total');
   } catch (e) {
     console.warn('⚠️  insertFinancialEvent failed:', e.message);
+    Metrics.increment('payments_record_error_total');
   }
 
   try {
@@ -93,6 +97,7 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
     results.ledgerSettled = LedgerService.settleByExternalRef('checkout', extId);
   } catch (e) {
     console.warn('⚠️  Ledger transfer failed:', e.message);
+    Metrics.increment('payments_ledger_error_total');
   }
 
   if (checkout.customer_email) {
@@ -107,6 +112,41 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
       }
     } catch (e) {
       console.warn('⚠️  Receipt email failed:', e.message);
+    }
+  }
+
+  // If this checkout is tied to an appointment, update appointment payment + status
+  if (checkout.appointment_id) {
+    try {
+      if (db.updateAppointmentPaymentStatus) {
+        db.updateAppointmentPaymentStatus(checkout.appointment_id, 'paid');
+      } else {
+        db.db.prepare(`
+          UPDATE appointments
+          SET payment_status = 'paid'
+          WHERE id = ?
+        `).run(checkout.appointment_id);
+      }
+      try {
+        // Only bump to confirmed if not already completed/cancelled
+        db.db.prepare(`
+          UPDATE appointments
+          SET status = 'confirmed'
+          WHERE id = ?
+            AND status IN ('scheduled', 'pending', 'pending_payment')
+        `).run(checkout.appointment_id);
+      } catch (_) {}
+      console.log('[Payments] ✅ Appointment payment recorded', {
+        appointment_id: checkout.appointment_id,
+        checkout_id: checkout.id,
+        payment_method: paymentMethod || null,
+        amount: amt,
+        journey_id: journey_id || null
+      });
+      Metrics.increment('payments_appointment_linked_total');
+    } catch (e) {
+      console.warn('⚠️  Failed to update appointment payment status:', e.message);
+      Metrics.increment('payments_appointment_link_error_total');
     }
   }
 

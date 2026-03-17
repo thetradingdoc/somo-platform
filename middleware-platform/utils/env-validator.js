@@ -22,13 +22,18 @@ const REQUIRED_VARS = {
   // Payment processing (required if payment features are used)
   payment: [
     'STRIPE_SECRET_KEY',
-    'STRIPE_PUBLISHABLE_KEY'
+    'STRIPE_PUBLISHABLE_KEY',
+    'STRIPE_WEBHOOK_SECRET'
   ],
   
   // Core services (required for basic functionality)
   core: [
+    // Voice / agent
     'RETELL_API_KEY',
-    'RETELL_AGENT_ID'
+    'RETELL_AGENT_ID',
+    // HTTP / URL configuration
+    'BASE_URL',
+    'API_BASE_URL'
   ],
   
   // Optional but recommended
@@ -112,7 +117,9 @@ function validateEnvVars(options = {}) {
  * Validate and exit if critical vars are missing in production
  */
 function validateAndExitIfInvalid() {
-  const result = validateEnvVars({ strict: isProduction });
+  // In production (or Azure), also validate payment vars so misconfigured Stripe
+  // is surfaced clearly at startup via warnings/errors.
+  const result = validateEnvVars({ strict: isProduction, checkPayment: true });
   
   if (result.warnings.length > 0) {
     console.warn('\n⚠️  ENVIRONMENT VARIABLE WARNINGS:');

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medical Coding Assistant - Login</title>
+    <title>LittleLab Clinic Dashboard</title>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="assets/js/config.js"></script>
     <style>
@@ -41,13 +41,15 @@
         }
 
         .logo {
-            font-size: 48px;
-            margin-bottom: 12px;
+            font-size: 32px;
+            margin-bottom: 8px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
         }
 
         .auth-header h1 {
-            font-size: 32px;
-            margin-bottom: 8px;
+            font-size: 26px;
+            margin-bottom: 4px;
             color: white;
         }
 
@@ -298,13 +300,11 @@
 <body>
     <div class="auth-container">
         <div class="auth-header">
-            <div class="logo"
-                style="font-family: 'Times New Roman', Times, serif; font-style: italic; letter-spacing: -3px;">
-                <span style="font-style: italic;">Doc</span><span
-                    style="font-family: 'Verdana', Geneva, sans-serif; font-weight: 700;">Little</span><span
-                    style="font-weight: 700;">.</span>
+            <div class="logo">
+                LittleLab
             </div>
-            <p>24/7 Medical Assistant</p>
+            <h1>LittleLab Clinic Dashboard</h1>
+            <p>For providers and clinic staff</p>
         </div>
 
         <div class="auth-body">
@@ -410,13 +410,6 @@
                     </div>
                 </button>
 
-                <button class="demo-btn" onclick="loginDemo('patient@doclittle.com', 'demo123')" title="Patient portal: Bala Jones">
-                    <span class="demo-btn-icon">👤</span>
-                    <div class="demo-btn-content">
-                        <div class="demo-btn-title">Bala Jones (Patient)</div>
-                        <div class="demo-btn-email">patient@doclittle.com</div>
-                    </div>
-                </button>
             </div>
 
             <!-- Sign up link - redirects to /signup -->
@@ -424,7 +417,7 @@
                 <p style="color: #718096; font-size: 14px; margin-bottom: 12px;">
                     Don't have an account?
                 </p>
-                <a href="/signup"
+                <a href="/unified-dashboard/signup.html"
                     style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
                     Create Account
                 </a>

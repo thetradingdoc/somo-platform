@@ -138,6 +138,9 @@ router.get('/config', (req, res) => {
       { id: 'agent', label: 'Voice Agent', icon: '🎙️', href: 'agent.html' }
     ];
     
+    const featureFlags = require('../utils/feature-flags');
+    const flagsConfig = featureFlags.getConfig ? featureFlags.getConfig() : {};
+
     res.json({
       success: true,
       hostname,
@@ -148,7 +151,8 @@ router.get('/config', (req, res) => {
         ? '24/7 Medical Assistant' 
         : 'Medical Coding Assistant',
       merchant_id: merchant?.id || null,
-      clinic_id: clinic?.clinic_id || null
+      clinic_id: clinic?.clinic_id || null,
+      feature_flags: flagsConfig
     });
   } catch (error) {
     console.error('❌ Error getting tenant config:', error);
