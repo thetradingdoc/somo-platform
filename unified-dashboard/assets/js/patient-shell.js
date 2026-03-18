@@ -140,6 +140,7 @@ function pageKeyFromPath() {
   if (p.includes('appointments')) return 'appointments';
   if (p.includes('wallet')) return 'wallet';
   if (p.includes('my-records')) return 'records';
+  if (p === 'profile.html' || p.includes('profile')) return 'profile';
   if (p.includes('patient-dashboard')) return 'dashboard';
   return 'appointments';
 }
@@ -170,6 +171,9 @@ export function mountBottomTabs() {
     </a>
     <a class="tab ${active === 'records' ? 'active' : ''}" href="my-records.html" aria-label="Records">
       <span class="icon">📄</span><span class="label">Records</span>
+    </a>
+    <a class="tab ${active === 'profile' ? 'active' : ''}" href="profile.html" aria-label="Profile">
+      <span class="icon">👤</span><span class="label">Profile</span>
     </a>
   `;
   document.body.appendChild(tabs);

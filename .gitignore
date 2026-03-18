@@ -24,6 +24,9 @@ merchant-shop/*.db
 backups/
 middleware-platform/backups/
 
+# Local sqlite in-memory artifact created by tooling
+middleware-platform/:memory:
+
 # Recovery files and secrets
 *recovery*.json
 *recovery*.dat
