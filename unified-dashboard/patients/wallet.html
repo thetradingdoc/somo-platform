@@ -353,35 +353,22 @@
         </aside>
 
         <main class="main-content">
-            <div class="page-header">
-                <h1 class="page-title">Wallet</h1>
-                <p class="page-subtitle">Receipts, payment methods, and balances</p>
+            <div class="page-header" style="display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:12px;">
+                <div>
+                    <h1 class="page-title">Wallet</h1>
+                    <p class="page-subtitle">Receipts, payment methods, and balances</p>
                 </div>
-
-            <div class="card">
-                <div class="row">
-                    <div>
-                        <div class="card-title">Balance</div>
-                        <div class="subtext">Cash-only for now (clearinghouse integrations will come later).</div>
-                </div>
-                    <div id="balanceBadge" class="badge">No balance due</div>
-                    </div>
-                </div>
-                <div style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-                    <div style="font-weight:900; font-size:28px; color:var(--gray-900);" id="balanceDueAmount">$0.00 USD</div>
-                    <a class="btn btn-primary" href="appointments.html" style="white-space:nowrap;">View appointments</a>
-                </div>
-                <div style="margin-top:12px;" id="pendingPaymentsMount"></div>
+                <a class="btn btn-primary" href="appointments.html" style="white-space:nowrap; align-self:center;">View appointments</a>
             </div>
 
             <div class="card">
                 <div class="row" style="align-items:flex-start;">
-                        <div>
+                    <div>
                         <div class="card-title">Payment method</div>
                         <div class="subtext">Your card on file is used to pay for visits when needed.</div>
-                        </div>
+                    </div>
                     <a class="btn btn-secondary" href="profile.html" style="white-space:nowrap;">Manage</a>
-                        </div>
+                </div>
                 <div id="paymentMethodCard"
                     style="margin-top:14px;border-radius:16px;padding:18px;background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;box-shadow:0 10px 25px rgba(30,64,175,0.25);">
                     <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
@@ -394,31 +381,40 @@
                     <div style="display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12px;opacity:0.9;">
                         <div id="pmHolder">CARDHOLDER</div>
                         <div id="pmExpiry">MM/YY</div>
-                        </div>
-                        </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="row">
+                    <div>
+                        <div class="card-title">Balance</div>
+                        <div class="subtext">Cash-only for now (clearinghouse integrations will come later).</div>
+                    </div>
+                    <div id="balanceBadge" class="badge">$0.00 USD</div>
+                </div>
+                <div style="margin-top:10px;" id="pendingPaymentsMount"></div>
+            </div>
 
             <div class="card">
                 <div class="row" style="align-items:flex-start;">
-                            <div>
+                    <div>
                         <div class="card-title">Receipts</div>
                         <div class="subtext">Your most recent payments</div>
-                            </div>
-                    <button class="btn btn-secondary" type="button" onclick="loadReceipts()" style="white-space:nowrap;">
-                        Refresh
-                    </button>
-                        </div>
-                <div id="receiptsContainer" style="margin-top:12px;"></div>
                     </div>
+                    <button class="btn btn-secondary" type="button" onclick="loadReceipts()" style="white-space:nowrap;">Refresh</button>
+                </div>
+                <div id="receiptsContainer" style="margin-top:12px;"></div>
+            </div>
 
             <div class="card">
                 <div class="row" style="align-items:flex-start;">
-                            <div>
+                    <div>
                         <div class="card-title">Insurance</div>
                         <div class="subtext">Connect your insurance provider</div>
-                            </div>
+                    </div>
                     <span class="badge">Coming soon</span>
-                        </div>
+                </div>
                 <div style="margin-top:10px;color:var(--gray-700);font-size:14px;line-height:1.35;">
                     Insurance linking will be available here later. For now, visits are handled as cash-only.
                 </div>
@@ -506,13 +502,11 @@
                     const n = Number(a.amount_due || 0);
                     if (!Number.isNaN(n)) due += n;
                 }
-                const amtEl = document.getElementById('balanceDueAmount');
-                if (amtEl) amtEl.textContent = fmtMoney(due, 'USD');
                 if (pending.length) {
-                    badge.textContent = `Balance due (${pending.length})`;
+                    badge.textContent = fmtMoney(due, 'USD');
                     badge.classList.add('due');
                 } else {
-                    badge.textContent = 'No balance due';
+                    badge.textContent = '$0.00 USD';
                     badge.classList.remove('due');
                 }
 

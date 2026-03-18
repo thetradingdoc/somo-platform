@@ -16,7 +16,7 @@ function ensureToastHost() {
   host.style.position = 'fixed';
   host.style.left = '16px';
   host.style.right = '16px';
-  host.style.bottom = '92px'; // above bottom tabs
+  host.style.bottom = '100px'; // above bottom tabs
   host.style.zIndex = '2000';
   host.style.display = 'flex';
   host.style.flexDirection = 'column';
@@ -150,9 +150,9 @@ export function mountBottomTabs() {
   patientSession.requireSessionOrRedirect();
 
   if (document.getElementById('patientBottomTabs')) return;
-  // Prevent content from being covered by tabs on mobile
+  // Prevent content from being covered by tabs on mobile (tabs raised 12px from bottom)
   try {
-    document.body.style.paddingBottom = '92px';
+    document.body.style.paddingBottom = '100px';
   } catch (_) {}
   const active = pageKeyFromPath();
 
