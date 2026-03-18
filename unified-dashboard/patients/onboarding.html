@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1e40af" />
   <link rel="manifest" href="../manifest.webmanifest" />
-  <title>Onboarding - LittleLab Patient Portal</title>
+  <title>Onboarding - Consʌlt Patient Portal</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="../assets/js/config.js" defer></script>
   <style>
@@ -112,6 +112,9 @@
 </head>
 <body>
   <div class="card">
+    <div style="text-align:center; margin-bottom: 12px;">
+      <div style="font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; letter-spacing: -2px; font-size: 44px; color: #1e40af; line-height: 1;">Consʌlt</div>
+    </div>
     <div class="steps">
       <div class="step-pill active" id="step-pill-1">1. Your details</div>
       <div class="step-pill" id="step-pill-2">2. Insurance</div>
@@ -318,6 +321,30 @@
         </div>
       </div>
       <div class="form-group">
+        <label class="form-label">Country</label>
+        <input id="countryInput" class="form-input" placeholder="e.g. United States" autocomplete="country-name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">City</label>
+        <input id="cityInput" class="form-input" placeholder="e.g. Austin" autocomplete="address-level2" />
+        <input id="cityPlaceIdInput" class="form-input" type="hidden" />
+        <div id="citySuggest" style="position:relative;"></div>
+        <p style="font-size:12px;color:#6b7280;margin-top:4px;">
+          Start typing and pick a match (helps us route you to the right care).
+        </p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Address line 1 (optional)</label>
+        <input id="addressLine1Input" class="form-input" placeholder="e.g. 123 Main St" autocomplete="address-line1" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Postal / ZIP code</label>
+        <input id="postalCodeInput" class="form-input" placeholder="e.g. 78701" autocomplete="postal-code" />
+        <p style="font-size:12px;color:#6b7280;margin-top:4px;">
+          We use your date of birth and address only to safely match your records.
+        </p>
+      </div>
+      <div class="form-group">
         <label class="form-label">Confirm your email address</label>
         <input id="emailInput" class="form-input" placeholder="you@example.com" readonly />
         <p style="font-size:12px;color:#6b7280;margin-top:4px;">
@@ -331,6 +358,9 @@
 
     <!-- Step 2: Insurance -->
     <div id="step-2" class="hidden">
+      <div style="padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; margin-bottom: 14px; font-size: 13px; color: #374151;">
+        Insurance is optional right now. We’re cash-only for this MVP.
+      </div>
       <div class="form-group">
         <label class="form-label">Insurance company</label>
         <input id="payerNameInput" class="form-input" placeholder="e.g. Blue Cross Blue Shield" />
@@ -345,6 +375,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-secondary" id="backToProfileBtn">Back</button>
+        <button class="btn btn-secondary" id="skipInsuranceBtn" type="button">Skip for now</button>
         <button class="btn btn-primary" id="saveInsuranceBtn">Save &amp; continue</button>
       </div>
     </div>
@@ -354,6 +385,16 @@
       <p style="font-size: 14px; color: #4b5563; margin-bottom: 12px;">
         Upload a photo of your insurance card or any important records you want us to have before your visit.
       </p>
+      <div id="connectRecordsBox" style="display:none; margin-bottom: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb;">
+        <div style="font-weight: 800; margin-bottom: 6px;">Connect my records</div>
+        <div style="color:#4b5563; font-size: 13px; line-height: 1.35;">
+          You can connect your records later. We’ll ask you to confirm your identity before importing anything.
+        </div>
+        <div style="display:flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+          <button class="btn btn-secondary" id="connectRecordsBtn" type="button">Connect my records</button>
+          <button class="btn btn-secondary" id="connectRecordsWhyBtn" type="button">Why do we ask?</button>
+        </div>
+      </div>
       <div class="form-group">
         <input id="docInput" type="file" multiple />
       </div>
@@ -388,10 +429,10 @@
       el.classList.remove('hidden');
     }
 
-    async function loadProfile() {
+    async function loadIntake() {
       if (!sessionId) return;
       try {
-        const res = await fetch(`${API_BASE}/api/patient/profile`, {
+        const res = await fetch(`${API_BASE}/api/patient/intake`, {
           headers: {
             ...API_HEADERS,
             'x-session-id': sessionId
@@ -399,21 +440,14 @@
         });
         const data = await res.json();
         if (!data.success) return;
-        const p = data.patient || data.profile || {};
-        if (p.first_name) document.getElementById('firstNameInput').value = p.first_name;
-        if (p.last_name) document.getElementById('lastNameInput').value = p.last_name;
-        if (!p.first_name && !p.last_name && p.name) {
-          const parts = p.name.split(' ');
-          document.getElementById('firstNameInput').value = parts[0] || '';
-          document.getElementById('lastNameInput').value = parts.slice(1).join(' ');
-        }
-        if (p.dob || p.birth_date) {
-          document.getElementById('dobInput').value = (p.dob || p.birth_date);
-        }
-        if (p.phone) {
+        const i = data.intake || {};
+        if (i.first_name) document.getElementById('firstNameInput').value = i.first_name;
+        if (i.last_name) document.getElementById('lastNameInput').value = i.last_name;
+        if (i.dob) document.getElementById('dobInput').value = i.dob;
+        if (i.phone) {
           const ccSel = document.getElementById('countryCodeInput');
           const localInput = document.getElementById('phoneLocalInput');
-          const match = p.phone.match(/^\+(\d+)(.*)$/);
+          const match = i.phone.match(/^\+(\d+)(.*)$/);
           if (match) {
             const cc = '+' + match[1];
             const rest = match[2].trim();
@@ -422,15 +456,24 @@
             }
             localInput.value = rest.replace(/[^0-9]/g, '');
           } else {
-            localInput.value = p.phone;
+            localInput.value = i.phone;
           }
         }
-        const storedEmail = localStorage.getItem('patient_email');
-        if (storedEmail) {
-          document.getElementById('emailInput').value = storedEmail;
-        } else if (p.email) {
-          document.getElementById('emailInput').value = p.email;
-        }
+        if (i.email) document.getElementById('emailInput').value = i.email;
+        if (i.country) document.getElementById('countryInput').value = i.country;
+        if (i.city) document.getElementById('cityInput').value = i.city;
+        if (i.city_place_id) document.getElementById('cityPlaceIdInput').value = i.city_place_id;
+        try {
+          const cached = JSON.parse(localStorage.getItem('patient_identity_cache') || '{}');
+          if (cached && cached.session_id === sessionId) {
+            if (cached.address_line1 && !document.getElementById('addressLine1Input').value) {
+              document.getElementById('addressLine1Input').value = cached.address_line1;
+            }
+            if (cached.postal_code && !document.getElementById('postalCodeInput').value) {
+              document.getElementById('postalCodeInput').value = cached.postal_code;
+            }
+          }
+        } catch (_) {}
         // Keep email read-only to reflect verified address
         document.getElementById('emailInput').readOnly = true;
       } catch (e) {
@@ -445,29 +488,59 @@
       const cc = document.getElementById('countryCodeInput').value;
       const phoneLocal = document.getElementById('phoneLocalInput').value.replace(/[^0-9]/g, '');
       const email = document.getElementById('emailInput').value.trim();
-      if (!firstName || !lastName || !dob || !email) {
-        showMsg('First name, last name, date of birth, and email are required.', 'error');
+      const country = document.getElementById('countryInput').value.trim();
+      const city = document.getElementById('cityInput').value.trim();
+      const city_place_id = document.getElementById('cityPlaceIdInput').value.trim();
+      const address_line1 = document.getElementById('addressLine1Input').value.trim();
+      const postal_code = document.getElementById('postalCodeInput').value.trim();
+      if (!firstName || !lastName || !dob || !email || !country || !city || !postal_code) {
+        showMsg('First name, last name, date of birth, phone, country, city, and postal/ZIP code are required.', 'error');
         return;
       }
       let phone = null;
       if (phoneLocal) {
         phone = `${cc}${phoneLocal}`;
       }
-      const name = `${firstName} ${lastName}`.trim();
       try {
-        const res = await fetch(`${API_BASE}/api/patient/profile`, {
+        const res = await fetch(`${API_BASE}/api/patient/intake`, {
           method: 'PUT',
           headers: {
             ...API_HEADERS,
             'x-session-id': sessionId
           },
-          body: JSON.stringify({ name, first_name: firstName, last_name: lastName, dob, phone, email })
+          body: JSON.stringify({
+            first_name: firstName,
+            last_name: lastName,
+            dob,
+            phone,
+            email,
+            country,
+            city,
+            city_place_id,
+            address_line1,
+            postal_code
+          })
         });
         const data = await res.json();
         if (!data.success) {
           showMsg(data.error || 'Unable to save profile.', 'error');
           return;
         }
+        try {
+          localStorage.setItem('patient_identity_cache', JSON.stringify({
+            session_id: sessionId,
+            first_name: firstName,
+            last_name: lastName,
+            dob,
+            phone,
+            email,
+            country,
+            city,
+            address_line1,
+            postal_code,
+            updated_at: new Date().toISOString()
+          }));
+        } catch (_) {}
         setStep(2);
       } catch (e) {
         showMsg('Network error while saving profile.', 'error');
@@ -478,18 +551,20 @@
       const payer_name = document.getElementById('payerNameInput').value.trim();
       const member_id = document.getElementById('memberIdInput').value.trim();
       const plan_name = document.getElementById('planNameInput').value.trim();
-      if (!payer_name && !member_id) {
-        showMsg('Please provide at least your insurance company or member ID.', 'error');
+      // Insurance is optional (cash-only MVP). If nothing provided, just continue.
+      if (!payer_name && !member_id && !plan_name) {
+        setStep(3);
+        loadDocuments();
         return;
       }
       try {
-        const res = await fetch(`${API_BASE}/api/patient/insurance`, {
+        const res = await fetch(`${API_BASE}/api/patient/intake`, {
           method: 'PUT',
           headers: {
             ...API_HEADERS,
             'x-session-id': sessionId
           },
-          body: JSON.stringify({ payer_name, member_id, plan_name })
+          body: JSON.stringify({ insurance: { payer_name, member_id, plan_name } })
         });
         const data = await res.json();
         if (!data.success) {
@@ -497,6 +572,7 @@
           return;
         }
         setStep(3);
+        loadDocuments();
       } catch (e) {
         showMsg('Network error while saving insurance.', 'error');
       }
@@ -563,6 +639,10 @@
     document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
     document.getElementById('saveInsuranceBtn').addEventListener('click', saveInsurance);
     document.getElementById('backToProfileBtn').addEventListener('click', () => setStep(1));
+    document.getElementById('skipInsuranceBtn').addEventListener('click', () => {
+      setStep(3);
+      loadDocuments();
+    });
     document.getElementById('backToInsuranceBtn').addEventListener('click', () => setStep(2));
     document.getElementById('finishBtn').addEventListener('click', uploadDocuments);
 
@@ -571,9 +651,119 @@
         window.location.href = 'patient-login.html';
         return;
       }
-      loadProfile();
+      loadIntake();
       loadDocuments();
+      initCityAutocomplete();
+      try { initConnectRecords(); } catch (_) {}
     });
+
+    function getCachedIdentity() {
+      try {
+        const c = JSON.parse(localStorage.getItem('patient_identity_cache') || '{}');
+        if (c && c.session_id === sessionId) return c;
+      } catch (_) {}
+      return null;
+    }
+
+    function canConnectRecordsFromIdentity(id) {
+      if (!id) return false;
+      const hasName = !!(id.first_name && id.last_name);
+      const hasDob = !!id.dob;
+      const hasContact = !!(id.email || id.phone);
+      const hasPostal = !!id.postal_code;
+      return hasName && hasDob && hasContact && hasPostal;
+    }
+
+    function initConnectRecords() {
+      const box = document.getElementById('connectRecordsBox');
+      if (!box) return;
+      const id = getCachedIdentity();
+      box.style.display = canConnectRecordsFromIdentity(id) ? 'block' : 'none';
+      const btn = document.getElementById('connectRecordsBtn');
+      const why = document.getElementById('connectRecordsWhyBtn');
+      if (btn) {
+        btn.addEventListener('click', () => {
+          if (!id) return;
+          try { sessionStorage.setItem('connect_records_identity', JSON.stringify(id)); } catch (_) {}
+          window.location.href = 'connect-records.html';
+        });
+      }
+      if (why) {
+        why.addEventListener('click', () => {
+          showMsg('We use your name, date of birth, and address only to safely match your medical records. You’ll always confirm before anything is imported.', 'success');
+        });
+      }
+    }
+
+    // Lightweight autocomplete: uses a backend hint if available, otherwise falls back to freeform.
+    // We store the chosen suggestion's place id when provided.
+    async function initCityAutocomplete() {
+      const input = document.getElementById('cityInput');
+      const suggestHost = document.getElementById('citySuggest');
+      const hidden = document.getElementById('cityPlaceIdInput');
+      let last = '';
+      let box = null;
+
+      const close = () => {
+        if (box) box.remove();
+        box = null;
+      };
+
+      input.addEventListener('input', async () => {
+        const q = input.value.trim();
+        hidden.value = '';
+        if (q.length < 2 || q === last) {
+          if (q.length < 2) close();
+          return;
+        }
+        last = q;
+        close();
+        try {
+          const res = await fetch(`${API_BASE}/api/geo/city-autocomplete?q=${encodeURIComponent(q)}`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' }
+          });
+          const data = await res.json();
+          const items = (data && data.success && Array.isArray(data.items)) ? data.items : [];
+          if (items.length === 0) return;
+          box = document.createElement('div');
+          box.style.position = 'absolute';
+          box.style.left = '0';
+          box.style.right = '0';
+          box.style.top = '0';
+          box.style.marginTop = '6px';
+          box.style.background = '#fff';
+          box.style.border = '1px solid #e5e7eb';
+          box.style.borderRadius = '10px';
+          box.style.boxShadow = '0 10px 20px rgba(0,0,0,0.12)';
+          box.style.zIndex = '50';
+          box.style.maxHeight = '220px';
+          box.style.overflowY = 'auto';
+
+          items.slice(0, 8).forEach((it) => {
+            const row = document.createElement('div');
+            row.textContent = it.label;
+            row.style.padding = '10px 12px';
+            row.style.cursor = 'pointer';
+            row.style.fontSize = '14px';
+            row.addEventListener('mouseenter', () => row.style.background = '#f3f4f6');
+            row.addEventListener('mouseleave', () => row.style.background = '#fff');
+            row.addEventListener('click', () => {
+              input.value = it.city || it.label;
+              if (it.place_id) hidden.value = it.place_id;
+              if (it.country) document.getElementById('countryInput').value = it.country;
+              close();
+            });
+            box.appendChild(row);
+          });
+
+          suggestHost.appendChild(box);
+        } catch (_) {
+          // ignore; keep freeform
+        }
+      });
+
+      input.addEventListener('blur', () => setTimeout(close, 150));
+    }
   </script>
 </body>
 </html>

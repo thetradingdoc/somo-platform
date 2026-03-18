@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1e40af">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>My Appointments - LittleLab Patient Portal</title>
+    <title>My Appointments - Consult Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
@@ -39,9 +39,11 @@
         .sidebar-logo {
             font-size: 32px;
             line-height: 1;
-            letter-spacing: -3px;
+            letter-spacing: -2px;
             color: #2d3748;
             margin-bottom: 4px;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 700;
         }
 
         .sidebar-subtitle {
@@ -439,25 +441,17 @@
     <div class="layout">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo">LittleLab</div>
-                <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+                <div class="sidebar-logo">Consʌlt</div>
+                <div class="sidebar-subtitle">Patient Portal</div>
             </div>
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
                     <span class="nav-icon">🏠</span>
                     <span>Dashboard</span>
                 </a>
-                <a href="patient-dashboard.html#benefits" class="nav-item">
-                    <span class="nav-icon">🏥</span>
-                    <span>My Benefits</span>
-                </a>
                 <a href="wallet.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>My Wallet</span>
-                </a>
-                <a href="patient-dashboard.html#claims" class="nav-item">
                     <span class="nav-icon">💳</span>
-                    <span>Bills & Claims</span>
+                    <span>Wallet</span>
                 </a>
                 <a href="appointments.html" class="nav-item active">
                     <span class="nav-icon">📅</span>
@@ -481,9 +475,12 @@
         </aside>
 
         <main class="main-content">
-            <div class="page-header">
+                <div class="page-header">
                 <h1 class="page-title">My Appointments</h1>
                 <p class="page-subtitle">View and manage your upcoming visits</p>
+                <div style="margin-top:16px;">
+                    <a href="book.html" class="btn btn-primary">Book a new visit</a>
+                </div>
             </div>
             <div id="messageContainer"></div>
             <div id="appointmentsContainer" class="appointments-list">
@@ -547,43 +544,80 @@
         </div>
     </div>
 
-    <script>
-        const API_BASE = window.API_BASE || 'http://localhost:4000';
-        const API_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
-        let sessionId = localStorage.getItem('patient_session_id');
+    <script type="module">
+        import { patientApi } from '../assets/js/patient-api.js';
+        import { mountBottomTabs, showToast } from '../assets/js/patient-shell.js';
 
-        if (!sessionId) {
-            window.location.href = 'patient-login.html';
-        }
+        const API_BASE = window.API_BASE || 'http://localhost:4000';
 
         document.addEventListener('DOMContentLoaded', () => {
+            mountBottomTabs();
             loadAppointments();
+            startAutoRefresh();
         });
+
+        function parseMs(iso) {
+            if (!iso) return NaN;
+            const t = new Date(iso).getTime();
+            return Number.isNaN(t) ? NaN : t;
+        }
+
+        function joinWindowGate(appt) {
+            const start = parseMs(appt.start_time);
+            const end = parseMs(appt.end_time);
+            if (Number.isNaN(start) || Number.isNaN(end)) return { allowed: true, reason: null };
+            const now = Date.now();
+            const earlyMin = 10;
+            const lateMin = 15;
+            const earliest = start - earlyMin * 60 * 1000;
+            const latest = end + lateMin * 60 * 1000;
+            if (now < earliest) return { allowed: false, reason: `Join opens ${earlyMin} min before start.` };
+            if (now > latest) return { allowed: false, reason: 'This visit is no longer available to join.' };
+            return { allowed: true, reason: null };
+        }
+
+        function statusBadge(appt) {
+            const s = (appt.status || '').toLowerCase();
+            const pay = (appt.payment_status || '').toLowerCase();
+            // Missed rule (mvp-43): scheduled/confirmed but past join window
+            const gate = joinWindowGate(appt);
+            if ((s === 'scheduled' || s === 'confirmed') && !gate.allowed && gate.reason === 'This visit is no longer available to join.') {
+                return { label: 'Missed', cls: 'status-missed' };
+            }
+            if (s === 'canceled' || s === 'cancelled') return { label: 'Canceled', cls: 'status-canceled' };
+            if (s === 'completed' || s === 'documented') return { label: 'Completed', cls: 'status-completed' };
+            if (pay === 'refunded') return { label: 'Refunded', cls: 'status-refunded' };
+            if (pay === 'paid') return { label: 'Paid', cls: 'status-paid' };
+            if (pay === 'unpaid' || pay === 'pending' || pay === '') return { label: 'Payment due', cls: 'status-pending-payment' };
+            if (s === 'confirmed') return { label: 'Confirmed', cls: 'status-confirmed' };
+            return { label: appt.status || 'Scheduled', cls: `status-${s || 'scheduled'}` };
+        }
 
         async function loadAppointments() {
             try {
-                const response = await fetch(`${API_BASE}/api/patient/appointments`, {
-                    headers: { ...API_HEADERS, 'x-session-id': sessionId }
-                });
-
-                const data = await response.json();
-
+                const data = await patientApi.getAppointments();
                 if (data.success) {
-                    displayAppointments(data.appointments);
+                    displayAppointments(data.appointments || []);
                 } else {
-                    if (data.error && data.error.includes('session')) {
-                        // Session expired
-                        localStorage.removeItem('patient_session_id');
-                        localStorage.removeItem('patient_phone');
-                        window.location.href = 'patient-login.html';
-                    } else {
-                        showMessage('Failed to load appointments: ' + (data.error || 'Unknown error'), 'error');
-                    }
+                    showMessage('Failed to load appointments: ' + (data.error || 'Unknown error'), 'error');
                 }
             } catch (error) {
                 console.error('Error loading appointments:', error);
                 showMessage('Network error. Please try again.', 'error');
             }
+        }
+
+        let refreshTimer = null;
+        function startAutoRefresh() {
+            if (refreshTimer) return;
+            const tick = async () => {
+                if (document.hidden) return;
+                await loadAppointments();
+            };
+            refreshTimer = setInterval(tick, 30000);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) tick();
+            });
         }
 
         function displayAppointments(appointments) {
@@ -600,20 +634,54 @@
                 return;
             }
 
-            container.innerHTML = appointments.map(apt => {
-                const statusClass = apt.payment_status === 'pending' ? 'status-pending-payment' : `status-${apt.status}`;
-                const statusLabel = apt.payment_status === 'pending' ? 'Payment pending' : apt.status;
-                const payBtn = apt.payment_link ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
+            const sorted = [...appointments].sort((a, b) => {
+                const am = a.start_time ? new Date(a.start_time).getTime() : NaN;
+                const bm = b.start_time ? new Date(b.start_time).getTime() : NaN;
+                if (!Number.isNaN(am) && !Number.isNaN(bm)) return am - bm;
+                const ak = `${a.date || ''} ${a.time || ''}`;
+                const bk = `${b.date || ''} ${b.time || ''}`;
+                return ak.localeCompare(bk);
+            });
+
+            // Multi-appointment UX (mvp-50): group by date label
+            const groups = new Map();
+            sorted.forEach(ap => {
+                const label = ap.date || 'Upcoming';
+                if (!groups.has(label)) groups.set(label, []);
+                groups.get(label).push(ap);
+            });
+
+            container.innerHTML = Array.from(groups.entries()).map(([dateLabel, list]) => {
+                const header = `<div style="margin:14px 2px 10px;color:var(--gray-600);font-weight:800;">${dateLabel}</div>`;
+                const cards = list.map(apt => {
+                const badge = statusBadge(apt);
+                const payState = (apt.payment_status || '').toLowerCase();
+                const needsPayment = !!apt.payment_link && (payState === 'unpaid' || payState === 'pending' || payState === '');
+                const payBtn = needsPayment ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
                 const room = apt.video_room || `appt-${apt.id}`;
                 const joinUrl = `video-call.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent('Patient')}`;
-                const joinBtn = `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
+                const gate = joinWindowGate(apt);
+                const joinDisabled = !gate.allowed || ['canceled', 'cancelled', 'completed', 'documented'].includes((apt.status || '').toLowerCase());
+                const joinBtn = joinDisabled
+                    ? `<button class="btn btn-secondary btn-sm" disabled style="opacity:.6;cursor:not-allowed;">Join video</button>`
+                    : `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
+                const joinHint = (!gate.allowed && gate.reason)
+                    ? `<div style="margin-top:8px;color:var(--gray-500);font-size:12px;">${gate.reason}</div>`
+                    : '';
+                const whyPay = needsPayment
+                    ? `<div style="margin-top:10px;color:var(--gray-600);font-size:13px;">
+                         <strong>Why am I paying?</strong> This visit has an outstanding balance. Paying generates a receipt and confirms your payment.
+                       </div>`
+                    : '';
                 return `
                     <div class="appointment-card">
                         <div class="appointment-header">
                             <div class="appointment-info">
                                 <div class="appointment-type">${apt.appointment_type || 'Consultation'}</div>
                                 <div class="appointment-datetime">${apt.datetime_display || apt.date + ' at ' + apt.time}</div>
-                                <span class="appointment-status ${statusClass}">${statusLabel}</span>
+                                <span class="appointment-status ${badge.cls}">${badge.label}</span>
+                                ${joinHint}
+                                ${whyPay}
                             </div>
                             <div class="appointment-actions">
                                 ${joinBtn}
@@ -624,6 +692,8 @@
                         </div>
                     </div>
                 `;
+                }).join('');
+                return header + cards;
             }).join('');
         }
 
@@ -661,10 +731,11 @@
             }
 
             try {
-                // We don't know clinic_id on the client; backend will resolve it from tenant context
+                // Use patient-scoped booking availability endpoint (clinic resolved server-side)
                 const params = new URLSearchParams({ date });
-                const res = await fetch(`${API_BASE}/api/appointments/available-slots?${params.toString()}`, {
-                    headers: { 'ngrok-skip-browser-warning': 'true' }
+                const sid = localStorage.getItem('patient_session_id') || '';
+                const res = await fetch(`${API_BASE}/api/patient/booking/available-slots?${params.toString()}`, {
+                    headers: { 'ngrok-skip-browser-warning': 'true', 'x-session-id': sid }
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
@@ -716,22 +787,11 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/api/patient/appointments/${apptId}/reschedule`, {
-                    method: 'PUT',
-                    headers: {
-                        ...API_HEADERS,
-                        'x-session-id': sessionId
-                    },
-                    body: JSON.stringify({
-                        new_date: newDate,
-                        new_time: newTime
-                    })
-                });
-
-                const data = await response.json();
-
+                const idempotencyKey = `reschedule-${apptId}-${newDate}-${newTime}`;
+                const data = await patientApi.rescheduleAppointment(apptId, newDate, newTime, idempotencyKey);
                 if (data.success) {
                     showMessage('Appointment rescheduled successfully!', 'success');
+                    showToast('Rescheduled.', 'success');
                     closeRescheduleModal();
                     loadAppointments();
                 } else {
@@ -758,19 +818,11 @@
             }
 
             try {
-                const response = await fetch(`${API_BASE}/api/patient/appointments/${apptId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        ...API_HEADERS,
-                        'x-session-id': sessionId
-                    },
-                    body: JSON.stringify({ reason })
-                });
-
-                const data = await response.json();
-
+                const idempotencyKey = `cancel-${apptId}-${(reason || '').slice(0, 20)}`;
+                const data = await patientApi.cancelAppointment(apptId, reason, idempotencyKey);
                 if (data.success) {
                     showMessage('Appointment cancelled successfully.', 'success');
+                    showToast('Canceled.', 'success');
                     closeCancelModal();
                     loadAppointments();
                 } else {
@@ -780,6 +832,8 @@
                 showMessage('Network error. Please try again.', 'error');
             }
         }
+
+        // Receipts moved to Wallet (patients/wallet.html)
 
         function showMessage(message, type) {
             const container = document.getElementById('messageContainer');
@@ -801,6 +855,19 @@
             localStorage.removeItem('patient_phone');
             window.location.href = 'patient-login.html';
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const userInfo = document.querySelector('.sidebar-footer .user-info');
+                if (userInfo) {
+                    userInfo.style.cursor = 'pointer';
+                    userInfo.addEventListener('click', (e) => {
+                        if (e.target && e.target.closest && e.target.closest('.logout-btn')) return;
+                        window.location.href = 'profile.html';
+                    });
+                }
+            } catch (_) {}
+        });
     </script>
 </body>
 

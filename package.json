@@ -2,7 +2,10 @@
   "type": "module",
   "scripts": {
     "loadtest:patient-journey": "k6 run loadtests/patient-journey.js",
-    "perf:lighthouse": "node perf/run-lighthouse.mjs"
+    "perf:lighthouse": "node perf/run-lighthouse.mjs",
+    "perf:budgets": "node scripts/check-performance-budgets.cjs",
+    "retention:cleanup": "node scripts/retention-cleanup.cjs",
+    "test:e2e": "cypress run"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",

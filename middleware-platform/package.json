@@ -27,6 +27,7 @@
         "test:demo-login": "bash scripts/test-demo-login.sh",
         "test:stedi": "node scripts/test-stedi-api.js",
         "backfill:patient-verification": "node scripts/backfill-patient-verification.js",
+        "smoke:voice-onboarding": "node scripts/smoke-voice-onboarding.cjs",
         "test": "jest"
     },
     "keywords": [

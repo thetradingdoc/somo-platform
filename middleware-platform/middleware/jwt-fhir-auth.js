@@ -28,6 +28,7 @@ function jwtFhirAuth(req, res, next) {
       sub: decoded.sub,
       scope: decoded.scope,
       clinic_id: decoded.clinic_id,
+      scopes: decoded.scopes || decoded.scope_list || decoded.scp || null,
       exp: decoded.exp
     };
     return next();

@@ -2,13 +2,13 @@
 <html lang="en">
 
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#1e40af">
-<link rel="manifest" href="../manifest.webmanifest">
-<title>My Wallet - Patient Portal</title>
-<link rel="stylesheet" href="../assets/css/global.css">
-<script src="../assets/js/config.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1e40af">
+    <link rel="manifest" href="../manifest.webmanifest">
+    <title>Wallet - Consʌlt Patient Portal</title>
+    <link rel="stylesheet" href="../assets/css/global.css">
+    <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -20,618 +20,6 @@
             display: flex;
             min-height: 100vh;
             background: #f7fafc;
-        }
-
-        /* Override background for wallet app container */
-        .wallet-app-container {
-            width: 100%;
-            max-width: 420px;
-            margin: 60px auto 80px;
-            background: transparent;
-            min-height: auto;
-            color: #0f172a;
-            position: relative;
-        }
-
-        .wallet-header {
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 60px;
-            background: white;
-        }
-
-        /* Mobile App Style Wallet - Clean White Design */
-        .wallet-app-container {
-            width: 100%;
-            max-width: 480px;
-            margin: 0 auto;
-            background: #ffffff;
-            min-height: 100vh;
-            color: #1f2937;
-            position: relative;
-            padding-bottom: 80px;
-        }
-
-        .wallet-profile {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .wallet-profile-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 16px;
-        }
-
-        .wallet-profile-name {
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .wallet-settings-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            border-radius: 8px;
-            padding: 8px;
-            cursor: pointer;
-            color: white;
-            font-size: 20px;
-        }
-
-        .current-balance-section {
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .current-balance-label {
-            font-size: 14px;
-            opacity: 0.8;
-            margin-bottom: 12px;
-        }
-
-        .current-balance-amount {
-            font-size: 42px;
-            font-weight: 700;
-            margin-bottom: 30px;
-            letter-spacing: -1px;
-        }
-
-        .credit-card-display {
-            background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-dark) 100%);
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .credit-card-display::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
-        }
-
-        .card-chip {
-            width: 40px;
-            height: 32px;
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            border-radius: 6px;
-            margin-bottom: 20px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .card-number {
-            font-size: 20px;
-            font-weight: 600;
-            letter-spacing: 2px;
-            margin-bottom: 20px;
-            font-family: 'Courier New', monospace;
-            position: relative;
-            z-index: 1;
-        }
-
-        .card-details {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            position: relative;
-            z-index: 1;
-        }
-
-        .card-holder-name {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .card-expiry {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .card-brand-logo {
-            position: absolute;
-            bottom: 24px;
-            right: 24px;
-            font-size: 32px;
-            opacity: 0.8;
-            z-index: 1;
-        }
-
-        .action-buttons {
-            display: flex;
-            justify-content: space-around;
-            padding: 20px;
-            gap: 16px;
-            background: white;
-        }
-
-        .action-button {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            cursor: pointer;
-            transition: all 0.2s;
-            flex: 1;
-            max-width: 100px;
-        }
-
-        .action-button:hover {
-            background: #f3f4f6;
-            transform: translateY(-2px);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .action-button-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--accent-green);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            margin-bottom: 4px;
-        }
-
-        .action-button-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: #1f2937;
-        }
-
-        /* Overview Section - Card-Based Design */
-        .overview-section {
-            padding: 20px;
-            background: white;
-        }
-
-        .overview-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 16px;
-        }
-
-        .overview-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            margin-bottom: 20px;
-        }
-
-        .overview-card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 16px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .overview-card.featured {
-            background: var(--accent-green);
-            color: white;
-            grid-column: 1 / -1;
-        }
-
-        .overview-card-icon {
-            font-size: 24px;
-            margin-bottom: 12px;
-        }
-
-        .overview-card-value {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-
-        .overview-card-label {
-            font-size: 14px;
-            opacity: 0.8;
-            margin-bottom: 8px;
-        }
-
-        .overview-card-action {
-            font-size: 12px;
-            font-weight: 600;
-            text-decoration: underline;
-            cursor: pointer;
-            opacity: 0.9;
-        }
-
-        .last-transaction-section {
-            padding: 20px;
-            background: white;
-            margin-top: 0;
-        }
-
-        .last-transaction-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .last-transaction-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1f2937;
-        }
-
-        .view-all-link {
-            font-size: 14px;
-            color: var(--accent-green);
-            text-decoration: none;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        .transaction-list {
-            background: #f9fafb;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-        }
-
-        .transaction-item {
-            padding: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #e5e7eb;
-            background: white;
-        }
-
-        .transaction-item:last-child {
-            border-bottom: none;
-        }
-
-        .transaction-info {
-            flex: 1;
-        }
-
-        .transaction-merchant {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 4px;
-            color: #1f2937;
-        }
-
-        .transaction-date {
-            font-size: 12px;
-            color: #6b7280;
-        }
-
-        .transaction-amount {
-            font-size: 16px;
-            font-weight: 700;
-        }
-
-        .transaction-amount.positive {
-            color: var(--accent-green);
-        }
-
-        .transaction-amount.negative {
-            color: #ef4444;
-        }
-
-        /* Bottom Navigation */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: white;
-            border-top: 1px solid #e5e7eb;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-            padding: 12px 0;
-            z-index: 1000;
-            max-width: 480px;
-            margin: 0 auto;
-        }
-
-        .nav-item-bottom {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            padding: 8px 16px;
-            border-radius: 8px;
-            transition: all 0.2s;
-        }
-
-        .nav-item-bottom:hover {
-            background: #f9fafb;
-        }
-
-        .nav-item-bottom.active {
-            color: var(--accent-green);
-        }
-
-        .nav-item-bottom-icon {
-            font-size: 20px;
-        }
-
-        .nav-item-bottom-label {
-            font-size: 10px;
-            font-weight: 600;
-        }
-
-        .nav-item-bottom.create {
-            background: #1f2937;
-            color: white;
-            border-radius: 50%;
-            width: 56px;
-            height: 56px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            margin-top: -20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .nav-item-bottom.create:hover {
-            background: #374151;
-        }
-
-        /* Wallet Sections */
-        .wallet-sections {
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .wallet-section {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .section-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: white;
-        }
-
-        .section-action-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            padding: 8px 16px;
-            color: white;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .section-action-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        /* Insurance Cards */
-        .insurance-cards-container {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .insurance-card-item {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 16px;
-            border-left: 4px solid #3b82f6;
-            position: relative;
-        }
-
-        .insurance-card-item.primary {
-            border-left-color: #10b981;
-        }
-
-        .insurance-card-item.secondary {
-            border-left-color: #f59e0b;
-        }
-
-        .insurance-card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 12px;
-        }
-
-        .insurance-card-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-
-        .insurance-card-badge.primary {
-            background: rgba(16, 185, 129, 0.3);
-            color: #10b981;
-        }
-
-        .insurance-card-badge.secondary {
-            background: rgba(245, 158, 11, 0.3);
-            color: #f59e0b;
-        }
-
-        .insurance-card-name {
-            font-size: 16px;
-            font-weight: 700;
-            color: white;
-            margin-bottom: 4px;
-        }
-
-        .insurance-card-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-top: 12px;
-        }
-
-        .insurance-detail-item {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .insurance-detail-label {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.6);
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-
-        .insurance-detail-value {
-            font-size: 14px;
-            font-weight: 600;
-            color: white;
-        }
-
-        /* Prior Authorizations */
-        .authorizations-container {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .authorization-item {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .authorization-info {
-            flex: 1;
-        }
-
-        .authorization-procedure {
-            font-size: 14px;
-            font-weight: 600;
-            color: white;
-            margin-bottom: 4px;
-        }
-
-        .authorization-details {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.7);
-        }
-
-        .authorization-status {
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .authorization-status.approved {
-            background: rgba(16, 185, 129, 0.3);
-            color: #10b981;
-        }
-
-        .authorization-status.pending {
-            background: rgba(245, 158, 11, 0.3);
-            color: #f59e0b;
-        }
-
-        /* Payment Methods */
-        .payment-methods-container {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .payment-method-item {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            padding: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .payment-method-info {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .payment-method-icon {
-            font-size: 24px;
-        }
-
-        .payment-method-details {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .payment-method-name {
-            font-size: 14px;
-            font-weight: 600;
-            color: white;
-            margin-bottom: 2px;
-        }
-
-        .payment-method-number {
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.7);
         }
 
         .sidebar {
@@ -651,19 +39,11 @@
         .sidebar-logo {
             font-size: 32px;
             line-height: 1;
-            letter-spacing: -3px;
+            letter-spacing: -2px;
             color: #2d3748;
             margin-bottom: 4px;
-        }
-
-        .sidebar-logo .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-        }
-
-        .sidebar-logo .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 800;
         }
 
         .sidebar-subtitle {
@@ -713,269 +93,6 @@
             background: white;
         }
 
-        .main-content {
-            margin-left: 260px;
-            padding: 32px;
-            flex: 1;
-        }
-
-        .page-header {
-            margin-bottom: 32px;
-        }
-
-        .page-title {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--gray-900);
-            margin-bottom: 8px;
-        }
-
-        .page-subtitle {
-            font-size: 16px;
-            color: var(--gray-600);
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-        }
-
-        .dashboard-card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
-        .card-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--gray-900);
-        }
-
-        .card-icon {
-            font-size: 24px;
-        }
-
-        .balance-card {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            border-radius: 12px;
-            padding: 32px;
-            color: white;
-            margin-bottom: 24px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .balance-label {
-            font-size: 14px;
-            opacity: 0.9;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .balance-amount {
-            font-size: 48px;
-            font-weight: 700;
-            margin-bottom: 24px;
-        }
-
-        .balance-actions {
-            display: flex;
-            gap: 12px;
-        }
-
-        .wallet-info {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--gray-200);
-        }
-
-        .wallet-info-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px;
-            font-size: 14px;
-        }
-
-        .wallet-info-label {
-            color: var(--gray-600);
-        }
-
-        .wallet-info-value {
-            color: var(--gray-900);
-            font-weight: 600;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--primary-dark);
-        }
-
-        .btn-secondary {
-            background: var(--gray-200);
-            color: var(--gray-700);
-        }
-
-        .btn-secondary:hover {
-            background: var(--gray-300);
-        }
-
-        .btn-white {
-            background: white;
-            color: var(--primary);
-        }
-
-        .btn-white:hover {
-            background: var(--gray-50);
-        }
-
-        .btn-outline {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-
-        .btn-outline:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .insurance-card {
-            background: white;
-            border: 2px solid var(--primary-light);
-        }
-
-        .insurance-card .card-title {
-            color: var(--gray-900);
-        }
-
-        .insurance-info {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .insurance-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .insurance-item:last-child {
-            border-bottom: none;
-        }
-
-        .insurance-label {
-            color: var(--gray-600);
-            font-size: 13px;
-        }
-
-        .insurance-value {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--gray-900);
-        }
-
-        .transactions-section {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .transactions-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .transactions-header h3 {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--gray-900);
-        }
-
-        .filter-select {
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--gray-300);
-            font-size: 14px;
-            background: white;
-            cursor: pointer;
-        }
-
-        .transaction-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 16px;
-            border-bottom: 1px solid var(--gray-200);
-            transition: background 0.2s;
-        }
-
-        .transaction-item:hover {
-            background: var(--gray-50);
-        }
-
-        .transaction-item:last-child {
-            border-bottom: none;
-        }
-
-        .transaction-info {
-            flex: 1;
-        }
-
-        .transaction-title {
-            font-weight: 600;
-            color: var(--gray-900);
-            margin-bottom: 4px;
-            font-size: 14px;
-        }
-
-        .transaction-date {
-            font-size: 12px;
-            color: var(--gray-500);
-        }
-
-        .transaction-amount {
-            font-weight: 600;
-            font-size: 16px;
-        }
-
-        .transaction-amount.positive {
-            color: var(--success);
-        }
-
-        .transaction-amount.negative {
-            color: var(--danger);
-        }
-
         .user-info {
             display: flex;
             align-items: center;
@@ -1017,328 +134,31 @@
             cursor: pointer;
             padding: 4px;
             border-radius: 4px;
-            transition: background 0.2s;
         }
 
-        .loading {
-            text-align: center;
-            padding: 48px;
-            color: var(--gray-600);
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 48px;
-            color: var(--gray-500);
-        }
-
-        .empty-state-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal.active {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 12px;
+        .main-content {
+            margin-left: 260px;
             padding: 32px;
-            max-width: 500px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            flex: 1;
         }
 
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .page-header {
             margin-bottom: 24px;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--gray-900);
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--gray-500);
-            padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: background 0.2s;
-        }
-
-        .close-btn:hover {
-            background: var(--gray-100);
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--gray-900);
-            font-size: 14px;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid var(--gray-300);
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.2s;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
             margin-top: 24px;
         }
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .stat-label {
-            font-size: 12px;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
             margin-bottom: 8px;
         }
 
-        .stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--gray-900);
-        }
-
-        .cards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-
-        .card-item {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-            padding: 24px;
-            color: white;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            position: relative;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .card-item:hover {
-            transform: translateY(-4px);
-        }
-
-        .card-item.visa {
-            background: linear-gradient(135deg, #1a1f71 0%, #0066cc 100%);
-        }
-
-        .card-item.mastercard {
-            background: linear-gradient(135deg, #eb001b 0%, #f79e1b 100%);
-        }
-
-        .card-item.amex {
-            background: linear-gradient(135deg, #006fcf 0%, #012169 100%);
-        }
-
-        .card-chip {
-            width: 40px;
-            height: 30px;
-            background: rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
-            margin-bottom: 20px;
-        }
-
-        .card-number {
-            font-size: 20px;
-            font-weight: 600;
-            letter-spacing: 2px;
-            margin-bottom: 20px;
-            font-family: monospace;
-        }
-
-        .card-details {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-        }
-
-        .card-holder {
-            font-size: 12px;
-            opacity: 0.9;
-            margin-bottom: 4px;
-        }
-
-        .card-name {
+        .page-subtitle {
             font-size: 16px;
-            font-weight: 600;
-        }
-
-        .card-expiry {
-            text-align: right;
-        }
-
-        .card-expiry-label {
-            font-size: 12px;
-            opacity: 0.9;
-            margin-bottom: 4px;
-        }
-
-        .card-expiry-date {
-            font-size: 16px;
-            font-weight: 600;
-        }
-
-        .card-status {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .card-status.active {
-            background: rgba(16, 185, 129, 0.3);
-        }
-
-        .card-status.canceled {
-            background: rgba(239, 68, 68, 0.3);
-        }
-
-        .card-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 16px;
-        }
-
-        .card-action-btn {
-            flex: 1;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
-            color: white;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .card-action-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .card-info-section {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 16px;
-            border: 1px solid var(--gray-200);
-        }
-
-        .card-info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .card-info-row:last-child {
-            border-bottom: none;
-        }
-
-        .card-info-label {
             color: var(--gray-600);
-            font-size: 14px;
         }
 
-        .card-info-value {
-            color: var(--gray-900);
-            font-weight: 600;
-            font-size: 14px;
-        }
-
-        .spending-limit-bar {
-            height: 8px;
-            background: var(--gray-200);
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 8px;
-        }
-
-        .spending-limit-fill {
-            height: 100%;
-            background: var(--primary);
-            transition: width 0.3s;
-        }
-
-        .spending-limit-fill.warning {
-            background: #f59e0b;
-        }
-
-        .spending-limit-fill.danger {
-            background: #ef4444;
-        }
-
-        /* Mobile Menu Toggle */
         .mobile-menu-toggle {
             display: none;
             position: fixed;
@@ -1353,6 +173,10 @@
             font-size: 24px;
             cursor: pointer;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            width: 48px;
+            height: 48px;
+            align-items: center;
+            justify-content: center;
         }
 
         .mobile-menu-overlay {
@@ -1366,380 +190,146 @@
             z-index: 999;
         }
 
-        /* Mobile-First: Hide sidebar, show mobile app design */
         @media (max-width: 768px) {
-            .sidebar {
-                display: none;
+            .mobile-menu-toggle {
+                display: flex;
             }
 
-            .mobile-menu-toggle {
-                display: none !important;
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                z-index: 1000;
+            }
+
+            .sidebar.mobile-open {
+                transform: translateX(0);
+            }
+
+            .mobile-menu-overlay.active {
+                display: block;
             }
 
             .main-content {
                 margin-left: 0;
-                padding: 0;
-                width: 100%;
-            }
-
-            .layout {
-                background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-            }
-
-            .wallet-app-container {
-                width: 100%;
-                max-width: 100%;
+                padding: 16px;
+                padding-top: 80px;
             }
         }
 
-        /* Desktop: Show sidebar, mobile app style in center */
-        @media (min-width: 769px) {
-            .wallet-app-container {
-                margin-left: 260px;
-                width: calc(100% - 260px);
-                max-width: 480px;
-            }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-bottom: 16px;
         }
 
-        .modern-wallet {
-            background: #ffffff;
-            border-radius: 28px;
-            padding: 32px 28px 36px;
-            box-shadow: 0 24px 60px rgba(111, 207, 151, 0.25);
+        .card-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--gray-900);
         }
 
-        .modern-hero {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 24px;
+        .subtext {
+            color: var(--gray-500);
+            font-size: 13px;
+            margin-top: 4px;
         }
 
-        .modern-hero-subtitle {
-            margin: 0;
-            font-size: 14px;
-            color: #64748b;
-        }
-
-        .modern-hero-title {
-            margin: 6px 0 4px;
-            font-size: 32px;
-            font-weight: 700;
-            color: #0f172a;
-        }
-
-        .modern-hero-tag {
+        .badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 6px 12px;
+            padding: 6px 10px;
             border-radius: 999px;
-            background: rgba(54, 197, 108, 0.12);
-            color: #15803d;
             font-size: 12px;
-            font-weight: 600;
-        }
-
-        .modern-hero-balance {
-            text-align: right;
-        }
-
-        .modern-hero-label {
-            font-size: 12px;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-        }
-
-        .modern-hero-value {
-            margin-top: 8px;
-            font-size: 32px;
             font-weight: 700;
-            color: #0f172a;
+            background: #eef2ff;
+            color: #3730a3;
         }
 
-        .modern-overview-grid {
-            margin-top: 28px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 16px;
+        .badge.due {
+            background: #fee2e2;
+            color: #991b1b;
         }
 
-        .modern-card {
-            background: #f8faf5;
-            border-radius: 18px;
-            padding: 18px 20px;
-            box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .modern-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 28px rgba(111, 207, 151, 0.15);
-        }
-
-        .modern-card--highlight {
-            background: linear-gradient(135deg, #7cff3e 0%, #36c56c 100%);
-            color: #083b25;
-            box-shadow: 0 24px 45px rgba(54, 197, 108, 0.35);
-        }
-
-        .modern-card-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: rgba(15, 23, 42, 0.6);
-            margin-bottom: 8px;
-        }
-
-        .modern-card--highlight .modern-card-label {
-            color: rgba(8, 59, 37, 0.65);
-        }
-
-        .modern-card-value {
-            font-size: 24px;
+        .btn {
+            padding: 10px 14px;
+            border-radius: 10px;
             font-weight: 700;
-            color: #0f172a;
-        }
-
-        .modern-card--highlight .modern-card-value {
-            color: #083b25;
-        }
-
-        .modern-card-meta {
-            font-size: 12px;
-            margin-top: 6px;
-            color: rgba(15, 23, 42, 0.5);
-        }
-
-        .modern-card--highlight .modern-card-meta {
-            color: rgba(8, 59, 37, 0.55);
-        }
-
-        .modern-section {
-            margin-top: 36px;
-            background: #ffffff;
-            border-radius: 22px;
-            padding: 24px;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-        }
-
-        .modern-section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 16px;
-            margin-bottom: 18px;
-        }
-
-        .modern-section-header h2 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 700;
-            color: #0f172a;
-        }
-
-        .modern-section-header p {
-            margin: 6px 0 0;
-            font-size: 12px;
-            color: #64748b;
-        }
-
-        .modern-action {
-            background: #0f172a;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            padding: 10px 18px;
-            font-size: 12px;
-            font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .modern-action:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
-        }
-
-        .modern-insurance-list {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
-
-        .modern-insurance-card {
-            border-radius: 16px;
-            padding: 16px 18px;
-            background: #f1fbec;
-            border: 1px solid transparent;
             transition: all 0.2s;
-            cursor: pointer;
-        }
-
-        .modern-insurance-card.primary {
-            background: #e7ffe0;
-            border-color: rgba(54, 197, 108, 0.35);
-        }
-
-        .modern-insurance-card.active {
-            border-color: #36c56c;
-            box-shadow: 0 16px 32px rgba(54, 197, 108, 0.22);
-        }
-
-        .modern-insurance-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 18px 40px rgba(111, 207, 151, 0.2);
-        }
-
-        .modern-insurance-header {
-            display: flex;
-            justify-content: space-between;
+            text-decoration: none;
+            display: inline-flex;
             align-items: center;
-            margin-bottom: 10px;
+            justify-content: center;
+            border: none;
+            min-height: 44px;
         }
 
-        .modern-insurance-badge {
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            color: #15803d;
-            background: rgba(21, 128, 61, 0.12);
-            padding: 4px 10px;
-            border-radius: 999px;
+        .btn-primary {
+            background: var(--primary);
+            color: white;
         }
 
-        .modern-insurance-payer {
-            font-size: 14px;
-            font-weight: 600;
-            color: #0f172a;
+        .btn-primary:hover {
+            background: var(--primary-dark);
         }
 
-        .modern-insurance-details {
-            font-size: 13px;
-            color: #475569;
+        .btn-secondary {
+            background: var(--gray-100);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-200);
+        }
+
+        .row {
             display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
-
-        .modern-insurance-foot {
-            margin-top: 12px;
-            font-size: 12px;
-            color: #15803d;
-        }
-
-        .modern-activity-list {
-            display: flex;
-            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
             gap: 12px;
         }
 
-        .modern-activity-item {
+        .receipt-row {
+            padding: 12px 0;
+            border-top: 1px solid #f1f5f9;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            background: #f8faf5;
-            border-radius: 16px;
-            padding: 14px 16px;
-            box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
+            gap: 12px;
         }
 
-        .modern-activity-left {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
+        .receipt-amt {
+            font-weight: 800;
         }
 
-        .modern-activity-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: #0f172a;
-        }
-
-        .modern-activity-date {
+        .receipt-meta {
+            color: var(--gray-500);
             font-size: 12px;
-            color: #94a3b8;
-        }
-
-        .modern-activity-amount {
-            font-size: 14px;
-            font-weight: 700;
-        }
-
-        .modern-activity-amount.negative {
-            color: #ef4444;
-        }
-
-        .modern-activity-amount.positive {
-            color: #22c55e;
-        }
-
-        .modern-empty {
-            text-align: center;
-            padding: 32px 12px;
-            font-size: 13px;
-            color: #94a3b8;
-            background: #f8faf5;
-            border-radius: 16px;
-            border: 1px dashed rgba(148, 163, 184, 0.35);
-        }
-
-        @media (max-width: 480px) {
-            .modern-wallet {
-                padding: 26px 22px 32px;
-            }
-
-            .modern-overview-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .modern-section {
-                padding: 20px;
-            }
-        }
-
-        .current-balance-section,
-        .wallet-sections,
-        .last-transaction-section {
-            display: none !important;
+            margin-top: 2px;
         }
     </style>
 </head>
 
 <body>
-    <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">☰</button>
     <div class="mobile-menu-overlay" onclick="toggleMobileMenu()"></div>
 
     <div class="layout">
-        <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    LittleLab
+                <div class="sidebar-logo">Consʌlt</div>
+                <div class="sidebar-subtitle">Patient Portal</div>
                 </div>
-                <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
-            </div>
-
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
                     <span class="nav-icon">🏠</span>
                     <span>Dashboard</span>
                 </a>
-                <a href="#benefits" class="nav-item"
-                    onclick="window.location.href='patient-dashboard.html#benefits'; return false;">
-                    <span class="nav-icon">🏥</span>
-                    <span>My Benefits</span>
-                </a>
                 <a href="wallet.html" class="nav-item active">
-                    <span class="nav-icon">💰</span>
-                    <span>My Wallet</span>
-                </a>
-                <a href="#claims" class="nav-item"
-                    onclick="window.location.href='patient-dashboard.html#claims'; return false;">
                     <span class="nav-icon">💳</span>
-                    <span>Bills & Claims</span>
+                    <span>Wallet</span>
                 </a>
                 <a href="appointments.html" class="nav-item">
                     <span class="nav-icon">📅</span>
@@ -1750,7 +340,6 @@
                     <span>My Records</span>
                 </a>
             </nav>
-
             <div class="sidebar-footer">
                 <div class="user-info">
                     <div class="user-avatar" id="userAvatar">P</div>
@@ -1758,1427 +347,293 @@
                         <div class="user-name" id="userName">Patient</div>
                         <div class="user-role">Patient Account</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">
-                        🚪
-                    </button>
+                    <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
                 </div>
             </div>
         </aside>
 
-        <!-- Main Content - Mobile App Style Wallet -->
         <main class="main-content">
-            <div class="wallet-app-container">
-                <!-- Wallet Header -->
-                <div class="wallet-header">
-                    <button class="wallet-settings-btn" onclick="toggleMobileMenu()" title="Menu">☰</button>
-                    <div class="wallet-profile">
-                        <div class="wallet-profile-avatar" id="walletAvatar">P</div>
-                        <button class="wallet-settings-btn" onclick="window.location.href='profile.html'"
-                            title="Profile">🔍</button>
-                    </div>
+            <div class="page-header">
+                <h1 class="page-title">Wallet</h1>
+                <p class="page-subtitle">Receipts, payment methods, and balances</p>
                 </div>
 
-                <!-- Greeting Section -->
-                <div class="wallet-greeting">
-                    <div class="wallet-greeting-text" id="walletGreeting">Hello, Patient</div>
+            <div class="card">
+                <div class="row">
+                    <div>
+                        <div class="card-title">Balance</div>
+                        <div class="subtext">Cash-only for now (clearinghouse integrations will come later).</div>
                 </div>
-
-                <!-- Overview Section - Card-Based Design -->
-                <div class="overview-section">
-                    <div class="overview-title">Overview</div>
-                    <div class="overview-grid">
-                        <!-- Featured Card: Unpaid Bills -->
-                        <div class="overview-card featured">
-                            <div class="overview-card-icon">📄</div>
-                            <div class="overview-card-value" id="overviewUnpaid">0</div>
-                            <div class="overview-card-label">Unpaid</div>
-                            <div class="overview-card-action"
-                                onclick="window.location.href='patient-dashboard.html#claims'">View All →</div>
-                        </div>
-                        <!-- Ongoing Claims -->
-                        <div class="overview-card">
-                            <div class="overview-card-icon">📋</div>
-                            <div class="overview-card-value" id="overviewOngoing">0</div>
-                            <div class="overview-card-label">Ongoing</div>
-                        </div>
-                        <!-- Account Balance -->
-                        <div class="overview-card">
-                            <div class="overview-card-icon">💰</div>
-                            <div class="overview-card-value" id="overviewBalance">$0.00</div>
-                            <div class="overview-card-label">Balance</div>
-                        </div>
-                        <!-- Revenue/Spent -->
-                        <div class="overview-card">
-                            <div class="overview-card-icon">📊</div>
-                            <div class="overview-card-value" id="overviewSpent">$0.00</div>
-                            <div class="overview-card-label">This Month</div>
-                        </div>
+                    <div id="balanceBadge" class="badge">No balance due</div>
                     </div>
                 </div>
-
-                <!-- Current Balance Section -->
-                <div class="current-balance-section">
-                    <div class="current-balance-label">Current Balance</div>
-                    <div class="current-balance-amount" id="currentBalance">$0.00</div>
-
-                    <!-- Credit Card Display -->
-                    <div class="credit-card-display" id="creditCardDisplay">
-                        <div class="card-chip"></div>
-                        <div class="card-number" id="cardNumber">5282 3456 7890 1289</div>
-                        <div class="card-details" style="padding-right: 50px;">
-                            <div class="card-holder-name" id="cardHolderName">CARDHOLDER NAME</div>
-                            <div style="display: flex; align-items: center; gap: 12px;">
-                                <div class="card-expiry" id="cardExpiry">09/25</div>
-                                <div class="card-brand-logo" id="cardBrandLogo">💳</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="action-buttons">
-                        <div class="action-button" onclick="showTransferModal()">
-                            <div class="action-button-icon">➡️</div>
-                            <div class="action-button-label">Transfer</div>
-                        </div>
-                        <div class="action-button" onclick="showReceiveModal()">
-                            <div class="action-button-icon">⬇️</div>
-                            <div class="action-button-label">Receive</div>
-                        </div>
-                        <div class="action-button" onclick="showPaymentModal()">
-                            <div class="action-button-icon">💳</div>
-                            <div class="action-button-label">Payment</div>
-                        </div>
-                    </div>
+                <div style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <div style="font-weight:900; font-size:28px; color:var(--gray-900);" id="balanceDueAmount">$0.00 USD</div>
+                    <a class="btn btn-primary" href="appointments.html" style="white-space:nowrap;">View appointments</a>
                 </div>
-
-                <!-- Modern Wallet Content -->
-                <div class="modern-wallet">
-                    <div class="modern-hero">
-                        <div>
-                            <p class="modern-hero-subtitle">Hello,</p>
-                            <h1 class="modern-hero-title" id="modernGreetingName">Patient</h1>
-                            <span class="modern-hero-tag">Digital Wallet</span>
-                        </div>
-                        <div class="modern-hero-balance">
-                            <span class="modern-hero-label">Wallet balance</span>
-                            <div class="modern-hero-value" id="modernBalance">$0.00</div>
-                        </div>
-                    </div>
-
-                    <div class="modern-overview-grid">
-                        <div class="modern-card modern-card--highlight">
-                            <div class="modern-card-label">Available balance</div>
-                            <div class="modern-card-value" id="modernHighlightBalance">$0.00</div>
-                            <div class="modern-card-meta">Virtual care wallet</div>
-                        </div>
-                        <div class="modern-card">
-                            <div class="modern-card-label">Copay due</div>
-                            <div class="modern-card-value" id="modernCopay">$0.00</div>
-                            <div class="modern-card-meta">Latest eligibility check</div>
-                        </div>
-                        <div class="modern-card">
-                            <div class="modern-card-label">Pending claims</div>
-                            <div class="modern-card-value" id="modernPending">0</div>
-                            <div class="modern-card-meta">Awaiting insurer review</div>
-                        </div>
-                        <div class="modern-card">
-                            <div class="modern-card-label">Total bills</div>
-                            <div class="modern-card-value" id="modernBills">$0.00</div>
-                            <div class="modern-card-meta">Outstanding balance</div>
-                        </div>
-                    </div>
-
-                    <div class="modern-section">
-                        <div class="modern-section-header">
-                            <div>
-                                <h2>Insurance Cards</h2>
-                                <p>Flip to manage benefits from each payer</p>
-                            </div>
-                            <button class="modern-action"
-                                onclick="window.location.href='patient-dashboard.html#benefits'">Manage</button>
-                        </div>
-                        <div id="modernInsuranceList" class="modern-insurance-list">
-                            <div class="modern-empty">No insurance cards yet. Add your primary insurance to start.</div>
-                        </div>
-                    </div>
-
-                    <div class="modern-section">
-                        <div class="modern-section-header">
-                            <div>
-                                <h2>Recent Activity</h2>
-                                <p>Telehealth visits & wallet payments</p>
-                            </div>
-                            <button class="modern-action" onclick="showAllTransactions()">View all</button>
-                        </div>
-                        <div id="modernActivityList" class="modern-activity-list">
-                            <div class="modern-empty">No activity yet. When you book visits or pay copays, you'll see
-                                them here.</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Digital Wallet Sections -->
-                <div class="wallet-sections">
-                    <!-- Insurance Cards Section -->
-                    <div class="wallet-section">
-                        <div class="section-header">
-                            <div class="section-title">🏥 Insurance Cards</div>
-                            <button class="section-action-btn" onclick="addInsuranceCard()"
-                                title="Add Insurance Card">+</button>
-                        </div>
-                        <div id="insuranceCardsList" class="insurance-cards-container">
-                            <div class="loading" style="color: white; padding: 20px; text-align: center;">Loading
-                                insurance cards...</div>
-                        </div>
-                    </div>
-
-                    <!-- Prior Authorizations Section -->
-                    <div class="wallet-section">
-                        <div class="section-header">
-                            <div class="section-title">✅ Prior Authorizations</div>
-                            <button class="section-action-btn" onclick="viewAllAuthorizations()" title="View All">View
-                                All</button>
-                        </div>
-                        <div id="authorizationsList" class="authorizations-container">
-                            <div class="loading" style="color: white; padding: 20px; text-align: center;">Loading
-                                authorizations...</div>
-                        </div>
-                    </div>
-
-                    <!-- Payment Methods Section -->
-                    <div class="wallet-section">
-                        <div class="section-header">
-                            <div class="section-title">💳 Payment Methods</div>
-                            <button class="section-action-btn" onclick="window.location.href='patient-dashboard.html'"
-                                title="Manage Cards">Manage</button>
-                        </div>
-                        <div id="paymentMethodsList" class="payment-methods-container">
-                            <div class="loading" style="color: white; padding: 20px; text-align: center;">Loading
-                                payment methods...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Last Transaction Section -->
-                <div class="last-transaction-section">
-                    <div class="last-transaction-header">
-                        <div class="last-transaction-title">Last Transaction</div>
-                        <a href="#" class="view-all-link" onclick="showAllTransactions(); return false;">View All</a>
-                    </div>
-                    <div class="transaction-list" id="lastTransactionsList">
-                        <div class="loading" style="color: white; padding: 20px; text-align: center;">Loading
-                            transactions...</div>
-                    </div>
-                </div>
+                <div style="margin-top:12px;" id="pendingPaymentsMount"></div>
             </div>
 
-            <!-- Bottom Navigation -->
-            <div class="bottom-nav">
-                <div class="nav-item-bottom active" onclick="window.location.href='patient-dashboard.html'">
-                    <div class="nav-item-bottom-icon">🏠</div>
-                    <div class="nav-item-bottom-label">Home</div>
-                </div>
-                <div class="nav-item-bottom" onclick="window.location.href='patient-dashboard.html#claims'">
-                    <div class="nav-item-bottom-icon">📄</div>
-                    <div class="nav-item-bottom-label">Bills</div>
-                </div>
-                <div class="nav-item-bottom create" onclick="window.location.href='appointments.html'">
-                    <div>+</div>
-                </div>
-                <div class="nav-item-bottom" onclick="window.location.href='appointments.html'">
-                    <div class="nav-item-bottom-icon">📅</div>
-                    <div class="nav-item-bottom-label">Calendar</div>
-                </div>
-                <div class="nav-item-bottom" onclick="window.location.href='profile.html'">
-                    <div class="nav-item-bottom-icon">⚙️</div>
-                    <div class="nav-item-bottom-label">Settings</div>
+            <div class="card">
+                <div class="row" style="align-items:flex-start;">
+                        <div>
+                        <div class="card-title">Payment method</div>
+                        <div class="subtext">Your card on file is used to pay for visits when needed.</div>
+                        </div>
+                    <a class="btn btn-secondary" href="profile.html" style="white-space:nowrap;">Manage</a>
+                        </div>
+                <div id="paymentMethodCard"
+                    style="margin-top:14px;border-radius:16px;padding:18px;background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;box-shadow:0 10px 25px rgba(30,64,175,0.25);">
+                    <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+                        <div style="font-weight:800;">My Payment Card</div>
+                        <div style="opacity:0.85;">💳</div>
+                    </div>
+                    <div id="pmNumber" style="margin-top:14px;font-family:'Courier New',monospace;letter-spacing:2px;font-weight:700;">
+                        •••• •••• •••• ••••
+                        </div>
+                    <div style="display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12px;opacity:0.9;">
+                        <div id="pmHolder">CARDHOLDER</div>
+                        <div id="pmExpiry">MM/YY</div>
+                        </div>
+                        </div>
+                    </div>
+
+            <div class="card">
+                <div class="row" style="align-items:flex-start;">
+                            <div>
+                        <div class="card-title">Receipts</div>
+                        <div class="subtext">Your most recent payments</div>
+                            </div>
+                    <button class="btn btn-secondary" type="button" onclick="loadReceipts()" style="white-space:nowrap;">
+                        Refresh
+                    </button>
+                        </div>
+                <div id="receiptsContainer" style="margin-top:12px;"></div>
+                    </div>
+
+            <div class="card">
+                <div class="row" style="align-items:flex-start;">
+                            <div>
+                        <div class="card-title">Insurance</div>
+                        <div class="subtext">Connect your insurance provider</div>
+                            </div>
+                    <span class="badge">Coming soon</span>
+                        </div>
+                <div style="margin-top:10px;color:var(--gray-700);font-size:14px;line-height:1.35;">
+                    Insurance linking will be available here later. For now, visits are handled as cash-only.
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Add Money Modal -->
-    <div id="addMoneyModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Add Money</h2>
-                <button class="close-btn" onclick="closeAddMoneyModal()">&times;</button>
-            </div>
-            <form onsubmit="handleAddMoney(event)">
-                <div class="form-group">
-                    <label>Amount</label>
-                    <input type="number" id="addAmount" step="0.01" min="0.01" placeholder="0.00" required>
-                </div>
-                <div class="form-group">
-                    <label>Payment Method</label>
-                    <select id="paymentMethod">
-                        <option value="test">Test Deposit (Sandbox)</option>
-                        <option value="ach">Bank Transfer (ACH)</option>
-                        <option value="card">Credit/Debit Card</option>
-                        <option value="wire">Wire Transfer</option>
-                    </select>
-                </div>
-                <div
-                    style="padding: 16px; background: var(--gray-50); border-radius: 8px; margin-top: 16px; margin-bottom: 16px;">
-                    <p style="font-size: 13px; color: var(--gray-600); margin: 0 0 8px 0; font-weight: 600;">Funding
-                        Options:</p>
-                    <ul style="font-size: 12px; color: var(--gray-600); margin: 0; padding-left: 20px;">
-                        <li><strong>Bank Transfer (ACH):</strong> Direct transfer from your bank account to Circle
-                            wallet (1-3 business days)</li>
-                        <li><strong>Credit/Debit Card:</strong> Instant deposit (fees may apply)</li>
-                        <li><strong>Wire Transfer:</strong> Same-day transfer for large amounts</li>
-                        <li><strong>Test Deposit:</strong> For sandbox/testing only</li>
-                    </ul>
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeAddMoneyModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Money</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <script type="module">
+        import { patientApi } from '../assets/js/patient-api.js';
+        import { mountBottomTabs } from '../assets/js/patient-shell.js';
 
-    <!-- Receive Modal -->
-    <div id="receiveModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Receive Money</h2>
-                <button class="close-btn" onclick="closeReceiveModal()">&times;</button>
-            </div>
-            <div class="form-group">
-                <label>Wallet Address</label>
-                <input type="text" id="walletAddress" readonly
-                    style="background: var(--gray-50); font-family: monospace;">
-                <button type="button" onclick="copyWalletAddress()" class="btn btn-primary"
-                    style="margin-top: 8px; width: 100%;">Copy Address</button>
-            </div>
-            <div style="padding: 16px; background: var(--gray-50); border-radius: 8px; margin-top: 16px;">
-                <p style="font-size: 14px; color: var(--gray-600); margin: 0;">
-                    Share this wallet address to receive payments. Funds will appear in your wallet once the transaction
-                    is confirmed.
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
-        let patientId = null;
-        let walletId = null;
-        let patientData = null;
 
-        // Check authentication - support both patient login (localStorage) and business login (sessionStorage)
-        function checkAuth() {
-            // Check for patient session (from patient-login.html)
-            const patientSessionId = localStorage.getItem('patient_session_id');
-            const patientEmail = localStorage.getItem('patient_email');
-            const patientPhone = localStorage.getItem('patient_phone'); // Backward compatibility
+        mountBottomTabs();
 
-            // Check for business/user session (from business login)
-            const authenticated = sessionStorage.getItem('authenticated');
-            const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
+        window.loadReceipts = loadReceipts;
 
-            if (!patientSessionId && !patientEmail && !patientPhone && authenticated !== 'true') {
-                // Not authenticated - redirect to patient login
-                window.location.href = 'patient-login.html';
-                return false;
-            }
+        document.addEventListener('DOMContentLoaded', () => {
+            hydrateUserHeader();
+            loadReceipts();
+            loadPaymentMethod();
+            loadBalanceDue();
+            try {
+                const userInfo = document.querySelector('.sidebar-footer .user-info');
+                if (userInfo) {
+                    userInfo.style.cursor = 'pointer';
+                    userInfo.addEventListener('click', (e) => {
+                        if (e.target && e.target.closest && e.target.closest('.logout-btn')) return;
+                        window.location.href = 'profile.html';
+                    });
+                }
+            } catch (_) { }
+        });
 
-            return true;
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.querySelector('.mobile-menu-overlay');
+            sidebar.classList.toggle('mobile-open');
+            overlay.classList.toggle('active');
         }
+        window.toggleMobileMenu = toggleMobileMenu;
 
         function logout() {
-            // Clear both patient and business sessions
             localStorage.removeItem('patient_session_id');
-            localStorage.removeItem('patient_email');
-            localStorage.removeItem('patient_phone'); // Backward compatibility
-            sessionStorage.removeItem('authenticated');
-            sessionStorage.removeItem('user');
+            localStorage.removeItem('patient_phone');
             window.location.href = 'patient-login.html';
         }
+        window.logout = logout;
 
-        // Get patient ID from phone number or name
-        async function initWallet() {
+        async function hydrateUserHeader() {
             try {
-                if (!checkAuth()) {
-                    return;
-                }
-
-                // Get patient email or phone from localStorage (patient login) or user data (business login)
-                const patientEmail = localStorage.getItem('patient_email');
-                const patientPhone = localStorage.getItem('patient_phone'); // Backward compatibility
-                const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
-                const patientName = userData.name || userData.patientName || '';
-
-                let patient = null;
-
-                // Try to find patient by email first (new method)
-                if (patientEmail) {
-                    try {
-                        const emailResponse = await fetch(`${API_BASE}/fhir/Patient?email=${encodeURIComponent(patientEmail)}`);
-                        const emailBundle = await emailResponse.json();
-                        if (emailBundle.entry && emailBundle.entry.length > 0) {
-                            patient = emailBundle.entry[0].resource;
-                            patientId = patient.id;
-                        }
-                    } catch (emailError) {
-                        console.warn('Error fetching patient by email:', emailError);
-                    }
-                }
-
-                // Try to find patient by phone (backward compatibility)
-                if (!patient && patientPhone) {
-                    try {
-                        const phoneResponse = await fetch(`${API_BASE}/fhir/Patient?telecom=${encodeURIComponent(patientPhone)}`);
-                        const phoneBundle = await phoneResponse.json();
-                        if (phoneBundle.entry && phoneBundle.entry.length > 0) {
-                            patient = phoneBundle.entry[0].resource;
-                            patientId = patient.id;
-                        }
-                    } catch (phoneError) {
-                        console.warn('Error fetching patient by phone:', phoneError);
-                    }
-                }
-
-                // If not found by phone, try by name
-                if (!patient && patientName) {
-                    try {
-                        const nameResponse = await fetch(`${API_BASE}/fhir/Patient?name=${encodeURIComponent(patientName)}`);
-                        const nameBundle = await nameResponse.json();
-                        if (nameBundle.entry && nameBundle.entry.length > 0) {
-                            patient = nameBundle.entry[0].resource;
-                            patientId = patient.id;
-                        }
-                    } catch (nameError) {
-                        console.warn('Error fetching patient by name:', nameError);
-                    }
-                }
-
-                // If still not found, try to get from session ID
-                if (!patient) {
-                    const sessionId = localStorage.getItem('patient_session_id');
-                    if (sessionId) {
-                        try {
-                            const sessionResponse = await fetch(`${API_BASE}/api/patient/appointments?session_id=${sessionId}`);
-                            const sessionData = await sessionResponse.json();
-                            if (sessionData.success && sessionData.patient_id) {
-                                patientId = sessionData.patient_id;
-                            }
-                        } catch (sessionError) {
-                            console.warn('Error fetching patient by session:', sessionError);
-                        }
-                    }
-                }
-
-                if (patientId) {
-                    patientData = patient;
-                    // Update user display
-                    if (patient) {
-                        const patientName = patient.name?.[0] ? `${(patient.name[0].given || []).join(' ')} ${patient.name[0].family || ''}`.trim() : 'Patient';
-                        const firstName = patientName.split(' ')[0];
-
-                        // Update sidebar
-                        document.getElementById('userName').textContent = patientName;
-                        const initials = patientName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                const sid = localStorage.getItem('patient_session_id') || '';
+                if (!sid) return;
+                const r = await fetch(`${API_BASE}/api/patient/me`, {
+                    headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) return;
+                const name = (data.patient && data.patient.name) ? data.patient.name : 'Patient';
+                const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'PT';
+                document.getElementById('userName').textContent = name;
                         document.getElementById('userAvatar').textContent = initials;
-
-                        // Update wallet header
-                        document.getElementById('walletName').textContent = firstName;
-                        document.getElementById('walletAvatar').textContent = initials;
-                    }
-
-                    await loadWallet();
-                    await loadStripeCards();
-                    await loadLastTransactions();
-                    await loadInsurance(); // Load insurance benefits
-                    await loadTransactions(); // Load full transactions
-                    updateOverviewCards(); // Update overview cards
-
-                    // Update greeting
-                    if (patientData && patientData.name) {
-                        const firstName = patientData.name[0]?.given?.[0] || 'Patient';
-                        const greetingEl = document.getElementById('walletGreeting');
-                        if (greetingEl) greetingEl.textContent = `Hello, ${firstName}`;
-                    }
-
-                    // Update card display with patient name after all data is loaded
-                    if (stripeCards.length > 0) {
-                        displayCardInWallet(stripeCards[0]);
-                    } else {
-                        displayDefaultCard();
-                    }
-                } else {
-                    console.error('Patient not found');
-                    document.getElementById('currentBalance').textContent = 'Patient not found';
-                    document.getElementById('lastTransactionsList').innerHTML = `
-                        <div style="color: white; padding: 20px; text-align: center;">Patient profile not found</div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Error initializing wallet:', error);
-                document.getElementById('currentBalance').textContent = 'Error loading wallet';
-            }
+            } catch (_) { }
         }
 
-        async function loadWallet() {
+        function fmtMoney(amount, currency = 'USD') {
+            if (amount == null || amount === '') return '—';
+            const n = Number(amount);
+            if (Number.isNaN(n)) return `${amount} ${currency || ''}`.trim();
+            const dollars = n >= 1000 ? (n / 100).toFixed(2) : n.toFixed(2);
+            return `$${dollars} ${currency || 'USD'}`.trim();
+        }
+
+        async function loadBalanceDue() {
+            const badge = document.getElementById('balanceBadge');
             try {
-                // Get subdomain from hostname for tenant context
-                const hostname = window.location.hostname;
-                const subdomain = hostname.split('.')[0];
-                const merchantId = window.TENANT_CONFIG?.merchant_id || null;
-
-                // Get or create wallet for patient (with tenant context)
-                const url = merchantId
-                    ? `${API_BASE}/api/circle/accounts/patient/${patientId}?merchant_id=${merchantId}`
-                    : `${API_BASE}/api/circle/accounts/patient/${patientId}`;
-
-                const response = await fetch(url);
-                if (!response.ok) {
-                    // Create wallet if it doesn't exist
-                    const createResponse = await fetch(`${API_BASE}/api/circle/wallets`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            entityType: 'patient',
-                            entityId: patientId,
-                            description: `Patient wallet for ${patientId}`,
-                            merchant_id: merchantId
-                        })
-                    });
-
-                    if (createResponse.ok) {
-                        const data = await createResponse.json();
-                        walletId = data.walletId;
-                        await updateBalance();
-                    }
-                } else {
-                    const data = await response.json();
-                    walletId = data.account?.circle_wallet_id;
-                    await updateBalance();
-                }
-            } catch (error) {
-                console.error('Error loading wallet:', error);
-            }
-        }
-
-        async function updateBalance() {
-            const balanceEl = document.getElementById('currentBalance');
-            if (!walletId) {
-                balanceEl.textContent = 'Wallet unavailable';
-                return;
-            }
-
-            try {
-                const response = await fetch(`${API_BASE}/api/circle/wallets/${walletId}/balance`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.balances && data.balances.length > 0) {
-                        const usdcBalance = data.balances.find(b => b.token?.symbol === 'USDC') || data.balances[0];
-                        const amount = parseFloat(usdcBalance.amount || usdcBalance.balance || 0) / 1000000; // USDC has 6 decimals
-                        balanceEl.textContent = `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                    } else {
-                        balanceEl.textContent = '$0.00';
-                    }
-                } else {
-                    console.warn('Circle wallet balance API returned non-OK status:', response.status);
-                    balanceEl.textContent = 'Wallet currently unavailable';
-                }
-            } catch (error) {
-                console.error('Error updating balance:', error);
-                balanceEl.textContent = 'Wallet currently unavailable';
-            }
-        }
-
-        async function loadInsurance() {
-            try {
-                if (!patientId) {
-                    document.getElementById('insuranceInfo').innerHTML = '<div style="color: var(--gray-600);">Patient ID not available</div>';
-                    return;
-                }
-
-                // Try to get patient name from patientData or session
-                let patientName = '';
-                if (patientData && patientData.name) {
-                    patientName = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
-                } else {
-                    const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
-                    patientName = userData.name || userData.patientName || '';
-                }
-
-                if (!patientName) {
-                    // Try to get from patient ID directly
-                    try {
-                        const patientResponse = await fetch(`${API_BASE}/fhir/Patient/${patientId}`);
-                        if (patientResponse.ok) {
-                            const patient = await patientResponse.json();
-                            if (patient.name) {
-                                patientName = `${(patient.name[0].given || []).join(' ')} ${patient.name[0].family || ''}`.trim();
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Could not fetch patient name:', e);
-                    }
-                }
-
-                // Try multiple methods to get patient name
-                let nameToUse = patientName;
-                if (!nameToUse && patient && patient.name) {
-                    nameToUse = `${(patient.name[0].given || []).join(' ')} ${patient.name[0].family || ''}`.trim();
-                }
-
-                if (nameToUse || patientId) {
-                    // Try by patientId first (more reliable)
-                    const url = patientId
-                        ? `${API_BASE}/api/patient/benefits?patientId=${encodeURIComponent(patientId)}`
-                        : `${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(nameToUse)}`;
-
-                    const response = await fetch(url);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success && (data.insurance || data.eligibility)) {
-                            const insurance = data.insurance || {};
-                            const eligibility = data.eligibility || {};
-
-                            document.getElementById('insuranceInfo').innerHTML = `
-                            <div class="insurance-item">
-                                <span class="insurance-label">Insurer</span>
-                                <span class="insurance-value">${insurance.payer_name || insurance.payerName || eligibility.payer_id || 'N/A'}</span>
-                            </div>
-                            <div class="insurance-item">
-                                <span class="insurance-label">Member ID</span>
-                                <span class="insurance-value">${insurance.member_id || insurance.memberId || 'N/A'}</span>
-                            </div>
-                            ${insurance.plan_name || insurance.planName ? `
-                            <div class="insurance-item">
-                                <span class="insurance-label">Plan</span>
-                                <span class="insurance-value">${insurance.plan_name || insurance.planName}</span>
-                            </div>
-                            ` : ''}
-                            ${eligibility.eligible !== undefined ? `
-                            <div class="insurance-item">
-                                <span class="insurance-label">Eligibility</span>
-                                <span class="insurance-value">${eligibility.eligible ? 'Active' : 'Inactive'}</span>
-                            </div>
-                            ` : ''}
-                            <div class="insurance-item">
-                                <span class="insurance-label">Copay</span>
-                                <span class="insurance-value">$${(eligibility.copay_amount || insurance.copay_amount || 0).toFixed(2)}</span>
-                            </div>
-                            ${eligibility.deductible_remaining !== null && eligibility.deductible_remaining !== undefined ? `
-                            <div class="insurance-item">
-                                <span class="insurance-label">Deductible Remaining</span>
-                                <span class="insurance-value">$${(eligibility.deductible_remaining || 0).toFixed(2)}</span>
-                            </div>
-                            ` : ''}
-                        `;
-                        } else {
-                            document.getElementById('insuranceInfo').innerHTML = '<div style="color: var(--gray-600);">No insurance information available</div>';
-                        }
-                    } else {
-                        document.getElementById('insuranceInfo').innerHTML = '<div style="color: var(--gray-600);">No insurance information available</div>';
-                    }
-                } else {
-                    document.getElementById('insuranceInfo').innerHTML = '<div style="color: var(--gray-600);">Unable to load insurance information</div>';
-                }
-            } catch (error) {
-                console.error('Error loading insurance:', error);
-                document.getElementById('insuranceInfo').innerHTML = '<div style="color: var(--gray-600);">Error loading insurance information</div>';
-            }
-        }
-
-        async function loadTransactions() {
-            try {
-                const filter = document.getElementById('filterSelect').value;
-
-                // Load wallet transactions
-                const walletResponse = await fetch(`${API_BASE}/api/patient/wallet/transactions?patientId=${patientId}&filter=${filter}`);
-                let walletTransactions = [];
-
-                if (walletResponse.ok) {
-                    const walletData = await walletResponse.json();
-                    walletTransactions = walletData.transactions || [];
-                }
-
-                // Load card transactions
-                let cardTransactions = [];
-                try {
-                    const cardResponse = await fetch(`${API_BASE}/api/patient/${patientId}/transactions`);
-                    if (cardResponse.ok) {
-                        const cardData = await cardResponse.json();
-                        if (cardData.success && cardData.transactions) {
-                            cardTransactions = cardData.transactions.map(tx => {
-                                // Convert from cents to dollars (amount is in cents from Stripe)
-                                const amountInDollars = typeof tx.amount === 'number' ? tx.amount / 100 : parseFloat(tx.amount) / 100 || 0;
-                                return {
-                                    ...tx,
-                                    amount: -Math.abs(amountInDollars), // Card transactions are negative (spending)
-                                    amount_cents: tx.amount, // Keep original amount in cents
-                                    description: `${tx.merchant_name || 'Card Transaction'} (****${tx.last4 || ''})`,
-                                    type: 'card',
-                                    date: tx.created_at,
-                                    created_at: tx.created_at
-                                };
-                            });
-                        }
-                    }
-                } catch (cardError) {
-                    console.warn('Error loading card transactions:', cardError);
-                    // Continue without card transactions
-                }
-
-                // Merge transactions
-                const allTransactions = [...walletTransactions, ...cardTransactions]
-                    .sort((a, b) => {
-                        const dateA = new Date(a.created_at || a.date || 0);
-                        const dateB = new Date(b.created_at || b.date || 0);
-                        return dateB - dateA; // Sort by date, newest first
-                    });
-
-                // Filter transactions based on filter select
-                let filteredTransactions = allTransactions;
-                if (filter === 'medical') {
-                    filteredTransactions = allTransactions.filter(tx =>
-                        tx.type === 'medical' ||
-                        tx.description?.toLowerCase().includes('claim') ||
-                        tx.merchant_category?.toLowerCase().includes('health')
-                    );
-                } else if (filter === 'deposit') {
-                    filteredTransactions = allTransactions.filter(tx => tx.amount > 0);
-                }
-
-                displayTransactions(filteredTransactions);
-                updateMonthStats(allTransactions);
-            } catch (error) {
-                console.error('Error loading transactions:', error);
-                document.getElementById('transactionsList').innerHTML = '<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading transactions</p></div>';
-            }
-        }
-
-        function displayTransactions(transactions) {
-            const container = document.getElementById('transactionsList');
-
-            if (transactions.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No transactions yet</p></div>';
-                return;
-            }
-
-            container.innerHTML = transactions.map(tx => {
-                const amount = typeof tx.amount === 'number' ? tx.amount : parseFloat(tx.amount) || 0;
-                const isPositive = amount >= 0;
-                const displayAmount = Math.abs(amount);
-                const icon = tx.type === 'card' ? '💳' : isPositive ? '➕' : '➖';
-
-                return `
-                <div class="transaction-item">
-                    <div class="transaction-info">
-                            <div class="transaction-title">
-                                ${icon} ${tx.description || tx.merchant_name || tx.type || 'Transaction'}
-                            </div>
-                        <div class="transaction-date">${new Date(tx.created_at || tx.date).toLocaleString()}</div>
-                            ${tx.merchant_category ? `<div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">${tx.merchant_category}</div>` : ''}
-                    </div>
-                        <div class="transaction-amount ${isPositive ? 'positive' : 'negative'}">
-                            ${isPositive ? '+' : ''}$${displayAmount.toFixed(2)}
-                    </div>
-                </div>
-                `;
-            }).join('');
-        }
-
-        function updateMonthStats(transactions) {
-            const now = new Date();
-            const thisMonth = transactions.filter(tx => {
-                const txDate = new Date(tx.created_at || tx.date);
-                return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
-            });
-
-            const spent = thisMonth
-                .filter(tx => tx.amount < 0)
-                .reduce((sum, tx) => {
-                    const amount = Math.abs(typeof tx.amount === 'number' ? tx.amount : parseFloat(tx.amount) || 0);
-                    return sum + amount;
-                }, 0);
-
-            const medicalServices = thisMonth.filter(tx =>
-                tx.type === 'medical' ||
-                tx.type === 'card' ||
-                tx.description?.toLowerCase().includes('claim') ||
-                tx.merchant_category?.toLowerCase().includes('health')
-            ).length;
-
-            document.getElementById('monthSpent').textContent = `$${spent.toFixed(2)}`;
-            document.getElementById('monthServices').textContent = medicalServices;
-        }
-
-        function showAddMoneyModal() {
-            document.getElementById('addMoneyModal').classList.add('active');
-        }
-
-        function closeAddMoneyModal() {
-            document.getElementById('addMoneyModal').classList.remove('active');
-        }
-
-        async function handleAddMoney(event) {
-            event.preventDefault();
-            const amount = parseFloat(document.getElementById('addAmount').value);
-            const method = document.getElementById('paymentMethod').value;
-
-            try {
-                const response = await fetch(`${API_BASE}/api/patient/wallet/deposit`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        patientId: patientId,
-                        amount: amount,
-                        method: method
-                    })
+                const data = await patientApi.getAppointments();
+                const appts = Array.isArray(data.appointments) ? data.appointments : [];
+                const pending = appts.filter(a => {
+                    const pay = (a.payment_status || '').toLowerCase();
+                    return pay === 'unpaid' || pay === 'pending' || pay === 'payment_due';
                 });
+                let due = 0;
+                for (const a of pending) {
+                    const n = Number(a.amount_due || 0);
+                    if (!Number.isNaN(n)) due += n;
+                }
+                const amtEl = document.getElementById('balanceDueAmount');
+                if (amtEl) amtEl.textContent = fmtMoney(due, 'USD');
+                if (pending.length) {
+                    badge.textContent = `Balance due (${pending.length})`;
+                    badge.classList.add('due');
+                } else {
+                    badge.textContent = 'No balance due';
+                    badge.classList.remove('due');
+                }
 
-                const data = await response.json();
-                if (data.success) {
-                    if (data.method === 'ach') {
-                        alert(`✅ ${data.message}\n\nYour ACH transfer has been initiated. You'll receive a notification when the funds are available in your wallet.`);
-                    } else if (data.method === 'wire') {
-                        alert(`✅ ${data.message}\n\nYour wire transfer has been initiated. Funds will be available same day.`);
+                // Render Pay now CTA list
+                const mount = document.getElementById('pendingPaymentsMount');
+                if (mount) {
+                    if (!pending.length) {
+                        mount.innerHTML = `<div class="subtext">No payments due right now.</div>`;
                     } else {
-                        alert(`✅ Successfully added $${amount.toFixed(2)} to your wallet!`);
-                    }
-                    closeAddMoneyModal();
-                    document.getElementById('addAmount').value = '';
-                    await updateBalance();
-                    await loadTransactions();
-                } else {
-                    alert('Error: ' + (data.error || 'Failed to add money'));
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
+                        mount.innerHTML = pending.slice(0, 5).map(a => {
+                            const when = `${a.date || ''} ${a.time || ''}`.trim();
+                            const amt = fmtMoney(a.amount_due, a.currency || 'USD');
+                            return `
+                              <div class="receipt-row" style="align-items:center;">
+                                <div style="min-width:0;">
+                                  <div style="font-weight:900;color:var(--gray-900);">${(a.appointment_type || 'Appointment')}</div>
+                                  <div class="receipt-meta">${when || '—'}</div>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:10px;">
+                                  <div style="font-weight:900;">${amt}</div>
+                                  <button class="btn btn-primary" data-pay-appt="${a.id}" style="padding:10px 12px;border-radius:10px;font-weight:900;">Pay now</button>
+                                </div>
+                              </div>
+                            `;
+                        }).join('');
 
-        function showReceiveModal() {
-            if (walletId) {
-                document.getElementById('walletAddress').value = walletId;
-                document.getElementById('receiveModal').classList.add('active');
-            } else {
-                alert('Wallet not initialized. Please wait a moment and try again.');
-            }
-        }
-
-        function closeReceiveModal() {
-            document.getElementById('receiveModal').classList.remove('active');
-        }
-
-        function copyWalletAddress() {
-            const address = document.getElementById('walletAddress');
-            address.select();
-            document.execCommand('copy');
-            alert('Wallet address copied to clipboard!');
-        }
-
-        // ============================================
-        // STRIPE CARDS
-        // ============================================
-
-        let stripeCards = [];
-        let selectedCard = null;
-
-        async function loadStripeCards() {
-            try {
-                if (!patientId) {
-                    return;
-                }
-
-                const response = await fetch(`${API_BASE}/api/patient/${patientId}/cards`);
-
-                if (!response.ok) {
-                    throw new Error('Failed to load cards');
-                }
-
-                const data = await response.json();
-
-                if (data.success && data.cards && data.cards.length > 0) {
-                    stripeCards = data.cards;
-                    selectedCard = data.cards[0];
-                    // Card display will be updated in initWallet after patientData is loaded
-                } else {
-                    // No cards found - will show default card in initWallet
-                }
-            } catch (error) {
-                console.error('Error loading Stripe cards:', error);
-                // Don't call displayDefaultCard here - it will be called in initWallet after patientData loads
-            }
-        }
-
-        function displayCardInWallet(card) {
-            if (!card) {
-                displayDefaultCard();
-                return;
-            }
-
-            const last4 = card.last4 || '1289';
-            const expiryMonth = String(card.expiry_month || 9).padStart(2, '0');
-            const expiryYear = String(card.expiry_year || 2025).slice(-2);
-
-            // Get patient name for cardholder
-            let cardholderName = 'CARDHOLDER NAME';
-            if (patientData && patientData.name && patientData.name[0]) {
-                const given = patientData.name[0].given || [];
-                const family = patientData.name[0].family || '';
-                cardholderName = `${given.join(' ')} ${family}`.trim().toUpperCase() || card.cardholder_name || 'CARDHOLDER NAME';
-            } else {
-                cardholderName = card.cardholder_name || 'CARDHOLDER NAME';
-            }
-
-            const brand = card.brand || 'visa';
-
-            // Format card number: 5282 3456 7890 1289 (match image design)
-            const cardNumber = `5282 3456 7890 ${last4}`;
-
-            document.getElementById('cardNumber').textContent = cardNumber;
-            document.getElementById('cardHolderName').textContent = cardholderName.toUpperCase();
-            document.getElementById('cardExpiry').textContent = `${expiryMonth}/${expiryYear}`;
-
-            // Set brand logo - use Mastercard style for visual match
-            document.getElementById('cardBrandLogo').textContent = '💳';
-        }
-
-        function displayDefaultCard() {
-            // Get patient name if available
-            let cardholderName = 'CARDHOLDER NAME';
-            if (patientData && patientData.name && patientData.name[0]) {
-                const given = patientData.name[0].given || [];
-                const family = patientData.name[0].family || '';
-                cardholderName = `${given.join(' ')} ${family}`.trim().toUpperCase() || 'CARDHOLDER NAME';
-            }
-
-            document.getElementById('cardNumber').textContent = '5282 3456 7890 1289';
-            document.getElementById('cardHolderName').textContent = cardholderName;
-            document.getElementById('cardExpiry').textContent = '09/25';
-            document.getElementById('cardBrandLogo').textContent = '💳';
-        }
-
-        async function loadLastTransactions() {
-            try {
-                if (!patientId) {
-                    document.getElementById('lastTransactionsList').innerHTML = '<div style="color: white; padding: 20px; text-align: center;">No transactions</div>';
-                    return;
-                }
-
-                // Get transactions from wallet and card transactions
-                const transactions = [];
-
-                // Get card transactions
-                try {
-                    const cardResponse = await fetch(`${API_BASE}/api/patient/${patientId}/transactions`);
-                    if (cardResponse.ok) {
-                        const cardData = await cardResponse.json();
-                        if (cardData.success && cardData.transactions) {
-                            cardData.transactions.forEach(tx => {
-                                transactions.push({
-                                    merchant: tx.merchant_name || 'Medical Service',
-                                    date: new Date(tx.created_at),
-                                    amount: -(tx.amount / 100), // Negative for expenses
-                                    type: 'card'
-                                });
+                        mount.querySelectorAll('button[data-pay-appt]').forEach(btn => {
+                            btn.addEventListener('click', async () => {
+                                const apptId = btn.getAttribute('data-pay-appt');
+                                try {
+                                    const sid = localStorage.getItem('patient_session_id') || '';
+                                    if (!sid) throw new Error('Please sign in again.');
+                                    btn.disabled = true;
+                                    btn.textContent = 'Opening…';
+                                    const r = await fetch(`${API_BASE}/api/patient/appointments/${encodeURIComponent(apptId)}/checkout`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' },
+                                        body: JSON.stringify({ amount_due: pending.find(p => p.id === apptId)?.amount_due })
+                                    });
+                                    const j = await r.json();
+                                    if (!r.ok || !j.success) throw new Error(j.error || 'Could not create checkout');
+                                    if (!j.checkout_url) throw new Error('Missing checkout url');
+                                    window.location.href = j.checkout_url;
+                                } catch (e) {
+                                    alert(e.message || 'Could not open checkout');
+                                    btn.disabled = false;
+                                    btn.textContent = 'Pay now';
+                                }
                             });
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Error loading card transactions:', e);
-                }
-
-                // Sort by date, most recent first
-                transactions.sort((a, b) => b.date - a.date);
-
-                // Get last 3 transactions
-                const lastTransactions = transactions.slice(0, 3);
-
-                if (lastTransactions.length === 0) {
-                    document.getElementById('lastTransactionsList').innerHTML = `
-                        <div class="transaction-item">
-                            <div class="transaction-info">
-                                <div class="transaction-merchant">No transactions yet</div>
-                                <div class="transaction-date">Start using your card to see transactions here</div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    document.getElementById('lastTransactionsList').innerHTML = lastTransactions.map(tx => {
-                        const isPositive = tx.amount > 0;
-                        const amountClass = isPositive ? 'positive' : 'negative';
-                        const amountSign = isPositive ? '+' : '';
-                        const dateStr = tx.date.toLocaleString('en-US', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            month: '2-digit',
-                            day: '2-digit',
-                            year: 'numeric'
                         });
-
-                        return `
-                            <div class="transaction-item">
-                                <div class="transaction-info">
-                                    <div class="transaction-merchant">${tx.merchant}</div>
-                                    <div class="transaction-date">${dateStr}</div>
-                                </div>
-                                <div class="transaction-amount ${amountClass}">${amountSign}$${Math.abs(tx.amount).toFixed(2)}</div>
-                            </div>
-                        `;
-                    }).join('');
+                    }
                 }
-            } catch (error) {
-                console.error('Error loading last transactions:', error);
-                document.getElementById('lastTransactionsList').innerHTML = '<div style="color: white; padding: 20px; text-align: center;">Error loading transactions</div>';
+            } catch (_) {
+                badge.textContent = 'Balance unavailable';
             }
         }
 
-        function showTransferModal() {
-            alert('Transfer functionality coming soon!');
-        }
-
-        function showReceiveModal() {
-            // Use existing receive modal
-            document.getElementById('receiveModal').style.display = 'block';
-        }
-
-        function showPaymentModal() {
-            // Use existing add money modal as payment
-            document.getElementById('addMoneyModal').style.display = 'block';
-        }
-
-        function showAllTransactions() {
-            // Scroll to transactions or show full list
-            alert('View all transactions - Full transaction list coming soon!');
-        }
-
-        function displayCards(cards) {
-            const container = document.getElementById('cardsList');
-
-            // Use grid layout for cards
-            container.style.display = 'grid';
-            container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(320px, 1fr))';
-            container.style.gap = '20px';
-            container.style.marginTop = '20px';
-
-            container.innerHTML = cards.map(card => {
-                const brand = (card.brand || 'visa').toLowerCase();
-                const last4 = card.last4 || '****';
-                const expiryMonth = card.expiry_month || 12;
-                const expiryYear = card.expiry_year || 2025;
-                const status = card.status || 'active';
-
-                // Get spending limit info
-                const spendingControls = card.spending_controls || {};
-                const spendingLimits = spendingControls.spending_limits || [];
-                const spendingLimit = spendingLimits.length > 0 ? spendingLimits[0].amount : 100000;
-                const spendingInterval = spendingLimits.length > 0 ? spendingLimits[0].interval : 'all_time';
-
-                // Get cardholder name
-                const cardholderName = card.cardholder_name || 'Cardholder';
-
+        async function loadReceipts() {
+            const el = document.getElementById('receiptsContainer');
+            if (!el) return;
+            el.innerHTML = `<div class="subtext">Loading…</div>`;
+            try {
+                const data = await patientApi.getReceipts();
+                if (!data.success) throw new Error(data.error || 'Failed to load');
+                const receipts = Array.isArray(data.receipts) ? data.receipts : [];
+                if (!receipts.length) {
+                    el.innerHTML = `<div style="padding:12px;border:1px dashed #e5e7eb;border-radius:12px;color:var(--gray-600);font-size:14px;">No receipts yet.</div>`;
+                    return;
+                }
+                el.innerHTML = `
+                  <div style="border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;">
+                    ${receipts.map(r => {
+                        const when = (r.issued_at || r.created_at || '').toString();
+                        const status = (r.status || 'issued').toString();
                 return `
-                    <div class="card-item ${brand}" onclick="selectCard('${card.id}')">
-                        <div class="card-status ${status}">${status.toUpperCase()}</div>
-                        <div class="card-chip"></div>
-                        <div class="card-number">**** **** **** ${last4}</div>
-                        <div class="card-details">
-                            <div>
-                                <div class="card-holder">CARDHOLDER</div>
-                                <div class="card-name">${cardholderName.toUpperCase()}</div>
+                          <div class="receipt-row">
+                            <div style="min-width:0;">
+                              <div class="receipt-amt">${fmtMoney(r.amount, r.currency)}</div>
+                              <div class="receipt-meta">${when}</div>
                             </div>
-                            <div class="card-expiry">
-                                <div class="card-expiry-label">EXPIRES</div>
-                                <div class="card-expiry-date">${String(expiryMonth).padStart(2, '0')}/${String(expiryYear).slice(-2)}</div>
-                            </div>
-                        </div>
-                        <div class="card-actions">
-                            <button class="card-action-btn" onclick="event.stopPropagation(); viewCardDetails('${card.id}')">
-                                📋 Details
-                            </button>
-                            <button class="card-action-btn" onclick="event.stopPropagation(); viewCardTransactions('${card.id}')">
-                                📊 Transactions
-                            </button>
-                        </div>
-                        <div class="card-info-section" style="margin-top: 16px; background: rgba(255, 255, 255, 0.15); border: none;">
-                            <div class="card-info-row" style="border-bottom: 1px solid rgba(255, 255, 255, 0.2); padding: 8px 0;">
-                                <span style="color: rgba(255, 255, 255, 0.9); font-size: 12px;">Spending Limit</span>
-                                <span style="color: white; font-weight: 600; font-size: 14px;">$${(spendingLimit / 100).toFixed(2)}</span>
-                            </div>
-                            <div class="card-info-row" style="padding: 8px 0;">
-                                <span style="color: rgba(255, 255, 255, 0.9); font-size: 12px;">Type</span>
-                                <span style="color: white; font-weight: 600; font-size: 14px;">${card.type === 'virtual' ? 'Virtual Card' : 'Physical Card'}</span>
-                            </div>
-                        </div>
+                            <div style="text-align:right;">
+                              <div style="font-size:12px;color:var(--gray-700);text-transform:capitalize;">${status}</div>
+                              <div class="receipt-meta">${r.id}</div>
                     </div>
+                </div>
                 `;
-            }).join('');
-
-            // If no cards selected, select the first one
-            if (cards.length > 0 && !selectedCard) {
-                selectedCard = cards[0];
-            }
-        }
-
-        function selectCard(cardId) {
-            selectedCard = stripeCards.find(c => c.id === cardId);
-            if (selectedCard) {
-                document.getElementById('viewCardBtn').style.display = 'inline-block';
-            }
-        }
-
-        async function viewCardDetails(cardId) {
-            try {
-                const response = await fetch(`${API_BASE}/api/patient/cards/${cardId}`);
-
-                if (!response.ok) {
-                    throw new Error('Failed to load card details');
-                }
-
-                const data = await response.json();
-
-                if (data.success && data.card) {
-                    showCardDetailsModal(data.card);
-                } else {
-                    alert('Error: ' + (data.error || 'Failed to load card details'));
-                }
-            } catch (error) {
-                console.error('Error loading card details:', error);
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function viewCardTransactions(cardId) {
-            try {
-                const response = await fetch(`${API_BASE}/api/patient/cards/${cardId}/transactions`);
-
-                if (!response.ok) {
-                    throw new Error('Failed to load transactions');
-                }
-
-                const data = await response.json();
-
-                if (data.success && data.transactions) {
-                    showCardTransactionsModal(cardId, data.transactions);
-                } else {
-                    alert('Error: ' + (data.error || 'Failed to load transactions'));
-                }
-            } catch (error) {
-                console.error('Error loading card transactions:', error);
-                alert('Error: ' + error.message);
-            }
-        }
-
-        function showCardDetailsModal(card) {
-            const modal = document.createElement('div');
-            modal.className = 'modal active';
-            modal.innerHTML = `
-                <div class="modal-content" style="max-width: 600px;">
-                    <div class="modal-header">
-                        <h2>Card Details</h2>
-                        <button class="close-btn" onclick="this.closest('.modal').remove()">&times;</button>
-                    </div>
-                    <div style="margin-top: 24px;">
-                        <div class="card-info-section">
-                            <div class="card-info-row">
-                                <span class="card-info-label">Card Number</span>
-                                <span class="card-info-value" id="cardNumberValue">
-                                    ${card.details && card.details.pan ? card.details.pan : `**** **** **** ${card.last4 || '****'}`}
-                                </span>
-                            </div>
-                            <div class="card-info-row">
-                                <span class="card-info-label">CVV</span>
-                                <span class="card-info-value" id="cardCvvValue">
-                                    ${card.details && card.details.cvc ? card.details.cvc : '***'}
-                                </span>
-                            </div>
-                            <div class="card-info-row">
-                                <span class="card-info-label">Expiry Date</span>
-                                <span class="card-info-value">
-                                    ${String(card.expiry_month || 12).padStart(2, '0')}/${card.expiry_year || 2025}
-                                </span>
-                            </div>
-                            <div class="card-info-row">
-                                <span class="card-info-label">Brand</span>
-                                <span class="card-info-value">${(card.brand || 'Visa').toUpperCase()}</span>
-                            </div>
-                            <div class="card-info-row">
-                                <span class="card-info-label">Type</span>
-                                <span class="card-info-value">${card.type === 'virtual' ? 'Virtual Card' : 'Physical Card'}</span>
-                            </div>
-                            <div class="card-info-row">
-                                <span class="card-info-label">Status</span>
-                                <span class="card-info-value">${(card.status || 'active').toUpperCase()}</span>
-                            </div>
-                            ${card.spending_controls && card.spending_controls.spending_limits && card.spending_controls.spending_limits.length > 0 ? `
-                                <div class="card-info-row">
-                                    <span class="card-info-label">Spending Limit</span>
-                                    <span class="card-info-value">
-                                        $${(card.spending_controls.spending_limits[0].amount / 100).toFixed(2)}
-                                        ${card.spending_controls.spending_limits[0].interval !== 'all_time' ? ` (${card.spending_controls.spending_limits[0].interval})` : ''}
-                                    </span>
-                                </div>
-                            ` : ''}
+                    }).join('')}
                         </div>
-                        ${card.details && card.details.pan ? `
-                            <div style="margin-top: 16px; padding: 16px; background: var(--gray-50); border-radius: 8px;">
-                                <p style="font-size: 12px; color: var(--gray-600); margin: 0 0 8px 0;">
-                                    <strong>💡 Tip:</strong> You can add this virtual card to Apple Pay or Google Pay for easy payments.
-                                </p>
-                                <button class="btn btn-primary" onclick="copyCardDetails()" style="width: 100%; margin-top: 8px;">
-                                    Copy Card Details
-                                </button>
-                            </div>
-                        ` : `
-                            <div style="margin-top: 16px; padding: 16px; background: var(--gray-50); border-radius: 8px;">
-                                <p style="font-size: 12px; color: var(--gray-600); margin: 0;">
-                                    Card details are only available for virtual cards in live mode. Contact support if you need your card information.
-                                </p>
-                            </div>
-                        `}
-                        <div class="form-actions" style="margin-top: 24px;">
-                            <button type="button" class="btn btn-secondary" onclick="this.closest('.modal').remove()">Close</button>
-                            ${card.status === 'active' ? `
-                                <button type="button" class="btn btn-primary" onclick="cancelCard('${card.id}')" style="background: var(--danger);">
-                                    Cancel Card
-                                </button>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-
-            // Store card data for copy function
-            window.currentCardDetails = card;
-        }
-
-        function showCardTransactionsModal(cardId, transactions) {
-            const card = stripeCards.find(c => c.id === cardId);
-            const modal = document.createElement('div');
-            modal.className = 'modal active';
-            modal.innerHTML = `
-                <div class="modal-content" style="max-width: 700px;">
-                    <div class="modal-header">
-                        <h2>Card Transactions</h2>
-                        <button class="close-btn" onclick="this.closest('.modal').remove()">&times;</button>
-                    </div>
-                    <div style="margin-top: 24px;">
-                        <div style="margin-bottom: 16px;">
-                            <p style="font-size: 14px; color: var(--gray-600); margin: 0;">
-                                Transactions for card ending in ${card ? card.last4 : '****'}
-                            </p>
-                        </div>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            ${transactions.length > 0 ? transactions.map(tx => `
-                                <div class="transaction-item">
-                                    <div class="transaction-info">
-                                        <div class="transaction-title">${tx.merchant_name || 'Transaction'}</div>
-                                        <div class="transaction-date">${new Date(tx.created_at).toLocaleString()}</div>
-                                        ${tx.merchant_category ? `<div style="font-size: 12px; color: var(--gray-500); margin-top: 4px;">${tx.merchant_category}</div>` : ''}
-                                    </div>
-                                    <div class="transaction-amount ${tx.amount > 0 ? 'positive' : 'negative'}">
-                                        ${tx.amount > 0 ? '+' : ''}$${(Math.abs(tx.amount) / 100).toFixed(2)}
-                                    </div>
-                                </div>
-                            `).join('') : '<div class="empty-state"><div class="empty-state-icon">📭</div><p>No transactions yet</p></div>'}
-                        </div>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-        }
-
-        function copyCardDetails() {
-            if (!window.currentCardDetails) return;
-
-            const card = window.currentCardDetails;
-            const cardDetails = `Card Number: ${card.details?.pan || `**** **** **** ${card.last4}`}\nCVV: ${card.details?.cvc || '***'}\nExpiry: ${String(card.expiry_month || 12).padStart(2, '0')}/${card.expiry_year || 2025}`;
-
-            navigator.clipboard.writeText(cardDetails).then(() => {
-                alert('Card details copied to clipboard!');
-            }).catch(() => {
-                // Fallback for older browsers
-                const textarea = document.createElement('textarea');
-                textarea.value = cardDetails;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                alert('Card details copied to clipboard!');
-            });
-        }
-
-        async function cancelCard(cardId) {
-            if (!confirm('Are you sure you want to cancel this card? This action cannot be undone.')) {
-                return;
+                    `;
+            } catch (_) {
+                el.innerHTML = `<div style="padding:12px;border:1px solid #fee2e2;border-radius:12px;background:#fff1f2;color:#991b1b;font-size:14px;">Unable to load receipts.</div>`;
             }
+        }
 
+        async function loadPaymentMethod() {
             try {
-                const response = await fetch(`${API_BASE}/api/patient/cards/${cardId}/cancel`, {
-                    method: 'POST'
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    alert('Card canceled successfully');
-                    // Close modal and reload cards
-                    document.querySelector('.modal.active')?.remove();
-                    await loadStripeCards();
-                } else {
-                    alert('Error: ' + (data.error || 'Failed to cancel card'));
-                }
-            } catch (error) {
-                console.error('Error canceling card:', error);
-                alert('Error: ' + error.message);
-            }
-        }
-
-        function showCardDetailsModal() {
-            if (selectedCard) {
-                viewCardDetails(selectedCard.id);
-            }
-        }
-
-        // Also load card transactions in the main transactions list
-        async function loadCardTransactions() {
-            try {
+                const sid = localStorage.getItem('patient_session_id') || '';
+                if (!sid) return;
+                const me = await fetch(`${API_BASE}/api/patient/me`, { headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' } });
+                const meData = await me.json();
+                const patientId = meData?.patient?.id || null;
                 if (!patientId) return;
 
-                const response = await fetch(`${API_BASE}/api/patient/${patientId}/transactions`);
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.transactions) {
-                        // Merge card transactions with wallet transactions
-                        const cardTransactions = data.transactions.map(tx => ({
-                            ...tx,
-                            amount: -tx.amount, // Card transactions are negative (spending)
-                            description: `${tx.merchant_name || 'Card Transaction'} (****${tx.last4 || ''})`,
-                            type: 'card',
-                            date: tx.created_at
-                        }));
-
-                        // You can merge these with existing transactions if needed
-                        return cardTransactions;
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading card transactions:', error);
-            }
-            return [];
-        }
-
-        // Initialize on page load
-        initWallet();
-
-        // Auto-refresh transactions and insurance every 30 seconds to catch provider/insurer updates
-        setInterval(() => {
-            if (patientId) {
-                loadTransactions();
-                loadInsurance();
-                updateBalance();
-            }
-        }, 30000); // Refresh every 30 seconds
-
-        function updateModernBalanceDisplay(amount) {
-            const formatted = `$${Number(amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-            const modernBalanceEl = document.getElementById('modernBalance');
-            const modernHighlightEl = document.getElementById('modernHighlightBalance');
-            if (modernBalanceEl) modernBalanceEl.textContent = formatted;
-            if (modernHighlightEl) modernHighlightEl.textContent = formatted;
-        }
-
-        function renderModernInsuranceList() {
-            const list = document.getElementById('modernInsuranceList');
-            if (!list) return;
-
-            if (!insuranceCards || insuranceCards.length === 0) {
-                list.innerHTML = '<div class="modern-empty">No insurance cards yet. Add your primary insurance to get started.</div>';
-                return;
-            }
-
-            list.innerHTML = insuranceCards
-                .map((card, index) => `
-                    <div class="modern-insurance-card ${card.is_primary ? 'primary' : ''} ${index === currentInsuranceIndex ? 'active' : ''}" onclick="handleInsuranceSelection(${index})">
-                        <div class="modern-insurance-header">
-                            <span class="modern-insurance-badge">${card.is_primary ? 'Primary' : 'Secondary'}</span>
-                            <span class="modern-insurance-payer">${card.payer_name || card.payer_id || 'Insurance'}</span>
-                        </div>
-                        <div class="modern-insurance-details">
-                            <span>Member ID: <strong>${card.member_id || 'N/A'}</strong></span>
-                            ${card.group_number ? `<span>Group: <strong>${card.group_number}</strong></span>` : ''}
-                            ${card.plan_name ? `<span>Plan: <strong>${card.plan_name}</strong></span>` : ''}
-                        </div>
-                        <div class="modern-insurance-foot">Tap to view benefits</div>
-                    </div>
-                `)
-                .join('');
-        }
-
-        function handleInsuranceSelection(index) {
-            currentInsuranceIndex = index;
-            renderModernInsuranceList();
-            if (!isCardFlipped) {
-                flipCard();
-            } else {
-                displayInsuranceCard(index);
-                if (insuranceCards[index]) {
-                    updateStatsForInsurance(insuranceCards[index]);
-                }
-            }
-        }
-
-        function renderModernTransactions(transactions) {
-            const list = document.getElementById('modernActivityList');
-            if (!list) return;
-
-            if (!transactions || transactions.length === 0) {
-                list.innerHTML = '<div class="modern-empty">No activity yet. When you book visits or pay copays, you\'ll see them here.</div>';
-                return;
-            }
-
-            list.innerHTML = transactions.slice(0, 5).map(tx => {
-                const amount = Number(tx.amount || 0);
-                const isPositive = amount >= 0;
-                const displayAmount = Math.abs(amount).toFixed(2);
-                const dateStr = new Date(tx.date || tx.created_at || Date.now()).toLocaleDateString(undefined, {
-                    month: 'short', day: 'numeric', year: 'numeric'
+                const r = await fetch(`${API_BASE}/api/patient/${encodeURIComponent(patientId)}/cards`, {
+                    headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
                 });
-                const title = tx.description || tx.merchant_name || (tx.type === 'card' ? 'Card transaction' : 'Wallet activity');
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.success) return;
+                const card = Array.isArray(data.cards) ? data.cards[0] : (data.card || null);
+                if (!card) return;
 
-                return `
-                    <div class="modern-activity-item">
-                        <div class="modern-activity-left">
-                            <div class="modern-activity-title">${title}</div>
-                            <div class="modern-activity-date">${dateStr}</div>
-                        </div>
-                        <div class="modern-activity-amount ${isPositive ? 'positive' : 'negative'}">
-                            ${isPositive ? '+' : '-'}$${displayAmount}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function flipCard() {
-            const flipCardElement = document.getElementById('flipCard');
-            isCardFlipped = !isCardFlipped;
-
-            if (isCardFlipped) {
-                if (flipCardElement) flipCardElement.classList.add('flipped');
-                if (insuranceCards.length > 0) {
-                    displayInsuranceCard(currentInsuranceIndex);
-                    updateStatsForInsurance(insuranceCards[currentInsuranceIndex]);
-                } else {
-                    loadInsuranceCard();
-                }
-            } else {
-                if (flipCardElement) flipCardElement.classList.remove('flipped');
-                loadStats();
-            }
+                const last4 = (card.last4 || '').toString().padStart(4, '•');
+                const exp = card.expiry || card.expiry_date || '';
+                const holder = card.cardholder_name || card.name || 'CARDHOLDER';
+                document.getElementById('pmNumber').textContent = `•••• •••• •••• ${last4}`;
+                document.getElementById('pmHolder').textContent = holder.toUpperCase();
+                document.getElementById('pmExpiry').textContent = exp || '—';
+            } catch (_) { }
         }
     </script>
 </body>
 
 </html>
+

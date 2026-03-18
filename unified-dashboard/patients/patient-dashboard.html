@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1e40af">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>LittleLab Patient Dashboard</title>
+    <title>Consult Patient Dashboard</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
@@ -39,9 +39,11 @@
         .sidebar-logo {
             font-size: 32px;
             line-height: 1;
-            letter-spacing: -3px;
+            letter-spacing: -2px;
             color: #2d3748;
             margin-bottom: 4px;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 700;
         }
 
         .sidebar-logo .doc {
@@ -582,10 +584,8 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    LittleLab
-                </div>
-                <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+                <div class="sidebar-logo">Consʌlt</div>
+                <div class="sidebar-subtitle">Patient Portal</div>
             </div>
 
             <nav class="sidebar-nav">
@@ -593,19 +593,10 @@
                     <span class="nav-icon">🏠</span>
                     <span>Dashboard</span>
                 </a>
-                <a href="#benefits" class="nav-item"
-                    onclick="document.getElementById('benefits').scrollIntoView({behavior: 'smooth'}); return false;">
-                    <span class="nav-icon">🏥</span>
-                    <span>My Benefits</span>
-                </a>
+                <!-- Benefits/Claims removed from telehealth MVP -->
                 <a href="wallet.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>My Wallet</span>
-                </a>
-                <a href="#claims" class="nav-item"
-                    onclick="document.getElementById('claims').scrollIntoView({behavior: 'smooth'}); return false;">
                     <span class="nav-icon">💳</span>
-                    <span>Bills & Claims</span>
+                    <span>Wallet</span>
                 </a>
                 <a href="appointments.html" class="nav-item">
                     <span class="nav-icon">📅</span>
@@ -631,15 +622,18 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <div class="page-header">
+                <div class="page-header">
                 <h1 class="page-title" id="greetingTitle">Hi Patient</h1>
                 <p class="page-subtitle">Welcome back! Here's your healthcare overview</p>
+                <div style="margin-top:16px;">
+                    <a href="book.html" class="btn btn-primary">Book a visit</a>
+                </div>
             </div>
 
             <div id="errorMessage" class="error-message" style="display: none;"></div>
 
-            <!-- Flippable Card Display (Payment Card / Insurance Card) - FIRST -->
-            <div class="payment-card-container" style="margin-bottom: 64px;">
+            <!-- Flippable Card Display (Payment Card / Insurance) -->
+            <div class="payment-card-container" style="margin-bottom: 88px;">
                 <div class="flip-card-wrapper">
                     <div class="flip-card" id="flipCard" onclick="flipCard()">
                         <!-- Front: Payment Card -->
@@ -665,7 +659,8 @@
                                         </div>
                                         <div class="card-number" id="dashboardCardNumber"
                                             style="font-size: 20px; font-weight: 600; letter-spacing: 2px; margin-bottom: 20px; font-family: 'Courier New', monospace; position: relative; z-index: 1; color: white;">
-                                            5282 3456 7890 1289</div>
+                                            •••• •••• •••• ••••
+                                        </div>
                                         <div class="card-details"
                                             style="display: flex; justify-content: space-between; align-items: flex-end; position: relative; z-index: 1; padding-right: 50px;">
                                             <div class="card-holder-name" id="dashboardCardHolder"
@@ -673,7 +668,7 @@
                                             </div>
                                             <div style="display: flex; align-items: center; gap: 12px;">
                                                 <div class="card-expiry" id="dashboardCardExpiry"
-                                                    style="font-size: 14px; opacity: 0.9; color: white;">09/25</div>
+                                                    style="font-size: 14px; opacity: 0.9; color: white;">MM/YY</div>
                                                 <div class="card-brand-logo" id="dashboardCardBrand"
                                                     style="font-size: 32px; opacity: 0.8; z-index: 1;">
                                                     💳</div>
@@ -684,75 +679,34 @@
                                     <button class="btn btn-primary"
                                         style="width: 100%; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white;"
                                         onclick="event.stopPropagation(); window.location.href='wallet.html'">
-                                        View Wallet & All Cards
+                                        View Wallet
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Back: Insurance Card -->
+                        <!-- Back: Insurance -->
                         <div class="flip-card-back">
                             <div class="dashboard-card payment-card-wrapper"
                                 style="padding: 0; overflow: hidden; background: linear-gradient(135deg, #10b981 0%, #059669 100%); min-height: 320px;">
                                 <div style="padding: 24px; color: white;">
                                     <div class="card-header"
-                                        style="border: none; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
-                                        <div class="card-title" style="color: white;">Insurance Card</div>
+                                        style="border: none; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+                                        <div class="card-title" style="color: white;">Insurance</div>
                                         <div style="font-size: 11px; opacity: 0.7; cursor: pointer;"
                                             onclick="event.stopPropagation(); flipCard();">👆 Tap to flip</div>
                                     </div>
-
-                                    <!-- Insurance Card Display -->
-                                    <div class="credit-card-display" id="insuranceCardDisplay"
-                                        style="background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; margin-bottom: 20px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); position: relative; overflow: hidden;">
-                                        <div
-                                            style="position: absolute; top: -50%; right: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);">
-                                        </div>
-                                        <div style="margin-bottom: 20px; position: relative; z-index: 1;">
-                                            <div class="insurance-card-badge primary" id="insuranceCardBadge"
-                                                style="margin-bottom: 12px; display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: rgba(255, 255, 255, 0.3);">
-                                                Primary</div>
-                                            <div class="insurance-card-name" id="insuranceCardName"
-                                                style="font-size: 18px; font-weight: 700; margin-top: 8px;">Insurance
-                                                Company</div>
-                                        </div>
-                                        <div class="card-details"
-                                            style="display: flex; flex-direction: column; gap: 16px; position: relative; z-index: 1;">
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                                <div>
-                                                    <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px;">
-                                                        Member ID</div>
-                                                    <div style="font-size: 16px; font-weight: 600; font-family: 'Courier New', monospace;"
-                                                        id="insuranceMemberId">123456789</div>
-                                                </div>
-                                                <div>
-                                                    <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px;">
-                                                        Group #</div>
-                                                    <div style="font-size: 16px; font-weight: 600; font-family: 'Courier New', monospace;"
-                                                        id="insuranceGroupNumber">GRP001</div>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <div style="font-size: 11px; opacity: 0.7; margin-bottom: 4px;">Plan
-                                                    Name</div>
-                                                <div style="font-size: 14px; font-weight: 600;" id="insurancePlanName">
-                                                    Premium Plan</div>
-                                            </div>
+                                    <div style="background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.22); border-radius: 16px; padding: 16px; margin-bottom: 14px;">
+                                        <div style="font-weight: 800; margin-bottom: 6px;">Coming soon</div>
+                                        <div style="font-size: 13px; opacity: 0.92; line-height: 1.35;">
+                                            Insurance linking will appear here later. For now, visits are handled as cash-only.
                                         </div>
                                     </div>
-
-                                    <div style="display: flex; gap: 8px;">
-                                        <button class="btn btn-primary"
-                                            style="flex: 1; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white;"
-                                            onclick="event.stopPropagation(); flipCard();">
-                                            View Payment Card
-                                        </button>
-                                        <button class="btn btn-primary"
-                                            style="flex: 1; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white;"
-                                            onclick="event.stopPropagation(); window.location.href='wallet.html'">
-                                            All Cards
-                                        </button>
-                                    </div>
+                                    <button class="btn btn-primary"
+                                        style="width: 100%; background: rgba(255, 255, 255, 0.2); border: 1px solid rgba(255, 255, 255, 0.3); color: white;"
+                                        onclick="event.stopPropagation(); window.location.href='wallet.html'">
+                                        Go to Wallet
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -760,93 +714,48 @@
                 </div>
             </div>
 
-            <!-- Stats Grid -->
-            <div class="stats-grid" style="margin-top: 48px; margin-bottom: 24px;">
-                <div class="stat-card">
-                    <div class="stat-label">Copay Amount</div>
-                    <div class="stat-value" id="copayAmount">$0.00</div>
-                </div>
-                <div class="stat-card"
-                    style="border: 2px solid var(--primary); background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);">
-                    <div class="stat-label">
-                        Account Balance
-                    </div>
-                    <div class="stat-value" id="walletBalance" style="color: var(--primary);">$3,000.00</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Pending Claims</div>
-                    <div class="stat-value" id="pendingClaims">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Total Bills</div>
-                    <div class="stat-value" id="totalBills">$0.00</div>
-                </div>
-            </div>
-
-            <!-- Dashboard Grid -->
-            <div class="dashboard-grid">
-                <!-- Benefits Card -->
-                <div class="dashboard-card" id="benefits">
+            <!-- Home -->
+            <div class="dashboard-grid" style="margin-top: 24px;">
+                <div class="dashboard-card">
                     <div class="card-header">
-                        <div class="card-title">My Benefits</div>
-                        <div class="card-icon">🏥</div>
+                        <div class="card-title">Visits</div>
+                        <div class="card-icon">📅</div>
                     </div>
-                    <div id="benefitsContent">
-                        <div class="loading">Loading benefits...</div>
+                    <div style="color: var(--gray-700); font-size: 14px;">
+                        Join your appointment when your join window opens, or reschedule/cancel as needed.
                     </div>
-                    <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;" onclick="loadBenefits()">
-                        🔄 Refresh Benefits
+                    <button class="btn btn-primary" style="width: 100%; margin-top: 16px;"
+                        onclick="window.location.href='appointments.html'">
+                        Go to Appointments
                     </button>
                 </div>
 
-                <!-- Recent Claims Card -->
-                <div class="dashboard-card" id="claims">
-                    <div class="card-header">
-                        <div class="card-title">Recent Claims</div>
-                        <div class="card-icon">📋</div>
-                    </div>
-                    <div id="claimsList">
-                        <div class="loading">Loading claims...</div>
-                    </div>
-                </div>
-
-                <!-- Medical Records Card - Connection First -->
                 <div class="dashboard-card">
                     <div class="card-header">
-                        <div class="card-title">Medical Records</div>
-                        <div class="card-icon">📁</div>
+                        <div class="card-title">Records & Documents</div>
+                        <div class="card-icon">📄</div>
                     </div>
-                    <div style="padding: 20px 0;" id="medicalRecordsContent">
-                        <div id="ehrConnectionStatus" style="margin-bottom: 16px;">
-                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                                <div id="ehrStatusIcon" style="font-size: 20px;">🔌</div>
-                                <div>
-                                    <div style="font-weight: 600; color: var(--gray-900); margin-bottom: 4px;">EHR
-                                        Connection</div>
-                                    <div id="ehrStatusText" style="font-size: 13px; color: var(--gray-600);">Not
-                                        connected</div>
-                                </div>
-                            </div>
-                            <div
-                                style="padding: 12px; background: var(--gray-50); border-radius: 8px; margin-bottom: 16px;">
-                                <p style="font-size: 13px; color: var(--gray-700); margin: 0 0 8px 0;">
-                                    Connect your Electronic Health Record (EHR) system to access your medical records,
-                                    appointment history, and health information.
-                                </p>
-                                <p style="font-size: 12px; color: var(--gray-600); margin: 0;">
-                                    Supported: Epic, 1upHealth, and other FHIR-compatible systems
-                                </p>
-                            </div>
-                            <button class="btn btn-primary" style="width: 100%; margin-bottom: 12px;"
-                                onclick="connectEHR()">
-                                🔌 Connect EHR System
-                            </button>
-                            <button class="btn btn-secondary" style="width: 100%; display: none;" id="viewRecordsBtn"
-                                onclick="viewMedicalRecords()">
-                                📁 View Medical Records
-                            </button>
-                        </div>
+                    <div style="color: var(--gray-700); font-size: 14px;">
+                        View visit summaries and download documents securely.
                     </div>
+                    <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;"
+                        onclick="window.location.href='my-records.html'">
+                        View My Records
+                    </button>
+                </div>
+
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <div class="card-title">Latest invoice</div>
+                        <div class="card-icon">🧾</div>
+                    </div>
+                    <div id="latestInvoiceSummary" style="color: var(--gray-700); font-size: 14px;">
+                        Loading…
+                    </div>
+                    <button class="btn btn-secondary" style="width: 100%; margin-top: 16px;"
+                        onclick="window.location.href='wallet.html'">
+                        View in Wallet
+                    </button>
                 </div>
             </div>
         </main>
@@ -855,95 +764,13 @@
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
 
-        // Circle Wallet Balance Management (Frontend-only for demo)
-        const WALLET_BALANCE_KEY = 'patient_wallet_balance';
-        const PAID_CLAIMS_KEY = 'patient_paid_claims';
-
-        // Initialize wallet balance if not exists
-        function initializeWalletBalance() {
-            const storedBalance = localStorage.getItem(WALLET_BALANCE_KEY);
-            if (!storedBalance) {
-                localStorage.setItem(WALLET_BALANCE_KEY, '3000.00');
-            }
-        }
-
-        // Get wallet balance
-        function getWalletBalance() {
-            const balance = parseFloat(localStorage.getItem(WALLET_BALANCE_KEY) || '3000.00');
-            return balance;
-        }
-
-        // Update wallet balance
-        function updateWalletBalance(newBalance) {
-            localStorage.setItem(WALLET_BALANCE_KEY, newBalance.toFixed(2));
-            updateWalletBalanceDisplay();
-        }
-
-        // Deduct from wallet balance
-        function deductFromWallet(amount) {
-            const currentBalance = getWalletBalance();
-            const newBalance = Math.max(0, currentBalance - amount);
-            updateWalletBalance(newBalance);
-            return newBalance;
-        }
-
-        // Update wallet balance display
-        function updateWalletBalanceDisplay() {
-            const balance = getWalletBalance();
-            const balanceElement = document.getElementById('walletBalance');
-            if (balanceElement) {
-                balanceElement.textContent = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                // Add visual feedback if balance is low
-                if (balance < 100) {
-                    balanceElement.style.color = '#ef4444'; // Red for low balance
-                } else if (balance < 500) {
-                    balanceElement.style.color = '#f59e0b'; // Orange for medium balance
-                } else {
-                    balanceElement.style.color = 'var(--primary)'; // Primary blue for good balance
-                }
-            }
-        }
-
-        // Paid Claims Management (Frontend-only for demo)
-        function getPaidClaims() {
-            try {
-                const paidClaims = localStorage.getItem(PAID_CLAIMS_KEY);
-                return paidClaims ? JSON.parse(paidClaims) : {};
-            } catch (e) {
-                return {};
-            }
-        }
-
-        function markClaimAsPaid(claimId) {
-            const paidClaims = getPaidClaims();
-            paidClaims[claimId] = {
-                paidAt: new Date().toISOString(),
-                paid: true
-            };
-            localStorage.setItem(PAID_CLAIMS_KEY, JSON.stringify(paidClaims));
-        }
-
-        function isClaimPaid(claimId) {
-            const paidClaims = getPaidClaims();
-            return paidClaims[claimId] && paidClaims[claimId].paid === true;
-        }
-
-        // Check authentication - support both patient login (localStorage) and business login (sessionStorage)
+        // Check authentication - patient portal session only (mvp-fhir-14: no PHI in storage)
         function checkAuth() {
-            // Check for patient session (from patient-login.html)
             const patientSessionId = localStorage.getItem('patient_session_id');
-            const patientEmail = localStorage.getItem('patient_email');
-            const patientPhone = localStorage.getItem('patient_phone'); // Backward compatibility
-
-            // Check for business/user session (from business login)
-            const authenticated = sessionStorage.getItem('authenticated');
-
-            if (!patientSessionId && !patientEmail && !patientPhone && authenticated !== 'true') {
-                // Not authenticated - redirect to patient login
+            if (!patientSessionId) {
                 window.location.href = 'patient-login.html';
                 return false;
             }
-
             return true;
         }
 
@@ -952,16 +779,11 @@
             // Will redirect, so stop execution
         }
 
-        // Initialize wallet balance on page load
-        initializeWalletBalance();
-
         // Load user info - will be updated with patient data
         let patientId = null;
-        let patientData = null;
         const userData = JSON.parse(sessionStorage.getItem('user') || '{}');
         const patientName = userData.name || userData.patientName || '';
-        const patientPhone = localStorage.getItem('patient_phone');
-        const fallbackLabel = patientName || userData.email || 'Patient';
+        const fallbackLabel = patientName || 'Patient';
         const initials = fallbackLabel
             .split(' ')
             .map(part => part.charAt(0))
@@ -972,166 +794,156 @@
         document.getElementById('userName').textContent = fallbackLabel;
         document.getElementById('userAvatar').textContent = initials;
 
-        // Update with actual patient data when loaded
+        // Update with server-resolved patient identity (mvp-fhir-12/13)
         async function updateUserInfo() {
             try {
-                // Try to get patient by email first (new method)
-                const patientEmail = localStorage.getItem('patient_email');
-                if (patientEmail) {
-                    try {
-                        const emailResponse = await fetch(`${API_BASE}/fhir/Patient?email=${encodeURIComponent(patientEmail)}`);
-                        const emailBundle = await emailResponse.json();
-                        if (emailBundle.entry && emailBundle.entry.length > 0) {
-                            patientData = emailBundle.entry[0].resource;
-                            patientId = patientData.id;
-                            const name = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
-                            document.getElementById('userName').textContent = name;
-                            const nameParts = name.split(' ');
-                            const firstName = nameParts[0] || name;
-                            document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                            const initials = nameParts.map(n => n[0]).join('').substring(0, 2);
-                            document.getElementById('userAvatar').textContent = initials;
-                            return;
-                        }
-                    } catch (emailError) {
-                        console.warn('Error fetching patient by email:', emailError);
-                    }
-                }
-
-                // Try to get patient by phone (backward compatibility)
-                if (patientPhone) {
-                    try {
-                        const phoneResponse = await fetch(`${API_BASE}/fhir/Patient?telecom=${encodeURIComponent(patientPhone)}`);
-                        const phoneBundle = await phoneResponse.json();
-                        if (phoneBundle.entry && phoneBundle.entry.length > 0) {
-                            patientData = phoneBundle.entry[0].resource;
-                            patientId = patientData.id;
-                            const name = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
-                            document.getElementById('userName').textContent = name;
-                            const nameParts = name.split(' ');
-                            const firstName = nameParts[0] || name;
-                            document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                            const initials = nameParts.map(n => n[0]).join('').substring(0, 2);
-                            document.getElementById('userAvatar').textContent = initials;
-                            return;
-                        }
-                    } catch (phoneError) {
-                        console.warn('Error fetching patient by phone:', phoneError);
-                    }
-                }
-
-                // Try by name if available
-                if (patientName) {
-                    const response = await fetch(`${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(patientName)}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success && data.patient) {
-                            document.getElementById('userName').textContent = data.patient.name;
-                            const nameParts = data.patient.name.split(' ');
-                            const firstName = nameParts[0] || data.patient.name;
-                            document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                            const initials = nameParts.map(n => n[0]).join('').substring(0, 2);
-                            document.getElementById('userAvatar').textContent = initials;
-                            patientId = data.patient.id;
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error updating user info:', error);
-            }
+                const sid = localStorage.getItem('patient_session_id') || '';
+                if (!sid) return;
+                const r = await fetch(`${API_BASE}/api/patient/me`, {
+                    headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) return;
+                const name = (data.patient && data.patient.name) ? data.patient.name : 'Patient';
+                patientId = (data.patient && data.patient.id) ? data.patient.id : null;
+                document.getElementById('userName').textContent = name;
+                const nameParts = name.split(' ').filter(Boolean);
+                const firstName = nameParts[0] || name;
+                const initials2 = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'PT';
+                document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
+                document.getElementById('userAvatar').textContent = initials2;
+            } catch (_) { }
         }
-
         updateUserInfo();
 
         document.addEventListener('DOMContentLoaded', () => {
-            loadDashboard();
-            
-            // Auto-refresh claims and benefits every 30 seconds to catch provider/insurer updates
-            setInterval(() => {
-                if (patientId || patientName) {
-                    loadClaims();
-                    loadBenefits();
+            try { loadLatestInvoiceSummary(); } catch (_) {}
+            try { hydrateCardFront(); } catch (_) {}
+            try {
+                const userInfo = document.querySelector('.sidebar-footer .user-info');
+                if (userInfo) {
+                    userInfo.style.cursor = 'pointer';
+                    userInfo.addEventListener('click', (e) => {
+                        if (e.target && e.target.closest && e.target.closest('.logout-btn')) return;
+                        window.location.href = 'profile.html';
+                    });
                 }
-            }, 30000); // Refresh every 30 seconds
+            } catch (_) {}
         });
 
-        async function loadDashboard() {
-            // Initialize and display wallet balance first
-            initializeWalletBalance();
-            updateWalletBalanceDisplay();
+        function flipCard() {
+            const el = document.getElementById('flipCard');
+            if (!el) return;
+            el.classList.toggle('flipped');
+        }
 
-            // Get patient ID - try multiple methods
-            if (!patientId) {
-                try {
-                    // Try by email first (new method)
-                    const patientEmail = localStorage.getItem('patient_email');
-                    if (patientEmail) {
-                        try {
-                            const emailResponse = await fetch(`${API_BASE}/fhir/Patient?email=${encodeURIComponent(patientEmail)}`);
-                            const emailBundle = await emailResponse.json();
-                            if (emailBundle.entry && emailBundle.entry.length > 0) {
-                                patientId = emailBundle.entry[0].resource.id;
-                                patientData = emailBundle.entry[0].resource;
-                            }
-                        } catch (emailError) {
-                            console.warn('Error fetching patient by email:', emailError);
-                        }
-                    }
+        function fmtMoney(amount, currency = 'USD') {
+            if (amount == null || amount === '') return '—';
+            const n = Number(amount);
+            if (Number.isNaN(n)) return `${amount} ${currency || ''}`.trim();
+            const dollars = n >= 1000 ? (n / 100).toFixed(2) : n.toFixed(2);
+            return `$${dollars} ${currency || 'USD'}`.trim();
+        }
 
-                    // Try by phone (backward compatibility)
-                    if (!patientId && patientPhone) {
-                        const phoneResponse = await fetch(`${API_BASE}/fhir/Patient?telecom=${encodeURIComponent(patientPhone)}`);
-                        const phoneBundle = await phoneResponse.json();
-                        if (phoneBundle.entry && phoneBundle.entry.length > 0) {
-                            patientId = phoneBundle.entry[0].resource.id;
-                            patientData = phoneBundle.entry[0].resource;
-                        }
-                    }
+        async function hydrateCardFront() {
+            try {
+                const sid = localStorage.getItem('patient_session_id') || '';
+                if (!sid) return;
+                const r = await fetch(`${API_BASE}/api/patient/me`, {
+                    headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) return;
+                const name = (data.patient && data.patient.name) ? data.patient.name : 'CARDHOLDER NAME';
+                document.getElementById('dashboardCardHolder').textContent = name.toUpperCase();
+                const pid = (data.patient && data.patient.id) ? data.patient.id : null;
+                if (!pid) return;
 
-                    // Try by name if phone didn't work
-                    if (!patientId && patientName) {
-                        const nameResponse = await fetch(`${API_BASE}/fhir/Patient?name=${encodeURIComponent(patientName)}`);
-                        const nameBundle = await nameResponse.json();
-                        if (nameBundle.entry && nameBundle.entry.length > 0) {
-                            patientId = nameBundle.entry[0].resource.id;
-                            patientData = nameBundle.entry[0].resource;
-                        }
-                    }
+                const cardsRes = await fetch(`${API_BASE}/api/patient/${encodeURIComponent(pid)}/cards`, {
+                    headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+                });
+                const cardsData = await cardsRes.json().catch(() => ({}));
+                if (!cardsRes.ok || !cardsData.success) return;
+                const card = Array.isArray(cardsData.cards) ? cardsData.cards[0] : (cardsData.card || null);
+                if (!card) return;
 
-                    // Try by session ID
-                    if (!patientId) {
-                        const sessionId = localStorage.getItem('patient_session_id');
-                        if (sessionId) {
-                            try {
-                                const sessionResponse = await fetch(`${API_BASE}/api/patient/appointments?session_id=${sessionId}`);
-                                const sessionData = await sessionResponse.json();
-                                if (sessionData.success && sessionData.patient_id) {
-                                    patientId = sessionData.patient_id;
-                                }
-                            } catch (sessionError) {
-                                console.warn('Error fetching patient by session:', sessionError);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error getting patient ID:', error);
+                const last4 = (card.last4 || '').toString().padStart(4, '•');
+                const exp = (card.expiry || card.expiry_date || '').toString();
+                document.getElementById('dashboardCardNumber').textContent = `•••• •••• •••• ${last4}`;
+                document.getElementById('dashboardCardExpiry').textContent = exp || '—';
+            } catch (_) { }
+        }
+
+        async function loadLatestInvoiceSummary() {
+            const box = document.getElementById('latestInvoiceSummary');
+            if (!box) return;
+            try {
+                const sid = localStorage.getItem('patient_session_id') || '';
+                if (!sid) {
+                    box.textContent = 'Sign in to view your invoices.';
+                    return;
                 }
-            }
 
-            await Promise.all([
-                loadBenefits(),
-                loadClaims(),
-                loadStats(),
-                loadCardsSummary(patientId)
-            ]);
-            
-            // Auto-refresh every 30 seconds to see claim updates
-            if (!window.claimRefreshInterval) {
-                window.claimRefreshInterval = setInterval(() => {
-                    loadClaims();
-                    loadStats();
-                }, 30000);
+                const [rReceipts, rAppts] = await Promise.all([
+                    fetch(`${API_BASE}/api/patient/receipts`, { headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' } }),
+                    fetch(`${API_BASE}/api/patient/appointments`, { headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' } })
+                ]);
+
+                const receiptsData = await rReceipts.json().catch(() => ({}));
+                const apptsData = await rAppts.json().catch(() => ({}));
+
+                const receipts = Array.isArray(receiptsData.receipts) ? receiptsData.receipts : [];
+                const appts = Array.isArray(apptsData.appointments) ? apptsData.appointments : [];
+
+                const latest = receipts[0] || null;
+                const pending = appts.filter(a => {
+                    const pay = (a.payment_status || '').toLowerCase();
+                    return pay === 'unpaid' || pay === 'pending' || pay === 'payment_due';
+                });
+
+                if (!latest && pending.length === 0) {
+                    box.textContent = 'No invoices yet.';
+                    return;
+                }
+
+                const dueAmount = pending.reduce((sum, a) => {
+                    const n = Number(a.amount_due);
+                    return sum + (Number.isFinite(n) ? n : 0);
+                }, 0);
+                const dueLine = (pending.length && dueAmount > 0)
+                    ? `<div style="margin-top:6px;color:#b91c1c;font-weight:800;">Balance due: ${fmtMoney(dueAmount, pending[0]?.currency || 'USD')}</div>`
+                    : (pending.length
+                        ? `<div style="margin-top:6px;color:#b91c1c;font-weight:800;">Balance due</div>`
+                        : `<div style="margin-top:6px;color:#16a34a;font-weight:800;">No balance due</div>`);
+
+                if (!latest) {
+                    box.innerHTML = `No recent receipt found.${dueLine}`;
+                    return;
+                }
+
+                const when = (latest.issued_at || latest.created_at || '').toString();
+                const status = (latest.status || 'issued').toString();
+                box.innerHTML = `
+                  <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+                    <div style="min-width:0;">
+                      <div style="font-weight:800;">${fmtMoney(latest.amount, latest.currency)}</div>
+                      <div style="color:var(--gray-500);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${when}</div>
+                    </div>
+                    <div style="font-size:12px;color:var(--gray-600);text-transform:capitalize;">${status}</div>
+                  </div>
+                  ${dueLine}
+                  <div style="margin-top:8px;color:var(--gray-600);font-size:12px;">Cash-only for now (insurance clearinghouse integrations coming later).</div>
+                `;
+            } catch (_) {
+                box.textContent = 'Unable to load invoices.';
             }
+        }
+
+        async function loadDashboard() {
+            // Telehealth MVP + FHIR-first interop (mvp-fhir-12):
+            // The patient UI must not call /fhir/* directly from the browser.
+            // Home page is navigation only; patient identity comes from /api/patient/me.
+            return;
         }
 
         async function loadBenefits() {
@@ -1704,73 +1516,7 @@
             }
         }
 
-        async function loadStats() {
-            try {
-                // Get patient name from patientData or session
-                let nameToUse = patientName;
-                if (!nameToUse && patientData && patientData.name) {
-                    nameToUse = `${(patientData.name[0].given || []).join(' ')} ${patientData.name[0].family || ''}`.trim();
-                }
-
-                if (!nameToUse) {
-                    // Still update wallet balance
-                    updateWalletBalanceDisplay();
-                    return;
-                }
-
-                // Load benefits data (which includes stats)
-                const response = await fetch(`${API_BASE}/api/patient/benefits?patientName=${encodeURIComponent(nameToUse)}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        // Update stats from benefits data
-                        const stats = data.stats || {};
-                        document.getElementById('pendingClaims').textContent = stats.pending_claims || 0;
-                        document.getElementById('totalBills').textContent = `$${(stats.total_bills || 0).toFixed(2)}`;
-
-                        // Update benefits stats
-                        if (data.eligibility) {
-                            const copay = data.eligibility.copay_amount || 0;
-                            document.getElementById('copayAmount').textContent = `$${copay.toFixed(2)}`;
-                        }
-
-                        // Update wallet balance from localStorage (Circle Wallet)
-                        updateWalletBalanceDisplay();
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading stats:', error);
-                // Still update wallet balance even if API call fails
-                updateWalletBalanceDisplay();
-            }
-        }
-
-        async function refreshBenefits() {
-            try {
-                // Show loading state
-                document.getElementById('benefitsContent').innerHTML = '<div class="loading">Refreshing benefits...</div>';
-                await Promise.all([
-                    loadBenefits(),
-                    loadStats()
-                ]);
-            } catch (error) {
-                console.error('Error refreshing benefits:', error);
-                showError('Failed to refresh benefits. Please try again.');
-            }
-        }
-
-        // Make loadBenefits available globally for button onclick
-        window.loadBenefits = loadBenefits;
-        window.refreshBenefits = refreshBenefits;
-
-        function showError(message) {
-            const errorEl = document.getElementById('errorMessage');
-            errorEl.textContent = message;
-            errorEl.style.display = 'block';
-            setTimeout(() => {
-                errorEl.style.display = 'none';
-            }, 5000);
-        }
+        // (MVP) Benefits/claims and EHR integrations are deferred.
 
         // Mobile menu toggle
         function toggleMobileMenu() {
@@ -1924,10 +1670,7 @@
             }
         }
 
-        // Check EHR status on page load
-        document.addEventListener('DOMContentLoaded', () => {
-            checkEHRStatus();
-        });
+        // (MVP) EHR connection status UI is deferred.
 
         // ============================================
         // FLIPPABLE CARD FUNCTIONALITY
@@ -2016,20 +1759,22 @@
 
             document.getElementById('insuranceCardBadge').textContent = insurance.is_primary ? 'Primary' : 'Secondary';
             document.getElementById('insuranceCardBadge').className = `insurance-card-badge ${insurance.is_primary ? 'primary' : 'secondary'}`;
-            document.getElementById('insuranceCardName').textContent = insurance.payer_name || insurance.payer_id || 'Insurance Company';
-            document.getElementById('insuranceMemberId').textContent = insurance.member_id || 'N/A';
-            document.getElementById('insuranceGroupNumber').textContent = insurance.group_number || 'N/A';
-            document.getElementById('insurancePlanName').textContent = insurance.plan_name || 'Plan Name';
+            // Telehealth MVP: avoid placeholder insurance identifiers on the dashboard.
+            // If insurance is present, show redacted/non-identifying values only.
+            document.getElementById('insuranceCardName').textContent = (insurance.payer_name || insurance.payer_id) ? 'On file' : '—';
+            document.getElementById('insuranceMemberId').textContent = '—';
+            document.getElementById('insuranceGroupNumber').textContent = '—';
+            document.getElementById('insurancePlanName').textContent = '—';
         }
 
         // Display default insurance card
         function displayDefaultInsuranceCard() {
             document.getElementById('insuranceCardBadge').textContent = 'Primary';
             document.getElementById('insuranceCardBadge').className = 'insurance-card-badge primary';
-            document.getElementById('insuranceCardName').textContent = 'No Insurance Card';
-            document.getElementById('insuranceMemberId').textContent = 'N/A';
-            document.getElementById('insuranceGroupNumber').textContent = 'N/A';
-            document.getElementById('insurancePlanName').textContent = 'Add insurance to view details';
+            document.getElementById('insuranceCardName').textContent = '—';
+            document.getElementById('insuranceMemberId').textContent = '—';
+            document.getElementById('insuranceGroupNumber').textContent = '—';
+            document.getElementById('insurancePlanName').textContent = '—';
         }
 
         // Update stats based on selected insurance
@@ -2068,18 +1813,12 @@
             }
         }
 
-        // Load insurance card when dashboard loads
-        document.addEventListener('DOMContentLoaded', () => {
-            // Load insurance cards after patient data is available
-            setTimeout(() => {
-                if (patientId) {
-                    loadInsuranceCard();
-                }
-            }, 1000);
-        });
+        // (MVP) Insurance card UI is deferred.
+    </script>
+    <script type="module">
+        import { mountBottomTabs } from '../assets/js/patient-shell.js';
+        mountBottomTabs();
     </script>
 </body>
-
-</html>
 
 </html>

@@ -10,6 +10,7 @@ const crypto = require('crypto');
 function correlationIdMiddleware(req, res, next) {
   const incoming = req.headers['x-request-id'] || req.headers['x-correlation-id'];
   req.id = incoming || crypto.randomBytes(16).toString('hex');
+  req.journey_id = (req.headers['x-journey-id'] || '').toString().trim() || null;
   res.setHeader('x-request-id', req.id);
   next();
 }

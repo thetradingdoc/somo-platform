@@ -624,6 +624,14 @@ class RetellWebSocketHandler {
                     result = await this.handleScheduleAppointment(callId, functionArgs);
                     break;
 
+                case 'patient_intake':
+                    result = await this.handlePatientIntake(callId, functionArgs);
+                    break;
+
+                case 'get_patient_intake_status':
+                    result = await this.handleGetPatientIntakeStatus(callId, functionArgs);
+                    break;
+
                 case 'get_available_slots':
                     result = await this.handleGetAvailableSlots(callId, functionArgs);
                     break;
@@ -2141,6 +2149,24 @@ class RetellWebSocketHandler {
                 const { blockScheduling, assessment } = checkBeforeScheduling(recentTurns);
                 if (blockScheduling && assessment?.isEmergency) {
                     console.warn(`🚨 EMERGENCY: Blocked scheduling - red flags detected: ${assessment.redFlags?.join(', ')}`);
+
+                    // Phase 1 safety: persist cross-channel emergency flag (24h)
+                    try {
+                        const phone = this.getCustomerPhone(callId);
+                        const email = this.getCustomerEmail(callId);
+                        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+                        if (this.db && typeof this.db.upsertPatientEmergencyFlag === 'function') {
+                            this.db.upsertPatientEmergencyFlag({
+                                phone: phone || null,
+                                email: email || null,
+                                source: 'voice',
+                                call_id: callId,
+                                expires_at: expiresAt,
+                                metadata: { red_flags: assessment.redFlags || [], urgency: assessment.urgency || 'EMERGENT' }
+                            });
+                        }
+                    } catch (_) {}
+
                     return {
                         success: false,
                         blockScheduling: true,
@@ -2246,6 +2272,9 @@ class RetellWebSocketHandler {
             // Log successful appointment creation
             if (response.data.success && response.data.appointment) {
                 console.log(`✅ Appointment successfully created: ${response.data.appointment.id} (Confirmation: ${response.data.appointment.confirmation_number})`);
+                if (connection && !connection._onboardingStartAt) {
+                    connection._onboardingStartAt = Date.now();
+                }
             } else if (!response.data.success) {
                 console.warn(`⚠️  Appointment scheduling failed: ${response.data.error || 'Unknown error'}`);
             }
@@ -2267,6 +2296,52 @@ class RetellWebSocketHandler {
             return {
                 success: false,
                 error: error.message
+            };
+        }
+    }
+
+    // Handle patient_intake function (DOB + country/city onboarding)
+    async handlePatientIntake(callId, args) {
+        try {
+            const connection = this.activeConnections.get(callId);
+            const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/patient/intake`, {
+                patient_id: args.patient_id,
+                patient_email: args.patient_email,
+                patient_phone: args.patient_phone,
+                first_name: args.first_name,
+                last_name: args.last_name,
+                dob: args.dob,
+                country: args.country,
+                city: args.city,
+                city_place_id: args.city_place_id
+            });
+            const data = response.data || {};
+            if (connection && connection._onboardingStartAt && data && data.success) {
+                data.onboarding_ms = Date.now() - connection._onboardingStartAt;
+            }
+            return data;
+        } catch (error) {
+            return {
+                success: false,
+                error: error.response?.data?.error || error.message,
+                message: error.response?.data?.message || "I couldn’t save that; let’s try again."
+            };
+        }
+    }
+
+    // Check which onboarding fields are missing (DOB/country/city)
+    async handleGetPatientIntakeStatus(callId, args) {
+        try {
+            const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/patient/intake/status`, {
+                patient_id: args.patient_id,
+                patient_email: args.patient_email,
+                patient_phone: args.patient_phone
+            });
+            return response.data;
+        } catch (error) {
+            return {
+                success: false,
+                error: error.response?.data?.error || error.message
             };
         }
     }

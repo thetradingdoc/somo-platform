@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e40af" />
+  <title>Connect Records - Consʌlt Patient Portal</title>
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="../assets/js/config.js" defer></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 560px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .title {
+      font-size: 22px;
+      margin: 0 0 6px 0;
+      font-weight: 800;
+    }
+
+    .sub {
+      margin: 0 0 16px 0;
+      font-size: 14px;
+      color: #4b5563;
+      line-height: 1.35;
+    }
+
+    .box {
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 14px;
+      background: #f9fafb;
+      margin-bottom: 16px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .kv {
+      font-size: 13px;
+      color: #374151;
+    }
+
+    .kv b {
+      display: block;
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 2px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      min-height: 44px;
+    }
+
+    .btn-primary {
+      background: #1e40af;
+      color: white;
+      flex: 1;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .msg {
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-top: 12px;
+      display: none;
+    }
+
+    .msg.ok {
+      background: #ecfdf3;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .msg.err {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    .muted {
+      color: #6b7280;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+
+    .hidden { display: none; }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div style="text-align:center; margin-bottom: 10px;">
+      <div style="font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; letter-spacing: -2px; font-size: 44px; color: #1e40af; line-height: 1;">Consʌlt</div>
+    </div>
+
+    <h1 class="title">Connect my records</h1>
+    <p class="sub">
+      Before we import anything, please confirm the identity information we’ll use to match your records.
+    </p>
+
+    <div class="box">
+      <div style="font-weight:800;margin-bottom:8px;">Is this you?</div>
+      <div class="grid" id="identityGrid"></div>
+      <div class="muted">
+        We use your date of birth and address only to safely match your records. You’ll be able to review matches before import.
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="yesBtn" type="button">Yes, this is me</button>
+        <button class="btn btn-secondary" id="noBtn" type="button">No, update my details</button>
+      </div>
+      <div class="msg ok" id="okMsg">Connection is coming soon. You’re all set for when it’s enabled.</div>
+      <div class="msg err" id="errMsg">We can’t confidently match your records yet. Please add your postal/ZIP code and try again.</div>
+    </div>
+
+    <!-- Multi-candidate stub (future) -->
+    <div class="box hidden" id="candidatesBox">
+      <div style="font-weight:800;margin-bottom:8px;">Possible matches</div>
+      <div style="color:#4b5563;font-size:13px;margin-bottom:10px;">
+        If a connector returns multiple potential matches, we’ll show them here and ask you to confirm.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
+          <div style="font-weight:800;">Example Candidate A</div>
+          <div style="color:#6b7280;font-size:12px;">Age: 34 • City: Austin</div>
+        </div>
+        <div style="padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#fff;">
+          <div style="font-weight:800;">Example Candidate B</div>
+          <div style="color:#6b7280;font-size:12px;">Age: 34 • City: Dallas</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row" style="justify-content:space-between;">
+      <button class="btn btn-secondary" type="button" onclick="window.location.href='profile.html'">Back to Profile</button>
+      <button class="btn btn-secondary" type="button" onclick="window.location.href='patient-dashboard.html'">Go to Dashboard</button>
+    </div>
+  </div>
+
+  <script>
+    function readIdentity() {
+      try {
+        const s = sessionStorage.getItem('connect_records_identity');
+        if (s) return JSON.parse(s);
+      } catch (_) {}
+      try {
+        const c = JSON.parse(localStorage.getItem('patient_identity_cache') || '{}');
+        return c || null;
+      } catch (_) {}
+      return null;
+    }
+
+    function esc(x) {
+      return (x || '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function canConnect(id) {
+      if (!id) return false;
+      const hasName = !!(id.first_name && id.last_name);
+      const hasDob = !!id.dob;
+      const hasContact = !!(id.email || id.phone);
+      const hasPostal = !!id.postal_code;
+      return hasName && hasDob && hasContact && hasPostal;
+    }
+
+    const id = readIdentity();
+    const grid = document.getElementById('identityGrid');
+    const okMsg = document.getElementById('okMsg');
+    const errMsg = document.getElementById('errMsg');
+
+    const rows = [
+      ['First name', id?.first_name],
+      ['Last name', id?.last_name],
+      ['Date of birth', id?.dob],
+      ['Email', id?.email],
+      ['Phone', id?.phone],
+      ['City', id?.city],
+      ['Country', id?.country],
+      ['Postal/ZIP', id?.postal_code],
+      ['Address line 1', id?.address_line1]
+    ];
+    grid.innerHTML = rows.map(([k, v]) => `
+      <div class="kv"><b>${esc(k)}</b>${esc(v || '—')}</div>
+    `).join('');
+
+    document.getElementById('yesBtn').addEventListener('click', () => {
+      okMsg.style.display = 'none';
+      errMsg.style.display = 'none';
+      if (!canConnect(id)) {
+        errMsg.style.display = 'block';
+        return;
+      }
+      okMsg.style.display = 'block';
+    });
+
+    document.getElementById('noBtn').addEventListener('click', () => {
+      // Route them to onboarding to update identity fields (especially postal/ZIP)
+      window.location.href = 'onboarding.html';
+    });
+  </script>
+</body>
+
+</html>
+

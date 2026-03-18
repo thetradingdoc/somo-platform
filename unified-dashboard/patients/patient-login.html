@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1e40af">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>LittleLab Patient Portal</title>
+    <title>Consult Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
@@ -26,44 +26,49 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
-        .login-container {
+        .auth-container {
             background: white;
-            border-radius: 16px;
-            padding: 40px;
-            max-width: 440px;
-            width: 100%;
+            border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 480px;
+            width: 100%;
+            overflow: hidden;
         }
 
-        .logo {
+        .auth-header {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            padding: 36px;
             text-align: center;
-            margin-bottom: 32px;
+            color: white;
+        }
+
+        .auth-body {
+            padding: 40px;
         }
 
         .logo-brand {
-            font-size: 48px;
-            font-weight: 300;
-            color: var(--primary);
+            font-size: 32px;
             margin-bottom: 8px;
-            letter-spacing: -3px;
-            line-height: 1;
-        }
-
-        .logo-brand .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-            font-weight: 400;
-        }
-
-        .logo-brand .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .logo-subtitle {
-            color: var(--gray-600);
+            opacity: 0.9;
             font-size: 14px;
-            margin-top: 8px;
+        }
+
+        .portal-title {
+            margin: 8px 0 0 0;
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .portal-sub {
+            margin: 6px 0 0 0;
+            font-size: 13px;
+            opacity: 0.92;
         }
 
         .step {
@@ -75,16 +80,19 @@
         }
 
         .step-title {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 8px;
+            font-size: 22px;
+            font-weight: 800;
+            margin: 0 0 8px 0;
             color: var(--gray-900);
+            text-align: center;
         }
 
         .step-description {
             color: var(--gray-600);
-            margin-bottom: 24px;
+            margin: 0 0 18px 0;
             font-size: 14px;
+            text-align: center;
+            line-height: 1.5;
         }
 
         .form-group {
@@ -111,16 +119,16 @@
         .form-input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
         }
 
         .btn-primary {
             width: 100%;
             padding: 14px;
-            background: var(--primary);
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
@@ -128,7 +136,8 @@
         }
 
         .btn-primary:hover {
-            background: var(--primary-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(30, 64, 175, 0.25);
         }
 
         .btn-primary:disabled {
@@ -137,21 +146,20 @@
         }
 
         .btn-secondary {
-            width: 100%;
-            padding: 12px;
-            background: var(--gray-100);
-            color: var(--gray-700);
-            border: none;
-            border-radius: 8px;
+            padding: 10px 14px;
+            background: #f7fafc;
+            color: #2d3748;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
-            margin-top: 12px;
         }
 
         .btn-secondary:hover {
-            background: var(--gray-200);
+            background: #eef2ff;
+            border-color: rgba(30, 64, 175, 0.35);
         }
 
         .code-input {
@@ -229,14 +237,12 @@
                 padding: 16px;
             }
 
-            .login-container {
-                padding: 24px 20px;
-                border-radius: 12px;
+            .auth-header {
+                padding: 28px 20px;
             }
 
-            .logo-brand {
-                font-size: 36px;
-                letter-spacing: -2px;
+            .auth-body {
+                padding: 24px 20px;
             }
 
             .step-title {
@@ -255,12 +261,11 @@
         }
 
         @media (max-width: 480px) {
-            .login-container {
-                padding: 20px 16px;
+            .auth-header {
+                padding: 24px 16px;
             }
-
-            .logo-brand {
-                font-size: 32px;
+            .auth-body {
+                padding: 20px 16px;
             }
 
             .step-title {
@@ -277,18 +282,24 @@
 </head>
 
 <body>
-    <div class="login-container">
-        <div class="logo">
-            <div class="logo-brand">
-                LittleLab
-            </div>
-            <div class="logo-subtitle">Access your LittleLab portal</div>
+    <div class="auth-container">
+        <div class="auth-header">
+            <div class="logo-brand">Consʌlt</div>
+            <div class="portal-title">Patient Portal</div>
+            <div class="portal-sub">Secure email code access</div>
         </div>
+        <div class="auth-body">
 
         <!-- Step 1: Enter Email -->
         <div class="step active" id="stepEmail">
-            <h2 class="step-title">Sign in to LittleLab</h2>
-            <p class="step-description">New or returning patient? Enter your email to get a secure 6-digit sign-in code.</p>
+            <h2 class="step-title" id="authTitle">Sign in</h2>
+            <p class="step-description" id="authDescription">Enter your email to receive a secure 6-digit code.</p>
+
+            <div style="margin:-8px 0 18px 0; text-align:center;">
+                <button type="button" id="toggleIntentBtn" class="btn-secondary" style="margin-top:0; width:auto; padding:8px 12px;">
+                    New here? Create account
+                </button>
+            </div>
 
             <div id="emailMessage"></div>
 
@@ -299,7 +310,7 @@
                         autocomplete="email">
                 </div>
                 <button type="submit" class="btn-primary" id="emailSubmitBtn">
-                    Send Verification Code
+                    Continue
                 </button>
             </form>
         </div>
@@ -338,6 +349,7 @@
                 <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
                 <div>Signing you in...</div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -408,6 +420,10 @@
 
                 if (data.success) {
                     sessionId = data.session_id;
+                    // If backend knows whether account exists, set the UI intent accordingly
+                    if (typeof data.existing_patient === 'boolean') {
+                        setAuthIntent(data.existing_patient ? 'signin' : 'signup');
+                    }
                     document.getElementById('emailDisplay').textContent = email;
                     showStep('stepCode');
                     // Focus first code input
@@ -415,7 +431,7 @@
                 } else {
                     showMessage('emailMessage', data.error || 'Failed to send code', 'error');
                     btn.disabled = false;
-                    btn.textContent = 'Send Verification Code';
+                    btn.textContent = 'Continue';
                 }
             } catch (error) {
                 showMessage('emailMessage', 'Network error. Please try again.', 'error');
@@ -427,7 +443,7 @@
                     });
                 }
                 btn.disabled = false;
-                btn.textContent = 'Send Verification Code';
+                btn.textContent = 'Continue';
             }
         }
 
@@ -458,37 +474,12 @@
                     sessionId = data.session_id;
                     // Store session in localStorage
                     localStorage.setItem('patient_session_id', sessionId);
-                    localStorage.setItem('patient_email', currentEmail);
 
                     showStep('stepLoading');
 
-                    // After login, decide whether to show onboarding or dashboard
-                    const tenantFlags = (window.TENANT_CONFIG && window.TENANT_CONFIG.feature_flags) || {};
-                    const onboardingEnabled = tenantFlags.FEATURE_PATIENT_ONBOARDING !== false;
-
-                    if (!onboardingEnabled) {
-                        window.location.href = 'wallet.html';
-                    } else {
-                        fetch(`${API_BASE}/api/patient/profile`, {
-                            headers: { ...API_HEADERS, 'x-session-id': sessionId }
-                        })
-                        .then(r => r.json())
-                        .then(profileData => {
-                            if (profileData.success && profileData.flags) {
-                                const { profile_verified, insurance_verified } = profileData.flags;
-                                if (profile_verified && insurance_verified) {
-                                    window.location.href = 'wallet.html';
-                                } else {
-                                    window.location.href = 'onboarding.html';
-                                }
-                            } else {
-                                window.location.href = 'onboarding.html';
-                            }
-                        })
-                        .catch(() => {
-                            window.location.href = 'onboarding.html';
-                        });
-                    }
+                    // If required onboarding fields are missing, route to onboarding
+                    const needsOnboarding = (data.created_patient === true) || (data.onboarding_complete === false);
+                    window.location.href = needsOnboarding ? 'onboarding.html' : 'appointments.html';
                 } else {
                     showMessage('codeMessage', data.error || 'Invalid verification code', 'error');
                     // Clear code inputs
@@ -540,17 +531,25 @@
 
         // Check if already logged in
         window.addEventListener('DOMContentLoaded', () => {
+            // default intent
+            setAuthIntent('signin');
+
+            const toggle = document.getElementById('toggleIntentBtn');
+            toggle.addEventListener('click', () => {
+                const next = (window.__patientAuthIntent === 'signin') ? 'signup' : 'signin';
+                setAuthIntent(next);
+            });
+
             const existingSession = localStorage.getItem('patient_session_id');
             if (existingSession) {
                 // Validate session
-                fetch(`${API_BASE}/api/patient/appointments?session_id=${existingSession}`, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+                fetch(`${API_BASE}/api/patient/appointments`, { headers: { 'ngrok-skip-browser-warning': 'true', 'x-session-id': existingSession } })
                     .then(r => r.json())
                     .then(data => {
                         if (data.success) {
-                            window.location.href = 'wallet.html';
+                            window.location.href = 'appointments.html';
                         } else {
                             localStorage.removeItem('patient_session_id');
-                            localStorage.removeItem('patient_phone');
                         }
                     })
                     .catch(() => {
@@ -558,6 +557,23 @@
                     });
             }
         });
+
+        function setAuthIntent(intent) {
+            window.__patientAuthIntent = intent === 'signup' ? 'signup' : 'signin';
+            const title = document.getElementById('authTitle');
+            const desc = document.getElementById('authDescription');
+            const toggle = document.getElementById('toggleIntentBtn');
+
+            if (window.__patientAuthIntent === 'signup') {
+                title.textContent = 'Create account';
+                desc.textContent = 'Enter your email to create your patient account. We’ll send a secure 6-digit code.';
+                toggle.textContent = 'Already have an account? Sign in';
+            } else {
+                title.textContent = 'Sign in';
+                desc.textContent = 'Enter your email to receive a secure 6-digit code.';
+                toggle.textContent = 'New here? Create account';
+            }
+        }
     </script>
 </body>
 

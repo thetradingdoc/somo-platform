@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DocLittle Command Center</title>
+    <title>Consʌlt Command Center</title>
     <style>
       :root {
         --bg: #05060a;
@@ -56,6 +56,8 @@
         font-weight: 700;
         font-size: 18px;
         color: var(--accent-blue);
+        font-family: 'Open Sans', "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+        letter-spacing: -0.02em;
       }
       .nav-icon {
         width: 40px;
@@ -196,7 +198,7 @@
   <body>
     <div class="shell">
       <aside>
-        <div class="logo">DL</div>
+        <div class="logo">Cʌ</div>
         <div class="nav-icon active" title="Command Center">⛭</div>
         <div class="nav-icon" title="Leads" onclick="window.location.href='/admin/leads.html'">☰</div>
         <div class="nav-icon" title="CRM" onclick="window.location.href='/admin/crm.html'">📈</div>
@@ -204,7 +206,7 @@
       <main>
         <div class="top-bar">
           <div>
-            <p style="margin:0;color:var(--muted);font-size:13px;">DocLittle • Unified Operations</p>
+            <p style="margin:0;color:var(--muted);font-size:13px;">Consʌlt • Unified Operations</p>
             <h1 class="page-title">Executive Command Center</h1>
           </div>
           <button class="theme-toggle" id="themeToggle">Switch Theme</button>
@@ -243,14 +245,11 @@
           <div class="panel">
             <h2 style="margin-top:0;">Quick Launch</h2>
             <div class="quick-links">
-              <a class="quick-link" href="/business/business-dashboard.html">
-                Business Portal <span>Clinics & billing</span>
+              <a class="quick-link" href="/unified-dashboard/portal.html">
+                Sign in <span>Patient Portal or Clinic Dashboard</span>
               </a>
               <a class="quick-link" href="/insurer/insurer-dashboard.html">
                 Insurer Ops <span>Payer data</span>
-              </a>
-              <a class="quick-link" href="/patients/wallet.html">
-                Patient Wallet <span>Experience</span>
               </a>
               <a class="quick-link" href="https://api.doclittle.site" target="_blank" rel="noopener">
                 API Hub <span>Credentials</span>
@@ -314,7 +313,7 @@
           </table>
         </section>
 
-        <footer>© <span id="year"></span> DocLittle • Operating on the primary domain.</footer>
+        <footer>© <span id="year"></span> Consʌlt • Operating on the primary domain.</footer>
       </main>
     </div>
 

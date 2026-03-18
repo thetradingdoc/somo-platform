@@ -85,6 +85,18 @@
             "type": "string",
             "description": "Patient's email address (required for confirmations)"
           },
+          "dob": {
+            "type": "string",
+            "description": "Patient date of birth (YYYY-MM-DD). Collect during/after booking for onboarding."
+          },
+          "country": {
+            "type": "string",
+            "description": "Patient country (e.g., United States). Collect during/after booking for onboarding."
+          },
+          "city": {
+            "type": "string",
+            "description": "Patient city (e.g., Austin). Collect during/after booking for onboarding."
+          },
           "appointment_type": {
             "type": "string",
             "description": "Type of appointment (e.g., Therapy Session - Psychiatry, Primary Care Consultation)"
@@ -115,6 +127,72 @@
           }
         },
         "required": ["patient_name", "patient_phone", "patient_email", "date", "time"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "patient_intake",
+      "description": "Capture patient onboarding details (DOB + country/city) and sync them to the patient portal.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "description": "FHIR patient ID if known (preferred)"
+          },
+          "patient_email": {
+            "type": "string",
+            "description": "Patient email (resolve patient if patient_id missing)"
+          },
+          "patient_phone": {
+            "type": "string",
+            "description": "Patient phone (resolve patient if patient_id missing)"
+          },
+          "first_name": {
+            "type": "string",
+            "description": "First name"
+          },
+          "last_name": {
+            "type": "string",
+            "description": "Last name"
+          },
+          "dob": {
+            "type": "string",
+            "description": "Date of birth (YYYY-MM-DD)"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country"
+          },
+          "city": {
+            "type": "string",
+            "description": "City"
+          }
+        },
+        "required": ["dob", "country", "city"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "get_patient_intake_status",
+      "description": "Check which onboarding fields are missing (DOB/country/city) so you only ask what is needed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "description": "FHIR patient ID if known"
+          },
+          "patient_email": {
+            "type": "string",
+            "description": "Patient email (resolve patient if patient_id missing)"
+          },
+          "patient_phone": {
+            "type": "string",
+            "description": "Patient phone (resolve patient if patient_id missing)"
+          }
+        },
+        "required": []
       }
     },
     {

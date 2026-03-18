@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1e40af">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>My Profile - LittleLab Patient Portal</title>
+    <title>My Profile - Consult Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js"></script>
     <style>
@@ -39,9 +39,11 @@
         .sidebar-logo {
             font-size: 32px;
             line-height: 1;
-            letter-spacing: -3px;
+            letter-spacing: -2px;
             color: #2d3748;
             margin-bottom: 4px;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 700;
         }
 
         .sidebar-subtitle {
@@ -319,25 +321,18 @@
     <div class="layout">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo">LittleLab</div>
-                <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+                <div class="sidebar-logo">Consʌlt</div>
+                <div class="sidebar-subtitle">Patient Portal</div>
             </div>
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
                     <span class="nav-icon">🏠</span>
                     <span>Dashboard</span>
                 </a>
-                <a href="patient-dashboard.html#benefits" class="nav-item">
-                    <span class="nav-icon">🏥</span>
-                    <span>My Benefits</span>
-                </a>
+                <!-- Benefits/Claims removed from telehealth MVP -->
                 <a href="wallet.html" class="nav-item">
-                    <span class="nav-icon">💰</span>
-                    <span>My Wallet</span>
-                </a>
-                <a href="patient-dashboard.html#claims" class="nav-item">
                     <span class="nav-icon">💳</span>
-                    <span>Bills & Claims</span>
+                    <span>Wallet</span>
                 </a>
                 <a href="appointments.html" class="nav-item">
                     <span class="nav-icon">📅</span>
@@ -386,14 +381,14 @@
 
         async function loadProfile() {
             try {
-                const response = await fetch(`${API_BASE}/api/patient/profile`, {
+                const response = await fetch(`${API_BASE}/api/patient/intake`, {
                     headers: { 'x-session-id': sessionId }
                 });
 
                 const data = await response.json();
 
                 if (data.success) {
-                    displayProfile(data.profile);
+                    displayProfile(data.intake || {});
                 } else {
                     if (data.error && data.error.includes('session')) {
                         localStorage.removeItem('patient_session_id');
@@ -413,18 +408,34 @@
             }
         }
 
-        function displayProfile(profile) {
+        function displayProfile(intake) {
             const card = document.getElementById('profileCard');
+            const fullName = [intake.first_name, intake.last_name].filter(Boolean).join(' ') || intake.name || '';
+            const address = intake.address || {};
+            let cached = null;
+            try {
+                cached = JSON.parse(localStorage.getItem('patient_identity_cache') || '{}');
+                if (cached && cached.session_id !== sessionId) cached = null;
+            } catch (_) { cached = null; }
+            const postal = (address.postal_code || intake.postal_code || cached?.postal_code || '').toString();
+            const line1 = (address.line1 || intake.address_line1 || cached?.address_line1 || '').toString();
+            const canConnectRecords = (() => {
+                const hasName = !!fullName.trim();
+                const hasDob = !!(intake.dob || '');
+                const hasContact = !!((intake.email || '').trim() || (intake.phone || '').trim());
+                const hasPostal = !!postal.trim();
+                return hasName && hasDob && hasContact && hasPostal;
+            })();
             card.innerHTML = `
                 <div class="profile-section">
                     <h2 class="section-title">Personal Information</h2>
                     <div class="form-group">
                         <label class="form-label">Full Name</label>
-                        <input type="text" class="form-input" value="${profile.name || ''}" disabled>
+                        <input type="text" class="form-input" value="${fullName}" disabled>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Date of Birth</label>
-                        <input type="date" class="form-input" value="${profile.birth_date || ''}" disabled>
+                        <input type="date" class="form-input" value="${intake.dob || ''}" disabled>
                     </div>
                 </div>
 
@@ -432,42 +443,95 @@
                     <h2 class="section-title">Contact Information</h2>
                     <div class="form-group">
                         <label class="form-label">Phone Number</label>
-                        <input type="tel" class="form-input" value="${profile.phone || ''}" disabled>
+                        <input type="tel" class="form-input" value="${intake.phone || ''}" disabled>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Email Address</label>
-                        <input type="email" class="form-input" value="${profile.email || ''}" disabled>
+                        <input type="email" class="form-input" value="${intake.email || ''}" disabled>
                     </div>
                 </div>
 
                 <div class="profile-section">
                     <h2 class="section-title">Address</h2>
                     <div class="form-group">
-                        <label class="form-label">Street Address</label>
-                        <input type="text" class="form-input" value="${profile.address.line || ''}" disabled>
+                        <label class="form-label">Country</label>
+                        <input type="text" class="form-input" value="${address.country || ''}" disabled>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label class="form-label">City</label>
-                            <input type="text" class="form-input" value="${profile.address.city || ''}" disabled>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">State</label>
-                            <input type="text" class="form-input" value="${profile.address.state || ''}" disabled>
+                            <input type="text" class="form-input" value="${address.city || ''}" disabled>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Postal Code</label>
-                        <input type="text" class="form-input" value="${profile.address.postal_code || ''}" disabled>
+                        <label class="form-label">Address line 1</label>
+                        <input type="text" class="form-input" value="${line1.replace(/"/g, '&quot;')}" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Postal / ZIP code</label>
+                        <input type="text" class="form-input" value="${postal.replace(/"/g, '&quot;')}" disabled>
+                        <p style="font-size:12px;color:#6b7280;margin-top:4px;">
+                          We use your date of birth and address only to safely match your records.
+                        </p>
                     </div>
                 </div>
 
-                <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--gray-200);">
-                    <p style="color: var(--gray-600); font-size: 14px; text-align: center;">
-                        To update your information, please contact us at your next appointment or call our office.
-                    </p>
+                <div class="profile-section">
+                    <h2 class="section-title">Insurance</h2>
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <div style="color: var(--gray-700); font-size: 14px; line-height: 1.35;">
+                            Connect your insurance provider to streamline coverage and claims.
+                        </div>
+                        <span style="display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:#eef2ff;color:#3730a3;font-weight:800;font-size:12px;">Coming soon</span>
+                    </div>
+                </div>
+
+                <div class="profile-section">
+                    <h2 class="section-title">Medical records</h2>
+                    <div style="color: var(--gray-700); font-size: 14px; line-height: 1.35;">
+                        Connect your records securely. You’ll always confirm your identity before anything is imported.
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                        <button class="btn btn-primary" type="button" id="connectRecordsBtn" ${canConnectRecords ? '' : 'disabled'}>Connect my records</button>
+                        <a class="btn btn-secondary" href="onboarding.html" style="text-decoration:none;">Update my details</a>
+                    </div>
+                    ${canConnectRecords ? '' : `<div style="margin-top:10px;color:#6b7280;font-size:13px;">To connect records, please add your postal/ZIP code in onboarding.</div>`}
+                </div>
+
+                <div class="profile-section">
+                    <h2 class="section-title">Help & Support</h2>
+                    <div style="color: var(--gray-700); font-size: 14px; line-height: 1.35;">
+                        Need help with appointments, payments, or records?
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+                        <button class="btn btn-secondary" type="button" onclick="window.showHelp && window.showHelp()">Open help</button>
+                        <a class="btn btn-primary" href="onboarding.html" style="text-decoration:none;">Update my info</a>
+                    </div>
                 </div>
             `;
+
+            // Wire connect records (frontend-only confirmation)
+            try {
+                const btn = document.getElementById('connectRecordsBtn');
+                if (btn) {
+                    btn.addEventListener('click', () => {
+                        const identity = {
+                            session_id: sessionId,
+                            first_name: intake.first_name || (fullName.split(' ')[0] || ''),
+                            last_name: intake.last_name || (fullName.split(' ').slice(1).join(' ') || ''),
+                            dob: intake.dob || '',
+                            phone: intake.phone || '',
+                            email: intake.email || '',
+                            country: address.country || intake.country || '',
+                            city: address.city || intake.city || '',
+                            address_line1: line1 || '',
+                            postal_code: postal || ''
+                        };
+                        try { sessionStorage.setItem('connect_records_identity', JSON.stringify(identity)); } catch (_) {}
+                        window.location.href = 'connect-records.html';
+                    });
+                }
+            } catch (_) {}
         }
 
         function showMessage(message, type) {
@@ -490,6 +554,22 @@
             localStorage.removeItem('patient_phone');
             window.location.href = 'patient-login.html';
         }
+    </script>
+    <script type="module">
+        import { mountBottomTabs, showHelp } from '../assets/js/patient-shell.js';
+        mountBottomTabs();
+        window.showHelp = showHelp;
+
+        try {
+            const userInfo = document.querySelector('.sidebar-footer .user-info');
+            if (userInfo) {
+                userInfo.style.cursor = 'pointer';
+                userInfo.addEventListener('click', (e) => {
+                    if (e.target && e.target.closest && e.target.closest('.logout-btn')) return;
+                    window.location.href = 'profile.html';
+                });
+            }
+        } catch (_) {}
     </script>
 </body>
 

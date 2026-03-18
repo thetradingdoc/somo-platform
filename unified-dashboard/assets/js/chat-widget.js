@@ -69,7 +69,7 @@ class ChatWidget {
         <button class="chat-widget-send" aria-label="Send">✈</button>
       </div>
       <div class="chat-widget-footer">
-        <span class="chat-widget-powered">Powered by DocLittle</span>
+        <span class="chat-widget-powered">Powered by Consʌlt</span>
         <button class="chat-widget-footer-btn" id="chat-widget-minimize" aria-label="Minimize">⌄</button>
         <button class="chat-widget-footer-btn" id="chat-widget-expand" aria-label="Expand">⛶</button>
       </div>

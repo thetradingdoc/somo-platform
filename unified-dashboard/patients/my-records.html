@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1e40af">
   <link rel="manifest" href="../manifest.webmanifest">
-  <title>My Records - LittleLab</title>
+  <title>My Records - Consult</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <script src="../assets/js/config.js" defer></script>
   <style>
@@ -34,9 +34,11 @@
     .sidebar-logo {
       font-size: 32px;
       line-height: 1;
-      letter-spacing: -3px;
+      letter-spacing: -2px;
       color: #2d3748;
       margin-bottom: 4px;
+      font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-weight: 700;
     }
     .sidebar-subtitle {
       font-size: 12px;
@@ -186,21 +188,16 @@
   <div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-logo">LittleLab</div>
-        <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+        <div class="sidebar-logo">Consʌlt</div>
+        <div class="sidebar-subtitle">Patient Portal</div>
       </div>
       <nav class="sidebar-nav">
         <a href="patient-dashboard.html" class="nav-item">
           <span class="nav-icon">🏠</span><span>Dashboard</span>
         </a>
-        <a href="patient-dashboard.html#benefits" class="nav-item">
-          <span class="nav-icon">🏥</span><span>My Benefits</span>
-        </a>
+        <!-- Benefits/Claims removed from telehealth MVP -->
         <a href="wallet.html" class="nav-item">
-          <span class="nav-icon">💰</span><span>My Wallet</span>
-        </a>
-        <a href="patient-dashboard.html#claims" class="nav-item">
-          <span class="nav-icon">💳</span><span>Bills & Claims</span>
+          <span class="nav-icon">💳</span><span>Wallet</span>
         </a>
         <a href="appointments.html" class="nav-item">
           <span class="nav-icon">📅</span><span>Appointments</span>
@@ -244,30 +241,20 @@
     </main>
   </div>
 
-  <script>
-    const API_BASE = window.API_BASE || 'http://localhost:4000';
+  <script type="module">
+    import { patientApi } from '../assets/js/patient-api.js';
+    import { mountBottomTabs } from '../assets/js/patient-shell.js';
 
     document.addEventListener('DOMContentLoaded', async () => {
-      const params = new URLSearchParams(window.location.search);
-      const storedSession = localStorage.getItem('patient_session_id') || '';
-      const sessionId = storedSession || params.get('session_id') || '';
+      mountBottomTabs();
       const errorEl = document.getElementById('errorMessage');
       const listEl = document.getElementById('recordsList');
       const docsEl = document.getElementById('docsList');
 
-      if (!sessionId) {
-        errorEl.textContent = 'Missing session. Please log in again.';
-        errorEl.style.display = 'block';
-        listEl.textContent = '';
-        docsEl.textContent = '';
-        return;
-      }
-
       // Load case reports
       try {
-        const r = await fetch(`${API_BASE}/api/patient/my-records?session_id=${encodeURIComponent(sessionId)}`);
-        const body = await r.json();
-        if (!r.ok || !body.success) {
+        const body = await patientApi.request('/api/patient/my-records', { method: 'GET' });
+        if (!body.success) {
           errorEl.textContent = body.error || 'Failed to load records.';
           errorEl.style.display = 'block';
           listEl.textContent = '';
@@ -301,9 +288,8 @@
 
       // Load uploaded documents
       try {
-        const r2 = await fetch(`${API_BASE}/api/patient/documents?session_id=${encodeURIComponent(sessionId)}`);
-        const body2 = await r2.json();
-        if (!r2.ok || !body2.success) {
+        const body2 = await patientApi.request('/api/patient/documents', { method: 'GET' });
+        if (!body2.success) {
           docsEl.textContent = 'Unable to load documents.';
           return;
         }
@@ -345,6 +331,19 @@
       localStorage.removeItem('patient_phone');
       window.location.href = 'patient-login.html';
     }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      const userInfo = document.querySelector('.sidebar-footer .user-info');
+      if (userInfo) {
+        userInfo.style.cursor = 'pointer';
+        userInfo.addEventListener('click', (e) => {
+          if (e.target && e.target.closest && e.target.closest('.logout-btn')) return;
+          window.location.href = 'profile.html';
+        });
+      }
+    } catch (_) {}
+  });
   </script>
 </body>
 </html>

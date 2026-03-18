@@ -8,7 +8,7 @@ export function Search({ query, setQuery, loading, error, empty }) {
   }, []);
 
   return (
-    <div className="search-wrapper" aria-label="LittleLab medical search">
+    <div className="search-wrapper" aria-label="Consult medical search">
       <div className="search-box" role="search">
         <svg
           className="search-icon"
@@ -42,7 +42,7 @@ export function Search({ query, setQuery, loading, error, empty }) {
       </div>
       {query && query.trim().length > 1 && !error && !empty && (
         <p className="search-hint">
-          {loading ? 'Searching LittleLab knowledge base…' : 'Hover cards to explore matches'}
+          {loading ? 'Searching knowledge base…' : 'Hover cards to explore matches'}
         </p>
       )}
       {error && (

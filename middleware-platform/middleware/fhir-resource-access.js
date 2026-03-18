@@ -18,7 +18,7 @@ function operationOutcome(diagnostics) {
  */
 async function resolvePatientId(req) {
   const pathParts = req.path.split('/').filter(Boolean);
-  const resourceType = pathParts[0]; // Patient, Encounter, Communication, Observation
+  const resourceType = pathParts[0]; // Patient, Encounter, Communication, Observation, DiagnosticReport, DocumentReference, Binary, Appointment, Consent, Provenance
   const id = req.params.id || pathParts[1];
 
   if (resourceType === 'Patient' && id && id !== '$everything') {
@@ -31,6 +31,32 @@ async function resolvePatientId(req) {
   if (resourceType === 'Encounter' && id) {
     const enc = db.getFHIREncounter && db.getFHIREncounter(id);
     if (enc && enc.patient_id) return enc.patient_id;
+  }
+  if (resourceType === 'DiagnosticReport' && id) {
+    const dr = db.getDiagnosticReportById && db.getDiagnosticReportById(id);
+    if (dr && dr.patient_id) return dr.patient_id;
+    if (dr && dr.resource_data?.subject?.reference) {
+      return String(dr.resource_data.subject.reference).replace(/^Patient\//, '');
+    }
+  }
+  if ((resourceType === 'DocumentReference' || resourceType === 'Binary') && id) {
+    const dr = db.getFHIRDocumentReference && db.getFHIRDocumentReference(id);
+    if (dr && dr.patient_id) return dr.patient_id;
+    const doc = db.getPatientDocumentById && db.getPatientDocumentById(id);
+    if (doc && doc.patient_id) return doc.patient_id;
+  }
+  if (resourceType === 'Appointment' && id) {
+    const appt = db.getAppointment && db.getAppointment(id);
+    if (appt && appt.patient_id) return appt.patient_id;
+  }
+  if (resourceType === 'Consent' || resourceType === 'Provenance') {
+    // Search-style access: Consent?patient= or Provenance?patient=
+    if (req.query.patient) {
+      const p = String(req.query.patient);
+      return p.startsWith('Patient/') ? p.replace('Patient/', '') : p;
+    }
+    // Write/read-by-id: for patient tokens we hard-bind to their compartment (best-effort)
+    if (req.user && req.user.scope === 'patient' && req.user.sub) return req.user.sub;
   }
   if ((resourceType === 'Communication' || resourceType === 'Observation') && req.query.encounter) {
     const encId = req.query.encounter.startsWith('Encounter/') ? req.query.encounter.replace('Encounter/', '') : req.query.encounter;
@@ -56,7 +82,7 @@ function fhirResourceAccess(req, res, next) {
   const pathParts = req.path.split('/').filter(Boolean);
   const resourceType = pathParts[0];
   const isMeta = req.path === '/metadata' || req.path === '/health';
-  if (isMeta || !['Patient', 'Encounter', 'Communication', 'Observation'].includes(resourceType)) {
+  if (isMeta || !['Patient', 'Encounter', 'Communication', 'Observation', 'DiagnosticReport', 'DocumentReference', 'Binary', 'Appointment', 'Consent', 'Provenance'].includes(resourceType)) {
     return next();
   }
 

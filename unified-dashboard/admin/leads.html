@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Search & Calling - DocLittle Admin</title>
+    <title>Job Search & Calling - Consʌlt Admin</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/email-composer.css">
     <script src="../assets/js/config.js"></script>
@@ -1076,11 +1076,11 @@
                 });
             } else {
                 // Fallback to simple prompt if composer not loaded
-                const subject = prompt(`Send email to ${lead.clinic_name || 'lead'}\n\nEnter email subject:`, 'DocLittle Medical Billing Software - Quick Demo Request');
+                const subject = prompt(`Send email to ${lead.clinic_name || 'lead'}\n\nEnter email subject:`, 'Consʌlt Medical Billing Software - Quick Demo Request');
                 if (!subject) return;
 
                 const content = prompt(`Enter email content (HTML supported):`,
-                    `Hi ${lead.clinic_name || 'there'},\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`);
+                    `Hi ${lead.clinic_name || 'there'},\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`);
                 if (!content) return;
 
                 try {
@@ -1453,11 +1453,11 @@
                 });
             } else {
                 // Fallback to simple prompt
-                const subject = prompt(`Send email to ${selectedLeads.size} leads\n\nEnter email subject:`, 'DocLittle Medical Billing Software - Quick Demo Request');
+                const subject = prompt(`Send email to ${selectedLeads.size} leads\n\nEnter email subject:`, 'Consʌlt Medical Billing Software - Quick Demo Request');
                 if (!subject) return;
 
                 const content = prompt(`Enter email content (HTML supported):`,
-                    `Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`);
+                    `Hi,\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`);
                 if (!content) return;
 
                 // Send emails to all selected leads
@@ -1796,8 +1796,8 @@
 
                 // Set default subject and content
                 if (options.lead) {
-                    subjectInput.value = `DocLittle Medical Billing Software - Quick Demo Request`;
-                    contentInput.value = `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`;
+                    subjectInput.value = `Consʌlt Medical Billing Software - Quick Demo Request`;
+                    contentInput.value = `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`;
                 }
 
                 // Store lead ID
@@ -1835,8 +1835,8 @@
                 scheduleDateInput.style.display = 'none';
 
                 // Set default subject and content
-                subjectInput.value = `DocLittle Medical Billing Software - Quick Demo Request`;
-                contentInput.value = `Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nDocLittle Team`;
+                subjectInput.value = `Consʌlt Medical Billing Software - Quick Demo Request`;
+                contentInput.value = `Hi,\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`;
 
                 this.leadId = null; // No single lead ID in bulk mode
 

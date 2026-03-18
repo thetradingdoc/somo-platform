@@ -168,9 +168,10 @@ class PaymentService {
         }
 
         // Update checkout with payment intent
+        // Align with enforced checkout lifecycle (pending -> completed) (mvp-23)
         await db.updateVoiceCheckout(checkout.id, {
             payment_intent_id: paymentIntentId,
-            status: 'paid'
+            status: 'completed'
         });
 
         return {

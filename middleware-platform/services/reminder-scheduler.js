@@ -5,8 +5,8 @@
  */
 
 const db = require('../database');
-const EmailService = require('./email-service');
 const TelemedicineReminders = require('./telemedicine-reminders');
+const { v4: uuidv4 } = require('uuid');
 let SMSService;
 try {
   SMSService = require('./sms-service');
@@ -17,6 +17,8 @@ try {
 class ReminderScheduler {
   static intervalId = null;
   static isRunning = false;
+  static lockId = null;
+  static lockName = 'reminder_scheduler';
 
   /**
    * Start the reminder scheduler
@@ -30,6 +32,17 @@ class ReminderScheduler {
 
     console.log('⏰ Starting reminder scheduler...');
     this.isRunning = true;
+    this.lockId = `${process.pid}-${uuidv4()}`;
+
+    // mvp-75: leader election via DB lock (safe for multi-instance)
+    const ttlSeconds = parseInt(process.env.REMINDER_SCHEDULER_LOCK_TTL_SECONDS || '90', 10);
+    const acquired = db.tryAcquireSchedulerLock(this.lockName, this.lockId, ttlSeconds);
+    if (!acquired) {
+      console.log('ℹ️  Reminder scheduler: not leader; will not run on this instance');
+      this.isRunning = false;
+      return;
+    }
+    console.log('✅ Reminder scheduler lock acquired');
 
     // Run immediately on start
     this.checkAndSendReminders();
@@ -59,6 +72,13 @@ class ReminderScheduler {
    */
   static async checkAndSendReminders() {
     try {
+      const ttlSeconds = parseInt(process.env.REMINDER_SCHEDULER_LOCK_TTL_SECONDS || '90', 10);
+      if (!db.heartbeatSchedulerLock(this.lockName, this.lockId, ttlSeconds)) {
+        console.warn('⚠️  Reminder scheduler lost leadership; stopping');
+        this.stop();
+        return;
+      }
+
       const now = new Date();
       console.log(`\n⏰ Reminder Scheduler Check: ${now.toISOString()}`);
 
@@ -95,21 +115,34 @@ class ReminderScheduler {
             ? TelemedicineReminders.buildUploadLinkForAppointment(appt.patient_id, appt.id, 26 * 60 * 60 * 1000)
             : null;
           const uploadLink = uploadBuilt ? uploadBuilt.uploadUrl : null;
-          const result = await EmailService.sendAppointmentReminder24h(appt, { uploadLink });
-          if (result.success) {
-            if (db.markReminder24hSent) db.markReminder24hSent(appt.id);
-            console.log(`✅ 24h reminder sent to ${appt.patient_email}`);
-            if (SMSService && appt.patient_phone) {
-              const tz = appt.timezone || 'America/New_York';
-              const dt = new Date(appt.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
-              const smsText = uploadLink
-                ? `DocLittle: Reminder: appointment tomorrow at ${dt}. Upload documents: ${uploadLink}`
-                : `DocLittle: Reminder: appointment tomorrow at ${dt}.`;
-              const smsResult = await SMSService.sendSMS(appt.patient_phone, smsText);
-              if (smsResult && smsResult.success) console.log(`   📱 SMS 24h reminder sent`);
-            }
-          } else {
-            console.error(`❌ 24h reminder failed: ${result.error}`);
+
+          // mvp-74: enqueue durable notification job (email). Delivery + retries handled by worker.
+          const idem = `appt:${appt.id}:reminder24h`;
+          const enq = db.enqueueNotificationJob({
+            id: uuidv4(),
+            channel: 'email',
+            type: 'reminder_24h',
+            to_address: appt.patient_email,
+            patient_id: appt.patient_id || null,
+            appointment_id: appt.id,
+            idempotency_key: idem,
+            payload_json: JSON.stringify({ appointment: appt, options: { uploadLink } }),
+            max_attempts: 6,
+            run_at: new Date().toISOString()
+          });
+          if (enq && enq.success) {
+            console.log(`✅ 24h reminder queued for ${appt.patient_email}`);
+          }
+
+          // Optional SMS still sent inline (not PHI-heavy) — can be queued later if needed
+          if (SMSService && appt.patient_phone) {
+            const tz = appt.timezone || 'America/New_York';
+            const dt = new Date(appt.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+            const smsText = uploadLink
+              ? `Reminder: appointment tomorrow at ${dt}. Upload documents: ${uploadLink}`
+              : `Reminder: appointment tomorrow at ${dt}.`;
+            const smsResult = await SMSService.sendSMS(appt.patient_phone, smsText);
+            if (smsResult && smsResult.success) console.log(`   📱 SMS 24h reminder sent`);
           }
         } catch (err) {
           console.error(`❌ 24h reminder error for ${appt.id}:`, err.message);
@@ -138,17 +171,25 @@ class ReminderScheduler {
         try {
           console.log(`📧 Sending 1h reminder for appointment ${appt.id} (${appt.patient_name})`);
           const joinLink = TelemedicineReminders.buildJoinLink(appt);
-          const result = await EmailService.sendAppointmentReminder(appt, { joinLink });
-
-          if (result.success) {
-            db.markReminderSent(appt.id);
-            console.log(`✅ Reminder sent to ${appt.patient_email} for ${appt.date} at ${appt.time}`);
-            if (SMSService && appt.patient_phone) {
-              const smsText = `DocLittle: Your appointment is in 1 hour. Join here: ${joinLink}`;
-              await SMSService.sendSMS(appt.patient_phone, smsText);
-            }
-          } else {
-            console.error(`❌ Failed to send reminder to ${appt.patient_email}: ${result.error}`);
+          const idem = `appt:${appt.id}:reminder1h`;
+          const enq = db.enqueueNotificationJob({
+            id: uuidv4(),
+            channel: 'email',
+            type: 'reminder_1h',
+            to_address: appt.patient_email,
+            patient_id: appt.patient_id || null,
+            appointment_id: appt.id,
+            idempotency_key: idem,
+            payload_json: JSON.stringify({ appointment: appt, options: { joinLink } }),
+            max_attempts: 6,
+            run_at: new Date().toISOString()
+          });
+          if (enq && enq.success) {
+            console.log(`✅ 1h reminder queued for ${appt.patient_email}`);
+          }
+          if (SMSService && appt.patient_phone) {
+            const smsText = `Your appointment is in 1 hour. Join here: ${joinLink}`;
+            await SMSService.sendSMS(appt.patient_phone, smsText);
           }
         } catch (error) {
           console.error(`❌ Error sending reminder for ${appt.id}:`, error.message);

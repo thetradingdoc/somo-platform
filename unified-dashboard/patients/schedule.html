@@ -5,33 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1e40af" />
   <link rel="manifest" href="../manifest.webmanifest" />
-  <title>Schedule a Visit - LittleLab</title>
+  <title>Schedule a Visit - Consult</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="../assets/js/config.js" defer></script>
   <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      try {
-        const flags = (window.TENANT_CONFIG && window.TENANT_CONFIG.feature_flags) || {};
-        const enabled = flags.FEATURE_PATIENT_SELF_SCHEDULING || false;
-        const navItem = document.getElementById('navScheduleItem');
-        if (navItem) {
-          navItem.style.display = enabled ? 'flex' : 'none';
-          if (!enabled) {
-            navItem.classList.remove('active');
-            var appointmentsLink = document.querySelector('.sidebar-nav a[href="appointments.html"]');
-            if (appointmentsLink) appointmentsLink.classList.add('active');
-          }
-        }
-        if (!enabled) {
-          const main = document.querySelector('.main-content');
-          if (main) {
-            main.innerHTML = '<div class="card"><h2>Scheduling coming soon</h2><p>Self-scheduling is not yet enabled for this clinic.</p></div>';
-          }
-        }
-      } catch (e) {
-        console.warn('FEATURE_PATIENT_SELF_SCHEDULING check failed:', e.message);
-      }
-    });
+    // Self-scheduling is now a first-class feature for the patient portal.
+    // The old FEATURE_PATIENT_SELF_SCHEDULING gate has been removed.
   </script>
   <style>
     :root {
@@ -63,9 +43,11 @@
     .sidebar-logo {
       font-size: 32px;
       line-height: 1;
-      letter-spacing: -3px;
+      letter-spacing: -2px;
       color: #2d3748;
       margin-bottom: 4px;
+      font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-weight: 700;
     }
     .sidebar-subtitle {
       font-size: 12px;
@@ -271,6 +253,18 @@
       color: #166534;
       border: 1px solid #bbf7d0;
     }
+    /* Batch 5: mobile thumb-zone + avoid content behind sticky CTA */
+    @media (max-width: 640px) {
+      .page-content {
+        padding-bottom: 96px; /* room for sticky CTA */
+      }
+      #ctaWrap {
+        position: sticky;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        padding-bottom: env(safe-area-inset-bottom);
+        z-index: 10;
+      }
+    }
   </style>
 </head>
 <body>
@@ -279,30 +273,22 @@
   <div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-logo">LittleLab</div>
-        <div class="sidebar-subtitle">LittleLab • Virtual Care</div>
+        <div class="sidebar-logo">Consʌlt</div>
+        <div class="sidebar-subtitle">Patient Portal</div>
       </div>
       <nav class="sidebar-nav">
         <a href="patient-dashboard.html" class="nav-item">
           <span class="nav-icon">🏠</span><span>Dashboard</span>
         </a>
-        <a href="patient-dashboard.html#benefits" class="nav-item">
-          <span class="nav-icon">🏥</span><span>My Benefits</span>
-        </a>
+        <!-- Benefits/Claims removed from telehealth MVP -->
         <a href="wallet.html" class="nav-item">
-          <span class="nav-icon">💰</span><span>My Wallet</span>
+          <span class="nav-icon">💳</span><span>Wallet</span>
         </a>
-        <a href="patient-dashboard.html#claims" class="nav-item">
-          <span class="nav-icon">💳</span><span>Bills & Claims</span>
-        </a>
-        <a href="appointments.html" class="nav-item">
+        <a href="appointments.html" class="nav-item active">
           <span class="nav-icon">📅</span><span>Appointments</span>
         </a>
         <a href="my-records.html" class="nav-item">
           <span class="nav-icon">📄</span><span>My Records</span>
-        </a>
-        <a href="schedule.html" class="nav-item active" id="navScheduleItem" style="display:none;">
-          <span class="nav-icon">➕</span><span>Schedule</span>
         </a>
       </nav>
       <div class="sidebar-footer">
@@ -320,48 +306,128 @@
     <main class="main-content">
       <div class="page-header">
         <h1 class="page-title">Schedule a Visit</h1>
-        <p class="page-subtitle">Pick a time that works for you.</p>
+        <p class="page-subtitle">Use the calendar to pick a time. Your profile details will be used automatically.</p>
       </div>
 
-      <div class="card">
-        <div id="msg" class="message" style="display:none;"></div>
+      <div class="card" style="padding:0; background:#022c5a; border-radius:18px;">
+        <div class="px-4 py-4 sm:px-6 sm:py-5 text-white">
+          <div class="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <div class="text-xs font-semibold tracking-wide text-sky-200 uppercase">Appointment</div>
+              <div class="mt-1 text-sm text-sky-100 max-w-xl">
+                Choose a day from the calendar and a time that works for you. If this feels like an emergency, please
+                call your local emergency number instead.
+              </div>
+            </div>
+            <button type="button" id="openChatModal" class="hidden sm:inline-flex items-center justify-center rounded-full bg-sky-500/90 hover:bg-sky-400 text-xs font-semibold px-4 py-2 shadow">
+              Chat with agent
+            </button>
+          </div>
 
-        <div class="form-group">
-          <label class="form-label">Appointment type</label>
-          <select id="apptTypeInput" class="form-select">
-            <option value="Mental Health Consultation">Mental Health Consultation</option>
-            <option value="Telemedicine Visit">Telemedicine Visit</option>
-            <option value="Follow-up Visit">Follow-up Visit</option>
-          </select>
-        </div>
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <div class="flex items-center gap-2 text-xs text-sky-100">
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Quick booking (calendar)</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-sky-100 uppercase tracking-wide">Appointment type</label>
+                <select id="apptTypeInput" class="w-full sm:w-56 rounded-full border border-sky-500/40 bg-sky-900/60 px-3 py-1.5 text-xs text-sky-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400">
+                  <option value="Mental Health Consultation">Mental Health Consultation</option>
+                  <option value="Telemedicine Visit">Telemedicine Visit</option>
+                  <option value="Follow-up Visit">Follow-up Visit</option>
+                </select>
+              </div>
+              <button type="button" id="todayBtn" class="hidden sm:inline-flex items-center justify-center rounded-full border border-sky-500/60 bg-sky-800/80 hover:bg-sky-700 text-[11px] font-semibold px-3 py-1.5">
+                Today
+              </button>
+            </div>
+          </div>
 
-        <div class="form-group">
-          <label class="form-label">Date</label>
-          <input id="dateInput" type="date" class="form-input" />
-        </div>
+          <div id="priceBox" class="mb-3 text-sm text-sky-100/90">
+            <div id="priceLine" style="font-weight:700;">Consultation — …</div>
+            <ul id="priceBullets" style="margin:6px 0 0 0; padding-left:18px; font-size:12px;">
+              <li>Doctor consultation</li>
+              <li>Written summary of your visit</li>
+              <li>Follow-up recommendations</li>
+            </ul>
+          </div>
 
-        <div class="form-group">
-          <label class="form-label">Available times</label>
-          <button id="loadSlotsBtn" class="btn btn-secondary" style="margin-bottom:8px;">Check availability</button>
-          <div id="slots" class="slots"></div>
-        </div>
+          <div id="msg" class="hidden text-[11px] rounded-lg px-3 py-2 mb-3 bg-red-900/40 border border-red-400/70 text-red-50"></div>
 
-        <div class="form-group">
-          <label class="form-label">Your name</label>
-          <input id="nameInput" class="form-input" placeholder="Full name" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Your phone</label>
-          <input id="phoneInput" class="form-input" placeholder="+1 555 555 1212" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Your email</label>
-          <input id="emailInput" class="form-input" placeholder="you@example.com" />
-        </div>
+          <div class="bg-sky-900/60 rounded-2xl p-3 sm:p-4 shadow-inner">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex flex-col">
+                <span class="text-[11px] font-semibold tracking-wide text-sky-200 uppercase">Step 2 — select date</span>
+                <span id="monthLabel" class="text-sm font-semibold text-white"></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" id="prevMonthBtn" class="w-8 h-8 rounded-full bg-sky-800 hover:bg-sky-700 flex items-center justify-center text-xs">◀</button>
+                <button type="button" id="nextMonthBtn" class="w-8 h-8 rounded-full bg-sky-800 hover:bg-sky-700 flex items-center justify-center text-xs">▶</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-[11px] font-semibold text-sky-200 mb-1">
+              <div class="text-center">Sun</div>
+              <div class="text-center">Mon</div>
+              <div class="text-center">Tue</div>
+              <div class="text-center">Wed</div>
+              <div class="text-center">Thu</div>
+              <div class="text-center">Fri</div>
+              <div class="text-center">Sat</div>
+            </div>
+            <div id="calendarGrid" class="grid grid-cols-7 gap-1 text-xs min-h-[224px]"></div>
+          </div>
 
-        <button id="scheduleBtn" class="btn btn-primary">Schedule appointment</button>
+          <div class="mt-4 flex flex-col gap-2 text-sky-100">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-semibold tracking-wide text-sky-200 uppercase">Step 3 — select time</span>
+              <span id="selectedDateLabel" class="text-xs text-sky-100"></span>
+            </div>
+            <div id="slots" class="hidden flex-col gap-1">
+              <div id="slotsMorning"></div>
+              <div id="slotsAfternoon"></div>
+              <div id="slotsEvening"></div>
+            </div>
+          </div>
+
+          <div id="ctaWrap" class="mt-4 flex flex-col gap-2">
+            <div id="holdBox" class="hidden rounded-2xl border border-amber-300/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-50">
+              Holding this time for <span id="holdTimer" class="font-semibold">—:—</span>. If payment fails, you can retry before the hold expires.
+            </div>
+            <button id="scheduleBtn" disabled class="inline-flex items-center justify-center w-full rounded-full bg-emerald-500 text-white text-sm font-semibold px-4 py-3 shadow hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-sky-900 focus:ring-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed">
+              Continue to payment
+            </button>
+            <button id="retryPayBtn" type="button" class="hidden inline-flex items-center justify-center w-full rounded-full border border-sky-400/60 bg-sky-900/40 text-sky-50 text-sm font-semibold px-4 py-3 hover:bg-sky-900/60">
+              Retry payment
+            </button>
+            <p id="ctaHint" class="text-[11px] text-sky-100/80 text-center -mt-1">Pick a time to continue.</p>
+            <p class="text-[11px] text-sky-100/80 text-center mt-1">
+              Licensed doctors • Secure video visit • Average wait time &lt; 5 minutes.
+            </p>
+          </div>
+        </div>
       </div>
     </main>
+  </div>
+
+  <!-- Chat modal using existing triage tooling -->
+  <div id="chatModal" class="fixed inset-0 bg-black/40 z-50 hidden items-center justify-center">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full mx-4 max-h-[560px] flex flex-col overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+        <div class="text-sm font-semibold text-gray-900">Book with AI assistant</div>
+        <button id="closeChatModal" type="button" class="text-gray-500 hover:text-gray-800 text-lg font-bold">&times;</button>
+      </div>
+      <div class="flex-1 flex flex-col">
+        <div class="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm" id="chatMsgs"></div>
+        <div class="border-t border-gray-200 px-3 py-2">
+          <div id="chatChips" class="flex flex-wrap gap-2 mb-2"></div>
+          <div class="flex gap-2">
+            <input id="chatInput" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm" placeholder="Describe your symptoms or what you need help with…" />
+            <button id="chatSendBtn" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -374,101 +440,346 @@
 
     const msgEl = document.getElementById('msg');
     const slotsEl = document.getElementById('slots');
+    const slotsMorningEl = document.getElementById('slotsMorning');
+    const slotsAfternoonEl = document.getElementById('slotsAfternoon');
+    const slotsEveningEl = document.getElementById('slotsEvening');
+    const monthLabelEl = document.getElementById('monthLabel');
+    const calendarGridEl = document.getElementById('calendarGrid');
+    const selectedDateLabelEl = document.getElementById('selectedDateLabel');
+    const scheduleBtn = document.getElementById('scheduleBtn');
+    const ctaHintEl = document.getElementById('ctaHint');
+    const holdBoxEl = document.getElementById('holdBox');
+    const holdTimerEl = document.getElementById('holdTimer');
+    const retryPayBtn = document.getElementById('retryPayBtn');
+    const reasonInput = { value: '' }; // lightweight stub; reason optional for calendar-only flow
+
+    let currentYear;
+    let currentMonth; // 0-based
+    let selectedDate; // YYYY-MM-DD
+    let selectedTime = null;
+    let slotsLoading = false;
+    let bookingInFlight = false;
+    let checkoutInFlight = false;
+    let holdInterval = null;
+    let lastAppointmentIdForRetry = null;
+    let holdExpiresAtMs = null;
+
+    const CLINIC_TIMEZONE = 'America/New_York';
+    const SLOT_HOLD_TTL_MINUTES = 30;
+
+    function isoDateInTz(date, timeZone) {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(date);
+      const y = parts.find(p => p.type === 'year')?.value;
+      const m = parts.find(p => p.type === 'month')?.value;
+      const d = parts.find(p => p.type === 'day')?.value;
+      return `${y}-${m}-${d}`;
+    }
+
+    function nowPartsInTz(timeZone) {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).formatToParts(new Date());
+      const y = parseInt(parts.find(p => p.type === 'year')?.value || '1970', 10);
+      const m = parseInt(parts.find(p => p.type === 'month')?.value || '01', 10);
+      const d = parseInt(parts.find(p => p.type === 'day')?.value || '01', 10);
+      return { year: y, monthIndex: m - 1, day: d };
+    }
+
+    function setCtaState() {
+      const canContinue = Boolean(selectedDate && selectedTime) && !slotsLoading && !bookingInFlight && !checkoutInFlight;
+      scheduleBtn.disabled = !canContinue;
+      if (bookingInFlight || checkoutInFlight) {
+        ctaHintEl.textContent = 'Starting payment…';
+      } else if (slotsLoading) {
+        ctaHintEl.textContent = 'Loading times…';
+      } else if (!selectedTime) {
+        ctaHintEl.textContent = 'Pick a time to continue.';
+      } else {
+        ctaHintEl.textContent = 'Step 4 — continue to payment';
+      }
+    }
+
+    function clearHold() {
+      if (holdInterval) window.clearInterval(holdInterval);
+      holdInterval = null;
+      holdExpiresAtMs = null;
+      lastAppointmentIdForRetry = null;
+      if (holdBoxEl) holdBoxEl.classList.add('hidden');
+      if (retryPayBtn) retryPayBtn.classList.add('hidden');
+    }
+
+    function fmtCountdown(ms) {
+      const s = Math.max(0, Math.floor(ms / 1000));
+      const mm = Math.floor(s / 60);
+      const ss = s % 60;
+      return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    }
+
+    function startHoldCountdown() {
+      if (!holdBoxEl || !holdTimerEl) return;
+      holdBoxEl.classList.remove('hidden');
+      if (holdInterval) window.clearInterval(holdInterval);
+      holdInterval = window.setInterval(() => {
+        if (!holdExpiresAtMs) return;
+        const remaining = holdExpiresAtMs - Date.now();
+        holdTimerEl.textContent = fmtCountdown(remaining);
+        if (remaining <= 0) {
+          window.clearInterval(holdInterval);
+          holdInterval = null;
+          if (retryPayBtn) retryPayBtn.classList.add('hidden');
+          showMsg('That hold expired. Please pick a new time.', 'error');
+          selectedTime = null;
+          setCtaState();
+        }
+      }, 250);
+    }
 
     function showMsg(text, type) {
       msgEl.textContent = text;
-      msgEl.className = 'message message-' + type;
-      msgEl.style.display = 'block';
+      msgEl.classList.remove('hidden', 'message-error', 'message-success');
+      msgEl.classList.add(
+        type === 'error' ? 'message-error' : 'message-success'
+      );
     }
 
     function clearMsg() {
-      msgEl.style.display = 'none';
+      msgEl.classList.add('hidden');
     }
 
-    function getSelectedSlot() {
-      const selected = slotsEl.querySelector('.slot-btn.selected');
-      return selected ? selected.dataset.time : null;
+    function fmtDateLabel(d) {
+      if (!d) return '';
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return d;
+      return dt.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     }
 
-    async function loadSlots() {
-      clearMsg();
-      slotsEl.innerHTML = 'Loading...';
+    async function loadPrice() {
+      try {
+        const sid = sessionId;
+        if (!sid) return;
+        // Try to get country/phone from intake/identity if needed later; for now, call quote without params
+        const res = await fetch(`${API_BASE}/api/pricing/quote`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) return;
+        const priceLine = document.getElementById('priceLine');
+        if (priceLine) {
+          priceLine.textContent = `Consultation — $${data.price_usd.toFixed(2)} ${data.currency}`;
+        }
+      } catch (_) {}
+    }
 
-      const date = document.getElementById('dateInput').value;
-      const apptType = document.getElementById('apptTypeInput').value;
-      if (!date) {
-        showMsg('Please choose a date first.', 'error');
-        slotsEl.textContent = '';
-        return;
+    function renderCalendar(year, month) {
+      currentYear = year;
+      currentMonth = month;
+      const first = new Date(year, month, 1);
+      const last = new Date(year, month + 1, 0);
+      const startWeekday = first.getDay();
+      const daysInMonth = last.getDate();
+
+      monthLabelEl.textContent = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      calendarGridEl.innerHTML = '';
+
+      for (let i = 0; i < startWeekday; i++) {
+        const empty = document.createElement('div');
+        calendarGridEl.appendChild(empty);
       }
+
+      const todayStr = isoDateInTz(new Date(), CLINIC_TIMEZONE);
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(year, month, day);
+        const iso = d.toISOString().slice(0, 10);
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = String(day);
+        btn.className = 'w-8 h-8 mx-auto flex items-center justify-center rounded-full text-xs transition';
+
+        const isToday = iso === todayStr;
+        const isSelected = iso === selectedDate;
+        // Timezone-safe: compare YYYY-MM-DD lexicographically in the clinic timezone
+        const inPast = iso < todayStr;
+
+        if (inPast) {
+          btn.classList.add('text-gray-300', 'pointer-events-none');
+        } else if (isSelected) {
+          btn.classList.add('bg-indigo-600', 'text-white', 'font-semibold', 'shadow-sm');
+        } else if (isToday) {
+          btn.classList.add('border', 'border-indigo-500', 'text-indigo-700', 'font-semibold', 'bg-indigo-50');
+        } else {
+          btn.classList.add('text-gray-700', 'hover:bg-gray-100');
+        }
+
+        btn.addEventListener('click', () => {
+          selectedDate = iso;
+          selectedTime = null;
+          renderCalendar(currentYear, currentMonth);
+          selectedDateLabelEl.textContent = fmtDateLabel(selectedDate);
+          loadSlotsForDate(iso);
+          setCtaState();
+        });
+
+        calendarGridEl.appendChild(btn);
+      }
+    }
+
+    function bucketForTimeLabel(label) {
+      // Expect formats like "09:00", "14:30", or with AM/PM
+      const m24 = label.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+      let h = null;
+      if (m24) {
+        h = parseInt(m24[1], 10);
+      } else {
+        const m12 = label.toLowerCase().match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b/);
+        if (m12) {
+          h = parseInt(m12[1], 10);
+          const ampm = m12[3];
+          if (ampm === 'pm' && h !== 12) h += 12;
+          if (ampm === 'am' && h === 12) h = 0;
+        }
+      }
+      if (h == null) return 'other';
+      if (h < 12) return 'morning';
+      if (h < 17) return 'afternoon';
+      return 'evening';
+    }
+
+    async function loadSlotsForDate(date) {
+      clearMsg();
+      slotsLoading = true;
+      setCtaState();
+      slotsEl.classList.remove('hidden');
+      slotsMorningEl.innerHTML = '';
+      slotsAfternoonEl.innerHTML = '';
+      slotsEveningEl.innerHTML = '';
+      slotsMorningEl.insertAdjacentHTML('beforebegin', '<div id="slotsLoading" class="text-xs text-sky-100/80">Loading…</div>');
+      const apptType = document.getElementById('apptTypeInput').value;
 
       try {
         const params = new URLSearchParams({
           date,
           appointment_type: apptType
         });
-        const res = await fetch(`${API_BASE}/api/appointments/available-slots?${params.toString()}`, {
-          headers: { 'ngrok-skip-browser-warning': 'true' }
+        const res = await fetch(`${API_BASE}/api/patient/booking/available-slots?${params.toString()}`, {
+          headers: { 'ngrok-skip-browser-warning': 'true', 'x-session-id': sessionId }
         });
         const data = await res.json();
+        const loadingNode = document.getElementById('slotsLoading');
+        if (loadingNode) loadingNode.remove();
+        slotsLoading = false;
+        setCtaState();
         if (!res.ok || !data.success) {
-          showMsg(data.error || 'Unable to load slots.', 'error');
-          slotsEl.textContent = '';
+          showMsg(data.error || 'Unable to load availability for that day.', 'error');
+          slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">No slots available.</span>';
           return;
         }
-        const slots = data.slots_with_display || data.slots || [];
+        const slots = data.slots_with_display || data.slots || data.available_slots || [];
         if (!slots.length) {
-          slotsEl.textContent = 'No slots available for this date.';
+          slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">No slots available for this date.</span>';
           return;
         }
-        slotsEl.innerHTML = '';
-        slots.forEach(s => {
-          const label = s.display || s.time || s;
-          const timeVal = s.time || s.value || s;
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'slot-btn';
-          btn.textContent = label;
-          btn.dataset.time = timeVal;
-          btn.addEventListener('click', () => {
-            Array.from(slotsEl.querySelectorAll('.slot-btn')).forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+
+        const morning = [];
+        const afternoon = [];
+        const evening = [];
+
+        slots.forEach((s) => {
+          const label = s.display || s.time || s.start_time || s;
+          const timeVal = s.time || s.value || s.start_time || s;
+          const bucket = bucketForTimeLabel(label);
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = label;
+          // Mobile thumb target: >=44px height, larger tap area
+          b.className = 'px-4 py-3 rounded-full border text-sm font-semibold border-sky-400/70 bg-sky-800/80 text-sky-50 hover:bg-emerald-500 hover:border-emerald-400';
+          b.addEventListener('click', () => {
+            selectedTime = timeVal;
+            Array.from(slotsEl.querySelectorAll('button')).forEach((btn) => {
+              btn.classList.remove('bg-emerald-500', 'border-emerald-400');
+            });
+            b.classList.add('bg-emerald-500', 'border-emerald-400');
+            setCtaState();
           });
-          slotsEl.appendChild(btn);
+          if (bucket === 'morning') morning.push(b);
+          else if (bucket === 'afternoon') afternoon.push(b);
+          else if (bucket === 'evening') evening.push(b);
         });
+
+        function renderSection(container, title, items) {
+          if (!items.length) {
+            container.innerHTML = '';
+            return;
+          }
+          const header = document.createElement('div');
+          header.className = 'text-[11px] font-semibold text-sky-200 mt-1 mb-1';
+          header.textContent = title;
+          const row = document.createElement('div');
+          row.className = 'flex flex-wrap gap-2 mb-1';
+          items.forEach((b) => row.appendChild(b));
+          container.innerHTML = '';
+          container.appendChild(header);
+          container.appendChild(row);
+        }
+
+        renderSection(slotsMorningEl, 'Morning', morning);
+        renderSection(slotsAfternoonEl, 'Afternoon', afternoon);
+        renderSection(slotsEveningEl, 'Evening', evening);
+
+        // If a slot was preselected (e.g., from chat), re-apply highlight.
+        if (selectedTime) {
+          const match = Array.from(slotsEl.querySelectorAll('button')).find((b) => {
+            const t = (b.textContent || '').trim();
+            return t === selectedTime || t.includes(selectedTime);
+          });
+          if (match) match.classList.add('bg-emerald-500', 'border-emerald-400');
+        }
       } catch (e) {
         console.error('Error loading slots:', e);
-        showMsg('Network error while loading slots.', 'error');
-        slotsEl.textContent = '';
+        const loadingNode = document.getElementById('slotsLoading');
+        if (loadingNode) loadingNode.remove();
+        slotsLoading = false;
+        setCtaState();
+        slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">Unable to load availability.</span>';
+        showMsg('Network error while loading availability.', 'error');
       }
     }
 
     async function scheduleAppointment() {
       clearMsg();
-      const apptType = document.getElementById('apptTypeInput').value;
-      const date = document.getElementById('dateInput').value;
-      const time = getSelectedSlot();
-      const name = document.getElementById('nameInput').value.trim();
-      const phone = document.getElementById('phoneInput').value.trim();
-      const email = document.getElementById('emailInput').value.trim();
-
-      if (!date || !time || !name || !email) {
-        showMsg('Name, email, date, and time are required.', 'error');
+      if (bookingInFlight || checkoutInFlight) return;
+      if (!selectedDate || !selectedTime) {
+        showMsg('Pick a date and time from the calendar first.', 'error');
         return;
       }
+      clearHold();
+      const apptType = document.getElementById('apptTypeInput').value;
+
+      const reason = reasonInput.value.trim();
 
       try {
+        bookingInFlight = true;
+        scheduleBtn.textContent = 'Booking…';
+        setCtaState();
         const body = {
           appointment_type: apptType,
-          date,
-          time,
-          patient_name: name,
-          patient_phone: phone,
-          patient_email: email
+          date: selectedDate,
+          time: selectedTime,
+          reason
         };
-        const res = await fetch(`${API_BASE}/api/appointments/schedule`, {
+        const bookingKey = `pt-book:${apptType}:${selectedDate}:${selectedTime}`;
+        const res = await fetch(`${API_BASE}/api/patient/booking/schedule`, {
           method: 'POST',
-          headers: API_HEADERS,
+          headers: { ...API_HEADERS, 'x-session-id': sessionId, 'idempotency-key': bookingKey },
           body: JSON.stringify(body)
         });
         const data = await res.json();
@@ -476,27 +787,246 @@
           showMsg(data.error || 'Unable to schedule appointment.', 'error');
           return;
         }
-        showMsg('Appointment scheduled successfully! A confirmation has been sent to your email.', 'success');
-        setTimeout(() => {
-          window.location.href = 'appointments.html';
-        }, 1500);
+
+        const apptId = data.appointment?.id;
+        if (!apptId) {
+          showMsg('Appointment scheduled but missing id. Please check your appointments.', 'error');
+          return;
+        }
+        lastAppointmentIdForRetry = apptId;
+        holdExpiresAtMs = Date.now() + SLOT_HOLD_TTL_MINUTES * 60 * 1000;
+        startHoldCountdown();
+
+        // Create checkout session and redirect directly to Stripe
+        try {
+          checkoutInFlight = true;
+          scheduleBtn.textContent = 'Starting payment…';
+          setCtaState();
+          const checkoutRes = await fetch(`${API_BASE}/api/patient/appointments/${encodeURIComponent(apptId)}/checkout`, {
+            method: 'POST',
+            headers: { ...API_HEADERS, 'x-session-id': sessionId, 'idempotency-key': `pt-checkout:${apptId}` },
+            body: JSON.stringify({})
+          });
+          const checkoutData = await checkoutRes.json();
+          if (!checkoutRes.ok || !checkoutData.success || !checkoutData.checkout_url) {
+            showMsg(checkoutData.error || 'Unable to start payment. You can try again from Wallet.', 'error');
+            if (retryPayBtn) retryPayBtn.classList.remove('hidden');
+            return;
+          }
+          window.location.href = checkoutData.checkout_url;
+        } catch (err) {
+          console.error('Error creating checkout session:', err);
+          showMsg('Appointment booked, but starting payment failed. You can complete payment from Wallet.', 'error');
+          if (retryPayBtn) retryPayBtn.classList.remove('hidden');
+        }
       } catch (e) {
         console.error('Error scheduling appointment:', e);
         showMsg('Network error while scheduling appointment.', 'error');
+      } finally {
+        bookingInFlight = false;
+        checkoutInFlight = false;
+        scheduleBtn.textContent = 'Continue to payment';
+        setCtaState();
       }
     }
 
-    document.getElementById('loadSlotsBtn').addEventListener('click', loadSlots);
-    document.getElementById('scheduleBtn').addEventListener('click', scheduleAppointment);
+    async function retryPayment() {
+      clearMsg();
+      if (!lastAppointmentIdForRetry) {
+        showMsg('Please pick a time and continue.', 'error');
+        return;
+      }
+      if (holdExpiresAtMs && Date.now() > holdExpiresAtMs) {
+        showMsg('That hold expired. Please pick a new time.', 'error');
+        clearHold();
+        return;
+      }
+      try {
+        checkoutInFlight = true;
+        scheduleBtn.textContent = 'Starting payment…';
+        setCtaState();
+        const apptId = lastAppointmentIdForRetry;
+        const checkoutRes = await fetch(`${API_BASE}/api/patient/appointments/${encodeURIComponent(apptId)}/checkout`, {
+          method: 'POST',
+          headers: { ...API_HEADERS, 'x-session-id': sessionId, 'idempotency-key': `pt-checkout:${apptId}` },
+          body: JSON.stringify({})
+        });
+        const checkoutData = await checkoutRes.json();
+        if (!checkoutRes.ok || !checkoutData.success || !checkoutData.checkout_url) {
+          showMsg(checkoutData.error || 'Unable to start payment. You can try again from Wallet.', 'error');
+          return;
+        }
+        window.location.href = checkoutData.checkout_url;
+      } catch (e) {
+        showMsg('Network error while starting payment.', 'error');
+      } finally {
+        checkoutInFlight = false;
+        scheduleBtn.textContent = 'Continue to payment';
+        setCtaState();
+      }
+    }
+
+    scheduleBtn.addEventListener('click', scheduleAppointment);
+    if (retryPayBtn) retryPayBtn.addEventListener('click', retryPayment);
 
     document.addEventListener('DOMContentLoaded', () => {
       if (!sessionId) {
         window.location.href = 'patient-login.html';
         return;
       }
-      // Default date = today
-      const today = new Date().toISOString().slice(0, 10);
-      document.getElementById('dateInput').value = today;
+      const nowParts = nowPartsInTz(CLINIC_TIMEZONE);
+      currentYear = nowParts.year;
+      currentMonth = nowParts.monthIndex;
+      selectedDate = isoDateInTz(new Date(), CLINIC_TIMEZONE);
+      selectedDateLabelEl.textContent = fmtDateLabel(selectedDate);
+      renderCalendar(currentYear, currentMonth);
+      loadSlotsForDate(selectedDate);
+      loadPrice();
+      setCtaState();
+    });
+
+    // Today button: jump to clinic "today" and reload.
+    const todayBtn = document.getElementById('todayBtn');
+    if (todayBtn) {
+      todayBtn.addEventListener('click', () => {
+        clearHold();
+        const nowParts = nowPartsInTz(CLINIC_TIMEZONE);
+        currentYear = nowParts.year;
+        currentMonth = nowParts.monthIndex;
+        selectedDate = isoDateInTz(new Date(), CLINIC_TIMEZONE);
+        selectedTime = null;
+        selectedDateLabelEl.textContent = fmtDateLabel(selectedDate);
+        renderCalendar(currentYear, currentMonth);
+        loadSlotsForDate(selectedDate);
+        setCtaState();
+      });
+    }
+
+    document.getElementById('prevMonthBtn').addEventListener('click', () => {
+      const d = new Date(currentYear, currentMonth - 1, 1);
+      renderCalendar(d.getFullYear(), d.getMonth());
+    });
+    document.getElementById('nextMonthBtn').addEventListener('click', () => {
+      const d = new Date(currentYear, currentMonth + 1, 1);
+      renderCalendar(d.getFullYear(), d.getMonth());
+    });
+
+    // Chat modal wiring (reuse /api/patient/triage/message)
+    const sid = localStorage.getItem('patient_session_id') || '';
+    const chatModal = document.getElementById('chatModal');
+    const openChatModal = document.getElementById('openChatModal');
+    const closeChatModal = document.getElementById('closeChatModal');
+    const chatMsgs = document.getElementById('chatMsgs');
+    const chatChips = document.getElementById('chatChips');
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const triageStateKey = 'patient_triage_state_v1';
+    let triageState = (() => {
+      try { return JSON.parse(sessionStorage.getItem(triageStateKey) || 'null') || {}; } catch (_) { return {}; }
+    })();
+
+    function chatAdd(role, text) {
+      const el = document.createElement('div');
+      el.className = role === 'user'
+        ? 'ml-auto max-w-[80%] rounded-2xl rounded-br-sm bg-indigo-600 text-white px-3 py-2'
+        : 'mr-auto max-w-[80%] rounded-2xl rounded-bl-sm bg-gray-100 text-gray-900 px-3 py-2 border border-gray-200';
+      el.textContent = text;
+      chatMsgs.appendChild(el);
+      chatMsgs.scrollTop = chatMsgs.scrollHeight;
+    }
+
+    function chatSetChips(options) {
+      chatChips.innerHTML = '';
+      if (!options || !options.length) return;
+      for (const opt of options) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'px-3 py-1.5 rounded-full border text-xs font-semibold border-gray-200 bg-white hover:bg-gray-50';
+        b.textContent = opt.label;
+        b.addEventListener('click', () => {
+          // If the assistant is offering concrete times, allow a direct handoff into the calendar UI.
+          if (opt.action === 'select_slot') {
+            const slot = opt.slot || null;
+            const date = (triageState && triageState.date) ? triageState.date : selectedDate;
+            const time = slot?.time || slot?.start_time || slot?.display || opt.value || null;
+            if (date && time) {
+              clearHold();
+              selectedDate = date;
+              selectedTime = time;
+              selectedDateLabelEl.textContent = fmtDateLabel(selectedDate);
+              const d = new Date(`${selectedDate}T00:00:00`);
+              if (!Number.isNaN(d.getTime())) {
+                renderCalendar(d.getFullYear(), d.getMonth());
+              }
+              loadSlotsForDate(selectedDate);
+              setCtaState();
+              chatModal.classList.add('hidden');
+              chatModal.classList.remove('flex');
+              return;
+            }
+          }
+          chatSendMessage(opt.value, { action: opt.action || null, slot: opt.slot || null });
+        });
+        chatChips.appendChild(b);
+      }
+    }
+
+    async function chatSendMessage(text, meta = {}) {
+      const t = (text || '').trim();
+      if (!t) return;
+      chatAdd('user', t);
+      chatInput.value = '';
+      chatSetChips([]);
+      chatSendBtn.disabled = true;
+      try {
+        const r = await fetch(`${API_BASE}/api/patient/triage/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' },
+          body: JSON.stringify({ message: t, state: triageState, meta })
+        });
+        const j = await r.json();
+        if (!r.ok || !j.success) throw new Error(j.error || 'Request failed');
+        triageState = j.state || {};
+        sessionStorage.setItem(triageStateKey, JSON.stringify(triageState));
+        if (j.reply) chatAdd('assistant', j.reply);
+        if (j.next_chips) chatSetChips(j.next_chips);
+        if (j.redirect_to) window.location.href = j.redirect_to;
+      } catch (e) {
+        chatAdd('assistant', e.message || 'Something went wrong.');
+      } finally {
+        chatSendBtn.disabled = false;
+      }
+    }
+
+    if (openChatModal) {
+      openChatModal.addEventListener('click', () => {
+        if (!sid) {
+          window.location.href = 'patient-login.html';
+          return;
+        }
+        chatModal.classList.remove('hidden');
+        chatModal.classList.add('flex');
+        if (!chatMsgs.hasChildNodes()) {
+          chatAdd('assistant', 'Hi — I can help you choose a time and set up your visit. What can we help you with today?');
+          chatSetChips([
+            { label: 'Book a general visit', value: 'I want to book a general visit' },
+            { label: 'I have symptoms', value: 'I have symptoms' },
+            { label: 'Billing / receipt', value: 'I need help with my receipt', action: 'billing' }
+          ]);
+        }
+      });
+    }
+
+    if (closeChatModal) {
+      closeChatModal.addEventListener('click', () => {
+        chatModal.classList.add('hidden');
+        chatModal.classList.remove('flex');
+      });
+    }
+
+    chatSendBtn.addEventListener('click', () => chatSendMessage(chatInput.value));
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); chatSendMessage(chatInput.value); }
     });
 
     function toggleMobileMenu() {

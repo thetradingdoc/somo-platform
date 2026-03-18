@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DocLittle Admin</title>
+  <title>Consʌlt Admin</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <link rel="stylesheet" href="assets/css/admin-ai-assistant.css">
   <script src="../assets/js/config.js"></script>
@@ -1002,7 +1002,7 @@
     <main>
       <div class="top-bar">
         <div>
-          <p style="margin:0;color:var(--muted);font-size:13px;font-weight:500;">DocLittle • Admin</p>
+          <p style="margin:0;color:var(--muted);font-size:13px;font-weight:500;">Consʌlt • Admin</p>
           <h1
             style="margin:8px 0 0;font-size:28px;font-weight:700;background:linear-gradient(135deg, var(--accent-blue), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
             Command Center</h1>
@@ -1399,7 +1399,7 @@
           <div class="tab-content" id="tab-clients">
             <div class="panel">
               <h2 style="margin:0 0 8px;">Clients & Credits Management</h2>
-              <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">API customers (developers/companies using the DocLittle API)</p>
+              <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">API customers (developers/companies using the Consult API)</p>
               <div class="stat-grid" id="clientsStats">
                 <div class="stat-card">
                   <div class="stat-label">Total Clients</div>
@@ -2981,8 +2981,8 @@
         document.getElementById('emailComposerTitle').textContent = '📧 Compose Email to Lead';
         document.getElementById('lead-email-to').value = options.recipient || '';
         document.getElementById('lead-email-to').readOnly = false;
-        document.getElementById('lead-email-subject').value = options.lead ? `DocLittle Medical Billing Software - Quick Demo Request` : '';
-        document.getElementById('lead-email-content').value = options.lead ? `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software.\n\nWould you be interested in a quick demo?\n\nBest regards,\nDocLittle Team` : '';
+        document.getElementById('lead-email-subject').value = options.lead ? `Consʌlt Medical Billing Software - Quick Demo Request` : '';
+        document.getElementById('lead-email-content').value = options.lead ? `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software.\n\nWould you be interested in a quick demo?\n\nBest regards,\nConsʌlt Team` : '';
         
         this.modal.style.display = 'flex';
       }
@@ -2996,8 +2996,8 @@
         document.getElementById('emailComposerTitle').textContent = `📧 Compose Email to ${this.bulkLeadIds.length} Leads`;
         document.getElementById('lead-email-to').value = options.recipient || `${this.bulkLeadIds.length} leads`;
         document.getElementById('lead-email-to').readOnly = true;
-        document.getElementById('lead-email-subject').value = 'DocLittle Medical Billing Software - Quick Demo Request';
-        document.getElementById('lead-email-content').value = `Hi,\n\nI'm reaching out from DocLittle. We provide AI-powered medical billing software.\n\nWould you be interested in a quick demo?\n\nBest regards,\nDocLittle Team`;
+        document.getElementById('lead-email-subject').value = 'Consʌlt Medical Billing Software - Quick Demo Request';
+        document.getElementById('lead-email-content').value = `Hi,\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software.\n\nWould you be interested in a quick demo?\n\nBest regards,\nConsʌlt Team`;
         
         this.modal.style.display = 'flex';
       }

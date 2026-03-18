@@ -36,8 +36,8 @@ Use the same palette on every patient page:
 
 ### 3.1 Header
 
-- **Logo text:** `LittleLab` (single word, no “Little” / “Lab” split or “Virtual Care Companion”).
-- **Subtitle:** `LittleLab • Virtual Care`.
+- **Logo text:** `Consʌlt` (use `ʌ` in place of the “u”).
+- **Subtitle:** `Home Care Works`.
 
 ### 3.2 Navigation (exactly 6 items)
 

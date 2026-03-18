@@ -86,7 +86,7 @@ export function useRAGSearch() {
         setError(
           failureCountRef.current >= 3
             ? 'Search is temporarily unavailable. Showing default cards.'
-            : 'We could not reach LittleLab knowledge right now. Please try again.'
+            : 'We could not reach search right now. Please try again.'
         );
         setCards([]);
       } finally {

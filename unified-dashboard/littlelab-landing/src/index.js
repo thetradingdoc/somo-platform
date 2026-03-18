@@ -14,8 +14,8 @@ function Root() {
       <App cards={cards} />
       <div className="ui-layer">
         <header className="brand">
-          <h1>LittleLab</h1>
-          <p>Your virtual care companion</p>
+          <h1>Consʌlt</h1>
+          <p>Home Care Works</p>
         </header>
         <Search
           query={query}

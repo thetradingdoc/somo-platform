@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LittleLab Clinic Dashboard</title>
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <title>Consʌlt Provider Portal — Sign in</title>
     <script src="assets/js/config.js"></script>
     <style>
         * {
@@ -44,7 +43,8 @@
             font-size: 32px;
             margin-bottom: 8px;
             font-weight: 700;
-            letter-spacing: -0.03em;
+            letter-spacing: -0.02em;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .auth-header h1 {
@@ -300,11 +300,9 @@
 <body>
     <div class="auth-container">
         <div class="auth-header">
-            <div class="logo">
-                LittleLab
-            </div>
-            <h1>LittleLab Clinic Dashboard</h1>
-            <p>For providers and clinic staff</p>
+            <div class="logo">Consʌlt</div>
+            <h1>Provider Portal</h1>
+            <p>For licensed providers</p>
         </div>
 
         <div class="auth-body">
@@ -367,51 +365,6 @@
 
             <!-- Signup form removed - users must use /signup page -->
 
-            <div class="divider">
-                <span>or continue with</span>
-            </div>
-
-            <div id="g_id_onload"
-                data-client_id="733692195644-k21cf071v806e216qris7evhr3asps72.apps.googleusercontent.com"
-                data-callback="handleGoogleSignIn" data-auto_prompt="false">
-            </div>
-
-            <button class="btn-google" id="googleSignInBtn">
-                <svg class="google-icon" viewBox="0 0 24 24">
-                    <path fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                </svg>
-                Sign in with Google
-            </button>
-
-            <!-- Test accounts - hidden in production, accessible via ?test=true query param -->
-            <div class="demo-section" id="testAccountsSection" style="display: none;">
-                <h3>Quick Test Accounts</h3>
-
-                <button class="demo-btn" onclick="loginDemo('insurer@doclittle.com', 'demo123')">
-                    <span class="demo-btn-icon">🏥</span>
-                    <div class="demo-btn-content">
-                        <div class="demo-btn-title">Insurer Admin</div>
-                        <div class="demo-btn-email">insurer@doclittle.com</div>
-                    </div>
-                </button>
-
-                <button class="demo-btn" onclick="loginDemo('provider@doclittle.com', 'demo123')">
-                    <span class="demo-btn-icon">👨‍⚕️</span>
-                    <div class="demo-btn-content">
-                        <div class="demo-btn-title">Healthcare Provider</div>
-                        <div class="demo-btn-email">provider@doclittle.com</div>
-                    </div>
-                </button>
-
-            </div>
-
             <!-- Sign up link - redirects to /signup -->
             <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
                 <p style="color: #718096; font-size: 14px; margin-bottom: 12px;">
@@ -419,8 +372,13 @@
                 </p>
                 <a href="/unified-dashboard/signup.html"
                     style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
-                    Create Account
+                    Create provider account
                 </a>
+                <div style="margin-top:12px;">
+                    <a href="/unified-dashboard/portal.html" style="color:#1e40af; text-decoration:none; font-size: 14px; font-weight: 600;">
+                        Are you a patient? Go to Patient Portal →
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -595,93 +553,8 @@
 
         // Signup function removed - signup is handled on /signup page
 
-        function loginDemo(email, password) {
-            document.getElementById('loginEmail').value = email;
-            document.getElementById('loginPassword').value = password;
-            login(email, password);
-        }
-
-        // Google Sign-In callback
-        function handleGoogleSignIn(response) {
-            const credential = response.credential;
-
-            // Decode JWT to get user info
-            const base64Url = credential.split('.')[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
-                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-
-            const userData = JSON.parse(jsonPayload);
-
-            // Send to backend for verification and account creation/login
-            authenticateWithGoogle(credential, userData);
-        }
-
-        async function authenticateWithGoogle(credential, userData) {
-            try {
-                const response = await fetch(`${API_BASE}/api/auth/google`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        credential,
-                        email: userData.email,
-                        name: userData.name,
-                        picture: userData.picture
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    sessionStorage.setItem('authenticated', 'true');
-                    sessionStorage.setItem('user', JSON.stringify(data.user));
-                    showSuccess('Welcome, ' + userData.name + '!');
-                    setTimeout(() => {
-                        window.location.href = '/business/business-dashboard.html';
-                    }, 1000);
-                } else {
-                    throw new Error(data.error || 'Google authentication failed');
-                }
-            } catch (error) {
-                console.error('Google auth error:', error);
-                showError(error.message || 'Failed to authenticate with Google');
-            }
-        }
-
-        // Initialize Google Sign-In button
-        window.onload = function () {
-            if (typeof google !== 'undefined') {
-                google.accounts.id.initialize({
-                    client_id: '733692195644-k21cf071v806e216qris7evhr3asps72.apps.googleusercontent.com',
-                    callback: handleGoogleSignIn
-                });
-
-                // Render button
-                const googleBtn = document.getElementById('googleSignInBtn');
-                if (googleBtn) {
-                    googleBtn.onclick = function () {
-                        google.accounts.id.prompt();
-                    };
-                }
-            }
-        };
-
         // Tab switching removed - login only
-        // Show test accounts only if ?test=true is in URL (for testing purposes)
         window.addEventListener('DOMContentLoaded', function () {
-            const urlParams = new URLSearchParams(window.location.search);
-            const isTestMode = urlParams.get('test') === 'true';
-            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-            // Show test accounts only in test mode or localhost (staging)
-            if (isTestMode || isLocalhost) {
-                const testSection = document.getElementById('testAccountsSection');
-                if (testSection) {
-                    testSection.style.display = 'block';
-                }
-            }
-
             // Always show login form
             document.getElementById('loginForm').classList.add('active');
         });

@@ -63,6 +63,63 @@ router.get('/', (req, res) => {
   }
 });
 
+// Phase 1: deterministic region pricing quote (fast, no network calls)
+// GET /api/pricing/quote?country=US OR ?phone_country_code=+263 OR ?phone=+2637...
+router.get('/quote', (req, res) => {
+  try {
+    const PHONE_MAP = require('../config/phone-country-map');
+    const countryRaw = (req.query.country || req.query.country_code || '').toString().trim().toUpperCase();
+    const phoneCountryCode = (req.query.phone_country_code || '').toString().trim();
+    const phone = (req.query.phone || '').toString().trim();
+
+    let iso2 = countryRaw || '';
+    if (!iso2 && phoneCountryCode) iso2 = PHONE_MAP[phoneCountryCode] || '';
+    if (!iso2 && phone.startsWith('+')) {
+      // longest prefix match
+      const keys = Object.keys(PHONE_MAP).sort((a, b) => b.length - a.length);
+      const hit = keys.find(k => phone.startsWith(k));
+      if (hit) iso2 = PHONE_MAP[hit] || '';
+    }
+
+    // Default to US if unknown (deterministic)
+    if (!iso2) iso2 = 'US';
+
+    const TIERS = {
+      HIGH: { tier: 'HIGH', price_usd: 150, floor_usd: 25 },
+      MID: { tier: 'MID', price_usd: 75, floor_usd: 25 },
+      STANDARD: { tier: 'STANDARD', price_usd: 45, floor_usd: 25 },
+      ACCESS: { tier: 'ACCESS', price_usd: 25, floor_usd: 25 }
+    };
+
+    const COUNTRY_TO_TIER = {
+      // Tier 1
+      US: 'HIGH', GB: 'HIGH', AE: 'HIGH', QA: 'HIGH',
+      // Tier 2
+      BR: 'MID', ZA: 'MID', MX: 'MID', PL: 'MID',
+      // Tier 3
+      IN: 'STANDARD', VN: 'STANDARD', KE: 'STANDARD',
+      // Tier 4
+      ZW: 'ACCESS', UG: 'ACCESS', NA: 'ACCESS', PG: 'ACCESS'
+    };
+
+    const tierKey = COUNTRY_TO_TIER[iso2] || 'STANDARD';
+    const t = TIERS[tierKey] || TIERS.STANDARD;
+    const price = Math.max(t.floor_usd, t.price_usd);
+
+    return res.json({
+      success: true,
+      iso2,
+      tier: t.tier,
+      currency: 'USD',
+      price_usd: price,
+      price_usd_cents: Math.round(price * 100),
+      floor_usd: t.floor_usd
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 /**
  * POST /api/admin/pricing (mount under /api/admin, requires admin auth)
  * Task 26: RBAC - admin may only modify clinics in ADMIN_PRICING_CLINIC_IDS (empty = all).

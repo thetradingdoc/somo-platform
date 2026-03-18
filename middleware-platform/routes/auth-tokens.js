@@ -61,7 +61,19 @@ router.post('/patient-token', async (req, res) => {
     const token = jwt.sign(
       {
         sub: patientId,
-        scope: 'patient'
+        scope: 'patient',
+        scopes: [
+          'openid',
+          'fhirUser',
+          'patient/Patient.read',
+          'patient/Appointment.read',
+          'patient/Encounter.read',
+          'patient/DocumentReference.read',
+          'patient/DiagnosticReport.read',
+          'patient/Binary.read',
+          'patient/Provenance.read',
+          'patient/Consent.read'
+        ]
       },
       JWT_SECRET,
       { expiresIn: '1h' }
@@ -116,7 +128,19 @@ router.post('/clinician-token', async (req, res) => {
       {
         sub: user.id,
         scope: 'clinician',
-        clinic_id: clinicId
+        clinic_id: clinicId,
+        scopes: [
+          'openid',
+          'fhirUser',
+          'user/*.*',
+          'patient/Patient.read',
+          'patient/Encounter.read',
+          'patient/DocumentReference.read',
+          'patient/DiagnosticReport.read',
+          'patient/Binary.read',
+          'patient/Provenance.read',
+          'patient/Consent.read'
+        ]
       },
       JWT_SECRET,
       { expiresIn: '8h' }

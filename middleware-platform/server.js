@@ -41,8 +41,10 @@ try {
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const path = require('path');
+// Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
 const stripeConfig = require('./utils/stripe-config');
 let stripe = null;
@@ -103,12 +105,15 @@ const PayerCacheService = require('./services/payer-cache-service');
 const Metrics = require('./services/metrics');
 const ProviderService = require('./services/provider-service');
 const PatientPortalService = require('./services/patient-portal-service');
+const PatientIntakeService = require('./services/patient-intake-service');
 const EHRAggregatorService = require('./services/ehr-aggregator-service');
 const EHRSyncService = require('./services/ehr-sync-service');
 const EpicAdapter = require('./services/epic-adapter');
 const RetellService = require('./services/retell-service');
 const livekitTokenRoutes = require('./routes/livekit');
 const authTokenRoutes = require('./routes/auth-tokens');
+const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('./middleware/jwt-fhir-auth');
 
 // Import Stripe Issuing Service (optional)
 let StripeIssuingService;
@@ -185,6 +190,644 @@ function decodeState(state) {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// ============================================
+// SMART-on-FHIR discovery + OAuth2 (minimal)
+// ============================================
+
+function publicBaseUrl(req) {
+  const configured = process.env.PUBLIC_BASE_URL || process.env.API_BASE_URL || process.env.BASE_URL;
+  if (configured) return configured.replace(/\/+$/, '');
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+app.get('/.well-known/smart-configuration', (req, res) => {
+  const base = publicBaseUrl(req);
+  return res.json({
+    issuer: base,
+    authorization_endpoint: `${base}/oauth/authorize`,
+    token_endpoint: `${base}/oauth/token`,
+    jwks_uri: `${base}/oauth/jwks`,
+    response_types_supported: ['code', 'token'],
+    grant_types_supported: ['authorization_code', 'client_credentials'],
+    scopes_supported: [
+      'openid',
+      'fhirUser',
+      'patient/Patient.read',
+      'patient/Appointment.read',
+      'patient/Encounter.read',
+      'patient/DocumentReference.read',
+      'patient/DiagnosticReport.read',
+      'patient/Binary.read',
+      'patient/Provenance.read',
+      'patient/Consent.read',
+      'user/*.*',
+      'system/*.*'
+    ],
+    capabilities: [
+      'launch-standalone',
+      'permission-v1',
+      'client-confidential-symmetric'
+    ]
+  });
+});
+
+// Minimal JWKS endpoint (symmetric JWTs can't publish a real JWK).
+app.get('/oauth/jwks', (req, res) => {
+  return res.status(501).json({ error: 'jwks_not_supported', error_description: 'Server uses symmetric JWT signing' });
+});
+
+// Minimal authorize endpoint stub (interactive SMART launch not implemented yet)
+app.get('/oauth/authorize', (req, res) => {
+  return res.status(501).send('SMART authorization_code flow not implemented. Use client_credentials or internal /api/auth/* token issuers.');
+});
+
+// Client credentials token (confidential clients only)
+app.post('/oauth/token', express.urlencoded({ extended: false }), (req, res) => {
+  try {
+    if (!JWT_SECRET) return res.status(500).json({ error: 'server_error', error_description: 'JWT not configured' });
+
+    const auth = (req.headers.authorization || '').toString();
+    let clientId = req.body.client_id;
+    let clientSecret = req.body.client_secret;
+    if (auth.startsWith('Basic ')) {
+      const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
+      const idx = decoded.indexOf(':');
+      if (idx >= 0) {
+        clientId = decoded.slice(0, idx);
+        clientSecret = decoded.slice(idx + 1);
+      }
+    }
+
+    const grantType = req.body.grant_type;
+    if (grantType !== 'client_credentials') {
+      return res.status(400).json({ error: 'unsupported_grant_type' });
+    }
+
+    const expectedId = process.env.SMART_CLIENT_ID || '';
+    const expectedSecret = process.env.SMART_CLIENT_SECRET || '';
+    if (!expectedId || !expectedSecret) {
+      return res.status(501).json({ error: 'oauth_not_configured', error_description: 'Set SMART_CLIENT_ID/SMART_CLIENT_SECRET' });
+    }
+    if (clientId !== expectedId || clientSecret !== expectedSecret) {
+      return res.status(401).json({ error: 'invalid_client' });
+    }
+
+    const requestedScopes = (req.body.scope || '').toString().split(/\s+/).filter(Boolean);
+    const allowed = new Set([
+      'openid',
+      'fhirUser',
+      'user/*.*',
+      'system/*.*',
+      'patient/Patient.read',
+      'patient/Appointment.read',
+      'patient/Encounter.read',
+      'patient/DocumentReference.read',
+      'patient/DiagnosticReport.read',
+      'patient/Binary.read',
+      'patient/Provenance.read',
+      'patient/Consent.read'
+    ]);
+    const scopes = (requestedScopes.length ? requestedScopes : ['system/*.*']).filter(s => allowed.has(s));
+
+    const token = jwt.sign(
+      { sub: clientId, scope: 'system', scopes },
+      JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    return res.json({
+      access_token: token,
+      token_type: 'bearer',
+      expires_in: 3600,
+      scope: scopes.join(' ')
+    });
+  } catch (e) {
+    return res.status(500).json({ error: 'server_error', error_description: e.message });
+  }
+});
+
+// ============================================
+// Patient portal authz helpers (mvp-27)
+// ============================================
+function requirePatientSession(req, res, next) {
+  const headerSession = req.headers['x-session-id'];
+  const cookieSession = req.cookies?.patient_session_id;
+  const sessionId = headerSession || cookieSession;
+  if (!sessionId) {
+    return res.status(401).json({ success: false, error: 'x-session-id required' });
+  }
+  req.usedCookieAuth = !headerSession && !!cookieSession;
+  const sessionValidation = PatientPortalService.validateSession(sessionId);
+  if (!sessionValidation.valid) {
+    return res.status(401).json({ success: false, error: 'Invalid or expired session' });
+  }
+  req.patientSessionId = sessionId;
+  req.patientSession = sessionValidation;
+  return next();
+}
+
+function issueCsrfCookie(res) {
+  const isSecure = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  const token = crypto.randomBytes(20).toString('hex');
+  res.cookie('patient_csrf', token, {
+    httpOnly: false,
+    sameSite: 'lax',
+    secure: isSecure,
+    maxAge: 24 * 60 * 60 * 1000
+  });
+  return token;
+}
+
+function requireCsrfForCookieAuth(req, res, next) {
+  const method = (req.method || 'GET').toUpperCase();
+  const unsafe = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  if (!unsafe) return next();
+  if (!req.usedCookieAuth) return next(); // header-based x-session-id is not cookie-auth
+
+  const cookieToken = (req.cookies?.patient_csrf || '').toString();
+  const headerToken = (req.headers['x-csrf-token'] || '').toString();
+  if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+    return res.status(403).json({ success: false, error: 'CSRF validation failed' });
+  }
+  return next();
+}
+
+async function rotatePatientSessionIfNeeded(req, res) {
+  if (!req.usedCookieAuth) return;
+  const hours = parseInt(process.env.PATIENT_SESSION_ROTATE_HOURS || '6', 10);
+  const rotateMs = Math.max(1, hours) * 60 * 60 * 1000;
+  try {
+    const row = db.db.prepare(`
+      SELECT id, email, phone, patient_id, verified, verified_at
+      FROM patient_portal_sessions
+      WHERE id = ? LIMIT 1
+    `).get(req.patientSessionId);
+    if (!row || !row.verified) return;
+    const verifiedAtMs = row.verified_at ? new Date(row.verified_at).getTime() : NaN;
+    if (Number.isNaN(verifiedAtMs)) return;
+    if (Date.now() - verifiedAtMs < rotateMs) return;
+
+    const { v4: uuidv4 } = require('uuid');
+    const newId = uuidv4();
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    db.db.prepare(`
+      INSERT INTO patient_portal_sessions
+        (id, patient_id, phone, email, verification_code, verified, verified_at, expires_at, created_at, last_seen_at)
+      VALUES
+        (?, ?, ?, ?, NULL, 1, datetime('now'), ?, datetime('now'), datetime('now'))
+    `).run(newId, row.patient_id || null, row.phone || null, row.email || null, expiresAt);
+
+    db.db.prepare(`
+      UPDATE patient_portal_sessions
+      SET revoked_at = datetime('now'), rotated_to = ?
+      WHERE id = ?
+    `).run(newId, row.id);
+
+    const isSecure = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+    res.cookie('patient_session_id', newId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isSecure,
+      maxAge: 24 * 60 * 60 * 1000
+    });
+    issueCsrfCookie(res);
+  } catch (_) {}
+}
+
+function assertPatientOwnsAppointmentOrThrow(sessionValidation, appointment) {
+  const sessionEmail = (sessionValidation.email || '').toLowerCase().trim();
+  const sessionPhone = sessionValidation.phone || null;
+  if (
+    appointment.patient_id &&
+    sessionValidation.patient_id &&
+    appointment.patient_id !== sessionValidation.patient_id
+  ) {
+    throw Object.assign(new Error('Not allowed to access this appointment'), { status: 403 });
+  }
+  if (!appointment.patient_id) {
+    const emailMatches =
+      appointment.patient_email &&
+      sessionEmail &&
+      appointment.patient_email.toLowerCase().trim() === sessionEmail;
+    const phoneMatches =
+      appointment.patient_phone && sessionPhone && appointment.patient_phone === sessionPhone;
+    if (!emailMatches && !phoneMatches) {
+      throw Object.assign(new Error('Not allowed to access this appointment'), { status: 403 });
+    }
+  }
+}
+
+function validateYyyyMmDd(s) {
+  if (typeof s !== 'string') return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime());
+}
+
+function validateHhMm(s) {
+  if (typeof s !== 'string') return false;
+  if (!/^\d{2}:\d{2}$/.test(s)) return false;
+  const [hh, mm] = s.split(':').map(n => parseInt(n, 10));
+  if (Number.isNaN(hh) || Number.isNaN(mm)) return false;
+  return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59;
+}
+
+function withIdempotency(operationType) {
+  return (req, res, next) => {
+    const key = (req.headers['idempotency-key'] || '').toString().trim();
+    if (!key) return next();
+
+    // If completed, return cached response
+    const cached = db.getIdempotentResult ? db.getIdempotentResult(key, operationType) : null;
+    if (cached && cached.result) {
+      return res.json({ ...cached.result, idempotent: true });
+    }
+
+    // Reserve key to prevent double-write
+    const reservation = db.reserveIdempotencyKey ? db.reserveIdempotencyKey(key, operationType) : 'reserved';
+    if (reservation === 'completed') {
+      const c2 = db.getIdempotentResult ? db.getIdempotentResult(key, operationType) : null;
+      if (c2 && c2.result) return res.json({ ...c2.result, idempotent: true });
+    }
+    if (reservation === 'in_progress') {
+      return res.status(409).json({ success: false, error: 'Request already in progress for this Idempotency-Key' });
+    }
+
+    req.idempotencyKey = key;
+    req.idempotencyOperation = operationType;
+
+    // Hook response json to store success results
+    const originalJson = res.json.bind(res);
+    res.json = (body) => {
+      try {
+        if (key && body && body.success && db.completeIdempotentResult) {
+          db.completeIdempotentResult(key, operationType, body);
+        }
+      } catch (_) { /* ignore */ }
+      return originalJson(body);
+    };
+
+    res.on('finish', () => {
+      // If request failed, release pending reservation so client can retry.
+      if (key && res.statusCode >= 400 && db.releaseIdempotencyKey) {
+        try { db.releaseIdempotencyKey(key, operationType); } catch (_) {}
+      }
+    });
+    return next();
+  };
+}
+
+// Patient: Support config (mvp-60)
+app.get('/api/patient/support-config', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    // Resolve patient -> clinic_id (best effort)
+    let clinicId = null;
+    try {
+      if (sessionValidation.patient_id && db.getPatientClinicIds) {
+        const ids = db.getPatientClinicIds(sessionValidation.patient_id);
+        clinicId = (ids && ids[0]) || null;
+      }
+    } catch (_) {}
+
+    const fromDb = (k) => {
+      try {
+        if (!clinicId) return null;
+        const row = db.db.prepare(`SELECT value FROM clinic_settings WHERE clinic_id = ? AND key = ? LIMIT 1`).get(clinicId, k);
+        return row ? row.value : null;
+      } catch (_) { return null; }
+    };
+
+    const phone = fromDb('support_phone') || process.env.CLINIC_SUPPORT_PHONE || '';
+    const email = fromDb('support_email') || process.env.CLINIC_SUPPORT_EMAIL || '';
+    const hours = fromDb('support_hours') || process.env.CLINIC_SUPPORT_HOURS || '';
+
+    return res.json({
+      success: true,
+      clinic_id: clinicId,
+      support: { phone, email, hours }
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Patient: "me" bootstrap (mvp-fhir-13)
+// Minimal safe identity for the patient UI; FHIR-first pages should use this instead of calling /fhir/* directly.
+app.get('/api/patient/me', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const patientId = sessionValidation.patient_id || null;
+
+    // Resolve FHIR Patient (best effort)
+    let patientRow = null;
+    try {
+      if (patientId && db.getFHIRPatient) patientRow = db.getFHIRPatient(patientId);
+      if (!patientRow && sessionValidation.email && db.getFHIRPatientByEmail) patientRow = db.getFHIRPatientByEmail(sessionValidation.email);
+      if (!patientRow && sessionValidation.phone && db.getFHIRPatientByPhone) patientRow = db.getFHIRPatientByPhone(sessionValidation.phone);
+    } catch (_) {}
+
+    let displayName = 'Patient';
+    let resolvedId = patientRow?.resource_id || patientId || null;
+    let canonicalIntake = null;
+    let onboarding = { onboarding_complete: false, missing_fields: ['first_name', 'last_name', 'dob', 'phone', 'country', 'city'] };
+    try {
+      const r = patientRow?.resource_data
+        ? (typeof patientRow.resource_data === 'string' ? JSON.parse(patientRow.resource_data) : patientRow.resource_data)
+        : null;
+      if (r && r.name && r.name[0]) {
+        const given = Array.isArray(r.name[0].given) ? r.name[0].given.join(' ') : (r.name[0].given || '');
+        const family = r.name[0].family || '';
+        const nm = `${given} ${family}`.trim();
+        if (nm) displayName = nm;
+      } else if (patientRow?.name) {
+        displayName = patientRow.name;
+      }
+      if (r && PatientIntakeService && PatientIntakeService.canonicalFromPatientResource) {
+        canonicalIntake = PatientIntakeService.canonicalFromPatientResource(r);
+        onboarding = PatientIntakeService.onboardingStatusFromCanonical(canonicalIntake);
+      }
+    } catch (_) {}
+
+    return res.json({
+      success: true,
+      patient: {
+        id: resolvedId,
+        name: displayName
+      },
+      onboarding: onboarding,
+      intake: canonicalIntake
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ============================================
+// Patient intake (web + voice canonical schema)
+// ============================================
+
+app.get('/api/patient/intake', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const { patientId, patientRow } = resolvePatientIdFromSession(sessionValidation);
+    const resource = patientRow?.resource_data
+      ? (typeof patientRow.resource_data === 'string' ? JSON.parse(patientRow.resource_data) : patientRow.resource_data)
+      : null;
+    const canonical = resource && PatientIntakeService.canonicalFromPatientResource
+      ? PatientIntakeService.canonicalFromPatientResource(resource)
+      : {
+        first_name: '',
+        last_name: '',
+        dob: '',
+        phone: '',
+        email: (sessionValidation?.email || '').toString(),
+        country: '',
+        city: '',
+        address_line1: '',
+        postal_code: '',
+        city_place_id: ''
+      };
+    const status = PatientIntakeService.onboardingStatusFromCanonical(canonical);
+    return res.json({
+      success: true,
+      patient_id: patientId || null,
+      intake: canonical,
+      ...status
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.put('/api/patient/intake', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const payload = req.body && typeof req.body === 'object' ? req.body : {};
+
+    const patientId = await PatientIntakeService.resolveOrCreatePatientIdFromSession(sessionValidation, payload);
+    if (!patientId) {
+      return res.status(500).json({ success: false, error: 'Unable to resolve or create patient record' });
+    }
+
+    const result = await PatientIntakeService.upsertIntakeByPatientId(patientId, payload);
+    if (!result.success) return res.status(400).json(result);
+
+    // Persist patient_id onto the portal session row for faster resolution later
+    try {
+      db.db.prepare(`
+        UPDATE patient_portal_sessions
+        SET patient_id = COALESCE(patient_id, ?)
+        WHERE id = ?
+      `).run(patientId, req.patientSessionId);
+    } catch (_) {}
+
+    return res.json(result);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Patient identity bundle for record-matching (no PHI beyond demographics)
+app.get('/api/patient/identity', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const { patientId, patientRow } = resolvePatientIdFromSession(sessionValidation);
+    const resource = patientRow?.resource_data
+      ? (typeof patientRow.resource_data === 'string' ? JSON.parse(patientRow.resource_data) : patientRow.resource_data)
+      : null;
+    const canonical = resource && PatientIntakeService.canonicalFromPatientResource
+      ? PatientIntakeService.canonicalFromPatientResource(resource)
+      : {
+        first_name: '',
+        last_name: '',
+        dob: '',
+        phone: (sessionValidation?.phone || '').toString(),
+        email: (sessionValidation?.email || '').toString(),
+        country: '',
+        city: '',
+        address_line1: '',
+        postal_code: '',
+        city_place_id: ''
+      };
+    const canConnect = PatientIntakeService.canConnectRecordsFromIntake
+      ? PatientIntakeService.canConnectRecordsFromIntake(canonical)
+      : false;
+    return res.json({
+      success: true,
+      patient_id: patientId || null,
+      identity: canonical,
+      can_connect_records: !!canConnect
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Geo helper for city autocomplete (web onboarding)
+// Uses Google Places if configured, otherwise falls back to a minimal in-process list.
+app.get('/api/geo/city-autocomplete', (req, res, next) => apiLimiter(req, res, next), async (req, res) => {
+  try {
+    const q = (req.query?.q || '').toString().trim();
+    if (q.length < 2) return res.json({ success: true, items: [] });
+
+    const key = (process.env.GOOGLE_MAPS_API_KEY || '').toString().trim();
+    if (key) {
+      try {
+        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(q)}&types=(cities)&key=${encodeURIComponent(key)}`;
+        const r = await fetch(url);
+        const data = await r.json();
+        const preds = Array.isArray(data?.predictions) ? data.predictions : [];
+        const items = preds.map(p => ({
+          label: p.description,
+          city: p.structured_formatting?.main_text || p.description,
+          country: (p.terms && p.terms.length ? p.terms[p.terms.length - 1].value : ''),
+          place_id: p.place_id || ''
+        }));
+        return res.json({ success: true, items });
+      } catch (_) {
+        // fall through to local fallback
+      }
+    }
+
+    // Fallback: small list-based suggestions (no external dependency)
+    const haystack = [
+      { label: 'Austin, United States', city: 'Austin', country: 'United States', place_id: '' },
+      { label: 'New York, United States', city: 'New York', country: 'United States', place_id: '' },
+      { label: 'San Francisco, United States', city: 'San Francisco', country: 'United States', place_id: '' },
+      { label: 'London, United Kingdom', city: 'London', country: 'United Kingdom', place_id: '' },
+      { label: 'Toronto, Canada', city: 'Toronto', country: 'Canada', place_id: '' }
+    ];
+    const lc = q.toLowerCase();
+    const items = haystack.filter(x => x.label.toLowerCase().includes(lc));
+    return res.json({ success: true, items });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+function resolvePatientIdFromSession(sessionValidation) {
+  try {
+    if (!sessionValidation) return { patientId: null, patientRow: null };
+    if (sessionValidation.patient_id && db.getFHIRPatient) {
+      const r = db.getFHIRPatient(sessionValidation.patient_id);
+      return { patientId: sessionValidation.patient_id, patientRow: r || null };
+    }
+    if (sessionValidation.email && db.getFHIRPatientByEmail) {
+      const r = db.getFHIRPatientByEmail(sessionValidation.email);
+      return { patientId: r ? r.resource_id : null, patientRow: r || null };
+    }
+    if (sessionValidation.phone && db.getFHIRPatientByPhone) {
+      const r = db.getFHIRPatientByPhone(sessionValidation.phone);
+      return { patientId: r ? r.resource_id : null, patientRow: r || null };
+    }
+    return { patientId: sessionValidation.patient_id || null, patientRow: null };
+  } catch (_) {
+    return { patientId: sessionValidation?.patient_id || null, patientRow: null };
+  }
+}
+
+function buildDocumentReferenceFromPatientDocRow(row, req) {
+  const patientId = row.patient_id;
+  const id = row.id;
+  const contentType = row.file_type || 'application/octet-stream';
+  const title = row.file_name || 'Document';
+  const createdAt = row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString();
+  const encounterRef = row.encounter_id ? { reference: `Encounter/${row.encounter_id}` } : null;
+
+  return {
+    resourceType: 'DocumentReference',
+    id,
+    status: 'current',
+    subject: patientId ? { reference: `Patient/${patientId}` } : undefined,
+    date: createdAt,
+    description: title,
+    context: encounterRef ? { encounter: [encounterRef] } : undefined,
+    content: [{
+      attachment: {
+        contentType,
+        title,
+        url: `${req.protocol}://${req.get('host')}/fhir/Binary/${id}`
+      }
+    }]
+  };
+}
+
+async function syncFhirEncounterFromAppointment(appointmentId) {
+  try {
+    if (!appointmentId) return;
+    const appt = db.getAppointment ? db.getAppointment(appointmentId) : null;
+    if (!appt || !appt.patient_id) return;
+    const FHIRResources = require('./models/fhir-resources');
+    const encId = appt.id;
+    const existing = db.getFHIREncounter ? db.getFHIREncounter(encId) : null;
+
+    const encStatus =
+      appt.status === 'completed' ? 'finished' :
+      appt.status === 'canceled' ? 'cancelled' :
+      appt.status === 'live' ? 'in-progress' :
+      'planned';
+
+    const startIso = appt.start_time || null;
+    const resource = FHIRResources.createEncounter({
+      id: encId,
+      patientId: appt.patient_id,
+      patientName: appt.patient_name || '',
+      callId: encId,
+      status: encStatus,
+      type: appt.appointment_type || 'Telehealth visit',
+      startTime: startIso || new Date().toISOString(),
+      ...(appt.end_time ? { endTime: appt.end_time } : {})
+    });
+    resource.extension = Array.isArray(resource.extension) ? resource.extension : [];
+    resource.extension.push({ url: 'https://doclittle.health/extension/appointment-status', valueString: appt.status || 'unknown' });
+    if (appt.payment_status) resource.extension.push({ url: 'https://doclittle.health/extension/payment-status', valueString: appt.payment_status });
+
+    if (!existing && db.createFHIREncounter) db.createFHIREncounter(resource);
+    if (existing && db.updateFHIREncounter) db.updateFHIREncounter(encId, resource);
+  } catch (_) {}
+}
+
+// Patient: Export documents metadata + signed download URLs (mvp-70)
+app.get('/api/patient/documents/export', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    let patient = null;
+    if (sessionValidation.patient_id && db.getFHIRPatient) patient = db.getFHIRPatient(sessionValidation.patient_id);
+    if (!patient && sessionValidation.email) patient = db.getFHIRPatientByEmail(sessionValidation.email);
+    if (!patient && sessionValidation.phone) patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    const patientId = patient ? patient.resource_id : sessionValidation.patient_id;
+    if (!patientId) return res.status(404).json({ success: false, error: 'Patient not found' });
+
+    const docs = db.getPatientDocuments ? db.getPatientDocuments(patientId) : [];
+    const base = `${req.protocol}://${req.get('host')}`;
+    const ttlSeconds = parseInt(process.env.PATIENT_DOCUMENT_SIGNED_URL_TTL_SECONDS || '300', 10);
+
+    const exported = [];
+    for (const d of docs) {
+      const token = crypto.randomBytes(24).toString('hex');
+      const expiresAtIso = new Date(Date.now() + Math.max(30, ttlSeconds) * 1000).toISOString();
+      db.createPatientDocumentDownloadToken && db.createPatientDocumentDownloadToken({
+        token,
+        doc_id: d.id,
+        patient_id: patientId,
+        expires_at: expiresAtIso
+      });
+      exported.push({
+        id: d.id,
+        file_name: d.file_name,
+        file_type: d.file_type,
+        status: d.status,
+        created_at: d.created_at,
+        download_url: `${base}/api/patient/documents/download/${token}`
+      });
+    }
+
+    return res.json({ success: true, documents: exported });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Trust proxy - required for Azure App Service and express-rate-limit
 // This allows Express to correctly identify client IPs behind proxies
 app.set('trust proxy', true);
@@ -234,6 +877,43 @@ try {
 }
 
 const logger = require('./services/logger');
+
+// mvp-72: Environment-controlled log level; suppress noisy logs in production
+if (isProd && !process.env.LOG_LEVEL) {
+  process.env.LOG_LEVEL = 'warn';
+  logger.logLevel = 'warn';
+}
+try {
+  const original = {
+    log: console.log.bind(console),
+    info: console.info ? console.info.bind(console) : console.log.bind(console),
+    debug: console.debug ? console.debug.bind(console) : console.log.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console)
+  };
+  console.log = (...args) => { if (logger.shouldLog('info')) original.log(...args); };
+  console.info = (...args) => { if (logger.shouldLog('info')) original.info(...args); };
+  console.debug = (...args) => { if (logger.shouldLog('debug')) original.debug(...args); };
+} catch (_) {}
+
+// mvp-73: Lightweight bot/WAF guard for public endpoints (kept intentionally simple)
+function botGuard(req, res, next) {
+  if (!isProd && !(process.env.BOT_GUARD_ENABLED === '1' || process.env.BOT_GUARD_ENABLED === 'true')) return next();
+  const ua = (req.get('user-agent') || '').toLowerCase();
+  const p = (req.path || '').toLowerCase();
+  const suspicious =
+    !ua ||
+    /curl|wget|python|httpclient|scrapy|spider|scanner|nikto|nmap|sqlmap|go-http-client|java\/|okhttp|bot\b/.test(ua);
+  const sensitive =
+    p.includes('/api/patient/verify/') ||
+    p.includes('/api/payment/process') ||
+    p.includes('/api/payment/verify-code') ||
+    p.includes('/api/payment/create-intent');
+  if (suspicious && sensitive) {
+    return res.status(403).json({ success: false, error: 'Request blocked' });
+  }
+  return next();
+}
 
 // Security middleware (must be first)
 app.use(securityHeaders);
@@ -291,7 +971,7 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-session-id', 'x-journey-id', 'idempotency-key'],
   exposedHeaders: ['Set-Cookie']
 };
 
@@ -470,20 +1150,33 @@ app.get('/', (req, res) => {
 
   // Localhost - serve voice agent marketing landing page (same as doclittle.site)
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Prefer LittleLab React landing build when available
+    // Keep the marketing landing page at "/" for local dev.
+    // Auth should still enter through the portal chooser via CTA buttons on the landing.
     const fs = require('fs');
+
+    // Prefer LittleLab React landing build if present
     const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'index.html');
     if (fs.existsSync(landingBuild)) {
-      console.log('[ROOT ROUTE] Serving LittleLab landing build (localhost)');
       return res.sendFile(landingBuild);
     }
 
+    // Otherwise serve the static unified-dashboard index page
+    const udIndex = getUnifiedDashboardPath('index.html');
+    if (fs.existsSync(udIndex)) {
+      return res.sendFile(udIndex);
+    }
+
+    // Fallback to unified-dashboard/landing.html if index isn't present
+    const udLanding = getUnifiedDashboardPath('landing.html');
+    if (fs.existsSync(udLanding)) {
+      return res.sendFile(udLanding);
+    }
+
+    // Last resort: middleware public landing
     const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
     if (fs.existsSync(legacyLandingPath)) {
       return res.sendFile(legacyLandingPath);
     }
-    // Fallback to admin if landing page doesn't exist
-    return res.redirect('/admin');
   }
 
   // API subdomain - check if user is already logged in
@@ -571,6 +1264,14 @@ app.get('/', (req, res) => {
 // ============================================
 // Unified Dashboard Routes (doclittle.site frontend)
 // ============================================
+
+// Serve unified-dashboard root pages under /unified-dashboard/*
+// This is the canonical front-door for Patient Portal vs Provider Portal selection.
+app.use('/unified-dashboard', express.static(getUnifiedDashboardPath(), {
+  index: false,
+  extensions: ['html'],
+  maxAge: '5m'
+}));
 
 // Serve unified-dashboard static assets
 app.use('/assets', express.static(getUnifiedDashboardPath('assets'), {
@@ -915,7 +1616,7 @@ app.use('/api/voice-agent', tenantContext({ requireTenant: false }), voiceAgentS
 
 // Payment routes (payment page and processing)
 const paymentRoutes = require('./routes/payment');
-app.use('/api/payment', paymentRoutes);
+app.use('/api/payment', botGuard, paymentRoutes);
 
 // Visit pricing API (Task 16)
 const pricingRoutes = require('./routes/pricing');
@@ -5581,6 +6282,168 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
   }
 });
 
+// Voice: Upsert patient intake (shared canonical schema)
+// Allows the voice agent to capture DOB/location/etc after initial booking.
+app.post('/voice/patient/intake', async (req, res) => {
+  try {
+    const args = req.body.args || req.body || {};
+    const patient_id = (args.patient_id || args.patientId || '').toString().trim();
+    const patient_email = (args.patient_email || args.email || '').toString().trim().toLowerCase();
+    let patient_phone = (args.patient_phone || args.phone || '').toString().trim();
+
+    // Validation (voice onboarding requirements)
+    const dobRaw = (args.dob || args.date_of_birth || '').toString().trim();
+    const countryRaw = (args.country || '').toString().trim();
+    const cityRaw = (args.city || '').toString().trim();
+
+    // Normalize phone early so patient resolution is stable
+    if (patient_phone) {
+      try {
+        const SMSService = require('./services/sms-service');
+        patient_phone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
+      } catch (_) {}
+    }
+
+    const errors = [];
+    if (dobRaw) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dobRaw);
+      if (!m) {
+        errors.push('dob must be in YYYY-MM-DD format');
+      } else {
+        const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+        const dt = new Date(Date.UTC(y, mo - 1, d));
+        const valid = dt.getUTCFullYear() === y && (dt.getUTCMonth() + 1) === mo && dt.getUTCDate() === d;
+        if (!valid) errors.push('dob is not a valid calendar date');
+      }
+    } else {
+      errors.push('dob is required');
+    }
+    if (!countryRaw) errors.push('country is required');
+    if (!cityRaw) errors.push('city is required');
+
+    if (errors.length) {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_validation_failed'); } catch (_) {}
+      return res.status(400).json({
+        success: false,
+        error: errors.join('; '),
+        message: "I couldn’t save that; let’s try again."
+      });
+    }
+
+    let patientId = patient_id || null;
+    if (!patientId && patient_email) {
+      try { patientId = db.getFHIRPatientByEmail(patient_email)?.resource_id || null; } catch (_) {}
+    }
+    if (!patientId && patient_phone) {
+      try { patientId = db.getFHIRPatientByPhone(patient_phone)?.resource_id || null; } catch (_) {}
+    }
+    if (!patientId && (patient_email || patient_phone || args.first_name || args.last_name || args.patient_name)) {
+      try {
+        const nm = (args.patient_name || [args.first_name, args.last_name].filter(Boolean).join(' ') || 'Unknown').toString();
+        const created = await FHIRService.getOrCreatePatient({
+          name: nm,
+          phone: patient_phone || undefined,
+          email: patient_email || undefined
+        }, false);
+        patientId = created?.patient?.id || null;
+      } catch (_) {}
+    }
+
+    if (!patientId) {
+      return res.status(400).json({ success: false, error: 'Unable to resolve patient_id (provide patient_id, patient_email, or patient_phone)' });
+    }
+
+    const payload = {
+      first_name: args.first_name || '',
+      last_name: args.last_name || '',
+      dob: dobRaw,
+      phone: patient_phone || '',
+      email: patient_email || '',
+      country: countryRaw,
+      city: cityRaw,
+      city_place_id: args.city_place_id || ''
+    };
+    if (args.insurance && typeof args.insurance === 'object') {
+      payload.insurance = args.insurance;
+    }
+    const result = await PatientIntakeService.upsertIntakeByPatientId(patientId, payload);
+    if (!result.success) {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_save_failed'); } catch (_) {}
+      return res.status(400).json({
+        ...result,
+        message: "I couldn’t save that; let’s try again."
+      });
+    }
+    try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_save_success'); } catch (_) {}
+    if (Array.isArray(result.missing_fields) && result.missing_fields.length) {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_missing_fields'); } catch (_) {}
+    }
+    return res.json({
+      ...result,
+      message: "Thanks — you’re all set."
+    });
+  } catch (e) {
+    try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_save_error'); } catch (_) {}
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Voice: Check patient onboarding status (DOB/country/city missing fields)
+app.post('/voice/patient/intake/status', async (req, res) => {
+  try {
+    const args = req.body.args || req.body || {};
+    const patient_id = (args.patient_id || args.patientId || '').toString().trim();
+    const patient_email = (args.patient_email || args.email || '').toString().trim().toLowerCase();
+    let patient_phone = (args.patient_phone || args.phone || '').toString().trim();
+    if (patient_phone) {
+      try {
+        const SMSService = require('./services/sms-service');
+        patient_phone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
+      } catch (_) {}
+    }
+
+    let patientId = patient_id || null;
+    if (!patientId && patient_email) {
+      try { patientId = db.getFHIRPatientByEmail(patient_email)?.resource_id || null; } catch (_) {}
+    }
+    if (!patientId && patient_phone) {
+      try { patientId = db.getFHIRPatientByPhone(patient_phone)?.resource_id || null; } catch (_) {}
+    }
+
+    if (!patientId) {
+      const missing_fields = ['dob', 'country', 'city'];
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_status_patient_not_found'); } catch (_) {}
+      return res.json({
+        success: true,
+        patient_id: null,
+        onboarding_complete: false,
+        missing_fields
+      });
+    }
+
+    const row = db.getFHIRPatient(patientId);
+    const canonical = PatientIntakeService.canonicalFromPatientResource(row?.resource_data || {});
+    const status = PatientIntakeService.onboardingStatusFromCanonical(canonical);
+    if (status?.onboarding_complete) {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_status_complete'); } catch (_) {}
+    } else {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_status_incomplete'); } catch (_) {}
+      try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_missing_fields'); } catch (_) {}
+    }
+    return res.json({
+      success: true,
+      patient_id: patientId,
+      ...status
+    });
+  } catch (e) {
+    try { db.incrementOpsCounter && db.incrementOpsCounter('voice_intake_status_error'); } catch (_) {}
+    return res.status(500).json({
+      success: false,
+      error: e.message
+    });
+  }
+});
+
 // Confirm appointment (for voice agent)
 app.post('/voice/appointments/confirm', async (req, res) => {
   try {
@@ -6260,6 +7123,17 @@ app.post('/voice/insurance/collect', async (req, res) => {
     // CRITICAL: Eligibility must be linked to a patient_id for proper retrieval
     let finalPatientId = patientId || (foundPatient ? foundPatient.resource_id : null);
 
+    // If we have an email but no patient yet, try resolve by email (web OTP identity)
+    if (!finalPatientId && patientEmail) {
+      try {
+        const byEmail = db.getFHIRPatientByEmail(patientEmail.trim().toLowerCase());
+        if (byEmail) {
+          finalPatientId = byEmail.resource_id;
+          foundPatient = byEmail;
+        }
+      } catch (_) {}
+    }
+
     // If no patient found yet, try to create or find by member_id in claims
     if (!finalPatientId && args.member_id) {
       // Try to find patient via claims (most reliable source)
@@ -6428,6 +7302,20 @@ app.post('/voice/insurance/collect', async (req, res) => {
       storedInsurance = insuranceRecord;
 
       console.log(`✅ Insurance stored for patient: ${finalPatientId}`);
+
+      // Keep canonical intake in sync (shared data format for web + voice)
+      try {
+        if (PatientIntakeService?.upsertIntakeByPatientId) {
+          await PatientIntakeService.upsertIntakeByPatientId(finalPatientId, {
+            insurance: {
+              payer_name: payerName || '',
+              payer_id: payerId || '',
+              member_id: args.member_id || '',
+              plan_name: args.plan_name || ''
+            }
+          });
+        }
+      } catch (_) {}
     } else if (patientPhone && !finalPatientId) {
       // Try to find patient by phone and link insurance
       try {
@@ -6449,6 +7337,20 @@ app.post('/voice/insurance/collect', async (req, res) => {
           storedInsurance = insuranceRecord;
 
           console.log(`✅ Insurance stored for patient: ${patient.resource_id}`);
+
+          // Keep canonical intake in sync (shared data format for web + voice)
+          try {
+            if (PatientIntakeService?.upsertIntakeByPatientId) {
+              await PatientIntakeService.upsertIntakeByPatientId(patient.resource_id, {
+                insurance: {
+                  payer_name: payerName || '',
+                  payer_id: payerId || '',
+                  member_id: args.member_id || '',
+                  plan_name: args.plan_name || ''
+                }
+              });
+            }
+          } catch (_) {}
         }
       } catch (patientError) {
         console.warn('⚠️  Could not link insurance to patient:', patientError.message);
@@ -9869,9 +10771,9 @@ app.get('/api/patient/insurance', async (req, res) => {
 // Patient: Update insurance (onboarding)
 app.put('/api/patient/insurance', apiLimiter, express.json(), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    const sessionId = req.headers['x-session-id'];
     if (!sessionId) {
-      return res.status(401).json({ success: false, error: 'Session ID required' });
+      return res.status(401).json({ success: false, error: 'x-session-id required' });
     }
 
     const { payer_name, payer_id, member_id, plan_name } = req.body || {};
@@ -10636,8 +11538,31 @@ app.get('/api/provider/providers', async (req, res) => {
 // PATIENT PORTAL ENDPOINTS
 // ============================================
 
+// OTP abuse protection beyond IP-only limits (mvp-36)
+const otpKey = (req) => {
+  const ip = (req.ip || req.connection?.remoteAddress || 'unknown').toString();
+  const email = (req.body?.email || '').toString().toLowerCase().trim();
+  return `${ip}::${email || 'no-email'}`;
+};
+const otpSendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: otpKey,
+  message: { success: false, error: 'Too many verification code requests. Please try again later.' }
+});
+const otpConfirmLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: otpKey,
+  message: { success: false, error: 'Too many verification attempts. Please try again later.' }
+});
+
 // Patient: Send verification code
-app.post('/api/patient/verify/send', authLimiter, async (req, res) => {
+app.post('/api/patient/verify/send', botGuard, authLimiter, otpSendLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -10654,15 +11579,30 @@ app.post('/api/patient/verify/send', authLimiter, async (req, res) => {
     });
 
     if (result.success) {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('otp_send_success'); } catch (_) {}
+      try {
+        db.insertAuditEvent && db.insertAuditEvent({
+          actor_type: 'patient',
+          actor_id: null,
+          patient_id: null,
+          resource_type: 'session',
+          resource_id: result.session_id || null,
+          action: 'otp_sent',
+          metadata: { ip: req.ip || null }
+        });
+      } catch (_) {}
       res.json({
         success: true,
         session_id: result.session_id,
+        existing_patient: !!result.existing_patient,
         message: result.message || 'Verification code sent to your email'
       });
     } else {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('otp_send_failed'); } catch (_) {}
       res.status(400).json(result);
     }
   } catch (error) {
+    try { db.incrementOpsCounter && db.incrementOpsCounter('otp_send_error'); } catch (_) {}
     console.error('❌ Error sending verification code:', error);
     res.status(500).json({
       success: false,
@@ -10693,7 +11633,7 @@ app.post('/api/admin/patient-sessions/revoke', async (req, res) => {
 
 // Patient: Verify code and login
 // Use authLimiter to protect against brute-force code guessing
-app.post('/api/patient/verify/confirm', authLimiter, async (req, res) => {
+app.post('/api/patient/verify/confirm', botGuard, authLimiter, otpConfirmLimiter, async (req, res) => {
   try {
     const { email, code } = req.body;
 
@@ -10707,16 +11647,57 @@ app.post('/api/patient/verify/confirm', authLimiter, async (req, res) => {
     const result = PatientPortalService.verifyCode(email, code);
 
     if (result.success) {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('otp_confirm_success'); } catch (_) {}
+      try {
+        db.insertAuditEvent && db.insertAuditEvent({
+          actor_type: 'patient',
+          actor_id: null,
+          patient_id: result.patient_id || null,
+          resource_type: 'session',
+          resource_id: result.session_id || null,
+          action: 'login_success',
+          metadata: { ip: req.ip || null }
+        });
+      } catch (_) {}
+      // Optional: cookie-based session storage (mvp-59). Frontend may still use x-session-id header.
+      const isSecure = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+      res.cookie('patient_session_id', result.session_id, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: isSecure,
+        maxAge: 24 * 60 * 60 * 1000 // 24h absolute, inactivity handled server-side
+      });
+      issueCsrfCookie(res);
+      // Determine onboarding completeness to drive web redirect
+      let onboarding_complete = false;
+      let missing_fields = ['first_name', 'last_name', 'dob', 'phone', 'country', 'city'];
+      try {
+        const row = (result.patient_id && db.getFHIRPatient) ? db.getFHIRPatient(result.patient_id) : null;
+        const resource = row?.resource_data
+          ? (typeof row.resource_data === 'string' ? JSON.parse(row.resource_data) : row.resource_data)
+          : null;
+        if (resource && PatientIntakeService?.canonicalFromPatientResource) {
+          const canonical = PatientIntakeService.canonicalFromPatientResource(resource);
+          const status = PatientIntakeService.onboardingStatusFromCanonical(canonical);
+          onboarding_complete = !!status.onboarding_complete;
+          missing_fields = status.missing_fields || missing_fields;
+        }
+      } catch (_) {}
       res.json({
         success: true,
         session_id: result.session_id,
         patient_id: result.patient_id,
-        email: result.email
+        email: result.email,
+        created_patient: !!result.created_patient,
+        onboarding_complete,
+        missing_fields
       });
     } else {
+      try { db.incrementOpsCounter && db.incrementOpsCounter('otp_confirm_failed'); } catch (_) {}
       res.status(400).json(result);
     }
   } catch (error) {
+    try { db.incrementOpsCounter && db.incrementOpsCounter('otp_confirm_error'); } catch (_) {}
     console.error('❌ Error verifying code:', error);
     res.status(500).json({
       success: false,
@@ -10760,37 +11741,180 @@ app.post('/api/patient/logout', async (req, res) => {
 });
 
 // Patient: Get documents list
-app.get('/api/patient/documents', apiLimiter, async (req, res) => {
+app.get('/api/patient/documents', apiLimiter, requirePatientSession, async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
-    if (!sessionId) {
-      return res.status(401).json({ success: false, error: 'Session ID required' });
+    const sessionValidation = req.patientSession;
+    const { patientId } = resolvePatientIdFromSession(sessionValidation);
+    if (!patientId) return res.status(404).json({ success: false, error: 'Patient not found' });
+
+    // FHIR-first read: DocumentReference table is canonical.
+    let documentReferences = db.getFHIRDocumentReferencesByPatientId
+      ? db.getFHIRDocumentReferencesByPatientId(patientId, 500).map(r => r.resource_data).filter(Boolean)
+      : [];
+
+    // Migration bridge: if none exist, derive from patient_documents and persist.
+    if (documentReferences.length === 0) {
+      const rows = db.getPatientDocuments ? db.getPatientDocuments(patientId) : [];
+      documentReferences = [];
+      for (const r of rows) {
+        const dr = buildDocumentReferenceFromPatientDocRow(r, req);
+        documentReferences.push(dr);
+        try { db.createFHIRDocumentReference && db.createFHIRDocumentReference(dr); } catch (_) {}
+      }
     }
-    const sessionValidation = PatientPortalService.validateSession(sessionId);
-    if (!sessionValidation.valid) {
-      return res.status(401).json({ success: false, error: 'Invalid session' });
-    }
-    // Resolve patient via email/phone
-    let patient = null;
-    if (sessionValidation.email) {
-      patient = db.getFHIRPatientByEmail(sessionValidation.email);
-    }
-    if (!patient && sessionValidation.phone) {
-      patient = db.getFHIRPatientByPhone(sessionValidation.phone);
-    }
-    if (!patient) {
-      return res.status(404).json({ success: false, error: 'Patient not found' });
-    }
-    const docs = db.getPatientDocuments ? db.getPatientDocuments(patient.resource_id) : [];
-    res.json({ success: true, documents: docs });
+
+    // Back-compat for existing UI: return a "documents" list derived from the DocumentReferences.
+    const documents = documentReferences.map(dr => {
+      const att = (dr.content && dr.content[0] && dr.content[0].attachment) ? dr.content[0].attachment : {};
+      return {
+        id: dr.id,
+        patient_id: patientId,
+        file_name: att.title || dr.description || 'Document',
+        file_type: att.contentType || null,
+        status: 'available',
+        created_at: dr.date || null,
+        fhir: { document_reference_id: dr.id, binary_url: att.url || null }
+      };
+    });
+
+    res.json({ success: true, patient_id: patientId, documentReferences, documents });
   } catch (error) {
     console.error('❌ Error fetching patient documents:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
+// Patient: Request a signed download URL for a document (mvp-39, mvp-61)
+app.get('/api/patient/documents/:id/download', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const docId = req.params.id;
+    const doc = db.getPatientDocumentById ? db.getPatientDocumentById(docId) : null;
+    if (!doc) return res.status(404).json({ success: false, error: 'Document not found' });
+
+    // Resolve patient and verify ownership
+    let patient = null;
+    if (sessionValidation.patient_id && db.getFHIRPatient) patient = db.getFHIRPatient(sessionValidation.patient_id);
+    if (!patient && sessionValidation.email) patient = db.getFHIRPatientByEmail(sessionValidation.email);
+    if (!patient && sessionValidation.phone) patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    const patientId = patient ? patient.resource_id : sessionValidation.patient_id;
+    if (!patientId || doc.patient_id !== patientId) {
+      return res.status(403).json({ success: false, error: 'Not allowed to access this document' });
+    }
+
+    const ttlSeconds = parseInt(process.env.PATIENT_DOCUMENT_SIGNED_URL_TTL_SECONDS || '300', 10);
+    const token = crypto.randomBytes(24).toString('hex');
+    const expiresAtIso = new Date(Date.now() + Math.max(30, ttlSeconds) * 1000).toISOString();
+    if (db.createPatientDocumentDownloadToken) {
+      const created = db.createPatientDocumentDownloadToken({
+        token,
+        doc_id: docId,
+        patient_id: patientId,
+        expires_at: expiresAtIso
+      });
+      if (!created.success) {
+        return res.status(500).json({ success: false, error: 'Failed to issue download token' });
+      }
+    }
+
+    // Audit log
+    try {
+      db.insertHipaaAccessLog && db.insertHipaaAccessLog({
+        user_id: null,
+        patient_id: patientId,
+        resource_type: 'patient_document',
+        resource_id: docId,
+        action: 'download_link_issued',
+        ip_address: req.ip
+      });
+      db.insertAuditEvent && db.insertAuditEvent({
+        actor_type: 'patient',
+        actor_id: null,
+        patient_id: patientId,
+        resource_type: 'document',
+        resource_id: docId,
+        action: 'download_link_issued',
+        metadata: { ip: req.ip || null }
+      });
+    } catch (_) {}
+
+    return res.json({
+      success: true,
+      url: `${req.protocol}://${req.get('host')}/api/patient/documents/download/${token}`,
+      expires_in_seconds: Math.max(30, ttlSeconds)
+    });
+  } catch (error) {
+    console.error('❌ Error issuing document download link:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Patient: Consume signed URL token and stream document (mvp-39, mvp-61)
+app.get('/api/patient/documents/download/:token', apiLimiter, async (req, res) => {
+  try {
+    const token = (req.params.token || '').toString();
+    const entry = db.getPatientDocumentDownloadToken ? db.getPatientDocumentDownloadToken(token) : null;
+    if (!entry) return res.status(404).send('Not found');
+    if (entry.revoked_at) return res.status(410).send('Expired');
+    if (entry.used_at) return res.status(410).send('Expired');
+    if (entry.expires_at && Date.now() > new Date(entry.expires_at).getTime()) return res.status(410).send('Expired');
+
+    const doc = db.getPatientDocumentById ? db.getPatientDocumentById(entry.doc_id) : null;
+    if (!doc) return res.status(404).send('Not found');
+    if (doc.patient_id !== entry.patient_id) return res.status(403).send('Forbidden');
+
+    // One-time use (durable)
+    if (db.markPatientDocumentDownloadTokenUsed) {
+      db.markPatientDocumentDownloadTokenUsed(token);
+    }
+
+    // Audit
+    try {
+      db.insertHipaaAccessLog && db.insertHipaaAccessLog({
+        user_id: null,
+        patient_id: entry.patient_id,
+        resource_type: 'patient_document',
+        resource_id: entry.doc_id,
+        action: 'download',
+        ip_address: req.ip
+      });
+      db.insertAuditEvent && db.insertAuditEvent({
+        actor_type: 'patient',
+        actor_id: null,
+        patient_id: entry.patient_id,
+        resource_type: 'document',
+        resource_id: entry.doc_id,
+        action: 'download',
+        metadata: { ip: req.ip || null }
+      });
+    } catch (_) {}
+
+    // If stored in cloud, redirect to provider-signed URL (mvp-68)
+    if (doc.storage_provider === 'azure') {
+      const BlobStorage = require('./services/blob-storage');
+      if (BlobStorage && BlobStorage.isAzureConfigured && BlobStorage.isAzureConfigured() && doc.storage_key) {
+        const signed = BlobStorage.generateSignedUrl({
+          blobName: doc.storage_key,
+          expiresInSeconds: 120,
+          contentDispositionFilename: doc.file_name || 'document'
+        });
+        return res.redirect(signed);
+      }
+    }
+
+    const p = doc.storage_path;
+    if (!p || !fs.existsSync(p)) return res.status(404).send('Not found');
+    res.setHeader('Content-Type', doc.file_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.file_name || 'document')}"`);
+    return fs.createReadStream(p).pipe(res);
+  } catch (error) {
+    console.error('❌ Error streaming document:', error);
+    return res.status(500).send('Internal error');
+  }
+});
+
 // Patient: Upload documents (multipart)
-app.post('/api/patient/documents', apiLimiter, async (req, res, next) => {
+app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upload'), async (req, res, next) => {
   // Defer to multer middleware; require it here to avoid startup failure if not installed
   let multer;
   try {
@@ -10818,7 +11942,22 @@ app.post('/api/patient/documents', apiLimiter, async (req, res, next) => {
     }
   });
 
-  const upload = multer({ storage }).array('files', 10);
+  const maxMb = parseInt(process.env.PATIENT_UPLOAD_MAX_MB || '10', 10);
+  const allowed = new Set([
+    'application/pdf',
+    'image/jpeg',
+    'image/png'
+  ]);
+  const upload = multer({
+    storage,
+    limits: { fileSize: Math.max(1, maxMb) * 1024 * 1024, files: 10 },
+    fileFilter: (req2, file, cb) => {
+      if (!allowed.has(file.mimetype)) {
+        return cb(new Error('Unsupported file type'));
+      }
+      cb(null, true);
+    }
+  }).array('files', 10);
 
   upload(req, res, async (err) => {
     if (err) {
@@ -10827,14 +11966,10 @@ app.post('/api/patient/documents', apiLimiter, async (req, res, next) => {
     }
 
     try {
-      const sessionId = req.headers['x-session-id'] || req.query.session_id;
-      if (!sessionId) {
-        return res.status(401).json({ success: false, error: 'Session ID required' });
-      }
+      const sessionId = req.headers['x-session-id'];
+      if (!sessionId) return res.status(401).json({ success: false, error: 'x-session-id required' });
       const sessionValidation = PatientPortalService.validateSession(sessionId);
-      if (!sessionValidation.valid) {
-        return res.status(401).json({ success: false, error: 'Invalid session' });
-      }
+      if (!sessionValidation.valid) return res.status(401).json({ success: false, error: 'Invalid or expired session' });
 
       let patient = null;
       if (sessionValidation.email) {
@@ -10852,19 +11987,105 @@ app.post('/api/patient/documents', apiLimiter, async (req, res, next) => {
       if (req.files && db.createPatientDocument) {
         for (const f of req.files) {
           try {
+            // Minimal magic-byte validation (mvp-40)
+            try {
+              const fd = fs.openSync(f.path, 'r');
+              const buf = Buffer.alloc(16);
+              fs.readSync(fd, buf, 0, 16, 0);
+              fs.closeSync(fd);
+              const sig = buf.toString('hex');
+              const isPdf = sig.startsWith('25504446'); // %PDF
+              const isPng = sig.startsWith('89504e470d0a1a0a');
+              const isJpg = sig.startsWith('ffd8ff');
+              if (
+                (f.mimetype === 'application/pdf' && !isPdf) ||
+                (f.mimetype === 'image/png' && !isPng) ||
+                (f.mimetype === 'image/jpeg' && !isJpg)
+              ) {
+                try { fs.unlinkSync(f.path); } catch (_) {}
+                continue;
+              }
+            } catch (_) {}
+
+            // Document lifecycle (mvp-69): uploaded -> processing -> available/failed
+            let storage_provider = 'local';
+            let storage_bucket = null;
+            let storage_key = null;
+            let storage_path = f.path;
+            let status = 'processing';
+
+            // Optional: upload to Azure Blob (mvp-68)
+            try {
+              const BlobStorage = require('./services/blob-storage');
+              if (BlobStorage && BlobStorage.isAzureConfigured && BlobStorage.isAzureConfigured()) {
+                const buf = fs.readFileSync(f.path);
+                const { v4: uuidv4 } = require('uuid');
+                const ext = path.extname(f.originalname || '') || '';
+                const blobName = `patients/${patientId}/${uuidv4()}${ext}`;
+                const uploaded = await BlobStorage.uploadBuffer({
+                  buffer: buf,
+                  contentType: f.mimetype,
+                  blobName
+                });
+                storage_provider = uploaded.provider;
+                storage_bucket = uploaded.bucket;
+                storage_key = uploaded.key;
+                storage_path = null;
+                // Remove local temp file after blob upload
+                try { fs.unlinkSync(f.path); } catch (_) {}
+              }
+            } catch (_) {}
+
+            // Malware scanning MVP (mvp-69): after magic bytes validation, mark available
+            status = 'available';
+
             const result = db.createPatientDocument({
               patient_id: patientId,
               file_name: f.originalname,
               file_type: f.mimetype,
-              storage_path: f.path,
-              uploaded_by: 'patient'
+              storage_path,
+              storage_provider,
+              storage_bucket,
+              storage_key,
+              uploaded_by: 'patient',
+              status
             });
             saved.push(result.id);
+
+            // Dual-write (Batch 5): persist a FHIR DocumentReference as the canonical metadata record.
+            try {
+              const rowForFhir = {
+                id: result.id,
+                patient_id: patientId,
+                encounter_id: null,
+                file_name: f.originalname,
+                file_type: f.mimetype,
+                created_at: new Date().toISOString()
+              };
+              const docRef = buildDocumentReferenceFromPatientDocRow(rowForFhir, req);
+              if (db.createFHIRDocumentReference) db.createFHIRDocumentReference(docRef);
+            } catch (_) {}
           } catch (e2) {
             console.error('❌ Failed to save patient_document record:', e2.message);
           }
         }
       }
+
+      try {
+        if (saved.length > 0 && db.insertAuditEvent) {
+          for (const docId of saved) {
+            db.insertAuditEvent({
+              actor_type: 'patient',
+              actor_id: null,
+              patient_id: patientId,
+              resource_type: 'document',
+              resource_id: docId,
+              action: 'upload',
+              metadata: {}
+            });
+          }
+        }
+      } catch (_) {}
 
       res.json({ success: true, uploaded: saved.length, document_ids: saved });
     } catch (error) {
@@ -10882,24 +12103,135 @@ app.use('/api/livekit', livekitTokenRoutes);
 
 // Patient: Get my appointments (requires session)
 // Protected by general API rate limiter
-app.get('/api/patient/appointments', apiLimiter, async (req, res) => {
+app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
-
-    if (!sessionId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Session ID required'
-      });
+    await rotatePatientSessionIfNeeded(req, res);
+    const sessionValidation = req.patientSession;
+    const { patientId } = resolvePatientIdFromSession(sessionValidation);
+    if (!patientId) {
+      return res.status(404).json({ success: false, error: 'Patient not found for this session' });
     }
 
-    const result = PatientPortalService.getPatientAppointments(sessionId);
+    // Migration bridge (Batch 3):
+    // Ensure we have a FHIR Encounter per appointment so reads can be FHIR-first,
+    // while keeping appointment mutation flows on the legacy appointments table for now.
+    try {
+      const FHIRResources = require('./models/fhir-resources');
+      const legacy = PatientPortalService.getPatientAppointments(req.patientSessionId);
+      if (legacy && legacy.success && Array.isArray(legacy.appointments)) {
+        for (const apt of legacy.appointments) {
+          const encId = apt.id; // align with DiagnosticReportForAppointment encounter ref: Encounter/{appointmentId}
+          const existing = db.getFHIREncounter ? db.getFHIREncounter(encId) : null;
 
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(401).json(result);
+          const encStatus =
+            apt.status === 'completed' ? 'finished' :
+            apt.status === 'canceled' ? 'cancelled' :
+            apt.status === 'live' ? 'in-progress' :
+            'planned';
+
+          const startTime = apt.start_time || null;
+          const endTime = apt.end_time || null;
+          const resource = FHIRResources.createEncounter({
+            id: encId,
+            patientId,
+            patientName: apt.patient_name || '',
+            callId: encId,
+            status: encStatus,
+            type: apt.appointment_type || 'Telehealth visit',
+            startTime: startTime || new Date().toISOString(),
+            ...(endTime ? { endTime } : {})
+          });
+
+          // Preserve the legacy appointment status for round-tripping UI states.
+          resource.extension = Array.isArray(resource.extension) ? resource.extension : [];
+          resource.extension.push({
+            url: 'https://doclittle.health/extension/appointment-status',
+            valueString: apt.status || 'unknown'
+          });
+          if (apt.payment_status) {
+            resource.extension.push({
+              url: 'https://doclittle.health/extension/payment-status',
+              valueString: apt.payment_status
+            });
+          }
+
+          if (!existing && db.createFHIREncounter) {
+            db.createFHIREncounter(resource);
+          } else if (existing && db.updateFHIREncounter) {
+            db.updateFHIREncounter(encId, resource);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // FHIR-first read: Encounter search by patient
+    const encounters = db.getPatientEncounters ? db.getPatientEncounters(patientId, 200) : [];
+
+    // Return the legacy appointment response shape, derived from FHIR Encounters.
+    // This keeps the patient UI stable while we migrate to fully FHIR-native objects.
+    const pendingByAppt = {};
+    for (const enc of encounters) {
+      const apptId = enc.resource_id || enc.id || enc.resource_data?.id;
+      if (!apptId) continue;
+      const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(apptId);
+      if (pending) {
+        pendingByAppt[apptId] = {
+          payment_status: pending.payment_status,
+          payment_link: pending.payment_link,
+          amount_due: pending.checkout?.amount ?? null,
+          currency: pending.checkout?.currency ?? 'USD'
+        };
+        continue;
+      }
+      const latest = db.getLatestCheckoutForAppointment && db.getLatestCheckoutForAppointment(apptId);
+      if (latest && latest.status === 'completed') {
+        pendingByAppt[apptId] = { payment_status: 'paid', payment_link: null };
+      }
     }
+
+    const appts = encounters.map(enc => {
+      const r = enc.resource_data || {};
+      const apptId = r.id || enc.resource_id || enc.id;
+      const subject = r.subject || {};
+      const period = r.period || {};
+      const typeText = (r.type && r.type[0] && (r.type[0].text || (r.type[0].coding && r.type[0].coding[0] && r.type[0].coding[0].display))) || '';
+      const ext = Array.isArray(r.extension) ? r.extension : [];
+      const legacyStatus = (ext.find(e => e.url === 'https://doclittle.health/extension/appointment-status') || {}).valueString;
+      const status =
+        legacyStatus ||
+        (r.status === 'finished' ? 'completed' :
+         r.status === 'cancelled' ? 'canceled' :
+         r.status === 'in-progress' ? 'live' :
+         'scheduled');
+
+      const payInfo = pendingByAppt[apptId] || {};
+      const startIso = period.start || null;
+      const dt = startIso ? new Date(startIso) : null;
+      const date = dt ? dt.toISOString().slice(0, 10) : null;
+      const time = dt ? dt.toISOString().slice(11, 16) : null;
+
+      return {
+        id: apptId,
+        patient_name: subject.display || '',
+        appointment_type: typeText || 'Telehealth visit',
+        date,
+        time,
+        start_time: startIso,
+        end_time: period.end || null,
+        status,
+        datetime_display: date && time ? PatientPortalService._formatDateTime(date, time) : '',
+        can_reschedule: ['scheduled', 'confirmed'].includes(status),
+        can_cancel: ['scheduled', 'confirmed'].includes(status),
+        video_room: apptId,
+        payment_status: payInfo.payment_status || null,
+        payment_link: payInfo.payment_link || null,
+        amount_due: (payInfo.amount_due != null ? payInfo.amount_due : null),
+        currency: payInfo.currency || 'USD',
+        fhir: { encounter_id: apptId }
+      };
+    });
+
+    return res.json({ success: true, appointments: appts });
   } catch (error) {
     console.error('❌ Error getting patient appointments:', error);
     res.status(500).json({
@@ -10909,17 +12241,401 @@ app.get('/api/patient/appointments', apiLimiter, async (req, res) => {
   }
 });
 
-// Patient: Mark appointment as completed (end of video visit)
-app.post('/api/patient/appointments/:id/complete', apiLimiter, async (req, res) => {
+// Patient: Create Stripe Checkout Session for an appointment (Phase 1 web checkout)
+app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSession, express.json(), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
-    if (!sessionId) {
-      return res.status(401).json({ success: false, error: 'Session ID required' });
+    await rotatePatientSessionIfNeeded(req, res);
+    if (!stripe) {
+      return res.status(503).json({ success: false, error: 'Stripe is not configured' });
     }
-    const sessionValidation = PatientPortalService.validateSession(sessionId);
-    if (!sessionValidation.valid) {
-      return res.status(401).json({ success: false, error: 'Invalid session' });
+
+    const sessionValidation = req.patientSession;
+    const { patientId, patientEmail } = resolvePatientIdFromSession(sessionValidation);
+    const appointmentId = req.params.id;
+
+    const appt = await db.getAppointment(appointmentId);
+    if (!appt) return res.status(404).json({ success: false, error: 'Appointment not found' });
+
+    // Ownership + authz
+    try {
+      assertPatientOwnsAppointmentOrThrow(sessionValidation, appt);
+    } catch (e) {
+      return res.status(e.status || 403).json({ success: false, error: e.message });
     }
+
+    const clinicId = appt.clinic_id || resolveClinicIdFromRequest(req) || FALLBACK_CLINIC_ID;
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id missing for appointment checkout' });
+
+    // If a pending checkout already exists, reuse it (idempotent UX)
+    const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(appointmentId);
+    if (pending && pending.checkout && pending.checkout.stripe_checkout_session_id) {
+      let url = null;
+      try {
+        const s = await stripe.checkout.sessions.retrieve(pending.checkout.stripe_checkout_session_id);
+        url = s?.url || null;
+      } catch (_) {}
+      return res.json({
+        success: true,
+        checkout_id: pending.checkout.id,
+        stripe_checkout_session_id: pending.checkout.stripe_checkout_session_id,
+        checkout_url: url
+      });
+    }
+
+    // Amount: prefer UI-provided amount_due (must be numeric) else resolve from visit_pricing
+    let amount = req.body?.amount_due;
+    if (amount == null) {
+      try {
+        const pricing = db.getEffectiveVisitPrice(clinicId, appt.appointment_type || 'General Consult');
+        amount = pricing?.effective_price;
+      } catch (_) {}
+    }
+    amount = parseFloat(amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid amount_due for checkout' });
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    const checkoutId = uuidv4();
+
+    // Create checkout record
+    const checkout = {
+      id: checkoutId,
+      merchant_id: (await db.getClinicById(clinicId))?.merchant_id,
+      product_id: 'APPOINTMENT',
+      product_name: appt.appointment_type ? `Appointment - ${appt.appointment_type}` : 'Appointment',
+      quantity: 1,
+      amount,
+      customer_phone: appt.patient_phone || '0000000000',
+      customer_name: appt.patient_name || 'Patient',
+      customer_email: patientEmail || appt.patient_email || null,
+      appointment_id: appointmentId,
+      status: 'pending',
+      clinic_id: clinicId
+    };
+
+    if (!checkout.merchant_id) {
+      return res.status(500).json({ success: false, error: 'Clinic merchant is not configured' });
+    }
+    await db.createVoiceCheckout(checkout);
+
+    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || `http://localhost:${PORT}`;
+    const ttlMinutes = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_MINUTES || '30', 10);
+    const expiresAt = Math.floor(Date.now() / 1000) + Math.max(10, ttlMinutes) * 60;
+
+    const successUrl = `${baseUrl}/unified-dashboard/patients/payment-success.html?checkout_id=${encodeURIComponent(checkoutId)}&appointment_id=${encodeURIComponent(appointmentId)}`;
+    const cancelUrl = `${baseUrl}/unified-dashboard/patients/wallet.html`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      expires_at: expiresAt,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: { name: checkout.product_name },
+            unit_amount: Math.round(amount * 100)
+          },
+          quantity: 1
+        }
+      ],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      customer_email: checkout.customer_email || undefined,
+      payment_intent_data: {
+        metadata: {
+          checkout_id: checkoutId,
+          appointment_id: appointmentId,
+          patient_id: patientId || ''
+        }
+      },
+      metadata: {
+        checkout_id: checkoutId,
+        appointment_id: appointmentId,
+        patient_id: patientId || ''
+      }
+    });
+
+    await db.updateVoiceCheckout(checkoutId, {
+      stripe_checkout_session_id: session.id,
+      stripe_session_expires_at: new Date(expiresAt * 1000).toISOString()
+    });
+
+    // Expose the session URL to the patient UI
+    return res.json({
+      success: true,
+      checkout_id: checkoutId,
+      appointment_id: appointmentId,
+      amount_due: amount,
+      currency: 'USD',
+      checkout_url: session.url
+    });
+  } catch (error) {
+    console.error('❌ Error creating patient appointment checkout session:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================
+// Patient booking (chat-led) + triage (Phase 1 web)
+// ============================================================
+function parseIsoDateFromText(text) {
+  const t = (text || '').toString();
+  const m = t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) return m[0];
+  const lower = t.toLowerCase();
+  if (lower.includes('tomorrow')) {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  if (lower.includes('today')) return new Date().toISOString().slice(0, 10);
+  return null;
+}
+
+function parseTimeFromText(text) {
+  const t = (text || '').toString().toLowerCase();
+  // "14:30"
+  const m24 = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (m24) return `${m24[1].padStart(2, '0')}:${m24[2]}`;
+  // "2pm", "2:30 pm"
+  const m12 = t.match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b/);
+  if (m12) {
+    let h = parseInt(m12[1], 10);
+    const min = m12[2] ? parseInt(m12[2], 10) : 0;
+    const ampm = m12[3];
+    if (ampm === 'pm' && h !== 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+app.get('/api/patient/booking/available-slots', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    const BookingService = require('./services/booking-service');
+    const args = req.query || {};
+    const date = args.date;
+    const appointmentType = args.appointment_type || 'General Consult';
+    const timezone = args.timezone || 'America/New_York';
+    const clinicId = resolveClinicIdFromRequest(req, args) || FALLBACK_CLINIC_ID;
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required' });
+    const result = await BookingService.getAvailableSlots(date, null, appointmentType, timezone, clinicId, null);
+    return res.json(result);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, withIdempotency('patient_booking_schedule'), express.json(), async (req, res) => {
+  try {
+    await rotatePatientSessionIfNeeded(req, res);
+    const BookingService = require('./services/booking-service');
+    const PatientPortalService = require('./services/patient-portal-service');
+
+    const args = req.body || {};
+    const clinicId = resolveClinicIdFromRequest(req, args) || FALLBACK_CLINIC_ID;
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required' });
+
+    const sid = req.patientSessionId;
+    const sessionValidation = PatientPortalService.validateSession(sid);
+    const email = sessionValidation?.email || null;
+    const mappedPatientId = sessionValidation?.patient_id || null;
+
+    // Prefer canonical intake for name/phone
+    let intake = null;
+    try {
+      const row = mappedPatientId ? db.getFHIRPatient(mappedPatientId) : null;
+      const r = row?.resource_data ? (typeof row.resource_data === 'string' ? JSON.parse(row.resource_data) : row.resource_data) : null;
+      if (r) {
+        const PatientIntakeService = require('./services/patient-intake-service');
+        intake = PatientIntakeService.canonicalFromPatientResource
+          ? PatientIntakeService.canonicalFromPatientResource(r)
+          : null;
+      }
+    } catch (_) {}
+
+    const patient_name =
+      args.patient_name ||
+      [intake?.first_name, intake?.last_name].filter(Boolean).join(' ').trim() ||
+      'Patient';
+
+    const patient_phone = args.patient_phone || intake?.phone || null;
+    const appointment_type = args.appointment_type || 'General Consult';
+    const date = args.date;
+    const time = args.time;
+    const timezone = args.timezone || 'America/New_York';
+    const notes = args.reason || args.notes || null;
+
+    if (!email) return res.status(400).json({ success: false, error: 'Patient session missing email' });
+    if (!date || !time) return res.status(400).json({ success: false, error: 'date and time required' });
+
+    const result = await BookingService.scheduleAppointment({
+      clinic_id: clinicId,
+      patient_name,
+      patient_phone,
+      patient_email: email,
+      appointment_type,
+      date,
+      time,
+      timezone,
+      notes,
+      patient_id: mappedPatientId || null
+    });
+    if (!result.success) return res.status(400).json(result);
+
+    return res.json({
+      success: true,
+      appointment: result.appointment
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, express.json(), async (req, res) => {
+  try {
+    await rotatePatientSessionIfNeeded(req, res);
+    const BookingService = require('./services/booking-service');
+    const PatientPortalService = require('./services/patient-portal-service');
+    const { detectRedFlags } = require('./services/triage-service');
+
+    const sid = req.patientSessionId;
+    const sessionValidation = PatientPortalService.validateSession(sid);
+    const email = sessionValidation?.email || null;
+    const mappedPatientId = sessionValidation?.patient_id || null;
+
+    const message = (req.body?.message || '').toString();
+    const state = req.body?.state || {};
+    const meta = req.body?.meta || {};
+    const clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required' });
+
+    // Emergency detection (persist + respond)
+    const assessment = detectRedFlags(message);
+    if (assessment?.isEmergency) {
+      try {
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        if (db.upsertPatientEmergencyFlag) {
+          db.upsertPatientEmergencyFlag({
+            patient_id: mappedPatientId || null,
+            email: email || null,
+            phone: sessionValidation?.phone || null,
+            source: 'web',
+            call_id: null,
+            expires_at: expiresAt,
+            metadata: { red_flags: assessment.redFlags || [], urgency: assessment.urgency || 'EMERGENT' }
+          });
+        }
+      } catch (_) {}
+      return res.json({
+        success: true,
+        reply: assessment.suggestedResponse || 'This may be an emergency. Please call 911 or go to the nearest ER now.',
+        state: { ...state, blocked: true, is_emergency: true }
+      });
+    }
+
+    // Simple guided flow
+    const next = { ...state };
+    next.step = next.step || 'collect_reason';
+    next.reason = next.reason || '';
+    next.appointment_type = next.appointment_type || 'General Consult';
+    next.timezone = next.timezone || 'America/New_York';
+
+    // meta actions from chips
+    if (meta && meta.action === 'billing') {
+      return res.json({
+        success: true,
+        reply: 'For receipts and payments, open Wallet. You can pay any balance due from there.',
+        redirect_to: 'wallet.html',
+        state: next
+      });
+    }
+
+    if (next.step === 'collect_reason') {
+      next.reason = message;
+      next.step = 'collect_date';
+      return res.json({
+        success: true,
+        reply: 'Thanks. What day should we aim for? You can reply like “today”, “tomorrow”, or “2026-03-20”.',
+        state: next
+      });
+    }
+
+    if (next.step === 'collect_date') {
+      const iso = parseIsoDateFromText(message);
+      if (!iso) {
+        return res.json({ success: true, reply: 'Please reply with a date like “2026-03-20”, or say “today” / “tomorrow”.', state: next });
+      }
+      next.date = iso;
+      next.step = 'choose_time';
+      const slots = await BookingService.getAvailableSlots(next.date, null, next.appointment_type, next.timezone, clinicId, null);
+      const options = (slots?.slots || slots?.available_slots || []).slice(0, 6);
+      const chips = options.map(s => {
+        const label = s.display || s.time || s.start_time || s.start || s;
+        const value = label;
+        return { label, value, action: 'select_slot', slot: s };
+      });
+      return res.json({
+        success: true,
+        reply: chips.length ? 'Here are some available times. Pick one.' : 'No slots found for that day. Try another date.',
+        next_chips: chips,
+        state: next
+      });
+    }
+
+    if (next.step === 'choose_time') {
+      const chosen = meta?.slot || null;
+      const time = chosen?.time || parseTimeFromText(message) || chosen?.start_time || null;
+      if (!time) {
+        return res.json({ success: true, reply: 'Please choose a time (for example “2:30pm” or “14:30”), or tap one of the options.', state: next });
+      }
+      next.time = time;
+      next.step = 'booking';
+
+      if (!email) {
+        return res.json({ success: true, reply: 'Your session is missing an email. Please sign in again.', state: { ...next, error: 'missing_email' }, redirect_to: 'patient-login.html' });
+      }
+
+      // Book appointment
+      const patient_name = next.patient_name || 'Patient';
+      const booked = await BookingService.scheduleAppointment({
+        clinic_id: clinicId,
+        patient_name,
+        patient_phone: sessionValidation?.phone || null,
+        patient_email: email,
+        appointment_type: next.appointment_type,
+        date: next.date,
+        time: next.time,
+        timezone: next.timezone,
+        notes: next.reason || null,
+        patient_id: mappedPatientId || null
+      });
+      if (!booked.success) {
+        next.step = 'collect_date';
+        return res.json({ success: true, reply: booked.error || 'Could not book that time. Try another date.', state: next });
+      }
+
+      next.step = 'done';
+      next.appointment_id = booked.appointment?.id;
+      return res.json({
+        success: true,
+        reply: `You’re booked for ${booked.appointment?.date} at ${booked.appointment?.time}. Next, we’ll take you to Wallet to complete payment if needed.`,
+        redirect_to: 'wallet.html',
+        state: next
+      });
+    }
+
+    return res.json({ success: true, reply: 'Tell me what you need help with, and we’ll book a visit.', state: next });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Patient: Mark appointment as completed (end of video visit)
+app.post('/api/patient/appointments/:id/complete', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, withIdempotency('patient_appt_complete'), async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
 
     const appointmentId = req.params.id;
     const appointment = await db.getAppointment(appointmentId);
@@ -10927,24 +12643,11 @@ app.post('/api/patient/appointments/:id/complete', apiLimiter, async (req, res) 
       return res.status(404).json({ success: false, error: 'Appointment not found' });
     }
 
-    // Optional: ensure this appointment belongs to this patient (email/phone match)
-    const sessionEmail = (sessionValidation.email || '').toLowerCase().trim();
-    const sessionPhone = sessionValidation.phone || null;
-    if (
-      appointment.patient_id &&
-      sessionValidation.patient_id &&
-      appointment.patient_id !== sessionValidation.patient_id
-    ) {
-      return res.status(403).json({ success: false, error: 'Not allowed to modify this appointment' });
-    }
-    if (!appointment.patient_id) {
-      const emailMatches = appointment.patient_email && sessionEmail &&
-        appointment.patient_email.toLowerCase().trim() === sessionEmail;
-      const phoneMatches = appointment.patient_phone && sessionPhone &&
-        appointment.patient_phone === sessionPhone;
-      if (!emailMatches && !phoneMatches) {
-        return res.status(403).json({ success: false, error: 'Not allowed to modify this appointment' });
-      }
+    // Ownership + authz (mvp-27)
+    try {
+      assertPatientOwnsAppointmentOrThrow(sessionValidation, appointment);
+    } catch (e) {
+      return res.status(e.status || 403).json({ success: false, error: e.message });
     }
 
     // Mark as completed
@@ -10955,8 +12658,23 @@ app.post('/api/patient/appointments/:id/complete', apiLimiter, async (req, res) 
           patient_id: appointment.patient_id || null
         });
     } catch (e) {
-      console.warn('⚠️  Failed to update appointment status to completed:', e.message);
+      return res.status(409).json({ success: false, error: e.message });
     }
+
+    // Dual-write: keep FHIR Encounter in sync (Batch 5)
+    try { await syncFhirEncounterFromAppointment(appointmentId); } catch (_) {}
+
+    try {
+      db.insertAuditEvent && db.insertAuditEvent({
+        actor_type: 'patient',
+        actor_id: null,
+        patient_id: appointment.patient_id || sessionValidation.patient_id || null,
+        resource_type: 'appointment',
+        resource_id: appointmentId,
+        action: 'completed',
+        metadata: {}
+      });
+    } catch (_) {}
 
     // Optionally trigger FHIR DiagnosticReport creation for this appointment.
     try {
@@ -10965,6 +12683,30 @@ app.post('/api/patient/appointments/:id/complete', apiLimiter, async (req, res) 
       }
     } catch (e) {
       console.warn('⚠️  Failed to create DiagnosticReport for completed appointment:', e.message);
+    }
+
+    // Post-visit notification (mvp-48). Failure must not block response.
+    try {
+      const EmailService = require('./services/email-service');
+      const { v4: uuidv4 } = require('uuid');
+      const idem = `appt:${appointmentId}:patient_post_visit_summary_ready`;
+      if (db.enqueueNotificationJob) {
+        db.enqueueNotificationJob({
+          id: uuidv4(),
+          channel: 'email',
+          type: 'patient_post_visit_summary_ready',
+          to_address: appointment.patient_email,
+          patient_id: appointment.patient_id || null,
+          appointment_id: appointmentId,
+          idempotency_key: idem,
+          payload_json: JSON.stringify({ appointment }),
+          max_attempts: 6
+        });
+      } else if (EmailService && typeof EmailService.sendPostVisitSummaryReady === 'function') {
+        await EmailService.sendPostVisitSummaryReady(appointment);
+      }
+    } catch (e) {
+      console.warn('⚠️  Post-visit email failed:', e.message);
     }
 
     res.json({ success: true });
@@ -11531,16 +13273,16 @@ app.get('/api/patient/benefits', apiLimiter, async (req, res) => {
 });
 
 // Patient: Reschedule appointment
-app.put('/api/patient/appointments/:id/reschedule', async (req, res) => {
+app.put('/api/patient/appointments/:id/reschedule', requireCsrfForCookieAuth, withIdempotency('patient_appt_reschedule'), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.body.session_id;
+    const sessionId = req.headers['x-session-id'];
     const appointmentId = req.params.id;
     const { new_date, new_time } = req.body;
 
     if (!sessionId) {
       return res.status(401).json({
         success: false,
-        error: 'Session ID required'
+        error: 'x-session-id required'
       });
     }
 
@@ -11553,12 +13295,28 @@ app.put('/api/patient/appointments/:id/reschedule', async (req, res) => {
       });
     }
 
+    if (!validateYyyyMmDd(new_date) || !validateHhMm(new_time)) {
+      return res.status(400).json({ success: false, error: 'Invalid new_date or new_time' });
+    }
+
     const appointment = await db.getAppointment(appointmentId);
     if (!appointment) {
       return res.status(404).json({
         success: false,
         error: 'Appointment not found'
       });
+    }
+
+    // Ownership + authz (mvp-27)
+    try {
+      assertPatientOwnsAppointmentOrThrow(session, appointment);
+    } catch (e) {
+      return res.status(e.status || 403).json({ success: false, error: e.message });
+    }
+
+    // State machine enforcement (mvp-22)
+    if (!['scheduled', 'confirmed', 'pending', 'pending_payment'].includes((appointment.status || '').toLowerCase())) {
+      return res.status(409).json({ success: false, error: `Cannot reschedule appointment in status '${appointment.status}'` });
     }
 
     const clinicId = appointment.clinic_id || null;
@@ -11574,6 +13332,19 @@ app.put('/api/patient/appointments/:id/reschedule', async (req, res) => {
     );
 
     if (result.success) {
+      try {
+        db.insertAuditEvent && db.insertAuditEvent({
+          actor_type: 'patient',
+          actor_id: null,
+          patient_id: session.patient_id || null,
+          resource_type: 'appointment',
+          resource_id: appointmentId,
+          action: 'rescheduled',
+          metadata: { new_date, new_time }
+        });
+      } catch (_) {}
+      // Dual-write: keep FHIR Encounter in sync (Batch 5)
+      try { await syncFhirEncounterFromAppointment(appointmentId); } catch (_) {}
       res.json(result);
     } else {
       res.status(400).json(result);
@@ -11588,16 +13359,16 @@ app.put('/api/patient/appointments/:id/reschedule', async (req, res) => {
 });
 
 // Patient: Cancel appointment
-app.delete('/api/patient/appointments/:id', async (req, res) => {
+app.delete('/api/patient/appointments/:id', requireCsrfForCookieAuth, withIdempotency('patient_appt_cancel'), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    const sessionId = req.headers['x-session-id'];
     const appointmentId = req.params.id;
     const { reason } = req.body;
 
     if (!sessionId) {
       return res.status(401).json({
         success: false,
-        error: 'Session ID required'
+        error: 'x-session-id required'
       });
     }
 
@@ -11618,12 +13389,37 @@ app.delete('/api/patient/appointments/:id', async (req, res) => {
       });
     }
 
+    // Ownership + authz (mvp-27)
+    try {
+      assertPatientOwnsAppointmentOrThrow(session, appointment);
+    } catch (e) {
+      return res.status(e.status || 403).json({ success: false, error: e.message });
+    }
+
+    // State machine enforcement (mvp-22)
+    if (!['scheduled', 'confirmed', 'pending', 'pending_payment'].includes((appointment.status || '').toLowerCase())) {
+      return res.status(409).json({ success: false, error: `Cannot cancel appointment in status '${appointment.status}'` });
+    }
+
     const clinicId = appointment.clinic_id || null;
 
     // Use existing cancel endpoint logic
     const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
 
     if (result.success) {
+      try {
+        db.insertAuditEvent && db.insertAuditEvent({
+          actor_type: 'patient',
+          actor_id: null,
+          patient_id: session.patient_id || null,
+          resource_type: 'appointment',
+          resource_id: appointmentId,
+          action: 'canceled',
+          metadata: { reason: reason || '' }
+        });
+      } catch (_) {}
+      // Dual-write: keep FHIR Encounter in sync (Batch 5)
+      try { await syncFhirEncounterFromAppointment(appointmentId); } catch (_) {}
       res.json(result);
     } else {
       res.status(400).json(result);
@@ -11638,18 +13434,9 @@ app.delete('/api/patient/appointments/:id', async (req, res) => {
 });
 
 // Patient: Get profile
-app.get('/api/patient/profile', apiLimiter, async (req, res) => {
+app.get('/api/patient/profile', apiLimiter, requirePatientSession, async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
-
-    if (!sessionId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Session ID required'
-      });
-    }
-
-    const result = PatientPortalService.getPatientProfile(sessionId);
+    const result = PatientPortalService.getPatientProfile(req.patientSessionId);
 
     if (result.success) {
       res.json(result);
@@ -11668,9 +13455,9 @@ app.get('/api/patient/profile', apiLimiter, async (req, res) => {
 // Patient: Update profile (onboarding)
 app.put('/api/patient/profile', apiLimiter, express.json(), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    const sessionId = req.headers['x-session-id'];
     if (!sessionId) {
-      return res.status(401).json({ success: false, error: 'Session ID required' });
+      return res.status(401).json({ success: false, error: 'x-session-id required' });
     }
 
     const {
@@ -12035,47 +13822,185 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
 });
 
 // Patient: Get my DiagnosticReports (requires session)
-app.get('/api/patient/my-records', async (req, res) => {
+app.get('/api/patient/my-records', apiLimiter, requirePatientSession, async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    const sessionValidation = req.patientSession;
+    const { patientId } = resolvePatientIdFromSession(sessionValidation);
+    if (!patientId) return res.status(404).json({ success: false, error: 'Patient not found for this session' });
 
-    if (!sessionId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Session ID required'
-      });
-    }
-
-    const session = PatientPortalService.getSession(sessionId);
-    if (!session || !session.patient_id) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid session'
-      });
-    }
-
-    const patientId = session.patient_id;
-    const rows = db.getDiagnosticReportsByPatientId
+    // FHIR-first read:
+    // - DiagnosticReport: visit summaries
+    // - DocumentReference: uploaded/available documents
+    const drRows = db.getDiagnosticReportsByPatientId
       ? db.getDiagnosticReportsByPatientId(patientId, 50)
       : [];
+    let docRefs = db.getFHIRDocumentReferencesByPatientId
+      ? db.getFHIRDocumentReferencesByPatientId(patientId, 500).map(r => r.resource_data).filter(Boolean)
+      : [];
+    if (docRefs.length === 0) {
+      const docRows = db.getPatientDocuments ? db.getPatientDocuments(patientId) : [];
+      docRefs = [];
+      for (const r of docRows) {
+        const dr = buildDocumentReferenceFromPatientDocRow(r, req);
+        docRefs.push(dr);
+        try { db.createFHIRDocumentReference && db.createFHIRDocumentReference(dr); } catch (_) {}
+      }
+    }
 
-    return res.json({
-      success: true,
-      patient_id: patientId,
-      records: rows.map(r => ({
+    const records = [];
+    for (const r of drRows) {
+      const resource = r.resource_data || null;
+      records.push({
+        type: 'DiagnosticReport',
         id: r.resource_id || r.id,
-        encounter_id: r.encounter_id,
-        status: r.status || 'unknown',
-        created_at: r.created_at,
-        summary: (r.case_report_text || '').slice(0, 200)
-      }))
-    });
+        encounter_id: r.encounter_id || (resource?.encounter?.reference || '').replace(/^Encounter\//, '') || null,
+        status: r.status || resource?.status || 'unknown',
+        created_at: r.created_at || null,
+        summary: (resource?.conclusion || r.case_report_text || '').toString().slice(0, 400),
+        fhir: resource
+      });
+    }
+    for (const dr of docRefs) {
+      const att = dr.content?.[0]?.attachment || {};
+      records.push({
+        type: 'DocumentReference',
+        id: dr.id,
+        encounter_id: (dr.context?.encounter?.[0]?.reference || '').replace(/^Encounter\//, '') || null,
+        status: dr.status || 'current',
+        created_at: dr.date || null,
+        summary: att.title || dr.description || 'Document',
+        download_url: att.url || null,
+        fhir: dr
+      });
+    }
+
+    return res.json({ success: true, patient_id: patientId, records });
   } catch (error) {
     console.error('[api/patient/my-records] error:', error);
     return res.status(500).json({
       success: false,
       error: 'Internal error'
     });
+  }
+});
+
+// Patient: Get receipts (mvp-24)
+app.get('/api/patient/receipts', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    let patient = null;
+    if (sessionValidation.patient_id && db.getFHIRPatient) {
+      patient = db.getFHIRPatient(sessionValidation.patient_id);
+    }
+    if (!patient && sessionValidation.email) {
+      patient = db.getFHIRPatientByEmail(sessionValidation.email);
+    }
+    if (!patient && sessionValidation.phone) {
+      patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    }
+
+    const patientId = patient ? patient.resource_id : (sessionValidation.patient_id || null);
+    const receipts = db.getPaymentReceiptsForPatient
+      ? db.getPaymentReceiptsForPatient(patientId, sessionValidation.email || null, 50)
+      : [];
+    return res.json({ success: true, receipts });
+  } catch (error) {
+    console.error('❌ Error fetching patient receipts:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// API v1 aliases (mvp-31)
+// ============================================
+app.get('/api/v1/patient/appointments', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    await rotatePatientSessionIfNeeded(req, res);
+    // Delegate to the same FHIR-first logic as /api/patient/appointments
+    req.url = '/api/patient/appointments';
+    return app._router.handle(req, res, () => res.status(404).json({ success: false, error: 'Not found' }));
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, code: 'internal_error' });
+  }
+});
+app.get('/api/v1/patient/receipts', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const patientId = sessionValidation.patient_id || null;
+    const receipts = db.getPaymentReceiptsForPatient
+      ? db.getPaymentReceiptsForPatient(patientId, sessionValidation.email || null, 50)
+      : [];
+    return res.json({ success: true, receipts });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, code: 'internal_error' });
+  }
+});
+
+// ============================================
+// Admin visibility (mvp-52) — admin-only
+// ============================================
+app.get('/api/admin/patient-portal/sessions', apiLimiter, requireAdminAuth, async (req, res) => {
+  try {
+    const rows = db.db.prepare(`
+      SELECT id, email, patient_id, verified, verified_at, expires_at, last_seen_at, created_at, ip_address
+      FROM patient_portal_sessions
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all();
+    return res.json({ success: true, sessions: rows });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.get('/api/admin/patient-portal/appointments', apiLimiter, requireAdminAuth, async (req, res) => {
+  try {
+    const rows = db.db.prepare(`
+      SELECT id, clinic_id, patient_email, patient_phone, patient_id, status, payment_status, start_time, end_time, created_at, updated_at
+      FROM appointments
+      ORDER BY datetime(start_time) DESC
+      LIMIT 200
+    `).all();
+    return res.json({ success: true, appointments: rows });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.get('/api/admin/patient-portal/payments', apiLimiter, requireAdminAuth, async (req, res) => {
+  try {
+    const checkouts = db.db.prepare(`
+      SELECT id, appointment_id, customer_email, customer_phone, amount, payment_method, status, payment_intent_id, created_at, completed_at
+      FROM voice_checkouts
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all();
+    const receipts = db.db.prepare(`
+      SELECT id, checkout_id, appointment_id, patient_email, amount, currency, status, issued_at, created_at
+      FROM payment_receipts
+      ORDER BY created_at DESC
+      LIMIT 200
+    `).all();
+    return res.json({ success: true, checkouts, receipts });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ============================================
+// Ops / reliability dashboard (mvp-78)
+// ============================================
+app.get('/api/admin/ops/summary', apiLimiter, requireAdminAuth, async (req, res) => {
+  try {
+    const notif = db.getNotificationQueueStats ? db.getNotificationQueueStats() : { success: true, by_status: {} };
+    const dead = db.listDeadNotificationJobs ? db.listDeadNotificationJobs(50) : [];
+    const counters = db.getOpsCounters ? db.getOpsCounters(24) : [];
+    return res.json({
+      success: true,
+      notification_queue: notif.success ? notif.by_status : {},
+      notification_dead_letter: dead,
+      ops_counters_24h: counters
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -14044,6 +15969,20 @@ const server = app.listen(PORT, HOST, () => {
     console.log('   Reminders will be disabled, but server will continue');
   }
 
+  // mvp-74: Start durable notification queue worker (retries + dead-letter)
+  try {
+    const NotificationQueue = require('./services/notification-queue');
+    const enabled = (process.env.NOTIFICATION_QUEUE_ENABLED === '1' || process.env.NOTIFICATION_QUEUE_ENABLED === 'true') || isProd;
+    if (enabled) {
+      NotificationQueue.start();
+      console.log('✅ Notification queue worker started');
+    } else {
+      console.log('ℹ️  Notification queue worker disabled (NOTIFICATION_QUEUE_ENABLED)');
+    }
+  } catch (e) {
+    console.warn('⚠️  Failed to start notification queue worker:', e.message);
+  }
+
   // Start EHR sync service (with error handling)
   try {
     EHRSyncService.start();
@@ -14072,6 +16011,80 @@ const server = app.listen(PORT, HOST, () => {
       }, 24 * 60 * 60 * 1000);
     }
   } catch (e) { /* ignore */ }
+
+  // Phase 1: Auto-cancel unpaid appointment checkouts (webhook-safe)
+  try {
+    const BookingService = require('./services/booking-service');
+    const ttlMinutes = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_MINUTES || '30', 10);
+    const pollMs = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_POLL_MS || '60000', 10);
+
+    async function runAppointmentPaymentTtlSweep() {
+      if (!ttlMinutes || ttlMinutes <= 0) return;
+      const cutoffIso = new Date(Date.now() - ttlMinutes * 60 * 1000).toISOString();
+      let rows = [];
+      try {
+        rows = db.db.prepare(`
+          SELECT * FROM voice_checkouts
+          WHERE product_id = 'APPOINTMENT'
+            AND status = 'pending'
+            AND deleted_at IS NULL
+            AND created_at < ?
+          ORDER BY created_at ASC
+          LIMIT 50
+        `).all(cutoffIso);
+      } catch (_) {
+        return;
+      }
+
+      for (const co of rows) {
+        try {
+          // If Stripe session exists and is still open, do not cancel (webhook-safe)
+          if (stripe && co.stripe_checkout_session_id) {
+            try {
+              const sess = await stripe.checkout.sessions.retrieve(co.stripe_checkout_session_id);
+              if (sess && sess.status === 'open') {
+                continue;
+              }
+              if (sess && sess.status === 'complete') {
+                continue;
+              }
+            } catch (_) {
+              // If we can't retrieve, fall back to expiry timestamp if present
+              if (co.stripe_session_expires_at) {
+                const exp = new Date(co.stripe_session_expires_at);
+                if (!isNaN(exp.getTime()) && exp.getTime() > Date.now()) {
+                  continue;
+                }
+              }
+            }
+          }
+
+          // Cancel appointment if still scheduled/confirmed
+          const apptId = co.appointment_id;
+          if (!apptId) {
+            await db.updateVoiceCheckout(co.id, { status: 'canceled' });
+            continue;
+          }
+          const appt = await db.getAppointment(apptId);
+          if (appt && ['scheduled', 'confirmed'].includes(appt.status)) {
+            await BookingService.cancelAppointment(apptId, 'Auto-canceled (payment not completed in time)', co.clinic_id || appt.clinic_id || null);
+          }
+          await db.updateVoiceCheckout(co.id, { status: 'canceled' });
+          try { db.incrementOpsCounter && db.incrementOpsCounter('appointment_payment_ttl_canceled'); } catch (_) {}
+        } catch (e) {
+          try { db.incrementOpsCounter && db.incrementOpsCounter('appointment_payment_ttl_error'); } catch (_) {}
+        }
+      }
+    }
+
+    // jittered start
+    setTimeout(() => {
+      runAppointmentPaymentTtlSweep();
+      setInterval(runAppointmentPaymentTtlSweep, pollMs);
+    }, 2000);
+  } catch (e) {
+    console.warn('⚠️  Appointment payment TTL sweep disabled:', e.message);
+  }
 
   console.log('⚙️  Configuration Status:');
   console.log(`   Database:      ✅ Using database.js module`);

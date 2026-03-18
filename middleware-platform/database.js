@@ -128,6 +128,68 @@ function toJsonValue(value) {
   }
 }
 
+function isSameStatus(a, b) {
+  return (a || '').toString().trim().toLowerCase() === (b || '').toString().trim().toLowerCase();
+}
+
+function canTransitionAppointmentStatus(current, next) {
+  let cur = (current || 'scheduled').toString().trim().toLowerCase();
+  let nxt = (next || '').toString().trim().toLowerCase();
+  if (cur === 'cancelled') cur = 'canceled';
+  if (nxt === 'cancelled') nxt = 'canceled';
+  if (!nxt) return false;
+  if (cur === nxt) return true;
+
+  // Canonical lifecycle (allow a few legacy states)
+  const allowed = {
+    pending: ['scheduled', 'confirmed', 'canceled'],
+    pending_payment: ['scheduled', 'confirmed', 'canceled'],
+    scheduled: ['confirmed', 'canceled', 'completed'],
+    confirmed: ['completed', 'canceled'],
+    completed: ['documented'],
+    documented: [],
+    canceled: []
+  };
+
+  if (!allowed[cur]) {
+    // If we encounter an unknown legacy status, be conservative but don't brick prod.
+    // Allow moving to canceled/confirmed/completed only.
+    return ['canceled', 'cancelled', 'confirmed', 'completed', 'documented'].includes(nxt);
+  }
+  return allowed[cur].includes(nxt);
+}
+
+function canTransitionPaymentStatus(current, next) {
+  const cur = (current || 'unpaid').toString().trim().toLowerCase();
+  const nxt = (next || '').toString().trim().toLowerCase();
+  if (!nxt) return false;
+  if (cur === nxt) return true;
+  const allowed = {
+    unpaid: ['paid'],
+    paid: ['refunded'],
+    refunded: []
+  };
+  if (!allowed[cur]) return ['paid', 'refunded'].includes(nxt);
+  return allowed[cur].includes(nxt);
+}
+
+function canTransitionCheckoutStatus(current, next) {
+  const cur = (current || 'pending').toString().trim().toLowerCase();
+  const nxt = (next || '').toString().trim().toLowerCase();
+  if (!nxt) return false;
+  if (cur === nxt) return true;
+  const allowed = {
+    pending: ['completed', 'failed', 'cancelled', 'canceled'],
+    failed: [],
+    completed: ['refunded'],
+    refunded: [],
+    cancelled: [],
+    canceled: []
+  };
+  if (!allowed[cur]) return ['completed', 'failed', 'refunded', 'cancelled', 'canceled'].includes(nxt);
+  return allowed[cur].includes(nxt);
+}
+
 /**
  * Enqueue failed Postgres sync for retry (Section 2.2).
  * @param {string} entityType - clinic|clinic_phone|appointment|appointment_delete|voice_checkout|voice_call_log|function_call_log
@@ -639,11 +701,39 @@ db.exec(`
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
+    deleted_at DATETIME,
     FOREIGN KEY (merchant_id) REFERENCES merchants(id),
     FOREIGN KEY (clinic_id) REFERENCES clinics(clinic_id),
     FOREIGN KEY (fhir_patient_id) REFERENCES fhir_patients(resource_id),
     FOREIGN KEY (fhir_encounter_id) REFERENCES fhir_encounters(resource_id)
   );
+
+  -- ============================================
+  -- PAYMENT RECEIPTS (patient portal)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS payment_receipts (
+    id TEXT PRIMARY KEY,
+    checkout_id TEXT UNIQUE,
+    appointment_id TEXT,
+    patient_id TEXT,
+    patient_email TEXT,
+    amount REAL NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    payment_method TEXT,
+    external_payment_id TEXT,
+    status TEXT DEFAULT 'issued',
+    issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME,
+    metadata TEXT,
+    FOREIGN KEY (checkout_id) REFERENCES voice_checkouts(id),
+    FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_payment_receipts_patient_id ON payment_receipts(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_payment_receipts_patient_email ON payment_receipts(patient_email);
+  CREATE INDEX IF NOT EXISTS idx_payment_receipts_appointment_id ON payment_receipts(appointment_id);
 
   CREATE TABLE IF NOT EXISTS voice_agent_settings (
     merchant_id TEXT PRIMARY KEY,
@@ -912,6 +1002,66 @@ db.exec(`
     FOREIGN KEY (encounter_id) REFERENCES fhir_encounters(resource_id)
   );
 
+  CREATE TABLE IF NOT EXISTS fhir_document_references (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id TEXT UNIQUE NOT NULL,
+    version_id INTEGER DEFAULT 1,
+    resource_data TEXT NOT NULL,
+    patient_id TEXT NOT NULL,
+    encounter_id TEXT,
+    date DATETIME,
+    status TEXT DEFAULT 'current',
+    is_deleted BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id),
+    FOREIGN KEY (encounter_id) REFERENCES fhir_encounters(resource_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS fhir_provenance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id TEXT UNIQUE NOT NULL,
+    version_id INTEGER DEFAULT 1,
+    resource_data TEXT NOT NULL,
+    patient_id TEXT,
+    target_resource_type TEXT,
+    target_resource_id TEXT,
+    recorded_at DATETIME,
+    is_deleted BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS fhir_consents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id TEXT UNIQUE NOT NULL,
+    version_id INTEGER DEFAULT 1,
+    resource_data TEXT NOT NULL,
+    patient_id TEXT,
+    status TEXT,
+    scope_code TEXT,
+    category_code TEXT,
+    is_deleted BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS fhir_bulk_export_jobs (
+    id TEXT PRIMARY KEY,
+    requester_scope TEXT,
+    requester_sub TEXT,
+    patient_id TEXT,
+    status TEXT NOT NULL,
+    since DATETIME,
+    types TEXT,
+    output_base_url TEXT,
+    error TEXT,
+    started_at DATETIME,
+    completed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS fhir_audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     action TEXT NOT NULL,
@@ -934,6 +1084,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_fhir_communications_encounter_id ON fhir_communications(encounter_id);
   CREATE INDEX IF NOT EXISTS idx_fhir_observations_patient_id ON fhir_observations(patient_id);
   CREATE INDEX IF NOT EXISTS idx_fhir_observations_encounter_id ON fhir_observations(encounter_id);
+  CREATE INDEX IF NOT EXISTS idx_fhir_document_references_patient_id ON fhir_document_references(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_fhir_document_references_encounter_id ON fhir_document_references(encounter_id);
+  CREATE INDEX IF NOT EXISTS idx_fhir_document_references_date ON fhir_document_references(date);
+  CREATE INDEX IF NOT EXISTS idx_fhir_provenance_patient_id ON fhir_provenance(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_fhir_provenance_target ON fhir_provenance(target_resource_type, target_resource_id);
+  CREATE INDEX IF NOT EXISTS idx_fhir_consents_patient_id ON fhir_consents(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_fhir_bulk_export_jobs_status ON fhir_bulk_export_jobs(status);
   CREATE INDEX IF NOT EXISTS idx_fhir_audit_resource_type ON fhir_audit_log(resource_type);
   CREATE INDEX IF NOT EXISTS idx_fhir_audit_resource_id ON fhir_audit_log(resource_id);
   CREATE INDEX IF NOT EXISTS idx_fhir_audit_timestamp ON fhir_audit_log(timestamp);
@@ -1643,6 +1800,7 @@ db.exec(`
     cancellation_reason TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
   );
 
@@ -1964,6 +2122,24 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_patient_sessions_email ON patient_sessions(email);
 
+  -- Cross-channel safety flags (Phase 1)
+  CREATE TABLE IF NOT EXISTS patient_emergency_flags (
+    id TEXT PRIMARY KEY,
+    patient_id TEXT,
+    email TEXT,
+    phone TEXT,
+    source TEXT, -- voice/web
+    call_id TEXT,
+    flagged_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    cleared_at DATETIME,
+    metadata_json TEXT,
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_patient_emergency_flags_patient ON patient_emergency_flags(patient_id);
+  CREATE INDEX IF NOT EXISTS idx_patient_emergency_flags_email ON patient_emergency_flags(email);
+  CREATE INDEX IF NOT EXISTS idx_patient_emergency_flags_phone ON patient_emergency_flags(phone);
+
   CREATE TABLE IF NOT EXISTS patient_portal_sessions (
     id TEXT PRIMARY KEY,
     patient_id TEXT,
@@ -1978,6 +2154,10 @@ db.exec(`
     user_agent TEXT,
     failed_attempts INTEGER DEFAULT 0,
     locked_until DATETIME,
+    revoked_at DATETIME,
+    rotated_to TEXT,
+    emergency_flag BOOLEAN DEFAULT 0,
+    emergency_flag_at DATETIME,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
   );
 
@@ -1994,11 +2174,30 @@ db.exec(`
     file_name TEXT NOT NULL,
     file_type TEXT,
     storage_path TEXT NOT NULL,
+    storage_provider TEXT DEFAULT 'local',
+    storage_bucket TEXT,
+    storage_key TEXT,
     uploaded_by TEXT,
+    status TEXT DEFAULT 'available',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
   );
   CREATE INDEX IF NOT EXISTS idx_patient_documents_patient ON patient_documents(patient_id);
+
+  -- Durable one-time download tokens (mvp-67)
+  CREATE TABLE IF NOT EXISTS patient_document_download_tokens (
+    token TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    patient_id TEXT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME,
+    revoked_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (doc_id) REFERENCES patient_documents(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_doc_tokens_doc ON patient_document_download_tokens(doc_id);
+  CREATE INDEX IF NOT EXISTS idx_doc_tokens_patient ON patient_document_download_tokens(patient_id);
 
   CREATE TABLE IF NOT EXISTS patient_merge_events (
     id TEXT PRIMARY KEY,
@@ -2743,6 +2942,9 @@ function migratePatientPortalSessionsSecurityMeta() {
     const hasUa = cols.some((c) => c.name === 'user_agent');
     const hasFailed = cols.some((c) => c.name === 'failed_attempts');
     const hasLocked = cols.some((c) => c.name === 'locked_until');
+    const hasLastSeen = cols.some((c) => c.name === 'last_seen_at');
+    const hasRevokedAt = cols.some((c) => c.name === 'revoked_at');
+    const hasRotatedTo = cols.some((c) => c.name === 'rotated_to');
 
     if (!hasIp) {
       console.log('📦 Adding ip_address column to patient_portal_sessions table...');
@@ -2760,11 +2962,72 @@ function migratePatientPortalSessionsSecurityMeta() {
       console.log('📦 Adding locked_until column to patient_portal_sessions table...');
       db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN locked_until DATETIME;`);
     }
+    if (!hasLastSeen) {
+      console.log('📦 Adding last_seen_at column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN last_seen_at DATETIME;`);
+    }
+    if (!hasRevokedAt) {
+      console.log('📦 Adding revoked_at column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN revoked_at DATETIME;`);
+    }
+    if (!hasRotatedTo) {
+      console.log('📦 Adding rotated_to column to patient_portal_sessions table...');
+      db.exec(`ALTER TABLE patient_portal_sessions ADD COLUMN rotated_to TEXT;`);
+    }
 
     db.pragma('foreign_keys = ON');
   } catch (e) {
     console.warn('⚠️  Patient portal sessions security meta migration failed:', e.message);
     db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Add status column to patient_documents (mvp-41)
+function migratePatientDocumentsStatus() {
+  try {
+    const info = db.prepare('PRAGMA table_info(patient_documents)').all();
+    if (!info.some(c => c.name === 'status')) {
+      db.exec(`ALTER TABLE patient_documents ADD COLUMN status TEXT DEFAULT 'available'`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_patient_documents_status ON patient_documents(status)`);
+      console.log('✅ Migration: patient_documents.status added');
+    }
+    if (!info.some(c => c.name === 'storage_provider')) {
+      db.exec(`ALTER TABLE patient_documents ADD COLUMN storage_provider TEXT DEFAULT 'local'`);
+    }
+    if (!info.some(c => c.name === 'storage_bucket')) {
+      db.exec(`ALTER TABLE patient_documents ADD COLUMN storage_bucket TEXT`);
+    }
+    if (!info.some(c => c.name === 'storage_key')) {
+      db.exec(`ALTER TABLE patient_documents ADD COLUMN storage_key TEXT`);
+    }
+    try {
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_patient_documents_provider ON patient_documents(storage_provider)`);
+    } catch (_) {}
+  } catch (e) {
+    console.warn('⚠️  patient_documents status migration failed:', e.message);
+  }
+}
+
+// Migration: durable patient doc download tokens table (mvp-67)
+function migratePatientDocumentDownloadTokens() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS patient_document_download_tokens (
+        token TEXT PRIMARY KEY,
+        doc_id TEXT NOT NULL,
+        patient_id TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        used_at DATETIME,
+        revoked_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_doc_tokens_doc ON patient_document_download_tokens(doc_id);
+      CREATE INDEX IF NOT EXISTS idx_doc_tokens_patient ON patient_document_download_tokens(patient_id);
+      CREATE INDEX IF NOT EXISTS idx_doc_tokens_expires ON patient_document_download_tokens(expires_at);
+    `);
+    console.log('✅ Migration: patient_document_download_tokens ensured');
+  } catch (e) {
+    console.warn('⚠️  patient_document_download_tokens migration failed:', e.message);
   }
 }
 
@@ -3857,6 +4120,32 @@ function migrateFHIRPatientsWalletAddress() {
   }
 }
 
+// Migration: Add merged_into marker for patient merges (helps unify identity)
+function migrateFHIRPatientsMergedInto() {
+  try {
+    db.pragma('foreign_keys = OFF');
+    const tableInfo = db.prepare("PRAGMA table_info(fhir_patients)").all();
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('merged_into')) {
+      console.log('🔄 Migrating: Adding merged_into column to fhir_patients table');
+      db.prepare("ALTER TABLE fhir_patients ADD COLUMN merged_into TEXT").run();
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_fhir_patients_merged_into ON fhir_patients(merged_into)").run();
+      console.log('✅ Migration complete: merged_into column added to fhir_patients table');
+    }
+    if (!columnNames.includes('merged_at')) {
+      console.log('🔄 Migrating: Adding merged_at column to fhir_patients table');
+      db.prepare("ALTER TABLE fhir_patients ADD COLUMN merged_at DATETIME").run();
+      console.log('✅ Migration complete: merged_at column added to fhir_patients table');
+    }
+
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.error('❌ FHIR patients merge marker migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
 // Migration: Add merchant_id column to circle_accounts table
 function migrateCircleAccountsMerchantId() {
   try {
@@ -3979,6 +4268,8 @@ migrateCodeEmbeddingsTable();
     migrateLongTermMemoryTables();
     migrateClinicSettingsTable();
     migrateHipaaAccessLogTable();
+migratePatientDocumentsStatus();
+migratePatientDocumentDownloadTokens();
     migrateIdempotencyKeysTable();
 migrateAppointmentsCustomerId();
 migrateCustomerMerchantId(); // CRITICAL: Link customers to merchants
@@ -3986,6 +4277,7 @@ migrateMerchantsSubdomain(); // Add subdomain support for tenant isolation
 migrateCustomersPasswordHash(); // Add password_hash for password-based authentication
 migrateCustomerCreditsExpiration(); // Add expiration and alert tracking for credits
 migrateFHIRPatientsMerchantId(); // Link FHIR patients to merchants (tenants)
+migrateFHIRPatientsMergedInto(); // Ensure merge markers exist on fhir_patients
 migrateCircleAccountsMerchantId(); // Link wallets to merchants (tenants)
 migrateLeadLabels(); // Create lead labels system
 migrateResearchBounties(); // Pharma data requests for impact-weighted escrow
@@ -4394,24 +4686,130 @@ function runMigrations() {
   const migrationsDir = path.join(__dirname, 'migrations');
   if (!fs.existsSync(migrationsDir)) return;
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-  const files = fs.readdirSync(migrationsDir).filter(f => /^\d+_.*\.js$/.test(f)).sort();
-  for (const f of files) {
-    const version = f.replace(/\.js$/, '');
-    const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version);
-    if (applied) continue;
-    try {
-      const m = require(path.join(migrationsDir, f));
-      if (typeof m.up === 'function') {
-        m.up(db);
-        db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)').run(version);
-        console.log(`✅ Migration applied: ${version}`);
+  // mvp-76: optional backup-before-migrate (prod)
+  try {
+    const strict = (process.env.MIGRATIONS_STRICT === '1' || process.env.MIGRATIONS_STRICT === 'true') || isProdEnv;
+    const wantBackup = (process.env.BACKUP_BEFORE_MIGRATE === '1' || process.env.BACKUP_BEFORE_MIGRATE === 'true') && isProdEnv;
+    if (wantBackup && fs.existsSync(dbPath)) {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupDir = process.env.DB_BACKUP_DIR || path.join(path.dirname(dbPath), 'backups');
+      try { fs.mkdirSync(backupDir, { recursive: true }); } catch (_) {}
+      const backupPath = path.join(backupDir, `${path.basename(dbPath)}.bak-${ts}`);
+      fs.copyFileSync(dbPath, backupPath);
+      console.log(`✅ DB backup created: ${backupPath}`);
+    }
+
+    const files = fs.readdirSync(migrationsDir).filter(f => /^\d+_.*\.js$/.test(f)).sort();
+    for (const f of files) {
+      const version = f.replace(/\.js$/, '');
+      const applied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?').get(version);
+      if (applied) continue;
+      try {
+        const m = require(path.join(migrationsDir, f));
+        if (typeof m.up === 'function') {
+          m.up(db);
+          db.prepare('INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)').run(version);
+          console.log(`✅ Migration applied: ${version}`);
+        }
+      } catch (e) {
+        console.warn(`⚠️  Migration ${version} failed:`, e.message);
+        if (strict) {
+          console.error('❌ Migration failed with MIGRATIONS_STRICT enabled; refusing to start.');
+          process.exit(1);
+        }
       }
-    } catch (e) {
-      console.warn(`⚠️  Migration ${version} failed:`, e.message);
+    }
+    return;
+  } catch (e) {
+    if (isProdEnv) {
+      console.error('❌ Migration runner crashed in production:', e.message);
+      process.exit(1);
     }
   }
 }
 runMigrations();
+
+// mvp-74/75/78: durable notification jobs + leader locks + ops counters
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_jobs (
+      id TEXT PRIMARY KEY,
+      channel TEXT NOT NULL,          -- email/sms
+      type TEXT NOT NULL,             -- reminder_24h, reminder_1h, appt_rescheduled, appt_canceled, post_visit_summary, payment_receipt, etc
+      to_address TEXT,
+      patient_id TEXT,
+      appointment_id TEXT,
+      idempotency_key TEXT,
+      payload_json TEXT,
+      status TEXT DEFAULT 'queued',   -- queued/in_progress/sent/dead
+      attempts INTEGER DEFAULT 0,
+      max_attempts INTEGER DEFAULT 6,
+      run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      locked_by TEXT,
+      locked_at DATETIME,
+      last_error TEXT,
+      provider_message_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_jobs_idem ON notification_jobs(idempotency_key);
+    CREATE INDEX IF NOT EXISTS idx_notification_jobs_status_run ON notification_jobs(status, run_at);
+
+    CREATE TABLE IF NOT EXISTS scheduler_locks (
+      name TEXT PRIMARY KEY,
+      locked_by TEXT,
+      locked_until DATETIME,
+      heartbeat_at DATETIME
+    );
+
+    CREATE TABLE IF NOT EXISTS ops_counters (
+      name TEXT NOT NULL,
+      bucket TEXT NOT NULL, -- YYYY-MM-DDTHH
+      count INTEGER DEFAULT 0,
+      PRIMARY KEY (name, bucket)
+    );
+
+    -- Immutable audit trail (mvp-34)
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id TEXT PRIMARY KEY,
+      actor_type TEXT NOT NULL,       -- patient/admin/system
+      actor_id TEXT,
+      patient_id TEXT,
+      resource_type TEXT NOT NULL,    -- session/appointment/payment/receipt/document
+      resource_id TEXT,
+      action TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_events_patient ON audit_events(patient_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_events_resource ON audit_events(resource_type, resource_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_events_created ON audit_events(created_at);
+  `);
+} catch (e) {
+  console.warn('⚠️  Failed to init ops tables:', e.message);
+}
+
+// mvp-34: migrations for soft delete columns (existing DBs)
+function migrateSoftDeleteColumns() {
+  const addColIfMissing = (table, colDef) => {
+    try {
+      const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+      const name = colDef.split(/\s+/)[0];
+      if (!cols.some((c) => c.name === name)) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef};`);
+      }
+    } catch (_) {}
+  };
+  addColIfMissing('appointments', 'deleted_at DATETIME');
+  addColIfMissing('voice_checkouts', 'deleted_at DATETIME');
+  addColIfMissing('voice_checkouts', 'stripe_checkout_session_id TEXT');
+  addColIfMissing('voice_checkouts', 'stripe_session_expires_at DATETIME');
+  addColIfMissing('payment_receipts', 'deleted_at DATETIME');
+  addColIfMissing('patient_documents', 'deleted_at DATETIME');
+  addColIfMissing('patient_portal_sessions', 'emergency_flag BOOLEAN DEFAULT 0');
+  addColIfMissing('patient_portal_sessions', 'emergency_flag_at DATETIME');
+}
+try { migrateSoftDeleteColumns(); } catch (_) {}
 
 module.exports = {
   // Expose the database instance for direct access when needed
@@ -4511,6 +4909,232 @@ module.exports = {
       console.error('❌ Failed to update patient_session:', e.message);
     }
   },
+
+  // ============================================
+  // NOTIFICATION QUEUE + OPS COUNTERS (mvp-74/75/78)
+  // ============================================
+  enqueueNotificationJob: (job) => {
+    try {
+      const id = job.id;
+      db.prepare(`
+        INSERT OR IGNORE INTO notification_jobs
+          (id, channel, type, to_address, patient_id, appointment_id, idempotency_key, payload_json, status, attempts, max_attempts, run_at, created_at, updated_at)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, ?, COALESCE(?, datetime('now')), datetime('now'), datetime('now'))
+      `).run(
+        id,
+        job.channel,
+        job.type,
+        job.to_address || null,
+        job.patient_id || null,
+        job.appointment_id || null,
+        job.idempotency_key || null,
+        job.payload_json || null,
+        job.max_attempts || 6,
+        job.run_at || null
+      );
+      return { success: true, id };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  },
+
+  claimNextNotificationJob: (workerId) => {
+    try {
+      const row = db.prepare(`
+        SELECT id
+        FROM notification_jobs
+        WHERE status = 'queued'
+          AND datetime(run_at) <= datetime('now')
+          AND attempts < max_attempts
+        ORDER BY datetime(run_at) ASC, created_at ASC
+        LIMIT 1
+      `).get();
+      if (!row) return null;
+      const r = db.prepare(`
+        UPDATE notification_jobs
+        SET status = 'in_progress', locked_by = ?, locked_at = datetime('now'), updated_at = datetime('now')
+        WHERE id = ? AND status = 'queued'
+      `).run(workerId, row.id);
+      if (!r.changes) return null;
+      return db.prepare(`SELECT * FROM notification_jobs WHERE id = ?`).get(row.id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  completeNotificationJobSuccess: (id, providerMessageId = null) => {
+    try {
+      db.prepare(`
+        UPDATE notification_jobs
+        SET status = 'sent', provider_message_id = ?, last_error = NULL, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(providerMessageId || null, id);
+    } catch (_) {}
+  },
+
+  completeNotificationJobFailure: (id, errMsg, nextRunAtIso = null, dead = false) => {
+    try {
+      db.prepare(`
+        UPDATE notification_jobs
+        SET status = ?, attempts = attempts + 1, last_error = ?, run_at = COALESCE(?, run_at), updated_at = datetime('now')
+        WHERE id = ?
+      `).run(dead ? 'dead' : 'queued', (errMsg || '').slice(0, 800), nextRunAtIso || null, id);
+    } catch (_) {}
+  },
+
+  getNotificationQueueStats: () => {
+    try {
+      const rows = db.prepare(`
+        SELECT status, COUNT(*) as count
+        FROM notification_jobs
+        GROUP BY status
+      `).all();
+      const byStatus = {};
+      for (const r of rows) byStatus[r.status] = r.count;
+      return { success: true, by_status: byStatus };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  },
+
+  listDeadNotificationJobs: (limit = 50) => {
+    try {
+      return db.prepare(`
+        SELECT id, channel, type, to_address, patient_id, appointment_id, attempts, max_attempts, last_error, updated_at
+        FROM notification_jobs
+        WHERE status = 'dead'
+        ORDER BY datetime(updated_at) DESC
+        LIMIT ?
+      `).all(limit);
+    } catch (_) {
+      return [];
+    }
+  },
+
+  tryAcquireSchedulerLock: (name, workerId, ttlSeconds = 60) => {
+    try {
+      const until = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+      db.prepare(`INSERT OR IGNORE INTO scheduler_locks (name, locked_by, locked_until, heartbeat_at) VALUES (?, ?, ?, datetime('now'))`)
+        .run(name, workerId, until);
+      const r = db.prepare(`
+        UPDATE scheduler_locks
+        SET locked_by = ?, locked_until = ?, heartbeat_at = datetime('now')
+        WHERE name = ?
+          AND (locked_until IS NULL OR datetime(locked_until) <= datetime('now') OR locked_by = ?)
+      `).run(workerId, until, name, workerId);
+      return !!(r.changes && r.changes > 0);
+    } catch (_) {
+      return false;
+    }
+  },
+
+  heartbeatSchedulerLock: (name, workerId, ttlSeconds = 60) => {
+    try {
+      const until = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+      const r = db.prepare(`
+        UPDATE scheduler_locks
+        SET locked_until = ?, heartbeat_at = datetime('now')
+        WHERE name = ? AND locked_by = ?
+      `).run(until, name, workerId);
+      return !!(r.changes && r.changes > 0);
+    } catch (_) {
+      return false;
+    }
+  },
+
+  incrementOpsCounter: (name, date = new Date()) => {
+    try {
+      const bucket = date.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+      db.prepare(`
+        INSERT INTO ops_counters (name, bucket, count)
+        VALUES (?, ?, 1)
+        ON CONFLICT(name, bucket) DO UPDATE SET count = count + 1
+      `).run(name, bucket);
+    } catch (_) {}
+  },
+
+  getOpsCounters: (sinceHours = 24) => {
+    try {
+      const cutoff = new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString().slice(0, 13);
+      return db.prepare(`
+        SELECT name, bucket, count
+        FROM ops_counters
+        WHERE bucket >= ?
+        ORDER BY bucket ASC
+      `).all(cutoff);
+    } catch (_) {
+      return [];
+    }
+  },
+
+  // ============================================
+  // AUDIT EVENTS (mvp-34)
+  // ============================================
+  insertAuditEvent: (evt) => {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const id = evt.id || `aud_${uuidv4()}`;
+      const meta = evt.metadata ? (typeof evt.metadata === 'string' ? evt.metadata : JSON.stringify(evt.metadata)) : null;
+      db.prepare(`
+        INSERT INTO audit_events
+          (id, actor_type, actor_id, patient_id, resource_type, resource_id, action, metadata_json, created_at)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        id,
+        evt.actor_type,
+        evt.actor_id || null,
+        evt.patient_id || null,
+        evt.resource_type,
+        evt.resource_id || null,
+        evt.action,
+        meta
+      );
+      return { success: true, id };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  },
+
+  getAuditEventsForPatient: (patientId, limit = 100) => {
+    try {
+      const lim = Math.max(1, Math.min(500, parseInt(limit, 10) || 100));
+      return db.prepare(`
+        SELECT id, actor_type, actor_id, patient_id, resource_type, resource_id, action, metadata_json, created_at
+        FROM audit_events
+        WHERE patient_id = ?
+        ORDER BY datetime(created_at) DESC
+        LIMIT ?
+      `).all(patientId, lim);
+    } catch (_) {
+      return [];
+    }
+  },
+
+  // ============================================
+  // SOFT DELETE HELPERS (mvp-34)
+  // ============================================
+  softDeleteAppointment: (id) => {
+    try {
+      return db.prepare(`UPDATE appointments SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND deleted_at IS NULL`).run(id);
+    } catch (_) { return { changes: 0 }; }
+  },
+  softDeleteVoiceCheckout: (id) => {
+    try {
+      return db.prepare(`UPDATE voice_checkouts SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL`).run(id);
+    } catch (_) { return { changes: 0 }; }
+  },
+  softDeletePaymentReceipt: (id) => {
+    try {
+      return db.prepare(`UPDATE payment_receipts SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL`).run(id);
+    } catch (_) { return { changes: 0 }; }
+  },
+  softDeletePatientDocument: (id) => {
+    try {
+      return db.prepare(`UPDATE patient_documents SET deleted_at = datetime('now') WHERE id = ? AND deleted_at IS NULL`).run(id);
+    } catch (_) { return { changes: 0 }; }
+  },
   deletePatientSession: (session_id) => {
     if (!session_id) return;
     try {
@@ -4542,9 +5166,10 @@ module.exports = {
       db.prepare(`
         INSERT INTO patient_documents (
           id, patient_id, encounter_id, appointment_id,
-          file_name, file_type, storage_path, uploaded_by, created_at
+          file_name, file_type, storage_path, storage_provider, storage_bucket, storage_key,
+          uploaded_by, status, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         id,
         doc.patient_id,
@@ -4552,8 +5177,12 @@ module.exports = {
         doc.appointment_id || null,
         doc.file_name,
         doc.file_type || null,
-        doc.storage_path,
-        doc.uploaded_by || 'patient'
+        doc.storage_path || null,
+        doc.storage_provider || 'local',
+        doc.storage_bucket || null,
+        doc.storage_key || null,
+        doc.uploaded_by || 'patient',
+        doc.status || 'available'
       );
       return { id };
     } catch (e) {
@@ -4566,14 +5195,94 @@ module.exports = {
     try {
       return db.prepare(`
         SELECT id, patient_id, encounter_id, appointment_id,
-               file_name, file_type, storage_path, uploaded_by, created_at
+               file_name, file_type, storage_provider, storage_bucket, storage_key,
+               storage_path, uploaded_by, status, created_at
         FROM patient_documents
-        WHERE patient_id = ?
+        WHERE patient_id = ? AND deleted_at IS NULL
         ORDER BY created_at DESC
       `).all(patientId);
     } catch (e) {
       console.error('❌ Failed to fetch patient_documents:', e.message);
       return [];
+    }
+  },
+
+  getPatientDocumentById: (docId) => {
+    if (!docId) return null;
+    try {
+      return db.prepare(`SELECT * FROM patient_documents WHERE id = ? AND deleted_at IS NULL LIMIT 1`).get(docId) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // ============================================
+  // Patient document download tokens (mvp-67)
+  // ============================================
+  createPatientDocumentDownloadToken: ({ token, doc_id, patient_id, expires_at }) => {
+    try {
+      db.prepare(`
+        INSERT INTO patient_document_download_tokens (token, doc_id, patient_id, expires_at, created_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+      `).run(token, doc_id, patient_id, expires_at);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  },
+  getPatientDocumentDownloadToken: (token) => {
+    if (!token) return null;
+    try {
+      return db.prepare(`
+        SELECT * FROM patient_document_download_tokens WHERE token = ? LIMIT 1
+      `).get(token) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  markPatientDocumentDownloadTokenUsed: (token) => {
+    try {
+      return db.prepare(`
+        UPDATE patient_document_download_tokens
+        SET used_at = datetime('now')
+        WHERE token = ? AND used_at IS NULL AND revoked_at IS NULL
+      `).run(token);
+    } catch (_) {
+      return { changes: 0 };
+    }
+  },
+  revokePatientDocumentDownloadToken: (token) => {
+    try {
+      return db.prepare(`
+        UPDATE patient_document_download_tokens
+        SET revoked_at = datetime('now')
+        WHERE token = ? AND revoked_at IS NULL
+      `).run(token);
+    } catch (_) {
+      return { changes: 0 };
+    }
+  },
+
+  insertHipaaAccessLog: (row) => {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const id = row.id || `hal_${uuidv4()}`;
+      db.prepare(`
+        INSERT INTO hipaa_access_log (id, user_id, patient_id, resource_type, resource_id, action, ip_address, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(
+        id,
+        row.user_id || null,
+        row.patient_id || null,
+        row.resource_type,
+        row.resource_id || null,
+        row.action,
+        row.ip_address || null
+      );
+      return id;
+    } catch (e) {
+      // Don't break request path on audit logging failure
+      return null;
     }
   },
 
@@ -4644,6 +5353,10 @@ module.exports = {
   updateAppointmentPaymentStatus: (appointmentId, status) => {
     if (!appointmentId || !status) return;
     try {
+      const existing = db.prepare(`SELECT payment_status FROM appointments WHERE id = ? LIMIT 1`).get(appointmentId);
+      if (existing && !canTransitionPaymentStatus(existing.payment_status, status)) {
+        throw new Error(`Invalid payment_status transition: ${existing.payment_status} -> ${status}`);
+      }
       db.prepare(`
         UPDATE appointments
         SET payment_status = ?
@@ -5631,8 +6344,9 @@ module.exports = {
       const result = db.prepare(`
         INSERT INTO voice_checkouts 
         (id, clinic_id, merchant_id, product_id, product_name, quantity, amount, 
-         customer_phone, customer_name, customer_email, appointment_id, payment_method, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         customer_phone, customer_name, customer_email, appointment_id, payment_method, status,
+         stripe_checkout_session_id, stripe_session_expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         checkout.id,
         checkout.clinic_id || null,
@@ -5646,7 +6360,9 @@ module.exports = {
         checkout.customer_email || null,
         checkout.appointment_id || null,
         checkout.payment_method || null,
-        checkout.status || 'pending'
+        checkout.status || 'pending',
+        checkout.stripe_checkout_session_id || null,
+        checkout.stripe_session_expires_at || null
       );
       return result;
     }
@@ -5663,10 +6379,20 @@ module.exports = {
 
   updateVoiceCheckout: async (id, updates) => {
     if (usePostgres && pgPool) {
+      // Enforce payment lifecycle transitions (mvp-23)
+      if (updates && updates.status !== undefined) {
+        const existing = await pgPool`SELECT status FROM voice_checkouts WHERE id = ${id} LIMIT 1`;
+        const currentStatus = (existing && existing[0] && existing[0].status) || null;
+        if (currentStatus && !canTransitionCheckoutStatus(currentStatus, updates.status)) {
+          throw new Error(`Invalid checkout status transition: ${currentStatus} -> ${updates.status}`);
+        }
+      }
+
       // SECURITY: Whitelist allowed fields to prevent SQL injection
       const allowedFields = [
         'status', 'payment_intent_id', 'merchant_order_id', 'payment_token',
         'fhir_patient_id', 'fhir_encounter_id', 'appointment_id', 'payment_method', 'customer_id'
+        , 'stripe_checkout_session_id', 'stripe_session_expires_at'
       ];
 
       // Build dynamic update using parameterized query (safe)
@@ -5725,6 +6451,15 @@ module.exports = {
       return { changes: result.count || 0 };
     } else {
       // SQLite path
+      // Enforce payment lifecycle transitions (mvp-23)
+      if (updates && updates.status !== undefined) {
+        const existing = db.prepare('SELECT status FROM voice_checkouts WHERE id = ? LIMIT 1').get(id);
+        const currentStatus = existing ? existing.status : null;
+        if (currentStatus && !canTransitionCheckoutStatus(currentStatus, updates.status)) {
+          throw new Error(`Invalid checkout status transition: ${currentStatus} -> ${updates.status}`);
+        }
+      }
+
       const fields = [];
       const values = [];
 
@@ -5789,6 +6524,96 @@ module.exports = {
       return await pgPool`SELECT * FROM voice_checkouts WHERE merchant_id = ${merchantId} ORDER BY created_at DESC`;
     } else {
       return db.prepare('SELECT * FROM voice_checkouts WHERE merchant_id = ? ORDER BY created_at DESC').all(merchantId);
+    }
+  },
+
+  // ============================================
+  // PAYMENT RECEIPTS (patient portal)
+  // ============================================
+  createPaymentReceipt: (receipt) => {
+    try {
+      const { v4: uuidv4 } = require('uuid');
+      const id = receipt.id || `rcpt_${uuidv4()}`;
+      const metadata = receipt.metadata ? (typeof receipt.metadata === 'string' ? receipt.metadata : JSON.stringify(receipt.metadata)) : null;
+      db.prepare(`
+        INSERT OR IGNORE INTO payment_receipts
+          (id, checkout_id, appointment_id, patient_id, patient_email, amount, currency, payment_method, external_payment_id, status, issued_at, metadata)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), ?)
+      `).run(
+        id,
+        receipt.checkout_id || null,
+        receipt.appointment_id || null,
+        receipt.patient_id || null,
+        receipt.patient_email || null,
+        receipt.amount,
+        receipt.currency || 'USD',
+        receipt.payment_method || null,
+        receipt.external_payment_id || null,
+        receipt.status || 'issued',
+        receipt.issued_at || null,
+        metadata
+      );
+      return { success: true, id };
+    } catch (e) {
+      console.warn('createPaymentReceipt failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  },
+
+  getPaymentReceiptsForPatient: (patientId, patientEmail = null, limit = 50) => {
+    try {
+      const lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+      if (patientId) {
+        return db.prepare(`
+          SELECT * FROM payment_receipts
+          WHERE patient_id = ? AND deleted_at IS NULL
+          ORDER BY issued_at DESC, created_at DESC
+          LIMIT ?
+        `).all(patientId, lim);
+      }
+      const email = (patientEmail || '').toLowerCase().trim();
+      if (!email) return [];
+      return db.prepare(`
+        SELECT * FROM payment_receipts
+        WHERE lower(patient_email) = ? AND deleted_at IS NULL
+        ORDER BY issued_at DESC, created_at DESC
+        LIMIT ?
+      `).all(email, lim);
+    } catch (e) {
+      console.warn('getPaymentReceiptsForPatient failed:', e.message);
+      return [];
+    }
+  },
+
+  updatePaymentReceiptStatusByCheckoutId: (checkoutId, status, metadataPatch = null) => {
+    if (!checkoutId || !status) return { changes: 0 };
+    try {
+      const existing = db.prepare(`SELECT metadata FROM payment_receipts WHERE checkout_id = ? LIMIT 1`).get(checkoutId);
+      let merged = null;
+      if (metadataPatch) {
+        try {
+          const cur = existing && existing.metadata ? (typeof existing.metadata === 'string' ? JSON.parse(existing.metadata) : existing.metadata) : {};
+          merged = JSON.stringify({ ...(cur || {}), ...(metadataPatch || {}) });
+        } catch (_) {
+          merged = JSON.stringify(metadataPatch || {});
+        }
+      }
+      if (merged != null) {
+        return db.prepare(`
+          UPDATE payment_receipts
+          SET status = ?, metadata = ?, issued_at = COALESCE(issued_at, CURRENT_TIMESTAMP)
+          WHERE checkout_id = ?
+        `).run(status, merged, checkoutId);
+      }
+      return db.prepare(`
+        UPDATE payment_receipts
+        SET status = ?, issued_at = COALESCE(issued_at, CURRENT_TIMESTAMP)
+        WHERE checkout_id = ?
+      `).run(status, checkoutId);
+    } catch (e) {
+      console.warn('updatePaymentReceiptStatusByCheckoutId failed:', e.message);
+      return { changes: 0 };
     }
   },
 
@@ -5871,6 +6696,57 @@ module.exports = {
       payload.currency,
       payload.metadata
     );
+  },
+
+  // ============================================
+  // PATIENT EMERGENCY FLAGS (cross-channel safety)
+  // ============================================
+  upsertPatientEmergencyFlag: (payload) => {
+    try {
+      const id = payload.id || require('uuid').v4();
+      const expiresAt = payload.expires_at || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const meta = payload.metadata ? JSON.stringify(payload.metadata) : (payload.metadata_json || null);
+      db.prepare(`
+        INSERT INTO patient_emergency_flags (id, patient_id, email, phone, source, call_id, expires_at, metadata_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        payload.patient_id || null,
+        payload.email ? String(payload.email).toLowerCase().trim() : null,
+        payload.phone || null,
+        payload.source || 'voice',
+        payload.call_id || null,
+        expiresAt,
+        meta
+      );
+      return { success: true, id, expires_at: expiresAt };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  },
+
+  getActivePatientEmergencyFlag: (opts = {}) => {
+    try {
+      const nowIso = new Date().toISOString();
+      const pid = opts.patient_id || null;
+      const email = opts.email ? String(opts.email).toLowerCase().trim() : null;
+      const phone = opts.phone || null;
+      const row = db.prepare(`
+        SELECT * FROM patient_emergency_flags
+        WHERE cleared_at IS NULL
+          AND expires_at > ?
+          AND (
+            (? IS NOT NULL AND patient_id = ?) OR
+            (? IS NOT NULL AND LOWER(email) = LOWER(?)) OR
+            (? IS NOT NULL AND phone = ?)
+          )
+        ORDER BY flagged_at DESC
+        LIMIT 1
+      `).get(nowIso, pid, pid, email, email, phone, phone);
+      return row || null;
+    } catch (_) {
+      return null;
+    }
   },
 
   async getWalletTransactions(customerId, merchantId, limit = 50) {
@@ -6802,6 +7678,186 @@ module.exports = {
     }
   },
 
+  getDiagnosticReportById(resourceId) {
+    try {
+      if (!resourceId) return null;
+      const row = db.prepare('SELECT * FROM fhir_diagnostic_reports WHERE resource_id = ? LIMIT 1').get(resourceId);
+      return row ? { ...row, resource_data: row.resource_data ? JSON.parse(row.resource_data) : null } : null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  // ============================================
+  // FHIR DocumentReference (portal documents)
+  // ============================================
+  createFHIRDocumentReference(docRefResource) {
+    try {
+      const patientId = docRefResource.subject?.reference?.replace('Patient/', '') || null;
+      const encounterId =
+        (docRefResource.context?.encounter?.[0]?.reference || '').replace(/^Encounter\//, '') || null;
+      const date = docRefResource.date || new Date().toISOString();
+      db.prepare(`
+        INSERT OR REPLACE INTO fhir_document_references
+          (resource_id, resource_data, patient_id, encounter_id, date, status, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(
+        docRefResource.id,
+        JSON.stringify(docRefResource),
+        patientId,
+        encounterId,
+        date,
+        docRefResource.status || 'current'
+      );
+      return docRefResource.id;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
+  getFHIRDocumentReference(resourceId) {
+    try {
+      if (!resourceId) return null;
+      const row = db.prepare(`
+        SELECT * FROM fhir_document_references
+        WHERE resource_id = ? AND is_deleted = 0
+        LIMIT 1
+      `).get(resourceId);
+      if (!row) return null;
+      return { ...row, resource_data: row.resource_data ? JSON.parse(row.resource_data) : null };
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
+  getFHIRDocumentReferencesByPatientId(patientId, limit = 200) {
+    try {
+      if (!patientId) return [];
+      const rows = db.prepare(`
+        SELECT * FROM fhir_document_references
+        WHERE patient_id = ? AND is_deleted = 0
+        ORDER BY datetime(date) DESC, created_at DESC
+        LIMIT ?
+      `).all(patientId, limit);
+      return rows.map(r => ({ ...r, resource_data: r.resource_data ? JSON.parse(r.resource_data) : null }));
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return [];
+    }
+  },
+
+  // ============================================
+  // FHIR Provenance + Consent (compliance expectations)
+  // ============================================
+  createFHIRProvenance(provResource) {
+    try {
+      const patientId = provResource.patient?.reference?.replace('Patient/', '') ||
+        provResource.target?.[0]?.reference?.replace(/^Patient\//, '') ||
+        null;
+      const target = (provResource.target && provResource.target[0] && provResource.target[0].reference) || '';
+      const [targetType, targetId] = target.includes('/') ? target.split('/') : [null, null];
+      db.prepare(`
+        INSERT OR REPLACE INTO fhir_provenance
+          (resource_id, resource_data, patient_id, target_resource_type, target_resource_id, recorded_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(
+        provResource.id,
+        JSON.stringify(provResource),
+        patientId,
+        targetType,
+        targetId,
+        provResource.recorded || new Date().toISOString()
+      );
+      return provResource.id;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
+  createFHIRConsent(consentResource) {
+    try {
+      const patientId = consentResource.patient?.reference?.replace('Patient/', '') || null;
+      const scopeCode = consentResource.scope?.coding?.[0]?.code || null;
+      const categoryCode = consentResource.category?.[0]?.coding?.[0]?.code || null;
+      db.prepare(`
+        INSERT OR REPLACE INTO fhir_consents
+          (resource_id, resource_data, patient_id, status, scope_code, category_code, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(
+        consentResource.id,
+        JSON.stringify(consentResource),
+        patientId,
+        consentResource.status || null,
+        scopeCode,
+        categoryCode
+      );
+      return consentResource.id;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
+  // ============================================
+  // Bulk export jobs (FHIR Bulk Data)
+  // ============================================
+  createFhirBulkExportJob(job) {
+    try {
+      db.prepare(`
+        INSERT INTO fhir_bulk_export_jobs
+          (id, requester_scope, requester_sub, patient_id, status, since, types, output_base_url, error, started_at, completed_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `).run(
+        job.id,
+        job.requester_scope || null,
+        job.requester_sub || null,
+        job.patient_id || null,
+        job.status || 'in-progress',
+        job.since || null,
+        job.types || null,
+        job.output_base_url || null,
+        job.error || null,
+        job.started_at || new Date().toISOString(),
+        job.completed_at || null
+      );
+      return job.id;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
+  getFhirBulkExportJob(jobId) {
+    try {
+      if (!jobId) return null;
+      return db.prepare('SELECT * FROM fhir_bulk_export_jobs WHERE id = ? LIMIT 1').get(jobId) || null;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
+  updateFhirBulkExportJob(jobId, updates) {
+    try {
+      const cols = [];
+      const vals = [];
+      for (const [k, v] of Object.entries(updates || {})) {
+        cols.push(`${k} = ?`);
+        vals.push(v);
+      }
+      if (!cols.length) return null;
+      vals.push(jobId);
+      db.prepare(`UPDATE fhir_bulk_export_jobs SET ${cols.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
+      return db.prepare('SELECT * FROM fhir_bulk_export_jobs WHERE id = ? LIMIT 1').get(jobId) || null;
+    } catch (e) {
+      if (!e.message?.includes('no such table')) throw e;
+      return null;
+    }
+  },
+
   // -------- Telemedicine Phase 2: patient_uploads (Task 14) --------
   createPatientUpload(row) {
     try {
@@ -7590,16 +8646,16 @@ module.exports = {
     if (usePostgres && pgPool) {
       let query;
       if (customerId) {
-        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND customer_id = ${customerId}`;
+        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND customer_id = ${customerId} AND deleted_at IS NULL`;
       } else if (clinicId) {
-        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND clinic_id = ${clinicId}`;
+        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND clinic_id = ${clinicId} AND deleted_at IS NULL`;
       } else {
-        query = pgPool`SELECT * FROM appointments WHERE id = ${id}`;
+        query = pgPool`SELECT * FROM appointments WHERE id = ${id} AND deleted_at IS NULL`;
       }
       const results = await query;
       row = results[0] || null;
     } else {
-      let query = 'SELECT * FROM appointments WHERE (id = ? OR id LIKE ?)';
+      let query = 'SELECT * FROM appointments WHERE (id = ? OR id LIKE ?) AND deleted_at IS NULL';
       const params = [id, `%${id}%`];
       if (customerId) { query += ' AND customer_id = ?'; params.push(customerId); }
       else if (clinicId) { query += ' AND clinic_id = ?'; params.push(clinicId); }
@@ -7615,9 +8671,9 @@ module.exports = {
     if (usePostgres && pgPool) {
       let query;
       if (clinicId) {
-        query = pgPool`SELECT * FROM appointments WHERE date = ${date} AND clinic_id = ${clinicId} ORDER BY time ASC`;
+        query = pgPool`SELECT * FROM appointments WHERE date = ${date} AND clinic_id = ${clinicId} AND deleted_at IS NULL ORDER BY time ASC`;
       } else {
-        query = pgPool`SELECT * FROM appointments WHERE date = ${date} ORDER BY time ASC`;
+        query = pgPool`SELECT * FROM appointments WHERE date = ${date} AND deleted_at IS NULL ORDER BY time ASC`;
       }
       let rows = await query;
       if (practitionerId) {
@@ -7626,7 +8682,7 @@ module.exports = {
       return rows.map(r => this._normalizeAppointmentVideoRoom(r));
     } else {
       // SQLite path
-      let query = 'SELECT * FROM appointments WHERE date = ?';
+      let query = 'SELECT * FROM appointments WHERE date = ? AND deleted_at IS NULL';
       const params = [date];
 
       if (clinicId) {
@@ -7659,6 +8715,7 @@ module.exports = {
           SELECT * FROM appointments
           WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
             AND customer_id = ${customerId}
+            AND deleted_at IS NULL
           ORDER BY date DESC, time DESC
         `;
       } else if (clinicId) {
@@ -7666,12 +8723,14 @@ module.exports = {
           SELECT * FROM appointments
           WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
             AND clinic_id = ${clinicId}
+            AND deleted_at IS NULL
           ORDER BY date DESC, time DESC
         `;
       } else {
         query = pgPool`
           SELECT * FROM appointments
           WHERE (patient_phone LIKE ${searchPattern} OR patient_email LIKE ${searchPattern})
+            AND deleted_at IS NULL
           ORDER BY date DESC, time DESC
         `;
       }
@@ -7682,6 +8741,7 @@ module.exports = {
       let query = `
         SELECT * FROM appointments
         WHERE (patient_phone LIKE ? OR patient_email LIKE ?)
+          AND deleted_at IS NULL
       `;
       const params = [`%${searchTerm}%`, `%${searchTerm}%`];
 
@@ -7703,7 +8763,7 @@ module.exports = {
 
   // Get all appointments (with optional filters)
   getAllAppointments(filters = {}) {
-    let query = 'SELECT * FROM appointments WHERE 1=1';
+    let query = 'SELECT * FROM appointments WHERE deleted_at IS NULL';
     const params = [];
 
     // Tenant isolation: Filter by customer_id if provided
@@ -7753,7 +8813,7 @@ module.exports = {
     // SQLite / default path
     const placeholders = ids.map(() => '?').join(',');
     const rows = db
-      .prepare(`SELECT * FROM appointments WHERE patient_id IN (${placeholders}) ORDER BY start_time DESC`)
+      .prepare(`SELECT * FROM appointments WHERE patient_id IN (${placeholders}) AND deleted_at IS NULL ORDER BY start_time DESC`)
       .all(...ids);
     return rows.map(r => this._normalizeAppointmentVideoRoom(r));
   },
@@ -7776,6 +8836,20 @@ module.exports = {
 
   // Update appointment status (supports both clinicId and customerId for tenant isolation)
   updateAppointmentStatus(id, status, reason = null, clinicId = null, customerId = null) {
+    // Enforce appointment lifecycle state transitions (mvp-22)
+    try {
+      // Exact id first; fall back to LIKE for legacy callers passing partial ids.
+      const existing =
+        db.prepare(`SELECT id, status FROM appointments WHERE id = ? LIMIT 1`).get(id) ||
+        db.prepare(`SELECT id, status FROM appointments WHERE id LIKE ? LIMIT 1`).get(`%${id}%`);
+      if (existing && !canTransitionAppointmentStatus(existing.status, status)) {
+        throw new Error(`Invalid appointment status transition: ${existing.status} -> ${status}`);
+      }
+    } catch (e) {
+      // Surface this as a hard error to callers so routes can return 400/409 rather than silently corrupt state.
+      throw e;
+    }
+
     let query = `
       UPDATE appointments
       SET status = ?,

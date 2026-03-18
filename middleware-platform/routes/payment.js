@@ -6,6 +6,7 @@
 const express = require('express');
 const path = require('path');
 const PaymentService = require('../services/payment-service');
+const db = require('../database');
 
 const router = express.Router();
 
@@ -38,6 +39,7 @@ router.get('/checkout/:token', async (req, res) => {
         const result = PaymentService.getCheckoutByToken(token);
 
         if (!result.success) {
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_checkout_failed'); } catch (_) {}
             return res.status(400).json(result);
         }
 
@@ -61,6 +63,7 @@ router.get('/checkout/:token', async (req, res) => {
         });
 
     } catch (error) {
+        try { db.incrementOpsCounter && db.incrementOpsCounter('payment_checkout_error'); } catch (_) {}
         console.error('Error fetching checkout:', error);
         res.status(500).json({
             success: false,
@@ -169,10 +172,21 @@ router.post('/process', async (req, res) => {
         // Validate token
         const checkoutResult = PaymentService.getCheckoutByToken(payment_token);
         if (!checkoutResult.success) {
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(400).json(checkoutResult);
+        }
+        // Enforce payment ↔ appointment linking for telehealth portal (mvp-51)
+        // Patient portal checkouts must be tied to an appointment_id.
+        if (!checkoutResult.checkout.appointment_id) {
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid checkout: appointment_id is required for patient payments.'
+            });
         }
         // Task 53: Reject payment until identity verified
         if (checkoutResult.requires_verification && !checkoutResult.identity_verified) {
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(403).json({
                 success: false,
                 error: 'Identity verification required. Enter the 6-digit code from your email to continue.',
@@ -182,10 +196,12 @@ router.post('/process', async (req, res) => {
         const claimOpType = 'payment_process';
         const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
         if (cached) {
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_success'); } catch (_) {}
             return res.json({ ...cached.result, idempotent: true });
         }
         const reserve = db.reserveIdempotencyKey && db.reserveIdempotencyKey(idemKey, claimOpType);
         if (reserve === 'in_progress') {
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(409).json({ success: false, error: 'Payment in progress', idempotent: true });
         }
         if (reserve === 'completed') {
@@ -206,6 +222,7 @@ router.post('/process', async (req, res) => {
                 difference: amountDifference
             });
             if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
+            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(400).json({
                 success: false,
                 error: 'Amount mismatch. Payment amount does not match checkout amount.'

@@ -543,22 +543,21 @@ class EmailService {
           .code-box { background: white; padding: 30px; margin: 20px 0; text-align: center; border-radius: 8px; border: 2px solid #1e40af; }
           .code { font-size: 36px; font-weight: 700; color: #1e40af; letter-spacing: 12px; font-family: 'Courier New', monospace; }
           .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
-          .brand { font-size: 28px; font-weight: 300; letter-spacing: -2px; }
-          .brand .doc { font-family: 'Times New Roman', Times, serif; font-style: italic; font-weight: 400; }
-          .brand .little { font-family: 'Verdana', Geneva, sans-serif; font-weight: 700; }
+          .brand { font-size: 32px; font-weight: 800; letter-spacing: -2px; font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+          .tagline { margin-top: 6px; font-size: 13px; opacity: 0.9; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
             <div class="brand" style="margin-bottom: 10px;">
-              <span class="doc">Doc</span><span class="little">Little</span>
+              Consʌlt
             </div>
             <h1>🔐 Patient Portal Verification</h1>
           </div>
           <div class="content">
             <p>Hello,</p>
-            <p>You requested to sign in to your DocLittle Patient Portal. Please use the verification code below:</p>
+            <p>You requested to sign in to your Consult Patient Portal. Please use the verification code below:</p>
             
             <div class="code-box">
               <div class="code">${code}</div>
@@ -567,7 +566,7 @@ class EmailService {
             <p><strong>This code will expire in 10 minutes.</strong></p>
             <p>If you didn't request this code, please ignore this email or contact support if you have concerns.</p>
             
-            <p>Best regards,<br>DocLittle Patient Portal Team</p>
+            <p>Best regards,<br>Consult Patient Portal Team</p>
           </div>
           <div class="footer">
             <p>This is an automated email. Please do not reply.</p>
@@ -579,7 +578,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: email,
-      subject: 'DocLittle Patient Portal - Verification Code',
+      subject: 'Consult Patient Portal - Verification Code',
       html: html
     });
   }
@@ -2345,6 +2344,56 @@ class EmailService {
       subject: `⚠️ ${alertLevel} Credit Alert: ${creditBalance} minutes remaining`,
       html: html
     });
+  }
+
+  // ============================================
+  // Patient portal notifications (mvp-47, mvp-48)
+  // ============================================
+  static async sendAppointmentRescheduled(appointment, details = {}) {
+    if (!appointment || !appointment.patient_email) return { success: false, error: 'Missing patient email' };
+    const prev = details.previous_datetime || details.previous || '';
+    const next = details.new_datetime || details.next || '';
+    const subject = 'Consult Patient Portal — Appointment Rescheduled';
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:16px;">
+        <div style="font-size:28px;font-weight:800;letter-spacing:-1px;">Consʌlt</div>
+        <div style="color:#6b7280;margin-top:4px;">Home Care Works</div>
+        <h2 style="margin-top:18px;">Your appointment was rescheduled</h2>
+        <p style="color:#374151;">Previous: <strong>${prev || '—'}</strong><br/>New: <strong>${next || '—'}</strong></p>
+        <p style="color:#374151;">You can review or manage your visit in your portal.</p>
+      </div>
+    `;
+    return this.sendEmail({ to: appointment.patient_email, subject, html });
+  }
+
+  static async sendAppointmentCanceled(appointment) {
+    if (!appointment || !appointment.patient_email) return { success: false, error: 'Missing patient email' };
+    const subject = 'Consult Patient Portal — Appointment Canceled';
+    const dt = (appointment.start_time ? new Date(appointment.start_time).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: appointment.timezone || 'America/New_York' }) : `${appointment.date || ''} ${appointment.time || ''}`);
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:16px;">
+        <div style="font-size:28px;font-weight:800;letter-spacing:-1px;">Consʌlt</div>
+        <div style="color:#6b7280;margin-top:4px;">Home Care Works</div>
+        <h2 style="margin-top:18px;">Your appointment was canceled</h2>
+        <p style="color:#374151;">Canceled visit time: <strong>${dt}</strong></p>
+        <p style="color:#374151;">If this was a mistake, please schedule a new visit or contact your clinic.</p>
+      </div>
+    `;
+    return this.sendEmail({ to: appointment.patient_email, subject, html });
+  }
+
+  static async sendPostVisitSummaryReady(appointment) {
+    if (!appointment || !appointment.patient_email) return { success: false, error: 'Missing patient email' };
+    const subject = 'Consult Patient Portal — Your Visit Summary Is Ready';
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:16px;">
+        <div style="font-size:28px;font-weight:800;letter-spacing:-1px;">Consʌlt</div>
+        <div style="color:#6b7280;margin-top:4px;">Home Care Works</div>
+        <h2 style="margin-top:18px;">Your visit summary is ready</h2>
+        <p style="color:#374151;">You can view your records and documents in the patient portal.</p>
+      </div>
+    `;
+    return this.sendEmail({ to: appointment.patient_email, subject, html });
   }
 }
 

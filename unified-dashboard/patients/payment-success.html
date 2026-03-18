@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1e40af" />
+  <title>Payment Successful - Consʌlt Patient Portal</title>
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <script src="../assets/js/config.js" defer></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 560px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+
+    .title {
+      font-size: 22px;
+      font-weight: 900;
+      margin: 0 0 6px 0;
+      color: #0f172a;
+    }
+
+    .sub {
+      margin: 0 0 16px 0;
+      font-size: 14px;
+      color: #4b5563;
+      line-height: 1.4;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      min-height: 44px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-primary {
+      background: #1e40af;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #374151;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      background: #ecfdf3;
+      color: #166534;
+      font-weight: 900;
+      border: 1px solid #bbf7d0;
+      margin: 10px 0 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div style="text-align:center; margin-bottom: 10px;">
+      <div style="font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; letter-spacing: -2px; font-size: 44px; color: #1e40af; line-height: 1;">Consʌlt</div>
+    </div>
+    <div class="pill">✅ Payment successful</div>
+    <h1 class="title">You’re all set</h1>
+    <p class="sub">
+      Your receipt is available in your Wallet. If you booked a visit, you can see it under Appointments.
+    </p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="wallet.html">View Wallet</a>
+      <a class="btn btn-secondary" href="appointments.html">View Appointments</a>
+      <a class="btn btn-secondary" href="patient-dashboard.html">Go to Dashboard</a>
+    </div>
+  </div>
+</body>
+
+</html>
+

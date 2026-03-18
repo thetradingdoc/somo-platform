@@ -16,6 +16,7 @@ try {
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const FHIRService = require('./fhir-service');
+const PatientIntakeService = require('./patient-intake-service');
 const EmailService = require('./email-service');
 const { getClinicBusinessHours, isBusinessDay } = require('../config/clinic-business-hours');
 const { getClinicCalendarConfig, useSingleCalendarPerEnv } = require('../config/clinic-calendar-config');
@@ -310,6 +311,23 @@ class BookingService {
         if (patientResult.patient) {
           fhirPatientId = patientResult.patient.id || patientResult.patient.resource_id;
           console.log(`✅ Patient record ${patientResult.foundBy}: ${fhirPatientId}`);
+
+          // Best-effort: populate canonical intake fields so web + voice share the same data format.
+          // Voice often lacks DOB/city/country; those remain missing and will trigger web onboarding later.
+          try {
+            if (PatientIntakeService && PatientIntakeService.upsertIntakeByPatientId) {
+              const full = (appointmentData.patient_name || '').toString().trim();
+              const parts = full.split(' ').filter(Boolean);
+              const first_name = parts[0] || '';
+              const last_name = parts.slice(1).join(' ') || '';
+              await PatientIntakeService.upsertIntakeByPatientId(fhirPatientId, {
+                first_name,
+                last_name,
+                phone: appointmentData.patient_phone || '',
+                email: appointmentData.patient_email || ''
+              });
+            }
+          } catch (_) {}
         }
       } catch (e) {
         console.warn('⚠️  FHIR patient upsert failed:', e.message);
@@ -707,6 +725,38 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
 
       const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
 
+      // Notify patient (mvp-47)
+      try {
+        const { v4: uuidv4 } = require('uuid');
+        const idem = `appt:${updatedAppointment.id}:patient_appt_rescheduled`;
+        if (db.enqueueNotificationJob) {
+          db.enqueueNotificationJob({
+            id: uuidv4(),
+            channel: 'email',
+            type: 'patient_appt_rescheduled',
+            to_address: updatedAppointment.patient_email,
+            patient_id: updatedAppointment.patient_id || null,
+            appointment_id: updatedAppointment.id,
+            idempotency_key: idem,
+            payload_json: JSON.stringify({
+              appointment: updatedAppointment,
+              details: {
+                previous_datetime: `${appointment.date} at ${appointment.time}`,
+                new_datetime: appointmentDateTime.displayTime
+              }
+            }),
+            max_attempts: 6
+          });
+        } else if (EmailService && typeof EmailService.sendAppointmentRescheduled === 'function') {
+          await EmailService.sendAppointmentRescheduled(updatedAppointment, {
+            previous_datetime: `${appointment.date} at ${appointment.time}`,
+            new_datetime: appointmentDateTime.displayTime
+          });
+        }
+      } catch (e) {
+        console.warn('⚠️  Reschedule email failed:', e.message);
+      }
+
       console.log('✅ Appointment rescheduled successfully');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
@@ -808,6 +858,29 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       }
 
       const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
+
+      // Notify patient (mvp-47)
+      try {
+        const { v4: uuidv4 } = require('uuid');
+        const idem = `appt:${updatedAppointment.id}:patient_appt_canceled`;
+        if (db.enqueueNotificationJob) {
+          db.enqueueNotificationJob({
+            id: uuidv4(),
+            channel: 'email',
+            type: 'patient_appt_canceled',
+            to_address: updatedAppointment.patient_email,
+            patient_id: updatedAppointment.patient_id || null,
+            appointment_id: updatedAppointment.id,
+            idempotency_key: idem,
+            payload_json: JSON.stringify({ appointment: updatedAppointment }),
+            max_attempts: 6
+          });
+        } else if (EmailService && typeof EmailService.sendAppointmentCanceled === 'function') {
+          await EmailService.sendAppointmentCanceled(updatedAppointment);
+        }
+      } catch (e) {
+        console.warn('⚠️  Cancel email failed:', e.message);
+      }
 
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 

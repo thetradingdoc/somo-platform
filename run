@@ -1,8 +1,8 @@
 #terminal 1: middleware (Products & Orders now integrated)
 cd middleware-platform
-export DB_PATH=./middleware-dev.db   # project-local db (writable, avoids readonly HOME)
+export DB_PATH=./middleware-dev.db
 export NVM_DIR="$HOME/.nvm"
-[ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"
+source "$(brew --prefix nvm)/nvm.sh"
 npm start
 
 

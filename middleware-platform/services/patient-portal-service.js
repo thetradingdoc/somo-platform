@@ -31,6 +31,9 @@ class PatientPortalService {
     const normalizedEmail = email.toLowerCase().trim();
     const ip = (reqMeta.ip || '').toString();
     const ua = (reqMeta.userAgent || '').toString();
+    const existingPatient = (() => {
+      try { return db.getFHIRPatientByEmail(normalizedEmail); } catch (_) { return null; }
+    })();
 
     // Generate 6-digit verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -61,7 +64,8 @@ class PatientPortalService {
         return {
           success: true,
           session_id: existing.id,
-          message: 'Verification code sent to your email'
+          message: 'Verification code sent to your email',
+          existing_patient: !!existingPatient
         };
       } else {
         // Create new session
@@ -77,7 +81,8 @@ class PatientPortalService {
         return {
           success: true,
           session_id: sessionId,
-          message: 'Verification code sent to your email'
+          message: 'Verification code sent to your email',
+          existing_patient: !!existingPatient
         };
       }
     } catch (error) {
@@ -160,6 +165,31 @@ class PatientPortalService {
 
       // Find patient by email (filter by merchant_id if provided)
       let patient = db.getFHIRPatientByEmail(normalizedEmail);
+      let created_patient = false;
+
+      // If no patient exists yet, treat this as "Create account" and create a minimal FHIR Patient.
+      if (!patient && db.createFHIRPatient) {
+        try {
+          const id = uuidv4();
+          const patientResource = {
+            resourceType: 'Patient',
+            id,
+            active: true,
+            telecom: [
+              { system: 'email', value: normalizedEmail, use: 'home' }
+            ],
+            meta: {
+              lastUpdated: new Date().toISOString()
+            },
+            merchant_id: merchantId || null
+          };
+          db.createFHIRPatient(patientResource);
+          patient = db.getFHIRPatientByEmail(normalizedEmail);
+          created_patient = !!patient;
+        } catch (e) {
+          console.warn('[PatientPortal] ⚠️  Failed to auto-create patient:', e.message);
+        }
+      }
 
       // If merchantId provided, ensure patient belongs to that tenant
       if (patient && merchantId && patient.merchant_id && patient.merchant_id !== merchantId) {
@@ -173,6 +203,17 @@ class PatientPortalService {
       }
 
       const patientId = patient ? patient.resource_id : null;
+
+      // Canonical identity mapping (mvp-49): persist resolved patient_id onto the session row.
+      try {
+        if (patientId) {
+          db.db.prepare(`
+            UPDATE patient_portal_sessions
+            SET patient_id = COALESCE(patient_id, ?)
+            WHERE id = ?
+          `).run(patientId, session.id);
+        }
+      } catch (_) {}
 
       // Create or update persistent patient_sessions mapping (email → patient_id)
       try {
@@ -208,7 +249,8 @@ class PatientPortalService {
         session_id: session.id,
         patient_id: patientId,
         email: normalizedEmail,
-        merchant_id: merchantId || (patient ? patient.merchant_id : null)
+        merchant_id: merchantId || (patient ? patient.merchant_id : null),
+        created_patient
       };
     } catch (error) {
       console.error('Error verifying code:', error);
@@ -302,6 +344,8 @@ class PatientPortalService {
             appointment_type: apt.appointment_type,
             date: apt.date,
             time: apt.time,
+            start_time: apt.start_time || null,
+            end_time: apt.end_time || null,
             status: apt.status,
             datetime_display: this._formatDateTime(apt.date, apt.time),
             can_reschedule: ['scheduled', 'confirmed'].includes(apt.status),
@@ -333,19 +377,85 @@ class PatientPortalService {
       if (!session) {
         return { success: false, valid: false, error: 'Invalid session' };
       }
-
-      // Check if session is still valid (24 hours)
-      const sessionAge = new Date() - new Date(session.verified_at);
-      if (sessionAge > 24 * 60 * 60 * 1000) {
+      if (session.revoked_at) {
         return { success: false, valid: false, error: 'Session expired' };
       }
+
+      // Emergency flag expiry (Phase 1 safety): clear after 24 hours
+      try {
+        if (session.emergency_flag && session.emergency_flag_at) {
+          const flagMs = new Date(session.emergency_flag_at).getTime();
+          const ttlMs = 24 * 60 * 60 * 1000;
+          if (Number.isFinite(flagMs) && Date.now() - flagMs > ttlMs) {
+            db.db.prepare(`
+              UPDATE patient_portal_sessions
+              SET emergency_flag = 0, emergency_flag_at = NULL
+              WHERE id = ?
+            `).run(sessionId);
+            session.emergency_flag = 0;
+            session.emergency_flag_at = null;
+          }
+        }
+      } catch (_) {}
+
+      const now = Date.now();
+      const verifiedAtMs = session.verified_at ? new Date(session.verified_at).getTime() : NaN;
+      const lastSeenMs = session.last_seen_at
+        ? new Date(session.last_seen_at).getTime()
+        : (Number.isNaN(verifiedAtMs) ? NaN : verifiedAtMs);
+
+      const absoluteHours = parseInt(process.env.PATIENT_SESSION_ABSOLUTE_TTL_HOURS || '24', 10);
+      const inactivityMinutes = parseInt(process.env.PATIENT_SESSION_INACTIVITY_TTL_MINUTES || '30', 10);
+
+      if (!Number.isNaN(verifiedAtMs)) {
+        const absoluteTtlMs = Math.max(1, absoluteHours) * 60 * 60 * 1000;
+        if (now - verifiedAtMs > absoluteTtlMs) {
+          return { success: false, valid: false, error: 'Session expired' };
+        }
+      }
+
+      if (!Number.isNaN(lastSeenMs)) {
+        const inactivityTtlMs = Math.max(1, inactivityMinutes) * 60 * 1000;
+        if (now - lastSeenMs > inactivityTtlMs) {
+          return { success: false, valid: false, error: 'Session expired' };
+        }
+      }
+
+      // Update activity timestamp (inactivity TTL)
+      try {
+        db.db.prepare(`
+          UPDATE patient_portal_sessions
+          SET last_seen_at = datetime('now')
+          WHERE id = ?
+        `).run(sessionId);
+      } catch (_) {}
+
+      // Cross-channel emergency flag (voice/web) - read-through
+      let crossChannelEmergency = null;
+      try {
+        const mappedPatientId =
+          session.patient_id ||
+          (db.getPatientSession && (db.getPatientSession(sessionId) || {}).patient_id) ||
+          null;
+        crossChannelEmergency = db.getActivePatientEmergencyFlag
+          ? db.getActivePatientEmergencyFlag({ patient_id: mappedPatientId, email: session.email, phone: session.phone })
+          : null;
+      } catch (_) {}
 
       return {
         success: true,
         valid: true,
         email: session.email,
         phone: session.phone,
-        patient_id: session.patient_id
+        patient_id: session.patient_id || (db.getPatientSession && (db.getPatientSession(sessionId) || {}).patient_id) || null,
+        emergency_flag: !!session.emergency_flag,
+        emergency_flag_at: session.emergency_flag_at || null,
+        cross_channel_emergency: crossChannelEmergency ? {
+          id: crossChannelEmergency.id,
+          source: crossChannelEmergency.source,
+          flagged_at: crossChannelEmergency.flagged_at,
+          expires_at: crossChannelEmergency.expires_at
+        } : null
       };
     } catch (error) {
       return { success: false, valid: false, error: error.message };
@@ -386,6 +496,8 @@ class PatientPortalService {
       const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
       const email = (telecom.find(t => t.system === 'email') || {}).value || '';
       const addr = (patientData.address && patientData.address[0]) || {};
+      const first_name = (nameObj.given && nameObj.given[0]) ? String(nameObj.given[0]) : '';
+      const last_name = nameObj.family ? String(nameObj.family) : '';
 
       // Insurance + eligibility summary for onboarding
       const insurance = db.getPrimaryPatientInsurance
@@ -404,12 +516,15 @@ class PatientPortalService {
         success: true,
         patient: {
           name: `${(nameObj.given || [''])[0]} ${nameObj.family || ''}`.trim(),
+          first_name,
+          last_name,
           phone,
           email,
           dob: patientData.birthDate || null,
           address: {
             line: (addr.line && addr.line[0]) || '',
             city: addr.city || '',
+            country: addr.country || '',
             state: addr.state || '',
             postal_code: addr.postalCode || ''
           }

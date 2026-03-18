@@ -107,13 +107,13 @@
     shop: ECOMMERCE_NAV_ITEMS
   };
 
-  // Default config (fallback) - clinic for LittleLab
+  // Default config (fallback)
   const defaultConfig = {
     hostname,
     subdomain,
     tenant_type: 'clinic',
     navItems: NAV_BY_TENANT.clinic,
-    sidebarSubtitle: 'LittleLab \u2022 Virtual Care'
+    sidebarSubtitle: 'Home Care Works'
   };
 
   window.MEDICAL_NAV_ITEMS = MEDICAL_NAV_ITEMS;
@@ -137,7 +137,7 @@
             subdomain: data.subdomain,
             tenant_type: tenantType,
             navItems: data.navItems || (window.NAV_BY_TENANT && window.NAV_BY_TENANT[tenantType]) || MEDICAL_NAV_ITEMS,
-            sidebarSubtitle: data.sidebarSubtitle || 'LittleLab \u2022 Virtual Care',
+            sidebarSubtitle: data.sidebarSubtitle || 'Home Care Works',
             merchant_id: data.merchant_id,
             clinic_id: data.clinic_id
           };

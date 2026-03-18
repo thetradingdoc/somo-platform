@@ -268,6 +268,9 @@ Always be polite, patient, and professional. If you don't know something, ask fo
             patient_name: { type: 'string', description: 'Patient full name' },
             patient_phone: { type: 'string', description: 'Patient phone number (required)' },
             patient_email: { type: 'string', description: 'Patient email address' },
+            dob: { type: 'string', description: 'Patient date of birth (YYYY-MM-DD). Ask if missing after booking so we can finish onboarding.' },
+            country: { type: 'string', description: 'Patient country (e.g., United States). Ask if missing after booking so we can finish onboarding.' },
+            city: { type: 'string', description: 'Patient city (e.g., Austin). Ask if missing after booking so we can finish onboarding.' },
             appointment_type: { type: 'string', description: 'Type of appointment' },
             date: { type: 'string', description: 'Appointment date (YYYY-MM-DD)' },
             time: { type: 'string', description: 'Appointment time (HH:MM)' },
@@ -275,6 +278,37 @@ Always be polite, patient, and professional. If you don't know something, ask fo
             notes: { type: 'string', description: 'Additional notes' }
           },
           required: ['patient_name', 'patient_phone', 'appointment_type', 'date', 'time']
+        }
+      },
+      {
+        name: 'patient_intake',
+        description: 'Capture patient onboarding details (DOB + country/city). Call during or right after booking to keep web + voice onboarding consistent.',
+        parameters: {
+          type: 'object',
+          properties: {
+            patient_id: { type: 'string', description: 'FHIR patient ID if known (preferred)' },
+            patient_email: { type: 'string', description: 'Patient email (used to resolve patient if patient_id missing)' },
+            patient_phone: { type: 'string', description: 'Patient phone (used to resolve patient if patient_id missing)' },
+            first_name: { type: 'string', description: 'First name' },
+            last_name: { type: 'string', description: 'Last name' },
+            dob: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' },
+            country: { type: 'string', description: 'Country' },
+            city: { type: 'string', description: 'City' }
+          },
+          required: ['dob', 'country', 'city']
+        }
+      },
+      {
+        name: 'get_patient_intake_status',
+        description: 'Check which onboarding fields are missing (DOB/country/city) so you only ask what is needed.',
+        parameters: {
+          type: 'object',
+          properties: {
+            patient_id: { type: 'string', description: 'FHIR patient ID if known' },
+            patient_email: { type: 'string', description: 'Patient email (resolve patient if patient_id missing)' },
+            patient_phone: { type: 'string', description: 'Patient phone (resolve patient if patient_id missing)' }
+          },
+          required: []
         }
       },
       {

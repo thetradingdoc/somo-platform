@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Visit - LittleLab Patient</title>
+  <title>Video Visit - Consult Patient</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <script src="../assets/js/config.js"></script>
   <style>
@@ -216,36 +216,33 @@
       el.className = 'status ' + type;
     }
 
-    async function fetchToken(roomName, identity, name) {
-      const body = { room: roomName, identity, name };
-      if (roomName.startsWith('appt-')) {
-        const appointmentId = roomName.replace(/^appt-/, '');
-        body.appointment_id = appointmentId;
+    async function fetchToken(roomName) {
+      // Patient join must be appointment-scoped
+      if (!roomName || !roomName.startsWith('appt-')) {
+        throw new Error('Invalid room. Please open the link from your appointment.');
       }
-      
-      const fullUrl = window.location.origin + '/api/livekit/token';
-      console.log('🔗 Fetching token from:', fullUrl);
-      console.log('📦 Request body:', body);
-      console.log('📍 Current origin:', window.location.origin);
-      
-      // Try fetch first, fallback to XMLHttpRequest for Safari iOS compatibility
+
+      const sessionId = localStorage.getItem('patient_session_id') || '';
+      if (!sessionId) {
+        throw new Error('Session expired. Please sign in again.');
+      }
+
+      const fullUrl = `${window.location.origin}/api/livekit/patient/video/token?room=${encodeURIComponent(roomName)}`;
+
+      // Use fetch; XHR fallback for older Safari
       let res;
       try {
         res = await fetch(fullUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          method: 'GET',
+          headers: { 'x-session-id': sessionId, 'ngrok-skip-browser-warning': 'true' }
         });
-        console.log('✅ Fetch completed. Status:', res.status, res.statusText);
       } catch (fetchErr) {
-        console.warn('⚠️ Fetch failed, trying XMLHttpRequest:', fetchErr.message);
-        // Fallback to XMLHttpRequest for Safari iOS
         res = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open('POST', fullUrl, true);
-          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.open('GET', fullUrl, true);
+          xhr.setRequestHeader('x-session-id', sessionId);
+          xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
           xhr.onload = () => {
-            // Create a Response-like object
             const response = {
               ok: xhr.status >= 200 && xhr.status < 300,
               status: xhr.status,
@@ -256,23 +253,16 @@
             resolve(response);
           };
           xhr.onerror = () => reject(new Error(`XMLHttpRequest failed: ${xhr.statusText || 'Network error'}`));
-          xhr.send(JSON.stringify(body));
+          xhr.send();
         });
-        console.log('✅ XMLHttpRequest completed. Status:', res.status);
       }
-      
+
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Server error ${res.status}: ${text || res.statusText}`);
       }
-      
-      let data;
-      try {
-        data = await res.json();
-      } catch (parseErr) {
-        throw new Error(`Invalid response from server: ${parseErr.message}`);
-      }
-      
+
+      const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to get token');
       return data;
     }
@@ -325,7 +315,7 @@
           throw new Error(`Cannot reach backend: ${healthErr.message}`);
         }
 
-        const { token, url } = await fetchToken(roomName, 'patient-' + Date.now(), displayName);
+        const { token, url } = await fetchToken(roomName);
 
         room = new Room({
           adaptiveStream: true,
@@ -521,23 +511,32 @@
         room.disconnect();
         room = null;
       }
-      showStatus('You left the visit.', 'error');
+      showStatus('Visit ended. Taking you back to your records…', 'connected');
+      setTimeout(() => {
+        window.location.href = 'my-records.html';
+      }, 900);
     }
 
     document.getElementById('toggleVideoBtn').addEventListener('click', toggleVideo);
     document.getElementById('toggleMicBtn').addEventListener('click', toggleMic);
     document.getElementById('leaveBtn').addEventListener('click', leaveCall);
-    // Test connection - skip health check, go straight to token endpoint
+    // Test connection - verify patient-scoped token endpoint (mvp-6)
     async function testConnection() {
       try {
         showStatus('Testing video endpoint...', '');
         
-        // Test /api/livekit/token (POST) directly
-        const tokenUrl = window.location.origin + '/api/livekit/token';
+        const sessionId = localStorage.getItem('patient_session_id') || '';
+        if (!sessionId) {
+          showStatus('Session expired. Please sign in again.', 'error');
+          return;
+        }
+
+        const tokenUrl = `${window.location.origin}/api/livekit/patient/video/token?room=${encodeURIComponent(roomFromUrl)}`;
         const testRes = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open('POST', tokenUrl, true);
-          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.open('GET', tokenUrl, true);
+          xhr.setRequestHeader('x-session-id', sessionId);
+          xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
           xhr.onload = () => {
             resolve({
               ok: xhr.status >= 200 && xhr.status < 300,
@@ -556,7 +555,7 @@
           xhr.onerror = () => reject(new Error(`Network error: Cannot connect to ${tokenUrl}`));
           xhr.ontimeout = () => reject(new Error('Request timeout after 10 seconds'));
           xhr.timeout = 10000;
-          xhr.send(JSON.stringify({ room: 'test-room', identity: 'test', name: 'Test' }));
+          xhr.send();
         });
         
         console.log('✅ Token endpoint test:', testRes.status);

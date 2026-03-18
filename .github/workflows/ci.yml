@@ -69,6 +69,63 @@ jobs:
           fi
         continue-on-error: true
 
+      # mvp-79: CI gates (perf budgets + retention dry-run + Cypress E2E)
+      - name: Performance budgets (repo root)
+        run: |
+          if [ -f "scripts/check-performance-budgets.cjs" ]; then
+            node scripts/check-performance-budgets.cjs
+          else
+            echo "No perf budget script found, skipping"
+          fi
+
+      - name: Auth UI guardrails (repo root)
+        run: |
+          if [ -f "scripts/check-auth-ui-guardrails.cjs" ]; then
+            node scripts/check-auth-ui-guardrails.cjs
+          else
+            echo "No auth UI guardrails script found, skipping"
+          fi
+
+      - name: Retention cleanup dry-run (repo root)
+        env:
+          RETENTION_DRY_RUN: "1"
+        run: |
+          if [ -f "scripts/retention-cleanup.cjs" ]; then
+            node scripts/retention-cleanup.cjs
+          else
+            echo "No retention script found, skipping"
+          fi
+
+      - name: Start API server (for Cypress)
+        working-directory: ./middleware-platform
+        env:
+          NODE_ENV: test
+          PORT: 4000
+          DB_PATH: ./middleware-test.db
+          NOTIFICATION_QUEUE_ENABLED: "0"
+        run: |
+          node server.js &
+          echo $! > /tmp/api_pid
+          sleep 3
+
+      - name: Run Cypress E2E (middleware-platform)
+        working-directory: ./middleware-platform
+        env:
+          CYPRESS_BASE_URL: http://localhost:4000
+        run: |
+          if [ -d "cypress" ]; then
+            npx cypress run
+          else
+            echo "No cypress folder found, skipping"
+          fi
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f /tmp/api_pid ]; then
+            kill $(cat /tmp/api_pid) || true
+          fi
+
       - name: Run accuracy evaluation (Section 4)
         working-directory: ./middleware-platform
         env:

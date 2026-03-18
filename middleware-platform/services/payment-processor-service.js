@@ -115,6 +115,47 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
     }
   }
 
+  // Persist receipt for patient portal (mvp-24)
+  try {
+    if (db.createPaymentReceipt) {
+      db.createPaymentReceipt({
+        checkout_id: checkout.id,
+        appointment_id: checkout.appointment_id || null,
+        patient_id: patientId,
+        patient_email: checkout.customer_email || null,
+        amount: amt,
+        currency,
+        payment_method: paymentMethod || checkout.payment_method || null,
+        external_payment_id: extId,
+        status: 'issued',
+        metadata: {
+          journey_id: journey_id || checkout.journey_id || null,
+          payment_intent_id: paymentIntentId || null,
+          transfer_id: transferId || null
+        }
+      });
+    }
+  } catch (e) {
+    console.warn('⚠️  Failed to persist payment receipt:', e.message);
+  }
+
+  // Immutable audit trail (mvp-34)
+  try {
+    db.insertAuditEvent && db.insertAuditEvent({
+      actor_type: 'patient',
+      actor_id: patientId || null,
+      patient_id: patientId || null,
+      resource_type: 'payment',
+      resource_id: checkout.id,
+      action: 'payment_succeeded',
+      metadata: {
+        appointment_id: checkout.appointment_id || null,
+        amount: amt,
+        payment_method: paymentMethod || checkout.payment_method || null
+      }
+    });
+  } catch (_) {}
+
   // If this checkout is tied to an appointment, update appointment payment + status
   if (checkout.appointment_id) {
     try {
@@ -128,13 +169,14 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
         `).run(checkout.appointment_id);
       }
       try {
-        // Only bump to confirmed if not already completed/cancelled
-        db.db.prepare(`
-          UPDATE appointments
-          SET status = 'confirmed'
-          WHERE id = ?
-            AND status IN ('scheduled', 'pending', 'pending_payment')
-        `).run(checkout.appointment_id);
+        // Only bump to confirmed if lifecycle allows it (mvp-22)
+        if (db.getAppointment && db.updateAppointmentStatus) {
+          const appt = await db.getAppointment(checkout.appointment_id);
+          const cur = (appt && appt.status) ? appt.status : null;
+          if (cur && ['scheduled', 'pending', 'pending_payment'].includes(cur)) {
+            db.updateAppointmentStatus(checkout.appointment_id, 'confirmed', null, appt.clinic_id || null);
+          }
+        }
       } catch (_) {}
       console.log('[Payments] ✅ Appointment payment recorded', {
         appointment_id: checkout.appointment_id,
@@ -219,6 +261,18 @@ async function refundCheckout(checkout, options = {}) {
     const amtRefunded = (refund.amount || 0) / 100;
 
     await recordRefundEvent({ checkout, amount: amtRefunded, refundId: refund.id });
+    try {
+      const patientId = checkout.patient_id || null;
+      db.insertAuditEvent && db.insertAuditEvent({
+        actor_type: 'system',
+        actor_id: null,
+        patient_id: patientId,
+        resource_type: 'payment',
+        resource_id: checkout.id,
+        action: 'refund_succeeded',
+        metadata: { refund_id: refund.id, amount: amtRefunded, appointment_id: checkout.appointment_id || null }
+      });
+    } catch (_) {}
 
     if (db.updateVoiceCheckout) {
       try {
@@ -226,6 +280,23 @@ async function refundCheckout(checkout, options = {}) {
       } catch (_) {
         // Schema may not have 'refunded'; leave status as 'completed'
       }
+    }
+
+    // Reconciliation: reflect refund on appointment + receipt (mvp-25)
+    if (checkout.appointment_id) {
+      try {
+        if (db.updateAppointmentPaymentStatus) {
+          db.updateAppointmentPaymentStatus(checkout.appointment_id, 'refunded');
+        }
+      } catch (_) {}
+      try {
+        if (db.updatePaymentReceiptStatusByCheckoutId) {
+          db.updatePaymentReceiptStatusByCheckoutId(checkout.id, 'refunded', {
+            refund_id: refund.id,
+            amount_refunded: amtRefunded
+          });
+        }
+      } catch (_) {}
     }
 
     return {

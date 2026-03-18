@@ -46,7 +46,7 @@ router.options('/token', (req, res) => {
  */
 router.post('/token', async (req, res) => {
   console.log('🔍 POST /api/livekit/token - Request from:', req.headers.origin || 'no origin', 'IP:', req.ip);
-  console.log('🔍 Request body:', JSON.stringify(req.body));
+  // mvp-37: avoid logging request bodies (may contain identifiers)
   if (!AccessToken) {
     return res.status(503).json({
       success: false,
@@ -138,11 +138,11 @@ router.get('/patient/video/token', async (req, res) => {
       return res.status(503).json({ success: false, error: 'LiveKit credentials missing' });
     }
 
-    const sessionId = req.headers['x-session-id'] || req.query.session_id;
+    const sessionId = req.headers['x-session-id'];
     const room = (req.query.room || '').toString().trim();
     const journeyId = (req.headers['x-journey-id'] || req.query.journey_id || '').toString().trim() || null;
     if (!sessionId || !room) {
-      return res.status(400).json({ success: false, error: 'session_id and room are required' });
+      return res.status(400).json({ success: false, error: 'x-session-id and room are required' });
     }
 
     const sessionValidation = PatientPortalService.validateSession(sessionId);
@@ -163,6 +163,29 @@ router.get('/patient/video/token', async (req, res) => {
     const appointment = await db.getAppointment(appointmentId);
     if (!appointment) {
       return res.status(404).json({ success: false, error: 'Appointment not found' });
+    }
+
+    // Enforce join window (mvp-26). Store times in UTC; compare using Date().
+    const earlyMin = parseInt(process.env.PATIENT_JOIN_EARLY_MINUTES || '10', 10);
+    const lateMin = parseInt(process.env.PATIENT_JOIN_LATE_MINUTES || '15', 10);
+    const startMs = appointment.start_time ? new Date(appointment.start_time).getTime() : NaN;
+    const endMs = appointment.end_time ? new Date(appointment.end_time).getTime() : NaN;
+    const nowMs = Date.now();
+    if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
+      const earliest = startMs - Math.max(0, earlyMin) * 60 * 1000;
+      const latest = endMs + Math.max(0, lateMin) * 60 * 1000;
+      if (nowMs < earliest) {
+        return res.status(403).json({
+          success: false,
+          error: `You can join up to ${earlyMin} minutes before your appointment start time.`
+        });
+      }
+      if (nowMs > latest) {
+        return res.status(403).json({
+          success: false,
+          error: 'This visit is no longer available to join.'
+        });
+      }
     }
 
     // Ensure this appointment belongs to this patient (by patient_id/email/phone)

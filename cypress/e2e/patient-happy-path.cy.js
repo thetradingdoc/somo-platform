@@ -1,4 +1,4 @@
-describe('LittleLab landing & journeys', () => {
+describe('Consult patient portal journeys', () => {
   const baseUrl = Cypress.config('baseUrl') || 'http://localhost:4000';
 
   function extractCodeFromLogs() {
@@ -13,36 +13,35 @@ describe('LittleLab landing & journeys', () => {
       });
   }
 
-  it('Journey A – New patient via landing', () => {
-    cy.visit('/');
+  ['iphone-6', [320, 640], [375, 700], [430, 780]].forEach((vp) => {
+    it(`Journey A – Patient login → appointments (${Array.isArray(vp) ? vp.join('x') : vp})`, () => {
+      if (Array.isArray(vp)) cy.viewport(vp[0], vp[1]);
+      else cy.viewport(vp);
 
-    cy.contains('LittleLab').should('exist');
+      cy.visit('/unified-dashboard/patients/patient-login.html');
+      cy.contains('Consʌlt').should('exist');
 
-    cy.get('input[type="search"], input[type="text"]').first().type('cough and fever');
+      const email = 'patient@consult.test';
+      cy.get('#emailInput').clear().type(email);
+      cy.get('#emailSubmitBtn').click();
 
-    cy.contains("I'm a Patient").click();
+      extractCodeFromLogs().then((code) => {
+        expect(code).to.match(/^[0-9]{6}$/);
+        code.split('').forEach((digit, idx) => {
+          cy.get(`#code${idx + 1}`).type(digit);
+        });
+        cy.get('#codeSubmitBtn').click();
 
-    cy.url().should('include', '/unified-dashboard/patients/patient-login.html');
-
-    const email = 'patient@doclittle.com';
-    cy.get('#emailInput').clear().type(email);
-    cy.get('#emailSubmitBtn').click();
-
-    extractCodeFromLogs().then((code) => {
-      code.split('').forEach((digit, idx) => {
-        cy.get(`#code${idx + 1}`).type(digit);
+        cy.url({ timeout: 20000 }).should('include', 'appointments.html');
+        cy.contains(/My Appointments/i).should('exist');
       });
-      cy.get('#codeSubmitBtn').click();
-
-      cy.url({ timeout: 20000 }).should('include', 'patient-dashboard.html');
-      cy.contains('Appointments').should('exist');
     });
   });
 
-  it('Journey B – Returning patient skips onboarding when verified', () => {
+  it('Journey B – Returning patient session lands on appointments', () => {
     cy.visit('/unified-dashboard/patients/patient-login.html');
 
-    const email = 'patient@doclittle.com';
+    const email = 'patient@consult.test';
     cy.get('#emailInput').clear().type(email);
     cy.get('#emailSubmitBtn').click();
 
@@ -52,7 +51,7 @@ describe('LittleLab landing & journeys', () => {
       });
       cy.get('#codeSubmitBtn').click();
 
-      cy.url({ timeout: 20000 }).should('include', 'patient-dashboard.html');
+      cy.url({ timeout: 20000 }).should('include', 'appointments.html');
     });
   });
 
@@ -61,15 +60,12 @@ describe('LittleLab landing & journeys', () => {
 
     cy.contains(/Appointments/i).should('exist');
 
-    cy.contains(/Pay now|Pay Now|Make Payment/).should('exist');
+    // CTA is conditional based on appointment/payment state; ensure receipts card exists
+    cy.contains(/Receipts/i).should('exist');
   });
 
-  it('Journey D – Provider login from landing', () => {
-    cy.visit('/');
-
-    cy.contains("I'm a Provider").click();
-
-    cy.url().should('include', '/unified-dashboard/login.html');
+  it('Journey D – Provider login page loads', () => {
+    cy.visit('/unified-dashboard/login.html');
 
     cy.get('#loginEmail').type('provider@doclittle.com');
     cy.get('#loginPassword').type('demo123');

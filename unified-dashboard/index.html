@@ -400,8 +400,8 @@
     <!-- Header -->
     <header class="header">
         <h1>#1 Medical Billing Assistant</h1>
-        <button class="top-call-button" onclick="redirectToLoginOptions()">
-            Login
+        <button class="top-call-button" onclick="redirectToPortal()">
+            Sign in
         </button>
     </header>
 
@@ -426,8 +426,9 @@
             ? 'http://localhost:4000'
             : '';
 
-        function redirectToLoginOptions() {
-            window.location.href = `${apiOrigin}/signup`;
+        function redirectToPortal() {
+            // Single front door for auth: patient vs clinic
+            window.location.href = `${apiOrigin}/unified-dashboard/portal.html`;
         }
 
         function redirectToAbout() {

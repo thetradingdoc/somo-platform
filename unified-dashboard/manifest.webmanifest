@@ -1,6 +1,6 @@
 {
-  "name": "LittleLab Patient Portal",
-  "short_name": "LittleLab",
+  "name": "Consult Patient Portal",
+  "short_name": "Consʌlt",
   "start_url": "/unified-dashboard/patients/patient-dashboard.html",
   "display": "standalone",
   "background_color": "#f7fafc",
