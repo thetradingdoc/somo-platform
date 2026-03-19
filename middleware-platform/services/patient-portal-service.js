@@ -405,7 +405,7 @@ class PatientPortalService {
         : (Number.isNaN(verifiedAtMs) ? NaN : verifiedAtMs);
 
       const absoluteHours = parseInt(process.env.PATIENT_SESSION_ABSOLUTE_TTL_HOURS || '24', 10);
-      const inactivityMinutes = parseInt(process.env.PATIENT_SESSION_INACTIVITY_TTL_MINUTES || '30', 10);
+      const inactivityMinutes = parseInt(process.env.PATIENT_SESSION_INACTIVITY_TTL_MINUTES || '60', 10);
 
       if (!Number.isNaN(verifiedAtMs)) {
         const absoluteTtlMs = Math.max(1, absoluteHours) * 60 * 60 * 1000;

@@ -531,6 +531,14 @@
 
         // Check if already logged in
         window.addEventListener('DOMContentLoaded', () => {
+            // Show session expired message when redirected after invalid session
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('expired') === '1') {
+                const emailMsg = document.getElementById('emailMessage');
+                if (emailMsg) {
+                    emailMsg.innerHTML = '<div class="alert alert-info" style="display:block;">Your session expired. Please sign in again to continue.</div>';
+                }
+            }
             // default intent
             setAuthIntent('signin');
 

@@ -1214,6 +1214,21 @@ try {
   }
 }
 
+// B-1: Unique constraint on slot booking to prevent race-condition double-booking
+try {
+  const apptExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='appointments'`).get();
+  if (apptExists) {
+    const idxExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='index' AND name='idx_appointments_slot_unique'`).get();
+    if (!idxExists) {
+      console.log('📦 B-1: Creating unique index on appointments (clinic_id, start_time) for active slots...');
+      db.exec(`CREATE UNIQUE INDEX idx_appointments_slot_unique ON appointments(clinic_id, start_time) WHERE deleted_at IS NULL AND (status IS NULL OR status NOT IN ('cancelled','no_show'))`);
+      console.log('✅ B-1: Slot booking constraint added');
+    }
+  }
+} catch (migrationError) {
+  console.warn('⚠️  B-1 slot constraint migration failed:', migrationError.message);
+}
+
 // Migration: Add verification_code columns to payment_tokens if they don't exist
 try {
   // Check if payment_tokens table exists
@@ -1492,6 +1507,28 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_visit_pricing_clinic ON visit_pricing(clinic_id);
   CREATE INDEX IF NOT EXISTS idx_visit_pricing_appt_type ON visit_pricing(appointment_type);
+
+  -- ============================================
+  -- PROVIDER STATUS (online/offline + availability)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS provider_status (
+    email TEXT PRIMARY KEY,
+    is_online BOOLEAN DEFAULT 0,
+    availability_rules TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_provider_status_online ON provider_status(is_online) WHERE is_online = 1;
+
+  CREATE TABLE IF NOT EXISTS provider_availability_blocks (
+    id TEXT PRIMARY KEY,
+    provider_email TEXT NOT NULL,
+    block_type TEXT NOT NULL,
+    start_datetime TEXT NOT NULL,
+    end_datetime TEXT NOT NULL,
+    title TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_availability_blocks_provider ON provider_availability_blocks(provider_email);
 
   -- ============================================
   -- STRIPE ISSUING: CARDHOLDERS AND CARDS
@@ -2341,6 +2378,47 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_voice_call_states_call_id ON voice_call_states(call_id);
+
+  -- Step 1: Patient Orchestrate sessions (stateful, multi-modal Voice+Chat)
+  CREATE TABLE IF NOT EXISTS patient_orchestrate_sessions (
+    id TEXT PRIMARY KEY,
+    session_id TEXT UNIQUE NOT NULL,
+    channel TEXT NOT NULL, -- voice|chat
+    patient_id TEXT,
+    caller_phone TEXT,
+    portal_session_id TEXT,
+    clinic_id TEXT,
+    preferred_language TEXT DEFAULT 'en',
+    turn_count INTEGER DEFAULT 0,
+    conversation_history TEXT, -- JSON: [{ role, content, content_english, timestamp }]
+    flow_state TEXT, -- JSON: { step, reason, date, time, appointment_id, ... }
+    case_id TEXT,
+    status TEXT DEFAULT 'active', -- active|abandoned|completed
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_orchestrate_sessions_session_id ON patient_orchestrate_sessions(session_id);
+  CREATE INDEX IF NOT EXISTS idx_orchestrate_sessions_caller_phone ON patient_orchestrate_sessions(caller_phone);
+  CREATE INDEX IF NOT EXISTS idx_orchestrate_sessions_patient_id ON patient_orchestrate_sessions(patient_id);
+
+  -- Phase 3: Case records (triage session persistence)
+  CREATE TABLE IF NOT EXISTS case_records (
+    id TEXT PRIMARY KEY,
+    case_number TEXT UNIQUE,
+    patient_id TEXT,
+    session_id TEXT,
+    channel TEXT,
+    visit_mode TEXT,
+    status TEXT DEFAULT 'draft',
+    opqrst TEXT,
+    suggested_icd10 TEXT,
+    created_at TEXT,
+    abandoned_at TEXT,
+    completed_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_case_records_session_id ON case_records(session_id);
+  CREATE INDEX IF NOT EXISTS idx_case_records_status ON case_records(status);
 
   CREATE TABLE IF NOT EXISTS voice_conversation_memory (
     id TEXT PRIMARY KEY,
@@ -3545,7 +3623,8 @@ function migrateCustomersTable() {
       pricing_tier: "TEXT DEFAULT 'starter'",
       custom_prompt: 'TEXT',
       prompt_updated_at: 'DATETIME',
-      fhir_patient_id: 'TEXT'
+      fhir_patient_id: 'TEXT',
+      provider_profile: 'TEXT'
     };
 
     Object.keys(newColumns).forEach(colName => {
@@ -4594,9 +4673,32 @@ function migrateVideoConsultSessions() {
       addIfMissing('video_session_id', `ALTER TABLE appointments ADD COLUMN video_session_id TEXT;`);
       addIfMissing('total_cost', `ALTER TABLE appointments ADD COLUMN total_cost REAL DEFAULT 0;`);
       addIfMissing('llm_tokens_used', `ALTER TABLE appointments ADD COLUMN llm_tokens_used INTEGER DEFAULT 0;`);
+      addIfMissing('visit_mode', `ALTER TABLE appointments ADD COLUMN visit_mode TEXT DEFAULT 'sync_video';`);
+      addIfMissing('slot_state', `ALTER TABLE appointments ADD COLUMN slot_state TEXT DEFAULT 'soft_reserved';`);
+      addIfMissing('stripe_payment_intent_id', `ALTER TABLE appointments ADD COLUMN stripe_payment_intent_id TEXT;`);
+      addIfMissing('tech_check_sent', `ALTER TABLE appointments ADD COLUMN tech_check_sent BOOLEAN DEFAULT 0;`);
       console.log('✅ Migration complete: Appointment outcome fields added');
     } catch (e) {
       if (!e.message?.includes('duplicate column')) console.warn('⚠️  Appointment outcome fields migration:', e.message);
+    }
+
+    // Phase 8: visit_feedbacks table
+    const visitFeedbacksExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='visit_feedbacks'`).get();
+    if (!visitFeedbacksExists) {
+      console.log('🔄 Migrating: Creating visit_feedbacks table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS visit_feedbacks (
+          id TEXT PRIMARY KEY,
+          appointment_id TEXT,
+          patient_id TEXT,
+          rating INTEGER,
+          helpful INTEGER,
+          comment TEXT,
+          created_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_visit_feedbacks_appointment ON visit_feedbacks(appointment_id);
+      `);
+      console.log('✅ Migration complete: visit_feedbacks table created');
     }
 
     // vc-db-9: Risk events (symptom triage audit)
@@ -4815,6 +4917,9 @@ module.exports = {
   // Expose the database instance for direct access when needed
   db: db,
 
+  // Run versioned migrations (also runs automatically on require). Use for pre-deploy or CI.
+  runMigrations,
+
   // ============================================
   // ADMIN SESSIONS (persistent admin auth)
   // ============================================
@@ -4907,6 +5012,135 @@ module.exports = {
       `).run(...values);
     } catch (e) {
       console.error('❌ Failed to update patient_session:', e.message);
+    }
+  },
+
+  // ============================================
+  // PATIENT ORCHESTRATE SESSIONS (Step 1 - Multi-Modal Front Door)
+  // ============================================
+  getOrchestrateSessionBySessionId: (session_id) => {
+    if (!session_id) return null;
+    try {
+      const row = db.prepare('SELECT * FROM patient_orchestrate_sessions WHERE session_id = ?').get(session_id);
+      return row ? { ...row, conversation_history: row.conversation_history ? JSON.parse(row.conversation_history) : [], flow_state: row.flow_state ? JSON.parse(row.flow_state) : {} } : null;
+    } catch (_) { return null; }
+  },
+  getOrchestrateSessionByCallerPhone: (caller_phone) => {
+    if (!caller_phone) return null;
+    try {
+      const norm = String(caller_phone).replace(/\D/g, '');
+      if (norm.length < 6) return null;
+      const rows = db.prepare('SELECT * FROM patient_orchestrate_sessions WHERE REPLACE(REPLACE(REPLACE(caller_phone, \'-\', \'\'), \' \', \'\'), \'+\', \'\') LIKE ? AND status = ? ORDER BY last_activity_at DESC LIMIT 1').all('%' + norm.slice(-10) + '%', 'active');
+      const row = rows && rows[0];
+      return row ? { ...row, conversation_history: row.conversation_history ? JSON.parse(row.conversation_history) : [], flow_state: row.flow_state ? JSON.parse(row.flow_state) : {} } : null;
+    } catch (_) { return null; }
+  },
+  upsertOrchestrateSession: (data) => {
+    try {
+      const id = data.id || require('uuid').v4();
+      const session_id = data.session_id || id;
+      const now = new Date().toISOString();
+      const history = JSON.stringify(data.conversation_history || []);
+      const flow_state = JSON.stringify(data.flow_state || {});
+      const case_id = data.case_id || (data.flow_state && data.flow_state.case_id) || null;
+      db.prepare(`
+        INSERT INTO patient_orchestrate_sessions (id, session_id, channel, patient_id, caller_phone, portal_session_id, clinic_id, preferred_language, turn_count, conversation_history, flow_state, case_id, status, created_at, updated_at, last_activity_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+          patient_id = COALESCE(excluded.patient_id, patient_orchestrate_sessions.patient_id),
+          caller_phone = COALESCE(excluded.caller_phone, patient_orchestrate_sessions.caller_phone),
+          portal_session_id = COALESCE(excluded.portal_session_id, patient_orchestrate_sessions.portal_session_id),
+          clinic_id = COALESCE(excluded.clinic_id, patient_orchestrate_sessions.clinic_id),
+          preferred_language = COALESCE(excluded.preferred_language, patient_orchestrate_sessions.preferred_language),
+          turn_count = excluded.turn_count,
+          conversation_history = excluded.conversation_history,
+          flow_state = excluded.flow_state,
+          case_id = COALESCE(excluded.case_id, patient_orchestrate_sessions.case_id),
+          status = COALESCE(excluded.status, patient_orchestrate_sessions.status),
+          updated_at = excluded.updated_at,
+          last_activity_at = excluded.last_activity_at
+      `).run(id, session_id, data.channel || 'chat', data.patient_id || null, data.caller_phone || null, data.portal_session_id || null, data.clinic_id || null, data.preferred_language || 'en', data.turn_count || 0, history, flow_state, case_id, data.status || 'active', now, now, now);
+      return { id, session_id };
+    } catch (e) {
+      console.error('❌ Failed to upsert orchestrate session:', e.message);
+      throw e;
+    }
+  },
+
+  // Phase 3: Case records
+  createCaseRecord: (data) => {
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO case_records (id, case_number, patient_id, session_id, channel, visit_mode, status, opqrst, suggested_icd10, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        data.id,
+        data.case_number,
+        data.patient_id || null,
+        data.session_id || null,
+        data.channel || 'chat',
+        data.visit_mode || null,
+        data.status || 'draft',
+        data.opqrst ? (typeof data.opqrst === 'string' ? data.opqrst : JSON.stringify(data.opqrst)) : null,
+        data.suggested_icd10 || null,
+        data.created_at || now
+      );
+      return { id: data.id, case_number: data.case_number };
+    } catch (e) {
+      if (e.message && (e.message.includes('UNIQUE') || e.message.includes('unique'))) {
+        return { id: data.id, case_number: data.case_number };
+      }
+      console.error('❌ Failed to create case record:', e.message);
+      throw e;
+    }
+  },
+
+  abandonStaleCaseRecords: (cutoffIso) => {
+    try {
+      const r = db.prepare(`
+        UPDATE case_records
+        SET status = 'abandoned', abandoned_at = datetime('now')
+        WHERE status = 'draft' AND created_at < ?
+      `).run(cutoffIso);
+      return r.changes || 0;
+    } catch (e) {
+      console.warn('abandonStaleCaseRecords:', e.message);
+      return 0;
+    }
+  },
+
+  /** Phase 7: Resolve case_number for an appointment (via case_records + session flow_state). */
+  getCaseNumberForAppointment(appointmentId) {
+    try {
+      const row = db.prepare(`
+        SELECT cr.case_number
+        FROM case_records cr
+        JOIN patient_orchestrate_sessions s ON s.session_id = cr.session_id
+        WHERE json_extract(s.flow_state, '$.appointment_id') = ?
+        AND cr.case_number IS NOT NULL
+        LIMIT 1
+      `).get(appointmentId);
+      return row ? row.case_number : null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  /** Phase 7: Resolve case_number to appointment_id (reverse of getCaseNumberForAppointment). */
+  getAppointmentIdFromCaseNumber(caseNumber) {
+    if (!caseNumber) return null;
+    try {
+      const row = db.prepare(`
+        SELECT json_extract(s.flow_state, '$.appointment_id') AS appointment_id
+        FROM case_records cr
+        JOIN patient_orchestrate_sessions s ON s.session_id = cr.session_id
+        WHERE cr.case_number = ?
+        LIMIT 1
+      `).get(caseNumber);
+      return row?.appointment_id || null;
+    } catch (_) {
+      return null;
     }
   },
 
@@ -5169,7 +5403,7 @@ module.exports = {
           file_name, file_type, storage_path, storage_provider, storage_bucket, storage_key,
           uploaded_by, status, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         id,
         doc.patient_id,
@@ -5213,6 +5447,34 @@ module.exports = {
       return db.prepare(`SELECT * FROM patient_documents WHERE id = ? AND deleted_at IS NULL LIMIT 1`).get(docId) || null;
     } catch (_) {
       return null;
+    }
+  },
+
+  // M-Doc.2: patient_document_extracts
+  createPatientDocumentExtract: (extract) => {
+    try {
+      const id = extract.id || require('uuid').v4();
+      db.prepare(`
+        INSERT OR REPLACE INTO patient_document_extracts (id, doc_id, patient_id, extracted_text, extraction_method, created_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+      `).run(id, extract.doc_id, extract.patient_id, extract.extracted_text || '', extract.extraction_method || 'unknown');
+      return { id };
+    } catch (e) {
+      console.error('❌ Failed to create patient_document_extract:', e.message);
+      throw e;
+    }
+  },
+  getPatientDocumentExtractsByPatient: (patientId) => {
+    if (!patientId) return [];
+    try {
+      return db.prepare(`
+        SELECT id, doc_id, patient_id, extracted_text, extraction_method, created_at
+        FROM patient_document_extracts
+        WHERE patient_id = ?
+        ORDER BY created_at DESC
+      `).all(patientId);
+    } catch (_) {
+      return [];
     }
   },
 
@@ -5425,6 +5687,18 @@ module.exports = {
   getClinic: (clinicId) => {
     try {
       return db.prepare(`SELECT * FROM clinics WHERE clinic_id = ? LIMIT 1`).get(clinicId) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  /** R-1: Map clinic to customer for credits/billing (clinic.merchant_id = customer.merchant_id) */
+  getCustomerIdForClinic(clinicId) {
+    if (!clinicId) return null;
+    try {
+      const clinic = db.prepare('SELECT merchant_id FROM clinics WHERE clinic_id = ?').get(clinicId);
+      if (!clinic?.merchant_id) return null;
+      const customer = db.prepare('SELECT id FROM customers WHERE merchant_id = ? LIMIT 1').get(clinic.merchant_id);
+      return customer?.id || null;
     } catch (_) {
       return null;
     }
@@ -7580,14 +7854,28 @@ module.exports = {
       if (!tableInfo.some(c => c.name === 'retry_of_job_id')) {
         db.exec(`ALTER TABLE fhir_diagnostic_reports ADD COLUMN retry_of_job_id TEXT`);
       }
+      if (!tableInfo.some(c => c.name === 'appointment_id')) {
+        db.exec(`ALTER TABLE fhir_diagnostic_reports ADD COLUMN appointment_id TEXT`);
+      }
     } catch (_) {}
     const resourceId = `pending-${row.job_id}`;
     const hasRetry = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all().some(c => c.name === 'retry_of_job_id');
-    if (hasRetry) {
+    const hasApptId = db.prepare('PRAGMA table_info(fhir_diagnostic_reports)').all().some(c => c.name === 'appointment_id');
+    if (hasRetry && hasApptId) {
+      db.prepare(`
+        INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, job_id, retry_of_job_id, appointment_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'), 'pending', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(resourceId, '{}', row.patient_id, row.encounter_id || null, row.job_id, row.retry_of_job_id || null, row.appointment_id || null);
+    } else if (hasRetry) {
       db.prepare(`
         INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, job_id, retry_of_job_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, datetime('now'), 'pending', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `).run(resourceId, '{}', row.patient_id, row.encounter_id || null, row.job_id, row.retry_of_job_id || null);
+    } else if (hasApptId) {
+      db.prepare(`
+        INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, job_id, appointment_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'), 'pending', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(resourceId, '{}', row.patient_id, row.encounter_id || null, row.job_id, row.appointment_id || null);
     } else {
       db.prepare(`
         INSERT INTO fhir_diagnostic_reports (resource_id, resource_data, patient_id, encounter_id, effective_date, status, job_id, created_at, updated_at)
@@ -8580,13 +8868,14 @@ module.exports = {
     }
 
     if (usePostgres && pgPool) {
-      // Postgres path (practitioner_id, timezone require ALTER TABLE if not in schema)
+      // Postgres path (visit_mode added Phase 2.4; primary_icd10, primary_cpt from triage)
       await pgPool`
         INSERT INTO appointments (
           id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id,
           appointment_type, date, time, start_time, end_time,
           duration_minutes, provider, status, notes,
-          calendar_event_id, calendar_link, video_room_name, created_at
+          calendar_event_id, calendar_link, video_room_name, visit_mode,
+          primary_icd10, primary_cpt, created_at
         ) VALUES (
           ${appointment.id},
           ${appointment.clinic_id || null},
@@ -8607,22 +8896,33 @@ module.exports = {
           ${appointment.calendar_event_id},
           ${appointment.calendar_link},
           ${appointment.video_room_name || null},
+          ${appointment.visit_mode || 'sync_video'},
+          ${appointment.primary_icd10 || null},
+          ${appointment.primary_cpt || null},
           ${appointment.created_at || new Date().toISOString()}
         )
       `;
       return { changes: 1, lastInsertRowid: appointment.id };
     } else {
-      // SQLite path (Task 4: practitioner_id, Task 51: timezone) - optional columns from migration
+      // SQLite path (Task 4: practitioner_id, Task 51: timezone, Phase 2: visit_mode, Phase 4: slot_state) - optional columns from migration
       const info = db.prepare('PRAGMA table_info(appointments)').all();
       const hasPractitioner = info.some(c => c.name === 'practitioner_id');
       const hasTimezone = info.some(c => c.name === 'timezone');
+      const hasVisitMode = info.some(c => c.name === 'visit_mode');
+      const hasSlotState = info.some(c => c.name === 'slot_state');
+      const hasPrimaryIcd10 = info.some(c => c.name === 'primary_icd10');
+      const hasPrimaryCpt = info.some(c => c.name === 'primary_cpt');
       const baseCols = 'id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id, appointment_type, date, time, start_time, end_time, duration_minutes, provider';
       const baseVals = [appointment.id, appointment.clinic_id || null, appointment.customer_id || null, appointment.patient_name, appointment.patient_phone, appointment.patient_email, appointment.patient_id || null, appointment.appointment_type, appointment.date, appointment.time, appointment.start_time, appointment.end_time, appointment.duration_minutes, appointment.provider];
-      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + ', created_at';
+      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + ', created_at';
       let vals = [...baseVals];
       if (hasPractitioner) vals.push(appointment.practitioner_id || null);
       vals.push(appointment.status, notes, appointment.calendar_event_id, appointment.calendar_link, appointment.video_room_name || null);
       if (hasTimezone) vals.push(appointment.timezone || 'America/New_York');
+      if (hasVisitMode) vals.push(appointment.visit_mode || 'sync_video');
+      if (hasSlotState) vals.push(appointment.slot_state || 'soft_reserved');
+      if (hasPrimaryIcd10) vals.push(appointment.primary_icd10 || null);
+      if (hasPrimaryCpt) vals.push(appointment.primary_cpt || null);
       vals.push(appointment.created_at);
       const placeholders = vals.map(() => '?').join(', ');
       const stmt = db.prepare(`INSERT INTO appointments (${cols}) VALUES (${placeholders})`);
@@ -8704,6 +9004,49 @@ module.exports = {
     }
   },
 
+  // Phase 2.4: Async review queue - appointments pending specialist review
+  async getAsyncReviewQueue(clinicId = null) {
+    const SLA_HOURS = 4; // Target response within 4 hours
+    const addSla = (r) => {
+      const created = r.created_at ? new Date(r.created_at) : null;
+      const slaDue = created ? new Date(created.getTime() + SLA_HOURS * 60 * 60 * 1000) : null;
+      return {
+        ...this._normalizeAppointmentVideoRoom(r),
+        sla_due_at: slaDue ? slaDue.toISOString() : null,
+        sla_hours: SLA_HOURS,
+        sla_countdown_minutes: slaDue ? Math.max(0, Math.round((slaDue - new Date()) / 60000)) : null
+      };
+    };
+    if (usePostgres && pgPool) {
+      let rows;
+      if (clinicId) {
+        rows = await pgPool`
+          SELECT * FROM appointments
+          WHERE visit_mode = 'async_review' AND status = 'pending_review' AND clinic_id = ${clinicId} AND deleted_at IS NULL
+          ORDER BY created_at ASC
+        `;
+      } else {
+        rows = await pgPool`
+          SELECT * FROM appointments
+          WHERE visit_mode = 'async_review' AND status = 'pending_review' AND deleted_at IS NULL
+          ORDER BY created_at ASC
+        `;
+      }
+      return rows.map(addSla);
+    } else {
+      let query = `SELECT * FROM appointments WHERE visit_mode = 'async_review' AND status = 'pending_review' AND deleted_at IS NULL`;
+      const params = [];
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+      query += ' ORDER BY created_at ASC';
+      const stmt = db.prepare(query);
+      const rows = stmt.all(...params);
+      return rows.map(addSla);
+    }
+  },
+
   // Search appointments by phone or email (supports both clinicId and customerId for tenant isolation)
   async searchAppointments(searchTerm, clinicId = null, customerId = null) {
     if (usePostgres && pgPool) {
@@ -8761,15 +9104,22 @@ module.exports = {
     }
   },
 
-  // Get all appointments (with optional filters)
+  // Get all appointments (with optional filters) — G-1: require tenant scope
   getAllAppointments(filters = {}) {
     let query = 'SELECT * FROM appointments WHERE deleted_at IS NULL';
     const params = [];
 
-    // Tenant isolation: Filter by customer_id if provided
+    // Tenant isolation: Require customer_id or clinic_id (G-1) to avoid cross-tenant leak
+    const hasTenantScope = !!(filters.customer_id || filters.clinic_id);
+    if (!hasTenantScope) return [];
+
     if (filters.customer_id) {
       query += ' AND customer_id = ?';
       params.push(filters.customer_id);
+    }
+    if (filters.clinic_id) {
+      query += ' AND clinic_id = ?';
+      params.push(filters.clinic_id);
     }
 
     if (filters.status) {
@@ -8785,11 +9135,6 @@ module.exports = {
     if (filters.provider) {
       query += ' AND provider = ?';
       params.push(filters.provider);
-    }
-
-    if (filters.clinic_id) {
-      query += ' AND clinic_id = ?';
-      params.push(filters.clinic_id);
     }
 
     query += ' ORDER BY date DESC, time DESC';
@@ -8910,6 +9255,14 @@ module.exports = {
       fields.push('duration_minutes = ?');
       values.push(updates.duration_minutes);
     }
+    if (updates.slot_state !== undefined) {
+      fields.push('slot_state = ?');
+      values.push(updates.slot_state);
+    }
+    if (updates.stripe_payment_intent_id !== undefined) {
+      fields.push('stripe_payment_intent_id = ?');
+      values.push(updates.stripe_payment_intent_id);
+    }
 
     if (fields.length === 0) {
       return { changes: 0 };
@@ -9003,6 +9356,21 @@ module.exports = {
       const has1h = info.some(c => c.name === 'reminder_1h_sent');
       const setCols = has1h ? 'reminder_1h_sent = 1, reminder_sent = 1' : 'reminder_sent = 1';
       let query = `UPDATE appointments SET ${setCols}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+      const params = [id];
+      if (clinicId) {
+        query += ' AND clinic_id = ?';
+        params.push(clinicId);
+      }
+      db.prepare(query).run(...params);
+    } catch (_) {}
+  },
+
+  // Phase 6 — Tech check SMS sent
+  markTechCheckSent(id, clinicId = null) {
+    try {
+      const info = db.prepare('PRAGMA table_info(appointments)').all();
+      if (!info.some(c => c.name === 'tech_check_sent')) return;
+      let query = 'UPDATE appointments SET tech_check_sent = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?';
       const params = [id];
       if (clinicId) {
         query += ' AND clinic_id = ?';
@@ -11355,12 +11723,16 @@ module.exports = {
       apiFeatures = JSON.stringify(apiFeatures);
     }
 
+    const providerProfile = customer.provider_profile
+      ? (typeof customer.provider_profile === 'string' ? customer.provider_profile : JSON.stringify(customer.provider_profile))
+      : null;
+
     return db.prepare(`
       INSERT INTO customers (
         id, name, email, phone_number, company_name, business_size, 
-        use_case, api_features, plan_tier, status, email_verified, email_verified_at
+        use_case, api_features, plan_tier, status, email_verified, email_verified_at, provider_profile
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       customer.id || require('crypto').randomBytes(16).toString('hex'),
       customer.name,
@@ -11373,7 +11745,8 @@ module.exports = {
       customer.plan_tier || 'starter',
       customer.status || 'pending',
       customer.email_verified ? 1 : 0,
-      customer.email_verified_at || null
+      customer.email_verified_at || null,
+      providerProfile
     );
   },
 
@@ -14312,4 +14685,358 @@ module.exports.getFeeSchedulesByPayer = function getFeeSchedulesByPayer(payerId,
     ORDER BY cpt_code
     LIMIT ?
   `).all(String(payerId).trim().toUpperCase(), limit);
+};
+
+// ============================================
+// SPECIALIST MARKETPLACE (Phase 0)
+// ============================================
+function _safeParseJson(value, fallback) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch (_) { return fallback; }
+}
+
+module.exports.createProviderProfile = function createProviderProfile(profile) {
+  const { v4: uuidv4 } = require('uuid');
+  const id = profile.id || `prov-${uuidv4()}`;
+  db.prepare(`
+    INSERT INTO provider_profiles (
+      id, clinic_id, user_id, display_name, email, phone,
+      specialty, languages, license_states, credentials,
+      supported_lanes, review_capacity,
+      min_rate, price_tier,
+      accepts_urgent, accepts_emergency_triage,
+      is_active, bio, profile_photo_url,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(
+    id,
+    profile.clinic_id,
+    profile.user_id || null,
+    profile.display_name,
+    profile.email || null,
+    profile.phone || null,
+    JSON.stringify(profile.specialty || []),
+    JSON.stringify(profile.languages || ['en']),
+    JSON.stringify(profile.license_states || []),
+    JSON.stringify(profile.credentials || []),
+    JSON.stringify(profile.supported_lanes || ['sync']),
+    profile.review_capacity || 0,
+    profile.min_rate || 0,
+    profile.price_tier || 2,
+    profile.accepts_urgent ? 1 : 0,
+    profile.accepts_emergency_triage ? 1 : 0,
+    profile.is_active !== false ? 1 : 0,
+    profile.bio || null,
+    profile.profile_photo_url || null
+  );
+  return id;
+};
+
+module.exports.getProviderProfile = function getProviderProfile(id) {
+  const row = db.prepare(`SELECT * FROM provider_profiles WHERE id = ?`).get(id);
+  return row ? {
+    ...row,
+    specialty: _safeParseJson(row.specialty, []),
+    languages: _safeParseJson(row.languages, ['en']),
+    license_states: _safeParseJson(row.license_states, []),
+    credentials: _safeParseJson(row.credentials, []),
+    supported_lanes: _safeParseJson(row.supported_lanes, ['sync'])
+  } : null;
+};
+
+module.exports.getProviderProfilesByClinic = function getProviderProfilesByClinic(clinicId) {
+  try {
+    return db.prepare(`SELECT * FROM provider_profiles WHERE clinic_id = ? AND is_active = 1`).all(clinicId)
+      .map(r => ({
+        ...r,
+        specialty: _safeParseJson(r.specialty, []),
+        languages: _safeParseJson(r.languages, ['en']),
+        license_states: _safeParseJson(r.license_states, []),
+        credentials: _safeParseJson(r.credentials, []),
+        supported_lanes: _safeParseJson(r.supported_lanes, ['sync'])
+      }));
+  } catch (_) { return []; }
+};
+
+module.exports.updateProviderProfile = function updateProviderProfile(id, updates) {
+  const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  const values = Object.values(updates).map(v =>
+    typeof v === 'object' && v !== null ? JSON.stringify(v) : v
+  );
+  db.prepare(`UPDATE provider_profiles SET ${fields}, updated_at = datetime('now') WHERE id = ?`).run(...values, id);
+};
+
+module.exports.createPrescription = function createPrescription(rx) {
+  const { v4: uuidv4 } = require('uuid');
+  const id = rx.id || `rx-${uuidv4()}`;
+  db.prepare(`
+    INSERT INTO prescriptions (
+      id, case_report_id, appointment_id, patient_id, specialist_id, clinic_id,
+      icd_codes, cpt_codes, diagnosis_summary, soap_note,
+      medications, instructions, referrals, follow_up_days,
+      media_attachment_ids, status,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+  `).run(
+    id,
+    rx.case_report_id || null,
+    rx.appointment_id || null,
+    rx.patient_id,
+    rx.specialist_id,
+    rx.clinic_id || null,
+    JSON.stringify(rx.icd_codes || []),
+    JSON.stringify(rx.cpt_codes || []),
+    rx.diagnosis_summary || null,
+    rx.soap_note || null,
+    JSON.stringify(rx.medications || []),
+    rx.instructions || null,
+    JSON.stringify(rx.referrals || []),
+    rx.follow_up_days || null,
+    JSON.stringify(rx.media_attachment_ids || []),
+    rx.status || 'draft'
+  );
+  return id;
+};
+
+module.exports.getPrescription = function getPrescription(id) {
+  const row = db.prepare(`SELECT * FROM prescriptions WHERE id = ?`).get(id);
+  return row ? {
+    ...row,
+    icd_codes: _safeParseJson(row.icd_codes, []),
+    cpt_codes: _safeParseJson(row.cpt_codes, []),
+    medications: _safeParseJson(row.medications, []),
+    referrals: _safeParseJson(row.referrals, []),
+    media_attachment_ids: _safeParseJson(row.media_attachment_ids, [])
+  } : null;
+};
+
+module.exports.getPrescriptionsByPatient = function getPrescriptionsByPatient(patientId, limit = 50) {
+  try {
+    return db.prepare(`SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC LIMIT ?`)
+      .all(patientId, limit)
+      .map(r => ({
+        ...r,
+        icd_codes: _safeParseJson(r.icd_codes, []),
+        cpt_codes: _safeParseJson(r.cpt_codes, []),
+        medications: _safeParseJson(r.medications, []),
+        referrals: _safeParseJson(r.referrals, []),
+        media_attachment_ids: _safeParseJson(r.media_attachment_ids, [])
+      }));
+  } catch (_) { return []; }
+};
+
+module.exports.updatePrescriptionStatus = function updatePrescriptionStatus(id, status, signedAt = null) {
+  db.prepare(`UPDATE prescriptions SET status = ?, signed_at = ?, updated_at = datetime('now') WHERE id = ?`).run(status, signedAt, id);
+};
+
+module.exports.createCaseReportMedia = function createCaseReportMedia(media) {
+  const { v4: uuidv4 } = require('uuid');
+  const id = media.id || `media-${uuidv4()}`;
+  db.prepare(`
+    INSERT INTO case_report_media (
+      id, case_report_id, patient_id, session_id,
+      media_type, mime_type, file_name, file_size_bytes,
+      storage_provider, storage_key, storage_url,
+      context_note, body_region, uploaded_during,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  `).run(
+    id,
+    media.case_report_id || null,
+    media.patient_id || null,
+    media.session_id || null,
+    media.media_type || 'document',
+    media.mime_type || null,
+    media.file_name || null,
+    media.file_size_bytes || null,
+    media.storage_provider || 'local',
+    media.storage_key || null,
+    media.storage_url || null,
+    media.context_note || null,
+    media.body_region || null,
+    media.uploaded_during || 'triage'
+  );
+  return id;
+};
+
+module.exports.getCaseReportMedia = function getCaseReportMedia(caseReportId) {
+  try {
+    return db.prepare(`SELECT * FROM case_report_media WHERE case_report_id = ? ORDER BY created_at`).all(caseReportId);
+  } catch (_) { return []; }
+};
+
+/** gap10: Get triage media (session-scoped uploads) for RAG context */
+module.exports.getTriageMediaForSession = function getTriageMediaForSession(sessionId) {
+  try {
+    return db.prepare(`
+      SELECT id, file_name, context_note, ai_analysis, media_type
+      FROM case_report_media
+      WHERE session_id = ? AND (uploaded_during = 'triage' OR uploaded_during IS NULL)
+      ORDER BY created_at
+    `).all(sessionId || '');
+  } catch (_) { return []; }
+};
+
+/** gap18: Get persisted preferred_language for Kelly session */
+module.exports.getKellySessionLanguage = function getKellySessionLanguage(sessionId) {
+  try {
+    const row = db.prepare('SELECT preferred_language FROM kelly_session_meta WHERE session_id = ?').get(sessionId || '');
+    return row?.preferred_language || null;
+  } catch (_) { return null; }
+};
+
+/** gap18: Persist detected language for Kelly session */
+module.exports.upsertKellySessionLanguage = function upsertKellySessionLanguage(sessionId, preferredLanguage) {
+  if (!sessionId || !preferredLanguage) return;
+  try {
+    db.prepare(`
+      INSERT INTO kelly_session_meta (session_id, preferred_language, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(session_id) DO UPDATE SET
+        preferred_language = excluded.preferred_language,
+        updated_at = datetime('now')
+    `).run(sessionId, preferredLanguage);
+  } catch (_) {}
+};
+
+module.exports.updateMediaAiAnalysis = function updateMediaAiAnalysis(id, aiAnalysis) {
+  db.prepare(`UPDATE case_report_media SET ai_analysis = ?, ai_analyzed_at = datetime('now') WHERE id = ?`).run(JSON.stringify(aiAnalysis), id);
+};
+
+module.exports.upsertTriageSession = function upsertTriageSession(session) {
+  const { v4: uuidv4 } = require('uuid');
+  const existing = db.prepare(`SELECT id FROM triage_sessions WHERE session_id = ? LIMIT 1`).get(session.session_id);
+  const id = existing?.id || session.id || `triage-${uuidv4()}`;
+
+  const critUnknowns = session.critical_unknowns != null
+    ? (Array.isArray(session.critical_unknowns) ? JSON.stringify(session.critical_unknowns) : String(session.critical_unknowns))
+    : null;
+
+  db.prepare(`
+      INSERT INTO triage_sessions (
+        id, session_id, patient_id,
+        onset, provocation, quality, radiation, severity, timing, associated_sx,
+        family_history, medications, prior_diagnoses, prior_workups, allergies,
+        alcohol_use, alcohol_cage_score, smoking_status, phq2_score, gad2_score,
+        safety_screen, substance_use, critical_unknowns, soap_note, detected_language,
+        rag_result_id, safety_level, urgency, target_specialty,
+        media_requested, media_received, media_ids,
+        opqrst_complete, triage_complete, referred_to_911,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        onset = COALESCE(excluded.onset, onset),
+        provocation = COALESCE(excluded.provocation, provocation),
+        quality = COALESCE(excluded.quality, quality),
+        radiation = COALESCE(excluded.radiation, radiation),
+        severity = COALESCE(excluded.severity, severity),
+        timing = COALESCE(excluded.timing, timing),
+        associated_sx = COALESCE(excluded.associated_sx, associated_sx),
+        family_history = COALESCE(excluded.family_history, family_history),
+        medications = COALESCE(excluded.medications, medications),
+        prior_diagnoses = COALESCE(excluded.prior_diagnoses, prior_diagnoses),
+        prior_workups = COALESCE(excluded.prior_workups, prior_workups),
+        allergies = COALESCE(excluded.allergies, allergies),
+        alcohol_use = COALESCE(excluded.alcohol_use, alcohol_use),
+        alcohol_cage_score = COALESCE(excluded.alcohol_cage_score, alcohol_cage_score),
+        smoking_status = COALESCE(excluded.smoking_status, smoking_status),
+        phq2_score = COALESCE(excluded.phq2_score, phq2_score),
+        gad2_score = COALESCE(excluded.gad2_score, gad2_score),
+        safety_screen = COALESCE(excluded.safety_screen, safety_screen),
+        substance_use = COALESCE(excluded.substance_use, substance_use),
+        critical_unknowns = COALESCE(excluded.critical_unknowns, critical_unknowns),
+        soap_note = COALESCE(excluded.soap_note, soap_note),
+        detected_language = COALESCE(excluded.detected_language, detected_language),
+        rag_result_id = COALESCE(excluded.rag_result_id, rag_result_id),
+        safety_level = COALESCE(excluded.safety_level, safety_level),
+        urgency = COALESCE(excluded.urgency, urgency),
+        target_specialty = COALESCE(excluded.target_specialty, target_specialty),
+        media_requested = excluded.media_requested,
+        media_received = excluded.media_received,
+        media_ids = excluded.media_ids,
+        opqrst_complete = excluded.opqrst_complete,
+        triage_complete = excluded.triage_complete,
+        referred_to_911 = excluded.referred_to_911,
+        updated_at = datetime('now')
+    `).run(
+      id, session.session_id, session.patient_id || null,
+      session.onset || null, session.provocation || null,
+      session.quality || null, session.radiation || null,
+      session.severity ?? null, session.timing || null,
+      session.associated_sx || null,
+      session.family_history || null, session.medications || null,
+      session.prior_diagnoses || null, session.prior_workups || null,
+      session.allergies || null,
+      session.alcohol_use || null, session.alcohol_cage_score ?? null,
+      session.smoking_status || null, session.phq2_score ?? null, session.gad2_score ?? null,
+      session.safety_screen || null, session.substance_use || null,
+      critUnknowns, session.soap_note || null, session.detected_language || null,
+      session.rag_result_id || null, session.safety_level || null,
+      session.urgency || null, session.target_specialty || null,
+      session.media_requested ? 1 : 0,
+      session.media_received ? 1 : 0,
+      JSON.stringify(session.media_ids || []),
+      session.opqrst_complete ? 1 : 0,
+      session.triage_complete ? 1 : 0,
+      session.referred_to_911 ? 1 : 0
+    );
+  return id;
+};
+
+module.exports.getTriageSession = function getTriageSession(sessionId) {
+  const row = db.prepare(`SELECT * FROM triage_sessions WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`).get(sessionId);
+  if (!row) return null;
+  return {
+    ...row,
+    media_ids: _safeParseJson(row.media_ids, []),
+    critical_unknowns: _safeParseJson(row.critical_unknowns, [])
+  };
+};
+
+module.exports.upsertPatientPricing = function upsertPatientPricing(patientId, tier, countryCode = null, currency = 'USD') {
+  db.prepare(`
+    INSERT INTO patient_pricing (patient_id, price_tier, country_code, currency, updated_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(patient_id) DO UPDATE SET
+      price_tier = excluded.price_tier,
+      country_code = COALESCE(excluded.country_code, country_code),
+      currency = excluded.currency,
+      updated_at = datetime('now')
+  `).run(patientId, tier, countryCode, currency);
+};
+
+module.exports.getPatientPricing = function getPatientPricing(patientId) {
+  return db.prepare(`SELECT * FROM patient_pricing WHERE patient_id = ?`).get(patientId)
+    || { patient_id: patientId, price_tier: 2, currency: 'USD' };
+};
+
+module.exports.createSlotAssignment = function createSlotAssignment(appointmentId, assignment) {
+  db.prepare(`
+    INSERT INTO appointment_slot_assignments (
+      appointment_id, practitioner_id, specialty, language,
+      price_tier, lane, matched_via, match_reason, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(appointment_id) DO UPDATE SET
+      practitioner_id = excluded.practitioner_id,
+      specialty = excluded.specialty,
+      language = excluded.language,
+      price_tier = excluded.price_tier,
+      lane = excluded.lane,
+      matched_via = excluded.matched_via,
+      match_reason = excluded.match_reason
+  `).run(
+    appointmentId,
+    assignment.practitioner_id,
+    assignment.specialty || null,
+    assignment.language || 'en',
+    assignment.price_tier || 2,
+    assignment.lane || 'sync',
+    assignment.matched_via || 'hard_filter',
+    assignment.match_reason || null
+  );
+};
+
+module.exports.getSlotAssignment = function getSlotAssignment(appointmentId) {
+  return db.prepare(`SELECT * FROM appointment_slot_assignments WHERE appointment_id = ?`).get(appointmentId);
 };

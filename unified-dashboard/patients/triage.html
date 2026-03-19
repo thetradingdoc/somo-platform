@@ -27,22 +27,43 @@
     .user-name { font-size:14px; font-weight:700; color:var(--gray-900); }
     .user-role { font-size:12px; color:var(--gray-500); }
     .logout-btn { background:none; border:none; cursor:pointer; font-size:20px; padding:4px; border-radius:6px; }
-    .card { background:#fff; border-radius:12px; padding:18px; box-shadow:var(--shadow-md); }
-    .title { font-size:26px; font-weight:900; margin:0 0 6px 0; }
+    .card { background:linear-gradient(135deg, #fff 0%, #f8fafc 100%); border-radius:16px; padding:20px; box-shadow:0 4px 24px rgba(30,64,175,0.08), 0 1px 3px rgba(0,0,0,0.06); border:1px solid rgba(30,64,175,0.12); }
+    .title { font-size:26px; font-weight:900; margin:0 0 6px 0; background:linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
     .sub { color:var(--gray-600); font-size:14px; margin:0 0 14px 0; }
-    .chat { border:1px solid var(--gray-200); border-radius:12px; overflow:hidden; }
-    .msgs { height:460px; overflow:auto; padding:14px; background:#f8fafc; display:flex; flex-direction:column; gap:10px; }
-    .msg { max-width:80%; padding:10px 12px; border-radius:14px; font-size:14px; line-height:1.35; }
-    .msg.user { background:#1e40af; color:#fff; align-self:flex-end; border-bottom-right-radius:6px; }
-    .msg.assistant { background:#fff; color:#111827; align-self:flex-start; border:1px solid #e5e7eb; border-bottom-left-radius:6px; }
-    .composer { display:flex; gap:10px; padding:12px; background:#fff; border-top:1px solid var(--gray-200); }
-    .input { flex:1; border:2px solid var(--gray-200); border-radius:10px; padding:10px 12px; font-size:14px; }
-    .btn { border:none; border-radius:10px; padding:10px 14px; font-weight:900; cursor:pointer; min-height:44px; }
-    .btn.primary { background:#1e40af; color:#fff; }
-    .btn.secondary { background:#e5e7eb; color:#374151; }
-    .chips { display:flex; gap:8px; flex-wrap:wrap; padding:12px; border-top:1px solid var(--gray-200); background:#fff; }
-    .chip { border:1px solid #e5e7eb; background:#fff; border-radius:999px; padding:8px 10px; font-weight:800; font-size:13px; cursor:pointer; }
-    .chip:hover { background:#f3f4f6; }
+    .chat { border:2px solid rgba(30,64,175,0.15); border-radius:14px; overflow:hidden; box-shadow:inset 0 2px 8px rgba(0,0,0,0.03); }
+    .msgs { height:460px; overflow:auto; padding:16px; background:linear-gradient(180deg, #f0f9ff 0%, #f8fafc 50%, #fefce8 100%); display:flex; flex-direction:column; gap:12px; }
+    .msg { max-width:80%; padding:12px 16px; border-radius:16px; font-size:14px; line-height:1.4; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.15s ease, box-shadow 0.15s ease; }
+    .msg:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+    .msg.user { background:linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%); color:#fff; align-self:flex-end; border-bottom-right-radius:6px; border:1px solid rgba(255,255,255,0.2); }
+    .msg.user:hover { box-shadow:0 4px 16px rgba(30,64,175,0.4); }
+    .msg.assistant { background:linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); color:#166534; align-self:flex-start; border:1px solid #86efac; border-bottom-left-radius:6px; }
+    .msg.assistant:hover { box-shadow:0 4px 12px rgba(34,197,94,0.15); }
+    .composer { display:flex; gap:12px; padding:14px; background:linear-gradient(180deg, #fff 0%, #f8fafc 100%); border-top:2px solid rgba(30,64,175,0.12); align-items:center; }
+    .upload-attach-btn { min-width:44px; padding:10px; font-size:18px; }
+    .input { flex:1; border:2px solid #e5e7eb; border-radius:12px; padding:10px 14px; font-size:14px; transition:border-color 0.2s, box-shadow 0.2s; }
+    .input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.2); }
+    .btn { border:none; border-radius:12px; padding:10px 16px; font-weight:900; cursor:pointer; min-height:44px; transition:transform 0.15s, box-shadow 0.15s; }
+    .btn:hover:not(:disabled) { transform:translateY(-2px); }
+    .btn.primary { background:linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color:#fff; box-shadow:0 4px 14px rgba(30,64,175,0.35); }
+    .btn.primary:hover:not(:disabled) { box-shadow:0 6px 20px rgba(30,64,175,0.45); }
+    .btn.secondary { background:linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color:#475569; border:1px solid #cbd5e1; }
+    .btn.secondary:hover { background:linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); }
+    .chips { display:flex; gap:10px; flex-wrap:wrap; padding:14px; border-top:1px solid rgba(30,64,175,0.1); background:linear-gradient(180deg, #fefce8 0%, #fff 100%); }
+    .chip { border:2px solid #e5e7eb; background:linear-gradient(180deg, #fff 0%, #f8fafc 100%); border-radius:999px; padding:10px 14px; font-weight:800; font-size:13px; cursor:pointer; transition:all 0.2s ease; }
+    .chip:hover { background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-color:#3b82f6; color:#1e40af; box-shadow:0 2px 8px rgba(59,130,246,0.25); transform:translateY(-1px); }
+    .chip:nth-child(1):hover { border-color:#0ea5e9; background:linear-gradient(135deg, #ecfeff 0%, #cffafe 100%); color:#0369a1; }
+    .chip:nth-child(2):hover { border-color:#10b981; background:linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color:#047857; }
+    .chip:nth-child(3):hover { border-color:#f59e0b; background:linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); color:#b45309; }
+    .chip-modal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.4); align-items:center; justify-content:center; padding:20px; }
+    .chip-modal.show { display:flex; }
+    .chip-modal-content { background:#fff; border-radius:20px; padding:28px; max-width:420px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.25); border:2px solid rgba(30,64,175,0.15); }
+    .chip-modal-title { font-size:18px; font-weight:800; color:#1e40af; margin:0 0 18px 0; }
+    .chip-modal-btns { display:flex; flex-direction:column; gap:12px; }
+    .chip-modal-btns .chip { width:100%; justify-content:center; padding:14px 20px; font-size:15px; }
+    .upload-zone { padding:14px; border-top:1px solid #e5e7eb; background:linear-gradient(180deg, #f0f9ff 0%, #f8fafc 100%); }
+    .resume-banner { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:12px 16px; margin-bottom:12px; background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border:1px solid #93c5fd; border-radius:12px; font-size:14px; color:#1e40af; }
+    .resume-banner-btns { display:flex; gap:8px; flex-shrink:0; }
+    .resume-banner .btn { padding:8px 14px; font-size:13px; min-height:36px; }
     /* Mobile Menu Toggle (match patient-dashboard.html) */
     .mobile-menu-toggle {
       display: none;
@@ -116,22 +137,57 @@
         <div class="title">Book a visit</div>
         <p class="sub">Tell us what’s going on, and we’ll guide you to a booked appointment and payment.</p>
 
+        <div id="resumeBanner" class="resume-banner" style="display:none;">
+          <span>You have a previous conversation. Would you like to continue or start fresh?</span>
+          <div class="resume-banner-btns">
+            <button type="button" class="btn secondary" id="resumeContinueBtn">Continue</button>
+            <button type="button" class="btn primary" id="resumeStartOverBtn">Start over</button>
+          </div>
+        </div>
+
         <div class="chat">
           <div class="msgs" id="msgs"></div>
           <div class="chips" id="chips"></div>
+          <div class="upload-zone" id="uploadZone" style="display:none;">
+            <p style="font-size:13px;color:var(--gray-600);margin:0 0 8px 0;">Upload a photo (JPEG, PNG) or PDF</p>
+            <input type="file" id="uploadInput" accept="image/jpeg,image/png,image/jpg,application/pdf" multiple style="display:none;" />
+            <button type="button" class="btn secondary" id="uploadBtn">Choose file</button>
+            <span id="uploadStatus" style="font-size:12px;color:var(--gray-600);margin-left:8px;"></span>
+          </div>
           <div class="composer">
+            <button type="button" class="btn secondary upload-attach-btn" id="attachBtn" title="Attach photo or document">📎</button>
             <input class="input" id="input" placeholder="Describe your symptoms or what you need help with…" />
             <button class="btn primary" id="sendBtn">Send</button>
           </div>
+          <input type="file" id="composerUploadInput" accept="image/jpeg,image/png,image/jpg,application/pdf" multiple style="display:none;" />
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Choice chips modal -->
+  <div class="chip-modal" id="chipModal" onclick="if(event.target===this) hideChipModal()">
+    <div class="chip-modal-content">
+      <div class="chip-modal-title" id="chipModalTitle">Choose an option</div>
+      <div class="chip-modal-btns" id="chipModalBtns"></div>
+    </div>
   </div>
 
   <script>
     const API_BASE = (window.API_BASE_URL || window.API_BASE || '').replace(/\/$/, '');
     const sid = localStorage.getItem('patient_session_id') || '';
     if (!sid) window.location.href = 'patient-login.html';
+
+    function handleSessionExpired(res, j) {
+      if (res && res.status === 401 && (j?.error === 'Invalid or expired session' || j?.error === 'x-session-id required')) {
+        localStorage.removeItem('patient_session_id');
+        localStorage.removeItem('patient_email');
+        localStorage.removeItem('patient_phone');
+        window.location.href = 'patient-login.html?expired=1';
+        return true;
+      }
+      return false;
+    }
 
     const stateKey = 'patient_triage_state_v1';
     let triageState = (() => {
@@ -151,8 +207,41 @@
       msgs.scrollTop = msgs.scrollHeight;
     }
 
-    function setChips(options) {
+    function hideChipModal() {
+      const modal = document.getElementById('chipModal');
+      if (modal) modal.classList.remove('show');
+    }
+
+    function showChipModal(options, title) {
+      const modal = document.getElementById('chipModal');
+      const titleEl = document.getElementById('chipModalTitle');
+      const btnsEl = document.getElementById('chipModalBtns');
+      if (!modal || !btnsEl) return;
+      titleEl.textContent = title || 'Choose an option';
+      btnsEl.innerHTML = '';
+      if (!options || !options.length) { hideChipModal(); return; }
+      for (const opt of options) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.type = 'button';
+        b.textContent = opt.label;
+        b.addEventListener('click', () => {
+          sendMessage(opt.value, { action: opt.action || null, slot: opt.slot || null, visit_mode: opt.visit_mode || null });
+          hideChipModal();
+        });
+        btnsEl.appendChild(b);
+      }
+      modal.classList.add('show');
+    }
+
+    function setChips(options, opts) {
       chips.innerHTML = '';
+      const useModal = opts?.display === 'modal' && options && options.length > 0;
+      if (useModal) {
+        showChipModal(options, opts?.title || 'How would you like to proceed?');
+        return;
+      }
+      hideChipModal();
       if (!options || !options.length) return;
       for (const opt of options) {
         const b = document.createElement('button');
@@ -160,22 +249,37 @@
         b.type = 'button';
         b.textContent = opt.label;
         b.addEventListener('click', () => {
-          sendMessage(opt.value, { action: opt.action || null, slot: opt.slot || null });
+          sendMessage(opt.value, { action: opt.action || null, slot: opt.slot || null, visit_mode: opt.visit_mode || null });
         });
         chips.appendChild(b);
       }
     }
 
-    async function hydrateHeader() {
+    const LANGUAGES_LIST = 'English, Spanish, Russian, Chinese, French, German, Swahili, and other common languages';
+    function buildKellyGreeting(firstName) {
+      const first = (firstName || 'Patient').trim() || 'Patient';
+      const cap = first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+      return `Hi ${cap}, my name is Kelly. I'm your virtual assistant today. How can I help you today? You can respond in any of the following languages: ${LANGUAGES_LIST}. If this feels like an emergency, please call 911 or go to the nearest ER.`;
+    }
+
+    async function fetchPatientAndHydrate() {
       try {
         const r = await fetch(`${API_BASE}/api/patient/me`, { headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' } });
         const j = await r.json();
-        if (!r.ok || !j.success) return;
+        if (handleSessionExpired(r, j)) return null;
+        if (!r.ok || !j.success) return null;
         const name = (j.patient && j.patient.name) ? j.patient.name : 'Patient';
         document.getElementById('userName').textContent = name;
         const initials = name.split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'P';
         document.getElementById('userAvatar').textContent = initials;
-      } catch (_) {}
+        const firstName = (name || '').trim().split(/\s+/)[0] || 'Patient';
+        return firstName;
+      } catch (_) { return null; }
+    }
+
+    function showUploadZone(show) {
+      const zone = document.getElementById('uploadZone');
+      if (zone) zone.style.display = show ? 'block' : 'none';
     }
 
     async function sendMessage(text, meta = {}) {
@@ -186,17 +290,25 @@
       setChips([]);
       sendBtn.disabled = true;
       try {
+        const ctrl = new AbortController();
+        const to = setTimeout(() => ctrl.abort(), 120000);
         const r = await fetch(`${API_BASE}/api/patient/triage/message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' },
-          body: JSON.stringify({ message: t, state: triageState, meta })
+          body: JSON.stringify({ message: t, state: triageState, session_id: triageState?.session_id, meta }),
+          signal: ctrl.signal
         });
+        clearTimeout(to);
         const j = await r.json();
+        if (handleSessionExpired(r, j)) return;
         if (!r.ok || !j.success) throw new Error(j.error || 'Request failed');
-        triageState = j.state || {};
+        triageState = { ...(j.state || {}), session_id: j.session_id || triageState?.session_id };
         sessionStorage.setItem(stateKey, JSON.stringify(triageState));
-        if (j.reply) add('assistant', j.reply);
-        if (j.next_chips) setChips(j.next_chips);
+        const reply = (j.reply != null && String(j.reply).trim()) ? String(j.reply).trim() : "I'm here. Please try again or call us if you need help.";
+        add('assistant', reply);
+        if (j.next_chips) setChips(j.next_chips, { display: j.chips_display, title: 'How would you like to proceed?' });
+        if (j.next_step === 'UPLOAD_IMAGE') showUploadZone(true);
+        else showUploadZone(false);
         if (j.redirect_to) window.location.href = j.redirect_to;
       } catch (e) {
         add('assistant', e.message || 'Something went wrong.');
@@ -228,13 +340,118 @@
       if (e.key === 'Enter') { e.preventDefault(); sendMessage(input.value); }
     });
 
-    hydrateHeader();
-    add('assistant', 'Hi — what can we help you with today? If this feels like an emergency, please call 911 or go to the nearest ER.');
-    setChips([
+    document.getElementById('attachBtn')?.addEventListener('click', () => document.getElementById('composerUploadInput').click());
+    async function doUpload(files, statusEl, fromZone) {
+      if (!files || files.length === 0) return;
+      if (statusEl) statusEl.textContent = 'Uploading…';
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append('files', f));
+      const sessionId = triageState?.session_id || '';
+      if (sessionId) formData.append('session_id', sessionId);
+      try {
+        const r = await fetch(`${API_BASE}/api/patient/documents`, {
+          method: 'POST',
+          headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' },
+          body: formData
+        });
+        const j = await r.json();
+        if (handleSessionExpired(r, j)) return;
+        if (j.success) {
+          if (statusEl) statusEl.textContent = 'Uploaded.';
+          add('assistant', 'Thanks, we received your upload.');
+          if (fromZone) showUploadZone(false);
+        } else {
+          const errMsg = j.error || 'Upload failed';
+          if (statusEl) statusEl.textContent = errMsg;
+          else add('assistant', 'Sorry, upload failed: ' + errMsg);
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = 'Network error';
+        else add('assistant', 'Sorry, upload failed. Please try again.');
+      }
+    }
+    document.getElementById('uploadBtn').addEventListener('click', () => document.getElementById('uploadInput').click());
+    document.getElementById('uploadInput').addEventListener('change', async (e) => {
+      const files = e.target.files;
+      await doUpload(files, document.getElementById('uploadStatus'), true);
+      e.target.value = '';
+    });
+    document.getElementById('composerUploadInput')?.addEventListener('change', async (e) => {
+      const files = e.target.files;
+      await doUpload(files, null, false);
+      e.target.value = '';
+    });
+    document.getElementById('uploadBtn').addEventListener('click', () => document.getElementById('uploadInput').click());
+
+    async function loadHistoryIfResuming() {
+      const sessionId = triageState?.session_id || '';
+      if (!sessionId) return false;
+      try {
+        const r = await fetch(`${API_BASE}/api/patient/triage/history?session_id=${encodeURIComponent(sessionId)}`, {
+          headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+        });
+        const j = await r.json();
+        if (handleSessionExpired(r, j)) return false;
+        if (!j.success || !j.history?.length) return false;
+        msgs.innerHTML = '';
+        for (const t of j.history) {
+          if (t.role && t.content) add(t.role, t.content);
+        }
+        if (j.state) triageState = { ...j.state, session_id: j.session_id || sessionId };
+        sessionStorage.setItem(stateKey, JSON.stringify(triageState));
+        return true;
+      } catch (_) { return false; }
+    }
+
+    function showResumeBanner() {
+      const banner = document.getElementById('resumeBanner');
+      if (banner) banner.style.display = 'flex';
+    }
+
+    function hideResumeBanner() {
+      const banner = document.getElementById('resumeBanner');
+      if (banner) banner.style.display = 'none';
+    }
+
+    function startOver(firstName) {
+      triageState = {};
+      sessionStorage.removeItem(stateKey);
+      hideResumeBanner();
+      msgs.innerHTML = '';
+      add('assistant', buildKellyGreeting(firstName));
+      setChips(initialChips);
+    }
+
+    const initialChips = [
       { label: 'Book a general visit', value: 'I want to book a general visit' },
       { label: 'I have symptoms', value: 'I have symptoms' },
-      { label: 'Billing / receipt', value: 'I need help with my receipt' , action: 'billing' }
-    ]);
+      { label: 'Billing / receipt', value: 'I need help with my receipt', action: 'billing' }
+    ];
+    const hasSession = triageState?.session_id;
+    (async function initGreeting() {
+      const firstName = await fetchPatientAndHydrate();
+      const greeting = buildKellyGreeting(firstName);
+      if (hasSession) {
+        const loaded = await loadHistoryIfResuming();
+        if (msgs.children.length === 0) {
+          add('assistant', greeting);
+          setChips(initialChips);
+        } else {
+          setChips([]);
+          if (loaded) showResumeBanner();
+        }
+      } else {
+        add('assistant', greeting);
+        setChips(initialChips);
+      }
+    })();
+
+    document.getElementById('resumeContinueBtn')?.addEventListener('click', () => hideResumeBanner());
+    document.getElementById('resumeStartOverBtn')?.addEventListener('click', () => {
+      const nameEl = document.getElementById('userName');
+      const firstName = nameEl ? nameEl.textContent.trim().split(/\s+/)[0] || null : null;
+      startOver(firstName);
+    });
   </script>
 </body>
 
