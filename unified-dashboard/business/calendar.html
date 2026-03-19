@@ -3,8 +3,9 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Medical Coding Assistant - Appointments Calendar</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1e40af">
+  <title>Appointments Calendar - Consʌlt</title>
 
   <!-- FullCalendar (reliable grid) -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet" />
@@ -48,7 +49,7 @@
       color: #2d3748;
       margin-bottom: 4px;
       font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-weight: 300;
+      font-weight: 700;
     }
 
     .sidebar-subtitle {
@@ -156,6 +157,61 @@
       flex: 1;
       padding: 32px;
       background: var(--gray-50);
+    }
+
+    /* Mobile-first: collapsible sidebar */
+    .sidebar-toggle {
+      display: none;
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1001;
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 999;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .sidebar-overlay.visible { opacity: 1; }
+    @media (max-width: 768px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        z-index: 1000;
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar-toggle { display: flex; }
+      .main-content { margin-left: 0; padding: 16px; padding-top: 72px; }
+      .topbar { flex-wrap: wrap; padding: 12px 16px; gap: 12px; }
+      .brand { flex-wrap: wrap; }
+      .filters { flex-wrap: wrap; }
+      .topbar .btn, .topbar .input, .topbar .select { min-height: 44px; min-width: 44px; }
+      .page-header { padding: 16px; }
+      .page-title { font-size: 22px; }
+      #calendarWrap { margin: 8px 0; }
+      #calendar { min-height: 400px; padding: 8px; }
+      .legend { flex-wrap: wrap; gap: 8px; }
+    }
+    @media (max-width: 480px) {
+      .main-content { padding: 12px; padding-top: 68px; }
+      .filters { flex-direction: column; width: 100%; }
+      .filters .input, .filters .select { width: 100%; }
     }
 
     .page-header {
@@ -357,6 +413,40 @@
       color: #374151;
     }
 
+    /* Online/Offline toggle */
+    .online-offline-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+    }
+    .toggle-track {
+      display: block;
+      width: 44px;
+      height: 24px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      position: relative;
+      transition: background 0.2s;
+    }
+    .online-offline-btn.online .toggle-track {
+      background: #10b981;
+    }
+    .toggle-thumb {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      transition: transform 0.2s;
+    }
+    .online-offline-btn.online .toggle-thumb {
+      transform: translateX(20px);
+    }
+
     /* Side drawer for appointment details (replaces full-screen overlay) */
     .details-panel {
       position: fixed;
@@ -380,17 +470,30 @@
 </head>
 
 <body style="background:#f3f4f6;">
+  <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Open menu">☰</button>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
   <div class="layout">
     <!-- Sidebar (same as other pages) -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-logo">
           Consʌlt
         </div>
-        <div class="sidebar-subtitle">Medical Coding Assistant</div>
+        <div class="sidebar-subtitle">Doctor's Portal</div>
       </div>
 
       <nav class="sidebar-nav" id="sidebarNav"></nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info" onclick="typeof window.navigateToBusinessPage==='function'?window.navigateToBusinessPage('settings.html'):window.location.href='settings.html'" title="Open Settings">
+          <div class="user-avatar" id="userAvatar">HP</div>
+          <div class="user-details">
+            <div class="user-name" id="userName">Healthcare Provider</div>
+            <div class="user-role" id="userRole">Provider</div>
+          </div>
+          <button class="logout-btn" onclick="event.stopPropagation(); (window.logout||function(){sessionStorage.removeItem('authenticated');window.location.href='../login.html';})();" title="Logout">🚪</button>
+        </div>
+      </div>
     </aside>
 
     <!-- Main Content -->
@@ -404,6 +507,12 @@
       <div class="topbar" style="border-radius:12px;">
         <div class="brand">
           <div class="title">Filters</div>
+          <div id="onlineOfflineWrap" style="margin-left:20px;display:flex;align-items:center;gap:8px;">
+            <span id="onlineStatusText" class="muted" style="font-size:13px;">Offline</span>
+            <button type="button" id="onlineOfflineBtn" class="online-offline-btn offline" title="Toggle Online/Offline">
+              <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            </button>
+          </div>
         </div>
         <div class="filters">
           <input type="date" id="dateFilter" class="input" />
@@ -415,6 +524,8 @@
           </select>
           <input id="providerFilter" placeholder="Provider" class="input" />
           <button id="createApptBtn" class="btn btn-primary" style="background:#10b981;">+ Create Appointment</button>
+          <button id="setAvailabilityBtn" class="btn" style="background:#3b82f6;color:#fff;border:none;">Set Availability</button>
+          <button id="outOfOfficeBtn" class="btn" style="background:#6b7280;color:#fff;border:none;">Out of Office</button>
           <button id="refreshBtn" class="btn btn-primary">Refresh</button>
         </div>
       </div>
@@ -423,6 +534,8 @@
         <div class="item"><span class="dot" style="background:#06b6d4"></span> Scheduled</div>
         <div class="item"><span class="dot" style="background:#10b981"></span> Confirmed</div>
         <div class="item"><span class="dot" style="background:#ef4444"></span> Cancelled</div>
+        <div class="item"><span class="dot" style="background:#3b82f6"></span> Available</div>
+        <div class="item"><span class="dot" style="background:#6b7280"></span> Out of Office</div>
       </div>
 
       <div id="calendarWrap">
@@ -489,6 +602,39 @@
     </div>
   </div>
 
+  <!-- Set Availability / Out of Office Modal -->
+  <div id="availabilityModal" class="details-panel" style="display:none;">
+    <div class="details-panel-inner">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div id="availabilityModalTitle" style="font-weight:700; color:#0e7490; font-size:18px;">Set Availability</div>
+        <button onclick="closeAvailabilityModal()" style="border:none;background:none;font-size:20px;cursor:pointer">✖</button>
+      </div>
+      <form id="availabilityForm" style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Start Date *</label>
+          <input type="date" id="avbStartDate" class="input" required style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Start Time *</label>
+          <input type="time" id="avbStartTime" class="input" required style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">End Date *</label>
+          <input type="date" id="avbEndDate" class="input" required style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">End Time *</label>
+          <input type="time" id="avbEndTime" class="input" required style="width:100%;" />
+        </div>
+        <div id="avbError" style="color:#ef4444;font-size:14px;display:none;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+          <button type="button" onclick="closeAvailabilityModal()" class="btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="avbSubmitBtn" style="background:#3b82f6;">Save Block</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Details Side Panel (replaces full-screen overlay) -->
   <div id="detailsModal" class="details-panel">
     <div class="details-panel-inner">
@@ -535,9 +681,203 @@
   </div>
 
   <script>
-    const API_BASE = window.API_BASE || 'http://localhost:4000';
+    const API_BASE = window.API_BASE || window.location.origin || 'http://localhost:4000';
+    const API_URL = (path) => {
+      const base = (API_BASE || '').replace(/\/$/, '');
+      return base ? `${base}${path.startsWith('/') ? path : '/' + path}` : path;
+    };
 
     requireAuth('../login.html');
+
+    // Online/Offline status (session-based, cookie auth)
+    async function loadAvailabilityStatus() {
+      const btn = document.getElementById('onlineOfflineBtn');
+      const text = document.getElementById('onlineStatusText');
+      try {
+        const res = await fetch(API_URL('/api/customers/me/availability-status'), { credentials: 'include' });
+        const data = await res.json();
+        if (data.success && data.status) {
+          const isOnline = !!data.status.is_online;
+          updateOnlineUI(isOnline);
+        } else if (!res.ok && res.status === 401) {
+          if (text) text.textContent = 'Sign in required';
+        }
+      } catch (e) {
+        console.warn('Could not load availability status:', e);
+        if (text) text.textContent = 'Offline';
+      }
+    }
+    function updateOnlineUI(isOnline) {
+      const btn = document.getElementById('onlineOfflineBtn');
+      const text = document.getElementById('onlineStatusText');
+      if (btn) btn.className = 'online-offline-btn ' + (isOnline ? 'online' : 'offline');
+      if (text) text.textContent = isOnline ? 'Online' : 'Offline';
+    }
+    async function toggleOnlineOffline() {
+      const btn = document.getElementById('onlineOfflineBtn');
+      const text = document.getElementById('onlineStatusText');
+      const currentlyOnline = btn && btn.classList.contains('online');
+      const newOnline = !currentlyOnline;
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(API_URL('/api/customers/me/availability-status'), {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_online: newOnline })
+        });
+        const data = await res.json();
+        if (data.success) {
+          updateOnlineUI(newOnline);
+        } else {
+          if (res.status === 401) alert('Session expired. Please sign in again.');
+          else alert(data.error || 'Failed to update status');
+        }
+      } catch (e) {
+        console.error('Failed to update status:', e);
+        alert('Could not connect. Check the console and ensure you are signed in.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+    (function initOnlineOffline() {
+      const btn = document.getElementById('onlineOfflineBtn');
+      if (btn) btn.addEventListener('click', toggleOnlineOffline);
+      loadAvailabilityStatus();
+    })();
+
+    function initMobileSidebar() {
+      const toggle = document.getElementById('sidebarToggle');
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      if (!toggle || !sidebar || !overlay) return;
+      function open() {
+        sidebar.classList.add('open');
+        overlay.style.display = 'block';
+        overlay.classList.add('visible');
+        toggle.textContent = '✕';
+        toggle.setAttribute('aria-label', 'Close menu');
+      }
+      function close() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('visible');
+        setTimeout(() => { overlay.style.display = 'none'; }, 200);
+        toggle.textContent = '☰';
+        toggle.setAttribute('aria-label', 'Open menu');
+      }
+      toggle.addEventListener('click', () => sidebar.classList.contains('open') ? close() : open());
+      overlay.addEventListener('click', close);
+      if (window.matchMedia('(min-width: 769px)').matches) {
+        overlay.style.display = 'none';
+        sidebar.classList.remove('open');
+      }
+      window.addEventListener('resize', () => {
+        if (window.innerWidth >= 769) { overlay.style.display = 'none'; sidebar.classList.remove('open'); toggle.textContent = '☰'; }
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initMobileSidebar);
+    } else {
+      initMobileSidebar();
+    }
+
+    // Availability blocks
+    let availabilityBlockType = 'available';
+    async function fetchAvailabilityBlocks(startDate, endDate) {
+      try {
+        const params = new URLSearchParams();
+        if (startDate) params.set('start', startDate);
+        if (endDate) params.set('end', endDate);
+        const res = await fetch(`${API_BASE}/api/customers/me/availability-blocks?${params}`, { credentials: 'include' });
+        const data = await res.json();
+        return data.success ? (data.blocks || []) : [];
+      } catch (e) {
+        console.warn('Could not load availability blocks:', e);
+        return [];
+      }
+    }
+    function toAvailabilityEvents(blocks) {
+      return blocks.map(b => ({
+        id: b.id,
+        title: (b.title || (b.block_type === 'out_of_office' ? 'Out of Office' : 'Available')),
+        start: b.start_datetime,
+        end: b.end_datetime,
+        backgroundColor: b.block_type === 'out_of_office' ? '#6b7280' : '#3b82f6',
+        borderColor: b.block_type === 'out_of_office' ? '#4b5563' : '#2563eb',
+        textColor: '#ffffff',
+        extendedProps: { isAvailabilityBlock: true, blockId: b.id, blockType: b.block_type, title: b.title }
+      }));
+    }
+    function openAvailabilityModal(blockType) {
+      availabilityBlockType = blockType;
+      const modal = document.getElementById('availabilityModal');
+      const titleEl = document.getElementById('availabilityModalTitle');
+      const submitBtn = document.getElementById('avbSubmitBtn');
+      titleEl.textContent = blockType === 'out_of_office' ? 'Out of Office' : 'Set Availability';
+      submitBtn.textContent = blockType === 'out_of_office' ? 'Add Out of Office' : 'Add Available';
+      submitBtn.style.background = blockType === 'out_of_office' ? '#6b7280' : '#3b82f6';
+      const today = new Date();
+      const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      document.getElementById('avbStartDate').value = dateStr;
+      document.getElementById('avbEndDate').value = dateStr;
+      document.getElementById('avbStartTime').value = '09:00';
+      document.getElementById('avbEndTime').value = '17:00';
+      document.getElementById('avbError').style.display = 'none';
+      modal.style.display = 'block';
+    }
+    function closeAvailabilityModal() {
+      document.getElementById('availabilityModal').style.display = 'none';
+    }
+    async function saveAvailabilityBlock() {
+      const startDate = document.getElementById('avbStartDate').value;
+      const endDate = document.getElementById('avbEndDate').value;
+      const startTime = document.getElementById('avbStartTime').value;
+      const endTime = document.getElementById('avbEndTime').value;
+      const errorEl = document.getElementById('avbError');
+      errorEl.style.display = 'none';
+      const startDatetime = startDate && startTime ? `${startDate}T${startTime}:00` : null;
+      const endDatetime = endDate && endTime ? `${endDate}T${endTime}:00` : null;
+      if (!startDatetime || !endDatetime) {
+        errorEl.textContent = 'Please fill in all date and time fields';
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (new Date(endDatetime) <= new Date(startDatetime)) {
+        errorEl.textContent = 'End must be after start';
+        errorEl.style.display = 'block';
+        return;
+      }
+      try {
+        const url = (typeof API_URL === 'function') ? API_URL('/api/customers/me/availability-blocks') : `${API_BASE}/api/customers/me/availability-blocks`;
+        const res = await fetch(url, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            block_type: availabilityBlockType,
+            start_datetime: startDatetime,
+            end_datetime: endDatetime
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeAvailabilityModal();
+          if (typeof window.calendarRefresh === 'function') window.calendarRefresh();
+        } else {
+          errorEl.textContent = data.error || 'Failed to save';
+          errorEl.style.display = 'block';
+        }
+      } catch (e) {
+        errorEl.textContent = 'Failed to save. Please try again.';
+        errorEl.style.display = 'block';
+      }
+    }
+    document.getElementById('availabilityForm')?.addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveAvailabilityBlock();
+    });
+    document.getElementById('setAvailabilityBtn')?.addEventListener('click', () => openAvailabilityModal('available'));
+    document.getElementById('outOfOfficeBtn')?.addEventListener('click', () => openAvailabilityModal('out_of_office'));
 
     // PHI masking helpers
     function maskPhone(phone) {
@@ -795,8 +1135,21 @@
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+        datesSet: function () { refresh(); },
         eventClick: function (info) {
           const p = info.event.extendedProps;
+          if (p && p.isAvailabilityBlock) {
+            const title = info.event.title || (p.blockType === 'out_of_office' ? 'Out of Office' : 'Available');
+            if (confirm(`Delete "${title}" block?`)) {
+              fetch(`${API_BASE}/api/customers/me/availability-blocks/${encodeURIComponent(info.event.id)}`, {
+                method: 'DELETE',
+                credentials: 'include'
+              }).then(r => r.json()).then(data => {
+                if (data.success) refresh();
+              }).catch(() => alert('Failed to delete'));
+            }
+            return;
+          }
           openModal('<div/>', info.event.id, p.status, p);
         }
       });
@@ -804,9 +1157,24 @@
       async function refresh() {
         const appts = await fetchAppointments();
         const events = toCalendarEvents(appts);
+        let start = null, end = null;
+        try {
+          const view = calendar.view;
+          if (view && view.activeStart) start = view.activeStart.toISOString().slice(0, 10);
+          if (view && view.activeEnd) end = view.activeEnd.toISOString().slice(0, 10);
+        } catch (_) {}
+        if (!start || !end) {
+          const d = new Date();
+          start = new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString().slice(0, 10);
+          end = new Date(d.getFullYear(), d.getMonth() + 2, 0).toISOString().slice(0, 10);
+        }
+        const blocks = await fetchAvailabilityBlocks(start, end);
+        const avbEvents = toAvailabilityEvents(blocks);
         calendar.removeAllEvents();
         calendar.addEventSource(events);
+        calendar.addEventSource(avbEvents);
       }
+      window.calendarRefresh = refresh;
 
       document.getElementById('refreshBtn').addEventListener('click', refresh);
       document.getElementById('createApptBtn').addEventListener('click', openCreateModal);

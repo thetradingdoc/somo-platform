@@ -6,6 +6,14 @@
 
 ---
 
+## 📊 Documentation Audit (March 2026)
+
+- **Total .md files:** 142 (down from 167; Phases 1–5 consolidation applied)
+- **Consolidation plan:** [DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
+- **Phase 1 & 2 applied:** Empty file + placeholder folders removed; patient/triage/matching/specialist merged into [PATIENT_BOOKING_AND_TRIAGE_GAPS.md](./PATIENT_BOOKING_AND_TRIAGE_GAPS.md)
+
+---
+
 ## 📚 Quick Navigation
 
 ### 🚀 Getting Started
@@ -42,18 +50,18 @@
 - **[Invoice API](./api/INVOICE_API.md)** - Invoice endpoints
 - **[Stedi Integration](./integrations/stedi/api/STEDI_API_ENDPOINTS.md)** - Stedi API
 - **[UHC FHIR Integration](./integrations/uhc/fhir/UHC_FHIR_SERVICE_USAGE.md)** - UHC FHIR
-- **[Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING_STATUS.md)** - Stripe cards
+- **[Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING.md)** - Stripe cards
 
 #### Setup & Configuration
 - **[Main Setup](./setup/getting-started/SETUP.md)** - Platform setup
-- **[Stripe Issuing Setup](./setup/stripe/STRIPE_ISSUING_COMPLETE_GUIDE.md)** - Stripe configuration
+- **[Stripe Issuing Setup](./integrations/stripe/issuing/STRIPE_ISSUING.md)** - Stripe configuration
 - **[Google OAuth](./setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md)** - Google Calendar OAuth
 - **[Azure Configuration](./azure/AZURE_AUTOMATION.md)** - Azure setup
 
 #### Deployment
 - **[Deployment Guide](./deployment/guides/DEPLOYMENT_GUIDE.md)** - Main deployment guide
 - **[Azure Deployment](./deployment/guides/basic/QUICK_DEPLOYMENT_GUIDE.md)** - Quick Azure deploy
-- **[DNS Configuration](./deployment/dns/ionos/IONOS_DNS_CONFIGURATION.md)** - DNS setup
+- **[DNS Configuration](./deployment/dns/ionos/IONOS_DNS_SETUP.md)** - DNS setup
 - **[SSL Setup](./deployment/dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md)** - SSL certificates
 - **[Security](./deployment/security/PRODUCTION_DEPLOYMENT_API_KEYS.md)** - Security setup
 - **[Database Migration](./deployment/database/POSTGRES_MIGRATION.md)** - Postgres migration
@@ -61,6 +69,10 @@
 #### User Guides
 - **[Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)** - Invoice generation workflow
 - **[Clinic Onboarding](./onboarding/CLINIC_ONBOARDING_CHECKLIST.md)** - Clinic setup
+
+#### Patient Booking & Triage Gaps
+- **[Patient Booking & Triage Gaps](./PATIENT_BOOKING_AND_TRIAGE_GAPS.md)** - Flow, all gaps (T/M/S/C/U), golden path, phased execution
+- **[Richer Triage & Records](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** - Schema, records Q&A
 
 #### Voice Agent, Video Consult & Medical Coding
 - **[Hybrid Architecture Overview](./architecture/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
@@ -103,12 +115,12 @@ docs/
 │   ├── IMPROVEMENT_PLAN.md           # Improvement roadmap
 │   ├── GITHUB_TASKS.md               # Repo hygiene tasks
 │   ├── MASTER_TODO_FULL.md           # Full platform roadmap
-│   └── TECH_LEAD_CLEANUP.md          # Cleanup record
+│   └── (TECH_LEAD_CLEANUP archived → archive/TECH_LEAD_CLEANUP.md)
 │
 ├── admin-portal/                      # Admin Portal
 │   ├── ADMIN_PORTAL_STRUCTURE.md     # Structure and URLs
 │   ├── ADMIN_PORTAL_TESTING.md       # Testing guide
-│   └── ADMIN_PORTAL_FIXES_COMPLETE.md
+│   └── (ADMIN_PORTAL_FIXES_COMPLETE archived → archive/)
 │
 ├── deployment/                        # Deployment Guides
 │   ├── guides/                       # Deployment guides (incl. DEPLOYMENT_GUIDE.md)
@@ -153,13 +165,13 @@ docs/
 ### I want to...
 - **Find all documentation** → This README (docs is the source of truth)
 - **Deploy the platform** → [Deployment Guide](./deployment/guides/DEPLOYMENT_GUIDE.md)
-- **Set up Stripe** → [Stripe Issuing Guide](./setup/stripe/STRIPE_ISSUING_COMPLETE_GUIDE.md)
+- **Set up Stripe** → [Stripe Issuing Guide](./integrations/stripe/issuing/STRIPE_ISSUING.md)
 - **Configure Google Calendar** → [Google OAuth Guide](./setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md)
 - **Understand the architecture** → [Architecture Overview](./architecture/vision/VISION.md)
 - **Use the API** → [API Documentation](./api/API_DOCUMENTATION.md)
 - **Generate invoices** → [Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)
 - **Set up Azure** → [Azure Automation](./azure/AZURE_AUTOMATION.md)
-- **Configure DNS** → [DNS Configuration](./deployment/dns/ionos/IONOS_DNS_CONFIGURATION.md)
+- **Configure DNS** → [DNS Configuration](./deployment/dns/ionos/IONOS_DNS_SETUP.md)
 - **Work on the Admin Portal** → [Admin Portal docs](./admin-portal/README.md)
 
 ---
@@ -190,12 +202,12 @@ docs/
 
 ### Payments
 - [Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)
-- [Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING_STATUS.md)
+- [Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING.md)
 - [Invoice System](./development/invoice-billing/IMPLEMENTATION_SUMMARY.md)
 
 ### Multi-Tenancy
 - [Multi-Tenant Architecture](./architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md)
-- [Tenant Subdomain Setup](./deployment/dns/TENANT_SUBDOMAIN_SETUP.md)
+- [Tenant & DNS Setup](./deployment/dns/TENANT_AND_DNS_SETUP.md)
 - [Automated Domain Setup](./deployment/azure/AUTOMATED_TENANT_DOMAIN_SETUP.md)
 
 ### Healthcare
@@ -207,7 +219,7 @@ docs/
 - [Voice Agent Config](./voice-agent/README.md)
 - [Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)
 - [Retell Configuration](./middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md)
-- [AI Agent Financial Layer TODO](./architecture/voice-agent/AI_AGENT_FINANCIAL_LAYER_TODO.md)
+- [Voice Agent Todo & Status](./architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)
 
 ---
 
@@ -224,7 +236,7 @@ docs/
 
 ## 🧹 Cleanup record
 
-One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./development/TECH_LEAD_CLEANUP.md)** for details.
+One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./archive/TECH_LEAD_CLEANUP.md)** for details.
 
 ---
 

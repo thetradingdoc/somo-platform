@@ -58,5 +58,5 @@ unified-dashboard/admin/
 
 ## Related Documentation
 
-- [ADMIN_PORTAL_FIXES_COMPLETE.md](./ADMIN_PORTAL_FIXES_COMPLETE.md)
+- [ADMIN_PORTAL_FIXES_COMPLETE.md](../archive/ADMIN_PORTAL_FIXES_COMPLETE.md) (archived)
 - [ADMIN_PORTAL_TESTING.md](./ADMIN_PORTAL_TESTING.md)

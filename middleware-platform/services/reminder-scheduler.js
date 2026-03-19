@@ -196,7 +196,36 @@ class ReminderScheduler {
         }
       }
 
-      if (needs24h.length === 0 && appointmentsNeedingReminders.length === 0) {
+      // Phase 6 — 10-minute tech check reminder (sync_video only)
+      const baseUrl = process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || 'http://localhost:4000';
+      const needsTechCheck = allAppointments.filter(appt => {
+        if (!appt.status || !['scheduled', 'confirmed'].includes(appt.status)) return false;
+        if (!appt.patient_phone) return false;
+        if (appt.tech_check_sent) return false;
+        if (appt.visit_mode !== 'sync_video') return false;
+        if (!appt.start_time) return false;
+        const startTime = new Date(appt.start_time);
+        const timeUntil = startTime.getTime() - now.getTime();
+        return timeUntil >= 10 * 60 * 1000 && timeUntil <= 11 * 60 * 1000;
+      });
+
+      for (const appt of needsTechCheck) {
+        try {
+          console.log(`📱 Sending tech check reminder for ${appt.id} (${appt.patient_name})`);
+          const techCheckUrl = `${baseUrl.replace(/\/$/, '')}/patients/tech-check.html?appt=${encodeURIComponent(appt.id)}`;
+          const smsText = `Tech check before your visit: ${techCheckUrl}`;
+          if (SMSService) {
+            await SMSService.sendSMS(appt.patient_phone, smsText);
+          }
+          if (db.markTechCheckSent) {
+            db.markTechCheckSent(appt.id, appt.clinic_id || null);
+          }
+        } catch (error) {
+          console.error(`❌ Error sending tech check reminder for ${appt.id}:`, error.message);
+        }
+      }
+
+      if (needs24h.length === 0 && appointmentsNeedingReminders.length === 0 && needsTechCheck.length === 0) {
         console.log('   ℹ️  No appointments needing reminders at this time');
       }
 

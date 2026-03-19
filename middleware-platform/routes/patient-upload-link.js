@@ -62,81 +62,123 @@ function buildUploadLinkEmail(to, uploadUrl, options = {}) {
   };
 }
 
+/**
+ * Build SMS body for upload link (u-7: voice handoff).
+ */
+function buildUploadLinkSms(uploadUrl) {
+  return `Upload documents for your visit: ${uploadUrl}\n\nThe link expires in 48 hours.`;
+}
+
+/**
+ * Create upload token and send link via email or SMS.
+ * Used by HTTP handler and PatientOrchestratorService (u-7 voice handoff).
+ * @param {{ patient_id?: string, patient_email?: string, patient_phone?: string, appointment_id?: string, channel?: 'email'|'sms' }} opts
+ * @returns {Promise<{ sent: boolean, channel: string, upload_url?: string, expires_at?: string, error?: string }>}
+ */
+async function createAndSendUploadLink(opts = {}) {
+  const { patient_id, patient_email, patient_phone, appointment_id, channel: requestedChannel = 'email' } = opts;
+
+  let patient = null;
+  if (patient_id) {
+    patient = db.getFHIRPatient(patient_id);
+  }
+  if (!patient && patient_email) {
+    patient = db.getFHIRPatientByEmail((patient_email || '').trim());
+  }
+  if (!patient && patient_phone) {
+    const normalized = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
+    patient = db.getFHIRPatientByPhone(normalized);
+  }
+
+  if (!patient) {
+    return { sent: false, error: 'Patient not found' };
+  }
+
+  const patientId = patient.resource_id;
+  const expiresAt = computeTokenExpiry(appointment_id || null);
+  const token = createUploadToken(patientId, appointment_id || null, expiresAt);
+
+  db.createUploadToken({
+    token,
+    patient_id: patientId,
+    appointment_id: appointment_id || null,
+    expires_at: expiresAt.toISOString(),
+    used: 0,
+    max_files: 10,
+    max_bytes: 52428800
+  });
+
+  const baseUrl = getBaseUrl();
+  const uploadUrl = `${baseUrl}${UPLOAD_PORTAL_PATH.startsWith('/') ? '' : '/'}${UPLOAD_PORTAL_PATH}?token=${encodeURIComponent(token)}`;
+
+  let appointmentTime = null;
+  if (appointment_id) {
+    try {
+      const apt = db.getAppointment && db.getAppointment(appointment_id);
+      if (apt && apt.start_time) {
+        appointmentTime = new Date(apt.start_time).toLocaleString('en-US', { weekday: 'short', dateStyle: 'medium', timeStyle: 'short' });
+      }
+    } catch (_) {}
+  }
+
+  if (requestedChannel === 'sms' && patient_phone) {
+    const phone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
+    const smsBody = buildUploadLinkSms(uploadUrl);
+    const smsResult = await SMSService.sendSMS(phone, smsBody);
+    return {
+      sent: !!smsResult?.success,
+      channel: 'sms',
+      upload_url: uploadUrl,
+      expires_at: expiresAt.toISOString(),
+      error: smsResult?.error || null
+    };
+  }
+
+  // Default: email
+  const emailPayload = buildUploadLinkEmail(patient.email || patient_email, uploadUrl, {
+    appointmentTime,
+    expiresAt: expiresAt.toISOString()
+  });
+
+  if (!emailPayload.to) {
+    return {
+      sent: false,
+      error: 'Patient has no email on file'
+    };
+  }
+
+  const emailResult = await EmailService.sendEmail({
+    to: emailPayload.to,
+    subject: emailPayload.subject,
+    html: emailPayload.html,
+    text: emailPayload.text
+  });
+
+  return {
+    sent: !!(emailResult?.success),
+    channel: 'email',
+    upload_url: uploadUrl,
+    expires_at: expiresAt.toISOString(),
+    error: emailResult?.error || null
+  };
+}
+
 async function sendUploadLinkHandler(req, res) {
   try {
-    const { patient_id, patient_email, patient_phone, appointment_id } = req.body || {};
-
-    let patient = null;
-    if (patient_id) {
-      patient = db.getFHIRPatient(patient_id);
-    }
-    if (!patient && patient_email) {
-      patient = db.getFHIRPatientByEmail(patient_email.trim());
-    }
-    if (!patient && patient_phone) {
-      const normalized = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patient_phone) : patient_phone;
-      patient = db.getFHIRPatientByPhone(normalized);
-    }
-
-    if (!patient) {
-      return res.status(404).json({
-        success: false,
-        error: 'Patient not found',
-        sent: false
-      });
-    }
-
-    const patientId = patient.resource_id;
-    const expiresAt = computeTokenExpiry(appointment_id || null);
-    const token = createUploadToken(patientId, appointment_id || null, expiresAt);
-
-    db.createUploadToken({
-      token,
-      patient_id: patientId,
-      appointment_id: appointment_id || null,
-      expires_at: expiresAt.toISOString(),
-      used: 0,
-      max_files: 10,
-      max_bytes: 52428800
+    const { patient_id, patient_email, patient_phone, appointment_id, channel } = req.body || {};
+    const result = await createAndSendUploadLink({
+      patient_id,
+      patient_email,
+      patient_phone,
+      appointment_id,
+      channel: channel || 'email'
     });
 
-    const baseUrl = getBaseUrl();
-    const uploadUrl = `${baseUrl}${UPLOAD_PORTAL_PATH.startsWith('/') ? '' : '/'}${UPLOAD_PORTAL_PATH}?token=${encodeURIComponent(token)}`;
-
-    let appointmentTime = null;
-    if (appointment_id) {
-      try {
-        const apt = db.getAppointment && db.getAppointment(appointment_id);
-        if (apt && apt.start_time) {
-          appointmentTime = new Date(apt.start_time).toLocaleString('en-US', { weekday: 'short', dateStyle: 'medium', timeStyle: 'short' });
-        }
-      } catch (_) {}
-    }
-
-    const emailPayload = buildUploadLinkEmail(patient.email || patient_email, uploadUrl, {
-      appointmentTime,
-      expiresAt: expiresAt.toISOString()
-    });
-
-    if (!emailPayload.to) {
-      return res.status(400).json({
+    if (!result.sent) {
+      const status = result.error === 'Patient not found' ? 404 : (result.error?.includes('email') ? 400 : 500);
+      return res.status(status).json({
         success: false,
-        error: 'Patient has no email on file; provide patient_email in the request or ensure FHIR patient has email',
-        sent: false
-      });
-    }
-
-    const emailResult = await EmailService.sendEmail({
-      to: emailPayload.to,
-      subject: emailPayload.subject,
-      html: emailPayload.html,
-      text: emailPayload.text
-    });
-
-    if (!emailResult || !emailResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: emailResult?.error || 'Failed to send email',
+        error: result.error || 'Failed to send',
         sent: false
       });
     }
@@ -144,8 +186,8 @@ async function sendUploadLinkHandler(req, res) {
     return res.json({
       success: true,
       sent: true,
-      channel: 'email',
-      expires_at: expiresAt.toISOString()
+      channel: result.channel,
+      expires_at: result.expires_at
     });
   } catch (err) {
     console.error('[send-upload-link]', err);
@@ -162,3 +204,4 @@ router.post('/send-upload-link', sendUploadLinkHandler);
 module.exports = router;
 module.exports.sendUploadLinkHandler = sendUploadLinkHandler;
 module.exports.computeTokenExpiry = computeTokenExpiry;
+module.exports.createAndSendUploadLink = createAndSendUploadLink;

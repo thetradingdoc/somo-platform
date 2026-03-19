@@ -64,7 +64,8 @@ router.post('/send-followup-email', verifyRetellSecret, express.json(), async (r
   try {
     console.log('\n📧 RETELL: Send Follow-up Email');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    const { safeLogRequestBody } = require('../services/payment-security');
+    safeLogRequestBody('Request body:', req);
 
     // Extract parameters from Retell payload
     // Retell sends: { call: {...}, parameters: {...} }
@@ -203,7 +204,8 @@ router.post('/send-followup-sms', verifyRetellSecret, express.json(), async (req
   try {
     console.log('\n📱 RETELL: Send Follow-up SMS');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    const { safeLogRequestBody } = require('../services/payment-security');
+    safeLogRequestBody('Request body:', req);
 
     // Extract parameters from Retell payload
     const parameters = req.body.parameters || req.body;

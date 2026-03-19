@@ -329,7 +329,7 @@ class InvoiceService {
               ` : ''}
             </div>
             <div class="footer">
-              <p>This is an automated message from DocLittle Medical Coding Assistant</p>
+              <p>This is an automated message from DocLittle Doctor's Portal</p>
             </div>
           </div>
         </body>
@@ -356,7 +356,7 @@ ${balance > 0 ? `Please remit payment by ${dueDate} to avoid late fees.` : 'This
 If you have any questions, please contact us.
 
 ---
-DocLittle Medical Coding Assistant
+DocLittle Doctor's Portal
       `.trim()
     };
   }

@@ -8,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 const db = require('../database');
 const EmailService = require('../services/email-service');
+const ProviderService = require('../services/provider-service');
 const RetellService = require('../services/retell-service');
 const TwilioPhoneService = require('../services/twilio-phone-service');
 const { v4: uuidv4 } = require('uuid');
@@ -66,18 +67,64 @@ function getSessionCookieOptions(req, maxAge = 30 * 24 * 60 * 60 * 1000) {
  */
 router.post('/signup', rateLimiter, async (req, res) => {
   try {
-    const { name, email, phone_number, company_name, business_size, use_case, api_features, customer_type } = req.body;
+    const {
+      name,
+      email,
+      phone_number,
+      company_name,
+      business_size,
+      use_case,
+      api_features,
+      customer_type,
+      first_name,
+      last_name,
+      city,
+      postal_code,
+      country,
+      country_code,
+      medical_specialty,
+      license_number,
+      license_state,
+      license_region,
+      languages
+    } = req.body;
 
-    // Log received customer_type for debugging
-    console.log(`📝 Signup request - customer_type from body: ${customer_type || 'undefined'}`);
-    console.log(`📝 Full request body:`, JSON.stringify({ name, email, customer_type, company_name }, null, 2));
+    // Build name from first_name + last_name if provided (specialist portal)
+    const fullName = (first_name || last_name)
+      ? [first_name, last_name].filter(Boolean).join(' ').trim()
+      : name;
+
+    console.log(`📝 Signup request - customer_type: ${customer_type || 'undefined'}, specialist: ${!!(first_name || last_name)}`);
 
     // Validation
-    if (!name || !email) {
+    if (!fullName || !email) {
       return res.status(400).json({
         success: false,
         error: 'Name and email are required'
       });
+    }
+
+    // Specialist portal: license and location required
+    if (first_name || last_name || medical_specialty) {
+      const licenseRegionVal = license_state || license_region;
+      if (!license_number || !licenseRegionVal) {
+        return res.status(400).json({
+          success: false,
+          error: 'License number and state/region are required for provider signup'
+        });
+      }
+      if (!city || !postal_code || !country) {
+        return res.status(400).json({
+          success: false,
+          error: 'City, postal code, and country are required'
+        });
+      }
+      if (!medical_specialty) {
+        return res.status(400).json({
+          success: false,
+          error: 'Medical specialty is required'
+        });
+      }
     }
 
     // Validate customer_type
@@ -166,11 +213,35 @@ router.post('/signup', rateLimiter, async (req, res) => {
       }
     }
 
+    // Build provider_profile for specialist signups
+    // Languages: array of ISO 639-1 codes for patient matching (preferred_language)
+    // Location: country_code (ISO 3166), country (name), city, postal_code
+    // License: license_region = state code (US) or region text (e.g. England, Ontario)
+    const licenseRegion = license_state || license_region;
+    const languagesArray = Array.isArray(languages)
+      ? languages.filter(Boolean)
+      : (typeof languages === 'string' ? languages.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+    const providerProfile = (first_name || last_name || medical_specialty)
+      ? {
+          first_name: first_name || null,
+          last_name: last_name || null,
+          city: city || null,
+          postal_code: postal_code || null,
+          country: country || null,
+          country_code: country_code || null,
+          medical_specialty: medical_specialty || null,
+          license_number: license_number || null,
+          license_region: licenseRegion || null,
+          languages: languagesArray
+        }
+      : null;
+
     // Create customer account (pending email verification)
     const customerId = `cust_${uuidv4()}`;
     const customerRecord = {
       id: customerId,
-      name,
+      name: fullName,
       email,
       phone_number: phone_number || null,
       company_name: company_name || null,
@@ -178,18 +249,18 @@ router.post('/signup', rateLimiter, async (req, res) => {
       use_case: use_case || null,
       api_features: api_features || [],
       customer_type: customerType,
-      pricing_tier: 'starter', // Default pricing tier
+      pricing_tier: 'starter',
       status: 'pending',
-      email_verified: false
+      email_verified: false,
+      provider_profile: providerProfile
     };
     db.createCustomer(customerRecord);
 
     // Track incomplete signup (Step 1: Started)
-    // This helps us follow up with businesses that don't complete signup
     try {
       const env = process.env.NODE_ENV || 'development';
       db.createIncompleteSignup({
-        name,
+        name: fullName,
         email,
         phone_number: phone_number || null,
         company_name: company_name || null,
@@ -215,7 +286,7 @@ router.post('/signup', rateLimiter, async (req, res) => {
     try {
       db.upsertLeadFromCustomer({
         id: customerId,
-        name,
+        name: fullName,
         email,
         phone_number: phone_number || null,
         company_name: company_name || null,
@@ -226,7 +297,7 @@ router.post('/signup', rateLimiter, async (req, res) => {
         pipeline_stage: 'new',
         status: 'new',
         activity_subject: 'Signup form submitted',
-        activity_description: `${name} (${email}) submitted the signup form.`
+        activity_description: `${fullName} (${email}) submitted the signup form.`
       });
     } catch (leadError) {
       console.warn('⚠️  Failed to create signup lead:', leadError.message);
@@ -240,7 +311,7 @@ router.post('/signup', rateLimiter, async (req, res) => {
 
     // Send verification email
     try {
-      await EmailService.sendVerificationCode(email, verificationCode, name);
+      await EmailService.sendVerificationCode(email, verificationCode, fullName);
     } catch (emailError) {
       console.error('❌ Failed to send verification email:', emailError);
       // Continue - customer can request another code
@@ -1522,6 +1593,161 @@ router.get('/customers/me/api-keys', rateLimiter, async (req, res) => {
 });
 
 /**
+ * GET /api/customers/me/availability-status
+ * Get current provider's online/offline status (session-based)
+ */
+router.get('/customers/me/availability-status', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    const status = ProviderService.getProviderStatus(customer.email);
+    res.json({
+      success: true,
+      status: status || { is_online: false, availability_rules: null, updated_at: null }
+    });
+  } catch (error) {
+    console.error('❌ Get availability status error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/customers/me/availability-blocks
+ * List availability blocks for the session provider
+ */
+router.get('/customers/me/availability-blocks', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    const startDate = req.query.start;
+    const endDate = req.query.end;
+    const blocks = ProviderService.getAvailabilityBlocks(customer.email, startDate || undefined, endDate || undefined);
+    res.json({ success: true, blocks });
+  } catch (error) {
+    console.error('❌ Get availability blocks error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/customers/me/availability-blocks
+ * Create availability block (available or out_of_office)
+ */
+router.post('/customers/me/availability-blocks', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    const { block_type, start_datetime, end_datetime, title } = req.body || {};
+    if (!block_type || !['available', 'out_of_office'].includes(block_type)) {
+      return res.status(400).json({ success: false, error: 'block_type must be "available" or "out_of_office"' });
+    }
+    if (!start_datetime || !end_datetime) {
+      return res.status(400).json({ success: false, error: 'start_datetime and end_datetime required' });
+    }
+    const block = ProviderService.createAvailabilityBlock({
+      provider_email: customer.email,
+      block_type,
+      start_datetime,
+      end_datetime,
+      title: title || null
+    });
+    res.json({ success: true, block });
+  } catch (error) {
+    console.error('❌ Create availability block error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/customers/me/availability-blocks/:id
+ * Delete availability block
+ */
+router.delete('/customers/me/availability-blocks/:id', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    const deleted = ProviderService.deleteAvailabilityBlock(customer.email, req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'Block not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Delete availability block error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * PATCH /api/customers/me/availability-status
+ * Set provider online/offline (session-based)
+ */
+router.patch('/customers/me/availability-status', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    const { is_online } = req.body || {};
+    if (typeof is_online === 'boolean') {
+      ProviderService.setProviderOnline(customer.email, is_online);
+    }
+    const status = ProviderService.getProviderStatus(customer.email);
+    res.json({ success: true, status });
+  } catch (error) {
+    console.error('❌ Update availability status error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/customers/me
  * Get current customer information
  */
@@ -1581,6 +1807,16 @@ router.get('/customers/me', rateLimiter, async (req, res) => {
       apiFeatures = [];
     }
 
+    // Parse provider_profile if present (specialist portal data)
+    let providerProfile = customer.provider_profile;
+    if (typeof providerProfile === 'string' && providerProfile) {
+      try {
+        providerProfile = JSON.parse(providerProfile);
+      } catch (e) {
+        providerProfile = null;
+      }
+    }
+
     res.json({
       success: true,
       customer: {
@@ -1591,6 +1827,7 @@ router.get('/customers/me', rateLimiter, async (req, res) => {
         company_name: customer.company_name,
         business_size: customer.business_size,
         api_features: apiFeatures,
+        provider_profile: providerProfile || null,
         plan_tier: customer.plan_tier,
         status: customer.status,
         email_verified: customer.email_verified === 1,

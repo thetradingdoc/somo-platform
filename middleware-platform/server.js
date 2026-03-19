@@ -43,6 +43,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 // Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
@@ -93,6 +94,7 @@ try {
 const db = require('./database');
 const constants = require('./utils/constants');
 const PaymentOrchestrator = require('./services/payment-orchestrator');
+const { sanitizeForLog, safeLogRequestBody } = require('./services/payment-security');
 const SMSService = require('./services/sms-service');
 const FHIRService = require('./services/fhir-service');
 const FHIRAdapter = require('./adapters/fhir-adapter');
@@ -376,6 +378,7 @@ async function rotatePatientSessionIfNeeded(req, res) {
         (?, ?, ?, ?, NULL, 1, datetime('now'), ?, datetime('now'), datetime('now'))
     `).run(newId, row.patient_id || null, row.phone || null, row.email || null, expiresAt);
 
+    // P-2: Invalidate old session row so validateSession rejects revoked sessions
     db.db.prepare(`
       UPDATE patient_portal_sessions
       SET revoked_at = datetime('now'), rotated_to = ?
@@ -390,7 +393,9 @@ async function rotatePatientSessionIfNeeded(req, res) {
       maxAge: 24 * 60 * 60 * 1000
     });
     issueCsrfCookie(res);
-  } catch (_) {}
+  } catch (e) {
+    console.warn('⚠️  rotatePatientSessionIfNeeded failed:', e?.message || e);
+  }
 }
 
 function assertPatientOwnsAppointmentOrThrow(sessionValidation, appointment) {
@@ -472,6 +477,12 @@ function withIdempotency(operationType) {
         try { db.releaseIdempotencyKey(key, operationType); } catch (_) {}
       }
     });
+    // Bug 6: Release key on close (socket closed without res.end, e.g. crash before response)
+    res.on('close', () => {
+      if (key && !res.writableEnded && db.releaseIdempotencyKey) {
+        try { db.releaseIdempotencyKey(key, operationType); } catch (_) {}
+      }
+    });
     return next();
   };
 }
@@ -501,10 +512,18 @@ app.get('/api/patient/support-config', (req, res, next) => apiLimiter(req, res, 
     const email = fromDb('support_email') || process.env.CLINIC_SUPPORT_EMAIL || '';
     const hours = fromDb('support_hours') || process.env.CLINIC_SUPPORT_HOURS || '';
 
+    const { getClinicBusinessHours } = require('./config/clinic-business-hours');
+    const clinicHours = clinicId ? getClinicBusinessHours(clinicId) : null;
+    const timezone = clinicHours?.timezone || process.env.GOOGLE_CALENDAR_TIMEZONE || 'America/New_York';
+
+    const slotHoldTtl = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_MINUTES || '30', 10);
+
     return res.json({
       success: true,
       clinic_id: clinicId,
-      support: { phone, email, hours }
+      support: { phone, email, hours },
+      timezone,
+      slot_hold_ttl_minutes: Math.max(10, Math.min(60, slotHoldTtl))
     });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
@@ -924,6 +943,12 @@ app.use('/patients/video-call.html', (req, res, next) => {
   next();
 });
 
+// Remove CSP for calendar (FullCalendar CDN + data: fonts need style-src/font-src)
+app.use(['/business/calendar.html', '/unified-dashboard/business/calendar.html'], (req, res, next) => {
+  res.removeHeader('Content-Security-Policy');
+  next();
+});
+
 // CORS
 // IMPORTANT: We must explicitly allow credentials and trusted origins,
 // otherwise browser requests with `credentials: 'include'` will fail
@@ -1000,6 +1025,92 @@ app.use(sanitizeInput);
 
 // Global rate limiting
 app.use('/api/', apiLimiter);
+
+// Provider Availability (must be early so no other middleware intercepts)
+const ProviderServiceAvail = require('./services/provider-service');
+app.get('/api/customers/me/availability-status', authLimiter, (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = db.getCustomerSession(sessionId);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) return res.status(404).json({ success: false, error: 'Customer not found' });
+    const status = ProviderServiceAvail.getProviderStatus(customer.email);
+    res.json({ success: true, status: status || { is_online: false, availability_rules: null, updated_at: null } });
+  } catch (e) {
+    console.error('Get availability status error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.patch('/api/customers/me/availability-status', authLimiter, express.json(), (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = db.getCustomerSession(sessionId);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) return res.status(404).json({ success: false, error: 'Customer not found' });
+    const { is_online } = req.body || {};
+    if (typeof is_online === 'boolean') ProviderServiceAvail.setProviderOnline(customer.email, is_online);
+    const status = ProviderServiceAvail.getProviderStatus(customer.email);
+    res.json({ success: true, status });
+  } catch (e) {
+    console.error('Patch availability status error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.get('/api/customers/me/availability-blocks', authLimiter, (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = db.getCustomerSession(sessionId);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) return res.status(404).json({ success: false, error: 'Customer not found' });
+    const blocks = ProviderServiceAvail.getAvailabilityBlocks(customer.email, req.query.start, req.query.end);
+    res.json({ success: true, blocks });
+  } catch (e) {
+    console.error('Get availability blocks error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.post('/api/customers/me/availability-blocks', authLimiter, express.json(), (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = db.getCustomerSession(sessionId);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) return res.status(404).json({ success: false, error: 'Customer not found' });
+    const { block_type, start_datetime, end_datetime, title } = req.body || {};
+    if (!block_type || !['available', 'out_of_office'].includes(block_type))
+      return res.status(400).json({ success: false, error: 'block_type must be "available" or "out_of_office"' });
+    if (!start_datetime || !end_datetime)
+      return res.status(400).json({ success: false, error: 'start_datetime and end_datetime required' });
+    const block = ProviderServiceAvail.createAvailabilityBlock({ provider_email: customer.email, block_type, start_datetime, end_datetime, title: title || null });
+    res.json({ success: true, block });
+  } catch (e) {
+    console.error('Create availability block error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.delete('/api/customers/me/availability-blocks/:id', authLimiter, (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = db.getCustomerSession(sessionId);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer || !customer.email) return res.status(404).json({ success: false, error: 'Customer not found' });
+    const deleted = ProviderServiceAvail.deleteAvailabilityBlock(customer.email, req.params.id);
+    if (!deleted) return res.status(404).json({ success: false, error: 'Block not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Delete availability block error:', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 
 // API Documentation routes (protected - requires signup + terms acceptance)
 app.get('/docs', (req, res, next) => {
@@ -2686,7 +2797,7 @@ app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: 
 app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, async (req, res) => {
   try {
     console.log('\n💳 VOICE: Create Appointment Checkout');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
     let clinicId = resolveClinicIdFromRequest(req, args);
@@ -2701,8 +2812,9 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     // Ensure customer_phone is provided (required field)
     const customerPhone = args.customer_phone || args.patient_phone || '0000000000';
 
-    // Try to find appointment by ID, phone, or email
+    // Try to find appointment by ID, phone, or email (S-2: tenant-scoped)
     let appointmentId = args.appointment_id || null;
+    const customerId = args.metadata?.customer_id || args.customer_id || req.body?.metadata?.customer_id || null;
     if (!appointmentId) {
       // Search for most recent appointment for this customer
       const BookingService = require('./services/booking-service');
@@ -2714,11 +2826,11 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
             const appointment = await db.getAppointment(appointmentId);
             scopedClinic = appointment?.clinic_id || null;
           }
-          if (!scopedClinic) {
-            throw new Error('Missing clinic context for appointment lookup');
+          if (!scopedClinic && !customerId) {
+            throw new Error('Missing clinic or customer context for appointment lookup');
           }
 
-          const searchResult = await BookingService.searchAppointments(searchTerm, scopedClinic);
+          const searchResult = await BookingService.searchAppointments(searchTerm, scopedClinic || null, customerId);
           if (searchResult.success && searchResult.appointments && searchResult.appointments.length > 0) {
             // Get the most recent scheduled/confirmed appointment
             const recentAppt = searchResult.appointments
@@ -2865,8 +2977,9 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
         const appointment = await db.getAppointment(appointmentId, clinicId);
         if (appointment && appointment.patient_id) {
           const FHIRService = require('./services/fhir-service');
-          // Check if this is a copay (amount matches copay from eligibility)
-          const isCopay = eligibilityChecks && eligibilityChecks.length > 0 &&
+          // Guard: fetch eligibility in this scope (was undefined when amount came from pricing)
+          const eligibilityChecks = db.getEligibilityChecksByPatient?.(appointment.patient_id) || [];
+          const isCopay = eligibilityChecks.length > 0 &&
             eligibilityChecks[0].copay_amount === amount;
 
           if (isCopay) {
@@ -2983,7 +3096,7 @@ if (process.env.NODE_ENV !== 'production') {
 app.post('/voice/checkout/verify', async (req, res) => {
   try {
     console.log('\n🔐 VOICE: Verify Email Code');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
     const token = args.payment_token || args.token;
@@ -3280,7 +3393,7 @@ app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => 
   try {
     console.log('\n💳 VOICE: Creating Checkout via Orchestrator');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Raw Retell data:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Raw Retell data:', req);
 
     // EXTRACT ARGS: Handle multiple Retell formats
     // 1. Webhook: req.body.tool_call.args
@@ -3298,7 +3411,7 @@ app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => 
       console.log('📥 Using body directly');
     }
 
-    console.log('Extracted args:', JSON.stringify(args, null, 2));
+    console.log('Extracted args:', JSON.stringify(sanitizeForLog(args), null, 2));
 
     // CRITICAL: Get merchant_id from metadata (from voice/incoming handler)
     // Fallback to args if not in metadata
@@ -4802,13 +4915,25 @@ app.post('/api/admin/session', handleAdminLogin);
 app.delete('/api/admin/session', handleAdminLogout);
 app.get('/api/admin/session', adminSessionStatus);
 
-// Seed test patients endpoint (public for initial setup)
+// Seed test patients endpoint (S-4: SEED_ENABLED + block staging)
 app.post('/api/admin/patients/seed-test', async (req, res) => {
-  // Only allow in development/staging environments
-  if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod') {
+  const env = process.env.NODE_ENV || '';
+  if (env === 'production' || env === 'prod') {
     return res.status(403).json({
       success: false,
       error: 'Test patient seeding is not allowed in production environment'
+    });
+  }
+  if (env === 'staging') {
+    return res.status(403).json({
+      success: false,
+      error: 'Test patient seeding is not allowed in staging environment'
+    });
+  }
+  if (process.env.SEED_ENABLED !== '1' && process.env.SEED_ENABLED !== 'true') {
+    return res.status(403).json({
+      success: false,
+      error: 'Seed endpoint disabled. Set SEED_ENABLED=1 to enable.'
     });
   }
 
@@ -4942,6 +5067,8 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
           console.log(`   💳 Creating eligibility check...`);
           const eligibilityId = `elig_${uuidv4()}`;
 
+          // Bug 6: Use 99203 fallback to match getCptCodeForVisit new-patient PrimaryCare/routine
+          const defaultCpt = (() => { try { return require('./utils/cpt-helper').getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })();
           db.db.prepare(`
             INSERT INTO eligibility_checks (
               id, patient_id, member_id, payer_id, service_code, date_of_service,
@@ -4954,7 +5081,7 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
             patientId,
             patientData.memberId,
             patientData.payerId,
-            '90834',
+            defaultCpt,
             new Date().toISOString().split('T')[0],
             1,
             patientData.copay,
@@ -5089,8 +5216,13 @@ function ensureMerchantForClinic(clinic) {
     return clinic.merchant_id;
   }
 
-  const merchantId = createMerchantForClinic(clinic.name || clinic.clinic_id);
-  db.updateClinic(clinic.clinic_id, { merchant_id: merchantId });
+  const clinicId = clinic.clinic_id || clinic.id;
+  if (!clinicId) {
+    console.warn('[ensureMerchantForClinic] Clinic missing clinic_id/id, cannot update');
+    return createMerchantForClinic(clinic.name || 'Clinic');
+  }
+  const merchantId = createMerchantForClinic(clinic.name || clinicId);
+  db.updateClinic(clinicId, { merchant_id: merchantId });
   clinic.merchant_id = merchantId;
   return merchantId;
 }
@@ -6150,6 +6282,9 @@ app.post('/api/admin/feature-requests/:requestId/update', async (req, res) => {
 // BOOKING/APPOINTMENT ENDPOINTS
 // ============================================
 
+// Bug 2: Declare before resolveClinicIdFromRequest (function references it)
+const FALLBACK_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || null;
+
 function resolveClinicIdFromRequest(req, args = {}) {
   const directClinicId =
     args?.clinic_id ||
@@ -6180,24 +6315,15 @@ function resolveClinicIdFromRequest(req, args = {}) {
     } catch (_) {}
   }
 
-  try {
-    const conn = db.db || db;
-    const first = conn.prepare('SELECT clinic_id FROM clinics WHERE is_active = 1 LIMIT 1').get();
-    if (first?.clinic_id) {
-      return first.clinic_id;
-    }
-  } catch (_) {}
-
+  // S-1: Do NOT fall back to arbitrary clinic - cross-tenant leak. Return null when clinic cannot be determined.
   return null;
 }
-
-const FALLBACK_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || null;
 
 // Schedule new appointment (for voice agent)
 app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, res) => {
   try {
     console.log('\n📅 VOICE: Schedule Appointment');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     // Extract args (handle Retell formats)
     let args = req.body.args || req.body;
@@ -6239,7 +6365,10 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       notes: args.notes,
       timezone: args.timezone || 'America/New_York',
       clinic_id: clinicId,
-      customer_id: customerId
+      customer_id: customerId,
+      // W3-S4.2: Resolved ICD/CPT from triage for billing
+      primary_icd10: args.primary_icd10 || null,
+      primary_cpt: args.primary_cpt || null
     };
 
     const result = await BookingService.scheduleAppointment(appointmentData);
@@ -6448,7 +6577,7 @@ app.post('/voice/patient/intake/status', async (req, res) => {
 app.post('/voice/appointments/confirm', async (req, res) => {
   try {
     console.log('\n✅ VOICE: Confirm Appointment');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
     const appointmentId = args.appointment_id || args.confirmation_number;
@@ -6476,7 +6605,7 @@ app.post('/voice/appointments/confirm', async (req, res) => {
 app.post('/voice/appointments/reschedule', async (req, res) => {
   try {
     console.log('\n🔄 VOICE: Reschedule Appointment');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
     const appointmentId = args.appointment_id || args.confirmation_number;
@@ -6522,7 +6651,7 @@ app.post('/voice/appointments/reschedule', async (req, res) => {
 app.post('/voice/appointments/cancel', async (req, res) => {
   try {
     console.log('\n❌ VOICE: Cancel Appointment');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
     const appointmentId = args.appointment_id || args.confirmation_number;
@@ -6548,7 +6677,7 @@ app.post('/voice/appointments/cancel', async (req, res) => {
 });
 
 // Get available slots (for voice agent)
-// Cached 5 min by clinic+date+type to reduce call duration (cost optimization P1)
+// Uses SpecialistResolver + specialist-slot-service when appointment_type is a specialty and provider_profiles exist
 app.post('/voice/appointments/available-slots', async (req, res) => {
   try {
     const args = req.body.args || req.body;
@@ -6556,7 +6685,8 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
     const provider = args.provider || null;
     const appointmentType = args.appointment_type || null;
     const timezone = args.timezone || 'America/New_York';
-    const clinicId = resolveClinicIdFromRequest(req, args);
+    const lane = args.lane || 'sync';
+    const clinicId = resolveClinicIdFromRequest(req, args) || args.clinic_id;
     if (!clinicId) {
       return res.status(400).json({
         success: false,
@@ -6566,10 +6696,74 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
 
     const practitionerId = args.practitioner_id || null;
     const cache = require('./services/cache-service');
-    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone || '', practitionerId || ''].join('|');
+    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone || '', practitionerId || '', lane || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) {
       return res.json(cached);
+    }
+
+    // Specialist path: when appointment_type is a specialty, use Resolver + specialist slots
+    // W3-S5.3/W3-S5.4: Use language + state from session when call_id provided
+    const { isSpecialtyType } = require('./services/specialist-slot-service');
+    if (isSpecialtyType(appointmentType)) {
+      try {
+        const SpecialistResolverService = require('./services/specialist-resolver-service');
+        const { getAvailableSlotsWithSpecialist } = require('./services/specialist-slot-service');
+        let language = 'en';
+        let patientState = null;
+        const callId = args.call_id || null;
+        let urgency = args.urgency || 'routine';
+        if (callId && db) {
+          try {
+            if (db.getKellySessionLanguage) language = db.getKellySessionLanguage(callId) || language;
+            const triageRow = db.getTriageSession ? db.getTriageSession(callId) : null;
+            if (!language && triageRow?.detected_language) language = triageRow.detected_language;
+            if (triageRow?.urgency) urgency = triageRow.urgency;
+            if (db.getOrchestrateSessionBySessionId) {
+              const row = db.getOrchestrateSessionBySessionId(callId);
+              patientState = row?.flow_state?.patient_state || row?.flow_state?.state || null;
+            }
+            const ragResult = require('./services/triage-rag-service').getLatestForSession?.(callId);
+            if (ragResult?.urgency) urgency = ragResult.urgency;
+          } catch (_) {}
+        }
+        const patientTier = 2;
+        const resolverResult = await SpecialistResolverService.resolve({
+          clinicId,
+          specialty: appointmentType,
+          language,
+          state: patientState,
+          lane,
+          urgency,
+          patientTier,
+          date
+        });
+        if (resolverResult.providers && resolverResult.providers.size > 0) {
+          const slots = await getAvailableSlotsWithSpecialist({
+            date,
+            lane,
+            providerMap: resolverResult.providers,
+            clinicId,
+            timezone,
+            appointmentType
+          });
+          const result = {
+            success: true,
+            available_slots: slots.map(s => s.time === 'ASYNC' ? `Async review — ${s.practitioner_name}` : s.time),
+            slot_bundles: slots,
+            appointment_type: appointmentType,
+            kelly_script: resolverResult.kellyScript
+          };
+          // M-S5.A: say_to_patient so LLM says kelly_script verbatim
+          if (resolverResult.kellyScript) {
+            result.say_to_patient = `Say this to the patient before presenting slots: "${resolverResult.kellyScript}"`;
+          }
+          cache.set('slot_availability', result, cacheKey);
+          return res.json(result);
+        }
+      } catch (specErr) {
+        console.warn('⚠️  Specialist slot path failed, falling back to standard:', specErr.message);
+      }
     }
 
     const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId, practitionerId);
@@ -6591,7 +6785,7 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
 app.post('/voice/appointments/search', async (req, res) => {
   try {
     console.log('\n🔍 VOICE: Search Appointments');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
     const searchTerm = args.phone || args.email || args.patient_phone || args.patient_email;
@@ -6646,7 +6840,9 @@ app.post('/api/appointments/schedule', async (req, res) => {
       notes: args.notes,
       timezone: args.timezone || 'America/New_York',
       clinic_id: clinicId,
-      customer_id: args.customer_id || null
+      customer_id: args.customer_id || null,
+      primary_icd10: args.primary_icd10 || null,
+      primary_cpt: args.primary_cpt || null
     };
     const result = await BookingService.scheduleAppointment(appointmentData);
 
@@ -6868,7 +7064,7 @@ function namesMatch(name1, name2) {
 app.post('/voice/insurance/collect', async (req, res) => {
   try {
     console.log('\n🏥 VOICE: Collect Insurance Information');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
 
@@ -6882,7 +7078,17 @@ app.post('/voice/insurance/collect', async (req, res) => {
 
     // Optional: patient_id to link insurance to patient
     const patientId = args.patient_id || args.patientId || null;
-    const patientPhone = args.patient_phone || args.phone || null;
+    // Bug 5: Normalize phone for consistent lookups (getFHIRPatientByPhone, findOrCreatePatient)
+    let patientPhone = (args.patient_phone || args.phone || '').toString().trim();
+    if (patientPhone) {
+      try {
+        const SMSService = require('./services/sms-service');
+        patientPhone = SMSService.formatPhoneNumber ? SMSService.formatPhoneNumber(patientPhone) : patientPhone.replace(/\D/g, '');
+      } catch (_) {
+        patientPhone = patientPhone.replace(/\D/g, '');
+      }
+    }
+    patientPhone = patientPhone || null;
     const patientName = args.patient_name || args.customer_name || null;
     const patientEmail = args.patient_email || args.customer_email || null;
 
@@ -6892,13 +7098,14 @@ app.post('/voice/insurance/collect', async (req, res) => {
     const callId = args.call_id || null;
     const initialName = args.initial_name || null;
 
-    // Get initial name from retellHandler if call_id is provided but initial_name is not
+    // V-3: Get initial name from DB (works in multi-instance; no retellHandler dependency)
     let storedInitialName = initialName;
-    if (callId && !storedInitialName && retellHandler) {
+    if (callId && !storedInitialName && db?.getOrchestrateSessionBySessionId) {
       try {
-        storedInitialName = retellHandler.getInitialName(callId);
+        const row = db.getOrchestrateSessionBySessionId(callId);
+        storedInitialName = row?.flow_state?.initial_name || null;
       } catch (error) {
-        console.warn('⚠️  Could not get initial name from call:', error.message);
+        console.warn('⚠️  Could not get initial name from session:', error.message);
       }
     }
 
@@ -6960,14 +7167,24 @@ app.post('/voice/insurance/collect', async (req, res) => {
       // This might be okay if name is optional, but log it
       console.warn(`⚠️  Initial name stored (${storedInitialName}) but no name provided in insurance collection`);
     } else if (!storedInitialName && patientName && callId) {
-      // No initial name stored yet - store it now (first time name is provided)
-      if (retellHandler) {
-        try {
-          retellHandler.storeCustomerName(callId, patientName);
+      // No initial name stored yet - persist to DB (V-3: multi-instance safe)
+      try {
+        const row = db?.getOrchestrateSessionBySessionId?.(callId);
+        const existingState = row?.flow_state || {};
+        if (db?.upsertOrchestrateSession) {
+          db.upsertOrchestrateSession({
+            session_id: callId,
+            channel: 'voice',
+            patient_id: row?.patient_id || null,
+            caller_phone: row?.caller_phone || patientPhone,
+            clinic_id: row?.clinic_id || null,
+            conversation_history: row?.conversation_history || [],
+            flow_state: { ...existingState, initial_name: patientName.trim() }
+          });
           console.log(`✅ Stored initial name from insurance collection: ${patientName}`);
-        } catch (error) {
-          console.warn('⚠️  Could not store initial name:', error.message);
         }
+      } catch (error) {
+        console.warn('⚠️  Could not store initial name:', error.message);
       }
     }
 
@@ -7247,13 +7464,32 @@ app.post('/voice/insurance/collect', async (req, res) => {
           }
         }
 
+        // W3-S4.6: Use resolved CPT from triage when call_id provided
+        let serviceCode = args.service_code;
+        if (!serviceCode && args.call_id) {
+          try {
+            const TriageRAGService = require('./services/triage-rag-service');
+            const { getCptCodeForVisit } = require('./utils/cpt-helper');
+            const triage = TriageRAGService.getLatestForSession(args.call_id);
+            if (triage?.target_specialty) {
+              serviceCode = getCptCodeForVisit({
+                specialty: triage.target_specialty,
+                isNewPatient: true,
+                urgency: triage.urgency || 'routine'
+              });
+            }
+          } catch (_) {}
+        }
+        serviceCode = serviceCode || (() => { try { return require('./utils/cpt-helper').getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })();
+
         const eligibilityData = {
-          patientId: finalPatientId, // Always include patient_id (may be null if no patient found)
+          patientId: finalPatientId,
           patientName: finalPatientName,
           dateOfBirth: dateOfBirth,
           memberId: args.member_id,
           payerId: payerId,
-          serviceCode: args.service_code || '90834', // Default CPT code for therapy
+          serviceCode,
+          diagnosisCode: args.primary_icd10 || null,
           dateOfService: args.date_of_service || new Date().toISOString().split('T')[0]
         };
 
@@ -7409,7 +7645,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
 app.post('/voice/insurance/check-eligibility', async (req, res) => {
   try {
     console.log('\n🏥 VOICE: Check Insurance Eligibility');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
 
@@ -7443,13 +7679,27 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
     }
 
     // Get appointment info if appointment_id is provided
+    // W3-S4.6: Use resolved CPT from appointment.primary_cpt (triage) or getCptCodeForVisit
     let serviceCode = args.service_code;
     let dateOfService = args.date_of_service;
 
     if (args.appointment_id) {
       const appointment = await db.getAppointment(args.appointment_id);
       if (appointment) {
-        serviceCode = serviceCode || InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type);
+        serviceCode = serviceCode || appointment.primary_cpt || null;
+        if (!serviceCode) {
+          const apptType = appointment.appointment_type || '';
+          const specialtyNames = ['Psychiatry', 'Cardiology', 'Pulmonology', 'Gastroenterology', 'Endocrinology', 'InfectiousDisease', 'Orthopedics', 'Neurology', 'Dermatology', 'PrimaryCare', 'ENT', 'Ophthalmology', 'Urology', 'EmergencyMedicine', 'ObstetricsGynecology', 'Pediatrics', 'Oncology'];
+          if (specialtyNames.includes(apptType)) {
+            try {
+              const { getCptCodeForVisit } = require('./utils/cpt-helper');
+              serviceCode = getCptCodeForVisit({ specialty: apptType, isNewPatient: true, urgency: 'routine' });
+            } catch (_) {}
+          }
+          if (!serviceCode) {
+            serviceCode = InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type, { urgency: 'routine' });
+          }
+        }
         dateOfService = dateOfService || appointment.date;
         patientId = patientId || appointment.patient_id;
       }
@@ -7461,7 +7711,7 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
       dateOfBirth: dateOfBirth || '1990-01-01', // Default if not provided
       memberId: args.member_id,
       payerId: args.payer_id,
-      serviceCode: serviceCode || '90834', // Default CPT code
+      serviceCode: serviceCode || (() => { try { const h = require('./utils/cpt-helper'); return h.getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })(),
       dateOfService: dateOfService || new Date().toISOString().split('T')[0]
     };
 
@@ -7484,7 +7734,7 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
 app.post('/voice/insurance/submit-claim', async (req, res) => {
   try {
     console.log('\n📋 VOICE: Submit Insurance Claim');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
 
@@ -7543,6 +7793,10 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
       if (c2) return res.json({ ...c2.result, idempotent: true });
     }
 
+    // W3-S4.2/W3-S4.5: Use resolved CPT/ICD from triage (appointment.primary_cpt, primary_icd10)
+    const resolvedCpt = args.service_code || appointment.primary_cpt || InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type, { urgency: 'routine' });
+    const resolvedIcd = args.diagnosis_code || appointment.primary_icd10 || InsuranceService.mapAppointmentTypeToICD10(appointment.appointment_type);
+
     const claimData = {
       appointmentId: args.appointment_id,
       patientId: patientId,
@@ -7550,8 +7804,8 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
       dateOfBirth: dateOfBirth || '1990-01-01',
       memberId: args.member_id,
       payerId: args.payer_id,
-      serviceCode: args.service_code || InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type),
-      diagnosisCode: args.diagnosis_code || InsuranceService.mapAppointmentTypeToICD10(appointment.appointment_type),
+      serviceCode: resolvedCpt,
+      diagnosisCode: resolvedIcd,
       totalAmount: parseFloat(args.total_amount),
       copayPaid: parseFloat(args.copay_paid || 0),
       dateOfService: args.date_of_service || appointment.date,
@@ -7610,7 +7864,7 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
 app.post('/voice/insurance/check-claim-status', async (req, res) => {
   try {
     console.log('\n🔍 VOICE: Check Claim Status');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
 
@@ -8182,10 +8436,118 @@ app.get('/api/circle/accounts/:entityType/:entityId', async (req, res) => {
 const { sendUploadLinkHandler } = require('./routes/patient-upload-link');
 app.post('/api/patient/send-upload-link', sendUploadLinkHandler);
 
+// Phase 8: POST /api/patient/visits/:id/feedback — Token-validated feedback (no session required)
+app.post('/api/patient/visits/:id/feedback', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
+    const { token, rating, helpful, comment } = req.body || {};
+    const { verifyFeedbackToken } = require('./utils/upload-token');
+
+    const payload = verifyFeedbackToken(token);
+    if (!payload || payload.appointment_id !== appointmentId) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired feedback link. Please use the link from your email.' });
+    }
+
+    const appointment = await db.getAppointment(appointmentId);
+    if (!appointment) return res.status(404).json({ success: false, error: 'Appointment not found' });
+
+    const { v4: uuidv4 } = require('uuid');
+    const id = 'fb-' + uuidv4();
+    const ratingInt = rating != null ? (parseInt(rating, 10) >= 1 && parseInt(rating, 10) <= 5 ? parseInt(rating, 10) : null) : null;
+    const helpfulInt = helpful != null ? (helpful === true || helpful === 1 || helpful === '1' ? 1 : 0) : null;
+    const commentStr = typeof comment === 'string' ? comment.trim().slice(0, 2000) : '';
+
+    db.db.prepare(`
+      INSERT INTO visit_feedbacks (id, appointment_id, patient_id, rating, helpful, comment, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(id, appointmentId, appointment.patient_id || null, ratingInt, helpfulInt, commentStr || null);
+
+    return res.json({ success: true, message: 'Thank you for your feedback.' });
+  } catch (e) {
+    console.error('POST /api/patient/visits/:id/feedback error:', e);
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Telemedicine Phase 4 — Patient upload portal (Tasks 25–33). Router: GET /upload, POST /upload
 const uploadPortalRouter = require('./routes/upload-portal');
 app.use('/', uploadPortalRouter);           // GET /upload?token=...
 app.use('/api/patient', uploadPortalRouter); // POST /api/patient/upload
+
+// gap10: Triage upload — session-scoped, stores to case_report_media for RAG
+app.post('/api/triage/upload', apiLimiter, async (req, res) => {
+  const sessionId = req.headers['x-session-id'] || req.body?.session_id;
+  if (!sessionId) return res.status(400).json({ success: false, error: 'x-session-id required' });
+  let multer;
+  try { multer = require('multer'); } catch (e) {
+    return res.status(500).json({ success: false, error: 'Upload backend not configured' });
+  }
+  const uploadDir = path.join(__dirname, 'uploads', 'triage');
+  try { if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
+  const m = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }).array('files', 5);
+  m(req, res, async (err) => {
+    if (err) return res.status(400).json({ success: false, error: 'Upload failed' });
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ success: false, error: 'No files' });
+    const saved = [];
+    const patientId = (() => {
+      try {
+        const triageRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+        return triageRow?.patient_id || req.body?.patient_id || null;
+      } catch (_) { return null; }
+    })();
+    for (const f of files) {
+      try {
+        const id = db.createCaseReportMedia({
+          session_id: sessionId,
+          patient_id: patientId,
+          media_type: (f.mimetype || '').startsWith('image/') ? 'image' : 'document',
+          mime_type: f.mimetype,
+          file_name: f.originalname,
+          file_size_bytes: f.size,
+          storage_provider: 'local',
+          context_note: f.originalname,
+          uploaded_during: 'triage'
+        });
+        saved.push(id);
+        // M-Doc.1: Dual-write to patient_documents when patient_id available
+        if (patientId && db.createPatientDocument && f.buffer) {
+          try {
+            const ext = path.extname(f.originalname) || '.bin';
+            const patientDir = path.join(uploadDir, 'patient_docs', patientId);
+            if (!fs.existsSync(patientDir)) fs.mkdirSync(patientDir, { recursive: true });
+            const storagePath = path.join(patientDir, `${id}${ext}`);
+            fs.writeFileSync(storagePath, f.buffer);
+            const docId = `pd-${id}`;
+            db.createPatientDocument({
+              id: docId,
+              patient_id: patientId,
+              file_name: f.originalname,
+              file_type: f.mimetype || 'application/octet-stream',
+              storage_path: storagePath,
+              storage_provider: 'local',
+              uploaded_by: 'triage'
+            });
+            // M-Doc.2: Async extraction for RAG query
+            setImmediate(() => {
+              const extraction = require('./services/patient-document-extraction');
+              extraction.extractAndStore(
+                { id: docId, patient_id: patientId, storage_path: storagePath, file_name: f.originalname, file_type: f.mimetype },
+                null,
+                db
+              ).catch(e => console.warn('[triage/upload] extractAndStore:', e.message));
+            });
+          } catch (e2) {
+            console.warn('[triage/upload] Dual-write patient_document:', e2.message);
+          }
+        }
+      } catch (e) {
+        console.warn('[triage/upload] createCaseReportMedia:', e.message);
+      }
+    }
+    res.json({ success: true, count: saved.length, message: 'Upload received. You can continue with your description.' });
+  });
+});
 
 // Telemedicine Phase 7 — Case report: internal transcript + callback (Tasks 53, 55, 56)
 const caseReportRoutes = require('./routes/case-report');
@@ -9821,8 +10183,8 @@ app.post('/api/test/simulate-stedi-approval', async (req, res) => {
       console.log(`📁 Could not get database path:`, e.message);
     }
 
-    // Get claim
-    const claim = db.getClaimById(claimId);
+    // Get claim (let for reassignment when resetting approved claims for testing)
+    let claim = db.getClaimById(claimId);
     if (!claim) {
       return res.status(404).json({
         success: false,
@@ -9869,6 +10231,7 @@ app.post('/api/test/simulate-stedi-approval', async (req, res) => {
     const port = process.env.PORT || 4000;
     const host = 'localhost';
     
+    // Bug 11: Properly resolve/reject Promise so handler completes
     return new Promise((resolve, reject) => {
       const postData = JSON.stringify({});
       const options = {
@@ -9892,11 +10255,12 @@ app.post('/api/test/simulate-stedi-approval', async (req, res) => {
           try {
             const approveData = JSON.parse(data);
             if (!approveData.success) {
-              return res.status(approveRes.statusCode || 500).json({
+              res.status(approveRes.statusCode || 500).json({
                 success: false,
                 error: `Failed to approve payment: ${approveData.error}`,
                 claimId: claimId
               });
+              return resolve();
             }
 
             res.json({
@@ -9909,11 +10273,13 @@ app.post('/api/test/simulate-stedi-approval', async (req, res) => {
                 timestamp: new Date().toISOString()
               }
             });
+            resolve();
           } catch (parseError) {
             res.status(500).json({
               success: false,
               error: `Failed to parse approve-payment response: ${parseError.message}`
             });
+            resolve();
           }
         });
       });
@@ -9924,6 +10290,7 @@ app.post('/api/test/simulate-stedi-approval', async (req, res) => {
           success: false,
           error: `Failed to trigger approve-payment: ${error.message}`
         });
+        resolve();
       });
 
       approveReq.write(postData);
@@ -11516,7 +11883,55 @@ app.get('/api/provider/live-stats', async (req, res) => {
   }
 });
 
+// Provider: Get / set status (online/offline + availability)
+app.get('/api/provider/status', async (req, res) => {
+  try {
+    const email = (req.query.email || '').toString().trim();
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'email query required' });
+    }
+    const status = ProviderService.getProviderStatus(email);
+    res.json({ success: true, status: status || { is_online: false, availability_rules: null } });
+  } catch (error) {
+    console.error('❌ Error fetching provider status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.patch('/api/provider/status', async (req, res) => {
+  try {
+    const { email, is_online, availability_rules } = req.body || {};
+    const e = (email || '').toString().trim();
+    if (!e) {
+      return res.status(400).json({ success: false, error: 'email required' });
+    }
+    if (typeof is_online === 'boolean') {
+      ProviderService.setProviderOnline(e, is_online);
+    }
+    if (availability_rules !== undefined) {
+      ProviderService.setProviderAvailability(e, availability_rules);
+    }
+    const status = ProviderService.getProviderStatus(e);
+    res.json({ success: true, status });
+  } catch (error) {
+    console.error('❌ Error updating provider status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Provider: Get all providers
+// Phase 2.4: GET /api/provider/async-queue — Appointments pending specialist review
+app.get('/api/provider/async-queue', async (req, res) => {
+  try {
+    const clinicId = req.query.clinic_id || null;
+    const queue = await db.getAsyncReviewQueue(clinicId);
+    return res.json({ success: true, appointments: queue, count: queue.length });
+  } catch (e) {
+    console.error('GET /api/provider/async-queue error:', e);
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/provider/providers', async (req, res) => {
   try {
     const providers = ProviderService.getProviders();
@@ -11531,6 +11946,81 @@ app.get('/api/provider/providers', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Phase 7.2: GET /api/provider/case-report?room= — OPQRST + ICD-10 + patient summary for video side-panel
+app.get('/api/provider/case-report', async (req, res) => {
+  try {
+    const room = (req.query.room || '').toString().trim();
+    if (!room) {
+      return res.status(400).json({ success: false, error: 'room query required' });
+    }
+
+    let caseRecord = null;
+    let appointment = null;
+
+    if (room.startsWith('case-')) {
+      const caseNumber = room.substring('case-'.length);
+      caseRecord = db.db.prepare('SELECT * FROM case_records WHERE case_number = ? LIMIT 1').get(caseNumber);
+      if (caseRecord?.session_id) {
+        const s = db.db.prepare('SELECT flow_state FROM patient_orchestrate_sessions WHERE session_id = ? LIMIT 1').get(caseRecord.session_id);
+        const fs = s?.flow_state ? (typeof s.flow_state === 'string' ? JSON.parse(s.flow_state) : s.flow_state) : {};
+        const apptId = fs.appointment_id;
+        if (apptId) appointment = await db.getAppointment(apptId);
+      }
+    } else if (room.startsWith('appt-')) {
+      const appointmentId = room.substring('appt-'.length);
+      appointment = await db.getAppointment(appointmentId);
+      const caseNumber = appointment && db.getCaseNumberForAppointment && db.getCaseNumberForAppointment(appointment.id);
+      if (caseNumber) {
+        caseRecord = db.db.prepare('SELECT * FROM case_records WHERE case_number = ? LIMIT 1').get(caseNumber);
+      }
+    }
+
+    if (!caseRecord && !appointment) {
+      return res.json({ success: true, case_report: null });
+    }
+
+    let patientSummary = '';
+    const patientId = caseRecord?.patient_id || appointment?.patient_id;
+    if (patientId && db.getFHIRPatient) {
+      const p = db.getFHIRPatient(patientId);
+      if (p?.resource_data) {
+        const r = typeof p.resource_data === 'string' ? JSON.parse(p.resource_data) : p.resource_data;
+        const name = r.name?.[0] ? [r.name[0].given?.join(' '), r.name[0].family].filter(Boolean).join(' ') : null;
+        patientSummary = name || appointment?.patient_name || '';
+      }
+    }
+    if (!patientSummary && appointment) patientSummary = appointment.patient_name || '';
+
+    const opqrst = caseRecord?.opqrst ? (typeof caseRecord.opqrst === 'string' ? caseRecord.opqrst : JSON.stringify(caseRecord.opqrst)) : '';
+    let suggestedIcd10 = [];
+    if (caseRecord?.suggested_icd10) {
+      try {
+        suggestedIcd10 = typeof caseRecord.suggested_icd10 === 'string' ? JSON.parse(caseRecord.suggested_icd10) : caseRecord.suggested_icd10;
+        if (!Array.isArray(suggestedIcd10)) suggestedIcd10 = [suggestedIcd10];
+      } catch (_) {
+        suggestedIcd10 = [caseRecord.suggested_icd10];
+      }
+    }
+
+    if (db.auditLog && (patientSummary || opqrst)) {
+      db.auditLog('clinician', req.user?.sub || req.headers['x-session-id'] || 'anonymous', 'READ', 'CaseReport', caseRecord?.case_number || appointment?.id || room, req.ip || '', req.get('User-Agent') || '', '200');
+    }
+
+    return res.json({
+      success: true,
+      case_report: {
+        case_number: caseRecord?.case_number || null,
+        patient_summary: patientSummary,
+        opqrst: opqrst || null,
+        suggested_icd10: suggestedIcd10
+      }
+    });
+  } catch (e) {
+    console.error('GET /api/provider/case-report error:', e);
+    return res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -11946,6 +12436,7 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
   const allowed = new Set([
     'application/pdf',
     'image/jpeg',
+    'image/jpg',
     'image/png'
   ]);
   const upload = multer({
@@ -11962,7 +12453,8 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
   upload(req, res, async (err) => {
     if (err) {
       console.error('❌ Error handling upload:', err);
-      return res.status(400).json({ success: false, error: 'Upload failed' });
+      const msg = (err.message && String(err.message).trim()) || 'Upload failed';
+      return res.status(400).json({ success: false, error: msg });
     }
 
     try {
@@ -12006,6 +12498,14 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
                 continue;
               }
             } catch (_) {}
+
+            // Antivirus / content scan (PATIENT_WEB_PORTAL_TODO 12.2.3)
+            const AntivirusService = require('./services/antivirus-service');
+            const avResult = await AntivirusService.scanFile(f.path);
+            if (!avResult.safe) {
+              const msg = avResult.error || AntivirusService.BLOCKED_MESSAGE;
+              return res.status(403).json({ success: false, error: msg });
+            }
 
             // Document lifecycle (mvp-69): uploaded -> processing -> available/failed
             let storage_provider = 'local';
@@ -12051,6 +12551,27 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
               status
             });
             saved.push(result.id);
+
+            // Dual-write (triage): when session_id provided (triage chat), also create case_report_media so RAG can use upload context
+            const triageSessionId = (req.body && req.body.session_id) ? String(req.body.session_id).trim() : null;
+            if (triageSessionId && db.createCaseReportMedia) {
+              try {
+                db.createCaseReportMedia({
+                  session_id: triageSessionId,
+                  patient_id: patientId,
+                  media_type: (f.mimetype || '').startsWith('image/') ? 'image' : 'document',
+                  mime_type: f.mimetype,
+                  file_name: f.originalname,
+                  file_size_bytes: f.size,
+                  storage_provider,
+                  storage_key: storage_key || result.id,
+                  context_note: f.originalname,
+                  uploaded_during: 'triage'
+                });
+              } catch (e3) {
+                console.warn('[patient/documents] Dual-write case_report_media:', e3.message);
+              }
+            }
 
             // Dual-write (Batch 5): persist a FHIR DocumentReference as the canonical metadata record.
             try {
@@ -12326,6 +12847,20 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
     const successUrl = `${baseUrl}/unified-dashboard/patients/payment-success.html?checkout_id=${encodeURIComponent(checkoutId)}&appointment_id=${encodeURIComponent(appointmentId)}`;
     const cancelUrl = `${baseUrl}/unified-dashboard/patients/wallet.html`;
 
+    // Phase 4.2: Pre-auth for sync_video (capture at case report); capture immediately for async_review
+    const visitMode = (appt.visit_mode || 'sync_video').toString();
+    const usePreAuth = visitMode === 'sync_video';
+    const paymentIntentData = {
+      metadata: {
+        checkout_id: checkoutId,
+        appointment_id: appointmentId,
+        patient_id: patientId || ''
+      }
+    };
+    if (usePreAuth) {
+      paymentIntentData.capture_method = 'manual';
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       expires_at: expiresAt,
@@ -12342,13 +12877,7 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
       success_url: successUrl,
       cancel_url: cancelUrl,
       customer_email: checkout.customer_email || undefined,
-      payment_intent_data: {
-        metadata: {
-          checkout_id: checkoutId,
-          appointment_id: appointmentId,
-          patient_id: patientId || ''
-        }
-      },
+      payment_intent_data: paymentIntentData,
       metadata: {
         checkout_id: checkoutId,
         appointment_id: appointmentId,
@@ -12480,7 +13009,8 @@ app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, wit
       time,
       timezone,
       notes,
-      patient_id: mappedPatientId || null
+      patient_id: mappedPatientId || null,
+      visit_mode: args.visit_mode || 'sync_video'
     });
     if (!result.success) return res.status(400).json(result);
 
@@ -12493,140 +13023,165 @@ app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, wit
   }
 });
 
-app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, express.json(), async (req, res) => {
+// Phase 2.4: POST /api/patient/async-review — Create async review case, returns appointment_id for payment
+app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
-    const BookingService = require('./services/booking-service');
     const PatientPortalService = require('./services/patient-portal-service');
-    const { detectRedFlags } = require('./services/triage-service');
+    const BookingService = require('./services/booking-service');
 
     const sid = req.patientSessionId;
     const sessionValidation = PatientPortalService.validateSession(sid);
     const email = sessionValidation?.email || null;
     const mappedPatientId = sessionValidation?.patient_id || null;
-
-    const message = (req.body?.message || '').toString();
-    const state = req.body?.state || {};
-    const meta = req.body?.meta || {};
     const clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required' });
+    if (!email) return res.status(400).json({ success: false, error: 'Patient session missing email' });
 
-    // Emergency detection (persist + respond)
-    const assessment = detectRedFlags(message);
-    if (assessment?.isEmergency) {
-      try {
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-        if (db.upsertPatientEmergencyFlag) {
-          db.upsertPatientEmergencyFlag({
-            patient_id: mappedPatientId || null,
-            email: email || null,
-            phone: sessionValidation?.phone || null,
-            source: 'web',
-            call_id: null,
-            expires_at: expiresAt,
-            metadata: { red_flags: assessment.redFlags || [], urgency: assessment.urgency || 'EMERGENT' }
-          });
-        }
-      } catch (_) {}
-      return res.json({
-        success: true,
-        reply: assessment.suggestedResponse || 'This may be an emergency. Please call 911 or go to the nearest ER now.',
-        state: { ...state, blocked: true, is_emergency: true }
-      });
-    }
+    const body = req.body || {};
+    const patient_name = body.patient_name || [sessionValidation?.first_name, sessionValidation?.last_name].filter(Boolean).join(' ').trim() || 'Patient';
+    const patient_phone = body.patient_phone || sessionValidation?.phone || null;
+    const result = await BookingService.createAsyncReviewAppointment({
+      patient_name,
+      patient_phone,
+      patient_email: email,
+      clinic_id: clinicId,
+      reason: body.reason || body.notes || '',
+      attachment_ids: body.attachment_ids || [],
+      customer_id: body.customer_id || null,
+      patient_id: mappedPatientId || null,
+      timezone: body.timezone || 'America/New_York'
+    });
 
-    // Simple guided flow
-    const next = { ...state };
-    next.step = next.step || 'collect_reason';
-    next.reason = next.reason || '';
-    next.appointment_type = next.appointment_type || 'General Consult';
-    next.timezone = next.timezone || 'America/New_York';
+    return res.json({
+      success: true,
+      appointment_id: result.appointment.id,
+      ...result
+    });
+  } catch (e) {
+    console.error('POST /api/patient/async-review error:', e);
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
 
-    // meta actions from chips
-    if (meta && meta.action === 'billing') {
-      return res.json({
-        success: true,
-        reply: 'For receipts and payments, open Wallet. You can pay any balance due from there.',
-        redirect_to: 'wallet.html',
-        state: next
-      });
-    }
+// Shared handler for chat triage (orch-6: consolidated orchestrate + triage/message)
+async function handlePatientTriageMessage(req) {
+  const PatientPortalService = require('./services/patient-portal-service');
+  const KellyAgentService = require('./services/kelly-agent-service');
+  const sid = req.patientSessionId;
+  const sessionValidation = PatientPortalService.validateSession(sid);
+  const email = sessionValidation?.email || null;
+  const mappedPatientId = sessionValidation?.patient_id || null;
+  // S-1: No last-resort fallback clinic (multi-tenant leak). Use env, request, or patient's clinic only.
+  let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
+  if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
+    try {
+      const patientClinics = db.getPatientClinicIds(mappedPatientId);
+      clinicId = patientClinics?.[0] || null;
+    } catch (_) {}
+  }
+  if (!clinicId) return { status: 400, json: { success: false, error: 'clinic_id required. Set DEFAULT_CLINIC_ID in .env, include clinic_id in request, or ensure patient has appointments.' } };
+  const message = (req.body?.message || '').toString();
+  const state = req.body?.state || {};
+  const meta = req.body?.meta || {};
+  let session_id = (req.body?.session_id || state.session_id || '').toString().trim() || null;
+  if (!session_id) session_id = require('uuid').v4();
 
-    if (next.step === 'collect_reason') {
-      next.reason = message;
-      next.step = 'collect_date';
-      return res.json({
-        success: true,
-        reply: 'Thanks. What day should we aim for? You can reply like “today”, “tomorrow”, or “2026-03-20”.',
-        state: next
-      });
-    }
+  const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
+  const conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
 
-    if (next.step === 'collect_date') {
-      const iso = parseIsoDateFromText(message);
-      if (!iso) {
-        return res.json({ success: true, reply: 'Please reply with a date like “2026-03-20”, or say “today” / “tomorrow”.', state: next });
+  const result = await KellyAgentService.processTurn({
+    message,
+    sessionId: session_id,
+    channel: 'chat',
+    clinicId,
+    patientId: mappedPatientId,
+    patientName: null,
+    portalSessionId: sid
+  });
+
+  if (!result.usedFallback && db?.upsertOrchestrateSession) {
+    const updatedHistory = [
+      ...conversationHistory,
+      { role: 'user', content: message },
+      { role: 'assistant', content: result.reply }
+    ];
+    const newTurnCount = (row?.turn_count || 0) + 1;
+    let preferredLanguage = row?.preferred_language || 'en';
+    // orch-4: Persist preferred_language from first 1–2 turns or explicit language request
+    try {
+      const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./services/patient-orchestrator-service');
+      const langReq = detectLanguagePreferenceRequest(message);
+      if (langReq?.isLanguageRequest && langReq?.code) {
+        preferredLanguage = langReq.code;
+      } else if (newTurnCount <= 2) {
+        preferredLanguage = detectLanguageFromText(message).code || preferredLanguage;
       }
-      next.date = iso;
-      next.step = 'choose_time';
-      const slots = await BookingService.getAvailableSlots(next.date, null, next.appointment_type, next.timezone, clinicId, null);
-      const options = (slots?.slots || slots?.available_slots || []).slice(0, 6);
-      const chips = options.map(s => {
-        const label = s.display || s.time || s.start_time || s.start || s;
-        const value = label;
-        return { label, value, action: 'select_slot', slot: s };
-      });
-      return res.json({
-        success: true,
-        reply: chips.length ? 'Here are some available times. Pick one.' : 'No slots found for that day. Try another date.',
-        next_chips: chips,
-        state: next
-      });
-    }
-
-    if (next.step === 'choose_time') {
-      const chosen = meta?.slot || null;
-      const time = chosen?.time || parseTimeFromText(message) || chosen?.start_time || null;
-      if (!time) {
-        return res.json({ success: true, reply: 'Please choose a time (for example “2:30pm” or “14:30”), or tap one of the options.', state: next });
-      }
-      next.time = time;
-      next.step = 'booking';
-
-      if (!email) {
-        return res.json({ success: true, reply: 'Your session is missing an email. Please sign in again.', state: { ...next, error: 'missing_email' }, redirect_to: 'patient-login.html' });
-      }
-
-      // Book appointment
-      const patient_name = next.patient_name || 'Patient';
-      const booked = await BookingService.scheduleAppointment({
+    } catch (_) {}
+    try {
+      db.upsertOrchestrateSession({
+        session_id,
+        channel: 'chat',
+        patient_id: mappedPatientId,
+        portal_session_id: sid,
         clinic_id: clinicId,
-        patient_name,
-        patient_phone: sessionValidation?.phone || null,
-        patient_email: email,
-        appointment_type: next.appointment_type,
-        date: next.date,
-        time: next.time,
-        timezone: next.timezone,
-        notes: next.reason || null,
-        patient_id: mappedPatientId || null
+        conversation_history: updatedHistory,
+        flow_state: result.state || state,
+        turn_count: newTurnCount,
+        preferred_language: preferredLanguage
       });
-      if (!booked.success) {
-        next.step = 'collect_date';
-        return res.json({ success: true, reply: booked.error || 'Could not book that time. Try another date.', state: next });
-      }
-
-      next.step = 'done';
-      next.appointment_id = booked.appointment?.id;
-      return res.json({
-        success: true,
-        reply: `You’re booked for ${booked.appointment?.date} at ${booked.appointment?.time}. Next, we’ll take you to Wallet to complete payment if needed.`,
-        redirect_to: 'wallet.html',
-        state: next
-      });
+    } catch (e) {
+      console.warn('⚠️  Failed to persist chat session:', e.message);
     }
+  }
 
-    return res.json({ success: true, reply: 'Tell me what you need help with, and we’ll book a visit.', state: next });
+  const reply = (result.reply && String(result.reply).trim()) || "I'm here. How can I help you today?";
+  return {
+    status: 200,
+    json: {
+      success: true,
+      reply,
+      session_id: session_id,
+      state: result.state || state,
+      next_chips: result.next_chips || [],
+      chips_display: result.chips_display,
+      redirect_to: result.redirect_to,
+      next_step: result.next_step
+    }
+  };
+}
+
+// POST /api/patient/orchestrate — Alias for triage/message (deprecated: use triage/message) (P-1: CSRF)
+app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, express.json(), async (req, res) => {
+  try {
+    await rotatePatientSessionIfNeeded(req, res);
+    const out = await handlePatientTriageMessage(req);
+    return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, express.json(), async (req, res) => {
+  try {
+    await rotatePatientSessionIfNeeded(req, res);
+    const out = await handlePatientTriageMessage(req);
+    return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/patient/triage/history — Fetch conversation history for resume (orch-5)
+app.get('/api/patient/triage/history', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    const session_id = (req.query.session_id || '').toString().trim();
+    if (!session_id) return res.json({ success: true, history: [], state: null });
+    const row = db.getOrchestrateSessionBySessionId?.(session_id);
+    if (!row) return res.json({ success: true, history: [], state: null });
+    const hist = row.conversation_history ? (typeof row.conversation_history === 'string' ? JSON.parse(row.conversation_history) : row.conversation_history) : [];
+    const fs = row.flow_state ? (typeof row.flow_state === 'string' ? JSON.parse(row.flow_state) : row.flow_state) : null;
+    return res.json({ success: true, history: hist, state: fs, session_id: row.session_id });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
@@ -12720,17 +13275,18 @@ app.post('/api/patient/appointments/:id/complete', apiLimiter, requirePatientSes
 // Protected by general API rate limiter
 app.get('/api/patient/benefits', apiLimiter, async (req, res) => {
   try {
-    const { patientName, patientPhone, patientId, memberId } = req.query;
+    const { patientName, patientPhone, patientId, memberId, patient_id: patientIdSnake } = req.query;
+    const resolvedPatientId = patientId || patientIdSnake;
 
     console.log('\n🏥 PATIENT BENEFITS: Fetching benefits data');
-    console.log('   Query params:', { patientName, patientPhone, patientId, memberId });
+    console.log('   Query params:', { patientName, patientPhone, patientId: resolvedPatientId, memberId });
 
     let patient = null;
 
-    // Find patient by ID, phone, name, or member_id (insurance number)
-    if (patientId) {
-      console.log('   Searching by patient ID:', patientId);
-      patient = db.getFHIRPatient(patientId);
+    // Find patient by ID, phone, name, or member_id (insurance number) — V-1: support patient_id from collect_insurance
+    if (resolvedPatientId) {
+      console.log('   Searching by patient ID:', resolvedPatientId);
+      patient = db.getFHIRPatient(resolvedPatientId);
     } else if (memberId) {
       // Search by insurance member_id (for voice agent)
       // PRIORITY: Find patient that has BOTH claims AND eligibility data (most complete data)
@@ -13272,28 +13828,12 @@ app.get('/api/patient/benefits', apiLimiter, async (req, res) => {
   }
 });
 
-// Patient: Reschedule appointment
-app.put('/api/patient/appointments/:id/reschedule', requireCsrfForCookieAuth, withIdempotency('patient_appt_reschedule'), async (req, res) => {
+// Patient: Reschedule appointment (requirePatientSession sets usedCookieAuth so CSRF is enforced only for cookie auth)
+app.put('/api/patient/appointments/:id/reschedule', requirePatientSession, requireCsrfForCookieAuth, withIdempotency('patient_appt_reschedule'), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'];
+    const session = req.patientSession;
     const appointmentId = req.params.id;
     const { new_date, new_time } = req.body;
-
-    if (!sessionId) {
-      return res.status(401).json({
-        success: false,
-        error: 'x-session-id required'
-      });
-    }
-
-    // Validate session
-    const session = PatientPortalService.validateSession(sessionId);
-    if (!session.valid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired session'
-      });
-    }
 
     if (!validateYyyyMmDd(new_date) || !validateHhMm(new_time)) {
       return res.status(400).json({ success: false, error: 'Invalid new_date or new_time' });
@@ -13358,28 +13898,12 @@ app.put('/api/patient/appointments/:id/reschedule', requireCsrfForCookieAuth, wi
   }
 });
 
-// Patient: Cancel appointment
-app.delete('/api/patient/appointments/:id', requireCsrfForCookieAuth, withIdempotency('patient_appt_cancel'), async (req, res) => {
+// Patient: Cancel appointment (requirePatientSession sets usedCookieAuth so CSRF enforced only for cookie auth)
+app.delete('/api/patient/appointments/:id', requirePatientSession, requireCsrfForCookieAuth, withIdempotency('patient_appt_cancel'), async (req, res) => {
   try {
-    const sessionId = req.headers['x-session-id'];
+    const session = req.patientSession;
     const appointmentId = req.params.id;
     const { reason } = req.body;
-
-    if (!sessionId) {
-      return res.status(401).json({
-        success: false,
-        error: 'x-session-id required'
-      });
-    }
-
-    // Validate session
-    const session = PatientPortalService.validateSession(sessionId);
-    if (!session.valid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid or expired session'
-      });
-    }
 
     const appointment = await db.getAppointment(appointmentId);
     if (!appointment) {
@@ -13712,10 +14236,9 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
     console.log('\n📥 ========================================');
     console.log('📥 RETELL WEBHOOK RECEIVED');
     console.log('📥 ========================================');
-    console.log('🔍 Request Headers:');
-    console.log(JSON.stringify(req.headers, null, 2));
-    console.log('\n🔍 Request Body:');
-    console.log(JSON.stringify(req.body, null, 2));
+    const { safeLogHeaders } = require('./services/payment-security');
+    safeLogHeaders('Request Headers:', req);
+    safeLogRequestBody('Request body:', req);
     console.log('📥 ========================================\n');
 
     // Always respond with success so Retell doesn't retry
@@ -13884,6 +14407,25 @@ app.get('/api/patient/my-records', apiLimiter, requirePatientSession, async (req
   }
 });
 
+// M-Doc.3: POST /api/patient/records/query — Ask about uploaded records (labs, visit notes, etc.)
+app.post('/api/patient/records/query', apiLimiter, requirePatientSession, express.json(), async (req, res) => {
+  try {
+    const sessionValidation = req.patientSession;
+    const { patientId } = resolvePatientIdFromSession(sessionValidation);
+    if (!patientId) return res.status(404).json({ success: false, error: 'Patient not found for this session' });
+
+    const query = (req.body?.query || req.body?.q || '').toString().trim();
+    if (!query) return res.status(400).json({ success: false, error: 'query required' });
+
+    const PatientRecordsQueryService = require('./services/patient-records-query-service');
+    const { answer, sources } = await PatientRecordsQueryService.queryPatientRecords(patientId, query);
+    return res.json({ success: true, answer, sources });
+  } catch (error) {
+    console.error('[api/patient/records/query] error:', error);
+    return res.status(500).json({ success: false, error: 'Internal error' });
+  }
+});
+
 // Patient: Get receipts (mvp-24)
 app.get('/api/patient/receipts', apiLimiter, requirePatientSession, async (req, res) => {
   try {
@@ -14010,7 +14552,7 @@ app.post('/webhook/retell/end-of-call', async (req, res) => {
     console.log('\n📞 ========================================');
     console.log('📞 RETELL: End of call webhook');
     console.log('📞 ========================================');
-    console.log('Webhook body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Webhook body:', req);
     console.log('📞 ========================================\n');
 
     const callId = req.body.call_id;
@@ -14279,6 +14821,30 @@ app.post('/webhook/stripe', async (req, res) => {
               completed_at: new Date().toISOString()
             });
 
+            // Phase 4.1 & 4.2: Confirm appointment (S-3: defer to avoid blocking; handle errors)
+            if (checkout.appointment_id) {
+              const apptId = checkout.appointment_id;
+              const clinicIdForConfirm = checkout.clinic_id || null;
+              const piId = paymentIntent.id;
+              const piStatus = paymentIntent.status;
+              // Bug 4: Wrap async callback so rejections are caught (setImmediate doesn't await)
+              setImmediate(() => {
+                (async () => {
+                  try {
+                    const BookingService = require('./services/booking-service');
+                    await BookingService.confirmAppointment(apptId, clinicIdForConfirm);
+                    const apt = await db.getAppointment(apptId);
+                    if (apt && apt.visit_mode === 'sync_video' && piStatus === 'requires_capture' && db.updateAppointment) {
+                      db.updateAppointment(apptId, { stripe_payment_intent_id: piId }, clinicIdForConfirm);
+                    }
+                    console.log(`✅ Appointment ${apptId} confirmed via webhook`);
+                  } catch (confirmErr) {
+                    console.error(`❌ setImmediate confirmAppointment failed: ${confirmErr.message}`, confirmErr.stack);
+                  }
+                })().catch(e => console.error('Unhandled webhook setImmediate error:', e));
+              });
+            }
+
             // Create transaction record for admin tracking
             db.createTransaction({
               id: uuidv4(),
@@ -14482,9 +15048,7 @@ app.post('/webhook/stripe', async (req, res) => {
     console.error('   Payment Intent:', event?.data?.object?.id);
     console.error('   Stack:', error.stack);
 
-    // CRITICAL: Always return 200 to Stripe to prevent retries
-    // We log errors for manual review instead of retrying
-    // This prevents infinite retry loops if there's a persistent issue
+    // S-3: Always return 200 to Stripe—prevents retry storms. Log for manual review.
     res.status(200).json({
       received: true,
       error: 'Webhook processing failed - logged for review',
@@ -14765,9 +15329,10 @@ app.get('/api/ehr/epic/callback', async (req, res) => {
   try {
     console.log('\n🔗 Epic OAuth Callback Received');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('Query params:', JSON.stringify(req.query, null, 2));
+    const { sanitizeForLog, safeLogHeaders } = require('./services/payment-security');
+    console.log('Query params:', JSON.stringify(sanitizeForLog(req.query || {})));
     console.log('Full URL:', req.url);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    safeLogHeaders('Headers:', req);
 
     const { code, state, error, error_description, error_uri } = req.query;
 
@@ -15677,7 +16242,7 @@ app.use((err, req, res, next) => {
 app.post('/api/test/appointment-email', async (req, res) => {
   try {
     console.log('\n🧪 TEST: Appointment Email Booking');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    safeLogRequestBody('Request body:', req);
 
     const { patient_name, patient_phone, patient_email, appointment_type, date, time, timezone } = req.body;
 
@@ -15877,6 +16442,14 @@ const server = app.listen(PORT, HOST, () => {
     const cacheService = require('./services/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();
   } catch (e) { console.warn('⚠️  Cache warm skipped:', e.message); }
+  // gap16: SpecialistResolver cache cleanup on startup + every 60 min
+  try {
+    const SpecialistResolverService = require('./services/specialist-resolver-service');
+    if (SpecialistResolverService.cleanupCache) {
+      SpecialistResolverService.cleanupCache();
+      setInterval(() => SpecialistResolverService.cleanupCache(), 60 * 60 * 1000);
+    }
+  } catch (e) { console.warn('⚠️  Resolver cache cleanup skipped:', e.message); }
   console.log('\n📊 Available Endpoints:');
   console.log('\n📞 Voice (Custom Telephony with SIP):');
   console.log(`   POST   http://localhost:${PORT}/voice/incoming`);
@@ -16086,6 +16659,21 @@ const server = app.listen(PORT, HOST, () => {
     console.warn('⚠️  Appointment payment TTL sweep disabled:', e.message);
   }
 
+  // Phase 3.3: Grace-period cleanup — abandon case records with no activity for 48h
+  try {
+    if (db.abandonStaleCaseRecords && db.db) {
+      const runCaseRecordCleanup = () => {
+        const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+        const n = db.abandonStaleCaseRecords(cutoff);
+        if (n > 0) console.log(`🧹 Case record cleanup: abandoned ${n} stale draft(s)`);
+      };
+      runCaseRecordCleanup();
+      setInterval(runCaseRecordCleanup, 60 * 60 * 1000);
+    }
+  } catch (e) {
+    console.warn('⚠️  Case record cleanup disabled:', e.message);
+  }
+
   console.log('⚙️  Configuration Status:');
   console.log(`   Database:      ✅ Using database.js module`);
   console.log(`   Stripe:        ${process.env.STRIPE_SECRET_KEY ? '✅ Configured' : '❌ Missing'}`);
@@ -16133,18 +16721,8 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n\n🛑 Shutting down gracefully...');
-  console.log('✅ Server closed');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('\n\n🛑 Shutting down gracefully...');
-  console.log('✅ Server closed');
-  process.exit(0);
-});
+// Bug 8: Removed duplicate inline SIGINT/SIGTERM handlers — they called process.exit(0)
+// immediately and preempted the proper gracefulShutdown below (db close, server.close).
 
 // ============================================
 // CRASH PREVENTION & RELIABILITY

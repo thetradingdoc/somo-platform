@@ -33,9 +33,17 @@ class Logger {
       ...data
     };
 
-    // In production, you might want to send to external service
-    if (process.env.NODE_ENV === 'production' && level === 'error') {
-      // TODO: Send to error tracking service (Sentry, etc.)
+    // L3-1: Send to Sentry when SENTRY_DSN configured
+    if (level === 'error' && process.env.SENTRY_DSN) {
+      try {
+        const Sentry = require('@sentry/node');
+        if (Sentry.captureException) {
+          const err = data?.error ? Object.assign(new Error(data.error.message), data.error) : new Error(message);
+          Sentry.captureException(err, { extra: data });
+        }
+      } catch (_) {
+        // Sentry not installed or init failed
+      }
     }
 
     return JSON.stringify(logEntry);

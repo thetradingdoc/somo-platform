@@ -18,8 +18,9 @@ const db = require('../database');
 const FHIRService = require('./fhir-service');
 const PatientIntakeService = require('./patient-intake-service');
 const EmailService = require('./email-service');
-const { getClinicBusinessHours, isBusinessDay } = require('../config/clinic-business-hours');
+const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, DAY_NAMES, normalizeDateStr } = require('../config/clinic-business-hours');
 const { getClinicCalendarConfig, useSingleCalendarPerEnv } = require('../config/clinic-calendar-config');
+const ProviderService = require('./provider-service');
 
 /**
  * Appointment Type Configuration
@@ -207,7 +208,10 @@ class BookingService {
         }
       }
 
-      console.warn('⚠️  Google Calendar credentials not configured. Running in mock mode. External events ignored; double-booking risk (Task 2).');
+      const isMock = process.env.GOOGLE_CALENDAR_MOCK === '1' || process.env.GOOGLE_CALENDAR_MOCK === 'true';
+      console.warn(
+        `⚠️  Google Calendar credentials not configured. Running in ${isMock ? 'MOCK mode (GOOGLE_CALENDAR_MOCK=1)' : 'mock mode'} — external events ignored; double-booking risk when calendar not configured.`
+      );
       return null;
 
     } catch (error) {
@@ -238,8 +242,16 @@ class BookingService {
       );
 
       const clinicHours = getClinicBusinessHours(clinicId);
-      if (!isBusinessDay(appointmentData.date, clinicHours)) {
-        throw new Error('Appointments can only be scheduled on business days. Please select a weekday.');
+      const dateStr = normalizeDateStr(appointmentData.date) || appointmentData.date;
+      if (!isBusinessDay(dateStr, clinicHours)) {
+        const d = new Date(dateStr + 'T12:00:00');
+        const dayName = isNaN(d.getTime()) ? '' : DAY_NAMES[d.getDay()] || '';
+        const nextOpen = getNextBusinessDay(dateStr, clinicHours);
+        const nextDayName = nextOpen ? DAY_NAMES[new Date(nextOpen + 'T12:00:00').getDay()] : '';
+        const hint = nextOpen ? ` Next available: ${nextDayName} ${nextOpen}.` : '';
+        throw new Error(
+          `We're open Monday–Friday. ${dayName ? dayName + ' isn\'t available. ' : ''}Please select a weekday.${hint}`
+        );
       }
 
       // Get appointment type configuration
@@ -348,6 +360,7 @@ class BookingService {
 
       // Prepare appointment record
       const isVideoConsult = (typeConfig.is_video === true) || (appointmentType === 'Video Consultation');
+      // W3-S4.2: primary_icd10, primary_cpt from triage for billing (eligibility, claims)
       const appointment = {
         id: appointmentId,
         clinic_id: clinicId,
@@ -368,11 +381,15 @@ class BookingService {
         provider: appointmentData.provider || 'DocLittle Mental Health Team',
         practitioner_id: appointmentData.practitioner_id || null,
         status: 'scheduled',
+        visit_mode: appointmentData.visit_mode || 'sync_video',
+        slot_state: 'soft_reserved',
         notes: appointmentData.notes || '',
         reminder_sent: false,
         calendar_event_id: null,
         timezone: appointmentData.timezone || BUSINESS_HOURS.timezone,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        primary_icd10: appointmentData.primary_icd10 || null,
+        primary_cpt: appointmentData.primary_cpt || null
       };
 
       console.log('📋 Appointment Details:', {
@@ -484,6 +501,77 @@ class BookingService {
   }
 
   /**
+   * Phase 2.4: Create async review appointment (visit_mode=async_review, status=pending_review).
+   * Bypasses slot validation; stores attachments in notes.
+   * @param {Object} data - { patient_name, patient_phone, patient_email, clinic_id, reason, attachment_ids?, customer_id?, patient_id? }
+   * @returns {Object} - { success, appointment: { id, ... } }
+   */
+  static async createAsyncReviewAppointment(data) {
+    const appointmentId = `appt-${uuidv4()}`;
+    const clinicId = this._ensureClinicId(data.clinic_id, 'async review');
+    const clinicHours = getClinicBusinessHours(clinicId);
+    const tz = data.timezone || clinicHours?.timezone || BUSINESS_HOURS.timezone;
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+
+    let fhirPatientId = data.patient_id || null;
+    if (!fhirPatientId && (data.patient_phone || data.patient_email)) {
+      try {
+        const patientResult = await FHIRService.getOrCreatePatient({
+          name: data.patient_name,
+          phone: data.patient_phone,
+          email: data.patient_email,
+          timezone: tz
+        }, false);
+        if (patientResult?.patient) {
+          fhirPatientId = patientResult.patient.id || patientResult.patient.resource_id;
+        }
+      } catch (_) {}
+    }
+
+    const notesObj = { reason: data.reason || '', attachment_ids: data.attachment_ids || [] };
+    const notes = JSON.stringify(notesObj);
+
+    const appointment = {
+      id: appointmentId,
+      clinic_id: clinicId,
+      customer_id: data.customer_id || null,
+      patient_name: data.patient_name,
+      patient_phone: data.patient_phone || null,
+      patient_email: data.patient_email || null,
+      patient_id: fhirPatientId,
+      appointment_type: data.appointment_type || 'General Consult',
+      date: today,
+      time: '12:00',
+      start_time: null,
+      end_time: null,
+      duration_minutes: 15,
+      provider: data.provider || 'DocLittle Specialist Team',
+      status: 'pending_review',
+      visit_mode: 'async_review',
+      notes,
+      calendar_event_id: null,
+      calendar_link: null,
+      video_room_name: appointmentId,
+      timezone: tz,
+      created_at: new Date().toISOString()
+    };
+
+    await db.createAppointment(appointment);
+    return {
+      success: true,
+      appointment: {
+        id: appointment.id,
+        confirmation_number: appointment.id.substring(5, 13).toUpperCase(),
+        clinic_id: clinicId,
+        patient_name: appointment.patient_name,
+        appointment_type: appointment.appointment_type,
+        status: appointment.status,
+        visit_mode: appointment.visit_mode
+      }
+    };
+  }
+
+  /**
    * Confirm an existing appointment
    * @param {String} appointmentId - Appointment ID or confirmation number
    * @returns {Object} - Confirmation result
@@ -518,6 +606,12 @@ class BookingService {
 
       // Update status
       db.updateAppointmentStatus(appointmentId, 'confirmed', null, scopedClinicId);
+      // Phase 4.1: Set slot_state = hard_locked when payment succeeds
+      if (db.updateAppointment) {
+        try {
+          db.updateAppointment(appointmentId, { slot_state: 'hard_locked' }, scopedClinicId);
+        } catch (_) {}
+      }
       console.log('✅ Appointment confirmed');
 
       const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
@@ -913,6 +1007,9 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
    * @param {String} clinicId - Clinic ID (required)
    * @param {String} practitionerId - Practitioner ID for provider-level availability (Task 4)
    * @returns {Object} - Available slots with timezone-aware display (Task 51)
+   * @note P2-4: Multi-provider filtering not yet implemented. practitionerId accepted but slots
+   *       are aggregated at clinic level (single calendar per clinic). Future: filter by
+   *       provider_id, license_states, specialties, languages.
    */
   static async getAvailableSlots(date, provider = null, appointmentType = null, timezone = null, clinicId = null, practitionerId = null) {
     console.log('\n🕐 BOOKING SERVICE: Get Available Slots');
@@ -1042,6 +1139,31 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
         }
       }
 
+      // Filter by provider availability (provider_availability_blocks + is_online)
+      const onlineProviders = ProviderService.getOnlineProviderEmailsForClinic(scopedClinicId);
+      if (onlineProviders.length > 0) {
+        const filtered = [];
+        const filteredDisplay = [];
+        for (let i = 0; i < availableSlots.length; i++) {
+          const slotTime = availableSlots[i];
+          const slotStart = this._timeToDate(date, slotTime, requestedTimezone);
+          const slotEnd = new Date(slotStart.getTime() +
+            (typeConfig.duration_minutes + typeConfig.buffer_before_minutes + typeConfig.buffer_after_minutes) * 60 * 1000);
+          const anyProviderAvailable = onlineProviders.some(email =>
+            ProviderService.isSlotInProviderAvailability(email, slotStart, slotEnd, date)
+          );
+          if (anyProviderAvailable) {
+            filtered.push(slotTime);
+            filteredDisplay.push(slotsWithDisplay[i]);
+          }
+        }
+        availableSlots.length = 0;
+        availableSlots.push(...filtered);
+        slotsWithDisplay.length = 0;
+        slotsWithDisplay.push(...filteredDisplay);
+        console.log('📋 Filtered by provider availability:', onlineProviders.length, 'online provider(s),', availableSlots.length, 'slots after filter');
+      }
+
       console.log('✅ Available slots:', availableSlots.length);
       console.log('📊 Booked slots:', bookedSlots.length);
       if (calendar_warning) console.warn('⚠️  ' + calendar_warning);
@@ -1074,14 +1196,16 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
   }
 
   /**
-   * Search for appointments by patient phone or email
+   * Search for appointments by patient phone or email (S-2: tenant-scoped)
    * @param {String} searchTerm - Phone number or email
+   * @param {String|null} clinicId - Required for clinic-scoped search
+   * @param {String|null} customerId - Optional for customer/tenant-scoped search (multi-tenant)
    * @returns {Object} - Found appointments
    */
-  static async searchAppointments(searchTerm, clinicId = null) {
+  static async searchAppointments(searchTerm, clinicId = null, customerId = null) {
     try {
-      const scopedClinicId = this._ensureClinicId(clinicId, 'searching appointments');
-      const appointments = await db.searchAppointments(searchTerm, scopedClinicId);
+      const scopedClinicId = customerId ? null : this._ensureClinicId(clinicId, 'searching appointments');
+      const appointments = await db.searchAppointments(searchTerm, scopedClinicId, customerId || null);
 
       return {
         success: true,
@@ -1334,6 +1458,10 @@ Appointment ID: ${appointment.id}
 
     const businessEnd = new Date(slotStart);
     businessEnd.setHours(hoursEnd, 0, 0, 0);
+    // B-2: If business hours span midnight (e.g. 22:00–02:00), end is next calendar day
+    if (hoursEnd <= hoursStart && hoursEnd > 0) {
+      businessEnd.setDate(businessEnd.getDate() + 1);
+    }
 
     // Calculate appointment end time (without buffer after)
     // slotStart is the actual appointment start time (after buffer before)
@@ -1498,6 +1626,7 @@ Appointment ID: ${appointment.id}
    *   patient_name: 'John Doe',
    *   patient_phone: '+1234567890',
    *   patient_email: 'john@example.com',
+   *   clinic_id: 'clinic-001',  // required (B-3)
    *   date: nextWeek,
    *   time: '14:00',
    *   appointment_type: 'Follow-up Session'
@@ -1506,6 +1635,9 @@ Appointment ID: ${appointment.id}
   static async createFutureAppointment(options) {
     if (!options.patient_name || !options.patient_phone) {
       throw new Error('patient_name and patient_phone are required');
+    }
+    if (!options.clinic_id) {
+      throw new Error('clinic_id is required for createFutureAppointment (B-3: no hardcoded fallback)');
     }
 
     // Normalize date to YYYY-MM-DD string
@@ -1550,7 +1682,7 @@ Appointment ID: ${appointment.id}
       timezone: options.timezone || BUSINESS_HOURS.timezone,
       provider: options.provider || 'DocLittle Mental Health Team',
       notes: options.notes || '',
-      clinic_id: options.clinic_id || 'clinic-001',
+      clinic_id: options.clinic_id,
       customer_id: options.customer_id || null
     };
 

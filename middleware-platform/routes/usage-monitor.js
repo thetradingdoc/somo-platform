@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const UsageMonitor = require('../services/usage-monitor');
+const { requireAdminAuth } = require('../middleware/admin-auth');
 
 // Middleware to get customer from session
 function getCustomerFromSession(req) {
@@ -188,12 +189,11 @@ router.get('/billing/:year/:month', (req, res) => {
 
 /**
  * POST /api/usage/generate-billing
- * Generate monthly billing for all tenants (Admin only)
+ * Generate monthly billing for all tenants (Admin only) — A-1: require admin auth
  * Body: { year, month }
  */
-router.post('/generate-billing', (req, res) => {
+router.post('/generate-billing', requireAdminAuth, (req, res) => {
   try {
-    // TODO: Add admin authentication
     const { year, month } = req.body;
 
     if (!year || !month) {

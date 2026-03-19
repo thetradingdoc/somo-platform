@@ -347,7 +347,7 @@ async function processEvent(roomId, eventType, payload, options = {}) {
       if (prior && (prior.resource_id || prior.resource_data?.id)) priorReportId = prior.resource_id || prior.resource_data?.id;
     }
     const jobId = `job-${uuidv4()}`;
-    db.insertPendingCaseReport({ job_id: jobId, patient_id: patientId, encounter_id: encounterId });
+    db.insertPendingCaseReport({ job_id: jobId, patient_id: patientId, encounter_id: encounterId, appointment_id: appointmentId || null });
 
     // Backfill encounter_id onto any existing uploads for this appointment.
     if (appointmentId && db.db && db.db.prepare) {

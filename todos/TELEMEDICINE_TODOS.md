@@ -117,6 +117,60 @@ This section tracks the open gaps from the architecture review. Each item has a 
 
 ---
 
+## Production-Grade Plumbing (9-Step Architecture)
+
+From `docs/architecture/patients/PATIENT_VOICE_BOOKING_ARCHITECTURE.md` — technical links between steps.
+
+### P2 — Case ID Handshake (Step 2 ↔ Step 7)
+
+- **Gap**: When the doctor enters the LiveKit room, they must see the Case Report (Step 2) immediately without searching.
+- **Action**:
+  - Set `room_name = case_id` (e.g. `case-CR-2026-001234`) or ensure `appt-{id}` resolves to a case.
+  - Provider video-call page: on room join, fetch `GET /api/provider/case-report?room={room_name}` and render in a side-panel.
+  - Room naming: prefer `case-{case_number}` for direct lookup, or map `appt-{id}` → `case_id` via appointment.
+
+---
+
+### P2 — Pre-Auth vs Capture (Step 5, Step 8)
+
+- **Gap**: In Sync (Video) model, if the doctor doesn't show up, refunding a captured payment incurs processing fees.
+- **Action**:
+  - Use Stripe **Authorize Now, Capture Later**.
+  - **At Booking (Step 5)**: Hold funds (pre-auth), do not capture.
+  - **At Step 8 (Report Generation)**: When the doctor submits the final report, capture the payment.
+
+---
+
+### P2 — Async-to-Sync Escalation (Step 3)
+
+- **Gap**: Patient pays for Async Review; specialist determines "needs live consultation."
+- **Action**:
+  - Add "Requires Live Consultation" button in provider async-queue UI.
+  - System sends patient a **Delta Payment** link (price difference Async → Sync).
+  - Once paid, convert case to Sync and enter Step 4a (video booking flow).
+
+---
+
+### P3 — Ambient AI Real-Time Pipeline (Step 7)
+
+- **Gap**: Ambient AI must draft reports during the call, not after hang-up.
+- **Action**:
+  - Use LiveKit **Egress** or **Transcription** to pipe audio → transcript feed → draft report service.
+  - Ensure report is ready seconds after hang-up.
+
+---
+
+### P3 — Multi-Tenant Voice (Step 12)
+
+- **Gap**: Need region-aware voice, pricing, and timezone handling.
+- **Actions**:
+  1. **Inbound Number → Price Tier**: Map `Inbound_Number` to `Price_Tier` via `clinic_phone_numbers` / `phone-country-map.js`. +263 → Tier 4, +1 → Tier 1.
+  2. **Agent Configured Numbers**: Voice agent must know and refer to configured inbound numbers in prompts.
+  3. **Region Check**: In region → offer Voice + Video. Outside region → Video (web) only.
+  4. **Timezone Awareness**: Agent aware of patient vs provider timezone for "immediate" vs "scheduled"; display slots in patient timezone.
+
+---
+
 ### Runbook items (no code changes, required before PHI in production)
 
 - Ensure Azure, Twilio, OpenAI, and Pinecone BAAs are signed and documented.

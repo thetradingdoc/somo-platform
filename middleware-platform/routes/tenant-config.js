@@ -149,7 +149,7 @@ router.get('/config', (req, res) => {
       navItems: tenantType === 'shop' ? shopNavItems : clinicNavItems,
       sidebarSubtitle: tenantType === 'shop' 
         ? '24/7 Medical Assistant' 
-        : 'Medical Coding Assistant',
+        : "Doctor's Portal",
       merchant_id: merchant?.id || null,
       clinic_id: clinic?.clinic_id || null,
       feature_flags: flagsConfig

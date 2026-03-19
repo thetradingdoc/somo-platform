@@ -9,6 +9,8 @@ const router = express.Router();
 const db = require('../database');
 const FHIRService = require('../services/fhir-service');
 const EmailService = require('../services/email-service');
+let stripe = null;
+try { stripe = require('stripe')(process.env.STRIPE_SECRET_KEY); } catch (_) {}
 
 /**
  * GET /api/patient/:patientId/case-report
@@ -208,6 +210,21 @@ router.post('/api/case-report/callback', express.json(), async (req, res) => {
       case_report_text: report_markdown || '',
       reasoning_chain: reasoning_chain
     });
+
+    // Phase 4.3: Trigger Stripe capture for sync_video pre-auth at case report generation
+    const appointmentId = row.appointment_id || null;
+    if (appointmentId && stripe) {
+      try {
+        const appointment = await db.getAppointment(appointmentId);
+        if (appointment && appointment.visit_mode === 'sync_video' && appointment.stripe_payment_intent_id) {
+          await stripe.paymentIntents.capture(appointment.stripe_payment_intent_id);
+          console.log(`[case-report] Captured pre-auth for appointment ${appointmentId} (PI: ${appointment.stripe_payment_intent_id})`);
+        }
+      } catch (capErr) {
+        console.warn('[case-report] Stripe capture failed:', capErr.message);
+      }
+    }
+
     const patientId = row.patient_id;
     const encounterId = row.encounter_id;
     try {

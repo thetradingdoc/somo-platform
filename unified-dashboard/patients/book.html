@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1e40af" />
   <link rel="manifest" href="../manifest.webmanifest" />
-  <title>Book a Visit - Consʌlt Patient Portal</title>
+  <title>Consult with a doctor - Consʌlt Patient Portal</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="../assets/js/config.js" defer></script>
   <style>
@@ -23,6 +23,7 @@
     .choice-title { font-size:16px; font-weight:700; margin-bottom:4px; }
     .choice-sub { font-size:13px; color:var(--gray-600); margin-bottom:10px; }
     .chip { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:600; margin-right:6px; }
+    .btn-cta { display:inline-flex; align-items:center; justify-content:center; padding:10px 18px; border-radius:10px; background:#1e40af; color:#fff; font-size:14px; font-weight:700; margin-top:8px; }
     .badge { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--gray-500); }
     .alert { border-radius:10px; padding:10px 12px; font-size:12px; margin-bottom:12px; display:none; }
     .alert-warning { background:#fffbeb; color:#92400e; border:1px solid #fed7aa; }
@@ -135,7 +136,7 @@
 
     <main class="main-content">
       <div class="page-header">
-        <h1 class="page-title">Book a visit</h1>
+        <h1 class="page-title">Consult with a doctor</h1>
         <p class="page-subtitle">Start by telling us how much help you want. We’ll make sure you don’t double‑book or miss an unpaid visit.</p>
       </div>
 
@@ -152,12 +153,9 @@
         <div class="badge">How would you like to book?</div>
         <div class="choice-row">
           <a href="triage.html" class="choice-card" id="guidedChoice">
-            <div class="choice-title">Get help choosing a doctor</div>
-            <div class="choice-sub">Chat with our AI assistant. We’ll ask a few questions, suggest the right visit, and handle booking for you.</div>
-            <div>
-              <span class="chip">Best for first‑time visits</span>
-              <span class="chip">Can handle triage</span>
-            </div>
+            <div class="choice-title">Book an appointment</div>
+            <div class="choice-sub">Chat with our virtual assistant. We’ll ask a few questions, suggest the right visit, and handle booking for you.</div>
+            <span class="btn-cta">Click to start</span>
           </a>
         </div>
       </div>

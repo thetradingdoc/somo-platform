@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -69,7 +69,7 @@ export default function HomeScreen() {
           setEmail(storedEmail);
           setStep('appointments');
         }
-      } catch (e) {
+      } catch {
         // ignore
       } finally {
         setRestoring(false);
@@ -77,12 +77,34 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  const loadAppointments = useCallback(async (sid?: string) => {
+    const effectiveSessionId = sid ?? sessionId;
+    if (!effectiveSessionId) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API_BASE}/api/patient/appointments`, {
+        headers: { ...API_HEADERS, 'x-session-id': effectiveSessionId },
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error || 'Failed to load appointments');
+        return;
+      }
+      setAppointments(json.appointments || []);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId]);
+
   // Load appointments when we have a session and are on appointments step
   useEffect(() => {
     if (!restoring && step === 'appointments' && sessionId) {
       loadAppointments(sessionId);
     }
-  }, [restoring, step, sessionId]);
+  }, [restoring, step, sessionId, loadAppointments]);
 
   async function sendCode() {
     try {
@@ -101,8 +123,8 @@ export default function HomeScreen() {
       // Store initial session id (backend may reuse it on confirm)
       if (json.session_id) setSessionId(json.session_id);
       setStep('code');
-    } catch (e: any) {
-      setError(e.message || 'Network error');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Network error');
     } finally {
       setLoading(false);
     }
@@ -128,30 +150,8 @@ export default function HomeScreen() {
       await SecureStore.setItemAsync(EMAIL_KEY, email.trim());
       await loadAppointments(sid);
       setStep('appointments');
-    } catch (e: any) {
-      setError(e.message || 'Network error');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadAppointments(sid?: string) {
-    const effectiveSessionId = sid ?? sessionId;
-    if (!effectiveSessionId) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`${API_BASE}/api/patient/appointments`, {
-        headers: { ...API_HEADERS, 'x-session-id': effectiveSessionId },
-      });
-      const json = await res.json();
-      if (!json.success) {
-        setError(json.error || 'Failed to load appointments');
-        return;
-      }
-      setAppointments(json.appointments || []);
-    } catch (e: any) {
-      setError(e.message || 'Network error');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Network error');
     } finally {
       setLoading(false);
     }
@@ -170,7 +170,6 @@ export default function HomeScreen() {
       api: API_BASE,
     });
     const url = `${base}/patients/video-call.html?${params.toString()}`;
-    console.log('Opening video URL:', url);
     Linking.openURL(url).catch(() => {
       setError('Could not open video visit link on this device.');
     });

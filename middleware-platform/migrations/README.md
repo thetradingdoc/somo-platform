@@ -11,5 +11,10 @@ Versioned migrations run on database initialization. Schema changes should be ad
 ## Adding a migration
 
 1. Create `migrations/NNN_description.js`
-2. Export `async function up(db) { ... }` and optionally `async function down(db) { ... }`
-3. Run `node -e "require('./database').runMigrations()"` or let server startup apply it
+2. Export `function up(db) { ... }` and optionally `function down(db) { ... }`
+3. Migrations run automatically when the server starts (database is required).
+4. To run manually: `npm run migrate` or `node -e "require('./database').runMigrations()"`
+
+## Recent migrations
+
+- `012_triage_differentials` — Adds `differentials` column to `triage_rag_results` (Stage 3 triage)

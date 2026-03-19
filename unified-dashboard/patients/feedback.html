@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visit Feedback - Consʌlt</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <script src="../assets/js/config.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+    .title { font-size: 22px; font-weight: 900; margin: 0 0 6px 0; color: #0f172a; }
+    .sub { margin: 0 0 20px 0; font-size: 14px; color: #4b5563; line-height: 1.4; }
+    .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+    .btn {
+      padding: 12px 20px; border-radius: 10px; font-weight: 600; border: none; cursor: pointer;
+      font-size: 16px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
+    }
+    .btn-primary { background: #16a34a; color: white; }
+    .btn-secondary { background: #dc2626; color: white; }
+    .btn-muted { background: #e5e7eb; color: #374151; }
+    .rating-row { display: flex; gap: 8px; justify-content: center; margin: 16px 0; }
+    .rating-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: 2px solid #e5e7eb;
+      background: white; font-size: 18px; font-weight: 700; cursor: pointer; color: #64748b;
+    }
+    .rating-btn:hover, .rating-btn.selected { background: #1e40af; border-color: #1e40af; color: white; }
+    textarea { width: 100%; min-height: 80px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box; }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 999px; background: #ecfdf3; color: #166534; font-weight: 900; border: 1px solid #bbf7d0; margin: 10px 0 14px; }
+    .error { color: #dc2626; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:#1e40af;margin-bottom:8px;">Consʌlt</div>
+    <div id="formView">
+      <h1 class="title">How was your visit?</h1>
+      <p class="sub">Your feedback helps us improve. Optional — takes less than a minute.</p>
+      <p style="font-size:13px;color:#64748b;margin-bottom:4px;">Rate your experience (1–5)</p>
+      <div class="rating-row">
+        <button type="button" class="rating-btn" data-rating="1">1</button>
+        <button type="button" class="rating-btn" data-rating="2">2</button>
+        <button type="button" class="rating-btn" data-rating="3">3</button>
+        <button type="button" class="rating-btn" data-rating="4">4</button>
+        <button type="button" class="rating-btn" data-rating="5">5</button>
+      </div>
+      <p style="font-size:13px;color:#64748b;margin-bottom:4px;">Was this visit helpful?</p>
+      <div class="btn-row">
+        <button type="button" id="helpfulYes" class="btn btn-primary">👍 Yes</button>
+        <button type="button" id="helpfulNo" class="btn btn-secondary">👎 No</button>
+      </div>
+      <p style="font-size:13px;color:#64748b;margin:16px 0 4px;text-align:left;">Additional comments (optional)</p>
+      <textarea id="commentInput" placeholder="Anything else you'd like to share?"></textarea>
+      <div class="btn-row" style="margin-top:20px;">
+        <button type="button" id="submitBtn" class="btn btn-primary">Submit feedback</button>
+      </div>
+      <p id="formError" class="error" style="display:none;"></p>
+    </div>
+    <div id="thanksView" style="display:none;">
+      <div class="pill">✅ Thank you</div>
+      <h1 class="title">Feedback received</h1>
+      <p class="sub">We appreciate you taking the time. Your input helps us provide better care.</p>
+      <a class="btn btn-muted" href="patient-dashboard.html">Back to dashboard</a>
+    </div>
+    <div id="invalidView" style="display:none;">
+      <h1 class="title">Invalid link</h1>
+      <p class="sub">This feedback link may have expired. Please use the link from your visit summary email.</p>
+    </div>
+    <div id="submittingView" style="display:none;">
+      <p class="sub">Submitting your feedback…</p>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const appointmentId = params.get('appointment_id');
+      const token = params.get('token');
+      const helpfulParam = params.get('helpful');
+
+      const formView = document.getElementById('formView');
+      const thanksView = document.getElementById('thanksView');
+      const invalidView = document.getElementById('invalidView');
+      const submittingView = document.getElementById('submittingView');
+
+      if (!appointmentId || !token) {
+        formView.style.display = 'none';
+        thanksView.style.display = 'none';
+        invalidView.style.display = 'block';
+        return;
+      }
+
+      let selectedRating = null;
+      let selectedHelpful = null;
+
+      document.querySelectorAll('.rating-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.rating-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          selectedRating = parseInt(btn.dataset.rating, 10);
+        });
+      });
+      document.getElementById('helpfulYes').addEventListener('click', () => { selectedHelpful = 1; });
+      document.getElementById('helpfulNo').addEventListener('click', () => { selectedHelpful = 0; });
+
+      async function submitFeedback() {
+        const res = await fetch(`/api/patient/visits/${encodeURIComponent(appointmentId)}/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token,
+            rating: selectedRating,
+            helpful: selectedHelpful,
+            comment: (document.getElementById('commentInput') || {}).value?.trim?.() || ''
+          })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'Failed to submit');
+        formView.style.display = 'none';
+        submittingView.style.display = 'none';
+        thanksView.style.display = 'block';
+      }
+
+      document.getElementById('submitBtn').addEventListener('click', async () => {
+        const errEl = document.getElementById('formError');
+        errEl.style.display = 'none';
+        try {
+          await submitFeedback();
+        } catch (e) {
+          errEl.textContent = e.message || 'Something went wrong. Please try again.';
+          errEl.style.display = 'block';
+        }
+      });
+
+      if (helpfulParam === '1' || helpfulParam === '0') {
+        selectedHelpful = helpfulParam === '1' ? 1 : 0;
+        formView.style.display = 'none';
+        submittingView.style.display = 'block';
+        submitFeedback().catch(() => {
+          formView.style.display = 'block';
+          submittingView.style.display = 'none';
+          document.getElementById('formError').textContent = 'Could not submit. Please try the form below.';
+          document.getElementById('formError').style.display = 'block';
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

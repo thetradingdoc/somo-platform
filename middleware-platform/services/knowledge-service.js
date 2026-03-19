@@ -13,7 +13,6 @@ const { rerankByPerceptualRelevance } = require('./layer2-rag/reranking-service'
 const ICD_REFERENCE_PATH = path.resolve(__dirname, '../../Knowledge/ICD-10 Files/icd10_reference.json');
 const ICD_REFERENCE_PATH_FALLBACK = path.resolve(__dirname, '../../Knowledge/icd10_reference.json');
 const SIMPLE_RULES_PATH = path.resolve(__dirname, '../../Knowledge/rules/simple-coding-rules.json');
-const TRIAGE_RULES_PATH = path.resolve(__dirname, '../../Knowledge/rules/triage-rules.json');
 const MEDICAL_ABBREVIATIONS_PATH = path.resolve(__dirname, '../../Knowledge/ontology/medical-abbreviations.json');
 const MEDICAL_ENTITIES_PATH = path.resolve(__dirname, '../../Knowledge/ontology/medical-entities.json');
 const EXTRACTION_PATTERNS_PATH = path.resolve(__dirname, '../../Knowledge/ontology/extraction-patterns.json');
@@ -98,7 +97,6 @@ loadColabExports();
 let icdCache = [];
 let simpleRules = [];
 let medicalAbbreviations = {};
-let triageRules = null;
 let medicalEntities = null;
 let extractionPatterns = null;
 
@@ -138,21 +136,10 @@ try {
   medicalAbbreviations = {};
 }
 
+// orch-16: Single load – use triage-service as source of truth
 function loadTriageRules() {
-  if (triageRules !== null) return triageRules;
-  triageRules = { emergent: [], urgent: [] };
-  try {
-    if (fs.existsSync(TRIAGE_RULES_PATH)) {
-      const raw = fs.readFileSync(TRIAGE_RULES_PATH, 'utf8');
-      triageRules = JSON.parse(raw);
-      const e = (triageRules.emergent || []).length;
-      const u = (triageRules.urgent || []).length;
-      if (e + u > 0) console.log(`✅ Loaded triage rules: ${e} emergent, ${u} urgent`);
-    }
-  } catch (e) {
-    console.warn('⚠️  Failed to load triage rules:', e.message);
-  }
-  return triageRules;
+  const { getTriageRules } = require('./triage-service');
+  return getTriageRules();
 }
 
 function loadMedicalEntities() {

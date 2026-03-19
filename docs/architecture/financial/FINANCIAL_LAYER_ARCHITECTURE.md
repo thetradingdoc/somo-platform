@@ -20,6 +20,8 @@
 
 **FHIR‑native RCM (2026):** For the Financial Intelligence Layer roadmap (EMPI + EDI→FHIR normalization into `ExplanationOfBenefit`), see **[FHIR_NATIVE_RCM_MAPPING.md](./FHIR_NATIVE_RCM_MAPPING.md)**.
 
+**Tiba Alignment:** The platform aligns with the Tiba Settlement Protocol for deterministic coding (c_i, q_i, φ_i, f^P_i, n_i), EOB line-item responsibility, modifier rules, prior-auth checks, OOP max, balance billing, and provider trust scores. Gaps and remediation: **[TIBA_AND_BILLING_TODO.md](./TIBA_AND_BILLING_TODO.md)**.
+
 ### 1.1 Purpose
 
 The Financial Layer orchestrates healthcare revenue operations: insurance eligibility verification, claim submission, medical coding, EOB (Explanation of Benefits) calculation, invoicing, and patient payments. It integrates external APIs (Stedi for X12 EDI), internal knowledge bases (ICD-10, CPT, coding rules), and AI-assisted medical coding.
@@ -577,14 +579,14 @@ When payer fee schedule data is available:
 
 ### 7.4 Related Documentation
 
-- `docs/architecture/voice-agent/AI_AGENT_FINANCIAL_LAYER_TODO.md` – **AI agent integration todo** (close backend–agent gap)
+- `docs/architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md` – **Voice agent todo & status** (close backend–agent gap)
 - `docs/architecture/voice-agent/MULTI_MODEL_REALITY_CHECK.md` – Voice vs PDF cost (98% vs 2%), multi-model deprioritized
 - `docs/architecture/voice-agent/STATE_FLOW.md` – Medical coding state flow
 - `docs/architecture/voice-agent/RUNBOOK.md` – Imports, evaluation, rules, troubleshooting
 - `docs/architecture/voice-agent/MEDICAL_CODING_AGENT_TODO.md` – Implementation roadmap
 - `docs/integrations/stedi/api/STEDI_API_ENDPOINTS.md` – Stedi endpoints
 - `docs/integrations/stedi/api/STEDI_VS_UHC_FHIR_DATA_COMPARISON.md` – Stedi vs UHC FHIR
-- `docs/integrations/stripe/issuing/STRIPE_ISSUING_ON_DEMAND.md` – Card creation rules
+- `docs/integrations/stripe/issuing/STRIPE_ISSUING.md` – Card creation rules (on-demand section)
 - `docs/knowledge-base/README.md` – Knowledge base architecture
 - `docs/development/invoice-billing/IMPLEMENTATION_SUMMARY.md` – Invoice implementation
 

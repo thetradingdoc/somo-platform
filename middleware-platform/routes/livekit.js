@@ -35,18 +35,22 @@ router.options('/token', (req, res) => {
 });
 
 /**
- * POST /api/livekit/token
+ * POST /api/livekit/token (L-1, L-2)
  * Get a token to join a LiveKit video room.
  *
- * Body: { room?: string, identity?: string, name?: string, appointment_id?: string }
+ * SECURITY: This endpoint has no auth by design for backwards compatibility.
+ * For patient joins, use GET /api/livekit/patient/video/token (requires x-session-id).
+ * When using appointment_id, appointment is validated with clinic/customer scoping.
+ *
+ * Body: { room?: string, identity?: string, name?: string, appointment_id?: string, clinic_id?: string }
  *   room          - Room name (optional; overridden by appointment_id)
- *   appointment_id - If provided, validates appointment exists and uses room appt-{id}
+ *   appointment_id - If provided, validates appointment exists and uses room appt-{id} (L-2: scoped)
+ *   clinic_id     - Optional; when provided with appointment_id, enforces tenant scope
  *   identity      - Participant ID (default: "user-{uuid}")
  *   name          - Display name (default: "Participant")
  */
 router.post('/token', async (req, res) => {
   console.log('🔍 POST /api/livekit/token - Request from:', req.headers.origin || 'no origin', 'IP:', req.ip);
-  // mvp-37: avoid logging request bodies (may contain identifiers)
   if (!AccessToken) {
     return res.status(503).json({
       success: false,
@@ -67,20 +71,33 @@ router.post('/token', async (req, res) => {
 
   try {
     const { v4: uuidv4 } = require('uuid');
-    const appointmentId = req.body?.appointment_id?.trim();
+    let appointmentId = req.body?.appointment_id?.trim();
+    const roomFromBody = req.body?.room?.trim();
+    const requestClinicId = (req.body?.clinic_id || req.headers['x-clinic-id'] || '').toString().trim() || null;
+    if (!appointmentId && roomFromBody && roomFromBody.startsWith('appt-')) {
+      appointmentId = roomFromBody.substring('appt-'.length);
+    }
     let room;
 
     if (appointmentId) {
-      const appointment = await db.getAppointment(appointmentId);
+      const appointment = await db.getAppointment(appointmentId, requestClinicId);
       if (!appointment) {
         return res.status(404).json({
           success: false,
           error: 'Appointment not found'
         });
       }
-      room = `appt-${appointmentId}`;
+      // L-2: Enforce tenant scope - appointment must match requested clinic when provided
+      if (requestClinicId && appointment.clinic_id !== requestClinicId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Appointment does not belong to this clinic'
+        });
+      }
+      const caseNumber = db.getCaseNumberForAppointment && db.getCaseNumberForAppointment(appointment.id);
+      room = caseNumber ? `case-${caseNumber}` : `appt-${appointmentId}`;
     } else {
-      room = req.body?.room?.trim() || `telehealth-${uuidv4().slice(0, 8)}`;
+      room = roomFromBody || `telehealth-${uuidv4().slice(0, 8)}`;
     }
 
     const identity = req.body?.identity || `user-${uuidv4().slice(0, 8)}`;
@@ -150,9 +167,31 @@ router.get('/patient/video/token', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Invalid session' });
     }
 
-    // Resolve appointment from room naming convention appt-{id}
+    // Resolve appointment from room naming convention appt-{id} or case-{case_number}
     let appointmentId = null;
+    let resolvedRoom = room;
     if (room.startsWith('appt-')) {
+      appointmentId = room.substring('appt-'.length);
+      const appointment = await db.getAppointment(appointmentId);
+      if (appointment && db.getCaseNumberForAppointment) {
+        const caseNumber = db.getCaseNumberForAppointment(appointment.id);
+        if (caseNumber) resolvedRoom = `case-${caseNumber}`;
+      }
+    } else if (room.startsWith('case-')) {
+      const caseNumber = room.substring('case-'.length);
+      try {
+        const cr = db.prepare('SELECT * FROM case_records WHERE case_number = ? LIMIT 1').get(caseNumber);
+        if (cr && cr.session_id) {
+          const s = db.prepare('SELECT flow_state FROM patient_orchestrate_sessions WHERE session_id = ? LIMIT 1').get(cr.session_id);
+          if (s && s.flow_state) {
+            const fs = typeof s.flow_state === 'string' ? JSON.parse(s.flow_state) : s.flow_state;
+            appointmentId = fs.appointment_id || null;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!appointmentId && room.startsWith('appt-')) {
       appointmentId = room.substring('appt-'.length);
     }
 
@@ -222,7 +261,7 @@ router.get('/patient/video/token', async (req, res) => {
 
     at.addGrant({
       roomJoin: true,
-      room,
+      room: resolvedRoom,
       canPublish: true,
       canSubscribe: true,
       canPublishData: true
@@ -231,12 +270,12 @@ router.get('/patient/video/token', async (req, res) => {
     const token = await at.toJwt();
     const url = livekitUrl.startsWith('http') ? livekitUrl.replace(/^https?/, 'wss') : livekitUrl;
     console.log('[LiveKit] 🎥 patient/video/token issued', {
-      room,
+      room: resolvedRoom,
       appointment_id: appointmentId,
       patient_id: sessionValidation.patient_id || null,
       journey_id: journeyId
     });
-    return res.json({ success: true, token, url, room });
+    return res.json({ success: true, token, url, room: resolvedRoom });
   } catch (err) {
     console.error('[LiveKit] patient/video/token error:', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to create token' });

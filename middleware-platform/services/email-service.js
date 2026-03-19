@@ -2357,7 +2357,7 @@ class EmailService {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:16px;">
         <div style="font-size:28px;font-weight:800;letter-spacing:-1px;">Consʌlt</div>
-        <div style="color:#6b7280;margin-top:4px;">Home Care Works</div>
+        <div style="color:#6b7280;margin-top:4px;">Healthcare at your home</div>
         <h2 style="margin-top:18px;">Your appointment was rescheduled</h2>
         <p style="color:#374151;">Previous: <strong>${prev || '—'}</strong><br/>New: <strong>${next || '—'}</strong></p>
         <p style="color:#374151;">You can review or manage your visit in your portal.</p>
@@ -2373,7 +2373,7 @@ class EmailService {
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:16px;">
         <div style="font-size:28px;font-weight:800;letter-spacing:-1px;">Consʌlt</div>
-        <div style="color:#6b7280;margin-top:4px;">Home Care Works</div>
+        <div style="color:#6b7280;margin-top:4px;">Healthcare at your home</div>
         <h2 style="margin-top:18px;">Your appointment was canceled</h2>
         <p style="color:#374151;">Canceled visit time: <strong>${dt}</strong></p>
         <p style="color:#374151;">If this was a mistake, please schedule a new visit or contact your clinic.</p>
@@ -2384,13 +2384,24 @@ class EmailService {
 
   static async sendPostVisitSummaryReady(appointment) {
     if (!appointment || !appointment.patient_email) return { success: false, error: 'Missing patient email' };
+    const baseUrl = (process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+    const feedbackExpiry = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+    const { createFeedbackToken } = require('../utils/upload-token');
+    const feedbackToken = createFeedbackToken(appointment.id, feedbackExpiry);
+    const feedbackUrl = `${baseUrl}/patients/feedback.html?appointment_id=${encodeURIComponent(appointment.id)}&token=${encodeURIComponent(feedbackToken)}`;
     const subject = 'Consult Patient Portal — Your Visit Summary Is Ready';
     const html = `
       <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:16px;">
         <div style="font-size:28px;font-weight:800;letter-spacing:-1px;">Consʌlt</div>
-        <div style="color:#6b7280;margin-top:4px;">Home Care Works</div>
+        <div style="color:#6b7280;margin-top:4px;">Healthcare at your home</div>
         <h2 style="margin-top:18px;">Your visit summary is ready</h2>
         <p style="color:#374151;">You can view your records and documents in the patient portal.</p>
+        <p style="margin-top:20px;color:#374151;font-weight:600;">Was this visit helpful?</p>
+        <p style="margin-top:8px;">
+          <a href="${feedbackUrl + '&helpful=1'}" style="display:inline-block;padding:10px 16px;margin-right:8px;background:#16a34a;color:white!important;text-decoration:none;border-radius:8px;font-weight:600;">👍 Yes</a>
+          <a href="${feedbackUrl + '&helpful=0'}" style="display:inline-block;padding:10px 16px;background:#dc2626;color:white!important;text-decoration:none;border-radius:8px;font-weight:600;">👎 No</a>
+        </p>
+        <p style="margin-top:12px;font-size:13px;color:#6b7280;">Or leave detailed feedback: <a href="${feedbackUrl}" style="color:#1e40af;">${feedbackUrl}</a></p>
       </div>
     `;
     return this.sendEmail({ to: appointment.patient_email, subject, html });

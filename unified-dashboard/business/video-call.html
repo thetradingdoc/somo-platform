@@ -265,6 +265,40 @@
   }
   .transcript-footer button:hover { background: rgba(74, 222, 128, 0.2); }
 
+  /* Phase 7.2: Case report side-panel */
+  .case-report-panel {
+    width: 260px;
+    min-width: 260px;
+    max-width: 90vw;
+    background: #0f172a;
+    border-radius: 12px;
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .case-report-panel-header {
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+    font-size: 13px;
+    font-weight: 600;
+    color: #c7d2fe;
+  }
+  .case-report-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    font-size: 12px;
+    color: #e2e8f0;
+  }
+  .case-report-section { margin-bottom: 12px; }
+  .case-report-section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #a5b4fc; margin-bottom: 4px; }
+  .case-report-opqrst { white-space: pre-wrap; word-break: break-word; line-height: 1.4; }
+  .case-report-icd { display: flex; flex-wrap: wrap; gap: 4px; }
+  .case-report-icd span { padding: 2px 8px; border-radius: 6px; background: rgba(99, 102, 241, 0.2); font-size: 11px; }
+  .case-report-empty { color: #64748b; font-style: italic; }
+
   /* Mobile layout: hide sidebar, make video UI full-width */
   @media (max-width: 768px) {
     .layout {
@@ -297,7 +331,7 @@
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-logo">Consʌlt</div>
-        <div class="sidebar-subtitle">Medical Coding Assistant</div>
+        <div class="sidebar-subtitle">Doctor's Portal</div>
       </div>
       <nav class="sidebar-nav" id="sidebarNav"></nav>
       <div class="sidebar-footer">
@@ -330,6 +364,12 @@
 
       <div id="videoSection" style="display: none;">
         <div class="transcript-panel-wrap" style="display:flex;gap:16px;">
+          <aside id="caseReportPanel" class="case-report-panel" aria-label="Case report" style="display:none;">
+            <div class="case-report-panel-header">Case Report</div>
+            <div class="case-report-panel-body" id="caseReportBody">
+              <div class="case-report-empty">Loading…</div>
+            </div>
+          </aside>
           <aside id="transcriptPanel" class="transcript-panel" aria-label="Live transcript">
             <div class="transcript-panel-header">
               <span class="transcript-panel-title">Transcript</span>
@@ -439,7 +479,7 @@
       if (roomFromUrl) {
         const roomInput = document.getElementById('roomInput');
         roomInput.value = roomFromUrl;
-        roomInput.readOnly = roomFromUrl.startsWith('appt-');
+        roomInput.readOnly = roomFromUrl.startsWith('appt-') || roomFromUrl.startsWith('case-');
         if (roomInput.readOnly) roomInput.title = 'Room is linked to an appointment';
         const tip = document.getElementById('roomTip');
         if (tip) tip.style.display = 'none';
@@ -795,6 +835,42 @@
       assistantInterval = setInterval(fetchAssistant, 15000);
     }
 
+    async function loadCaseReport(roomName) {
+      const panel = document.getElementById('caseReportPanel');
+      const body = document.getElementById('caseReportBody');
+      if (!panel || !body) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/provider/case-report?room=${encodeURIComponent(roomName)}`, { credentials: 'include' });
+        const json = await res.json();
+        if (!json.success || !json.case_report) {
+          panel.style.display = 'none';
+          return;
+        }
+        const cr = json.case_report;
+        let html = '';
+        if (cr.patient_summary) {
+          html += '<div class="case-report-section"><div class="case-report-section-title">Patient</div><div>' + (cr.patient_summary || '').replace(/</g, '&lt;') + '</div></div>';
+        }
+        if (cr.opqrst) {
+          const opqrstStr = typeof cr.opqrst === 'string' ? cr.opqrst : JSON.stringify(cr.opqrst);
+          html += '<div class="case-report-section"><div class="case-report-section-title">OPQRST</div><div class="case-report-opqrst">' + opqrstStr.replace(/</g, '&lt;') + '</div></div>';
+        }
+        if (cr.suggested_icd10 && cr.suggested_icd10.length > 0) {
+          html += '<div class="case-report-section"><div class="case-report-section-title">Suggested ICD-10</div><div class="case-report-icd">';
+          cr.suggested_icd10.forEach(c => {
+            const code = (typeof c === 'object' && c.code) ? c.code : c;
+            html += '<span>' + String(code).replace(/</g, '&lt;') + '</span>';
+          });
+          html += '</div></div>';
+        }
+        if (!html) html = '<div class="case-report-empty">No pre-visit case data yet</div>';
+        body.innerHTML = html;
+        panel.style.display = 'flex';
+      } catch (e) {
+        panel.style.display = 'none';
+      }
+    }
+
     function stopAssistantPolling() {
       if (assistantInterval) { clearInterval(assistantInterval); assistantInterval = null; }
       if (sseReconnectTimeout) { clearTimeout(sseReconnectTimeout); sseReconnectTimeout = null; }
@@ -805,6 +881,8 @@
       if (rb) rb.style.display = 'none';
       const overlay = document.getElementById('assistantOverlay');
       if (overlay) overlay.style.display = 'none';
+      const casePanel = document.getElementById('caseReportPanel');
+      if (casePanel) casePanel.style.display = 'none';
     }
 
     function attachExistingRemoteVideos(r) {
@@ -875,6 +953,7 @@
           enableCameraAndMic();
           attachExistingRemoteVideos(room);
           startSseAndAssistant();
+          loadCaseReport(roomName);
         });
 
         room.on(RoomEvent.Disconnected, () => {

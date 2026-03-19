@@ -54,7 +54,7 @@ async function main() {
     const ok = r.ok && r.data.includes('packager');
     console.log(ok ? '   ✅ Metro is running' : '   ❌ Metro not running or wrong response');
     if (!ok) console.log('   → Start Metro: npx expo start (in another terminal)');
-  } catch (e) {
+  } catch {
     console.log('   ❌ Metro not reachable - is "npx expo start" running?');
   }
 

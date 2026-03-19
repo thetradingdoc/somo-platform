@@ -294,9 +294,9 @@ The automation tracks each step:
 
 ## 📚 Related Documentation
 
-- [Tenant Subdomain Setup Guide](./TENANT_SUBDOMAIN_SETUP.md) - Manual setup instructions
+- [Tenant & DNS Setup Guide](../dns/TENANT_AND_DNS_SETUP.md) - Manual setup instructions
 - [Wildcard DNS Explanation](./WILDCARD_DNS_EXPLANATION.md) - DNS vs Azure custom domains
-- [Subdomain SSL Fix](./SUBDOMAIN_SSL_FIX.md) - Troubleshooting SSL issues
+- [Tenant & DNS Setup](../dns/TENANT_AND_DNS_SETUP.md) - SSL and subdomain troubleshooting
 
 ---
 

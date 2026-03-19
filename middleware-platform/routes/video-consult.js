@@ -6,6 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
+const db = require('../database');
 const videoConsultService = require('../services/video-consult-service');
 const videoConsultGraph = require('../services/video-consult-graph');
 const videoConsultAssistant = require('../services/video-consult-assistant-service');
@@ -256,8 +257,13 @@ router.post('/agent-events', async (req, res) => {
       }
       // Mark linked appointment as completed before running LangGraph so trigger_case_report can fire.
       let appointmentId = options.appointment_id || null;
-      if (!appointmentId && room && room.startsWith('appt-')) {
-        appointmentId = room.replace(/^appt-/, '');
+      if (!appointmentId && room) {
+        if (room.startsWith('appt-')) {
+          appointmentId = room.replace(/^appt-/, '');
+        } else if (room.startsWith('case-')) {
+          const caseNumber = room.replace(/^case-/, '');
+          appointmentId = db.getAppointmentIdFromCaseNumber && db.getAppointmentIdFromCaseNumber(caseNumber);
+        }
       }
       if (appointmentId) {
         const clinicId = options.clinic_id || req.body.clinic_id || null;

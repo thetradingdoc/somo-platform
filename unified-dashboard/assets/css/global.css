@@ -1,5 +1,5 @@
 /* ============================================
-   GLOBAL STYLES - Medical Coding Assistant
+   GLOBAL STYLES - Doctor's Portal
    ============================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;700&display=swap');
@@ -120,6 +120,21 @@ body {
 /* Tap target baseline (mvp-10) */
 button, .btn, a.btn, .nav-item, .patient-bottom-tabs .tab {
     min-height: 44px;
+}
+
+/* Heroicons-style nav icons (SVG) - consistent 20px size, inherits color */
+.nav-icon.nav-icon-svg {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.nav-icon.nav-icon-svg svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
 }
 
 @media (min-width: 900px) {

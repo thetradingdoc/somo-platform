@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Today's Schedule - Medical Coding Assistant</title>
+    <title>Today's Schedule - Doctor's Portal</title>
     <link rel="stylesheet" href="../../assets/css/global.css">
     <script src="../../assets/js/config.js"></script>
+    <script src="../../assets/js/auth-utils.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -89,6 +90,48 @@
             font-size: 20px;
         }
 
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid var(--gray-200);
+            position: absolute;
+            bottom: 0;
+            width: 260px;
+            background: white;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: var(--gray-50);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-info:hover {
+            background: var(--gray-100);
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .user-details { flex: 1; }
+        .user-name { font-weight: 600; font-size: 14px; color: var(--gray-900); }
+        .user-role { font-size: 12px; color: var(--gray-500); }
+        .logout-btn { background: none; border: none; color: var(--gray-500); cursor: pointer; padding: 8px; border-radius: 4px; }
+        .logout-btn:hover { background: var(--danger-light, #fed7d7); color: var(--danger, #f56565); }
+
         .main-content {
             margin-left: 260px;
             flex: 1;
@@ -129,6 +172,143 @@
         }
 
         .refresh-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-600);
+        }
+
+        .status-toggle-wrapper.online .status-label {
+            color: #059669;
+        }
+
+        .status-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+        }
+
+        .toggle-track {
+            display: flex;
+            align-items: center;
+            width: 52px;
+            height: 28px;
+            background: var(--gray-300);
+            border-radius: 14px;
+            padding: 3px;
+            transition: background 0.2s;
+        }
+
+        .status-toggle-wrapper.online .toggle-track {
+            background: #10b981;
+        }
+
+        .toggle-thumb {
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+
+        .status-toggle-wrapper.online .toggle-thumb {
+            transform: translateX(24px);
+        }
+
+        .availability-card {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .availability-header {
+            padding: 16px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: var(--gray-700);
+            user-select: none;
+        }
+
+        .availability-header:hover {
+            background: var(--gray-50);
+        }
+
+        .availability-body {
+            padding: 0 20px 20px;
+        }
+
+        .availability-hint {
+            font-size: 13px;
+            color: var(--gray-600);
+            margin-bottom: 16px;
+        }
+
+        .availability-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .availability-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 1fr auto;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .availability-row label {
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .availability-row input[type="time"] {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .availability-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .availability-actions {
+            margin-top: 16px;
+        }
+
+        .availability-save-btn {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .availability-save-btn:hover {
             background: var(--primary-dark);
         }
 
@@ -362,7 +542,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo"><strong>Billy</strong></div>
-                <div class="sidebar-subtitle">Medical Coding Assistant</div>
+                <div class="sidebar-subtitle">Doctor's Portal</div>
             </div>
 
             <nav class="sidebar-nav">
@@ -399,6 +579,17 @@
                     <span>Settings</span>
                 </a>
             </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-info" onclick="window.location.href='../settings.html'" title="Open Settings">
+                    <div class="user-avatar" id="userAvatar">HP</div>
+                    <div class="user-details">
+                        <div class="user-name" id="userName">Healthcare Provider</div>
+                        <div class="user-role">Provider</div>
+                    </div>
+                    <button class="logout-btn" onclick="event.stopPropagation(); (window.logout||function(){sessionStorage.removeItem('authenticated');window.location.href='../login.html';})();" title="Logout">🚪</button>
+                </div>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -408,7 +599,32 @@
                     <h1 class="page-title">Today's Schedule</h1>
                     <div class="page-date" id="currentDate"></div>
                 </div>
-                <button class="refresh-btn" onclick="loadTodaySchedule()">🔄 Refresh</button>
+                <div class="header-actions">
+                    <div class="status-toggle-wrapper" title="Toggle your availability for new consultations">
+                        <span class="status-label" id="statusLabel">Offline</span>
+                        <button type="button" class="status-toggle" id="statusToggle" role="switch" aria-checked="false">
+                            <span class="toggle-track">
+                                <span class="toggle-thumb"></span>
+                            </span>
+                        </button>
+                    </div>
+                    <button class="refresh-btn" onclick="loadTodaySchedule()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <!-- Set availability card (collapsible) -->
+            <div class="availability-card" id="availabilityCard">
+                <div class="availability-header" onclick="toggleAvailabilitySection()">
+                    <span class="availability-title">📅 Set my availability</span>
+                    <span class="availability-chevron" id="availabilityChevron">▾</span>
+                </div>
+                <div class="availability-body" id="availabilityBody" style="display: none;">
+                    <p class="availability-hint">Set your weekly hours. Patients can only book when you're online and within these windows.</p>
+                    <div class="availability-grid" id="availabilityGrid"></div>
+                    <div class="availability-actions">
+                        <button type="button" class="availability-save-btn" id="availabilitySaveBtn">Save availability</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Next Patient Card -->
@@ -485,6 +701,150 @@
             window.location.href = '../../login.html';
         }
 
+        function getProviderEmail() {
+            try {
+                const customer = JSON.parse(sessionStorage.getItem('customer') || '{}');
+                const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+                return (customer.email || user.email || '').trim();
+            } catch (_) { return ''; }
+        }
+
+        let providerStatus = { is_online: false, availability_rules: null };
+
+        async function loadProviderStatus() {
+            const email = getProviderEmail();
+            if (!email) {
+                const wrapper = document.querySelector('.status-toggle-wrapper');
+                if (wrapper) wrapper.style.display = 'none';
+                const card = document.getElementById('availabilityCard');
+                if (card) card.style.display = 'none';
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/provider/status?email=${encodeURIComponent(email)}`);
+                const data = await res.json();
+                if (data.success && data.status) {
+                    providerStatus = data.status;
+                    updateStatusUI();
+                    buildAvailabilityForm(providerStatus.availability_rules || {});
+                }
+            } catch (err) {
+                console.error('Failed to load provider status:', err);
+            }
+        }
+
+        function updateStatusUI() {
+            const wrapper = document.querySelector('.status-toggle-wrapper');
+            const label = document.getElementById('statusLabel');
+            const toggle = document.getElementById('statusToggle');
+            if (!wrapper) return;
+            wrapper.classList.toggle('online', providerStatus.is_online);
+            label.textContent = providerStatus.is_online ? 'Online' : 'Offline';
+            toggle.setAttribute('aria-checked', String(providerStatus.is_online));
+        }
+
+        async function setOnline(online) {
+            const email = getProviderEmail();
+            if (!email) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/provider/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, is_online: online })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    providerStatus = data.status;
+                    updateStatusUI();
+                } else {
+                    throw new Error(data.error || 'Failed to update');
+                }
+            } catch (err) {
+                console.error('Failed to set online status:', err);
+                alert('Could not update status. Please try again.');
+            }
+        }
+
+        function toggleAvailabilitySection() {
+            const body = document.getElementById('availabilityBody');
+            const chevron = document.getElementById('availabilityChevron');
+            if (body.style.display === 'none') {
+                body.style.display = 'block';
+                chevron.textContent = '▴';
+            } else {
+                body.style.display = 'none';
+                chevron.textContent = '▾';
+            }
+        }
+
+        const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+        const DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+
+        function buildAvailabilityForm(rules) {
+            const grid = document.getElementById('availabilityGrid');
+            if (!grid) return;
+            grid.innerHTML = DAYS.map(day => {
+                const r = rules[day] || {};
+                const start = r.start || '09:00';
+                const end = r.end || '17:00';
+                const enabled = !!r.start;
+                return `
+                    <div class="availability-row">
+                        <label>${DAY_LABELS[day]}</label>
+                        <input type="time" value="${start}" data-day="${day}" data-field="start" ${!enabled ? 'disabled' : ''}>
+                        <input type="time" value="${end}" data-day="${day}" data-field="end" ${!enabled ? 'disabled' : ''}>
+                        <label style="display:flex;align-items:center;gap:6px;">
+                            <input type="checkbox" ${enabled ? 'checked' : ''} data-day="${day}">
+                            <span>Available</span>
+                        </label>
+                    </div>
+                `;
+            }).join('');
+
+            grid.querySelectorAll('input[data-day]').forEach(input => {
+                if (input.type === 'checkbox') {
+                    input.addEventListener('change', e => {
+                        const row = e.target.closest('.availability-row');
+                        const start = row.querySelector('[data-field="start"]');
+                        const end = row.querySelector('[data-field="end"]');
+                        start.disabled = !e.target.checked;
+                        end.disabled = !e.target.checked;
+                        if (!e.target.checked) { start.value = '09:00'; end.value = '17:00'; }
+                    });
+                }
+            });
+        }
+
+        async function saveAvailability() {
+            const email = getProviderEmail();
+            if (!email) return;
+            const rules = {};
+            document.querySelectorAll('.availability-row').forEach((row, i) => {
+                const day = DAYS[i];
+                const cb = row.querySelector('input[type="checkbox"]');
+                const startIn = row.querySelector('[data-field="start"]');
+                const endIn = row.querySelector('[data-field="end"]');
+                if (cb?.checked && startIn && endIn)
+                    rules[day] = { start: startIn.value, end: endIn.value };
+            });
+
+            try {
+                const res = await fetch(`${API_BASE}/api/provider/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, availability_rules: Object.keys(rules).length ? rules : null })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    providerStatus.availability_rules = data.status?.availability_rules || rules;
+                    alert('Availability saved.');
+                } else throw new Error(data.error);
+            } catch (err) {
+                console.error('Failed to save availability:', err);
+                alert('Could not save. Please try again.');
+            }
+        }
+
         // Set current date
         document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
             weekday: 'long',
@@ -498,6 +858,13 @@
             loadTodaySchedule();
             loadLiveStats();
             loadNextPatient();
+            loadProviderStatus();
+
+            document.getElementById('statusToggle')?.addEventListener('click', () => {
+                setOnline(!providerStatus.is_online);
+            });
+
+            document.getElementById('availabilitySaveBtn')?.addEventListener('click', saveAvailability);
 
             // Auto-refresh every 30 seconds
             setInterval(() => {

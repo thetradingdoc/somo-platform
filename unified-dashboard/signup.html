@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Consʌlt Provider Portal — Create account</title>
   <link rel="stylesheet" href="/assets/css/global.css" />
+  <script src="/assets/data/provider-signup-data.js"></script>
   <style>
     :root {
       color-scheme: light;
@@ -36,8 +37,7 @@
     .shell {
       width: 100%;
       max-width: 1100px;
-      display: none;
-      /* Hidden by default, shown after integration selection */
+      display: grid;
       grid-template-columns: 1.1fr 0.9fr;
       gap: 32px;
     }
@@ -241,13 +241,69 @@
         padding: 24px;
       }
     }
+
+    .form-row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 540px) {
+      .form-row-2 { grid-template-columns: 1fr; }
+    }
+    .languages-section {
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fdfdfd;
+    }
+    .languages-search {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+      background: var(--card);
+    }
+    .languages-search::placeholder {
+      color: var(--muted);
+    }
+    .languages-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .lang-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1.5px solid var(--card-border);
+      background: var(--card);
+      color: var(--text);
+    }
+    .lang-tag:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .lang-tag.selected {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
   </style>
 </head>
 
 <body>
   <div class="shell">
     <section class="panel hero">
-      <p class="muted" style="margin-bottom:8px;">Consʌlt • Home Care Works</p>
+      <p class="muted" style="margin-bottom:8px;">Consʌlt • Healthcare at your home</p>
       <h1>Create your provider account</h1>
       <p style="font-size:1.1rem;line-height:1.6;margin-top:12px;">
         Sign up your provider portal account. You'll verify your email, then you're ready to sign in.
@@ -257,8 +313,8 @@
         <div class="timeline-item">
           <div class="timeline-bullet"></div>
           <div class="timeline-body">
-            <h3>Step 1 · Enter provider details</h3>
-            <p>We use this to set up your provider portal account.</p>
+            <h3>Step 1 · Provider details</h3>
+            <p>Your name, contact info, location, specialty, and license information.</p>
           </div>
         </div>
         <div class="timeline-item">
@@ -287,26 +343,27 @@
 
     <section class="panel" id="step-intake">
       <h2 style="margin-top:0;">Provider details</h2>
-      <p class="muted" style="margin-top:4px;">Create your provider portal account.</p>
+      <p class="muted" style="margin-top:4px;">Create your specialist provider portal account.</p>
 
       <form id="signupForm">
-        <div>
-          <label>Full Name</label>
-          <input type="text" name="name" required placeholder="Dr. Kelly Rivers" />
+        <div class="form-row-2">
+          <div>
+            <label>First name</label>
+            <input type="text" name="first_name" required placeholder="Kelly" />
+          </div>
+          <div>
+            <label>Last name</label>
+            <input type="text" name="last_name" required placeholder="Rivers" />
+          </div>
         </div>
 
         <div>
-          <label>Work Email</label>
+          <label>Work email</label>
           <input type="email" name="email" required placeholder="kelly@yourclinic.com" />
         </div>
 
         <div>
-          <label>Company</label>
-          <input type="text" name="company_name" placeholder="Rivers Pediatrics" />
-        </div>
-
-        <div>
-          <label>Company Phone (optional)</label>
+          <label>Phone number</label>
           <div style="display:flex;gap:8px;align-items:stretch;">
             <select name="country_code" id="countryCode"
               style="width:100px;padding:12px 14px;border-radius:12px;border:1px solid var(--card-border);background:#fdfdfd;font-size:1rem;color:var(--text);">
@@ -353,25 +410,83 @@
               <option value="+57">+57 CO</option>
               <option value="+51">+51 PE</option>
             </select>
-            <input type="tel" name="phone_number" id="phoneNumber" placeholder="555 123 4567" style="flex:1;" />
+            <input type="tel" name="phone_number" id="phoneNumber" required placeholder="555 123 4567" style="flex:1;" />
           </div>
-          <p style="margin-top:4px;font-size:0.85rem;color:var(--muted);">Phone will be saved in E.164 format
-            (+1XXXXXXXXXX)</p>
+          <p class="muted" style="margin-top:4px;font-size:0.85rem;">Saved in E.164 format (+1XXXXXXXXXX)</p>
         </div>
 
         <div>
-          <label>Team Size</label>
-          <select name="business_size">
-            <option value="1-5">1-5 providers</option>
-            <option value="6-15">6-15 providers</option>
-            <option value="16-40">16-40 providers</option>
-            <option value="40+">40+ providers</option>
+          <label>Location</label>
+          <select name="country" id="countrySelect" required style="margin-bottom:14px;">
+            <option value="">Select country</option>
+          </select>
+          <div class="form-row-2" style="margin-bottom:14px;">
+            <div>
+              <label style="font-size:0.85rem;margin-bottom:4px;">City</label>
+              <input type="text" name="city" id="cityInput" required placeholder="Select or type city" list="cityList" autocomplete="off" />
+              <datalist id="cityList"></datalist>
+            </div>
+            <div>
+              <label style="font-size:0.85rem;margin-bottom:4px;">Postal / Zip code</label>
+              <input type="text" name="postal_code" required placeholder="e.g. SW1A 1AA" />
+            </div>
+          </div>
+          <input type="hidden" name="location_country_code" id="countryCodeHidden" />
+        </div>
+
+        <div>
+          <label>Medical specialty</label>
+          <select name="medical_specialty" required>
+            <option value="">Select specialty</option>
+            <option value="family_medicine">Family Medicine</option>
+            <option value="internal_medicine">Internal Medicine</option>
+            <option value="pediatrics">Pediatrics</option>
+            <option value="dermatology">Dermatology</option>
+            <option value="psychiatry">Psychiatry</option>
+            <option value="cardiology">Cardiology</option>
+            <option value="orthopedics">Orthopedics</option>
+            <option value="obgyn">OB/GYN</option>
+            <option value="neurology">Neurology</option>
+            <option value="geriatrics">Geriatrics</option>
+            <option value="home_health">Home Health</option>
+            <option value="telehealth">Telehealth</option>
+            <option value="other">Other</option>
           </select>
         </div>
 
         <div>
-          <label>What are you trying to automate?</label>
-          <textarea name="use_case" placeholder="Prior auth + Medicaid billing + call routing..."></textarea>
+          <label>License number <span style="color:var(--danger);">*</span></label>
+          <div class="form-row-2" style="grid-template-columns:1fr 160px;">
+            <input type="text" name="license_number" required placeholder="e.g. MD12345" />
+            <div id="licenseRegionWrap">
+              <label style="font-size:0.85rem;margin-bottom:4px;" id="licenseRegionLabel">State / Region</label>
+              <select name="license_state" id="licenseStateSelect">
+                <option value="">Select state</option>
+              </select>
+              <input type="text" name="license_region" id="licenseRegionInput" placeholder="e.g. England, Ontario" style="display:none;" />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label>License document (PDF only)</label>
+          <input type="file" name="license_document" accept="application/pdf" />
+          <p class="muted" style="margin-top:4px;font-size:0.85rem;">Upload your medical license. PDF format only, max 5MB.</p>
+        </div>
+
+        <div>
+          <label>Profile photo (optional)</label>
+          <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" />
+        </div>
+
+        <div>
+          <label>Languages spoken</label>
+          <p class="muted" style="font-size:0.85rem;margin-bottom:10px;">Click to select each language you speak (used to match with patients)</p>
+          <div class="languages-section">
+            <input type="text" class="languages-search" id="languagesSearch" placeholder="Search languages..." autocomplete="off" />
+            <div id="languagesContainer" class="languages-tags"></div>
+          </div>
+          <input type="hidden" name="languages_hidden" id="languagesHidden" />
         </div>
 
         <button type="submit" id="signupSubmit">
@@ -450,7 +565,129 @@
     const resendBtn = document.getElementById('resendBtn');
     const codeInputs = Array.from(document.querySelectorAll('#codeGrid input'));
     let pendingEmail = '';
-    let pendingCustomerId = null; // Store customer ID for email update
+    let pendingCustomerId = null;
+
+    // Populate countries, languages, license region
+    document.addEventListener('DOMContentLoaded', function () {
+      const { LANGUAGES, COUNTRIES, US_STATES } = (typeof ProviderSignupData !== 'undefined') ? ProviderSignupData : { LANGUAGES: [], COUNTRIES: [], US_STATES: [] };
+
+      // Countries dropdown
+      const countrySelect = document.getElementById('countrySelect');
+      if (countrySelect && COUNTRIES.length) {
+        COUNTRIES.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.name;
+          opt.dataset.code = c.code;
+          opt.textContent = c.name;
+          countrySelect.appendChild(opt);
+        });
+        countrySelect.addEventListener('change', onCountryChange);
+      }
+
+      // Languages: clickable tags (ISO 639-1 for patient matching)
+      const langContainer = document.getElementById('languagesContainer');
+      const langSearch = document.getElementById('languagesSearch');
+      const langHidden = document.getElementById('languagesHidden');
+      if (langContainer && LANGUAGES.length) {
+        let selectedCodes = new Set();
+        function renderLanguages(filter) {
+          langContainer.innerHTML = '';
+          const q = (filter || '').toLowerCase();
+          const list = q ? LANGUAGES.filter(l => l.name.toLowerCase().includes(q)) : LANGUAGES;
+          list.forEach(lang => {
+            const tag = document.createElement('span');
+            tag.className = 'lang-tag' + (selectedCodes.has(lang.code) ? ' selected' : '');
+            tag.dataset.code = lang.code;
+            tag.textContent = lang.name;
+            tag.addEventListener('click', () => {
+              if (selectedCodes.has(lang.code)) {
+                selectedCodes.delete(lang.code);
+              } else {
+                selectedCodes.add(lang.code);
+              }
+              tag.classList.toggle('selected');
+              if (langHidden) langHidden.value = Array.from(selectedCodes).join(',');
+            });
+            langContainer.appendChild(tag);
+          });
+        }
+        renderLanguages();
+        if (langSearch) {
+          langSearch.addEventListener('input', () => renderLanguages(langSearch.value));
+        }
+      }
+
+      // License state dropdown (US)
+      const licenseStateSelect = document.getElementById('licenseStateSelect');
+      if (licenseStateSelect && US_STATES.length) {
+        US_STATES.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s;
+          opt.textContent = s;
+          licenseStateSelect.appendChild(opt);
+        });
+      }
+
+      onCountryChange(); // Initial state
+    });
+
+    function onCountryChange() {
+      const countrySelect = document.getElementById('countrySelect');
+      const countryCodeHidden = document.getElementById('countryCodeHidden');
+      const licenseStateSelect = document.getElementById('licenseStateSelect');
+      const licenseRegionInput = document.getElementById('licenseRegionInput');
+      const cityInput = document.getElementById('cityInput');
+      const cityList = document.getElementById('cityList');
+
+      const opt = countrySelect?.selectedOptions[0];
+      const countryCode = opt?.dataset?.code || '';
+      if (countryCodeHidden) countryCodeHidden.value = countryCode;
+      const isUS = countryCode === 'US';
+
+      if (licenseStateSelect && licenseRegionInput) {
+        if (isUS) {
+          licenseStateSelect.style.display = '';
+          licenseStateSelect.disabled = false;
+          licenseRegionInput.style.display = 'none';
+          licenseRegionInput.disabled = true;
+          licenseStateSelect.required = true;
+          licenseRegionInput.required = false;
+          licenseRegionInput.removeAttribute('required');
+        } else if (countryCode) {
+          licenseStateSelect.style.display = 'none';
+          licenseStateSelect.disabled = true;
+          licenseRegionInput.style.display = '';
+          licenseRegionInput.disabled = false;
+          licenseStateSelect.required = false;
+          licenseStateSelect.removeAttribute('required');
+          licenseRegionInput.required = true;
+        } else {
+          licenseStateSelect.style.display = '';
+          licenseRegionInput.style.display = 'none';
+          licenseStateSelect.required = false;
+          licenseRegionInput.required = false;
+        }
+      }
+
+      // Fetch cities for selected country
+      const countryName = countrySelect?.value;
+      cityList.innerHTML = '';
+      if (cityInput) cityInput.value = '';
+      if (!countryName) return;
+      fetch('https://countriesnow.space/api/v0.1/countries/cities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ country: countryName })
+      }).then(r => r.json()).then(data => {
+        if (data.data && Array.isArray(data.data)) {
+          data.data.forEach(city => {
+            const opt = document.createElement('option');
+            opt.value = city;
+            cityList.appendChild(opt);
+          });
+        }
+      }).catch(() => {});
+    }
 
     function showPanel(panel) {
       [signupPanel, codePanel, integrationPanel].forEach(p => {
@@ -488,21 +725,38 @@
       const formData = new FormData(signupForm);
       const payload = Object.fromEntries(formData.entries());
 
-      console.log('Submitting clinic signup');
+      // Build full name from first + last
+      const firstName = (payload.first_name || '').trim();
+      const lastName = (payload.last_name || '').trim();
+      payload.name = [firstName, lastName].filter(Boolean).join(' ') || payload.name;
 
-      // Format phone number to E.164 standard if provided
+      // Format phone number to E.164 (phone dial code)
+      const dialCode = payload.country_code || '+1';
       if (payload.phone_number && payload.phone_number.trim()) {
-        const countryCode = payload.country_code || '+1';
         const phoneDigits = payload.phone_number.replace(/\D/g, '');
-        if (phoneDigits) {
-          // Combine country code and phone number in E.164 format
-          payload.phone_number = countryCode + phoneDigits;
-        } else {
-          payload.phone_number = '';
-        }
+        payload.phone_number = phoneDigits ? dialCode.replace(/\s/g, '') + phoneDigits : '';
       }
-      // Remove country_code from payload (not needed in backend)
       delete payload.country_code;
+
+      // Languages: from tag selection (ISO 639-1 codes for patient matching)
+      const langVal = document.getElementById('languagesHidden')?.value || '';
+      payload.languages = langVal ? langVal.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      // Country: use location_country_code as country_code for backend
+      payload.country_code = payload.location_country_code || '';
+      delete payload.location_country_code;
+
+      // License: US uses license_state, other countries use license_region
+      if (!payload.license_state && payload.license_region) {
+        payload.license_state = payload.license_region;
+      }
+      delete payload.license_region;
+
+      // Don't send file objects in JSON
+      delete payload.license_document;
+      delete payload.photo;
+
+      console.log('Submitting provider signup');
 
       try {
         const res = await fetch(`${SIGNUP_API_BASE}/api/signup`, {

@@ -106,4 +106,4 @@ Root-level access (should be blocked):
 ## Related Documentation
 
 - [ADMIN_PORTAL_STRUCTURE.md](./ADMIN_PORTAL_STRUCTURE.md)
-- [ADMIN_PORTAL_FIXES_COMPLETE.md](./ADMIN_PORTAL_FIXES_COMPLETE.md)
+- [ADMIN_PORTAL_FIXES_COMPLETE.md](../archive/ADMIN_PORTAL_FIXES_COMPLETE.md) (archived)

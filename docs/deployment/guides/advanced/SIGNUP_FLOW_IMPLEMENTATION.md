@@ -16,11 +16,16 @@ Completely rebuilt the signup and authentication flow for `api.doclittle.site`:
 
 ## 🎯 User Flow
 
+**Specialist Provider Portal** (individual medical specialists; no company signup)
+
 ```
-User visits api.doclittle.site
+User visits signup page (e.g. api.doclittle.site or unified-dashboard)
   ↓
-Signup Page (Step 1)
-  - Name, Email, Phone, Company, Business Size, Use Case
+Signup Page (Step 1) — Provider details
+  - First name, Last name, Work email, Phone (required)
+  - Location: City, Postal/Zip code, Country
+  - Medical specialty, License number, License state (required)
+  - License document (PDF only, optional), Photo (optional), Languages
   - Submit → Verification code sent to email
   ↓
 Email Verification (Step 2)
@@ -295,7 +300,10 @@ This enables:
 
 ## 📖 Documentation
 
+- **Provider Signup Requirements**: `docs/compliance/PROVIDER_SIGNUP_REQUIREMENTS.md`
+- **Healthcare Legal Requirements**: `docs/compliance/HEALTHCARE_LEGAL_REQUIREMENTS.md`
 - **Terms of Service**: `docs/legal/TERMS_OF_SERVICE.md`
+- **Data Retention**: `docs/compliance/DATA_RETENTION_POLICY.md`
 - **API Documentation**: `docs/api/API_DOCUMENTATION.md` (will need update)
 - **Deployment Guide**: `docs/deployment/guides/DEPLOYMENT_GUIDE.md`
 

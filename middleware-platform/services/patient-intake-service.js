@@ -214,6 +214,16 @@ async function upsertIntakeByPatientId(patientId, payload = {}) {
   };
 }
 
+function getIntakeStatusByPatientId(patientId) {
+  if (!patientId || !db.getFHIRPatient) return { onboarding_complete: false, missing_fields: ['first_name','last_name','dob','phone','country','city'], intake: null };
+  const row = db.getFHIRPatient(patientId);
+  if (!row?.resource_data) return { onboarding_complete: false, missing_fields: ['first_name','last_name','dob','phone','country','city'], intake: null };
+  const resource = safeJson(row.resource_data);
+  const canonical = canonicalFromPatientResource(resource || {});
+  const status = onboardingStatusFromCanonical(canonical);
+  return { ...status, intake: canonical };
+}
+
 function canConnectRecordsFromIntake(intake) {
   const hasName = !!((intake.first_name || '').toString().trim() && (intake.last_name || '').toString().trim());
   const hasDob = !!(intake.dob || '').toString().trim();
@@ -242,6 +252,7 @@ module.exports = {
   PLACE_ID_EXT_URL,
   canonicalFromPatientResource,
   onboardingStatusFromCanonical,
+  getIntakeStatusByPatientId,
   resolveOrCreatePatientIdFromSession,
   upsertIntakeByPatientId,
   canConnectRecordsFromIntake,

@@ -69,8 +69,9 @@ function matchesRule(text, rule) {
     if (pat.includes('[') || pat.includes('(')) {
       try {
         if (new RegExp(pat, 'i').test(text)) matchCount++;
-      } catch (_) {
+      } catch (e) {
         if (t.includes(pat.toLowerCase())) matchCount++;
+        else console.warn('[triage] regex match failed:', e.message);
       }
     } else if (t.includes(pat.toLowerCase())) {
       matchCount++;
@@ -79,8 +80,10 @@ function matchesRule(text, rule) {
 
   if (matchMode === 'any_1' && matchCount >= 1) return true;
   if (matchMode === 'any_2_of_symptoms' && matchCount >= 2) return true;
-  if (matchMode === 'any_2_or_throat_swelling' && matchCount >= 2) return true;
-  if (matchMode === 'any_2_or_throat_swelling' && t.includes('throat') && t.includes('swell')) return true;
+  if (matchMode === 'any_2_or_throat_swelling') {
+    if (matchCount >= 2) return true;
+    if (t.includes('throat') && t.includes('swell')) return true;
+  }
   // meningitis: need stiff neck + headache, or all 3 - "fever" alone must NOT match
   if (matchMode === 'all_3_or_headache_stiff') {
     const hasStiff = t.includes('stiff') && t.includes('neck');
@@ -179,9 +182,15 @@ function checkBeforeScheduling(recentTurns = []) {
   };
 }
 
+/** Export loaded rules for shared use (orch-16) */
+function getTriageRules() {
+  return triageRules;
+}
+
 module.exports = {
   detectRedFlags,
   checkBeforeScheduling,
+  getTriageRules,
   EMERGENT_RESPONSE,
   URGENT_RESPONSE
 };

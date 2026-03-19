@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tech Check - Video Visit</title>
+  <link rel="stylesheet" href="../assets/css/global.css">
+  <script src="../assets/js/config.js"></script>
+  <style>
+    :root { --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    .header { margin-bottom: 16px; }
+    .title { font-size: 20px; font-weight: 700; }
+    .subtitle { font-size: 13px; color: #9ca3af; }
+    .card {
+      background: #020617;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.9);
+    }
+    .test-section {
+      margin-bottom: 20px;
+    }
+    .test-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .test-section .status {
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+    .status.pass { background: #166534; color: #dcfce7; }
+    .status.fail { background: #991b1b; color: #fecaca; }
+    .status.pending { background: #374151; color: #9ca3af; }
+    .video-preview {
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #0f172a;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .video-preview video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .audio-meter {
+      height: 24px;
+      background: #0f172a;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 8px;
+      position: relative;
+    }
+    .audio-meter .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #166534, #22c55e);
+      width: 0%;
+      transition: width 80ms ease-out;
+    }
+    .btn {
+      padding: 12px 24px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.2s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: #16a34a;
+      color: white;
+      width: 100%;
+      margin-top: 12px;
+    }
+    .btn-primary:hover:not(:disabled) { background: #15803d; }
+    .error-msg { color: #f87171; font-size: 13px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">Tech check</h1>
+      <p class="subtitle">Make sure your camera and microphone work before your visit</p>
+    </div>
+    <div class="card">
+      <div class="test-section">
+        <h3>Camera <span id="camStatus" class="status pending">Testing…</span></h3>
+        <div class="video-preview">
+          <video id="camPreview" autoplay playsinline muted></video>
+        </div>
+        <p id="camError" class="error-msg" style="display:none"></p>
+      </div>
+      <div class="test-section">
+        <h3>Microphone <span id="micStatus" class="status pending">Testing…</span></h3>
+        <div class="audio-meter">
+          <div id="micFill" class="fill"></div>
+        </div>
+        <p id="micError" class="error-msg" style="display:none"></p>
+      </div>
+      <button id="readyBtn" class="btn btn-primary" disabled>I'm ready — join visit</button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const apptParam = params.get('appt');
+      if (!apptParam) {
+        document.getElementById('camStatus').textContent = 'Missing appointment';
+        document.getElementById('camStatus').className = 'status fail';
+        return;
+      }
+      const roomName = apptParam.startsWith('appt-') ? apptParam : 'appt-' + apptParam;
+
+      const camStatus = document.getElementById('camStatus');
+      const camPreview = document.getElementById('camPreview');
+      const camError = document.getElementById('camError');
+      const micStatus = document.getElementById('micStatus');
+      const micFill = document.getElementById('micFill');
+      const micError = document.getElementById('micError');
+      const readyBtn = document.getElementById('readyBtn');
+
+      let camReady = false;
+      let micReady = false;
+      let cameraStream = null;
+      let audioContext = null;
+      let analyser = null;
+
+      function updateReady() {
+        if (camReady && micReady) {
+          readyBtn.disabled = false;
+        }
+      }
+
+      async function testCamera() {
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          camPreview.srcObject = cameraStream;
+          camStatus.textContent = 'OK';
+          camStatus.className = 'status pass';
+          camReady = true;
+          updateReady();
+        } catch (e) {
+          camStatus.textContent = 'Failed';
+          camStatus.className = 'status fail';
+          camError.textContent = e.message || 'Could not access camera';
+          camError.style.display = 'block';
+        }
+      }
+
+      async function testMicrophone() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(stream);
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 256;
+          source.connect(analyser);
+
+          const data = new Uint8Array(analyser.frequencyBinCount);
+
+          function tick() {
+            if (!analyser) return;
+            analyser.getByteFrequencyData(data);
+            const avg = data.reduce((a, b) => a + b, 0) / data.length;
+            const pct = Math.min(100, (avg / 128) * 100);
+            micFill.style.width = pct + '%';
+            requestAnimationFrame(tick);
+          }
+          tick();
+
+          micStatus.textContent = 'OK';
+          micStatus.className = 'status pass';
+          micReady = true;
+          updateReady();
+        } catch (e) {
+          micStatus.textContent = 'Failed';
+          micStatus.className = 'status fail';
+          micError.textContent = e.message || 'Could not access microphone';
+          micError.style.display = 'block';
+        }
+      }
+
+      readyBtn.addEventListener('click', () => {
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(t => t.stop());
+        }
+        const url = window.location.pathname.replace('tech-check.html', 'video-call.html');
+        window.location.href = url + '?room=' + encodeURIComponent(roomName);
+      });
+
+      testCamera();
+      testMicrophone();
+    })();
+  </script>
+</body>
+</html>

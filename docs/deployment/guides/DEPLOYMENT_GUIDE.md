@@ -26,14 +26,14 @@ git push origin main
 2. **Add Root Domain**: Run `./scripts/add-root-domain.sh` (or use Azure Portal)
 3. **Configure DNS**: Add A record in IONOS pointing to Azure IP
 4. **Create SSL**: After DNS propagates, create managed certificate
-5. **Configure Subdomain SSL**: See [SUBDOMAIN_SSL_FIX.md](../dns/SUBDOMAIN_SSL_FIX.md) for tenant subdomains
+5. **Configure Subdomain SSL**: See [TENANT_AND_DNS_SETUP.md](../dns/TENANT_AND_DNS_SETUP.md) for tenant subdomains
 6. **Verify**: Test all URLs and health endpoints
 
 **⚠️ Important**: Azure managed certificates only cover the root domain. For tenant subdomains (e.g., `doctor-little.doclittle.site`), you need either:
 - **Cloudflare** (recommended) - automatic SSL for all subdomains
 - **Wildcard certificate** - manual setup required
 
-See [SUBDOMAIN_SSL_FIX.md](../dns/SUBDOMAIN_SSL_FIX.md) for detailed instructions.
+See [TENANT_AND_DNS_SETUP.md](../dns/TENANT_AND_DNS_SETUP.md) for detailed instructions.
 
 See detailed steps below.
 
@@ -437,7 +437,7 @@ allowFallback: true
 
 ## 🔗 Related Documentation
 
-- **Architecture Fixes**: `docs/architecture/maintenance/FIXES_APPLIED.md`
+- **Architecture Fixes**: `docs/archive/FIXES_APPLIED.md` (archived)
 - **Architecture Issues**: `docs/architecture/maintenance/ARCHITECTURE_ISSUES.md`
 - **Database Migration**: `docs/deployment/database/POSTGRES_MIGRATION.md`
 - **Security Setup**: `docs/deployment/security/`

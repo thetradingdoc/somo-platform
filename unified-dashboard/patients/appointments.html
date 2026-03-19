@@ -731,7 +731,7 @@
             }
 
             try {
-                // Use patient-scoped booking availability endpoint (clinic resolved server-side)
+                slotsContainer.innerHTML = '<div class="subtext">Loading…</div>';
                 const params = new URLSearchParams({ date });
                 const sid = localStorage.getItem('patient_session_id') || '';
                 const res = await fetch(`${API_BASE}/api/patient/booking/available-slots?${params.toString()}`, {
@@ -739,6 +739,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok || !data.success) {
+                    slotsContainer.innerHTML = '<div class="subtext" style="color:#991b1b;">Unable to load times. ' + (data.error || 'Try again.') + '</div>';
                     showMessage(data.error || 'Unable to load available times for this date.', 'error');
                     return;
                 }
@@ -769,9 +770,11 @@
                 });
             } catch (error) {
                 console.error('Error loading reschedule slots:', error);
+                slotsContainer.innerHTML = '<div class="subtext" style="color:#991b1b;">Network error. <button type="button" onclick="loadRescheduleSlots()" style="text-decoration:underline;">Try again</button></div>';
                 showMessage('Network error while loading available times.', 'error');
             }
         }
+        window.loadRescheduleSlots = loadRescheduleSlots;
 
         async function handleReschedule(e) {
             e.preventDefault();

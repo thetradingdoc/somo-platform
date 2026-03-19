@@ -218,6 +218,180 @@ class ProviderService {
   }
   
   /**
+   * Get provider status (online/offline + availability) by email
+   * @param {string} email - Provider email
+   * @returns {Object|null} { is_online, availability_rules } or null
+   */
+  getProviderStatus(email) {
+    if (!email || typeof email !== 'string') return null;
+    const row = db.db.prepare(`
+      SELECT is_online, availability_rules, updated_at
+      FROM provider_status
+      WHERE email = ?
+    `).get(email.trim().toLowerCase());
+    if (!row) return { is_online: false, availability_rules: null, updated_at: null };
+    let rules = null;
+    try {
+      rules = row.availability_rules ? JSON.parse(row.availability_rules) : null;
+    } catch (_) {}
+    return {
+      is_online: !!row.is_online,
+      availability_rules: rules,
+      updated_at: row.updated_at
+    };
+  }
+
+  /**
+   * Set provider online/offline status
+   * @param {string} email - Provider email
+   * @param {boolean} isOnline - Online status
+   */
+  setProviderOnline(email, isOnline) {
+    if (!email || typeof email !== 'string') return;
+    const e = email.trim().toLowerCase();
+    db.db.prepare(`
+      INSERT INTO provider_status (email, is_online, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(email) DO UPDATE SET
+        is_online = excluded.is_online,
+        updated_at = datetime('now')
+    `).run(e, isOnline ? 1 : 0);
+  }
+
+  /**
+   * Set provider availability rules (weekly hours)
+   * @param {string} email - Provider email
+   * @param {Object} availabilityRules - { mon: { start, end }, ... } or null
+   */
+  setProviderAvailability(email, availabilityRules) {
+    if (!email || typeof email !== 'string') return;
+    const e = email.trim().toLowerCase();
+    const rulesJson = availabilityRules ? JSON.stringify(availabilityRules) : null;
+    db.db.prepare(`
+      INSERT INTO provider_status (email, availability_rules, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(email) DO UPDATE SET
+        availability_rules = excluded.availability_rules,
+        updated_at = datetime('now')
+    `).run(e, rulesJson);
+  }
+
+  /**
+   * Get availability blocks for a provider
+   * @param {string} email - Provider email
+   * @param {string} [startDate] - Optional filter start date (YYYY-MM-DD)
+   * @param {string} [endDate] - Optional filter end date (YYYY-MM-DD)
+   * @returns {Array}
+   */
+  getAvailabilityBlocks(email, startDate = null, endDate = null) {
+    if (!email || typeof email !== 'string') return [];
+    const e = email.trim().toLowerCase();
+    let query = `SELECT id, provider_email, block_type, start_datetime, end_datetime, title, created_at
+      FROM provider_availability_blocks WHERE provider_email = ?`;
+    const params = [e];
+    if (startDate) {
+      query += ` AND date(end_datetime) >= date(?)`;
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ` AND date(start_datetime) <= date(?)`;
+      params.push(endDate);
+    }
+    query += ` ORDER BY start_datetime ASC`;
+    return db.db.prepare(query).all(...params);
+  }
+
+  /**
+   * Create availability block
+   * @param {Object} block - { id, provider_email, block_type, start_datetime, end_datetime, title }
+   * @returns {Object} created block
+   */
+  createAvailabilityBlock(block) {
+    if (!block || !block.provider_email || !block.block_type || !block.start_datetime || !block.end_datetime) {
+      throw new Error('Missing required fields for availability block');
+    }
+    const id = block.id || `avb_${require('crypto').randomBytes(12).toString('hex')}`;
+    const e = block.provider_email.trim().toLowerCase();
+    db.db.prepare(`
+      INSERT INTO provider_availability_blocks (id, provider_email, block_type, start_datetime, end_datetime, title)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, e, block.block_type, block.start_datetime, block.end_datetime, block.title || null);
+    return { id, provider_email: e, block_type: block.block_type, start_datetime: block.start_datetime, end_datetime: block.end_datetime, title: block.title };
+  }
+
+  /**
+   * Delete availability block
+   * @param {string} email - Provider email
+   * @param {string} blockId - Block ID
+   * @returns {boolean} true if deleted
+   */
+  deleteAvailabilityBlock(email, blockId) {
+    if (!email || !blockId) return false;
+    const e = email.trim().toLowerCase();
+    const result = db.db.prepare(`
+      DELETE FROM provider_availability_blocks WHERE id = ? AND provider_email = ?
+    `).run(blockId, e);
+    return result.changes > 0;
+  }
+
+  /**
+   * Get online provider emails for a clinic (customers with provider_profile + merchant matching clinic)
+   * Used by BookingService to filter slots by provider availability
+   * @param {string} clinicId - Clinic ID
+   * @returns {string[]} Array of provider emails who are online
+   */
+  getOnlineProviderEmailsForClinic(clinicId) {
+    if (!clinicId) return [];
+    try {
+      const clinic = db.db.prepare('SELECT merchant_id FROM clinics WHERE clinic_id = ?').get(clinicId);
+      if (!clinic?.merchant_id) return [];
+      const customers = db.db.prepare(`
+        SELECT id, email FROM customers
+        WHERE merchant_id = ? AND provider_profile IS NOT NULL AND provider_profile != ''
+      `).all(clinic.merchant_id);
+      const online = [];
+      for (const c of customers) {
+        if (!c.email) continue;
+        const status = this.getProviderStatus(c.email);
+        if (status && status.is_online) online.push(c.email.trim().toLowerCase());
+      }
+      return online;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /**
+   * Check if a datetime falls within provider's available blocks (and not out_of_office)
+   * @param {string} providerEmail - Provider email
+   * @param {Date} slotStart - Slot start datetime
+   * @param {Date} slotEnd - Slot end datetime
+   * @param {string} date - YYYY-MM-DD
+   * @returns {boolean}
+   */
+  isSlotInProviderAvailability(providerEmail, slotStart, slotEnd, date) {
+    const blocks = this.getAvailabilityBlocks(providerEmail, date, date);
+    const outOfOffice = blocks.filter(b => b.block_type === 'out_of_office');
+    const available = blocks.filter(b => b.block_type === 'available');
+    for (const b of outOfOffice) {
+      const s = new Date(b.start_datetime).getTime();
+      const e = new Date(b.end_datetime).getTime();
+      const slotS = slotStart.getTime();
+      const slotE = slotEnd.getTime();
+      if (slotS < e && slotE > s) return false; // overlaps out_of_office
+    }
+    if (available.length === 0) return true; // No availability blocks = use clinic hours (legacy)
+    for (const b of available) {
+      const s = new Date(b.start_datetime).getTime();
+      const e = new Date(b.end_datetime).getTime();
+      const slotS = slotStart.getTime();
+      const slotE = slotEnd.getTime();
+      if (slotS >= s && slotE <= e) return true; // fully inside available block
+    }
+    return false;
+  }
+
+  /**
    * Get all providers (for multi-provider support)
    * @returns {Array} List of providers
    */

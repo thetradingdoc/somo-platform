@@ -60,4 +60,27 @@ function verifyUploadToken(token) {
   };
 }
 
-module.exports = { createUploadToken, verifyUploadToken, base64url, decodeBase64url };
+/** Phase 8: Create short-lived token for visit feedback. Payload: { purpose: 'feedback', appointment_id, expires_at }. */
+function createFeedbackToken(appointmentId, expiresAt) {
+  const exp = expiresAt instanceof Date ? expiresAt.toISOString() : (expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString());
+  const payload = { purpose: 'feedback', appointment_id: appointmentId, expires_at: exp };
+  const payloadB64 = base64url(payload);
+  const hmac = crypto.createHmac('sha256', SECRET).update(payloadB64).digest();
+  return `${base64url(hmac)}.${payloadB64}`;
+}
+
+/** Verify feedback token; returns { appointment_id } or null. */
+function verifyFeedbackToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [hmacB64, payloadB64] = parts;
+  const payload = decodeBase64url(payloadB64);
+  if (!payload || payload.purpose !== 'feedback' || !payload.appointment_id || !payload.expires_at) return null;
+  const expectedHmac = crypto.createHmac('sha256', SECRET).update(payloadB64).digest();
+  if (base64url(expectedHmac) !== hmacB64) return null;
+  if (Date.now() > new Date(payload.expires_at).getTime()) return null;
+  return { appointment_id: payload.appointment_id };
+}
+
+module.exports = { createUploadToken, verifyUploadToken, createFeedbackToken, verifyFeedbackToken, base64url, decodeBase64url };

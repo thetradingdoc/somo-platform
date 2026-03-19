@@ -17,6 +17,10 @@ Retention periods for Doctor Little middleware platform data. Aligns with billin
 | `postgres_sync_retry` | 7 days | Retry queue |
 | `postgres_sync_dlq` | 90 days | Manual review before purge |
 | `hipaa_access_log` | 7 years | HIPAA audit requirement; delete after retention |
+| `customers` (provider_profile) | 7 years after account closure | Licensing, credentialing audits |
+| Provider license documents | 7 years | State/payer verification, credentialing |
+
+See `docs/compliance/HEALTHCARE_LEGAL_REQUIREMENTS.md` for legal basis.
 
 ## Cleanup
 

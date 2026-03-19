@@ -217,8 +217,8 @@
     }
 
     async function fetchToken(roomName) {
-      // Patient join must be appointment-scoped
-      if (!roomName || !roomName.startsWith('appt-')) {
+      // Patient join must be appointment-scoped (appt-xxx or case-xxx)
+      if (!roomName || (!roomName.startsWith('appt-') && !roomName.startsWith('case-'))) {
         throw new Error('Invalid room. Please open the link from your appointment.');
       }
 

@@ -194,9 +194,6 @@ class SequenceEngineService {
         })
       });
 
-      // Optionally pause sequence on error
-      // db.updateSequenceExecution(executionId, { status: 'paused' });
-      
       throw error;
     }
   }

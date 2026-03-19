@@ -18,6 +18,7 @@ const { verifyUploadToken } = require('../utils/upload-token');
 const { isAllowedMime, getDetectedType } = require('../utils/mime-validate');
 const blobService = require('../services/patient-upload-blob');
 const EmailService = require('../services/email-service');
+const AntivirusService = require('../services/antivirus-service');
 
 const MAX_FILES = 10;
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -286,6 +287,12 @@ async function postUpload(req, res) {
         } else {
           return res.status(415).json({ success: false, error: 'HEIC not supported on this server. Please convert to JPEG or PNG.' });
         }
+      }
+
+      // Antivirus scan (PATIENT_WEB_PORTAL_TODO 12.2.3) — scan final content before storing
+      const avResult = await AntivirusService.scanBuffer(finalBuffer);
+      if (!avResult.safe) {
+        return res.status(403).json({ success: false, error: avResult.error || AntivirusService.BLOCKED_MESSAGE });
       }
 
       let storagePath = null;

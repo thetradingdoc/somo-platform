@@ -44,6 +44,7 @@ router.get('/', (req, res) => {
   try {
     const clinicId = req.query.clinic_id || null;
     const appointmentType = req.query.appointment_type || 'General Consult';
+    const visitMode = (req.query.visit_mode || 'sync_video').toString().trim();
     if (!clinicId) {
       return res.status(400).json({ success: false, error: 'clinic_id is required' });
     }
@@ -51,11 +52,18 @@ router.get('/', (req, res) => {
     if (!pricing) {
       return res.status(404).json({ success: false, error: 'Pricing not found' });
     }
+    const basePrice = pricing.base_price ?? pricing.effective_price ?? 0;
+    const multiplier = visitMode === 'async_review' ? 0.6 : 1;
+    const effectivePrice = basePrice * multiplier;
     res.json({
       success: true,
       clinic_id: clinicId,
       appointment_type: appointmentType,
-      ...pricing
+      visit_mode: visitMode,
+      base_price: basePrice,
+      effective_price: effectivePrice,
+      ...pricing,
+      ...(visitMode === 'async_review' ? { effective_price: effectivePrice, async_discount: 0.6 } : {})
     });
   } catch (error) {
     console.error('GET /api/pricing error:', error);
@@ -104,13 +112,16 @@ router.get('/quote', (req, res) => {
 
     const tierKey = COUNTRY_TO_TIER[iso2] || 'STANDARD';
     const t = TIERS[tierKey] || TIERS.STANDARD;
-    const price = Math.max(t.floor_usd, t.price_usd);
+    let price = Math.max(t.floor_usd, t.price_usd);
+    const visitMode = (req.query.visit_mode || 'sync_video').toString().trim();
+    if (visitMode === 'async_review') price *= 0.6;
 
     return res.json({
       success: true,
       iso2,
       tier: t.tier,
       currency: 'USD',
+      visit_mode: visitMode,
       price_usd: price,
       price_usd_cents: Math.round(price * 100),
       floor_usd: t.floor_usd

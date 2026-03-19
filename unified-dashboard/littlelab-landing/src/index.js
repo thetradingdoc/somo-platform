@@ -15,7 +15,7 @@ function Root() {
       <div className="ui-layer">
         <header className="brand">
           <h1>Consʌlt</h1>
-          <p>Home Care Works</p>
+          <p>Healthcare at your home</p>
         </header>
         <Search
           query={query}

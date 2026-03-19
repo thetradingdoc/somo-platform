@@ -566,7 +566,7 @@ Twilio receives call → POST /voice/incoming
 |----------|----------|
 | `docs/architecture/financial/FINANCIAL_LAYER_ARCHITECTURE.md` | Full financial layer, Stedi, coding pipeline, Tiba spec |
 | `docs/architecture/voice-agent/STATE_FLOW.md` | Medical coding state machine |
-| `docs/architecture/voice-agent/IMPLEMENTATION_STATUS.md` | Implementation status |
+| `docs/architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md` | Implementation status |
 | `docs/middleware-platform/VOICE_AGENT_FUNCTIONS_AND_DYNAMIC_VARIABLES.md` | Voice tools and dynamic variables |
 | `todos/PRODUCTION_READINESS_TASKS.md` | Production readiness checklist, Azure setup, compliance |
 

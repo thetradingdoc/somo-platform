@@ -148,7 +148,7 @@ If variables aren't set, the system will:
 ## 📚 Related Documentation
 
 - [Automated Tenant Domain Setup](./AUTOMATED_TENANT_DOMAIN_SETUP.md) - How the automation works
-- [Tenant Subdomain Setup Guide](./TENANT_SUBDOMAIN_SETUP.md) - Manual setup instructions
+- [Tenant & DNS Setup Guide](../dns/TENANT_AND_DNS_SETUP.md) - Manual setup instructions
 
 ---
 

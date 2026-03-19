@@ -124,7 +124,7 @@ For a proper multi-tenant setup, you'll need:
      --hostname doctor-little.doclittle.site
    ```
 
-4. **Bind SSL certificate** (see [TENANT_SUBDOMAIN_SETUP.md](./TENANT_SUBDOMAIN_SETUP.md))
+4. **Bind SSL certificate** (see [TENANT_AND_DNS_SETUP.md](./TENANT_AND_DNS_SETUP.md))
 
 ---
 

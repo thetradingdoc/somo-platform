@@ -117,6 +117,10 @@
             "type": "string",
             "description": "Optional notes about the appointment, insurance information, or patient preferences"
           },
+          "visit_mode": {
+            "type": "string",
+            "description": "sync_video (live visit) or async_review (specialist reviews within hours)"
+          },
           "practitioner_id": {
             "type": "string",
             "description": "Practitioner ID to assign this appointment to a specific provider"

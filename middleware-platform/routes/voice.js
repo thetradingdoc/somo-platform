@@ -23,7 +23,8 @@ const router = express.Router();
 router.post('/products/search', async (req, res) => {
     console.log('\n📦 VOICE: Product Search');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔍 REQUEST BODY:', JSON.stringify(req.body, null, 2));
+    const { safeLogRequestBody } = require('../services/payment-security');
+    safeLogRequestBody('REQUEST BODY:', req);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
@@ -322,7 +323,8 @@ router.post('/checkout/create', async (req, res) => {
     try {
         console.log('\n💳 VOICE: Creating Checkout via Orchestrator');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
+        const { safeLogRequestBody } = require('../services/payment-security');
+        safeLogRequestBody('Request body:', req);
 
         // Extract email from request (multiple possible locations)
         let email = req.body.customer_email || req.body.args?.customer_email || req.body.customer?.email;
@@ -378,8 +380,8 @@ router.post('/checkout/create', async (req, res) => {
         // CRITICAL: Validate email is present
         if (!email) {
             console.error('❌ MISSING EMAIL IN CHECKOUT REQUEST');
-            console.error('   Request body keys:', Object.keys(req.body));
-            console.error('   Request body:', JSON.stringify(req.body, null, 2));
+            const { safeLogRequestBody } = require('../services/payment-security');
+            safeLogRequestBody('Request body (error):', req);
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
             return res.status(400).json({
                 success: false,

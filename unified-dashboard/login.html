@@ -5,274 +5,138 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Consʌlt Provider Portal — Sign in</title>
-    <script src="assets/js/config.js"></script>
+    <link rel="stylesheet" href="/assets/css/global.css" />
+    <script src="/assets/js/config.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            color-scheme: light;
+            --bg: #f9fafb;
+            --card: #ffffff;
+            --card-border: #e5e7eb;
+            --text: #0f172a;
+            --muted: #6b7280;
+            --accent: #7c5dfa;
+            --accent-dark: #6d48f2;
+            --shadow: 0 20px 60px rgba(15, 23, 42, 0.12);
         }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 32px 16px;
         }
-
-        .auth-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 480px;
+        .shell {
             width: 100%;
-            overflow: hidden;
+            max-width: 1000px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            align-items: start;
         }
-
-        .auth-header {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            padding: 40px;
-            text-align: center;
-            color: white;
+        .panel {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: var(--shadow);
         }
-
-        .logo {
-            font-size: 32px;
-            margin-bottom: 8px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .auth-header h1 {
-            font-size: 26px;
-            margin-bottom: 4px;
-            color: white;
-        }
-
-        .auth-header p {
-            opacity: 0.9;
-            font-size: 14px;
-        }
-
-        .auth-body {
-            padding: 40px;
-        }
-
-        .tab-buttons {
-            display: none;
-            /* Hide tabs - login only */
-        }
-
-        .tab-btn {
-            display: none;
-            /* Hide tab buttons */
-        }
-
-        .auth-form {
-            display: none;
-        }
-
-        .auth-form.active {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
+        .hero .muted { margin-bottom: 8px; }
+        .hero h1 { margin: 0; font-size: 2rem; line-height: 1.2; }
+        .hero p { margin: 16px 0 0; color: var(--muted); font-size: 1.05rem; }
+        .auth-form { display: none; }
+        .auth-form.active { display: block; }
+        .form-group { margin-bottom: 18px; }
         .form-group label {
             display: block;
-            font-size: 14px;
+            font-size: 0.9rem;
             font-weight: 600;
-            color: #4a5568;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            color: var(--text);
         }
-
         .form-group input {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 15px;
-            transition: all 0.2s;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            background: #fdfdfd;
+            font-size: 1rem;
         }
-
         .form-group input:focus {
             outline: none;
-            border-color: #1e40af;
-            box-shadow: 0 0 0 3px rgba(210, 105, 30, 0.1);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(124, 93, 250, 0.15);
         }
-
         .btn-primary {
             width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            color: white;
+            padding: 14px 18px;
             border: none;
-            border-radius: 10px;
-            font-size: 16px;
+            border-radius: 12px;
+            background: var(--accent);
+            color: white;
+            font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            margin-top: 8px;
+            transition: all 0.15s ease;
         }
-
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(210, 105, 30, 0.4);
-            background: #0e7490;
+            background: var(--accent-dark);
+            transform: translateY(-1px);
         }
-
         .btn-primary:disabled {
-            background: #cbd5e0;
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
-
-        .divider {
-            text-align: center;
-            margin: 32px 0;
-            position: relative;
-        }
-
-        .divider::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 50%;
-            width: 100%;
-            height: 1px;
-            background: #e2e8f0;
-        }
-
-        .divider span {
-            background: white;
-            padding: 0 16px;
-            color: #718096;
-            font-size: 13px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .btn-google {
-            width: 100%;
-            padding: 14px;
-            background: white;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            color: #2d3748;
-        }
-
-        .btn-google:hover {
-            background: #f7fafc;
-            border-color: #cbd5e0;
-        }
-
-        .google-icon {
-            width: 20px;
-            height: 20px;
-        }
-
         .demo-section {
-            margin-top: 32px;
+            margin-top: 24px;
             padding-top: 24px;
-            border-top: 1px solid #e2e8f0;
+            border-top: 1px solid var(--card-border);
         }
-
         .demo-section h3 {
-            font-size: 13px;
-            color: #718096;
+            font-size: 0.8rem;
+            color: var(--muted);
             margin-bottom: 12px;
-            text-align: center;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-
         .demo-btn {
             width: 100%;
-            padding: 14px 16px;
-            background: #f7fafc;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: 14px;
-            font-weight: 600;
+            padding: 12px 14px;
+            background: #fdfdfd;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            font-size: 0.9rem;
             cursor: pointer;
             margin-bottom: 8px;
-            transition: all 0.2s;
+            transition: all 0.15s;
             text-align: left;
             display: flex;
             align-items: center;
             gap: 12px;
         }
-
         .demo-btn:hover {
-            background: #edf2f7;
-            border-color: #1e40af;
+            border-color: var(--accent);
+            background: rgba(124, 93, 250, 0.04);
         }
-
-        .demo-btn-icon {
-            font-size: 24px;
-        }
-
-        .demo-btn-content {
-            flex: 1;
-        }
-
-        .demo-btn-title {
-            color: #2d3748;
-            margin-bottom: 2px;
-        }
-
-        .demo-btn-email {
-            font-size: 12px;
-            color: #718096;
-            font-weight: 400;
-        }
-
-        .error-message {
-            background: #fed7d7;
-            color: #c53030;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
+        .demo-btn-icon { font-size: 20px; }
+        .demo-btn-title { color: var(--text); font-weight: 600; }
+        .demo-btn-email { font-size: 0.8rem; color: var(--muted); }
+        .error-message, .success-message {
+            padding: 12px 14px;
+            border-radius: 12px;
+            font-size: 0.9rem;
             margin-bottom: 16px;
             display: none;
         }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .success-message {
-            background: #c6f6d5;
-            color: #22543d;
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 16px;
-            display: none;
-        }
-
-        .success-message.show {
-            display: block;
-        }
-
-        .password-toggle {
-            position: relative;
-        }
-
+        .error-message { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+        .success-message { background: rgba(22, 163, 74, 0.15); color: #16a34a; }
+        .error-message.show, .success-message.show { display: block; }
+        .password-toggle { position: relative; }
         .password-toggle-btn {
             position: absolute;
             right: 12px;
@@ -281,106 +145,104 @@
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 20px;
+            font-size: 18px;
             padding: 4px;
         }
-
-        @media (max-width: 480px) {
-            .auth-container {
-                border-radius: 0;
-            }
-
-            .auth-body {
-                padding: 24px;
-            }
+        .link-accent { color: var(--accent); text-decoration: none; font-weight: 600; }
+        .link-accent:hover { text-decoration: underline; }
+        @media (max-width: 768px) {
+            .shell { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 
 <body>
-    <div class="auth-container">
-        <div class="auth-header">
-            <div class="logo">Consʌlt</div>
+    <div class="shell">
+        <section class="panel hero">
+            <p class="muted">Consʌlt • Healthcare at your home</p>
             <h1>Provider Portal</h1>
-            <p>For licensed providers</p>
-        </div>
+            <p>Sign in to your provider account. Use demo accounts below to try without signing up.</p>
+            <div style="margin-top: 24px;">
+                <p class="muted" style="font-size: 0.9rem;">
+                    Don't have an account?
+                    <a href="/unified-dashboard/signup.html" class="link-accent">Create provider account</a>
+                </p>
+            </div>
+            <div style="margin-top: 24px;">
+                <a href="/unified-dashboard/portal.html" class="link-accent" style="font-size: 0.9rem;">
+                    Are you a patient? Go to Patient Portal →
+                </a>
+            </div>
+        </section>
 
-        <div class="auth-body">
-            <!-- Tab buttons removed - login only, signup redirects to /signup -->
+        <section class="panel">
+            <h2 style="margin-top: 0; margin-bottom: 4px;">Sign in</h2>
+            <p class="muted" style="font-size: 0.9rem; margin-bottom: 24px;">Enter your credentials to access your provider dashboard</p>
+
             <div class="error-message" id="errorMessage"></div>
             <div class="success-message" id="successMessage"></div>
 
-            <!-- Login Form -->
             <form id="loginForm" class="auth-form active">
                 <div class="form-group">
-                    <label for="loginEmail">Email Address</label>
+                    <label for="loginEmail">Email</label>
                     <input type="email" id="loginEmail" placeholder="you@company.com" required>
                 </div>
-
                 <div class="form-group">
                     <label for="loginPassword">Password</label>
                     <div class="password-toggle">
                         <input type="password" id="loginPassword" placeholder="••••••••" required>
-                        <button type="button" class="password-toggle-btn"
-                            onclick="togglePassword('loginPassword')">👁️</button>
+                        <button type="button" class="password-toggle-btn" onclick="togglePassword('loginPassword')">👁️</button>
                     </div>
                 </div>
-
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <label
-                        style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: #4a5568; font-weight: normal;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem; color: var(--muted); font-weight: 500;">
                         <input type="checkbox" id="rememberMe" style="width: auto; margin: 0;">
-                        <span>Remember me</span>
+                        Remember me
                     </label>
-                    <a href="#" onclick="showForgotPassword(); return false;"
-                        style="color: #1e40af; text-decoration: none; font-size: 14px;">Forgot password?</a>
+                    <a href="#" onclick="showForgotPassword(); return false;" class="link-accent" style="font-size: 0.9rem;">Forgot password?</a>
                 </div>
-
-                <button type="submit" class="btn-primary" id="loginBtn">
-                    Sign In
-                </button>
+                <button type="submit" class="btn-primary" id="loginBtn">Sign In</button>
             </form>
 
-            <!-- Forgot Password Form -->
-            <form id="forgotPasswordForm" class="auth-form" style="display: none;">
-                <h2 style="margin-bottom: 16px; color: #1e293b;">Reset Password</h2>
-                <p style="color: #64748b; margin-bottom: 24px; font-size: 14px;">
-                    Enter your email address and we'll send you a link to reset your password.
-                </p>
+            <div class="demo-section">
+                <h3>Demo login (no signup)</h3>
+                <button type="button" class="demo-btn" onclick="useDemoAccount('provider@doclittle.com','demo123')">
+                    <span class="demo-btn-icon">👨‍⚕️</span>
+                    <span class="demo-btn-content">
+                        <span class="demo-btn-title">Provider</span>
+                        <span class="demo-btn-email">provider@doclittle.com</span>
+                    </span>
+                </button>
+                <button type="button" class="demo-btn" onclick="useDemoAccount('patient@doclittle.com','demo123')">
+                    <span class="demo-btn-icon">🧑‍🤝‍🧑</span>
+                    <span class="demo-btn-content">
+                        <span class="demo-btn-title">Patient</span>
+                        <span class="demo-btn-email">patient@doclittle.com</span>
+                    </span>
+                </button>
+                <button type="button" class="demo-btn" onclick="useDemoAccount('insurer@doclittle.com','demo123')">
+                    <span class="demo-btn-icon">🏥</span>
+                    <span class="demo-btn-content">
+                        <span class="demo-btn-title">Insurer</span>
+                        <span class="demo-btn-email">insurer@doclittle.com</span>
+                    </span>
+                </button>
+                <p class="muted" style="font-size: 0.75rem; margin-top: 8px;">Password: demo123 (all accounts)</p>
+            </div>
 
+            <form id="forgotPasswordForm" class="auth-form" style="display: none;">
+                <h2 style="margin-bottom: 12px;">Reset Password</h2>
+                <p class="muted" style="margin-bottom: 20px; font-size: 0.9rem;">Enter your email and we'll send a reset link.</p>
                 <div class="form-group">
-                    <label for="forgotEmail">Email Address</label>
+                    <label for="forgotEmail">Email</label>
                     <input type="email" id="forgotEmail" placeholder="you@company.com" required>
                 </div>
-
-                <button type="submit" class="btn-primary" id="forgotBtn">
-                    Send Reset Link
-                </button>
-
-                <div style="text-align: center; margin-top: 16px;">
-                    <a href="#" onclick="showLogin(); return false;"
-                        style="color: #1e40af; text-decoration: none; font-size: 14px;">Back to login</a>
-                </div>
-            </form>
-
-            <!-- Signup form removed - users must use /signup page -->
-
-            <!-- Sign up link - redirects to /signup -->
-            <div style="text-align: center; margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-                <p style="color: #718096; font-size: 14px; margin-bottom: 12px;">
-                    Don't have an account?
+                <button type="submit" class="btn-primary" id="forgotBtn">Send Reset Link</button>
+                <p style="text-align: center; margin-top: 16px;">
+                    <a href="#" onclick="showLogin(); return false;" class="link-accent">Back to login</a>
                 </p>
-                <a href="/unified-dashboard/signup.html"
-                    style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.2s;">
-                    Create provider account
-                </a>
-                <div style="margin-top:12px;">
-                    <a href="/unified-dashboard/portal.html" style="color:#1e40af; text-decoration:none; font-size: 14px; font-weight: 600;">
-                        Are you a patient? Go to Patient Portal →
-                    </a>
-                </div>
-            </div>
-        </div>
+            </form>
+        </section>
     </div>
 
     <script>
@@ -411,6 +273,13 @@
 
         const API_BASE = getApiBase();
         console.log('🌐 Using API Base URL:', API_BASE);
+
+        // Demo account: fill form and log in
+        function useDemoAccount(email, password) {
+            document.getElementById('loginEmail').value = email;
+            document.getElementById('loginPassword').value = password;
+            login(email, password);
+        }
 
         // Login Form Handler
         document.getElementById('loginForm').addEventListener('submit', async (e) => {

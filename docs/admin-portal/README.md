@@ -6,7 +6,7 @@ Documentation for the DocLittle admin portal (unified dashboard admin section).
 
 - **[ADMIN_PORTAL_STRUCTURE.md](./ADMIN_PORTAL_STRUCTURE.md)** - Structure, URL patterns, navigation
 - **[ADMIN_PORTAL_TESTING.md](./ADMIN_PORTAL_TESTING.md)** - Testing guide and checklist
-- **[ADMIN_PORTAL_FIXES_COMPLETE.md](./ADMIN_PORTAL_FIXES_COMPLETE.md)** - Summary of fixes applied
+- **[ADMIN_PORTAL_FIXES_COMPLETE.md](../archive/ADMIN_PORTAL_FIXES_COMPLETE.md)** - Summary of fixes applied (archived)
 
 ## Quick Reference
 

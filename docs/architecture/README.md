@@ -29,7 +29,7 @@ System architecture, design decisions, and technical documentation.
 ### Implementation & Maintenance
 - **[middleware/MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md](./middleware/MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md)** — Brain improvements implementation
 - **[maintenance/ARCHITECTURE_ISSUES.md](./maintenance/ARCHITECTURE_ISSUES.md)** — Known architecture issues
-- **[maintenance/FIXES_APPLIED.md](./maintenance/FIXES_APPLIED.md)** — Applied fixes log
+- **[FIXES_APPLIED.md](../archive/FIXES_APPLIED.md)** — Applied fixes log (archived)
 
 ### Voice Agent & Retell
 - **[voice-agent/RUNBOOK.md](./voice-agent/RUNBOOK.md)** — Medical coding runbook
@@ -37,14 +37,11 @@ System architecture, design decisions, and technical documentation.
 - **[voice-agent/AUTOMATED_RETELL_AGENT_CREATION.md](./voice-agent/AUTOMATED_RETELL_AGENT_CREATION.md)** — Agent provisioning
 
 ### Financial Layer (Tiba)
-- **[financial/TIBA_FINANCIAL_LAYER_GAP_ANALYSIS.md](./financial/TIBA_FINANCIAL_LAYER_GAP_ANALYSIS.md)**
-- **[financial/TIBA_FINANCIAL_LAYER_GAP_REMEDIATION_TODO.md](./financial/TIBA_FINANCIAL_LAYER_GAP_REMEDIATION_TODO.md)**
-- **[financial/TIBA_FINANCIAL_LAYER_TODO.md](./financial/TIBA_FINANCIAL_LAYER_TODO.md)**
+- **[financial/TIBA_AND_BILLING_TODO.md](./financial/TIBA_AND_BILLING_TODO.md)** — Tiba gaps, remediation, billing
 - **[financial/STATIC_RECORDS_AUDIT.md](./financial/STATIC_RECORDS_AUDIT.md)**
 
 ### Stripe
-- **[payments/STRIPE_ISSUING_IMPLEMENTATION.md](./payments/STRIPE_ISSUING_IMPLEMENTATION.md)**
-- **[payments/STRIPE_ISSUING_INTEGRATION.md](./payments/STRIPE_ISSUING_INTEGRATION.md)**
+- **[integrations/stripe/issuing/STRIPE_ISSUING.md](../../integrations/stripe/issuing/STRIPE_ISSUING.md)** — Stripe Issuing (consolidated)
 
 ---
 

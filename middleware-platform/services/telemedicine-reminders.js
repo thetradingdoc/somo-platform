@@ -41,10 +41,13 @@ function buildUploadLinkForAppointment(patientId, appointmentId = null, expiresI
 
 /**
  * Build video join link for 1h reminder (Task 37).
+ * Phase 7: Prefer case-{case_number} when a case record exists.
  */
 function buildJoinLink(appointment) {
+  const db = require('../database');
   const baseUrl = process.env.DASHBOARD_BASE_URL || process.env.BASE_URL || process.env.API_BASE_URL || 'http://localhost:4000';
-  const roomName = appointment.video_room_name || `appt-${appointment.id}`;
+  const caseNumber = db.getCaseNumberForAppointment && db.getCaseNumberForAppointment(appointment.id);
+  const roomName = caseNumber ? `case-${caseNumber}` : (appointment.video_room_name || `appt-${appointment.id}`);
   return `${baseUrl.replace(/\/$/, '')}/patients/video-call.html?room=${encodeURIComponent(roomName)}`;
 }
 

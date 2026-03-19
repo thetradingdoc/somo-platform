@@ -8,6 +8,15 @@
   <title>Payment Successful - Consʌlt Patient Portal</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="../assets/js/config.js" defer></script>
+  <script>
+    (function() {
+      const sid = localStorage.getItem('patient_session_id');
+      if (!sid) {
+        const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.replace('patient-login.html?return=' + returnTo);
+      }
+    })();
+  </script>
   <style>
     body {
       background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
@@ -99,12 +108,44 @@
     <p class="sub">
       Your receipt is available in your Wallet. If you booked a visit, you can see it under Appointments.
     </p>
+    <div id="appointmentDetails" class="hidden" style="margin: 16px 0; padding: 12px; background: #f0fdf4; border-radius: 10px; text-align: left;">
+      <div style="font-size: 13px; font-weight: 600; color: #166534; margin-bottom: 6px;">Your visit</div>
+      <div id="appointmentSummary" style="font-size: 14px; color: #374151;"></div>
+      <div id="nextSteps" style="margin-top: 10px; font-size: 12px; color: #6b7280;"></div>
+    </div>
     <div class="btn-row">
       <a class="btn btn-primary" href="wallet.html">View Wallet</a>
       <a class="btn btn-secondary" href="appointments.html">View Appointments</a>
       <a class="btn btn-secondary" href="patient-dashboard.html">Go to Dashboard</a>
     </div>
   </div>
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const appointmentId = params.get('appointment_id');
+      if (!appointmentId) return;
+      const API_BASE = window.API_BASE || 'http://localhost:4000';
+      const sid = localStorage.getItem('patient_session_id');
+      if (!sid) return;
+      fetch(`${API_BASE}/api/patient/appointments`, { headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' } })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.success || !data.appointments) return;
+          const apt = data.appointments.find(a => String(a.id) === String(appointmentId));
+          if (!apt) return;
+          const el = document.getElementById('appointmentDetails');
+          const summary = document.getElementById('appointmentSummary');
+          const steps = document.getElementById('nextSteps');
+          if (!el || !summary) return;
+          const dt = apt.start_time ? new Date(apt.start_time).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : (apt.date && apt.time ? apt.date + ' at ' + apt.time : 'Scheduled');
+          summary.textContent = (apt.appointment_type || 'Visit') + ' - ' + dt;
+          const isSync = (apt.visit_mode || 'sync_video') === 'sync_video';
+          steps.textContent = isSync ? "You'll receive reminders with an upload link and a tech check link before your visit." : "You'll receive a link to upload photos. A specialist will review within ~4 hours.";
+          el.classList.remove('hidden');
+        })
+        .catch(function() {});
+    })();
+  </script>
 </body>
 
 </html>

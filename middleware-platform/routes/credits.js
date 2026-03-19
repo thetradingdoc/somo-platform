@@ -179,8 +179,8 @@ router.post('/purchase', rateLimiter, async (req, res) => {
             });
         }
 
-        const package = CREDIT_PACKAGES.find(p => p.id === package_id);
-        if (!package) {
+        const creditPackage = CREDIT_PACKAGES.find(p => p.id === package_id);
+        if (!creditPackage) {
             return res.status(400).json({
                 success: false,
                 error: 'Invalid package ID'
@@ -212,17 +212,17 @@ router.post('/purchase', rateLimiter, async (req, res) => {
             // Use stored payment method - direct charge (one-click checkout)
             try {
                 const paymentIntent = await stripe.paymentIntents.create({
-                    amount: Math.round(package.price * 100), // Stripe uses cents
+                    amount: Math.round(creditPackage.price * 100), // Stripe uses cents
                     currency: 'usd',
                     payment_method: paymentMethod.stripe_payment_method_id,
                     confirm: true,
-                    description: `${package.name} - ${package.minutes} Minutes`,
+                    description: `${creditPackage.name} - ${creditPackage.minutes} Minutes`,
                     metadata: {
                         customer_id: customer.id,
-                        package_id: package.id,
-                        package_name: package.name,
-                        credits_amount: package.minutes.toString(),
-                        amount_paid: package.price.toString(),
+                        package_id: creditPackage.id,
+                        package_name: creditPackage.name,
+                        credits_amount: creditPackage.minutes.toString(),
+                        amount_paid: creditPackage.price.toString(),
                         type: 'credit_purchase'
                     }
                 });
@@ -231,9 +231,9 @@ router.post('/purchase', rateLimiter, async (req, res) => {
                     // Purchase successful - create purchase record and add credits immediately
                     const purchaseResult = db.createCreditPurchase(
                         customer.id,
-                        package.name,
-                        package.minutes,
-                        package.price,
+                        creditPackage.name,
+                        creditPackage.minutes,
+                        creditPackage.price,
                         null, // No checkout session for direct purchase
                         paymentMethod.stripe_payment_method_id
                     );
@@ -250,14 +250,14 @@ router.post('/purchase', rateLimiter, async (req, res) => {
                         );
                     }
 
-                    db.addPaidCredits(customer.id, package.minutes);
+                    db.addPaidCredits(customer.id, creditPackage.minutes);
 
-                    console.log(`✅ Direct credit purchase completed: ${package.minutes} minutes for customer ${customer.id}`);
+                    console.log(`✅ Direct credit purchase completed: ${creditPackage.minutes} minutes for customer ${customer.id}`);
 
                     return res.json({
                         success: true,
                         direct_purchase: true,
-                        credits_added: package.minutes,
+                        credits_added: creditPackage.minutes,
                         message: 'Credits purchased successfully using your stored card'
                     });
                 } else if (paymentIntent.status === 'requires_action') {
@@ -285,10 +285,10 @@ router.post('/purchase', rateLimiter, async (req, res) => {
                     price_data: {
                         currency: 'usd',
                         product_data: {
-                            name: `${package.name} - ${package.minutes} Minutes`,
-                            description: `Credits for voice agent API calls (${package.minutes} minutes)`
+                            name: `${creditPackage.name} - ${creditPackage.minutes} Minutes`,
+                            description: `Credits for voice agent API calls (${creditPackage.minutes} minutes)`
                         },
-                        unit_amount: Math.round(package.price * 100) // Stripe uses cents
+                        unit_amount: Math.round(creditPackage.price * 100) // Stripe uses cents
                     },
                     quantity: 1
                 }
@@ -299,19 +299,19 @@ router.post('/purchase', rateLimiter, async (req, res) => {
             customer_email: customer.email,
             metadata: {
                 customer_id: customer.id,
-                package_id: package.id,
-                package_name: package.name,
-                credits_amount: package.minutes,
-                amount_paid: package.price.toString()
+                package_id: creditPackage.id,
+                package_name: creditPackage.name,
+                credits_amount: creditPackage.minutes,
+                amount_paid: creditPackage.price.toString()
             }
         });
 
         // Create credit purchase record (pending)
         db.createCreditPurchase(
             customer.id,
-            package.name,
-            package.minutes,
-            package.price,
+            creditPackage.name,
+            creditPackage.minutes,
+            creditPackage.price,
             checkoutSession.id
         );
 

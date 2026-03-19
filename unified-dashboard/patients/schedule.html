@@ -331,8 +331,16 @@
             </div>
             <div class="flex items-center gap-3">
               <div class="flex flex-col gap-1">
+                <label class="text-[11px] font-semibold text-sky-100 uppercase tracking-wide">Visit type</label>
+                <select id="visitModeInput" class="w-full sm:w-48 rounded-full border border-sky-500/40 bg-sky-900/60 px-3 py-1.5 text-xs text-sky-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400">
+                  <option value="sync_video">Live video visit</option>
+                  <option value="async_review">Photo review (~4h)</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
                 <label class="text-[11px] font-semibold text-sky-100 uppercase tracking-wide">Appointment type</label>
                 <select id="apptTypeInput" class="w-full sm:w-56 rounded-full border border-sky-500/40 bg-sky-900/60 px-3 py-1.5 text-xs text-sky-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400">
+                  <option value="General Consult">General Consult</option>
                   <option value="Mental Health Consultation">Mental Health Consultation</option>
                   <option value="Telemedicine Visit">Telemedicine Visit</option>
                   <option value="Follow-up Visit">Follow-up Visit</option>
@@ -344,6 +352,10 @@
             </div>
           </div>
 
+          <div id="asyncLaneCard" class="hidden mb-4 p-4 rounded-xl bg-sky-800/80 border border-sky-500/40">
+            <p class="text-sm text-sky-100 mb-3">Upload photos and notes — a specialist will review within ~4 hours. No live video needed.</p>
+            <a href="triage.html" class="inline-flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold px-4 py-2">Start async review</a>
+          </div>
           <div id="priceBox" class="mb-3 text-sm text-sky-100/90">
             <div id="priceLine" style="font-weight:700;">Consultation — …</div>
             <ul id="priceBullets" style="margin:6px 0 0 0; padding-left:18px; font-size:12px;">
@@ -355,7 +367,7 @@
 
           <div id="msg" class="hidden text-[11px] rounded-lg px-3 py-2 mb-3 bg-red-900/40 border border-red-400/70 text-red-50"></div>
 
-          <div class="bg-sky-900/60 rounded-2xl p-3 sm:p-4 shadow-inner">
+          <div id="calendarSection" class="bg-sky-900/60 rounded-2xl p-3 sm:p-4 shadow-inner">
             <div class="flex items-center justify-between mb-3">
               <div class="flex flex-col">
                 <span class="text-[11px] font-semibold tracking-wide text-sky-200 uppercase">Step 2 — select date</span>
@@ -464,8 +476,8 @@
     let lastAppointmentIdForRetry = null;
     let holdExpiresAtMs = null;
 
-    const CLINIC_TIMEZONE = 'America/New_York';
-    const SLOT_HOLD_TTL_MINUTES = 30;
+    let CLINIC_TIMEZONE = 'America/New_York';
+    let SLOT_HOLD_TTL_MINUTES = 30;
 
     function isoDateInTz(date, timeZone) {
       const parts = new Intl.DateTimeFormat('en-CA', {
@@ -565,15 +577,16 @@
       try {
         const sid = sessionId;
         if (!sid) return;
-        // Try to get country/phone from intake/identity if needed later; for now, call quote without params
-        const res = await fetch(`${API_BASE}/api/pricing/quote`, {
+        const visitMode = (document.getElementById('visitModeInput')?.value || 'sync_video');
+        const res = await fetch(`${API_BASE}/api/pricing/quote?visit_mode=${encodeURIComponent(visitMode)}`, {
           headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         const data = await res.json();
         if (!res.ok || !data.success) return;
         const priceLine = document.getElementById('priceLine');
         if (priceLine) {
-          priceLine.textContent = `Consultation — $${data.price_usd.toFixed(2)} ${data.currency}`;
+          const label = visitMode === 'async_review' ? 'Photo review' : 'Consultation';
+          priceLine.textContent = `${label} — $${data.price_usd.toFixed(2)} ${data.currency}`;
         }
       } catch (_) {}
     }
@@ -770,11 +783,17 @@
         bookingInFlight = true;
         scheduleBtn.textContent = 'Booking…';
         setCtaState();
+        const visitMode = document.getElementById('visitModeInput')?.value || 'sync_video';
+        if (visitMode === 'async_review') {
+          showMsg('For photo review, use "Start async review" above.', 'error');
+          return;
+        }
         const body = {
           appointment_type: apptType,
           date: selectedDate,
           time: selectedTime,
-          reason
+          reason,
+          visit_mode: visitMode
         };
         const bookingKey = `pt-book:${apptType}:${selectedDate}:${selectedTime}`;
         const res = await fetch(`${API_BASE}/api/patient/booking/schedule`, {
@@ -869,11 +888,30 @@
     scheduleBtn.addEventListener('click', scheduleAppointment);
     if (retryPayBtn) retryPayBtn.addEventListener('click', retryPayment);
 
-    document.addEventListener('DOMContentLoaded', () => {
+    function toggleVisitModeUI() {
+      const visitMode = document.getElementById('visitModeInput')?.value || 'sync_video';
+      const calendarSection = document.getElementById('calendarSection');
+      const asyncCard = document.getElementById('asyncLaneCard');
+      const ctaWrap = document.getElementById('ctaWrap');
+      if (visitMode === 'async_review') {
+        if (calendarSection) calendarSection.classList.add('hidden');
+        if (asyncCard) asyncCard.classList.remove('hidden');
+        if (ctaWrap) ctaWrap.classList.add('hidden');
+      } else {
+        if (calendarSection) calendarSection.classList.remove('hidden');
+        if (asyncCard) asyncCard.classList.add('hidden');
+        if (ctaWrap) ctaWrap.classList.remove('hidden');
+      }
+      loadPrice();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
       if (!sessionId) {
         window.location.href = 'patient-login.html';
         return;
       }
+      document.getElementById('visitModeInput')?.addEventListener('change', toggleVisitModeUI);
+      await loadScheduleConfig();
       const nowParts = nowPartsInTz(CLINIC_TIMEZONE);
       currentYear = nowParts.year;
       currentMonth = nowParts.monthIndex;
@@ -882,8 +920,25 @@
       renderCalendar(currentYear, currentMonth);
       loadSlotsForDate(selectedDate);
       loadPrice();
+      toggleVisitModeUI();
       setCtaState();
+      loadScheduleConfig();
     });
+
+    async function loadScheduleConfig() {
+      try {
+        const sid = sessionId;
+        if (!sid) return;
+        const res = await fetch(`${API_BASE}/api/patient/support-config`, {
+          headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.timezone) CLINIC_TIMEZONE = data.timezone;
+          if (typeof data.slot_hold_ttl_minutes === 'number') SLOT_HOLD_TTL_MINUTES = data.slot_hold_ttl_minutes;
+        }
+      } catch (_) {}
+    }
 
     // Today button: jump to clinic "today" and reload.
     const todayBtn = document.getElementById('todayBtn');
@@ -948,12 +1003,24 @@
           if (opt.action === 'select_slot') {
             const slot = opt.slot || null;
             const date = (triageState && triageState.date) ? triageState.date : selectedDate;
-            const time = slot?.time || slot?.start_time || slot?.display || opt.value || null;
+            const time = slot?.display || slot?.time || slot?.start_time || opt.value || null;
             if (date && time) {
               clearHold();
               selectedDate = date;
               selectedTime = time;
               selectedDateLabelEl.textContent = fmtDateLabel(selectedDate);
+              if (triageState?.appointment_type && document.getElementById('apptTypeInput')) {
+                const apptEl = document.getElementById('apptTypeInput');
+                const val = String(triageState.appointment_type);
+                const hasOpt = Array.from(apptEl.options).some(o => o.value === val);
+                if (!hasOpt) {
+                  const opt = document.createElement('option');
+                  opt.value = val;
+                  opt.textContent = val;
+                  apptEl.appendChild(opt);
+                }
+                apptEl.value = val;
+              }
               const d = new Date(`${selectedDate}T00:00:00`);
               if (!Number.isNaN(d.getTime())) {
                 renderCalendar(d.getFullYear(), d.getMonth());
@@ -964,6 +1031,10 @@
               chatModal.classList.remove('flex');
               return;
             }
+          }
+          if (opt.action === 'upload') {
+            window.location.href = 'triage.html';
+            return;
           }
           chatSendMessage(opt.value, { action: opt.action || null, slot: opt.slot || null });
         });
@@ -986,10 +1057,14 @@
         });
         const j = await r.json();
         if (!r.ok || !j.success) throw new Error(j.error || 'Request failed');
-        triageState = j.state || {};
+        triageState = { ...(j.state || {}), session_id: j.session_id || triageState?.session_id };
         sessionStorage.setItem(triageStateKey, JSON.stringify(triageState));
         if (j.reply) chatAdd('assistant', j.reply);
-        if (j.next_chips) chatSetChips(j.next_chips);
+        const chips = j.next_chips || [];
+        if (j.next_step === 'UPLOAD_IMAGE') {
+          chips.push({ label: 'Upload photo', value: '[upload]', action: 'upload' });
+        }
+        if (chips.length) chatSetChips(chips);
         if (j.redirect_to) window.location.href = j.redirect_to;
       } catch (e) {
         chatAdd('assistant', e.message || 'Something went wrong.');

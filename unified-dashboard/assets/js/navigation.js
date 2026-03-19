@@ -19,7 +19,7 @@ function renderNavigation(activeId = null) {
         window.TENANT_CONFIG = {
             tenant_type: tenantType,
             navItems: defaultNav,
-            sidebarSubtitle: tenantType === 'shop' ? '24/7 Medical Assistant' : 'Medical Coding Assistant'
+            sidebarSubtitle: tenantType === 'shop' ? '24/7 Medical Assistant' : "Doctor's Portal"
         };
     }
 
@@ -27,9 +27,9 @@ function renderNavigation(activeId = null) {
         window.TENANT_CONFIG.navItems = defaultNav;
     }
 
-    // Filter: agent and settings live under profile menu; wallets removed from provider nav
+    // Filter: agent lives under profile; settings/wallets are now My Profile / My Wallet in nav
     const navItems = window.TENANT_CONFIG.navItems.filter(
-      item => item.id !== 'settings' && item.id !== 'wallets'
+      item => item.id !== 'settings'
     );
 
     // Determine active item if not provided
@@ -66,9 +66,10 @@ function renderNavigation(activeId = null) {
     navEl.innerHTML = navItems.map(item => {
         const isActive = item.id === activeId;
         const href = resolveHref(item.href);
+        const iconHtml = (typeof window.getNavIcon === 'function' ? window.getNavIcon(item.icon) : item.icon) || item.icon;
         return `
             <a href="${href}" class="nav-item ${isActive ? 'active' : ''}">
-                <span class="nav-icon">${item.icon}</span>
+                <span class="nav-icon nav-icon-svg">${iconHtml}</span>
                 <span>${item.label}</span>
             </a>
         `;

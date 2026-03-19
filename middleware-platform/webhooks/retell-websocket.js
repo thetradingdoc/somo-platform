@@ -14,8 +14,9 @@ const SMSService = require('../services/sms-service');
 const { processTurn: processCodingStateTurn } = require('../services/coding-state-service');
 const CodingGraph = require('../services/coding-graph');
 const { detectRedFlags, checkBeforeScheduling } = require('../services/triage-service');
-const AgentBrainService = require('../services/agent-brain-service');
 const CallSessionService = require('../services/call-session-service');
+const PatientOrchestratorService = require('../services/patient-orchestrator-service');
+const KellyAgentService = require('../services/kelly-agent-service');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -65,6 +66,7 @@ class RetellWebSocketHandler {
             nameProvidedAt: null, // Timestamp when name was first provided
             clinic_id: existingState?.clinic_id || null, // Restore from persisted state
             appointment_id: null, // Task 52 (D2): set from room name (appt-{id}) when message.call arrives
+            _transcriptSequence: 0, // u-6: barge-in idempotency — increment per transcript; skip stale replies
             _codingState: existingState?.current_stage || 'INTAKE',
             _codingStateData: existingState?.state_data || {},
             session
@@ -116,9 +118,8 @@ class RetellWebSocketHandler {
                     const callDurationSeconds = Math.floor(callDuration / 1000);
                     const callDurationMinutes = Math.ceil(callDurationSeconds / 60); // Round up to nearest minute
 
-                    // NOTE: For now, we use clinic_id as customer_id for credits (database schema uses customer_id)
-                    // TODO: Create clinic_credits table or map clinic to customer properly
-                    const customerIdForCredits = connection.clinic_id;
+                    // R-1: Map clinic to customer for credits (clinic.merchant_id -> customer)
+                    const customerIdForCredits = this.db.getCustomerIdForClinic?.(connection.clinic_id) || connection.clinic_id;
                     
                     // Get customer credits (using clinic_id as customer_id for now)
                     const credits = this.db.getCustomerCredits(customerIdForCredits);
@@ -314,9 +315,9 @@ class RetellWebSocketHandler {
                     // Fallback: check customers table (legacy support)
                 const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(message.call.agent_id);
                 if (customer) {
-                        // For backward compatibility, use customer.id as clinic_id
-                        // TODO: Map customer to clinic properly when relationship is clarified
-                        connection.clinic_id = customer.id;
+                        // R-1: Use customer's first clinic when agent maps to customer (legacy)
+                        const clinicRow = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1').get(customer.merchant_id);
+                        connection.clinic_id = clinicRow?.clinic_id || customer.id;
                         console.log(`⚠️  Looked up clinic_id from customer agent_id (legacy): ${connection.clinic_id}`);
                     }
                 }
@@ -334,20 +335,12 @@ class RetellWebSocketHandler {
                 }
             }
 
-            // Task 6: Final fallback when Retell doesn't provide clinic_id
+            // Task 6: Fallback clinic_id from env only. S-1: No arbitrary DB clinic—multi-tenant leak risk.
             if (!connection.clinic_id) {
                 const fallback = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID;
                 if (fallback) {
                     connection.clinic_id = fallback;
                     console.log(`⚠️  Using fallback clinic_id from env: ${connection.clinic_id}`);
-                } else {
-                    try {
-                        const first = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE is_active = 1 LIMIT 1').get();
-                        if (first?.clinic_id) {
-                            connection.clinic_id = first.clinic_id;
-                            console.log(`⚠️  Using first active clinic as fallback: ${connection.clinic_id}`);
-                        }
-                    } catch (_) {}
                 }
             }
 
@@ -423,9 +416,28 @@ class RetellWebSocketHandler {
     // Handle user speech transcript
     async handleTranscript(callId, message) {
         const connection = this.activeConnections.get(callId);
+
+        // VOICE_AGENT_ENABLED gate (u-4): when 0, reject voice; redirect to web chat
+        const voiceAgentEnabled = process.env.VOICE_AGENT_ENABLED === '1' || process.env.VOICE_AGENT_ENABLED === 'true';
+        if (!voiceAgentEnabled) {
+            const baseUrl = this.config?.apiBaseUrl || process.env.BASE_URL || 'http://localhost:4000';
+            const chatUrl = `${baseUrl}/unified-dashboard/patients/triage.html`;
+            const rejectMsg = `Voice is currently unavailable. Please use our web chat at ${chatUrl} to book or get help.`;
+            this.sendToRetell(connection.ws, {
+                type: 'response',
+                response: { content: rejectMsg, end_call: true }
+            });
+            console.log(`🚫 Voice channel disabled (VOICE_AGENT_ENABLED=0): redirected caller to web chat`);
+            return;
+        }
+
         const userSaid = message.transcript;
 
         console.log(`🗣️  User said: "${userSaid}"`);
+
+        // u-6: Barge-in idempotency — increment sequence; capture ours before async work
+        connection._transcriptSequence = (connection._transcriptSequence || 0) + 1;
+        const mySequence = connection._transcriptSequence;
 
         // Store in conversation history
         connection.conversationHistory.push({
@@ -493,90 +505,129 @@ class RetellWebSocketHandler {
             }
         }
 
-        // Agent brain handles high-level reasoning and reply text
-        try {
-            const session = connection.session || CallSessionService.getSession(callId) || null;
-            const historyForBrain = (connection.conversationHistory || []).map((turn) => ({
-                role: turn.role === 'user' ? 'user' : 'assistant',
-                content: turn.content
-            }));
+        // Kelly Agent (LLM) — K-1: Groq + tools; falls back to PatientOrchestrator when LLM unavailable
+        let agentReply = null;
+        let kellyResult = null;
+        {
+            try {
+                const callerPhone = connection?.customerPhone || connection?.callMetadata?.from_number || null;
+                const resolvedPatientId = connection?.patientId || null;
+                const result = await KellyAgentService.processTurn({
+                    message: userSaid,
+                    sessionId: callId,
+                    channel: 'voice',
+                    clinicId: connection?.clinic_id || null,
+                    patientId: resolvedPatientId,
+                    callerPhone,
+                    patientName: connection?.customerName || connection?.initialName || null
+                });
+                kellyResult = result;
+                agentReply = result?.reply;
+                if (result?.usedFallback) {
+                    console.log(`📋 [${callId}] Kelly LLM unavailable, used orchestrator fallback`);
+                }
+                if (result?.endCall) {
+                    if (agentReply) {
+                        this.sendToRetell(connection.ws, {
+                            type: 'response',
+                            response: { content: agentReply, end_call: true }
+                        });
+                    }
+                    return;
+                }
+            } catch (e) {
+                kellyResult = { usedFallback: true };
+                console.warn('⚠️  KellyAgent failed:', e.message);
+                try {
+                    const fb = await PatientOrchestratorService.orchestrate({
+                        channel: 'voice',
+                        transcript_or_message: userSaid,
+                        session_id: callId,
+                        caller_phone: connection?.customerPhone || connection?.callMetadata?.from_number || null,
+                        patient_id: connection?.patientId || null,
+                        clinic_id: connection?.clinic_id || null
+                    });
+                    agentReply = fb?.text || fb?.reply;
+                } catch (e2) {
+                    console.warn('⚠️  Orchestrator fallback also failed:', e2.message);
+                }
+            }
+        }
+
+        // u-8: Orchestrator-only (AgentBrain removed). Fallback when orchestrator returns nothing.
+        if (!agentReply) {
+            agentReply = "I didn't catch that. Could you say that again?";
+        }
+
+        if (agentReply) {
+            // u-6: Skip if a newer transcript arrived while we were processing (barge-in)
+            if (mySequence !== (connection._transcriptSequence || 0)) {
+                console.log(`⏭️  Skipping stale reply (seq ${mySequence} < current ${connection._transcriptSequence})`);
+                return;
+            }
+
+            connection.conversationHistory.push({
+                role: 'assistant',
+                content: agentReply,
+                timestamp: Date.now()
+            });
+
+            // orch-1 + orch-4: Persist voice session (skip when fallback—orchestrator already persisted)
+            try {
+                if (!kellyResult?.usedFallback && this.db?.upsertOrchestrateSession) {
+                    const row = this.db.getOrchestrateSessionBySessionId?.(callId);
+                    let preferredLang = row?.preferred_language || 'en';
+                    try {
+                        const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('../services/patient-orchestrator-service');
+                        const langReq = detectLanguagePreferenceRequest(userSaid);
+                        if (langReq?.isLanguageRequest && langReq?.code) preferredLang = langReq.code;
+                        else if ((row?.turn_count ?? 0) < 2) preferredLang = detectLanguageFromText(userSaid).code || preferredLang;
+                    } catch (_) {}
+                    this.db.upsertOrchestrateSession({
+                        session_id: callId,
+                        channel: 'voice',
+                        patient_id: connection?.patientId || row?.patient_id,
+                        caller_phone: connection?.customerPhone || connection?.callMetadata?.from_number || row?.caller_phone,
+                        clinic_id: connection?.clinic_id || row?.clinic_id,
+                        preferred_language: preferredLang,
+                        turn_count: (row?.turn_count ?? 0) + 1,
+                        conversation_history: connection.conversationHistory,
+                        flow_state: { ...(row?.flow_state || {}), initial_name: connection?.initialName }
+                    });
+                }
+            } catch (e2) { console.warn('⚠️  orch-1/orch-4: Failed to persist voice session:', e2?.message); }
 
             const turnIndex = connection.conversationHistory.length;
+            const session = connection.session || CallSessionService.getSession(callId) || null;
 
-            const brainInput = {
-                channel: 'voice',
-                sessionId: session?.traceId || callId,
-                callId,
-                clinicId: connection?.clinic_id || null,
-                speaker: 'user',
-                text: userSaid,
-                history: historyForBrain,
-                context: {
-                    clinicName: connection.callMetadata?.agent_name || null
-                }
-            };
-
-            let brainResult;
-
-            if (AgentBrainService.isStreamingAvailable && AgentBrainService.isStreamingAvailable()) {
-                brainResult = await AgentBrainService.streamTurn(brainInput, (partialText) => {
-                    if (!partialText) return;
-                    this.sendToRetell(connection.ws, {
-                        type: 'response',
-                        response: {
-                            content: partialText,
-                            end_call: false
-                        }
+            if (this.db && typeof this.db.insertAgentTurn === 'function') {
+                try {
+                    this.db.insertAgentTurn({
+                        call_id: callId,
+                        clinic_id: connection?.clinic_id || null,
+                        turn_index: turnIndex,
+                        role: 'assistant',
+                        text: agentReply,
+                        actions_json: [],
+                        prompt_profile_id: 'patient_orchestrate',
+                        prompt_version: 'v1',
+                        prompt_checksum: '',
+                        model: 'orchestrate',
+                        latency_ms: null,
+                        trace_id: session?.traceId || null
                     });
-                });
-            } else {
-                brainResult = await AgentBrainService.processTurn(brainInput);
+                } catch (e) {
+                    console.warn('⚠️  Failed to insert agent turn:', e.message);
+                }
             }
 
-            if (brainResult && brainResult.text) {
-                const agentReply = brainResult.text;
-
-                connection.conversationHistory.push({
-                    role: 'assistant',
+            this.sendToRetell(connection.ws, {
+                type: 'response',
+                response: {
                     content: agentReply,
-                    timestamp: Date.now()
-                });
-
-                // Log agent turn to database if helper exists
-                if (this.db && typeof this.db.insertAgentTurn === 'function') {
-                    try {
-                        this.db.insertAgentTurn({
-                            call_id: callId,
-                            clinic_id: connection?.clinic_id || null,
-                            turn_index: turnIndex,
-                            role: 'assistant',
-                            text: agentReply,
-                            actions_json: brainResult.actions || [],
-                            prompt_profile_id: brainResult.meta?.promptProfileId,
-                            prompt_version: brainResult.meta?.promptVersion,
-                            prompt_checksum: brainResult.meta?.promptChecksum,
-                            model: brainResult.meta?.model,
-                            latency_ms: brainResult.meta?.latencyMs,
-                            trace_id: session?.traceId || null
-                        });
-                    } catch (e) {
-                        console.warn('⚠️  Failed to insert agent turn:', e.message);
-                    }
+                    end_call: false
                 }
-
-                // For non-streaming path, send full reply once
-                if (!(AgentBrainService.isStreamingAvailable && AgentBrainService.isStreamingAvailable())) {
-                    this.sendToRetell(connection.ws, {
-                        type: 'response',
-                        response: {
-                            content: agentReply,
-                            end_call: brainResult.actions?.some(a => a.type === 'end_call') || false
-                        }
-                    });
-                }
-            }
-        } catch (e) {
-            console.warn('⚠️  Agent brain failed:', e.message);
+            });
         }
     }
 
@@ -749,6 +800,34 @@ class RetellWebSocketHandler {
                         success: false,
                         error: `Unknown function: ${functionName}`
                     };
+            }
+
+            // Link voice session to patient_id when caller is identified (orch-1)
+            const pid = result?.patient_id || result?.patientId || (result?.appointment?.patient_id);
+            if (pid) {
+                const conn = this.activeConnections.get(callId);
+                if (conn) {
+                    conn.patientId = pid;
+                }
+                try {
+                    if (this.db && typeof this.db.upsertOrchestrateSession === 'function') {
+                        const row = this.db.getOrchestrateSessionBySessionId?.(callId);
+                        if (row) {
+                            this.db.upsertOrchestrateSession({
+                                session_id: callId,
+                                channel: 'voice',
+                                patient_id: pid,
+                                caller_phone: conn?.customerPhone || conn?.callMetadata?.from_number || row.caller_phone,
+                                clinic_id: conn?.clinic_id || row.clinic_id,
+                                preferred_language: row?.preferred_language,
+                                turn_count: row?.turn_count,
+                                conversation_history: row?.conversation_history,
+                                flow_state: row?.flow_state,
+                                status: row?.status || 'active'
+                            });
+                        }
+                    }
+                } catch (_) {}
             }
 
             const responseTime = Date.now() - startTime;
@@ -2044,7 +2123,7 @@ class RetellWebSocketHandler {
         return connection?.customerEmail || null;
     }
 
-    // Helper: Store customer name (called when name is first provided)
+    // Helper: Store customer name (called when name is first provided). V-3: Also persist to DB.
     storeCustomerName(callId, name) {
         const connection = this.activeConnections.get(callId);
         if (connection && name && !connection.initialName) {
@@ -2052,6 +2131,21 @@ class RetellWebSocketHandler {
             connection.customerName = name.trim();
             connection.nameProvidedAt = Date.now();
             console.log(`✅ Stored initial customer name: ${connection.initialName} (callId: ${callId})`);
+            try {
+                const row = this.db?.getOrchestrateSessionBySessionId?.(callId);
+                const existingState = row?.flow_state || {};
+                if (this.db?.upsertOrchestrateSession) {
+                    this.db.upsertOrchestrateSession({
+                        session_id: callId,
+                        channel: 'voice',
+                        patient_id: row?.patient_id || connection?.patientId || null,
+                        caller_phone: row?.caller_phone || connection?.customerPhone || null,
+                        clinic_id: row?.clinic_id || connection?.clinic_id || null,
+                        conversation_history: row?.conversation_history || connection?.conversationHistory || [],
+                        flow_state: { ...existingState, initial_name: name.trim() }
+                    });
+                }
+            } catch (e) { console.warn('⚠️  Could not persist initial_name:', e?.message); }
         }
     }
 
@@ -2090,14 +2184,7 @@ class RetellWebSocketHandler {
             console.warn(`⚠️  Using fallback clinic_id from env: ${envId}`);
             return envId;
         }
-        try {
-            const conn = this.db.db || this.db;
-            const first = conn.prepare('SELECT clinic_id FROM clinics WHERE is_active = 1 LIMIT 1').get();
-            if (first?.clinic_id) {
-                console.warn(`⚠️  Using first clinic as fallback: ${first.clinic_id}`);
-                return first.clinic_id;
-            }
-        } catch (_) {}
+        // S-1: Do NOT use arbitrary clinic - cross-tenant leak. Return null.
         return null;
     }
 
@@ -2141,12 +2228,28 @@ class RetellWebSocketHandler {
         try {
             const connection = this.activeConnections.get(callId);
 
-            // SAFETY: Red-flag check before scheduling (emergency symptoms → block scheduling)
-            // Task 50: Provider override for incorrectly blocked EMERGENT bookings
+            // SAFETY: Red-flag check before scheduling (orch-9, V-2: ensure voice history available)
             const providerOverrideEmergency = args.provider_override_emergency === true || args.provider_override_emergency === 'true';
-            if (!providerOverrideEmergency && typeof this.db.getConversationHistory === 'function') {
-                const recentTurns = this.db.getConversationHistory(callId, 10);
-                const { blockScheduling, assessment } = checkBeforeScheduling(recentTurns);
+            if (!providerOverrideEmergency) {
+                let recentTurns = [];
+                const orchRow = this.db?.getOrchestrateSessionBySessionId?.(callId);
+                if (orchRow?.conversation_history) {
+                    const hist = typeof orchRow.conversation_history === 'string'
+                        ? JSON.parse(orchRow.conversation_history) : orchRow.conversation_history;
+                    recentTurns = (Array.isArray(hist) ? hist : []).slice(-10);
+                }
+                if (recentTurns.length === 0 && typeof this.db?.getConversationHistory === 'function') {
+                    recentTurns = this.db.getConversationHistory(callId, 10);
+                }
+                // V-2: Merge in-memory transcript so we don't miss unpersisted turns
+                const connHist = connection?.conversationHistory || [];
+                for (const t of connHist.slice(-5)) {
+                    if (t?.content && t?.role === 'user') recentTurns.push({ role: 'user', content: t.content });
+                }
+                const { blockScheduling, assessment } = checkBeforeScheduling(recentTurns.map(t => ({
+                    role: t.role,
+                    content: t.content || t.content_english
+                })));
                 if (blockScheduling && assessment?.isEmergency) {
                     console.warn(`🚨 EMERGENCY: Blocked scheduling - red flags detected: ${assessment.redFlags?.join(', ')}`);
 
@@ -2165,7 +2268,9 @@ class RetellWebSocketHandler {
                                 metadata: { red_flags: assessment.redFlags || [], urgency: assessment.urgency || 'EMERGENT' }
                             });
                         }
-                    } catch (_) {}
+                    } catch (e) {
+                        console.warn('⚠️  upsertPatientEmergencyFlag failed:', e?.message || e);
+                    }
 
                     return {
                         success: false,
@@ -2180,12 +2285,9 @@ class RetellWebSocketHandler {
                 console.warn(`⚠️  Provider override: EMERGENT booking block bypassed for schedule_appointment`);
             }
 
-            // Store the initial name when first provided (for fraud detection)
-            if (connection && args.patient_name && !connection.initialName) {
-                connection.initialName = args.patient_name.trim();
-                connection.nameProvidedAt = Date.now();
-                connection.customerName = args.patient_name.trim();
-                console.log(`✅ Stored initial customer name: ${connection.initialName} (callId: ${callId})`);
+            // Store the initial name when first provided (for fraud detection). V-3: use storeCustomerName to persist to DB.
+            if (connection && args.patient_name) {
+                this.storeCustomerName(callId, args.patient_name);
             }
 
             // CRITICAL: Validate email is provided (REQUIRED for confirmations)
@@ -2250,7 +2352,8 @@ class RetellWebSocketHandler {
                 time: args.time,
                 timezone: args.timezone || 'America/New_York',
                 notes: args.notes,
-                clinic_id: clinicId
+                clinic_id: clinicId,
+                visit_mode: args.visit_mode || 'sync_video'
             });
 
             // If duplicate was detected, return the duplicate response
@@ -2347,6 +2450,7 @@ class RetellWebSocketHandler {
     }
 
     // Handle get_available_slots function
+    // W3-S5.4: Pass call_id for session context (detected_language, patient state)
     async handleGetAvailableSlots(callId, args) {
         try {
             const clinicId = this.getClinicId(callId);
@@ -2363,7 +2467,8 @@ class RetellWebSocketHandler {
                 provider: args.provider || null,
                 practitioner_id: args.practitioner_id || null,
                 timezone: args.timezone || 'America/New_York',
-                clinic_id: clinicId
+                clinic_id: clinicId,
+                call_id: callId
             });
 
             return response.data;
@@ -2725,7 +2830,12 @@ class RetellWebSocketHandler {
         }
     }
 
-    // Handle end_call function (for sales agent)
+    /**
+     * Handle end_call function (K-2: clarify usage).
+     * PATIENT AGENT: Used by Kelly to gracefully end a patient call (e.g. after scheduling).
+     * SALES AGENT: Used to update lead pipeline stage and close the call.
+     * Both agents register this; the connection's callMetadata.agent_type distinguishes them.
+     */
     async handleEndCall(callId, args) {
         try {
             const connection = this.activeConnections.get(callId);

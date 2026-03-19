@@ -33,7 +33,7 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 | A2 | Configure root domain | Run `./scripts/add-root-domain.sh` or add `doclittle.site` in Azure Portal |
 | A3 | DNS (IONOS or registrar) | A record for `doclittle.site` → Azure App Service outbound IP or ALIAS to `doclittle.azurewebsites.net` |
 | A4 | SSL for root domain | `az webapp config ssl create` then `ssl bind` for `doclittle.site` (see [QUICK_DEPLOYMENT_GUIDE.md](../docs/deployment/guides/basic/QUICK_DEPLOYMENT_GUIDE.md)) |
-| A5 | Tenant subdomains SSL | Azure managed certs = root only. Use [SUBDOMAIN_SSL_FIX.md](../docs/deployment/dns/SUBDOMAIN_SSL_FIX.md): Cloudflare (recommended) or wildcard cert |
+| A5 | Tenant subdomains SSL | Azure managed certs = root only. Use [TENANT_AND_DNS_SETUP.md](../docs/deployment/dns/TENANT_AND_DNS_SETUP.md): Cloudflare (recommended) or wildcard cert |
 
 ### 1.2 Azure Domain Service (Tenant Subdomains)
 
