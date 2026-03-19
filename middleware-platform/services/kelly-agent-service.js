@@ -45,11 +45,25 @@ const GROQ_MODEL = process.env.KELLY_GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GROQ_FALLBACK_MODEL = process.env.KELLY_GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
 
 // Max history turns to send (token budget)
-const MAX_HISTORY_TURNS = 20;
+const MAX_HISTORY_TURNS = parseInt(process.env.KELLY_MAX_HISTORY_TURNS || '12', 10);
+
+// Hard cap to prevent large triage/RAG history from pushing the Groq request over TPM limits.
+const MAX_HISTORY_CONTENT_CHARS_VOICE = parseInt(process.env.KELLY_HISTORY_CONTENT_CHARS_VOICE || '1200', 10);
+const MAX_HISTORY_CONTENT_CHARS_CHAT = parseInt(process.env.KELLY_HISTORY_CONTENT_CHARS_CHAT || '2000', 10);
+
+function _truncateForLLM(content, maxChars) {
+  const s = content == null ? '' : String(content);
+  if (!maxChars || s.length <= maxChars) return s;
+  return s.slice(0, maxChars) + '…';
+}
 
 // Max tool call iterations per turn (prevents infinite loops)
-// Raised to 10 so Kelly can complete multi-step flows (triage → slots → insurance → schedule) and return a reply
-const MAX_TOOL_ITERATIONS = 10;
+// Default lowered to reduce Groq token-rate-limit pressure during multi-step booking.
+const MAX_TOOL_ITERATIONS = parseInt(process.env.KELLY_MAX_TOOL_ITERATIONS || '8', 10);
+
+// Token budget: lower defaults reduce Groq TPM errors while still allowing tool calling.
+const KELLY_VOICE_MAX_TOKENS = parseInt(process.env.KELLY_VOICE_MAX_TOKENS || '200', 10);
+const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300', 10);
 
 // ─────────────────────────────────────────────────────────────
 // Kelly system prompt (the full medical-assistant persona)
@@ -74,6 +88,34 @@ You help patients:
 - If they say "nataka kuongea na daktari" (I want to talk to a doctor in Swahili), respond in Swahili and route them to booking.
 ${patientName ? `- The patient's name is ${patientName}. Use it naturally.` : ''}
 
+## Multilingual Symptom Triggers (Triage Required)
+Treat any of these as symptom/medical-concern triggers (not “routine booking”), and run OPQRST + run_triage_rag before slots:
+- Spanish examples: "me duele", "tengo dolor", "tengo fiebre", "me falta el aire", "tengo náuseas"
+- Swahili examples: "maumivu", "inauma", "homa", "kikohozi", "kushindwa kupumua", "kichefuchefu"
+- If you detect symptom language in the caller’s language, do NOT skip triage.
+
+## Triage Trigger Rules (Hard Policy)
+- If the patient reports ANY symptom or medical concern (including when they say "I just want to book" or "general visit"), you MUST collect OPQRST and call run_triage_rag before calling get_available_slots.
+- Only skip triage for clearly routine/annual/admin visits with NO current symptom or medical concern.
+
+## Conversation State Machine (Tool Ordering)
+You MUST follow these states for every conversation:
+
+### State A: Pre-triage
+- Allowed tools: get_triage_session, store_triage_opqrst, store_triage_rich_intake, request_document_upload, query_patient_records (records Q&A only), run_triage_rag.
+- Forbidden tools: get_available_slots, collect_insurance, schedule_appointment, create_appointment_checkout, verify_checkout_code.
+
+### State B: Triage-in-progress
+- Allowed tools: store_triage_opqrst, store_triage_rich_intake, get_triage_session, run_triage_rag, request_document_upload.
+- Forbidden tools: get_available_slots, collect_insurance, schedule_appointment, create_appointment_checkout, verify_checkout_code.
+
+### State C: Triage-complete
+- Allowed tools: get_available_slots → collect_insurance → schedule_appointment → payment tools.
+- Hard rule: do NOT call get_available_slots or schedule_appointment until triage is complete (OPQRST + run_triage_rag done, and rag_confidence is not low).
+
+### Safety override
+- If emergency protocol triggers (detectRedFlags or safety_screen), you MUST stop and you MUST NOT call any scheduling/slot/payment tools.
+
 ## History of Present Illness (HPI) — OPQRST (W1-S1.5)
 You MUST complete triage BEFORE calling get_available_slots. Collect OPQRST in order:
 1. **Onset**: "When did this start?"
@@ -91,15 +133,15 @@ Store each answer via store_triage_opqrst immediately — do not wait.
 
 ## Meds + Allergies (non-negotiable)
 "Are you on any medications?" — Critical for differential (e.g. antipsychotic → medication-induced hyperprolactinemia). Always ask.
-"Any drug or food allergies?" — Non-negotiable before routing. Store via store_triage_opqrst.
+"Any drug or food allergies?" — Non-negotiable before routing. Collect now; store later via store_triage_rich_intake.
 
-## Family History (FHx) / Social History (SHx)
+## Family History (FHx) / Social History (SHx) — collect AFTER specialty deep-dive
 - **Cardiology**: "Any family history of heart disease or heart attack before 60?"
 - **Oncology**: FHx colon, breast, prostate cancer when relevant.
-- **Hepatology/Psychiatry**: CAGE-4 alcohol screen — see below. Store alcohol_cage_score 0–4; ≥2 = positive.
+- **Hepatology/Psychiatry**: CAGE-4 alcohol screen — see below. Collect (0–4); ≥2 = positive, then store later via store_triage_rich_intake.
 
 ## Specialty-Specific Deep-Dive (W1-S1.6, W1-S1.7)
-**CRITICAL:** After run_triage_rag suggests a specialty, ask specialty-specific questions, store via store_triage_opqrst, then call run_triage_rag again with full combined history.
+**CRITICAL:** After you collect OPQRST + medications + known conditions + allergies, make a first run_triage_rag call to identify the most likely specialty. Then ask specialty-specific deep-dive questions. If any answers belong in OPQRST, store them via store_triage_opqrst. After that, collect family/social history (incl. alcohol/smoking/occupation), call store_triage_rich_intake, then call run_triage_rag again with full combined context.
 - **Hepatology/GI**: Alcohol use? Meds/supplements? Prior liver tests (ALT, AST, ultrasound)?
 - **Cardiology**: Family heart disease? Prior ECG/echo? Current cardiac meds?
 - **Dermatology**: How long? Spreading? New skincare products or exposures?
@@ -111,6 +153,23 @@ For mood, anxiety, depression, PTSD, ADHD, bipolar: Do NOT ask "does it spread a
 - **PHQ-2**: "Over the last 2 weeks, have you felt little interest or pleasure? Down, depressed, or hopeless?"
 - **GAD-2**: "Over the last 2 weeks, have you felt nervous or on edge? Unable to stop worrying?"
 - Prior treatment: meds, therapy, psychiatrist.
+
+## OPQRST Adaptation for Non-Pain Complaints (T16)
+When the complaint is NOT classic pain (e.g. rash/skin, fatigue/endocrine, respiratory, psychiatry), adapt the OPQRST fields like this:
+- **Rashes / skin**
+  - Severity 1–10 = itch/burning intensity and/or extent (small patch = low; rapidly spreading, painful, blistering = high).
+  - Radiation = does it spread to other body areas?
+  - Provocation = new skincare products, exposures, new meds, allergens.
+- **Fatigue / endocrine**
+  - Severity 1–10 = impact on daily function (able to do normal activities = low; unable to function = high).
+  - Quality = tiredness vs weakness vs sleepiness; any heat/cold intolerance if relevant.
+  - Radiation = does it affect multiple systems (sleep, energy, weight change)?
+- **Respiratory (breathing/cough)**
+  - Severity 1–10 = breathing difficulty and how limited you are (mild cough = low; cannot speak full sentences or severe breathlessness = high).
+  - Quality = dry vs wheezy vs wet cough; tightness/pressure feeling.
+  - Timing = how long the breathing symptom has lasted and whether it’s constant or comes/goes.
+- **Psychiatry**
+  - Severity 1–10 = distress/impairment (how hard it is to function), and you must still run the Safety Screen when mental health is in scope.
 
 ## Safety Screen — Columbia Protocol (M-S1.C)
 For mental health OR when RAG suggests psychiatry: Ask these 2 questions. Store yes/no via safety_screen_q1, safety_screen_q2.
@@ -128,9 +187,18 @@ If ANY of these are present → IMMEDIATELY say: "This sounds like a medical eme
 - Active seizure or unconscious person
 - Overdose
 
+Safety precedence: once emergency protocol triggers, you MUST NOT call get_available_slots or schedule_appointment (or any insurance/payment tools) for the rest of the conversation.
+
+## Mixed-Intent Ordering (T17)
+For any symptomatic case:
+- Finish triage (run_triage_rag and any required deep-dive + critical_unknowns follow-ups) before booking.
+- If the patient asks about booking/insurance while triage is incomplete, prioritize safety/triage first.
+- Intent precedence: safety/emergency → triage → booking → insurance → billing.
+
 ## Specialist Routing
 After triage, use the RAG tools to determine the right specialty — DO NOT ask the patient "which specialist do you want?" They don't know. You figure it out from symptoms.
 When run_triage_rag returns secondary_specialties (2+ differentials point to different specialists), the patient_friendly_summary will say "you may need both X and Y". Say that to the patient and ask which they'd like to book first.
+- If secondary_specialties is non-empty, default to booking the primary specialty first, and offer the secondary specialty as an optional additional review after the primary visit.
 - Chest/heart symptoms → Cardiology
 - Skin rashes, lesions → Dermatology
 - Mental health, mood, anxiety → Psychiatry
@@ -143,11 +211,18 @@ When run_triage_rag returns secondary_specialties (2+ differentials point to dif
 If the patient mentions a rash, skin condition, ECG result, lab result, or any visual symptom:
 - Call request_document_upload with the reason (e.g. "skin rash photo", "ECG report")
 - Halt the triage flow until they upload — say: "I'll pause here. Please upload your [reason] using the button. Once you've uploaded, tell me and we'll continue."
-- When they say "I've uploaded" or similar, continue triage. The upload will be fed into run_triage_rag automatically.
+- When they say "I've uploaded" or similar:
+  - Call get_triage_session first and check upload state:
+    - If media_received is 1 (or true): do NOT request upload again; continue OPQRST/rich intake collection if anything is still missing.
+    - If media_received is 0 (or false): request_document_upload again (the patient may not have uploaded successfully yet).
+  - After you have an uploaded state (media_received=1), call run_triage_rag again with full context (including uploaded content).
+  - Only after triage-complete can you proceed to get_available_slots and scheduling.
 - For voice: "I'll send you a link to upload your documents."
 
 ## Patient Records (M-Doc.3)
 When the patient asks about their own records — "explain my labs", "what did my last visit say", "what do my results mean", "what did the doctor find" — call query_patient_records with their question. This searches their uploaded documents and returns a patient-friendly answer. If they have no documents yet, explain they can upload and ask again.
+
+Hard rule: query_patient_records is ONLY for Q&A about existing labs/last visits. Never use it to handle a new complaint with symptoms; new complaints must go through OPQRST + run_triage_rag first.
 
 ## Async vs Sync UX Script (gap9)
 When offering options, explain the tradeoff:
@@ -162,13 +237,16 @@ Say: "Would you prefer the lower-cost review within a few hours, or a live video
 4. Confirm insurance with collect_insurance tool
 5. Find available slots with get_available_slots (MUST run triage first; pass specialty from run_triage_rag)
 6. If kelly_script is in the slot result, say it to the patient (e.g. language match decay)
+6b. If the slot result includes secondary_specialties, offer an optional additional review for those secondary specialties after the primary visit (ask which they want).
 7. Confirm slot with patient
 8. Collect email
 9. Schedule with schedule_appointment (practitioner_id from the slot is REQUIRED)
 10. Handle payment
 
 ## gap12: Before run_triage_rag — assemble OPQRST from session
-Call get_triage_session first. Merge stored onset, provocation, quality, radiation, severity, timing, associated_sx with what the patient just said. Pass the complete OPQRST and rich intake to run_triage_rag.
+Call get_triage_session first. Merge stored onset, provocation, quality, radiation, severity, timing, associated_sx with what the patient just said. For the first run_triage_rag pass, also pass the medications/known conditions/allergies you collected in this step (even before you call store_triage_rich_intake). For the second pass (after store_triage_rich_intake), include full rich intake from session + any new clarifications.
+
+Session continuity rule (resume): if the conversation is resuming, you MUST summarize what you already stored (OPQRST + rich intake) and ask ONLY for missing pieces before calling run_triage_rag again.
 
 ## critical_unknowns (M-S1.D)
 When run_triage_rag returns critical_unknowns (e.g. "alcohol history", "CAGE not done"), ask those questions before routing. Store answers via store_triage_opqrst, then call run_triage_rag again with full history.
@@ -341,7 +419,7 @@ const KELLY_TOOLS = [
     type: 'function',
     function: {
       name: 'store_triage_opqrst',
-      description: 'Store OPQRST and rich intake. Call after EACH material clinical answer — do not wait until the end. Supports partial updates (e.g. only onset, or only medications).',
+      description: 'Store OPQRST (symptom HPI). Call after EACH material OPQRST answer — do not wait until the end. Use `store_triage_rich_intake` for meds/allergies/PMH/FHx/social context.',
       parameters: {
         type: 'object',
         properties: {
@@ -374,6 +452,29 @@ const KELLY_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'store_triage_rich_intake',
+      description: 'Store non-OPQRST rich intake (meds, allergies, PMH, FHx/SHx). Merge into triage_sessions for the current session.',
+      parameters: {
+        type: 'object',
+        properties: {
+          session_id: { type: 'string', description: 'Current session_id (optional; use context if omitted)' },
+          medications: { type: 'array', items: { type: 'string' }, description: 'Medications list' },
+          allergies: { type: 'array', items: { type: 'string' }, description: 'Allergies list' },
+          prior_diagnoses: { type: 'array', items: { type: 'string' }, description: 'Known conditions list' },
+          prior_workups: { type: 'string', description: 'Prior tests (ECG, labs, imaging)' },
+          family_history: { type: 'string', description: 'Family medical history' },
+          alcohol_use: { type: 'string', description: 'Alcohol use description' },
+          smoking_status: { type: 'string', description: 'Smoking status' },
+          substance_use: { type: 'string', description: 'Other substance use' },
+          occupation: { type: 'string', description: 'Occupation (incl. exposures if relevant)' },
+          critical_unknowns: { type: 'array', items: { type: 'string' }, description: 'Missing critical history items from triage' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_triage_rag',
       description: 'Analyze symptoms to determine specialty, urgency, safety. Call after collecting OPQRST and (when relevant) rich intake. Merge get_triage_session + current turn. When result includes low_confidence or suggested_next_step, ask one more clarifying question then call again — do NOT proceed to get_available_slots. After specialty deep-dive, call again with full history.',
       parameters: {
@@ -382,7 +483,7 @@ const KELLY_TOOLS = [
           symptom_text: { type: 'string', description: 'Full symptom description' },
           onset: { type: 'string' },
           quality: { type: 'string' },
-          severity: { type: 'number', description: '1-10' },
+          severity: { oneOf: [{ type: 'number' }, { type: 'string' }], description: '1-10 or "unknown"' },
           radiation: { type: 'string' },
           timing: { type: 'string' },
           associated_sx: { type: 'string' },
@@ -487,11 +588,24 @@ class KellyAgentService {
       preferredLanguage = this._detectPreferredLanguage(history, message);
       if (preferredLanguage) {
         if (db.upsertKellySessionLanguage) db.upsertKellySessionLanguage(sessionId, preferredLanguage);
-        if (db.upsertTriageSession) db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+        // Do *not* use upsertTriageSession here: it overwrites triage gating/flags
+        // (media_received, opqrst_complete, triage_complete, etc.) with defaults when
+        // only detected_language is provided.
+        try {
+          db.db?.prepare('UPDATE triage_sessions SET detected_language = ? WHERE session_id = ?').run(preferredLanguage, sessionId);
+        } catch (_) {
+          // Fallback to legacy upsert only if direct update is unavailable.
+          if (db.upsertTriageSession) db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+        }
       }
     } else if (db.upsertTriageSession) {
       // M-S1.E: Sync detected_language to triage_sessions on each turn (prevent drift)
-      db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+      try {
+        db.db?.prepare('UPDATE triage_sessions SET detected_language = ? WHERE session_id = ?').run(preferredLanguage, sessionId);
+      } catch (_) {
+        // Last-resort fallback
+        db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+      }
     }
 
     // ── 3. Build context ──────────────────────────────────────
@@ -519,6 +633,34 @@ class KellyAgentService {
       nextStep = loopResult.next_step;
       nextChips = loopResult.next_chips;
       chipsDisplay = loopResult.chips_display;
+
+      // Upload pause/resume guardrail:
+      // If media has already been received for this triage session but the LLM keeps asking
+      // for uploads anyway, re-run `run_triage_rag` server-side to keep UX moving.
+      try {
+        const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+        const mediaReceived =
+          sessionRow &&
+          ((sessionRow.media_received === 1) || (sessionRow.media_received === true));
+        const triageComplete =
+          sessionRow &&
+          ((sessionRow.triage_complete === 1) || (sessionRow.triage_complete === true));
+
+        const assistantStillRequestsUpload = /upload your photo|upload your document|use the upload area|you can upload your photo below/i.test(reply);
+        if (mediaReceived && assistantStillRequestsUpload && !triageComplete) {
+          const triageOut = await KellyToolExecutor.execute(
+            'run_triage_rag',
+            { symptom_text: message },
+            { sessionId, clinicId, patientId, callerPhone, channel }
+          );
+          if (triageOut?.patient_friendly_summary) reply = triageOut.patient_friendly_summary;
+          else if (triageOut?.suggested_next_step) reply = triageOut.suggested_next_step;
+          else reply = 'Thanks for the upload. Let’s continue triage now.';
+          toolsUsed = Array.isArray(toolsUsed) ? [...toolsUsed, 'run_triage_rag'] : ['run_triage_rag'];
+        }
+      } catch (guardErr) {
+        // If the guard fails, keep original LLM reply.
+      }
     } catch (err) {
       console.error('[KellyAgent] LLM loop failed:', err.message);
       const isRateLimit = err.status === 429 || err.statusCode === 429 ||
@@ -558,9 +700,15 @@ class KellyAgentService {
   // ─────────────────────────────────────────────────────────────
   static async _runLLMLoop({ history, context, clinicId, patientId, callerPhone, sessionId, channel }) {
     const groq = getGroq();
+    const maxTurns = channel === 'voice' ? Math.min(8, MAX_HISTORY_TURNS) : MAX_HISTORY_TURNS;
+    const maxChars = channel === 'voice' ? MAX_HISTORY_CONTENT_CHARS_VOICE : MAX_HISTORY_CONTENT_CHARS_CHAT;
+    const prunedHistory = history
+      .slice(-maxTurns)
+      .map(m => ({ role: m.role, content: _truncateForLLM(m.content, maxChars) }));
+
     const messages = [
       { role: 'system', content: buildSystemPrompt(context) },
-      ...history.slice(-MAX_HISTORY_TURNS)
+      ...prunedHistory
     ];
 
     const toolsUsed = [];
@@ -581,7 +729,7 @@ class KellyAgentService {
           tools: KELLY_TOOLS,
           tool_choice: 'auto',
           temperature: 0.3,       // Lower = more consistent medical responses
-          max_tokens: channel === 'voice' ? 200 : 600
+          max_tokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS
         });
       } catch (err) {
         const isRateLimit = (err.status === 429 || (err.message && String(err.message).includes('rate_limit')));
@@ -596,7 +744,7 @@ class KellyAgentService {
               tools: KELLY_TOOLS,
               tool_choice: 'auto',
               temperature: 0.3,
-              max_tokens: channel === 'voice' ? 200 : 600
+              max_tokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS
             });
           } catch (err2) {
             console.error('[KellyAgent] Fallback model also failed:', err2.message);
