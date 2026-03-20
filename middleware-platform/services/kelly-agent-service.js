@@ -2026,6 +2026,9 @@ class KellyAgentService {
     }
   }
 
+  /**
+   * Persist one history message in the bounded per-session transcript.
+   */
   static _appendToHistory(sessionId, role, content) {
     try {
       db.db.prepare(`
@@ -2059,6 +2062,10 @@ class KellyAgentService {
     }
   }
 
+  /**
+   * Handle non-clinical fast intents before entering the LLM tool loop.
+   * Returns a full response object when handled, otherwise null.
+   */
   static _handleFastIntentPrecheck({ intent, message, sessionId, patientId }) {
     if (intent === 'billing') {
       const billingReply = _getBillingReply(message);

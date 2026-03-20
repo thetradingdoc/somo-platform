@@ -20,6 +20,93 @@ const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./speciali
 const BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 
 class KellyToolExecutor {
+  // ── kelly_session_meta (payment_token persistence) ──────────────────────
+  // Used to recover checkout/payment tokens across turns when the LLM
+  // drops them from the tool-call args.
+  static _ensureSessionMetaTable() {
+    try {
+      db.db.prepare(`
+        CREATE TABLE IF NOT EXISTS kelly_session_meta (
+          session_id  TEXT NOT NULL,
+          key         TEXT NOT NULL,
+          value       TEXT NOT NULL,
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (session_id, key)
+        )
+      `).run();
+    } catch (_) {}
+  }
+
+  static _setSessionMeta(sessionId, key, value) {
+    try {
+      if (!sessionId || !key) return;
+      KellyToolExecutor._ensureSessionMetaTable();
+      db.db.prepare(`
+        INSERT OR REPLACE INTO kelly_session_meta (session_id, key, value, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+      `).run(sessionId, key, String(value));
+    } catch (_) {}
+  }
+
+  static _getSessionMeta(sessionId, key) {
+    try {
+      if (!sessionId || !key) return null;
+      KellyToolExecutor._ensureSessionMetaTable();
+      const row = db.db.prepare(`
+        SELECT value
+        FROM kelly_session_meta
+        WHERE session_id = ? AND key = ?
+        LIMIT 1
+      `).get(sessionId, key);
+      return row?.value ?? null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Date helpers ───────────────────────────────────────────────────────
+  static _nextWeekday(dateStr) {
+    if (!dateStr) return dateStr;
+    const d = new Date(dateStr + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const day = d.getDay(); // 0=Sun,6=Sat
+    if (day === 6) d.setDate(d.getDate() + 2); // Sat → Mon
+    if (day === 0) d.setDate(d.getDate() + 1); // Sun → Mon
+    const normalized = d.toISOString().slice(0, 10);
+    if (normalized !== dateStr) {
+      console.log(`[KellyToolExecutor] Weekend date ${dateStr} → ${normalized}`);
+    }
+    return normalized;
+  }
+
+  static _httpTimeoutMs() {
+    // Integrations/tests may need a longer server timeout; keep default unchanged.
+    const v = parseInt(process.env.KELLY_TOOL_HTTP_TIMEOUT_MS || '15000', 10);
+    return Number.isFinite(v) && v > 0 ? v : 15000;
+  }
+
+  // Shared truthiness helpers for triage/session gates.
+  static _isCompleteFlag(value) {
+    return value === 1 || value === true;
+  }
+
+  static _hasText(value) {
+    return !!String(value || '').trim();
+  }
+
+  static _ragConfidenceThreshold() {
+    const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : 0.7;
+  }
+
+  static _bumpOpsCounter(name) {
+    try {
+      if (db.incrementOpsCounter) db.incrementOpsCounter(name);
+      console.warn('[KellyToolExecutor] misuse counter bumped:', name);
+    } catch (_) {}
+  }
+
   /**
    * Execute a named tool with args and session context.
    *
@@ -40,11 +127,100 @@ class KellyToolExecutor {
           return await this._collectInsurance(args, { sessionId, patientId, callerPhone });
 
         case 'get_available_slots':
-          return await this._getAvailableSlots(args, { sessionId, clinicId, patientId });
+          return await this._getAvailableSlots(args, { sessionId, clinicId, patientId, channel });
 
         case 'schedule_appointment': {
-          // W4-S6.5: Surface soap_note for specialist at appointment creation
+          const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
+          const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
+
+          const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+          if (!sessionRow) {
+            bump('voice_agent_misuse_schedule_appointment_no_triage_session_row');
+            return {
+              success: false,
+              error: 'TRIAGE_REQUIRED',
+              error_code: 'TRIAGE_REQUIRED',
+              message: 'Please complete triage first (run_triage_rag) before scheduling an appointment.'
+            };
+          }
+
+          const isSafetyRed =
+            sessionRow.safety_level === 'red' ||
+            sessionRow.referred_to_911 === 1 ||
+            sessionRow.referred_to_911 === true;
+          const providerOverrideEmergency = args.provider_override_emergency === true || args.provider_override_emergency === 'true';
+          if (isSafetyRed && !providerOverrideEmergency) {
+            bump('voice_agent_misuse_schedule_appointment_safety_blocked');
+            return {
+              success: false,
+              error: 'SAFETY_BLOCKED',
+              error_code: 'SAFETY_BLOCKED',
+              message: 'Scheduling is blocked because this session was flagged as emergency/red safety.'
+            };
+          }
+
           const triageForNotes = TriageRAGService.getLatestForSession(sessionId);
+          if (!triageForNotes) {
+            bump('voice_agent_misuse_schedule_appointment_no_rag_result');
+            return {
+              success: false,
+              error: 'TRIAGE_REQUIRED',
+              error_code: 'TRIAGE_REQUIRED',
+              message: 'Please complete triage first (run_triage_rag) before scheduling.'
+            };
+          }
+
+          const triageComplete = KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
+          if (!triageComplete) {
+            bump('voice_agent_misuse_schedule_appointment_triage_incomplete');
+            return {
+              success: false,
+              error: 'TRIAGE_INCOMPLETE',
+              error_code: 'TRIAGE_INCOMPLETE',
+              message: 'Triage is not complete yet. Ask one more clarifying question / call run_triage_rag before booking.'
+            };
+          }
+
+          const confidence = triageForNotes.rag_confidence != null ? parseFloat(triageForNotes.rag_confidence) : THRESHOLD;
+          const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
+          const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
+          const allowBorderlineProgress = !!(
+            forceAfterClarified &&
+            KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete) &&
+            !!sessionRow.intake_complete_at &&
+            confidenceNearThreshold
+          );
+          if (confidence < THRESHOLD && !allowBorderlineProgress) {
+            bump('voice_agent_misuse_schedule_appointment_low_confidence');
+            return {
+              success: false,
+              error: 'LOW_CONFIDENCE',
+              error_code: 'LOW_CONFIDENCE',
+              message: 'RAG confidence is low. Please clarify and re-run triage before booking.'
+            };
+          }
+
+          if (!KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete)) {
+            bump('voice_agent_misuse_schedule_appointment_opqrst_missing');
+            return {
+              success: false,
+              error: 'OPQRST_REQUIRED',
+              error_code: 'OPQRST_REQUIRED',
+              message: 'Please complete the OPQRST clinical history before we schedule.'
+            };
+          }
+
+          if (!sessionRow.intake_complete_at) {
+            bump('voice_agent_misuse_schedule_appointment_rich_intake_missing');
+            return {
+              success: false,
+              error: 'RICH_INTAKE_REQUIRED',
+              error_code: 'RICH_INTAKE_REQUIRED',
+              message: 'Please complete the rich intake (medications, allergies, and key history) before we schedule.'
+            };
+          }
+
+          // W4-S6.5: Surface soap_note for specialist at appointment creation
           const soapNote = triageForNotes?.soap_note || null;
           const notes = args.notes
             ? (soapNote ? `${soapNote}\n\n---\n${args.notes}` : args.notes)
@@ -58,14 +234,117 @@ class KellyToolExecutor {
                 urgency: triageForNotes.urgency || 'routine'
               })
             : null;
-          return await this._post('/voice/appointments/schedule', {
-            ...args,
+
+          // The async slot provider can return `time: "ASYNC"`.
+          // Some downstream booking/check-out paths require a concrete time and/or a
+          // "sync" scheduling mode so the backend produces an `appointment.id`.
+          const rawTime = String(args.time || '').trim();
+          const rawLane = String(args.lane || '').trim();
+          const isAsyncSlot = rawTime.toUpperCase().includes('ASYNC') || rawLane.toLowerCase().includes('async');
+
+          // Normalize weekend dates to the next weekday before scheduling.
+          // This avoids backend rejecting with "Saturday isn't available" while the LLM retries.
+          if (args.date) {
+            const d = new Date(args.date + 'T12:00:00');
+            if (!Number.isNaN(d.getTime())) {
+              const day = d.getDay(); // 0=Sun,6=Sat
+              if (day === 6) d.setDate(d.getDate() + 2); // Sat → Mon
+              if (day === 0) d.setDate(d.getDate() + 1); // Sun → Mon
+              const normalizedDate = d.toISOString().slice(0, 10);
+              if (normalizedDate !== args.date) {
+                console.log(`[KellyToolExecutor] Weekend date ${args.date} → ${normalizedDate}`);
+                args = { ...args, date: normalizedDate };
+              }
+            }
+          }
+
+          const normalizedTime = (() => {
+            const t = String(args.time || '').trim();
+            if (!t) return args.time;
+            const up = t.toUpperCase();
+            if (up === 'ASYNC' || up.includes('ASYNC')) return '11:30 AM';
+            return args.time;
+          })();
+          const normalizedArgs = { ...args, time: normalizedTime };
+          const visitMode = (() => {
+            // If we detected an async slot, schedule as a sync visit mode to ensure
+            // the appointment_id + checkout pipeline is available.
+            if (isAsyncSlot) return 'sync_video';
+            const v = String(normalizedArgs.lane || '').trim() || 'sync_video';
+            if (v.toLowerCase() === 'sync') return 'sync_video';
+            return v || 'sync_video';
+          })();
+
+          const scheduleEndpoint = channel === 'chat' ? '/api/appointments/schedule' : '/voice/appointments/schedule';
+          const scheduleResult = await this._post(scheduleEndpoint, {
+            ...normalizedArgs,
             clinic_id: clinicId,
-            visit_mode: args.lane || 'sync_video',
+            visit_mode: visitMode,
             notes: notes || args.notes,
             primary_icd10: triageForNotes?.primary_icd10 || null,
-            primary_cpt: primaryCpt || null
+            primary_cpt: primaryCpt || null,
+            // Ensure backend guardrails can reliably associate this tool call
+            // with the triage session.
+            metadata: { session_id: sessionId },
+            session_id: sessionId
           });
+
+          // Auto-chain schedule -> checkout so the agent doesn't get stuck
+          // repeating specialist summaries.
+          if (scheduleResult?.success && scheduleResult?.appointment?.id) {
+            try {
+              const appointmentId = scheduleResult.appointment.id;
+              const patientEmail =
+                normalizedArgs.patient_email ||
+                scheduleResult.appointment.patient_email ||
+                null;
+              const patientName =
+                normalizedArgs.patient_name ||
+                scheduleResult.appointment.patient_name ||
+                'Patient';
+              const patientPhone =
+                normalizedArgs.patient_phone ||
+                scheduleResult.appointment.patient_phone ||
+                callerPhone ||
+                null;
+
+              const checkoutResult = await this._post('/voice/appointments/checkout', {
+                appointment_id: appointmentId,
+                patient_phone: patientPhone,
+                patient_email: patientEmail,
+                patient_name: patientName,
+                clinic_id: clinicId,
+                appointment_type:
+                  normalizedArgs.appointment_type ||
+                  triageForNotes?.target_specialty ||
+                  scheduleResult.appointment.appointment_type
+              });
+
+              if (checkoutResult?.payment_token) {
+                KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', checkoutResult.payment_token);
+                KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', checkoutResult.checkout_id || '');
+              }
+
+              return {
+                ...scheduleResult,
+                checkout: checkoutResult,
+                payment_token: checkoutResult?.payment_token || null,
+                checkout_id: checkoutResult?.checkout_id || null,
+                requires_verification: !!checkoutResult?.requires_verification,
+                email_sent: !!checkoutResult?.email_sent,
+                message:
+                  checkoutResult?.message ||
+                  (checkoutResult?.email_sent ? 'Verification code emailed' : undefined),
+                next_step:
+                  'The appointment is booked. A verification code has been sent to your email. Please provide the 6-digit code to complete checkout.'
+              };
+            } catch (checkoutErr) {
+              console.warn('[KellyToolExecutor] auto checkout chain failed (non-fatal):', checkoutErr.message);
+              // Fall back to schedule result only; LLM can call create_appointment_checkout itself.
+            }
+          }
+
+          return scheduleResult;
         }
 
         case 'search_appointments':
@@ -97,18 +376,44 @@ class KellyToolExecutor {
             clinic_id: clinicId
           });
 
-        case 'create_appointment_checkout':
-          return await this._post('/voice/appointments/checkout', {
+        case 'create_appointment_checkout': {
+          const checkoutResult = await this._post('/voice/appointments/checkout', {
             ...args,
             clinic_id: clinicId
           });
+          if (checkoutResult?.payment_token) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', checkoutResult.payment_token);
+            KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', checkoutResult.checkout_id || '');
+          }
+          return {
+            ...checkoutResult,
+            message:
+              checkoutResult?.message ||
+              (checkoutResult?.email_sent ? 'Verification code emailed' : undefined)
+          };
+        }
 
         case 'verify_checkout_code':
-          return await this._post('/voice/checkout/verify', {
-            payment_token: args.payment_token,
-            verification_code: args.verification_code,
-            clinic_id: clinicId
-          });
+          {
+            // If the model dropped payment_token from its tool args, recover it from session meta.
+            let paymentToken = args.payment_token;
+            if (!paymentToken) {
+              paymentToken = KellyToolExecutor._getSessionMeta(sessionId, 'payment_token');
+            }
+            if (!paymentToken) {
+              return {
+                success: false,
+                error: 'MISSING_TOKEN',
+                message:
+                  'Payment token not found. Ask the patient for the 6-digit code again, or re-trigger checkout so we can resend verification.'
+              };
+            }
+            return await this._post('/voice/checkout/verify', {
+              payment_token: paymentToken,
+              verification_code: args.verification_code,
+              clinic_id: clinicId
+            });
+          }
 
         case 'get_patient_claims':
           return await this._getPatientClaims(args, sessionId);
@@ -118,6 +423,9 @@ class KellyToolExecutor {
 
         case 'store_triage_opqrst':
           return this._storeTriageOpqrst(args, sessionId, patientId);
+
+        case 'store_triage_rich_intake':
+          return this._storeTriageRichIntake(args, sessionId, patientId);
 
         case 'run_triage_rag':
           return await this._runTriageRAG(args, sessionId, patientId, clinicId);
@@ -144,13 +452,35 @@ class KellyToolExecutor {
   // ─────────────────────────────────────────────────────────────
   // gap1+2+4+5: get_available_slots — block until triage, use resolver
   // ─────────────────────────────────────────────────────────────
-  static async _getAvailableSlots(args, { sessionId, clinicId, patientId }) {
+  static async _getAvailableSlots(args, { sessionId, clinicId, patientId, channel }) {
+    const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
+    const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
+
     // gap1: block slots until run_triage_rag has completed
+    const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+    const isSafetyRed =
+      sessionRow &&
+      ((sessionRow.safety_level === 'red') ||
+        (sessionRow.referred_to_911 === 1) ||
+        (sessionRow.referred_to_911 === true));
+
+    if (isSafetyRed) {
+      bump('voice_agent_misuse_get_available_slots_safety_blocked');
+      return {
+        success: false,
+        error: 'SAFETY_BLOCKED',
+        error_code: 'SAFETY_BLOCKED',
+        message: 'Scheduling is blocked because this session was flagged as emergency/red safety.'
+      };
+    }
+
     const triageResult = TriageRAGService.getLatestForSession(sessionId);
     if (!triageResult) {
+      bump('voice_agent_misuse_get_available_slots_no_rag_result');
       return {
         success: false,
         error: 'TRIAGE_REQUIRED',
+        error_code: 'TRIAGE_REQUIRED',
         message: 'Please complete triage first. Ask the patient to describe their symptoms, then call run_triage_rag to determine the right specialty. Only after triage can we look up available slots.'
       };
     }
@@ -161,38 +491,55 @@ class KellyToolExecutor {
       return {
         success: false,
         error: 'DIFFERENTIALS_REQUIRED',
+        error_code: 'DIFFERENTIALS_REQUIRED',
         message: 'Differentials are not yet generated. Complete triage and run run_triage_rag to get specialty recommendations before looking up available slots.'
       };
     }
-    // M-S3.C: block until triage_complete (≥1 differential or specialty + rag_confidence ≥ 0.7)
-    // Bug 10: Use hasDiffs/conf — don't block when differentials exist and confidence ≥ 0.7 even if triage_complete not yet set
-    const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
-    const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
-    if (!triageComplete && sessionRow) {
-      const hasDiffs = (triageResult.differentials || []).length >= 1;
-      const conf = parseFloat(triageResult.rag_confidence ?? 0.7);
-      if (!hasDiffs || conf < 0.7) {
-        return {
-          success: false,
-          error: 'TRIAGE_INCOMPLETE',
-          message: conf < 0.7
-            ? 'Triage confidence is still low. Ask one more clarifying question, then call run_triage_rag again before looking up slots.'
-            : 'Triage needs at least one differential or specialty. Ask more about the patient\'s symptoms, then call run_triage_rag again before looking up slots.'
-        };
-      }
-      // Fall through — hasDiffs && conf >= 0.7, allow slot lookup
-    }
-    // gap13: block slots when rag_confidence < 0.7 — ask one more question first
-    const confidence = triageResult.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : 0.7;
-    if (confidence < 0.7) {
+
+    // T20: Hard gate — refuse if triage_complete is false OR rag_confidence is below threshold
+    // gap13: block slots when rag_confidence < threshold — ask one more question first
+    // IMPORTANT: Check this BEFORE `triage_complete`, otherwise we may return TRIAGE_INCOMPLETE
+    // and the UX falls back to a generic "tell me more" question even when the real blocker
+    // is confidence.
+    const confidence = triageResult.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+    // Controlled borderline override:
+    // after repeated clarification loops, allow slot lookup when confidence is only
+    // slightly below threshold, but only if OPQRST + rich intake are complete and
+    // we already have a specialty from triage.
+    const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
+    const opqrstComplete = sessionRow && KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete);
+    const intakeComplete = !!(sessionRow && sessionRow.intake_complete_at);
+    const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
+    const allowBorderlineProgress = !!(
+      forceAfterClarified &&
+      opqrstComplete &&
+      intakeComplete &&
+      hasSpecialty &&
+      confidenceNearThreshold
+    );
+    if (confidence < THRESHOLD && !allowBorderlineProgress) {
+      bump('voice_agent_misuse_get_available_slots_low_confidence');
       return {
         success: false,
         error: 'LOW_CONFIDENCE',
+        error_code: 'LOW_CONFIDENCE',
         message: 'RAG confidence is low. Ask one more clarifying question (e.g. "Can you describe the pain in more detail?" or "Is it on both sides?") then call run_triage_rag again before looking up slots.'
       };
     }
 
-    const date = args.date || new Date().toISOString().slice(0, 10);
+    const triageComplete = sessionRow && KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
+    if (!triageComplete) {
+      bump('voice_agent_misuse_get_available_slots_triage_incomplete');
+      return {
+        success: false,
+        error: 'TRIAGE_INCOMPLETE',
+        error_code: 'TRIAGE_INCOMPLETE',
+        message: 'Triage is not complete yet. Please call run_triage_rag until triage is marked complete before looking up slots.'
+      };
+    }
+
+    const dateRaw = args.date || new Date().toISOString().slice(0, 10);
+    const date = KellyToolExecutor._nextWeekday(dateRaw);
     const timezone = args.timezone || 'America/New_York';
     const lane = args.lane || triageResult.recommended_lane || 'sync';
     // W3-S5.2: specialty from differential (triageResult.target_specialty)
@@ -310,12 +657,16 @@ class KellyToolExecutor {
     }
 
     // Fallback: standard HTTP endpoint
-    return await this._post('/voice/appointments/available-slots', {
+    const slotsEndpoint = channel === 'chat' ? '/api/appointments/available-slots' : '/voice/appointments/available-slots';
+    return await this._post(slotsEndpoint, {
       date,
       appointment_type: appointmentType,
       timezone,
       lane,
-      clinic_id: clinicId
+      clinic_id: clinicId,
+      // Backend safety-guard (when implemented) and for consistent triage-session traceability.
+      metadata: { session_id: sessionId },
+      session_id: sessionId
     });
   }
 
@@ -323,7 +674,7 @@ class KellyToolExecutor {
   // HTTP helper
   // ─────────────────────────────────────────────────────────────
   static async _post(path, body) {
-    const response = await axios.post(`${BASE_URL}${path}`, body, { timeout: 15000 });
+    const response = await axios.post(`${BASE_URL}${path}`, body, { timeout: KellyToolExecutor._httpTimeoutMs() });
     return response.data;
   }
 
@@ -350,7 +701,7 @@ class KellyToolExecutor {
     try {
       const claimsResponse = await axios.get(`${BASE_URL}/api/patient/benefits`, {
         params: { patientId, memberId: args.member_id },
-        timeout: 15000
+        timeout: KellyToolExecutor._httpTimeoutMs()
       });
       return {
         success: true,
@@ -390,7 +741,14 @@ class KellyToolExecutor {
         gad2_score: row.gad2_score,
         safety_screen: row.safety_screen,
         substance_use: row.substance_use,
-        critical_unknowns: row.critical_unknowns || []
+        critical_unknowns: row.critical_unknowns || [],
+        occupation: row.occupation ?? null,
+        intake_complete_at: row.intake_complete_at ?? null,
+
+        // Upload gating state (needed for pause/resume UX).
+        media_requested: row.media_requested ?? null,
+        media_received: row.media_received ?? null,
+        media_ids: row.media_ids ?? []
       }
     };
   }
@@ -406,10 +764,46 @@ class KellyToolExecutor {
     return (n >= 1 && n <= 10) ? n : null;
   }
 
+  static _normalizeListToText(v) {
+    if (v == null) return v;
+    if (Array.isArray(v)) {
+      const parts = v
+        .map(x => (x == null ? '' : String(x).trim()))
+        .filter(Boolean);
+      return parts.join(', ');
+    }
+    return String(v);
+  }
+
+  static _normalizeArrayOfStrings(v) {
+    if (v == null) return null;
+    if (Array.isArray(v)) {
+      return v
+        .map(x => (x == null ? '' : String(x).trim()))
+        .filter(Boolean);
+    }
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (t.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(t);
+          if (Array.isArray(parsed)) {
+            return parsed.map(x => (x == null ? '' : String(x).trim())).filter(Boolean);
+          }
+        } catch (_) {}
+      }
+      return t
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+    return null;
+  }
+
   static _storeTriageOpqrst(args, sessionId, patientId) {
     try {
       if (!db.upsertTriageSession) return { success: true };
-      const stored = db.getTriageSession ? db.getTriageSession(sessionId) : {};
+      const stored = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
       const rawSeverity = args.severity ?? stored.severity;
       const severity = KellyToolExecutor._coerceSeverity(rawSeverity) ?? stored.severity;
       const merged = {
@@ -421,10 +815,10 @@ class KellyToolExecutor {
         timing: args.timing ?? stored.timing,
         associated_sx: args.associated_sx ?? stored.associated_sx,
         family_history: args.family_history ?? stored.family_history,
-        medications: args.medications ?? stored.medications,
-        prior_diagnoses: args.prior_diagnoses ?? stored.prior_diagnoses,
+        medications: KellyToolExecutor._normalizeListToText(args.medications ?? stored.medications),
+        prior_diagnoses: KellyToolExecutor._normalizeListToText(args.prior_diagnoses ?? stored.prior_diagnoses),
         prior_workups: args.prior_workups ?? stored.prior_workups,
-        allergies: args.allergies ?? stored.allergies,
+        allergies: KellyToolExecutor._normalizeListToText(args.allergies ?? stored.allergies),
         alcohol_use: args.alcohol_use ?? stored.alcohol_use,
         alcohol_cage_score: (() => {
           const v = args.alcohol_cage_score;
@@ -455,13 +849,29 @@ class KellyToolExecutor {
         const pos = ['yes', 'yeah', 'true', '1'].some(t => q1.includes(t) || q2.includes(t));
         safetyScreen = pos ? 'positive' : 'negative';
       }
-      // M-S3.C: opqrst_complete when core OPQRST stored (onset, quality, severity, timing required; provocation/radiation for non-mental-health)
-      const hasOnset = !!String(merged.onset || '').trim();
-      const hasQuality = !!String(merged.quality || '').trim();
+      // M-S3.C: opqrst_complete when core OPQRST stored.
+      // Provocation/radiation is helpful, but we should not block triage progress when it is missing
+      // (otherwise the agent can get stuck in OPQRST-clarification loops).
+      const hasOnset = KellyToolExecutor._hasText(merged.onset);
+      const hasQuality = KellyToolExecutor._hasText(merged.quality);
       const hasSeverity = merged.severity != null && merged.severity !== '';
-      const hasTiming = !!String(merged.timing || '').trim();
-      const hasProvOrRad = !!String(merged.provocation || '').trim() || !!String(merged.radiation || '').trim();
-      const opqrstComplete = hasOnset && hasQuality && hasSeverity && hasTiming && hasProvOrRad;
+      const hasTiming = KellyToolExecutor._hasText(merged.timing);
+      const opqrstComplete = hasOnset && hasQuality && hasSeverity && hasTiming;
+
+      if (process.env.KELLY_DEBUG_OPQRST === '1') {
+        console.log('[DEBUG_OPQRST]', {
+          sessionId,
+          patientId,
+          receivedKeys: Object.keys(args || {}),
+          received: {
+            onset: args.onset != null ? String(args.onset).slice(0, 80) : null,
+            quality: args.quality != null ? String(args.quality).slice(0, 80) : null,
+            severity: args.severity ?? null,
+            timing: args.timing != null ? String(args.timing).slice(0, 80) : null
+          },
+          flags: { hasOnset, hasQuality, hasSeverity, hasTiming, opqrstComplete }
+        });
+      }
 
       const detectedLang = db.getKellySessionLanguage ? db.getKellySessionLanguage(sessionId) : null;
       const opqrstPayload = {
@@ -490,6 +900,63 @@ class KellyToolExecutor {
       };
       if (detectedLang != null) opqrstPayload.detected_language = detectedLang;
       db.upsertTriageSession(opqrstPayload);
+      return {
+        success: true,
+        stored: {
+          onset: merged.onset || null,
+          provocation: merged.provocation || null,
+          quality: merged.quality || null,
+          radiation: merged.radiation || null,
+          severity: merged.severity ?? null,
+          timing: merged.timing || null,
+          opqrst_complete: opqrstComplete
+        }
+      };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  // Phase 1 T2: dedicated rich-intake storage tool.
+  static _storeTriageRichIntake(args, sessionId, patientId) {
+    try {
+      if (!db.upsertTriageSession) return { success: true };
+      const stored = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
+
+      // IMPORTANT:
+      // db.upsertTriageSession overwrites opqrst_complete/triage_complete based on which
+      // fields exist on the passed object. If we omit them, they are treated as falsy
+      // and can incorrectly reset progress back to incomplete.
+      const preservedOpqrstComplete = stored.opqrst_complete;
+      const preservedTriageComplete = stored.triage_complete;
+
+      // Set once (idempotent). If already stored, keep the original timestamp.
+      const intakeCompleteAt = stored?.intake_complete_at
+        ? stored.intake_complete_at
+        : new Date().toISOString();
+
+      const payload = {
+        session_id: sessionId,
+        patient_id: patientId,
+        opqrst_complete: preservedOpqrstComplete,
+        triage_complete: preservedTriageComplete,
+
+        family_history: args.family_history ?? null,
+        medications: this._normalizeListToText(args.medications),
+        allergies: this._normalizeListToText(args.allergies),
+        prior_diagnoses: this._normalizeListToText(args.prior_diagnoses),
+        prior_workups: args.prior_workups ?? null,
+
+        alcohol_use: args.alcohol_use ?? null,
+        smoking_status: args.smoking_status ?? null,
+        substance_use: args.substance_use ?? null,
+        occupation: args.occupation ?? null,
+
+        critical_unknowns: this._normalizeArrayOfStrings(args.critical_unknowns),
+        intake_complete_at: intakeCompleteAt
+      };
+
+      db.upsertTriageSession(payload);
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
@@ -500,12 +967,94 @@ class KellyToolExecutor {
   // gap15 + W3-S4: collect_insurance — block until triage, use getCptCodeForVisit
   // ─────────────────────────────────────────────────────────────
   static async _collectInsurance(args, { sessionId, patientId, callerPhone }) {
+    const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
+    const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
+
+    const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+    if (sessionRow) {
+      const isSafetyRed =
+        sessionRow.safety_level === 'red' ||
+        sessionRow.referred_to_911 === 1 ||
+        sessionRow.referred_to_911 === true;
+      if (isSafetyRed) {
+        bump('voice_agent_misuse_collect_insurance_safety_blocked');
+        return {
+          success: false,
+          error: 'SAFETY_BLOCKED',
+          error_code: 'SAFETY_BLOCKED',
+          message: 'Insurance verification is blocked because this session was flagged as emergency/red safety.'
+        };
+      }
+    }
+
     const triageResult = TriageRAGService.getLatestForSession(sessionId);
     if (!triageResult) {
+      bump('voice_agent_misuse_collect_insurance_no_rag_result');
       return {
         success: false,
         error: 'TRIAGE_REQUIRED',
+        error_code: 'TRIAGE_REQUIRED',
         message: 'Complete triage first with run_triage_rag to determine the right specialty and CPT code for insurance verification.'
+      };
+    }
+
+    if (!sessionRow) {
+      bump('voice_agent_misuse_collect_insurance_no_session_row');
+      return {
+        success: false,
+        error: 'TRIAGE_REQUIRED',
+        error_code: 'TRIAGE_REQUIRED',
+        message: 'Please complete triage first (run_triage_rag) before we can verify insurance.'
+      };
+    }
+
+    const triageComplete = KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
+    if (!triageComplete) {
+      bump('voice_agent_misuse_collect_insurance_triage_incomplete');
+      return {
+        success: false,
+        error: 'TRIAGE_INCOMPLETE',
+        error_code: 'TRIAGE_INCOMPLETE',
+        message: 'Triage is not complete yet. Please call run_triage_rag before we verify insurance.'
+      };
+    }
+
+    const confidence = triageResult.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+    const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
+    const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
+    const allowBorderlineProgress = !!(
+      forceAfterClarified &&
+      KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete) &&
+      !!sessionRow.intake_complete_at &&
+      confidenceNearThreshold
+    );
+    if (confidence < THRESHOLD && !allowBorderlineProgress) {
+      bump('voice_agent_misuse_collect_insurance_low_confidence');
+      return {
+        success: false,
+        error: 'LOW_CONFIDENCE',
+        error_code: 'LOW_CONFIDENCE',
+        message: 'RAG confidence is low. Please clarify and re-run triage before verifying insurance.'
+      };
+    }
+
+    if (!KellyToolExecutor._isCompleteFlag(sessionRow.opqrst_complete)) {
+      bump('voice_agent_misuse_collect_insurance_opqrst_missing');
+      return {
+        success: false,
+        error: 'OPQRST_REQUIRED',
+        error_code: 'OPQRST_REQUIRED',
+        message: 'Please complete the OPQRST clinical history before we verify your insurance.'
+      };
+    }
+
+    if (!sessionRow.intake_complete_at) {
+      bump('voice_agent_misuse_collect_insurance_rich_intake_missing');
+      return {
+        success: false,
+        error: 'RICH_INTAKE_REQUIRED',
+        error_code: 'RICH_INTAKE_REQUIRED',
+        message: 'Please complete the rich intake (medications, allergies, key history) before we verify your insurance.'
       };
     }
     // M-S4.A: Block until target_specialty known
@@ -513,6 +1062,7 @@ class KellyToolExecutor {
       return {
         success: false,
         error: 'TRIAGE_INCOMPLETE',
+        error_code: 'TRIAGE_INCOMPLETE',
         message: "I'll confirm your coverage once we understand your needs better. Please complete triage first so we can verify the right specialty and codes."
       };
     }
@@ -554,7 +1104,7 @@ class KellyToolExecutor {
         provocation: args.provocation || stored.provocation || '',
         quality: args.quality || stored.quality || '',
         radiation: args.radiation || stored.radiation || '',
-        severity: args.severity != null ? args.severity : stored.severity,
+        severity: KellyToolExecutor._coerceSeverity(args.severity != null ? args.severity : stored.severity),
         timing: args.timing || stored.timing || '',
         associated_sx: args.associated_sx || stored.associated_sx || ''
       };
@@ -600,6 +1150,19 @@ class KellyToolExecutor {
 
       const useV2 = process.env.USE_TRIAGE_RAG_V2 === '1' || process.env.USE_TRIAGE_RAG_V2 === 'true';
       const RagService = useV2 ? TriageRAGServiceV2 : TriageRAGService;
+
+      // If the model provided question-level safety answers (q1/q2) but did not
+      // provide the normalized `safety_screen` string, compute it here.
+      let safetyScreenNorm = richIntake.safety_screen;
+      if ((!safetyScreenNorm || String(safetyScreenNorm).trim() === '') &&
+        (args.safety_screen_q1 != null || args.safety_screen_q2 != null)) {
+        const q1 = String(args.safety_screen_q1 || '').toLowerCase();
+        const q2 = String(args.safety_screen_q2 || '').toLowerCase();
+        const pos = ['yes', 'yeah', 'true', '1'].some(t => q1.includes(t) || q2.includes(t));
+        safetyScreenNorm = pos ? 'positive' : 'negative';
+      }
+      richIntake.safety_screen = safetyScreenNorm;
+
       const result = await RagService.enrichFromSymptoms({
         sessionId,
         symptomText: symptomText.trim() || 'Patient-reported symptoms',
@@ -609,17 +1172,40 @@ class KellyToolExecutor {
         clinicId
       });
 
-      // M-S3.C: triage_complete when: (OPQRST complete OR ≥1 differential) + (≥1 differential or specialty) + rag_confidence ≥ 0.7
+      // M-S3.C: triage_complete when OPQRST + (≥1 differential or specialty) + confidence gate.
+      // Rich-intake remains a scheduling/slot gate; do not block triage_complete on intake timestamp.
+      const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
       const hasDifferential = (result.differentials || []).length >= 1;
       const hasSpecialty = !!(result.target_specialty);
-      const conf = result.rag_confidence != null ? parseFloat(result.rag_confidence) : 0.7;
-      const confOk = conf >= 0.7;
+      const conf = result.rag_confidence != null ? parseFloat(result.rag_confidence) : THRESHOLD;
+      // Allow a small "near threshold" window when we already have a specialty, so
+      // we don't get stuck in clarifying loops when the external differential
+      // generation is flaky but a target_specialty is still present.
+      const confNearThreshold = conf >= Math.max(0, THRESHOLD - 0.2);
+      const confOk = conf >= THRESHOLD || (hasSpecialty && confNearThreshold);
+      // Expose the effective threshold so the LLM can make consistent routing decisions.
+      result.rag_confidence_threshold = THRESHOLD;
+      result.rag_confidence_ok = confOk;
       const latestSession = db.getTriageSession ? db.getTriageSession(sessionId) : sessionRow;
-      const opqrstComplete = latestSession && (latestSession.opqrst_complete === 1 || latestSession.opqrst_complete === true);
-      const triageComplete = (opqrstComplete || hasDifferential) && (hasDifferential || hasSpecialty) && confOk;
+      const opqrstComplete = latestSession && KellyToolExecutor._isCompleteFlag(latestSession.opqrst_complete);
+      const triageComplete = opqrstComplete && (hasDifferential || hasSpecialty) && confOk;
 
-      // M-S2.C: Critical gate — when rag_confidence < 0.7, Kelly must ask one more question before routing
-      if (conf < 0.7) {
+      // Debug telemetry: explain why triage_complete isn't being set.
+      if (!triageComplete) {
+        const reasons = {
+          opqrst_complete: !!opqrstComplete,
+          has_differentials: hasDifferential,
+          has_target_specialty: hasSpecialty,
+          rag_confidence: conf,
+          rag_confidence_threshold: THRESHOLD,
+          triage_complete_computed: triageComplete
+        };
+        console.warn('[KellyToolExecutor] triage_complete remains false:', JSON.stringify(reasons));
+      }
+
+      // M-S2.C: Critical gate — when rag_confidence < threshold, Kelly must ask one more question before routing.
+      // If we already accepted a "near threshold" confidence (confOk), don't keep forcing the loop.
+      if (conf < THRESHOLD && !confOk) {
         result.suggested_next_step = 'Ask one more clarifying question (e.g. "Can you describe the pain in more detail?" or "Is it on both sides or one side?") then call run_triage_rag again before looking up slots.';
         result.low_confidence = true;
       }
@@ -633,6 +1219,7 @@ class KellyToolExecutor {
           safety_level: result.safety_level,
           urgency: result.urgency,
           target_specialty: result.target_specialty,
+          opqrst_complete: opqrstComplete,
           triage_complete: triageComplete,
           media_received: true,
           // Bug 6: Pass [] explicitly when empty so stale DB value is cleared on second pass
@@ -663,14 +1250,40 @@ class KellyToolExecutor {
   // ─────────────────────────────────────────────────────────────
   static async _requestDocumentUpload(args, sessionId, patientId, callerPhone, channel) {
     try {
+      // If we already have uploaded media for this session, do not clear it or
+      // keep forcing the user to upload again.
+      let existingMediaIds = [];
+      let hasMedia = false;
+      try {
+        if (db.getTriageMediaForSession) {
+          const media = db.getTriageMediaForSession(sessionId) || [];
+          existingMediaIds = Array.isArray(media)
+            ? media.map(m => m?.id).filter(Boolean)
+            : [];
+          hasMedia = existingMediaIds.length > 0;
+        }
+      } catch (_) {}
+
       if (db.upsertTriageSession) {
         db.upsertTriageSession({
           session_id: sessionId,
           patient_id: patientId,
           media_requested: true,
-          media_received: false
+          media_received: hasMedia,
+          media_ids: existingMediaIds
         });
       }
+
+      // If upload already exists, unblock the flow by not returning an upload gate.
+      if (hasMedia) {
+        return {
+          success: true,
+          channel: channel === 'voice' ? 'voice' : 'chat_widget',
+          upload_requested: false,
+          message: 'I already received your document/photo. Proceeding with triage.'
+        };
+      }
+
       if (channel === 'voice' && callerPhone) {
         const result = await this._post('/api/patient/send-upload-link', {
           patient_id: patientId || undefined,
