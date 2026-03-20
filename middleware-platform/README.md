@@ -4,6 +4,7 @@
 **Status**: Production Ready
 
 > **Full docs**: [docs/](../docs/README.md) is the source of truth. See [docs/middleware-platform/](../docs/middleware-platform/README.md) for platform-specific docs.
+> **Kelly + Payment runbooks**: see [`middleware-platform/docs/`](./docs/README.md) for implementation standards and operational runbooks.
 
 ## Overview
 
