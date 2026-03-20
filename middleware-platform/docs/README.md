@@ -8,6 +8,7 @@ This folder is the developer-facing source of truth for Kelly and payment flow b
 - `architecture-kelly-payment.md` - end-to-end flow and state transitions
 - `runbook-kelly-loops.md` - triage/booking loop debugging guide
 - `runbook-payment-settlement.md` - checkout, verify, process-payment troubleshooting
+- `test-matrix-handoff.md` - shared chat/voice and payment-rail verification matrix
 
 ## Change policy
 

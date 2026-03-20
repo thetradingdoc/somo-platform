@@ -94,6 +94,7 @@ try {
 const db = require('./database');
 const constants = require('./utils/constants');
 const PaymentOrchestrator = require('./services/payment-orchestrator');
+const PaymentFlowService = require('./services/payment-flow-service');
 const { sanitizeForLog, safeLogRequestBody } = require('./services/payment-security');
 const SMSService = require('./services/sms-service');
 const FHIRService = require('./services/fhir-service');
@@ -3054,17 +3055,27 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       }
     }
 
-    return res.json({
-      success: true,
-      checkout_id: checkoutId,
-      amount: amount,
-      currency: 'USD',
-      payment_token: paymentToken,
-      requires_verification: true,
-      email_sent: !!emailResult.success,
-      billing_email_sent: !!billingEmailResult.success,
-      message: emailResult.success ? 'Verification code emailed' : 'Verification code generated (email not sent)'
+    const checkoutResponse = PaymentFlowService.buildLifecycleResponse({
+      stage: 'checkout_created',
+      nextAction: 'verify_identity_code',
+      message: emailResult.success ? 'Verification code emailed' : 'Verification code generated (email not sent)',
+      checkoutId,
+      paymentToken,
+      requiresVerification: true,
+      extra: {
+        amount,
+        currency: 'USD',
+        email_sent: !!emailResult.success,
+        billing_email_sent: !!billingEmailResult.success
+      }
     });
+    PaymentFlowService.logTransition('checkout_created', {
+      checkout_id: checkoutId,
+      appointment_id: appointmentId,
+      clinic_id: clinicId,
+      merchant_id: merchantId
+    });
+    return res.json(checkoutResponse);
   } catch (error) {
     console.error('❌ Error creating appointment checkout:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -3232,13 +3243,22 @@ app.post('/voice/checkout/verify', async (req, res) => {
     // Task 53: Mark token as identity-verified (required before payment redemption)
     db.updatePaymentToken(token, { status: 'verified', identity_verified_at: new Date().toISOString() });
 
-    return res.json({
-      success: true,
+    const verifyResponse = PaymentFlowService.buildLifecycleResponse({
+      stage: 'identity_verified',
+      nextAction: 'process_payment',
       message: emailResult.success ? 'Payment link emailed successfully' : (emailResult.error || 'Email not sent'),
-      payment_token: token,
-      checkout_id: checkout.id,
-      wallet: walletInfo // Include wallet info in response
+      paymentToken: token,
+      checkoutId: checkout.id,
+      requiresVerification: false,
+      wallet: walletInfo
     });
+    PaymentFlowService.logTransition('identity_verified', {
+      checkout_id: checkout.id,
+      appointment_id: checkout.appointment_id,
+      clinic_id: checkout.clinic_id,
+      merchant_id: checkout.merchant_id
+    });
+    return res.json(verifyResponse);
   } catch (error) {
     console.error('❌ Error verifying email code:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -3737,7 +3757,11 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
 
         // Transfer from patient wallet to provider wallet
         // Get provider wallet (system wallet or merchant wallet)
-        const providerWalletId = process.env.CIRCLE_PROVIDER_WALLET_ID || process.env.CIRCLE_SYSTEM_WALLET_ID;
+        const walletResolution = PaymentFlowService.resolveProviderWalletId({
+          clinicId: checkout.clinic_id || null,
+          merchantId: checkout.merchant_id || null
+        });
+        const providerWalletId = walletResolution.walletId;
 
         if (!providerWalletId) {
           if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
@@ -3825,14 +3849,27 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
           }
         }
 
-        const result = {
-          success: true,
-          payment_method: 'wallet',
-          transfer_id: transferResult.transferId || transferResult.id,
+        const result = PaymentFlowService.buildLifecycleResponse({
+          stage: 'payment_settled',
+          nextAction: 'complete',
+          message: 'Wallet payment settled successfully',
+          checkoutId: resolvedCheckoutId,
+          paymentMethod: 'wallet',
+          transferId: transferResult.transferId || transferResult.id,
+          requiresVerification: false,
+          extra: {
+            appointment_confirmed: !!checkout.appointment_id,
+            wallet_balance_after: walletBalance - chargeAmount,
+            provider_wallet_source: walletResolution.source
+          }
+        });
+        PaymentFlowService.logTransition('payment_settled_wallet', {
           checkout_id: resolvedCheckoutId,
-          appointment_confirmed: checkout.appointment_id ? true : false,
-          wallet_balance_after: walletBalance - chargeAmount
-        };
+          appointment_id: checkout.appointment_id,
+          clinic_id: checkout.clinic_id,
+          merchant_id: checkout.merchant_id,
+          payment_method: 'wallet'
+        });
         if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
         return res.json(result);
 
@@ -3904,13 +3941,19 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     // 1.3: Handle requires_action (3DS)
     if (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_source_action') {
       console.log(`⚠️  Payment requires 3DS: ${paymentIntent.id}`);
-      const result = {
-        success: true,
-        requires_action: true,
-        client_secret: paymentIntent.client_secret,
-        payment_intent_id: paymentIntent.id,
-        checkout_id: resolvedCheckoutId
-      };
+      const result = PaymentFlowService.buildLifecycleResponse({
+        stage: 'payment_action_required',
+        nextAction: 'complete_3ds',
+        message: 'Additional payment authentication is required',
+        checkoutId: resolvedCheckoutId,
+        paymentMethod: 'stripe',
+        paymentIntentId: paymentIntent.id,
+        requiresAction: true,
+        requiresVerification: false,
+        extra: {
+          client_secret: paymentIntent.client_secret
+        }
+      });
       if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
       return res.json(result);
     }
@@ -3963,14 +4006,26 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
       }
     }
 
-    const result = {
-      success: true,
-      payment_method: 'stripe',
-      payment_intent_id: paymentIntent.id,
+    const result = PaymentFlowService.buildLifecycleResponse({
+      stage: authorizedOnly ? 'payment_authorized' : 'payment_settled',
+      nextAction: authorizedOnly ? 'capture_payment' : 'complete',
+      message: authorizedOnly ? 'Payment authorized and awaiting capture' : 'Card payment settled successfully',
+      checkoutId: resolvedCheckoutId,
+      paymentMethod: 'stripe',
+      paymentIntentId: paymentIntent.id,
+      requiresVerification: false,
+      extra: {
+        appointment_confirmed: !!checkout.appointment_id,
+        requires_capture: authorizedOnly
+      }
+    });
+    PaymentFlowService.logTransition(authorizedOnly ? 'payment_authorized_stripe' : 'payment_settled_stripe', {
       checkout_id: resolvedCheckoutId,
-      appointment_confirmed: !!checkout.appointment_id,
-      requires_capture: authorizedOnly
-    };
+      appointment_id: checkout.appointment_id,
+      clinic_id: checkout.clinic_id,
+      merchant_id: checkout.merchant_id,
+      payment_method: 'stripe'
+    });
     if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
     res.json(result);
 
@@ -6371,6 +6426,87 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       primary_cpt: args.primary_cpt || null
     };
 
+    // Phase 5: Backend guardrails (enforce triage_complete/confidence + safety lock)
+    // Only apply when we can identify the triage session (metadata.session_id from caller).
+    const sessionIdForGuard =
+      args?.metadata?.session_id ||
+      args?.session_id ||
+      req.body?.metadata?.session_id ||
+      null;
+    if (sessionIdForGuard && db?.getTriageSession) {
+      const THRESHOLD = (() => {
+        const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : 0.7;
+      })();
+
+      const bump = (name) => {
+        try { db.incrementOpsCounter && db.incrementOpsCounter(name); } catch (_) {}
+      };
+
+      const sessionRow = db.getTriageSession(sessionIdForGuard);
+      const isSafetyRed =
+        sessionRow?.safety_level === 'red' ||
+        sessionRow?.referred_to_911 === 1 ||
+        sessionRow?.referred_to_911 === true;
+      const providerOverrideEmergency =
+        args?.provider_override_emergency === true || args?.provider_override_emergency === 'true';
+
+      const triageResult = require('./services/triage-rag-service').getLatestForSession?.(sessionIdForGuard) || null;
+      const confidence = triageResult?.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+      const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
+
+      if (isSafetyRed && !providerOverrideEmergency) {
+        bump('voice_agent_misuse_http_schedule_safety_blocked');
+        return res.status(403).json({
+          success: false,
+          error: 'SAFETY_BLOCKED',
+          error_code: 'SAFETY_BLOCKED',
+          message: 'Scheduling is blocked because this session was flagged as emergency/red safety.'
+        });
+      }
+
+      if (!triageComplete) {
+        bump('voice_agent_misuse_http_schedule_triage_incomplete');
+        return res.status(403).json({
+          success: false,
+          error: 'TRIAGE_INCOMPLETE',
+          error_code: 'TRIAGE_INCOMPLETE',
+          message: 'Triage is not complete yet. Please complete triage (run_triage_rag) before scheduling.'
+        });
+      }
+
+      if (confidence < THRESHOLD) {
+        bump('voice_agent_misuse_http_schedule_low_confidence');
+        return res.status(403).json({
+          success: false,
+          error: 'LOW_CONFIDENCE',
+          error_code: 'LOW_CONFIDENCE',
+          message: 'RAG confidence is low. Please clarify symptoms and re-run triage before scheduling.'
+        });
+      }
+
+      if (!(sessionRow?.opqrst_complete === 1 || sessionRow?.opqrst_complete === true)) {
+        bump('voice_agent_misuse_http_schedule_opqrst_missing');
+        return res.status(403).json({
+          success: false,
+          error: 'OPQRST_REQUIRED',
+          error_code: 'OPQRST_REQUIRED',
+          message: 'Please complete the OPQRST clinical history before we schedule.'
+        });
+      }
+
+      if (!sessionRow?.intake_complete_at) {
+        bump('voice_agent_misuse_http_schedule_rich_intake_missing');
+        return res.status(403).json({
+          success: false,
+          error: 'RICH_INTAKE_REQUIRED',
+          error_code: 'RICH_INTAKE_REQUIRED',
+          message: 'Please complete the rich intake (medications, allergies, and key history) before we schedule.'
+        });
+      }
+    }
+
     const result = await BookingService.scheduleAppointment(appointmentData);
 
     // Task 10: Auto-checkout fallback when agent skips create_appointment_checkout
@@ -6385,7 +6521,7 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
           patient_name: args.patient_name || result.appointment.patient_name,
           clinic_id: clinicId,
           appointment_type: args.appointment_type
-        }, { timeout: 10000 });
+        }, { timeout: 30000 });
         if (checkoutRes.data && checkoutRes.data.success) {
           result.checkout = {
             checkout_id: checkoutRes.data.checkout_id,
@@ -6858,7 +6994,7 @@ app.post('/api/appointments/schedule', async (req, res) => {
           patient_name: args.patient_name,
           clinic_id: clinicId,
           appointment_type: args.appointment_type
-        }, { timeout: 10000 });
+        }, { timeout: 30000 });
         if (checkoutRes.data && checkoutRes.data.success) {
           result.checkout = {
             checkout_id: checkoutRes.data.checkout_id,
@@ -7074,6 +7210,80 @@ app.post('/voice/insurance/collect', async (req, res) => {
         success: false,
         error: 'Missing required field: member_id'
       });
+    }
+
+    // Phase 5: Backend guardrails (enforce triage_complete/confidence + safety lock)
+    // Only apply when we can identify the triage session via call_id.
+    const guardCallId = args?.call_id || args?.callId || null;
+    if (guardCallId && db?.getTriageSession) {
+      const THRESHOLD = (() => {
+        const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : 0.7;
+      })();
+
+      const bump = (name) => {
+        try { db.incrementOpsCounter && db.incrementOpsCounter(name); } catch (_) {}
+      };
+
+      const sessionRow = db.getTriageSession(guardCallId);
+      const isSafetyRed =
+        sessionRow?.safety_level === 'red' ||
+        sessionRow?.referred_to_911 === 1 ||
+        sessionRow?.referred_to_911 === true;
+      if (isSafetyRed) {
+        bump('voice_agent_misuse_http_collect_insurance_safety_blocked');
+        return res.status(403).json({
+          success: false,
+          error: 'SAFETY_BLOCKED',
+          error_code: 'SAFETY_BLOCKED',
+          message: 'Insurance verification is blocked because this session was flagged as emergency/red safety.'
+        });
+      }
+
+      const triageResult = require('./services/triage-rag-service').getLatestForSession?.(guardCallId) || null;
+      const confidence = triageResult?.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+      const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
+
+      if (!triageComplete) {
+        bump('voice_agent_misuse_http_collect_insurance_triage_incomplete');
+        return res.status(403).json({
+          success: false,
+          error: 'TRIAGE_INCOMPLETE',
+          error_code: 'TRIAGE_INCOMPLETE',
+          message: 'Triage is not complete yet. Please complete triage (run_triage_rag) before verifying insurance.'
+        });
+      }
+
+      if (confidence < THRESHOLD) {
+        bump('voice_agent_misuse_http_collect_insurance_low_confidence');
+        return res.status(403).json({
+          success: false,
+          error: 'LOW_CONFIDENCE',
+          error_code: 'LOW_CONFIDENCE',
+          message: 'RAG confidence is low. Please clarify symptoms and re-run triage before verifying insurance.'
+        });
+      }
+
+      if (!(sessionRow?.opqrst_complete === 1 || sessionRow?.opqrst_complete === true)) {
+        bump('voice_agent_misuse_http_collect_insurance_opqrst_missing');
+        return res.status(403).json({
+          success: false,
+          error: 'OPQRST_REQUIRED',
+          error_code: 'OPQRST_REQUIRED',
+          message: 'Please complete the OPQRST clinical history before verifying insurance.'
+        });
+      }
+
+      if (!sessionRow?.intake_complete_at) {
+        bump('voice_agent_misuse_http_collect_insurance_rich_intake_missing');
+        return res.status(403).json({
+          success: false,
+          error: 'RICH_INTAKE_REQUIRED',
+          error_code: 'RICH_INTAKE_REQUIRED',
+          message: 'Please complete the rich intake (medications, allergies, and key history) before verifying insurance.'
+        });
+      }
     }
 
     // Optional: patient_id to link insurance to patient
@@ -8545,6 +8755,35 @@ app.post('/api/triage/upload', apiLimiter, async (req, res) => {
         console.warn('[triage/upload] createCaseReportMedia:', e.message);
       }
     }
+
+    // Critical: update/create triage_sessions so the agent knows media was received.
+    // Without this, Kelly may keep requesting uploads because `media_received` stays false.
+    try {
+      const mediaIdsJson = JSON.stringify(saved || []);
+      if (db?.db?.prepare) {
+        const r = db.db.prepare(`
+          UPDATE triage_sessions
+          SET media_received = 1,
+              media_requested = 1,
+              media_ids = COALESCE(?, media_ids)
+          WHERE session_id = ?
+        `).run(mediaIdsJson, sessionId);
+
+        // If no triage_session row exists yet for this session_id, create a minimal one.
+        if (r?.changes === 0 && db?.upsertTriageSession) {
+          db.upsertTriageSession({
+            session_id: sessionId,
+            patient_id: patientId || null,
+            media_requested: true,
+            media_received: true,
+            media_ids: saved || []
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[triage/upload] failed to mark media_received:', e.message);
+    }
+
     res.json({ success: true, count: saved.length, message: 'Upload received. You can continue with your description.' });
   });
 });
@@ -13089,6 +13328,7 @@ async function handlePatientTriageMessage(req) {
 
   const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
   const conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
+  const existingFlowState = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
 
   const result = await KellyAgentService.processTurn({
     message,
@@ -13097,10 +13337,13 @@ async function handlePatientTriageMessage(req) {
     clinicId,
     patientId: mappedPatientId,
     patientName: null,
+    patientEmail: email,
     portalSessionId: sid
   });
 
-  if (!result.usedFallback && db?.upsertOrchestrateSession) {
+  // Always persist chat conversation history so the next turn has the right
+  // triage/OPQRST state even when the LLM/tool loop had to fall back.
+  if (db?.upsertOrchestrateSession) {
     const updatedHistory = [
       ...conversationHistory,
       { role: 'user', content: message },
@@ -13126,7 +13369,7 @@ async function handlePatientTriageMessage(req) {
         portal_session_id: sid,
         clinic_id: clinicId,
         conversation_history: updatedHistory,
-        flow_state: result.state || state,
+        flow_state: result.state || existingFlowState || state,
         turn_count: newTurnCount,
         preferred_language: preferredLanguage
       });
@@ -13143,6 +13386,8 @@ async function handlePatientTriageMessage(req) {
       reply,
       session_id: session_id,
       state: result.state || state,
+      // Expose tool usage for E2E metrics harness (used by scripts/run-kelly-tests.sh)
+      toolsUsed: Array.isArray(result.toolsUsed) ? result.toolsUsed : [],
       next_chips: result.next_chips || [],
       chips_display: result.chips_display,
       redirect_to: result.redirect_to,

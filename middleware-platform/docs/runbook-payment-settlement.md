@@ -47,3 +47,13 @@ Use this when checkout appears successful but funds did not move.
 2. Inspect `payment_tokens` for verification status.
 3. Inspect `circle_transfers` for wallet rails.
 4. Inspect logs from `[Payments]` and route-level `/process-payment`.
+
+## Team handoff checklist
+
+Before escalating a payment issue, include:
+
+1. checkout id + payment token status,
+2. rail used (wallet/stripe),
+3. provider wallet resolution source (clinic/merchant/provider/system),
+4. final lifecycle stage observed,
+5. whether audit/ledger hooks executed.

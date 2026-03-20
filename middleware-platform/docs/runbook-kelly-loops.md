@@ -48,3 +48,13 @@ Use this when Kelly repeats OPQRST, specialist summary, or checkout prompts.
 - date/business-day validation retries
 - message conversion payload issues
 - missing session metadata for checkout verification
+
+## Team handoff checklist
+
+Before handing a fix to another developer, include:
+
+1. failing case id and log excerpt,
+2. exact tool sequence observed,
+3. triage session flags at failure point,
+4. whether failure occurs on chat, voice, or both,
+5. command used to verify the fix.

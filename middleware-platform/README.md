@@ -41,6 +41,24 @@ The middleware platform is the core backend API for DocLittle, handling all busi
 - **mastercard-service.js** - Mastercard Agent Pay integration
 - **visa-service.js** - Visa Agent Toolkit integration
 
+## Kelly Triage Lifecycle
+
+1. `KellyAgentService.processTurn` runs emergency and intent pre-checks.
+2. Tool loop stores OPQRST and rich intake signals.
+3. `run_triage_rag` produces specialty + confidence and updates triage state.
+4. Booking sequence: slots -> schedule -> checkout creation -> code verify -> payment process.
+
+See detailed flow in `middleware-platform/docs/architecture-kelly-payment.md`.
+
+## Payment Lifecycle
+
+1. Checkout created (`/voice/appointments/checkout`)
+2. Identity verified (`/voice/checkout/verify`)
+3. Payment processed (`/process-payment` or `/api/payment/process`)
+4. Settlement/audit updates and appointment payment status updates
+
+Important: verification does not move funds; settlement occurs at payment processing stage.
+
 #### Medical Coding
 - **medical-coding-service.js** - Groq AI for ICD-10/CPT extraction
 - **coding-orchestrator.js** - Medical coding workflow

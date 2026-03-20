@@ -8,6 +8,17 @@ const db = require('../database');
 const LedgerService = require('./ledger-service');
 const Metrics = require('./metrics');
 
+function logPaymentEvent(event, context = {}) {
+  const payload = {
+    checkout_id: context.checkout_id || null,
+    appointment_id: context.appointment_id || null,
+    payment_method: context.payment_method || null,
+    amount: context.amount ?? null,
+    external_id: context.external_id || null
+  };
+  console.log(`[Payments] ${event}`, payload);
+}
+
 /**
  * Resolve checkout from request body (supports payment_token or checkout_id)
  * Task 14: Always derive amount from checkout, never trust req.body.amount
@@ -35,6 +46,13 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
   const amt = parseFloat(amount) || parseFloat(checkout.amount) || 0;
   const currency = 'USD';
   const extId = paymentIntentId || transferId || checkout.id;
+  logPaymentEvent('settlement_postprocess_start', {
+    checkout_id: checkout.id,
+    appointment_id: checkout.appointment_id,
+    payment_method: paymentMethod,
+    amount: amt,
+    external_id: extId
+  });
 
   const patientId = (checkout.patient_id) ||
       (checkout.customer_email && (() => {
@@ -191,6 +209,14 @@ async function completePaymentSuccess({ checkout, amount, paymentMethod, payment
       Metrics.increment('payments_appointment_link_error_total');
     }
   }
+
+  logPaymentEvent('settlement_postprocess_complete', {
+    checkout_id: checkout.id,
+    appointment_id: checkout.appointment_id,
+    payment_method: paymentMethod,
+    amount: amt,
+    external_id: extId
+  });
 
   return results;
 }
