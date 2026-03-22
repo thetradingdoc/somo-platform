@@ -4364,6 +4364,7 @@ migrateEmpiTables(); // Enterprise Master Patient Index (FHIR-native financial l
 migrateRcmPremiumTables(); // Premium billed/paid (Safe Harbor 2026)
 migrateRcmAiDecisions(); // Financial agent audit (FHIR-native RCM layer)
 migrateVideoConsultSessions(); // Video consult multimodal AI sessions
+migrateEncounterVitals(); // vc-4: Provider-entered vitals during video consult
 
 /**
  * Migration: Enterprise Master Patient Index (EMPI)
@@ -4732,6 +4733,40 @@ function migrateVideoConsultSessions() {
 }
 
 /**
+ * Migration: encounter_vitals (vc-4) — Provider-entered vitals during video consult
+ */
+function migrateEncounterVitals() {
+  try {
+    const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='encounter_vitals'`).get();
+    if (!exists) {
+      console.log('🔄 Migrating: Creating encounter_vitals table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS encounter_vitals (
+          id TEXT PRIMARY KEY,
+          encounter_id TEXT NOT NULL,
+          appointment_id TEXT,
+          room_id TEXT,
+          blood_pressure_systolic INTEGER,
+          blood_pressure_diastolic INTEGER,
+          heart_rate INTEGER,
+          blood_sugar_mgdl REAL,
+          temperature_f REAL,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_encounter_vitals_encounter ON encounter_vitals(encounter_id);
+        CREATE INDEX IF NOT EXISTS idx_encounter_vitals_appointment ON encounter_vitals(appointment_id);
+        CREATE INDEX IF NOT EXISTS idx_encounter_vitals_room ON encounter_vitals(room_id);
+      `);
+      console.log('✅ Migration complete: encounter_vitals table created');
+    }
+  } catch (e) {
+    console.error('❌ encounter_vitals migration failed:', e.message);
+  }
+}
+
+/**
  * Migration: Create research_bounties table (Pharma Data Requests)
  */
 function migrateResearchBounties() {
@@ -4830,6 +4865,22 @@ function runMigrations() {
   }
 }
 runMigrations();
+
+// Extra safeguard: if rich intake/phase1 columns are missing (common when a prior migration
+// version was applied but didn't include later columns), attempt Phase 1 schema fix again.
+// This keeps triage->booking gate logic from getting stuck on missing `occupation` /
+// `intake_complete_at`.
+try {
+  const triageInfo = db.prepare(`PRAGMA table_info(triage_sessions)`).all();
+  const existingCols = new Set(triageInfo.map(c => c.name));
+  const missing = ['occupation', 'intake_complete_at'].filter(c => !existingCols.has(c));
+  if (missing.length) {
+    console.warn(`[migration] triage_sessions missing: ${missing.join(', ')}. Applying 015...`);
+    require('./migrations/015_triage_rich_intake_phase1_columns').up(db);
+  }
+} catch (e) {
+  console.warn('[migration] triage_sessions column safeguard failed:', e.message);
+}
 
 // mvp-74/75/78: durable notification jobs + leader locks + ops counters
 try {
@@ -5065,6 +5116,29 @@ module.exports = {
       console.error('❌ Failed to upsert orchestrate session:', e.message);
       throw e;
     }
+  },
+
+  /**
+   * Clear triage/RAG/Kelly rows for a chat session_id before the first persisted orchestrate turn.
+   * Prevents get_available_slots from succeeding on leftover triage_rag_results when session IDs
+   * collide or dev DB is dirty. Uses the same sqlite handle as the rest of this module.
+   */
+  wipeChatSessionClinicalState: (session_id) => {
+    if (!session_id) return { ok: false };
+    const sid = String(session_id).trim();
+    if (!sid) return { ok: false };
+    const run = (sql) => {
+      try {
+        db.prepare(sql).run(sid);
+      } catch (_) {
+        /* table may not exist until Kelly first touches it */
+      }
+    };
+    run('DELETE FROM triage_rag_results WHERE session_id = ?');
+    run('DELETE FROM triage_sessions WHERE session_id = ?');
+    run('DELETE FROM kelly_conversation_history WHERE session_id = ?');
+    run('DELETE FROM kelly_session_meta WHERE session_id = ?');
+    return { ok: true };
   },
 
   // Phase 3: Case records
@@ -9106,7 +9180,26 @@ module.exports = {
 
   // Get all appointments (with optional filters) — G-1: require tenant scope
   getAllAppointments(filters = {}) {
-    let query = 'SELECT * FROM appointments WHERE deleted_at IS NULL';
+    let query = `
+      SELECT
+        a.*,
+        (
+          SELECT j.status
+          FROM ehr_sync_jobs j
+          WHERE j.appointment_id = a.id
+          ORDER BY datetime(j.updated_at) DESC, datetime(j.created_at) DESC
+          LIMIT 1
+        ) AS ehr_sync_status,
+        (
+          SELECT j.last_error
+          FROM ehr_sync_jobs j
+          WHERE j.appointment_id = a.id
+          ORDER BY datetime(j.updated_at) DESC, datetime(j.created_at) DESC
+          LIMIT 1
+        ) AS ehr_sync_last_error
+      FROM appointments a
+      WHERE a.deleted_at IS NULL
+    `;
     const params = [];
 
     // Tenant isolation: Require customer_id or clinic_id (G-1) to avoid cross-tenant leak
@@ -9114,30 +9207,38 @@ module.exports = {
     if (!hasTenantScope) return [];
 
     if (filters.customer_id) {
-      query += ' AND customer_id = ?';
+      query += ' AND a.customer_id = ?';
       params.push(filters.customer_id);
     }
     if (filters.clinic_id) {
-      query += ' AND clinic_id = ?';
+      query += ' AND a.clinic_id = ?';
       params.push(filters.clinic_id);
     }
 
     if (filters.status) {
-      query += ' AND status = ?';
+      query += ' AND a.status = ?';
       params.push(filters.status);
     }
 
     if (filters.date) {
-      query += ' AND date = ?';
+      query += ' AND a.date = ?';
       params.push(filters.date);
+    }
+    if (filters.start_date) {
+      query += ' AND a.date >= ?';
+      params.push(filters.start_date);
+    }
+    if (filters.end_date) {
+      query += ' AND a.date <= ?';
+      params.push(filters.end_date);
     }
 
     if (filters.provider) {
-      query += ' AND provider = ?';
+      query += ' AND a.provider = ?';
       params.push(filters.provider);
     }
 
-    query += ' ORDER BY date DESC, time DESC';
+    query += ' ORDER BY a.date DESC, a.time DESC';
 
     const stmt = db.prepare(query);
     const rows = stmt.all(...params);
@@ -10603,6 +10704,113 @@ module.exports = {
     }));
   },
 
+  // --------------------------------------------
+  // External patient ID mapping (Athena/Epic/etc)
+  // --------------------------------------------
+  upsertPatientExternalId({
+    patient_id,
+    source_system,
+    tenant_id,
+    external_patient_id,
+    mrn = null,
+    status = 'active',
+    metadata_json = null
+  }) {
+    if (!patient_id || !source_system || !tenant_id || !external_patient_id) {
+      throw new Error('Missing required fields for external patient ID mapping');
+    }
+    const id = require('crypto').randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO patient_external_ids
+        (id, patient_id, source_system, tenant_id, external_patient_id, mrn, status, metadata_json, created_at, updated_at)
+      VALUES
+        (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(source_system, tenant_id, external_patient_id) DO UPDATE SET
+        patient_id = excluded.patient_id,
+        mrn = excluded.mrn,
+        status = excluded.status,
+        metadata_json = excluded.metadata_json,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(
+      id,
+      patient_id,
+      String(source_system).toLowerCase().trim(),
+      String(tenant_id).trim(),
+      String(external_patient_id).trim(),
+      mrn || null,
+      status || 'active',
+      metadata_json ? (typeof metadata_json === 'string' ? metadata_json : JSON.stringify(metadata_json)) : null
+    );
+    return db.prepare(`
+      SELECT * FROM patient_external_ids
+      WHERE source_system = ? AND tenant_id = ? AND external_patient_id = ?
+      LIMIT 1
+    `).get(String(source_system).toLowerCase().trim(), String(tenant_id).trim(), String(external_patient_id).trim());
+  },
+
+  getPatientExternalIds(patientId) {
+    if (!patientId) return [];
+    return db.prepare(`
+      SELECT * FROM patient_external_ids
+      WHERE patient_id = ?
+      ORDER BY created_at DESC
+    `).all(patientId);
+  },
+
+  getPatientByExternalId(source_system, tenant_id, external_patient_id) {
+    if (!source_system || !tenant_id || !external_patient_id) return null;
+    return db.prepare(`
+      SELECT p.*
+      FROM patient_external_ids x
+      INNER JOIN fhir_patients p ON p.resource_id = x.patient_id
+      WHERE x.source_system = ? AND x.tenant_id = ? AND x.external_patient_id = ?
+        AND p.is_deleted = 0
+      LIMIT 1
+    `).get(
+      String(source_system).toLowerCase().trim(),
+      String(tenant_id).trim(),
+      String(external_patient_id).trim()
+    ) || null;
+  },
+
+  enqueueEhrSyncJob({
+    event_type,
+    patient_id,
+    appointment_id = null,
+    source_system = 'athena',
+    tenant_id = 'clinic-default',
+    payload_json = null,
+    idempotency_key = null,
+    run_at = null
+  }) {
+    if (!event_type || !patient_id) throw new Error('event_type and patient_id are required');
+    const idem = idempotency_key ? String(idempotency_key).trim() : null;
+    if (idem) {
+      const existing = db.prepare(`
+        SELECT id FROM ehr_sync_jobs WHERE idempotency_key = ? LIMIT 1
+      `).get(idem);
+      if (existing?.id) return existing.id;
+    }
+    const id = require('crypto').randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO ehr_sync_jobs
+        (id, event_type, patient_id, appointment_id, source_system, tenant_id, payload_json, idempotency_key, status, attempts, max_attempts, run_at, created_at, updated_at)
+      VALUES
+        (?, ?, ?, ?, ?, ?, ?, ?, 'queued', 0, 5, COALESCE(?, CURRENT_TIMESTAMP), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      id,
+      event_type,
+      patient_id,
+      appointment_id || null,
+      String(source_system).toLowerCase().trim(),
+      String(tenant_id).trim(),
+      payload_json ? (typeof payload_json === 'string' ? payload_json : JSON.stringify(payload_json)) : null,
+      idem,
+      run_at || null
+    );
+    return id;
+  },
+
   // ============================================
   // USAGE TRACKING & LOGGING
   // ============================================
@@ -11235,6 +11443,49 @@ module.exports = {
     } catch (e) {
       console.warn('⚠️  video_consult_transcripts insert failed:', e.message);
       return null;
+    }
+  },
+
+  /** vc-4: Encounter vitals (provider-entered during video consult) */
+  insertEncounterVitals(data) {
+    try {
+      const tbl = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='encounter_vitals'").get();
+      if (!tbl) return null;
+      const id = require('crypto').randomBytes(16).toString('hex');
+      db.prepare(`
+        INSERT INTO encounter_vitals (id, encounter_id, appointment_id, room_id, blood_pressure_systolic, blood_pressure_diastolic,
+          heart_rate, blood_sugar_mgdl, temperature_f, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(
+        id,
+        data.encounter_id || null,
+        data.appointment_id || null,
+        data.room_id || null,
+        data.blood_pressure_systolic ?? null,
+        data.blood_pressure_diastolic ?? null,
+        data.heart_rate ?? null,
+        data.blood_sugar_mgdl ?? null,
+        data.temperature_f ?? null,
+        data.notes || null
+      );
+      return id;
+    } catch (e) {
+      console.warn('⚠️  encounter_vitals insert failed:', e.message);
+      return null;
+    }
+  },
+
+  getEncounterVitals(encounterIdOrRoomId) {
+    try {
+      const tbl = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='encounter_vitals'").get();
+      if (!tbl) return [];
+      const rows = db.prepare(`
+        SELECT * FROM encounter_vitals WHERE encounter_id = ? OR room_id = ? OR appointment_id = ?
+        ORDER BY created_at DESC LIMIT 10
+      `).all(encounterIdOrRoomId, encounterIdOrRoomId, encounterIdOrRoomId);
+      return rows;
+    } catch (e) {
+      return [];
     }
   },
 
@@ -14866,11 +15117,11 @@ module.exports.getCaseReportMedia = function getCaseReportMedia(caseReportId) {
   } catch (_) { return []; }
 };
 
-/** gap10: Get triage media (session-scoped uploads) for RAG context */
+/** gap10: Get triage media (session-scoped uploads) for RAG context + provider portal */
 module.exports.getTriageMediaForSession = function getTriageMediaForSession(sessionId) {
   try {
     return db.prepare(`
-      SELECT id, file_name, context_note, ai_analysis, media_type
+      SELECT id, file_name, context_note, ai_analysis, media_type, mime_type, storage_url
       FROM case_report_media
       WHERE session_id = ? AND (uploaded_during = 'triage' OR uploaded_during IS NULL)
       ORDER BY created_at
@@ -14920,11 +15171,12 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
         family_history, medications, prior_diagnoses, prior_workups, allergies,
         alcohol_use, alcohol_cage_score, smoking_status, phq2_score, gad2_score,
         safety_screen, substance_use, critical_unknowns, soap_note, detected_language,
+        occupation,
         rag_result_id, safety_level, urgency, target_specialty,
         media_requested, media_received, media_ids,
         opqrst_complete, triage_complete, referred_to_911,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(id) DO UPDATE SET
         onset = COALESCE(excluded.onset, onset),
         provocation = COALESCE(excluded.provocation, provocation),
@@ -14948,6 +15200,7 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
         critical_unknowns = COALESCE(excluded.critical_unknowns, critical_unknowns),
         soap_note = COALESCE(excluded.soap_note, soap_note),
         detected_language = COALESCE(excluded.detected_language, detected_language),
+        occupation = COALESCE(excluded.occupation, occupation),
         rag_result_id = COALESCE(excluded.rag_result_id, rag_result_id),
         safety_level = COALESCE(excluded.safety_level, safety_level),
         urgency = COALESCE(excluded.urgency, urgency),
@@ -14972,6 +15225,7 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
       session.smoking_status || null, session.phq2_score ?? null, session.gad2_score ?? null,
       session.safety_screen || null, session.substance_use || null,
       critUnknowns, session.soap_note || null, session.detected_language || null,
+      session.occupation || null,
       session.rag_result_id || null, session.safety_level || null,
       session.urgency || null, session.target_specialty || null,
       session.media_requested ? 1 : 0,
@@ -14981,6 +15235,17 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
       session.triage_complete ? 1 : 0,
       session.referred_to_911 ? 1 : 0
     );
+
+  // Persist `intake_complete_at` without touching the main VALUES placeholder list.
+  // We keep it idempotent: null means "don't overwrite".
+  if (session.intake_complete_at !== undefined) {
+    db.prepare(`
+      UPDATE triage_sessions
+      SET intake_complete_at = COALESCE(?, intake_complete_at)
+      WHERE id = ?
+    `).run(session.intake_complete_at || null, id);
+  }
+
   return id;
 };
 

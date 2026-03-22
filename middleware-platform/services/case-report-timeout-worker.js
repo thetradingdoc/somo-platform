@@ -50,6 +50,10 @@ function run() {
       appointment_id: null,
       transcript_endpoint: `${baseUrl}/internal/communications/${row.encounter_id}/text`,
       transcript_endpoint_token: callbackToken,
+      document_context_endpoint: `${baseUrl}/internal/communications/${row.encounter_id}/document-context`,
+      document_context_endpoint_token: callbackToken,
+      vitals_endpoint: `${baseUrl}/internal/communications/${row.encounter_id}/vitals`,
+      vitals_endpoint_token: callbackToken,
       prior_report_id: null,
       callback_url: `${baseUrl}/api/case-report/callback`,
       callback_token: callbackToken

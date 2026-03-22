@@ -1334,16 +1334,31 @@
 
             // Create and show modal
             const modal = document.createElement('div');
+            modal.className = 'ehr-details-modal-overlay';
             modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;';
             modal.innerHTML = `
-                <div style="background: white; border-radius: 12px; padding: 24px; max-width: 90%; max-height: 90%; overflow-y: auto; position: relative;">
-                    <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="position: absolute; top: 16px; right: 16px; background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 18px;">×</button>
+                <div class="ehr-details-modal-card" style="background: white; border-radius: 12px; padding: 24px; max-width: 90%; max-height: 90%; overflow-y: auto; position: relative;">
+                    <button data-ehr-close="1" style="position: absolute; top: 16px; right: 16px; background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 18px;">×</button>
                     ${ehrDetailsHtml}
                     <div style="margin-top: 16px; text-align: right;">
-                        <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" class="btn btn-primary btn-sm">Close</button>
+                        <button data-ehr-close="1" class="btn btn-primary btn-sm">Close</button>
                     </div>
                 </div>
             `;
+            const closeModal = () => {
+                if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
+                document.removeEventListener('keydown', onEsc, true);
+            };
+            const onEsc = (evt) => {
+                if (evt.key === 'Escape') closeModal();
+            };
+            modal.addEventListener('click', (evt) => {
+                // Close when clicking overlay (outside card) or explicit close buttons.
+                if (evt.target === modal || evt.target.closest('[data-ehr-close="1"]')) {
+                    closeModal();
+                }
+            });
+            document.addEventListener('keydown', onEsc, true);
             document.body.appendChild(modal);
         }
 

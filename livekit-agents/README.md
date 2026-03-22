@@ -89,10 +89,24 @@ Middleware requires `VIDEO_CONSULT_AGENT_SECRET`. Agents must send:
 
 ## Deployment
 
+### Transcription agent (vc-11)
+
+The `transcription_agent.py` provides real-time STT and posts to agent-events:
+
+```bash
+# Dev (single room)
+python transcription_agent.py dev
+
+# Production (worker)
+python transcription_agent.py start
+```
+
+Requires: `DEEPGRAM_API_KEY`, `MIDDLEWARE_URL`, `VIDEO_CONSULT_AGENT_SECRET`.
+
 ### Render / Railway / EC2
 
 1. Set env vars in platform dashboard
-2. Run entrypoint: `python transcription_agent.py` (or your agent module)
+2. Run entrypoint: `python transcription_agent.py start`
 3. Agents connect to LiveKit; rooms auto-discovered or use worker
 
 ### Room naming

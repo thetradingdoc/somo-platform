@@ -112,6 +112,15 @@ router.get('/config', (req, res) => {
             merchant = db.getMerchant(customer.merchant_id);
             if (merchant) {
               tenantType = getTenantType(merchant);
+              // Resolve clinic_id from merchant (for provider calendar, appointments)
+              try {
+                const defaultClinicId = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'clinic-default';
+                const clinicForMerchant = db.db?.prepare?.('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1').get(merchant.id);
+                clinic = clinicForMerchant ? { clinic_id: clinicForMerchant.clinic_id } : (defaultClinicId ? { clinic_id: defaultClinicId } : null);
+              } catch (_) {
+                const fallback = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'clinic-default';
+                clinic = fallback ? { clinic_id: fallback } : null;
+              }
             }
           }
         }

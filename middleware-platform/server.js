@@ -101,8 +101,10 @@ const FHIRService = require('./services/fhir-service');
 const FHIRAdapter = require('./adapters/fhir-adapter');
 const BookingService = require('./services/booking-service');
 const ReminderScheduler = require('./services/reminder-scheduler');
+const KellyToolExecutor = require('./services/kelly-tool-executor');
 const PostgresSyncWorker = require('./services/postgres-sync-worker');
 const ToolCallDlqWorker = require('./services/tool-call-dlq-worker');
+const EhrSyncJobWorker = require('./services/ehr-sync-job-worker');
 const InsuranceService = require('./services/insurance-service');
 const PayerCacheService = require('./services/payer-cache-service');
 const Metrics = require('./services/metrics');
@@ -326,6 +328,25 @@ function requirePatientSession(req, res, next) {
   req.patientSessionId = sessionId;
   req.patientSession = sessionValidation;
   return next();
+}
+
+/** Provider portal auth: X-Provider-Id header or customer_session for provider customers. */
+function requireProviderAuth(req, res, next) {
+  const providerId = req.headers['x-provider-id'];
+  if (providerId) {
+    req.providerId = providerId;
+    return next();
+  }
+  const sessionId = req.cookies?.customer_session;
+  if (sessionId) {
+    const session = db.getCustomerSession && db.getCustomerSession(sessionId);
+    const customer = session && db.getCustomer && db.getCustomer(session.customer_id);
+    if (customer?.email) {
+      req.providerId = customer.email;
+      return next();
+    }
+  }
+  return res.status(401).json({ error: 'Unauthorized. Provide X-Provider-Id header or customer session.' });
 }
 
 function issueCsrfCookie(res) {
@@ -1011,6 +1032,10 @@ app.use(correlationIdMiddleware);
 // Cookie parser
 app.use(cookieParser());
 
+// Stripe webhook — MUST be before express.json() (raw body required for signature verification)
+const { stripeWebhookRouter } = require('./routes/stripe-webhook-handler');
+app.use('/webhooks/stripe', stripeWebhookRouter);
+
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -1385,6 +1410,17 @@ app.use('/unified-dashboard', express.static(getUnifiedDashboardPath(), {
   maxAge: '5m'
 }));
 
+// Serve manifest.webmanifest at root (patient/portal pages use href="../manifest.webmanifest")
+app.get('/manifest.webmanifest', (req, res) => {
+  const manifestPath = getUnifiedDashboardPath('manifest.webmanifest');
+  if (require('fs').existsSync(manifestPath)) {
+    res.type('application/manifest+json');
+    res.sendFile(manifestPath);
+  } else {
+    res.status(404).json({ error: 'Manifest not found' });
+  }
+});
+
 // Serve unified-dashboard static assets
 app.use('/assets', express.static(getUnifiedDashboardPath('assets'), {
   maxAge: '1d' // Cache static assets for 1 day
@@ -1652,6 +1688,10 @@ app.use('/api/credits', creditsRoutes);
 const invoiceRoutes = require('./routes/invoices');
 app.use('/api', invoiceRoutes);
 
+// Merchant settings/profile routes
+const merchantRoutes = require('./routes/merchant');
+app.use('/api/merchant', merchantRoutes);
+
 // Clinic Invoice Routes (Patient Billing)
 // ============================================
 const clinicInvoiceRoutes = require('./routes/invoices-clinic');
@@ -1729,6 +1769,10 @@ app.use('/api/voice-agent', tenantContext({ requireTenant: false }), voiceAgentS
 // Payment routes (payment page and processing)
 const paymentRoutes = require('./routes/payment');
 app.use('/api/payment', botGuard, paymentRoutes);
+
+// Provider case summary API (appointments, SOAP notes, post-visit notes)
+const { providerCaseSummaryRouter } = require('./routes/provider-case-summary-route');
+app.use('/api/provider', requireProviderAuth, providerCaseSummaryRouter);
 
 // Visit pricing API (Task 16)
 const pricingRoutes = require('./routes/pricing');
@@ -3638,10 +3682,14 @@ app.post('/voice/checkout/create', scheduleCheckoutLimiter, async (req, res) => 
   }
 });
 
-// Payment page (Task 11: unified - redirect to /api/payment for single flow)
-app.get('/payment/:token', (req, res) => {
-  return res.redirect(302, `/api/payment/${req.params.token}`);
+// Payment page — Kelly flow: Stripe Elements + webhook-driven settlement
+// Browser requests get HTML; API requests (Accept: application/json) get client_secret
+const { paymentPageRouter } = require('./routes/payment-page-route');
+app.get('/payment/:token', (req, res, next) => {
+  if (req.headers.accept && req.headers.accept.includes('application/json')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'payment-page.html'));
 });
+app.use('/payment', paymentPageRouter);
 
 // Process payment (Task 11, 14: unified flow; amount from checkout)
 app.post('/process-payment', paymentLimiter, async (req, res) => {
@@ -6453,7 +6501,7 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
         args?.provider_override_emergency === true || args?.provider_override_emergency === 'true';
 
       const triageResult = require('./services/triage-rag-service').getLatestForSession?.(sessionIdForGuard) || null;
-      const confidence = triageResult?.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+      const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
       const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
 
       if (isSafetyRed && !providerOverrideEmergency) {
@@ -7242,7 +7290,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
       }
 
       const triageResult = require('./services/triage-rag-service').getLatestForSession?.(guardCallId) || null;
-      const confidence = triageResult?.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+      const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
       const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
 
       if (!triageComplete) {
@@ -8094,6 +8142,82 @@ app.post('/voice/insurance/check-claim-status', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+/**
+ * vc-5: Create claim from DiagnosticReport (video visit case report)
+ * POST /api/claims/create-from-diagnostic-report
+ * Body: { appointment_id: string, icd10?: string[], cpt?: string[], total_amount?: number }
+ */
+app.post('/api/claims/create-from-diagnostic-report', async (req, res) => {
+  try {
+    const { appointment_id: appointmentId, icd10: icd10Override, cpt: cptOverride, total_amount: totalAmountOverride } = req.body || {};
+    if (!appointmentId) return res.status(400).json({ success: false, error: 'appointment_id required' });
+
+    const appt = await db.getAppointment(appointmentId);
+    if (!appt) return res.status(404).json({ success: false, error: 'Appointment not found' });
+    const patientId = appt.patient_id;
+    if (!patientId) return res.status(400).json({ success: false, error: 'Appointment has no patient' });
+
+    let icd10Codes = Array.isArray(icd10Override) ? icd10Override : [];
+    let cptCodes = Array.isArray(cptOverride) ? cptOverride.map(c => ({ code: typeof c === 'string' ? c : c?.code || c })) : [];
+
+    const dr = db.getDiagnosticReportByEncounterId && db.getDiagnosticReportByEncounterId(appointmentId);
+    if (dr?.reasoning_chain) {
+      try {
+        const chain = typeof dr.reasoning_chain === 'string' ? JSON.parse(dr.reasoning_chain) : dr.reasoning_chain;
+        if (chain?.layers) {
+          const codesLayer = chain.layers.find(l => l.codes || l.icd10 || l.cpt);
+          if (codesLayer?.icd10) icd10Codes = icd10Codes.length ? icd10Codes : codesLayer.icd10.map(c => c?.code || c);
+          if (codesLayer?.cpt) cptCodes = cptCodes.length ? cptCodes : (codesLayer.cpt || []).map(c => ({ code: c?.code || c }));
+        }
+      } catch (_) {}
+    }
+    if (icd10Codes.length === 0 || cptCodes.length === 0) {
+      const roomId = `appt-${appointmentId}`;
+      const aiRows = db.db?.prepare?.('SELECT codes FROM video_consult_ai_decisions WHERE room_id = ? ORDER BY created_at DESC LIMIT 1')?.get(roomId);
+      if (aiRows?.codes) {
+        try {
+          const codes = typeof aiRows.codes === 'string' ? JSON.parse(aiRows.codes) : aiRows.codes;
+          if (codes?.icd10?.length) icd10Codes = icd10Codes.length ? icd10Codes : codes.icd10.map(c => c?.code || c);
+          if (codes?.cpt?.length) cptCodes = cptCodes.length ? cptCodes : (codes.cpt || []).map(c => ({ code: c?.code || c }));
+        } catch (_) {}
+      }
+    }
+    if (icd10Codes.length === 0 && cptCodes.length === 0) return res.status(400).json({ success: false, error: 'No ICD/CPT codes; ensure case report or RAG has completed' });
+
+    if (cptCodes.length === 0 && icd10Codes.length > 0) {
+      const DiagnosisCodeMapper = require('./services/diagnosis-code-mapper');
+      cptCodes = DiagnosisCodeMapper.generateServiceLineItemsFromDiagnoses(icd10Codes, {
+        maxServicesPerDiagnosis: 2,
+        dateOfService: appt.date || new Date().toISOString().split('T')[0]
+      }) || [];
+    }
+    const eligibility = db.getEligibilityChecksByPatient?.(patientId) || [];
+    const latest = eligibility[0];
+    const totalAmount = totalAmountOverride ?? (cptCodes.reduce((s, c) => s + (parseFloat(c.charge || c.amount || c.price) || 0), 0) || 150);
+
+    const claimId = `claim-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const claimData = {
+      id: claimId,
+      appointment_id: appointmentId,
+      patient_id: patientId,
+      member_id: latest?.member_id || 'N/A',
+      payer_id: latest?.payer_id || 'N/A',
+      service_code: (cptCodes.map(c => c.code || c.cpt_code).filter(Boolean).join(', ') || '90834').substring(0, 200),
+      diagnosis_code: icd10Codes.map(d => typeof d === 'string' ? d : d.code || d).join(', ').substring(0, 200),
+      total_amount: totalAmount,
+      copay_amount: latest?.copay_amount || 0,
+      insurance_amount: totalAmount - (latest?.copay_amount || 0),
+      status: 'draft',
+      response_data: JSON.stringify({ createdFrom: 'diagnostic-report', appointmentId })
+    };
+    db.createInsuranceClaim(claimData);
+    res.json({ success: true, claimId });
+  } catch (e) {
+    console.error('[claims] create-from-diagnostic-report error:', e);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -11904,14 +12028,36 @@ app.post('/api/admin/insurance/cache/refresh', async (req, res) => {
 // Dashboard: Get all appointments
 app.get('/api/admin/appointments', async (req, res) => {
   try {
+    let clinicId = resolveClinicIdFromRequest(req);
+    if (!clinicId && db.db) {
+      try {
+        const firstClinic = db.db.prepare('SELECT clinic_id FROM clinics LIMIT 1').get();
+        clinicId = firstClinic?.clinic_id || null;
+      } catch (_) { /* clinics table may not exist */ }
+    }
+    // Support both start_date/end_date (YYYY-MM-DD) and start/end (ISO timestamps)
+    let startDate = req.query.start_date;
+    let endDate = req.query.end_date;
+    if (req.query.start && !startDate) {
+      const m = String(req.query.start).match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) startDate = m[1];
+    }
+    if (req.query.end && !endDate) {
+      const m = String(req.query.end).match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m) endDate = m[1];
+    }
     const filters = {
       status: req.query.status,
       date: req.query.date,
-      provider: req.query.provider
+      start_date: startDate,
+      end_date: endDate,
+      provider: req.query.provider,
+      clinic_id: clinicId || undefined
     };
 
     const appointments = db.getAllAppointments(filters);
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.json({
       success: true,
       appointments,
@@ -11930,7 +12076,14 @@ app.get('/api/admin/appointments', async (req, res) => {
 app.get('/api/admin/appointments/upcoming', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
-    const appointments = db.getUpcomingAppointments(limit);
+    let clinicId = resolveClinicIdFromRequest(req);
+    if (!clinicId && db.db) {
+      try {
+        const firstClinic = db.db.prepare('SELECT clinic_id FROM clinics LIMIT 1').get();
+        clinicId = firstClinic?.clinic_id || null;
+      } catch (_) { /* clinics table may not exist */ }
+    }
+    const appointments = db.getUpcomingAppointments(limit, clinicId || null);
 
     res.json({
       success: true,
@@ -11943,6 +12096,162 @@ app.get('/api/admin/appointments/upcoming', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+function ensureAppointmentTodosTable() {
+  try {
+    db.db.exec(`
+      CREATE TABLE IF NOT EXISTS appointment_todos (
+        id TEXT PRIMARY KEY,
+        appointment_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        completed INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (appointment_id) REFERENCES appointments(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_appointment_todos_appointment_id ON appointment_todos(appointment_id);
+    `);
+  } catch (e) {
+    console.warn('⚠️  Could not ensure appointment_todos table:', e.message);
+  }
+}
+
+// Dashboard: read appointment to-do list items
+app.get('/api/admin/appointments/:id/todos', async (req, res) => {
+  try {
+    ensureAppointmentTodosTable();
+    const apptId = String(req.params.id || '').trim();
+    if (!apptId) return res.status(400).json({ success: false, error: 'Missing appointment id' });
+    const rows = db.db.prepare(`
+      SELECT id, content, completed, created_at, updated_at
+      FROM appointment_todos
+      WHERE appointment_id = ?
+      ORDER BY created_at ASC
+    `).all(apptId);
+    return res.json({
+      success: true,
+      todos: (rows || []).map(r => ({
+        id: r.id,
+        content: r.content,
+        completed: !!r.completed,
+        created_at: r.created_at,
+        updated_at: r.updated_at
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error reading appointment todos:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Dashboard: replace appointment to-do list items
+app.put('/api/admin/appointments/:id/todos', async (req, res) => {
+  try {
+    ensureAppointmentTodosTable();
+    const apptId = String(req.params.id || '').trim();
+    if (!apptId) return res.status(400).json({ success: false, error: 'Missing appointment id' });
+    const inputTodos = Array.isArray(req.body?.todos) ? req.body.todos : null;
+    if (!inputTodos) {
+      return res.status(400).json({ success: false, error: 'Body must include todos[]' });
+    }
+    const cleaned = inputTodos
+      .map(t => ({
+        id: String(t?.id || '').trim(),
+        content: String(t?.content || '').trim(),
+        completed: !!t?.completed
+      }))
+      .filter(t => t.id && t.content);
+
+    const delStmt = db.db.prepare(`DELETE FROM appointment_todos WHERE appointment_id = ?`);
+    const insStmt = db.db.prepare(`
+      INSERT INTO appointment_todos (id, appointment_id, content, completed, created_at, updated_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `);
+    const tx = db.db.transaction((rows) => {
+      delStmt.run(apptId);
+      for (const t of rows) insStmt.run(t.id, apptId, t.content, t.completed ? 1 : 0);
+    });
+    tx(cleaned);
+    return res.json({ success: true, count: cleaned.length });
+  } catch (error) {
+    console.error('❌ Error saving appointment todos:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Dashboard: Search known patients by name/phone/email for create-appointment modal.
+app.get('/api/admin/patients/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || req.query.name || '').trim();
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || '10', 10) || 10, 50));
+    if (q.length < 2) {
+      return res.json({ success: true, patients: [] });
+    }
+    const pattern = `%${q.toLowerCase()}%`;
+    const rows = db.db.prepare(`
+      SELECT
+        patient_name AS name,
+        patient_phone AS phone,
+        patient_email AS email,
+        MAX(created_at) AS last_seen_at
+      FROM appointments
+      WHERE patient_name IS NOT NULL
+        AND (
+          LOWER(COALESCE(patient_name, '')) LIKE ?
+          OR LOWER(COALESCE(patient_phone, '')) LIKE ?
+          OR LOWER(COALESCE(patient_email, '')) LIKE ?
+        )
+      GROUP BY patient_name, patient_phone, patient_email
+      ORDER BY last_seen_at DESC
+      LIMIT ?
+    `).all(pattern, pattern, pattern, limit);
+    return res.json({ success: true, patients: rows || [] });
+  } catch (error) {
+    console.error('❌ Error searching patients for admin create-appointment:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// External EHR IDs for patient crosswalk (Athena/Epic/etc)
+app.get('/api/admin/patients/:id/external-ids', async (req, res) => {
+  try {
+    const patientId = String(req.params.id || '').trim();
+    if (!patientId) return res.status(400).json({ success: false, error: 'Missing patient id' });
+    const rows = db.getPatientExternalIds(patientId);
+    return res.json({ success: true, external_ids: rows || [] });
+  } catch (error) {
+    console.error('❌ Error fetching patient external IDs:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/admin/patients/:id/external-ids', async (req, res) => {
+  try {
+    const patientId = String(req.params.id || '').trim();
+    if (!patientId) return res.status(400).json({ success: false, error: 'Missing patient id' });
+    const {
+      source_system,
+      tenant_id,
+      external_patient_id,
+      mrn = null,
+      status = 'active',
+      metadata_json = null
+    } = req.body || {};
+    const row = db.upsertPatientExternalId({
+      patient_id: patientId,
+      source_system,
+      tenant_id,
+      external_patient_id,
+      mrn,
+      status,
+      metadata_json
+    });
+    return res.json({ success: true, external_id: row });
+  } catch (error) {
+    console.error('❌ Error upserting patient external ID:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -12013,6 +12322,32 @@ app.post('/api/admin/appointments/create', async (req, res) => {
       clinic_id: clinicId,
       customer_id: customer_id || null
     });
+
+    // Lifecycle trigger: queue outbound EHR sync (best-effort, non-blocking).
+    try {
+      const createdApptId = result?.appointment?.id;
+      if (createdApptId) {
+        const apptRow = await db.getAppointment(createdApptId);
+        if (apptRow?.patient_id) {
+          db.enqueueEhrSyncJob({
+            event_type: 'appointment_created',
+            patient_id: apptRow.patient_id,
+            appointment_id: createdApptId,
+            source_system: 'athena',
+            tenant_id: apptRow.clinic_id || 'clinic-default',
+            idempotency_key: `appointment_created:${createdApptId}`,
+            payload_json: {
+              appointment_id: createdApptId,
+              patient_name: apptRow.patient_name || null,
+              date: apptRow.date || null,
+              time: apptRow.time || null
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️  Could not enqueue EHR sync job (appointment_created):', e.message);
+    }
 
     res.json(result);
   } catch (error) {
@@ -12260,6 +12595,38 @@ app.get('/api/provider/case-report', async (req, res) => {
   } catch (e) {
     console.error('GET /api/provider/case-report error:', e);
     return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// vc-3: GET /api/provider/diagnostic-report/:appointmentId — completed AI case report (post-visit)
+app.get('/api/provider/diagnostic-report/:appointmentId', async (req, res) => {
+  try {
+    const appointmentId = (req.params.appointmentId || '').toString().trim();
+    if (!appointmentId) return res.status(400).json({ success: false, error: 'appointmentId required' });
+    const row = db.getDiagnosticReportByEncounterId && db.getDiagnosticReportByEncounterId(appointmentId);
+    if (!row) return res.json({ success: true, diagnostic_report: null });
+    const conclusion = row.case_report_text || (row.resource_data?.conclusion) || '';
+    const codes = [];
+    if (row.resource_data?.result) {
+      for (const ref of (row.resource_data.result || [])) {
+        const drRef = typeof ref === 'object' && ref.reference ? ref.reference : '';
+        if (drRef) codes.push(drRef);
+      }
+    }
+    res.json({
+      success: true,
+      diagnostic_report: {
+        id: row.resource_id,
+        encounter_id: row.encounter_id,
+        status: row.status,
+        conclusion,
+        case_report_text: row.case_report_text,
+        created_at: row.created_at
+      }
+    });
+  } catch (e) {
+    console.error('GET /api/provider/diagnostic-report error:', e);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
@@ -12949,7 +13316,7 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
       }
     }
 
-    const appts = encounters.map(enc => {
+    const appts = await Promise.all(encounters.map(async (enc) => {
       const r = enc.resource_data || {};
       const apptId = r.id || enc.resource_id || enc.id;
       const subject = r.subject || {};
@@ -12967,8 +13334,21 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
       const payInfo = pendingByAppt[apptId] || {};
       const startIso = period.start || null;
       const dt = startIso ? new Date(startIso) : null;
-      const date = dt ? dt.toISOString().slice(0, 10) : null;
-      const time = dt ? dt.toISOString().slice(11, 16) : null;
+      // Use appointment.date when available (avoids UTC date-shift; appointments use clinic-local date)
+      let date = null;
+      let time = null;
+      try {
+        const appt = apptId ? await db.getAppointment(apptId) : null;
+        if (appt && appt.date) {
+          date = appt.date;
+          time = appt.time || (dt ? dt.toISOString().slice(11, 16) : null);
+        }
+      } catch (_) {}
+      if (!date) {
+        date = dt ? dt.toISOString().slice(0, 10) : null;
+        time = dt ? dt.toISOString().slice(11, 16) : null;
+      }
+      if (!time && dt) time = dt.toISOString().slice(11, 16);
 
       return {
         id: apptId,
@@ -12989,8 +13369,9 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
         currency: payInfo.currency || 'USD',
         fhir: { encounter_id: apptId }
       };
-    });
+    }));
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.json({ success: true, appointments: appts });
   } catch (error) {
     console.error('❌ Error getting patient appointments:', error);
@@ -13329,6 +13710,17 @@ async function handlePatientTriageMessage(req) {
   const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
   const conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
   const existingFlowState = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
+
+  // Fresh chat session only: wipe stale triage/RAG/Kelly rows when there is no orchestrate
+  // row yet OR turn_count === 0 (first persisted turn). We intentionally do NOT wipe when
+  // turn_count >= 1 even if RAG is missing — that would destroy in-progress triage. The Kelly
+  // test harness uses a new UUID suffix per case run (run-kelly-tests.sh) so session_id does
+  // not collide on shared dev DB.
+  const turns = Number(row?.turn_count ?? 0);
+  const orchestrateEmpty = !row || turns === 0;
+  if (orchestrateEmpty && db?.wipeChatSessionClinicalState) {
+    db.wipeChatSessionClinicalState(session_id);
+  }
 
   const result = await KellyAgentService.processTurn({
     message,
@@ -15441,6 +15833,30 @@ app.get('/api/admin/ehr/connections', async (req, res) => {
   }
 });
 
+// Debug/ops: inspect EHR sync queue (latest first)
+app.get('/api/admin/ehr/sync-jobs', async (req, res) => {
+  try {
+    const status = String(req.query.status || '').trim().toLowerCase();
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || '50', 10) || 50, 200));
+    const rows = status
+      ? db.db.prepare(`
+          SELECT * FROM ehr_sync_jobs
+          WHERE status = ?
+          ORDER BY created_at DESC
+          LIMIT ?
+        `).all(status, limit)
+      : db.db.prepare(`
+          SELECT * FROM ehr_sync_jobs
+          ORDER BY created_at DESC
+          LIMIT ?
+        `).all(limit);
+    res.json({ success: true, jobs: rows || [] });
+  } catch (error) {
+    console.error('Error fetching EHR sync jobs:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get EHR summary for appointment
 app.get('/api/admin/appointments/:id/ehr-summary', async (req, res) => {
   try {
@@ -16804,6 +17220,7 @@ const server = app.listen(PORT, HOST, () => {
   // Start EHR sync service (with error handling)
   try {
     EHRSyncService.start();
+    EhrSyncJobWorker.start();
   } catch (error) {
     console.error('⚠️  Failed to start EHR sync service:', error.message);
     console.log('   EHR sync will be disabled, but server will continue');

@@ -299,6 +299,101 @@
   .case-report-icd span { padding: 2px 8px; border-radius: 6px; background: rgba(99, 102, 241, 0.2); font-size: 11px; }
   .case-report-empty { color: #64748b; font-style: italic; }
 
+  /* vc-6: Telehealth right panel (Vitals, AI, Chart, Actions) */
+  .telehealth-right-panel {
+    width: 300px;
+    min-width: 300px;
+    max-width: 90vw;
+    background: #0f172a;
+    border-radius: 12px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .telehealth-right-panel-header {
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+    font-size: 13px;
+    font-weight: 600;
+    color: #c7d2fe;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .telehealth-right-panel-tab {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    color: #a5b4fc;
+  }
+  .telehealth-right-panel-tab:hover { background: rgba(99, 102, 241, 0.2); }
+  .telehealth-right-panel-tab.active { background: rgba(99, 102, 241, 0.4); color: #e0e7ff; }
+  .telehealth-right-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    font-size: 12px;
+    color: #e2e8f0;
+  }
+  .telehealth-vitals-form input, .telehealth-vitals-form textarea {
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    background: rgba(15, 23, 42, 0.8);
+    color: #e2e8f0;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+  .telehealth-vitals-form label { display: block; font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-bottom: 2px; }
+  .telehealth-vitals-form button {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #6366f1;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .telehealth-vitals-form button:hover { background: #4f46e5; }
+  .telehealth-chart-excerpt {
+    padding: 8px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  .telehealth-actions-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+  }
+  .telehealth-actions-btn.primary { background: #059669; color: white; }
+  .telehealth-actions-btn.primary:hover { background: #047857; }
+  .telehealth-actions-btn.danger { background: #dc2626; color: white; }
+  .telehealth-actions-btn.danger:hover { background: #b91c1c; }
+  .telehealth-actions-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
   /* Mobile layout: hide sidebar, make video UI full-width */
   @media (max-width: 768px) {
     .layout {
@@ -445,6 +540,50 @@
           <button id="endAndClaimBtn" class="btn" style="background:#059669;color:#fff;display:none;">End & Create Claim</button>
         </div>
           </div>
+          <!-- vc-6: Telehealth right panel (Vitals, AI, Chart, Actions) -->
+          <aside id="telehealthRightPanel" class="telehealth-right-panel" aria-label="Telehealth panel">
+            <div id="telehealthPanelAlert" class="telehealth-panel-alert" style="display:none;padding:8px 12px;margin:0;font-size:11px;font-weight:600;background:#7f1d1d;color:#fecaca;border-bottom:1px solid #b91c1c;cursor:pointer;" title="Click to scroll to transcript">
+              <span id="telehealthPanelAlertText">⚠️ High-risk symptom detected</span>
+              <button type="button" id="telehealthPanelAlertDismiss" style="margin-left:8px;padding:2px 6px;font-size:10px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:4px;color:#fecaca;cursor:pointer;">Dismiss</button>
+            </div>
+            <div class="telehealth-right-panel-header">
+              <button type="button" class="telehealth-right-panel-tab active" data-tab="vitals">Vitals</button>
+              <button type="button" class="telehealth-right-panel-tab" data-tab="ai">AI</button>
+              <button type="button" class="telehealth-right-panel-tab" data-tab="chart">Chart</button>
+              <button type="button" class="telehealth-right-panel-tab" data-tab="actions">Actions</button>
+            </div>
+            <div class="telehealth-right-panel-body">
+              <div id="telehealthTabVitals" class="telehealth-tab-content">
+                <form id="telehealthVitalsForm" class="telehealth-vitals-form">
+                  <label>BP Systolic</label>
+                  <input type="number" name="blood_pressure_systolic" placeholder="120" min="60" max="250" step="1">
+                  <label>BP Diastolic</label>
+                  <input type="number" name="blood_pressure_diastolic" placeholder="80" min="40" max="150" step="1">
+                  <label>Heart Rate (bpm)</label>
+                  <input type="number" name="heart_rate" placeholder="72" min="30" max="200" step="1">
+                  <label>Temp (°F)</label>
+                  <input type="number" name="temperature_f" placeholder="98.6" min="90" max="110" step="0.1">
+                  <label>Glucose (mg/dL)</label>
+                  <input type="number" name="blood_sugar_mgdl" placeholder="Optional">
+                  <label>Notes</label>
+                  <textarea name="notes" rows="2" placeholder="Optional notes"></textarea>
+                  <button type="submit">Save Vitals</button>
+                </form>
+                <div id="telehealthVitalsSaved" style="font-size:11px;color:#4ade80;margin-top:8px;display:none;">Saved</div>
+              </div>
+              <div id="telehealthTabAi" class="telehealth-tab-content" style="display:none;">
+                <button type="button" id="telehealthGetSummaryBtn" class="telehealth-actions-btn primary">Get Live Summary</button>
+                <div id="telehealthSummaryText" style="margin-top:8px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word;"></div>
+              </div>
+              <div id="telehealthTabChart" class="telehealth-tab-content" style="display:none;">
+                <div id="telehealthChartContent">Loading chart…</div>
+              </div>
+              <div id="telehealthTabActions" class="telehealth-tab-content" style="display:none;">
+                <button type="button" id="telehealthEndAndClaimBtn" class="telehealth-actions-btn primary">End & Create Claim</button>
+                <button type="button" id="telehealthLeaveBtn" class="telehealth-actions-btn danger">Leave Call</button>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
 
@@ -602,10 +741,115 @@
       });
     }
     initTranscriptPanel();
+
+    function initTelehealthRightPanel() {
+      const panel = document.getElementById('telehealthRightPanel');
+      if (!panel) return;
+      const tabs = panel.querySelectorAll('.telehealth-right-panel-tab');
+      const contents = {
+        vitals: document.getElementById('telehealthTabVitals'),
+        ai: document.getElementById('telehealthTabAi'),
+        chart: document.getElementById('telehealthTabChart'),
+        actions: document.getElementById('telehealthTabActions')
+      };
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const name = tab.getAttribute('data-tab');
+          tabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          Object.keys(contents).forEach(k => {
+            const el = contents[k];
+            if (el) el.style.display = (k === name) ? 'block' : 'none';
+          });
+          if (name === 'chart' && currentRoomName) loadTelehealthChart(currentRoomName);
+        });
+      });
+      const vitalsForm = document.getElementById('telehealthVitalsForm');
+      if (vitalsForm) {
+        vitalsForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!currentRoomName) return;
+          const fd = new FormData(vitalsForm);
+          const body = {};
+          ['blood_pressure_systolic','blood_pressure_diastolic','heart_rate','temperature_f','blood_sugar_mgdl','notes'].forEach(k => {
+            const v = fd.get(k);
+            if (v != null && v !== '') body[k] = isNaN(Number(v)) ? v : Number(v);
+          });
+          try {
+            const res = await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/vitals`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            });
+            const json = await res.json();
+            if (json.success) {
+              const saved = document.getElementById('telehealthVitalsSaved');
+              if (saved) { saved.style.display = 'block'; setTimeout(() => { saved.style.display = 'none'; }, 2000); }
+            }
+          } catch (err) { console.warn('[telehealth] vitals save error', err); }
+        });
+      }
+      document.getElementById('telehealthGetSummaryBtn')?.addEventListener('click', async () => {
+        if (!currentRoomName) return;
+        const btn = document.getElementById('telehealthGetSummaryBtn');
+        const out = document.getElementById('telehealthSummaryText');
+        if (btn) btn.disabled = true;
+        if (out) out.textContent = 'Loading…';
+        try {
+          const res = await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/summary`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+          });
+          const json = await res.json();
+          if (out) out.textContent = json.summary || json.error || 'No summary available (no transcript yet)';
+        } catch (err) {
+          if (out) out.textContent = 'Failed to load summary';
+        }
+        if (btn) btn.disabled = false;
+      });
+      document.getElementById('telehealthEndAndClaimBtn')?.addEventListener('click', () => {
+        if (currentRoomName && currentRoomName.startsWith('appt-')) handleEndAndCreateClaim(currentRoomName);
+      });
+      document.getElementById('telehealthLeaveBtn')?.addEventListener('click', () => {
+        document.getElementById('leaveBtn')?.click();
+      });
+    }
+    initTelehealthRightPanel();
+
+    async function loadTelehealthChart(roomName) {
+      const el = document.getElementById('telehealthChartContent');
+      if (!el) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(roomName)}/patient-chart`, { credentials: 'include' });
+        const json = await res.json();
+        if (!json.success || !json.extracts || json.extracts.length === 0) {
+          el.innerHTML = '<div style="color:#94a3b8;font-size:11px;">No patient documents on file</div>';
+          return;
+        }
+        el.innerHTML = json.extracts.map((e, i) =>
+          '<div class="telehealth-chart-excerpt">' + (e.excerpt || '').replace(/</g, '&lt;').slice(0, 800) + (e.excerpt && e.excerpt.length > 800 ? '…' : '') + '</div>'
+        ).join('');
+      } catch (err) {
+        el.innerHTML = '<div style="color:#f87171;">Failed to load chart</div>';
+      }
+    }
+
+    function dismissRiskBanners() {
+      const rb = document.getElementById('riskBanner');
+      const pa = document.getElementById('telehealthPanelAlert');
+      if (rb) rb.style.display = 'none';
+      if (pa) pa.style.display = 'none';
+    }
     document.getElementById('riskBannerDismiss')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      const rb = document.getElementById('riskBanner');
-      if (rb) rb.style.display = 'none';
+      dismissRiskBanners();
+    });
+    document.getElementById('telehealthPanelAlertDismiss')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissRiskBanners();
     });
 
     function showStatus(msg, type = '') {
@@ -639,21 +883,35 @@
     function showRiskBanner(risk) {
       const banner = document.getElementById('riskBanner');
       const riskPill = document.getElementById('assistantRiskPill');
+      const panelAlert = document.getElementById('telehealthPanelAlert');
+      const panelAlertText = document.getElementById('telehealthPanelAlertText');
       if (riskPill) {
         riskPill.style.display = 'inline';
         riskPill.className = 'risk-pill risk-' + (risk?.level || 'low');
         riskPill.textContent = 'Risk: ' + (risk?.level || 'low');
       }
-      if (!banner) return;
-      if (!risk || !risk.level || risk.level === 'low') { banner.style.display = 'none'; return; }
+      if (!risk || !risk.level || risk.level === 'low') {
+        if (banner) banner.style.display = 'none';
+        if (panelAlert) panelAlert.style.display = 'none';
+        return;
+      }
       const msg = (risk.flags && risk.flags[0]) ? `⚠️ High-risk: ${(risk.flags[0].rule_id || '').replace(/_/g, ' ')} detected` : '⚠️ High-risk symptom detected';
       const textEl = document.getElementById('riskBannerText');
       if (textEl) textEl.textContent = msg;
       if (textEl) textEl.onclick = () => transcriptJumpToLatest();
-      banner.style.display = 'flex';
-      banner.style.background = risk.level === 'high' ? '#7f1d1d' : '#854d0e';
-      banner.style.color = risk.level === 'high' ? '#fecaca' : '#fef3c7';
-      banner.onclick = () => transcriptJumpToLatest();
+      if (banner) {
+        banner.style.display = 'flex';
+        banner.style.background = risk.level === 'high' ? '#7f1d1d' : '#854d0e';
+        banner.style.color = risk.level === 'high' ? '#fecaca' : '#fef3c7';
+        banner.onclick = () => transcriptJumpToLatest();
+      }
+      if (panelAlert && panelAlertText) {
+        panelAlertText.textContent = msg;
+        panelAlert.style.display = 'block';
+        panelAlert.style.background = risk.level === 'high' ? '#7f1d1d' : '#854d0e';
+        panelAlert.style.color = risk.level === 'high' ? '#fecaca' : '#fef3c7';
+        panelAlert.onclick = () => transcriptJumpToLatest();
+      }
     }
 
     function setSseStatus(connected) {
@@ -877,8 +1135,7 @@
       if (sseAbortController) { sseAbortController.abort(); sseAbortController = null; }
       setSseStatus(false);
       clearTranscript();
-      const rb = document.getElementById('riskBanner');
-      if (rb) rb.style.display = 'none';
+      dismissRiskBanners();
       const overlay = document.getElementById('assistantOverlay');
       if (overlay) overlay.style.display = 'none';
       const casePanel = document.getElementById('caseReportPanel');
@@ -1066,23 +1323,41 @@
       else el.textContent = '✓ Connected with ' + remoteCount + ' participant' + (remoteCount > 1 ? 's' : '');
     }
 
-    function handleEndAndCreateClaim(roomName) {
+    async function handleEndAndCreateClaim(roomName) {
       if (!roomName.startsWith('appt-')) return;
-      const appointmentId = roomName.replace(/appt-/, '');
-      if (room) { room.disconnect(); room = null; }
-      const codes = [];
-      document.querySelectorAll('#assistantCodes .assistant-chip-wrap').forEach((wrap) => {
-        if (wrap.style.display !== 'none') {
-          const chip = wrap.querySelector('.assistant-chip');
-          if (chip) { const t = chip.textContent?.trim(); if (t) codes.push(t); }
+      const appointmentId = roomName.replace(/^appt-/, '');
+      const endBtn = document.getElementById('endAndClaimBtn');
+      if (endBtn) { endBtn.disabled = true; endBtn.textContent = 'Ending…'; }
+      try {
+        const res = await fetch(`${API_BASE}/api/video-consult/end-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ room: roomName })
+        });
+        const data = await res.json();
+        let codes = [];
+        if (data.suggested_codes?.icd10?.length) codes = data.suggested_codes.icd10;
+        else {
+          document.querySelectorAll('#assistantCodes .assistant-chip-wrap').forEach((wrap) => {
+            if (wrap.style.display !== 'none') {
+              const chip = wrap.querySelector('.assistant-chip');
+              if (chip) { const t = chip.textContent?.trim(); if (t) codes.push(t); }
+            }
+          });
         }
-      });
-      const base = (typeof window.resolveBusinessPath === 'function')
-        ? window.location.origin + window.resolveBusinessPath('billing.html')
-        : window.location.origin + '/business/billing.html';
-      let url = base + '?section=scan&appointment_id=' + encodeURIComponent(appointmentId);
-      if (codes.length) url += '&suggested_codes=' + encodeURIComponent(codes.join(','));
-      window.location.href = url;
+        if (room) { room.disconnect(); room = null; }
+        const base = (typeof window.resolveBusinessPath === 'function')
+          ? window.location.origin + window.resolveBusinessPath('billing.html')
+          : window.location.origin + '/business/billing.html';
+        let url = base + '?section=scan&appointment_id=' + encodeURIComponent(appointmentId);
+        if (codes.length) url += '&suggested_codes=' + encodeURIComponent(codes.join(','));
+        window.location.href = url;
+      } catch (e) {
+        console.error('End session failed:', e);
+        if (endBtn) { endBtn.disabled = false; endBtn.textContent = 'End & Create Claim'; }
+        alert('Failed to end session. You can still go to Billing manually.');
+      }
     }
 
     document.getElementById('joinBtn').addEventListener('click', joinRoom);

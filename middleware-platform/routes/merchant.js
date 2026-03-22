@@ -112,6 +112,156 @@ router.get('/me', async (req, res) => {
 });
 
 /**
+ * PATCH /api/merchant/me
+ * Update merchant fields editable from settings.
+ */
+router.patch('/me', async (req, res) => {
+  try {
+    const cookies = req.headers.cookie || '';
+    const sessionMatch = cookies.match(/customer_session=([^;]+)/);
+    if (!sessionMatch) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = require('../database').getCustomerSession(sessionMatch[1]);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = require('../database').getCustomer(session.customer_id);
+    if (!customer?.merchant_id) return res.status(404).json({ success: false, error: 'No merchant associated' });
+    const merchant = require('../database').getMerchant(customer.merchant_id);
+    if (!merchant) return res.status(404).json({ success: false, error: 'Merchant not found' });
+
+    const updates = {};
+    if (typeof req.body?.name === 'string') updates.name = req.body.name.trim().slice(0, 200);
+    if (typeof req.body?.webhook_url === 'string') {
+      const v = req.body.webhook_url.trim();
+      if (v) {
+        try { new URL(v); } catch (_) { return res.status(400).json({ success: false, error: 'Invalid webhook URL' }); }
+      }
+      updates.webhook_url = v || null;
+    }
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ success: false, error: 'No editable fields provided' });
+    }
+
+    const setParts = [];
+    const values = [];
+    Object.entries(updates).forEach(([k, v]) => { setParts.push(`${k} = ?`); values.push(v); });
+    values.push(merchant.id);
+    db.db.prepare(`UPDATE merchants SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
+
+    const fresh = require('../database').getMerchant(merchant.id);
+    return res.json({
+      success: true,
+      merchant: {
+        id: fresh.id,
+        name: fresh.name,
+        api_key: fresh.api_key,
+        api_url: fresh.api_url,
+        webhook_url: fresh.webhook_url,
+        enabled_platforms: fresh.enabled_platforms,
+        status: fresh.status
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/merchant/me/regenerate-api-key
+ * Regenerate merchant API key (invalidates previous key)
+ */
+router.post('/me/regenerate-api-key', async (req, res) => {
+  try {
+    const cookies = req.headers.cookie || '';
+    const sessionMatch = cookies.match(/customer_session=([^;]+)/);
+    if (!sessionMatch) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = require('../database').getCustomerSession(sessionMatch[1]);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = require('../database').getCustomer(session.customer_id);
+    if (!customer?.merchant_id) return res.status(404).json({ success: false, error: 'No merchant associated' });
+    const merchant = require('../database').getMerchant(customer.merchant_id);
+    if (!merchant) return res.status(404).json({ success: false, error: 'Merchant not found' });
+
+    const newApiKey = `mk_${crypto.randomBytes(32).toString('hex')}`;
+    db.db.prepare('UPDATE merchants SET api_key = ? WHERE id = ?').run(newApiKey, merchant.id);
+
+    const fresh = require('../database').getMerchant(merchant.id);
+    return res.json({
+      success: true,
+      message: 'API key regenerated. Update your applications with the new key.',
+      merchant: {
+        id: fresh.id,
+        name: fresh.name,
+        api_key: fresh.api_key,
+        api_url: fresh.api_url,
+        webhook_url: fresh.webhook_url,
+        enabled_platforms: fresh.enabled_platforms,
+        status: fresh.status
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/merchant/me/test-webhook
+ * Send a test payload to the configured webhook URL
+ */
+router.post('/me/test-webhook', async (req, res) => {
+  try {
+    const cookies = req.headers.cookie || '';
+    const sessionMatch = cookies.match(/customer_session=([^;]+)/);
+    if (!sessionMatch) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const session = require('../database').getCustomerSession(sessionMatch[1]);
+    if (!session) return res.status(401).json({ success: false, error: 'Invalid session' });
+    const customer = require('../database').getCustomer(session.customer_id);
+    if (!customer?.merchant_id) return res.status(404).json({ success: false, error: 'No merchant associated' });
+    const merchant = require('../database').getMerchant(customer.merchant_id);
+    if (!merchant) return res.status(404).json({ success: false, error: 'Merchant not found' });
+
+    const webhookUrl = merchant.webhook_url;
+    if (!webhookUrl || !webhookUrl.trim()) {
+      return res.status(400).json({ success: false, error: 'No webhook URL configured. Please set a webhook URL first.' });
+    }
+
+    const testPayload = {
+      type: 'test',
+      event: 'webhook_test',
+      timestamp: new Date().toISOString(),
+      merchant_id: merchant.id,
+      message: 'This is a test webhook from DocLittle settings. If you receive this, your webhook is configured correctly.'
+    };
+
+    const axiosRes = await axios.post(webhookUrl.trim(), testPayload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+      validateStatus: () => true
+    });
+
+    if (axiosRes.status >= 200 && axiosRes.status < 300) {
+      return res.json({
+        success: true,
+        message: `Test webhook sent. Endpoint returned ${axiosRes.status}.`,
+        status: axiosRes.status
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      error: `Webhook endpoint returned ${axiosRes.status}. Check your server logs.`,
+      status: axiosRes.status
+    });
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      return res.status(400).json({
+        success: false,
+        error: 'Could not reach webhook URL. Check that the URL is correct and your server is running.'
+      });
+    }
+    return res.status(500).json({ success: false, error: error.message || 'Failed to send test webhook' });
+  }
+});
+
+/**
  * Register a new merchant
  * POST /api/merchant/register
  */

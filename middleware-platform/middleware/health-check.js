@@ -63,8 +63,16 @@ function checkMemory() {
   const rssMB = usage.rss / 1024 / 1024;
   const heapUsagePercent = (heapUsedMB / heapTotalMB) * 100;
 
-  const status = heapUsagePercent > 90 ? 'critical' : 
-                 heapUsagePercent > 75 ? 'warning' : 'healthy';
+  // In some sandbox / constrained runtimes, V8 heapTotal can be unusually small.
+  // In that case, percent-based thresholds can incorrectly flag the service as critical
+  // even though absolute heap usage is still low.
+  const HEAP_TOTAL_PERCENT_MODE_THRESHOLD_MB = parseFloat(process.env.HEALTH_HEAP_TOTAL_FOR_PERCENT_MODE_MB || '100');
+  const HEAP_USED_WARNING_MB = parseFloat(process.env.HEALTH_HEAP_USED_WARNING_MB || '200');
+  const HEAP_USED_CRITICAL_MB = parseFloat(process.env.HEALTH_HEAP_USED_CRITICAL_MB || '300');
+
+  const status = heapTotalMB < HEAP_TOTAL_PERCENT_MODE_THRESHOLD_MB
+    ? (heapUsedMB > HEAP_USED_CRITICAL_MB ? 'critical' : heapUsedMB > HEAP_USED_WARNING_MB ? 'warning' : 'healthy')
+    : (heapUsagePercent > 90 ? 'critical' : heapUsagePercent > 75 ? 'warning' : 'healthy');
 
   healthMetrics.memory = {
     status,
@@ -230,7 +238,8 @@ async function performHealthCheck() {
  */
 async function healthCheckHandler(req, res) {
   const detailed = req.query.detailed === 'true' || req.query.detailed === '1';
-  
+  const showDbPath = req.query.show_db_path === '1' || req.query.show_db_path === 'true';
+
   if (detailed) {
     const [fullHealth, dependencies] = await Promise.all([
       performHealthCheck(),
@@ -283,10 +292,14 @@ async function healthCheckHandler(req, res) {
   
   const isHealthy = dbCheck.healthy && memoryCheck.status !== 'critical';
   
+  const sqlitePath =
+    showDbPath && db?.db && typeof db.db.name === 'string' ? db.db.name : undefined;
+
   res.status(isHealthy ? 200 : 503).json({
     status: isHealthy ? 'ok' : 'unhealthy',
     timestamp: new Date().toISOString(),
     service: 'middleware-platform',
+    ...(sqlitePath ? { database_path: sqlitePath, db_path: sqlitePath } : {}),
     ...(isHealthy ? {} : { 
       issues: {
         database: !dbCheck.healthy ? 'Database connection failed' : null,

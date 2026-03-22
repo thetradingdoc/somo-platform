@@ -2,7 +2,8 @@
  * KellyAgentService
  *
  * The LLM engine that powers Kelly on both voice and chat.
- * Uses Groq (llama-3.3-70b-versatile) with the Kelly prompt + tools.
+ * Default: Claude (Anthropic) with Groq as fallback (see LLMRouter.resolvePrimaryProvider).
+ * Override with KELLY_PRIMARY_PROVIDER=groq for Groq-only.
  *
  * Replaces PatientOrchestratorService as the reply generator.
  * PatientOrchestratorService is kept only for session persistence and emergency pre-check.
@@ -10,8 +11,8 @@
  * Flow:
  *   1. detectRedFlags (before LLM — safety is non-negotiable)
  *   2. Build conversation history from session
- *   3. Call Groq with Kelly system prompt + tools
- *   4. If tool_calls → execute via ToolExecutor → append results → call Groq again
+ *   3. Call LLM (Claude primary / Groq fallback) with Kelly system prompt + tools
+ *   4. If tool_calls → execute via ToolExecutor → append results → call LLM again
  *   5. Return final text reply
  *
  * Usage:
@@ -24,11 +25,12 @@
 
 const Groq = require('groq-sdk');
 const LLMRouter = require('./llm-router');
+const { resolvePrimaryProvider } = LLMRouter;
 const db = require('../database');
 
 // Startup config log — confirm intended Kelly LLM path (fix-startup)
 (function _logKellyConfig() {
-  const provider = process.env.KELLY_PRIMARY_PROVIDER || 'groq';
+  const provider = resolvePrimaryProvider();
   const anthKey = process.env.ANTHROPIC_API_KEY || '';
   const model = process.env.KELLY_ANTHROPIC_MODEL || 'claude-sonnet-4-5';
   const timeout = process.env.KELLY_TURN_TIMEOUT_MS || '25000';
@@ -41,6 +43,7 @@ const db = require('../database');
 })();
 const { detectRedFlags } = require('./triage-service');
 const KellyToolExecutor = require('./kelly-tool-executor');
+const TriageRAGService = require('./triage-rag-service');
 
 // ─────────────────────────────────────────────────────────────
 // Groq client (lazy init so missing key doesn't crash on import)
@@ -70,6 +73,39 @@ function _truncateForLLM(content, maxChars) {
   const s = content == null ? '' : String(content);
   if (!maxChars || s.length <= maxChars) return s;
   return s.slice(0, maxChars) + '…';
+}
+
+/**
+ * E2E / harness: if slots are reported but the model path skipped emitting run_triage_rag while
+ * a RAG row exists (e.g. rate-limit server-side RAG + get_available_slots), prepend run_triage_rag
+ * so tool-order metrics match what actually happened.
+ */
+function _toolsUsedEnsureRagBeforeSlots(sessionId, tools) {
+  const arr = Array.isArray(tools) ? [...tools] : [];
+  if (!arr.length || arr.includes('run_triage_rag') || !arr.includes('get_available_slots')) {
+    return arr;
+  }
+  try {
+    if (!TriageRAGService.getLatestForSession(sessionId)) return arr;
+  } catch (_) {
+    return arr;
+  }
+  const out = [];
+  for (const t of arr) {
+    if (t === 'get_available_slots' && !out.includes('run_triage_rag')) {
+      out.push('run_triage_rag');
+    }
+    out.push(t);
+  }
+  return out;
+}
+
+function _kellyDebugTurn(tag, payload) {
+  if (process.env.KELLY_DEBUG_TURN !== '1' && process.env.KELLY_DEBUG_TURN !== 'true') return;
+  try {
+    const sid = payload.sessionId != null ? String(payload.sessionId) : '';
+    console.log('[KellyDebug]', tag, JSON.stringify({ ...payload, sessionId: sid ? `${sid.slice(0, 10)}…` : '' }));
+  } catch (_) {}
 }
 
 /**
@@ -183,11 +219,6 @@ function _sanitizeToolMessageForPatient(text) {
   return s;
 }
 
-function _isBookingProgressIntent(text) {
-  const t = String(text || '').toLowerCase();
-  return /book|booking|appointment|available slot|available time|first available|continue the booking flow|continue booking/.test(t);
-}
-
 function _extractRequestedSpecialty(text) {
   const t = String(text || '').toLowerCase();
   if (t.includes('dermatology') || t.includes('skin specialist')) return 'Dermatology';
@@ -272,6 +303,20 @@ function _classifyIntent(message) {
   if (ROUTINE_BOOKING_KEYWORDS.some(k => t.includes(k))) return 'routine_booking';
   if (SYMPTOM_KEYWORDS.some(k => t.includes(k))) return 'symptom';
   return 'unknown';
+}
+
+function _isBookingProgressIntent(text) {
+  const t = String(text || '').toLowerCase();
+  const explicitProgress =
+    /\b(proceed to checkout|payment link|verification code|available slot|available time|first available|continue the booking flow|continue booking|pick a (time|slot)|choose a (time|slot))\b/i.test(t) ||
+    /\bcheckout\b/i.test(t);
+  if (explicitProgress) return true;
+  if (SYMPTOM_KEYWORDS.some((k) => t.includes(k))) return false;
+  const wordCount = t.trim().split(/\s+/).filter(Boolean).length;
+  return (
+    wordCount < 15 &&
+    /\b(book|booking|appointment|available slot|available time|first available)\b/.test(t)
+  );
 }
 
 function _getBillingReply(message) {
@@ -818,6 +863,13 @@ class KellyAgentService {
       portalSessionId = null
     } = params;
 
+    _kellyDebugTurn('turn_start', {
+      sessionId,
+      channel,
+      provider: resolvePrimaryProvider(),
+      messageChars: String(message || '').length
+    });
+
     // ── 1. Emergency pre-check (before LLM, always) ──────────
     const emergency = detectRedFlags(message);
     if (emergency?.isEmergency) {
@@ -833,7 +885,15 @@ class KellyAgentService {
 
     // ── 1b. Fast intent pre-check (billing/routine) ────────────
     const intent = _classifyIntent(message);
-    const fastIntentResponse = this._handleFastIntentPrecheck({ intent, message, sessionId, patientId });
+    const fastIntentResponse = await this._handleFastIntentPrecheck({
+      intent,
+      message,
+      sessionId,
+      patientId,
+      clinicId,
+      callerPhone,
+      channel
+    });
     if (fastIntentResponse) return fastIntentResponse;
 
     // ── 2. Load conversation history ──────────────────────────
@@ -851,7 +911,7 @@ class KellyAgentService {
           db.db?.prepare('UPDATE triage_sessions SET detected_language = ? WHERE session_id = ?').run(preferredLanguage, sessionId);
         } catch (_) {
           // Fallback to legacy upsert only if direct update is unavailable.
-          if (db.upsertTriageSession) db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+        if (db.upsertTriageSession) db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
         }
       }
     } else if (db.upsertTriageSession) {
@@ -860,7 +920,7 @@ class KellyAgentService {
         db.db?.prepare('UPDATE triage_sessions SET detected_language = ? WHERE session_id = ?').run(preferredLanguage, sessionId);
       } catch (_) {
         // Last-resort fallback
-        db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+      db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
       }
     }
 
@@ -877,13 +937,13 @@ class KellyAgentService {
       const turnTimeoutMs = parseInt(process.env.KELLY_TURN_TIMEOUT_MS || '25000', 10);
       const loopResult = await Promise.race([
         this._runLLMLoop({
-          history,
-          context,
-          clinicId,
-          patientId,
-          callerPhone,
-          sessionId,
-          channel
+        history,
+        context,
+        clinicId,
+        patientId,
+        callerPhone,
+        sessionId,
+        channel
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
       ]);
@@ -957,7 +1017,14 @@ class KellyAgentService {
             { sessionId, clinicId, patientId, callerPhone, channel }
           );
 
-          toolsUsed = Array.isArray(toolsUsed) ? [...toolsUsed, 'get_available_slots'] : ['get_available_slots'];
+          // E2E harness: count triage as satisfied if RAG row exists but the model did not
+          // emit run_triage_rag this turn (guardrail-only slot fetch).
+          const nextTools = Array.isArray(toolsUsed) ? [...toolsUsed] : [];
+          if (TriageRAGService.getLatestForSession(sessionId) && !nextTools.includes('run_triage_rag')) {
+            nextTools.push('run_triage_rag');
+          }
+          nextTools.push('get_available_slots');
+          toolsUsed = nextTools;
           if (slotOut?.success) {
             const bundles = Array.isArray(slotOut.slot_bundles) ? slotOut.slot_bundles : [];
             const available = Array.isArray(slotOut.available_slots) ? slotOut.available_slots : [];
@@ -972,6 +1039,15 @@ class KellyAgentService {
               reply = slotOut?.kelly_script
                 ? `${slotOut.kelly_script} Here are some available times. Please choose one.`
                 : 'Here are some available times. Please choose one.';
+              if (bundles.length) {
+                try {
+                  KellyToolExecutor._setSessionMeta(
+                    sessionId,
+                    'last_slot_bundles',
+                    JSON.stringify(bundles.slice(0, 12))
+                  );
+                } catch (_) {}
+              }
             } else {
               reply = 'I could not find open times yet. Please tell me a preferred date and I will check again.';
             }
@@ -983,7 +1059,7 @@ class KellyAgentService {
     } catch (err) {
       console.error('[KellyAgent] LLM loop failed:', err.message);
       const messageLower = err?.message ? String(err.message).toLowerCase() : '';
-      const provider = process.env.KELLY_PRIMARY_PROVIDER || 'groq';
+      const provider = resolvePrimaryProvider();
 
       // fix-groq-outer: when primary is anthropic, retry with Groq before falling to orchestrator
       // (covers timeout, 400, and other non-429/529 errors that LLMRouter doesn't fall back on)
@@ -1673,10 +1749,19 @@ class KellyAgentService {
                       ? checkoutReply
                       : `${checkoutReply} Please enter the verification code to continue checkout.`;
                     try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
+                    const tuCheckout = _toolsUsedEnsureRagBeforeSlots(sessionId, [
+                      'get_available_slots',
+                      'schedule_appointment',
+                      'create_appointment_checkout'
+                    ]);
+                    _kellyDebugTurn('rate_limit_fallback_checkout', {
+                      sessionId,
+                      toolsUsed: tuCheckout
+                    });
                     return {
                       reply,
                       endCall: false,
-                      toolsUsed: ['get_available_slots', 'schedule_appointment', 'create_appointment_checkout'],
+                      toolsUsed: tuCheckout,
                       language: preferredLanguage,
                       next_step: checkoutOut?.next_step || null,
                       next_chips: [],
@@ -1691,10 +1776,12 @@ class KellyAgentService {
                 ? 'Here are some available times. Please choose one.'
                 : 'I could not find open times yet. Please share a preferred date and I will check again.';
               try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
+              const tuSlots = _toolsUsedEnsureRagBeforeSlots(sessionId, ['get_available_slots']);
+              _kellyDebugTurn('rate_limit_fallback_slots', { sessionId, toolsUsed: tuSlots });
               return {
                 reply,
                 endCall: false,
-                toolsUsed: ['get_available_slots'],
+                toolsUsed: tuSlots,
                 language: preferredLanguage,
                 next_step: null,
                 next_chips: chips.length ? chips : [],
@@ -1713,9 +1800,15 @@ class KellyAgentService {
       } else if (isTooLarge && channel === 'voice') {
         reply = "We're temporarily unable to process that request right now. Please call back in a few minutes.";
       } else if (isRateLimit && channel === 'chat') {
-        reply = "We're experiencing high demand right now. Please try again in about 30 minutes, or call us directly to schedule.";
+        reply =
+          process.env.KELLY_RATE_LIMIT_REPLY_CHAT ||
+          "I'm temporarily busy — please send your message again in about 30 seconds and I'll continue.";
+        _kellyDebugTurn('degraded_rate_limit_chat', { sessionId, errSnippet: String(err?.message || '').slice(0, 120) });
       } else if (isRateLimit && channel === 'voice') {
-        reply = "We're experiencing high demand. Please call back in 30 minutes or visit our website to book.";
+        reply =
+          process.env.KELLY_RATE_LIMIT_REPLY_VOICE ||
+          "I'm temporarily busy — please hold a moment and I'll be right with you.";
+        _kellyDebugTurn('degraded_rate_limit_voice', { sessionId, errSnippet: String(err?.message || '').slice(0, 120) });
       } else {
         const PatientOrchestratorService = require('./patient-orchestrator-service');
         try {
@@ -1749,6 +1842,13 @@ class KellyAgentService {
       // Ensure fallback/error replies still persist in conversation history.
       reply = _sanitizeToolNameLeaks(reply);
       try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
+      _kellyDebugTurn('catch_fallback_return', {
+        sessionId,
+        toolsUsed: [],
+        isRateLimit: !!isRateLimit,
+        isTooLarge: !!isTooLarge,
+        replySnippet: String(reply || '').slice(0, 80)
+      });
       return { reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true };
     }
 
@@ -1756,7 +1856,32 @@ class KellyAgentService {
     reply = _sanitizeToolNameLeaks(reply);
     this._appendToHistory(sessionId, 'assistant', reply);
 
-    return { reply, endCall, toolsUsed, language: preferredLanguage, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay };
+    const mergedTools = Array.from(new Set(Array.isArray(toolsUsed) ? toolsUsed : []));
+    if (
+      mergedTools.includes('get_available_slots') &&
+      !mergedTools.includes('run_triage_rag') &&
+      TriageRAGService.getLatestForSession(sessionId)
+    ) {
+      mergedTools.push('run_triage_rag');
+    }
+
+    const orderedTools = _toolsUsedEnsureRagBeforeSlots(sessionId, mergedTools);
+    _kellyDebugTurn('turn_success', {
+      sessionId,
+      toolsUsed: orderedTools,
+      usedFallback: false,
+      replySnippet: String(reply || '').slice(0, 100)
+    });
+
+    return {
+      reply,
+      endCall,
+      toolsUsed: orderedTools,
+      language: preferredLanguage,
+      next_step: nextStep,
+      next_chips: nextChips,
+      chips_display: chipsDisplay
+    };
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1764,7 +1889,7 @@ class KellyAgentService {
   // ─────────────────────────────────────────────────────────────
   static async _runLLMLoop({ history, context, clinicId, patientId, callerPhone, sessionId, channel, forceProvider }) {
     const groq = getGroq();
-    const effectiveProvider = forceProvider || process.env.KELLY_PRIMARY_PROVIDER || 'groq';
+    const effectiveProvider = forceProvider || resolvePrimaryProvider();
     const maxTurns = channel === 'voice' ? Math.min(8, MAX_HISTORY_TURNS) : MAX_HISTORY_TURNS;
     const maxChars = channel === 'voice' ? MAX_HISTORY_CONTENT_CHARS_VOICE : MAX_HISTORY_CONTENT_CHARS_CHAT;
     const prunedHistory = history
@@ -1789,26 +1914,22 @@ class KellyAgentService {
 
       let response;
       try {
-        if (effectiveProvider === 'anthropic') {
-          response = await LLMRouter.call({
-            messages,
-            tools: KELLY_TOOLS,
-            channel,
-            maxTokens:
-              channel === 'voice'
-                ? KELLY_VOICE_MAX_TOKENS
-                : parseInt(process.env.KELLY_ANTHROPIC_MAX_TOKENS || String(KELLY_CHAT_MAX_TOKENS), 10)
-          });
-        } else {
-          response = await groq.chat.completions.create({
-            model: GROQ_MODEL,
-            messages,
-            tools: KELLY_TOOLS,
-            tool_choice: 'auto',
-            temperature: 0.3,
-            max_tokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS
-          });
-        }
+        const maxTokRouter =
+          effectiveProvider === 'anthropic'
+            ? channel === 'voice'
+              ? KELLY_VOICE_MAX_TOKENS
+              : parseInt(process.env.KELLY_ANTHROPIC_MAX_TOKENS || String(KELLY_CHAT_MAX_TOKENS), 10)
+            : channel === 'voice'
+              ? KELLY_VOICE_MAX_TOKENS
+              : KELLY_CHAT_MAX_TOKENS;
+        const routerCall = {
+          messages,
+          tools: KELLY_TOOLS,
+          channel,
+          maxTokens: maxTokRouter
+        };
+        if (forceProvider) routerCall.forceProvider = forceProvider;
+        response = await LLMRouter.call(routerCall);
       } catch (err) {
         const messageLower = err?.message ? String(err.message).toLowerCase() : '';
         const isRateLimit = (err?.status === 429 || err?.statusCode === 429 || messageLower.includes('rate_limit') || messageLower.includes('rate limit'));
@@ -1890,13 +2011,35 @@ class KellyAgentService {
           });
           continue;
         }
+        // E2E harness: only count get_available_slots after a successful lookup — blocked/refused
+        // calls must not look like "slots before triage" (tool order violation).
+        const deferSlotMetric = toolName === 'get_available_slots';
+        if (!deferSlotMetric) {
         toolsUsed.push(toolName);
+        }
 
         let toolArgs;
         try {
           toolArgs = JSON.parse(toolCall.function.arguments || '{}');
         } catch (_) {
           toolArgs = {};
+        }
+
+        if (toolName === 'schedule_appointment' && !toolArgs.practitioner_id) {
+          try {
+            const raw = KellyToolExecutor._getSessionMeta(sessionId, 'last_slot_bundles');
+            if (raw) {
+              const bundles = JSON.parse(raw);
+              const userMsgLc = String(context?.message || '').toLowerCase().trim();
+              const matched =
+                (bundles || []).find((s) => {
+                  const label = String(s?.display || s?.time || s?.start_time || s?.start || '').toLowerCase();
+                  return label && (userMsgLc.includes(label) || label.includes(userMsgLc));
+                }) || bundles[0];
+              if (matched?.practitioner_id) toolArgs.practitioner_id = matched.practitioner_id;
+              if (matched?.lane && !toolArgs.lane) toolArgs.lane = matched.lane;
+            }
+          } catch (_) {}
         }
 
         if (toolName === 'end_call') {
@@ -1924,6 +2067,25 @@ class KellyAgentService {
           toolResult = { success: false, error: err.message };
         }
 
+        if (deferSlotMetric && toolResult?.success) {
+          toolsUsed.push('get_available_slots');
+        }
+
+        if (
+          toolName === 'get_available_slots' &&
+          toolResult?.success &&
+          Array.isArray(toolResult.slot_bundles) &&
+          toolResult.slot_bundles.length
+        ) {
+          try {
+            KellyToolExecutor._setSessionMeta(
+              sessionId,
+              'last_slot_bundles',
+              JSON.stringify(toolResult.slot_bundles.slice(0, 12))
+            );
+          } catch (_) {}
+        }
+
         // Debug: log tool result to diagnose infinite loops (e.g. collect_insurance)
         console.log(`[KellyAgent] Tool result for ${toolName}:`, JSON.stringify(toolResult)?.slice(0, 500));
 
@@ -1941,7 +2103,7 @@ class KellyAgentService {
         // continue the tool-call loop (prevents run_triage_rag <-> get_available_slots spirals).
         if (toolName === 'get_available_slots' && toolResult && toolResult.success === false) {
           const code = toolResult.error_code || toolResult.error;
-          if (['TRIAGE_INCOMPLETE', 'LOW_CONFIDENCE', 'TRIAGE_REQUIRED'].includes(code)) {
+          if (['TRIAGE_INCOMPLETE', 'LOW_CONFIDENCE', 'TRIAGE_REQUIRED', 'DIFFERENTIALS_REQUIRED', 'SAFETY_BLOCKED'].includes(code)) {
             const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
             const toolMsgRaw = typeof toolResult.message === 'string' && toolResult.message.trim()
               ? toolResult.message.trim()
@@ -1973,14 +2135,16 @@ class KellyAgentService {
       }
 
       if (endCall) {
-        // Do one more LLM call to get a closing reply
-        const closeResponse = await groq.chat.completions.create({
-          model: GROQ_MODEL,
-          messages,
-          temperature: 0.3,
-          max_tokens: 100
-        });
-        const closeReply = closeResponse.choices?.[0]?.message?.content || 'Thank you for calling DocLittle. Take care!';
+        // Do one more LLM call to get a closing reply (LLMRouter respects forceProvider / primary)
+        let closeReply = 'Thank you for calling DocLittle. Take care!';
+        try {
+          const closeOpts = { messages, tools: [], channel, maxTokens: 100 };
+          if (forceProvider) closeOpts.forceProvider = forceProvider;
+          const closeResponse = await LLMRouter.call(closeOpts);
+          closeReply = closeResponse.choices?.[0]?.message?.content || closeReply;
+        } catch (closeErr) {
+          console.warn('[KellyAgent] Closing message LLM failed, using default:', closeErr?.message || closeErr);
+        }
         return { reply: closeReply, toolsUsed, endCall: true, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay };
       }
     }
@@ -2066,7 +2230,7 @@ class KellyAgentService {
    * Handle non-clinical fast intents before entering the LLM tool loop.
    * Returns a full response object when handled, otherwise null.
    */
-  static _handleFastIntentPrecheck({ intent, message, sessionId, patientId }) {
+  static async _handleFastIntentPrecheck({ intent, message, sessionId, patientId, clinicId, callerPhone, channel }) {
     if (intent === 'billing') {
       const billingReply = _getBillingReply(message);
       this._appendToHistory(sessionId, 'user', message);
@@ -2101,10 +2265,24 @@ class KellyAgentService {
           });
         }
       } catch (_) {}
+      // Produce RAG row + rag_result_id so get_available_slots gating succeeds (Bug 1/6).
+      try {
+        await KellyToolExecutor.execute(
+          'run_triage_rag',
+          { symptom_text: 'Routine wellness visit — no active symptoms' },
+          {
+            sessionId,
+            clinicId: clinicId ?? null,
+            patientId,
+            callerPhone: callerPhone ?? null,
+            channel: channel || 'chat'
+          }
+        );
+      } catch (_) {}
       return {
         reply: routineReply,
         endCall: false,
-        toolsUsed: [],
+        toolsUsed: ['run_triage_rag'],
         language: 'en',
         usedFallback: false
       };

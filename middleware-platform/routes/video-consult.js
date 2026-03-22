@@ -154,6 +154,7 @@ router.post('/agent-events', async (req, res) => {
 
     if (event === 'transcript' || event === 'vision_frame') {
       let session = videoConsultService.getSession(room);
+      const wasNewSession = !session;
       if (!session) {
         session = videoConsultService.createSession(room, options);
       }
@@ -243,6 +244,34 @@ router.post('/agent-events', async (req, res) => {
           console.warn('⚠️  Failed to persist frame incrementally:', e.message);
         }
       }
+      if (wasNewSession) {
+        try {
+          const appointmentId = options.appointment_id || (room.startsWith('appt-') ? room.replace(/^appt-/, '') : null);
+          let patientId = options.patient_id || null;
+          let tenantId = options.clinic_id || 'clinic-default';
+          if (appointmentId) {
+            const appt = db.getAppointment ? db.getAppointment(appointmentId) : null;
+            if (appt?.patient_id) patientId = patientId || appt.patient_id;
+            if (appt?.clinic_id) tenantId = appt.clinic_id;
+          }
+          if (appointmentId && patientId) {
+            db.enqueueEhrSyncJob({
+              event_type: 'video_started',
+              patient_id: patientId,
+              appointment_id: appointmentId,
+              source_system: 'athena',
+              tenant_id: tenantId,
+              idempotency_key: `video_started:${appointmentId}`,
+              payload_json: {
+                room,
+                started_at: new Date().toISOString()
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('[video-consult] Could not enqueue video_started EHR sync job:', e.message);
+        }
+      }
     }
 
     if (event === 'end_session') {
@@ -270,6 +299,25 @@ router.post('/agent-events', async (req, res) => {
         await BookingService.completeAppointment(appointmentId, clinicId);
         // Also expose appointment_id in session_metadata for downstream nodes.
         options.session_metadata.appointment_id = appointmentId;
+        try {
+          const appt = db.getAppointment ? db.getAppointment(appointmentId) : null;
+          if (appt?.patient_id) {
+            db.enqueueEhrSyncJob({
+              event_type: 'video_ended',
+              patient_id: appt.patient_id,
+              appointment_id: appointmentId,
+              source_system: 'athena',
+              tenant_id: appt.clinic_id || clinicId || 'clinic-default',
+              idempotency_key: `video_ended:${appointmentId}`,
+              payload_json: {
+                room,
+                ended_at: new Date().toISOString()
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('[video-consult] Could not enqueue video_ended EHR sync job:', e.message);
+        }
       }
     }
     if (event === 'end_session' && !tokenBudget.canProceedVideoConsult(room, 0.05)) {
@@ -432,6 +480,186 @@ router.get('/session/:roomId', async (req, res) => {
   } catch (err) {
     console.error('[video-consult] get session error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/video-consult/end-session (vc-1)
+ * Provider-triggered end of video call. Completes appointment, runs LangGraph (store FHIR + case report).
+ * Body: { room: string } or room in URL.
+ */
+router.post('/end-session', express.json(), async (req, res) => {
+  try {
+    const room = (req.body?.room || req.query?.room || '').toString().trim();
+    if (!room) {
+      return res.status(400).json({ success: false, error: 'room required' });
+    }
+    if (!room.startsWith('appt-') && !room.startsWith('case-')) {
+      return res.status(400).json({ success: false, error: 'room must be appt-* or case-*' });
+    }
+
+    const { resolveVideoConsultIds } = require('../utils/video-consult-resolver');
+    const resolved = await resolveVideoConsultIds({ room_id: room });
+    if (!resolved?.appointment_id) {
+      return res.status(404).json({ success: false, error: 'Appointment not found for room' });
+    }
+
+    const options = {
+      encounter_id: resolved.encounter_id,
+      clinic_id: resolved.clinic_id,
+      patient_id: resolved.patient_id,
+      appointment_id: resolved.appointment_id
+    };
+
+    options.session_metadata = { end_time: new Date().toISOString() };
+    const session = videoConsultService.getSession(room);
+    if (session?.start_time) {
+      options.session_metadata.start_time = session.start_time;
+    }
+
+    await BookingService.completeAppointment(resolved.appointment_id, resolved.clinic_id);
+    options.session_metadata.appointment_id = resolved.appointment_id;
+
+    const result = await videoConsultGraph.processEvent(room, 'end_session', { end: true }, options);
+
+    if (result.success === false) {
+      return res.status(500).json({ success: false, error: result.error?.message || 'Pipeline failed' });
+    }
+
+    tokenBudget.resetVideoConsult(room);
+    videoConsultService.clearLiveTranscript(room);
+    videoConsultService.clearRoomParticipants(room);
+    videoConsultService.endSession(room, { ...result, ended_at: new Date().toISOString() });
+    videoConsultSse.broadcastSessionEnded(room, { stage: result.stage });
+
+    let suggested_codes;
+    if (result.rag_context?.merged_codes) {
+      const merged = result.rag_context.merged_codes;
+      suggested_codes = {
+        icd10: (merged.icd10 || []).map((c) => c?.code).filter(Boolean),
+        cpt: (merged.cpt || []).map((c) => c?.code).filter(Boolean),
+        hcpcs: (merged.hcpcs || []).map((c) => c?.code).filter(Boolean)
+      };
+    }
+
+    res.json({
+      success: true,
+      stage: result.stage,
+      appointment_id: resolved.appointment_id,
+      ...(suggested_codes && { suggested_codes })
+    });
+  } catch (err) {
+    console.error('[video-consult] end-session error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/video-consult/rooms/:roomId/vitals (vc-4)
+ * Save vitals for the current video consult.
+ */
+router.post('/rooms/:roomId/vitals', express.json(), async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const { resolveVideoConsultIds } = require('../utils/video-consult-resolver');
+    const resolved = await resolveVideoConsultIds({ room_id: roomId });
+    if (!resolved) return res.status(404).json({ success: false, error: 'Room not found' });
+    const body = req.body || {};
+    const id = db.insertEncounterVitals({
+      encounter_id: resolved.encounter_id,
+      appointment_id: resolved.appointment_id,
+      room_id: roomId,
+      blood_pressure_systolic: body.blood_pressure_systolic ?? body.bp_systolic ?? null,
+      blood_pressure_diastolic: body.blood_pressure_diastolic ?? body.bp_diastolic ?? null,
+      heart_rate: body.heart_rate ?? body.hr ?? null,
+      blood_sugar_mgdl: body.blood_sugar_mgdl ?? body.glucose ?? null,
+      temperature_f: body.temperature_f ?? body.temp_f ?? null,
+      notes: body.notes || null
+    });
+    if (!id) return res.status(500).json({ success: false, error: 'Failed to save vitals' });
+    res.json({ success: true, id, vitals: body });
+  } catch (err) {
+    console.error('[video-consult] vitals save error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/video-consult/rooms/:roomId/summary (vc-12)
+ * In-call live AI summary from current transcript.
+ */
+router.post('/rooms/:roomId/summary', express.json(), async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const state = await videoConsultService.getSessionState(roomId);
+    const transcript = state.transcript || [];
+    const text = transcript
+      .map(t => (typeof t === 'string' ? t : t.text || t.content || ''))
+      .filter(Boolean)
+      .join('\n')
+      .slice(0, 6000);
+    if (!text.trim()) {
+      return res.json({ success: true, summary: null, error: 'No transcript yet' });
+    }
+    let summary = null;
+    if (process.env.OPENAI_API_KEY) {
+      const OpenAI = require('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const comp = await openai.chat.completions.create({
+        model: process.env.VIDEO_SUMMARY_MODEL || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'Summarize this clinical encounter in 2-4 sentences. Include chief complaint, key findings, and suggested next steps. Be concise.' },
+          { role: 'user', content: text }
+        ],
+        max_tokens: 300
+      });
+      summary = comp.choices?.[0]?.message?.content?.trim() || null;
+    }
+    res.json({ success: true, summary });
+  } catch (err) {
+    console.error('[video-consult] summary error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/video-consult/rooms/:roomId/vitals (vc-4)
+ * Get vitals for the current video consult.
+ */
+router.get('/rooms/:roomId/vitals', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const rows = db.getEncounterVitals(roomId);
+    res.json({ success: true, vitals: rows });
+  } catch (err) {
+    console.error('[video-consult] vitals get error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/video-consult/rooms/:roomId/patient-chart (vc-6)
+ * Returns patient document extracts for provider in-call chart view.
+ */
+router.get('/rooms/:roomId/patient-chart', async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const { resolveVideoConsultIds } = require('../utils/video-consult-resolver');
+    const resolved = await resolveVideoConsultIds({ room_id: roomId });
+    if (!resolved?.patient_id) return res.json({ success: true, extracts: [] });
+    const extracts = db.getPatientDocumentExtractsByPatient?.(resolved.patient_id) || [];
+    const items = extracts
+      .filter(e => e.extracted_text?.trim())
+      .slice(0, 10)
+      .map(e => ({ doc_id: e.doc_id, excerpt: (e.extracted_text || '').trim().slice(0, 1500) }));
+    res.json({ success: true, extracts: items });
+  } catch (err) {
+    console.error('[video-consult] patient-chart error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

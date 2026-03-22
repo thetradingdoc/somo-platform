@@ -166,6 +166,34 @@
             font-size: 14px;
         }
 
+        .settings-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .settings-tab-btn {
+            border: 1px solid var(--gray-200);
+            background: #fff;
+            color: var(--gray-700);
+            padding: 8px 12px;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .settings-tab-btn.active {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+        }
+
+        .settings-panel[hidden] {
+            display: none !important;
+        }
+
         /* Settings Sections */
         .settings-section {
             background: white;
@@ -377,6 +405,18 @@
                 min-height: 48px;
                 padding: 14px 16px;
             }
+
+            .settings-tabs {
+                position: sticky;
+                top: 8px;
+                z-index: 5;
+                background: #f8fafc;
+                padding: 6px 0;
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                scrollbar-width: thin;
+            }
+            .settings-tab-btn { white-space: nowrap; }
         }
 
         @media (max-width: 480px) {
@@ -441,14 +481,22 @@
                 <p class="page-subtitle">Manage your AI voice receptionist platform settings</p>
             </div>
 
+            <div class="settings-tabs">
+                <button class="settings-tab-btn active" data-settings-tab="profile">Profile</button>
+                <button class="settings-tab-btn" data-settings-tab="integrations">Integrations</button>
+                <button class="settings-tab-btn" data-settings-tab="voice">Voice Agent</button>
+                <button class="settings-tab-btn" data-settings-tab="billing">Billing</button>
+                <button class="settings-tab-btn" data-settings-tab="advanced">Advanced</button>
+            </div>
+
             <!-- Business Information -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="profile">
                 <h3>🏪 Business Information</h3>
 
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Business Name</h4>
-                        <p class="setting-description" id="businessNameSetting">VitaminCo</p>
+                        <p class="setting-description" id="businessNameSetting">Loading...</p>
                     </div>
                     <div class="setting-action">
                         <button class="btn btn-secondary btn-sm" onclick="editBusinessName()">
@@ -460,7 +508,7 @@
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Contact Email</h4>
-                        <p class="setting-description" id="businessEmail">owner@vitamins.com</p>
+                        <p class="setting-description" id="businessEmail">Loading...</p>
                     </div>
                     <div class="setting-action">
                         <button class="btn btn-secondary btn-sm" onclick="editEmail()">
@@ -472,7 +520,7 @@
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Phone Number</h4>
-                        <p class="setting-description">+1 (862) 230-7479</p>
+                        <p class="setting-description" id="businessPhone">Not set</p>
                     </div>
                     <div class="setting-action">
                         <button class="btn btn-secondary btn-sm" onclick="editPhone()">
@@ -480,10 +528,22 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <h4>Provider Display</h4>
+                        <p class="setting-description" id="providerDisplayName">Not set</p>
+                    </div>
+                    <div class="setting-action">
+                        <button class="btn btn-secondary btn-sm" onclick="editProviderDisplayName()">
+                            Edit
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Account & Billing -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="billing">
                 <h3>🧾 Account & Billing</h3>
                 <div class="service-card">
                     <div class="service-icon" style="background: #dbeafe;">📄</div>
@@ -496,14 +556,14 @@
             </div>
 
             <!-- Connected Services -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="integrations">
                 <h3>🔌 Connected Services</h3>
 
                 <div class="service-card">
                     <div class="service-icon stripe">💳</div>
                     <div class="service-info">
                         <h4>Stripe</h4>
-                        <p class="service-status connected">✅ Connected - Payments enabled</p>
+                        <p class="service-status" id="stripeServiceStatus">Checking...</p>
                     </div>
                     <button class="btn btn-secondary btn-sm" onclick="manageStripe()">
                         Manage
@@ -514,7 +574,7 @@
                     <div class="service-icon twilio">📱</div>
                     <div class="service-info">
                         <h4>Twilio</h4>
-                        <p class="service-status connected">✅ Connected - SMS enabled</p>
+                        <p class="service-status" id="twilioServiceStatus">Checking...</p>
                     </div>
                     <button class="btn btn-secondary btn-sm" onclick="manageTwilio()">
                         Manage
@@ -541,7 +601,7 @@
                     <div class="service-icon shopify">🛍️</div>
                     <div class="service-info">
                         <h4>Shopify (Optional)</h4>
-                        <p class="service-status">Not connected - Sync products from Shopify</p>
+                        <p class="service-status" id="shopifyServiceStatus">Checking...</p>
                     </div>
                     <button class="btn btn-primary btn-sm" onclick="connectShopify()">
                         Connect
@@ -550,7 +610,7 @@
             </div>
 
             <!-- Notifications -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="integrations">
                 <h3>🔔 Notifications</h3>
 
                 <div class="setting-row">
@@ -559,7 +619,7 @@
                         <p class="setting-description">Get notified when new orders arrive</p>
                     </div>
                     <div class="setting-action">
-                        <input type="checkbox" checked onchange="toggleNotification('orders')">
+                        <input type="checkbox" id="notifOrders" onchange="toggleNotification('orders')">
                     </div>
                 </div>
 
@@ -569,7 +629,7 @@
                         <p class="setting-description">Receive alerts for suspicious activity</p>
                     </div>
                     <div class="setting-action">
-                        <input type="checkbox" checked onchange="toggleNotification('fraud')">
+                        <input type="checkbox" id="notifFraud" onchange="toggleNotification('fraud')">
                     </div>
                 </div>
 
@@ -579,18 +639,18 @@
                         <p class="setting-description">Get weekly performance summaries</p>
                     </div>
                     <div class="setting-action">
-                        <input type="checkbox" checked onchange="toggleNotification('reports')">
+                        <input type="checkbox" id="notifReports" onchange="toggleNotification('reports')">
                     </div>
                 </div>
             </div>
 
             <!-- Voice Agent Settings -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="voice">
                 <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
                     <div>
                         <h3>🎛️ Voice Agent Settings</h3>
                         <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 0;">
-                            Control your voice agent availability and messaging. These settings are stored per merchant and can be pushed to your Retell agent.
+                            Control your voice agent availability and messaging. These settings are stored per practice and can be pushed to your Retell agent.
                         </p>
                     </div>
                     <button class="btn btn-secondary btn-sm" onclick="window.location.href='agent.html'">Open Voice Agent</button>
@@ -657,7 +717,7 @@
             </div>
 
             <!-- Voice Agent Prompt -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="voice">
                 <h3>🎙️ Voice Agent Prompt</h3>
                 <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 20px;">
                     Customize your AI voice agent's behavior and responses. The agent will use this prompt to handle
@@ -691,7 +751,7 @@
             </div>
 
             <!-- Pay-as-you-go Billing -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="billing">
                 <h3>💰 Pay-as-you-go Billing</h3>
                 <p style="color: var(--gray-600); font-size: 14px; margin-bottom: 20px;">
                     Track your usage and manage payment methods. You're charged based on actual voice call minutes.
@@ -740,7 +800,7 @@
                             <p class="setting-description" id="paymentMethodDesc">No payment method on file</p>
                         </div>
                         <div class="setting-action">
-                            <button class="btn btn-primary btn-sm" onclick="setupPaymentMethod()" id="setupPaymentBtn">
+                            <button class="btn btn-primary btn-sm" onclick="paymentMethodAction()" id="setupPaymentBtn">
                                 Add Payment Method
                             </button>
                         </div>
@@ -761,12 +821,12 @@
             </div>
 
             <!-- Merchant Settings -->
-            <div class="settings-section">
-                <h3>🏪 Merchant Account</h3>
+            <div class="settings-section settings-panel" data-settings-panel="profile">
+                <h3>🏥 Practice / Organization</h3>
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <h4>Merchant ID</h4>
+                        <h4>Organization ID</h4>
                         <p class="setting-description" id="merchantIdDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
@@ -778,7 +838,7 @@
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <h4>Merchant Name</h4>
+                        <h4>Practice Name</h4>
                         <p class="setting-description" id="merchantNameDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
@@ -845,13 +905,13 @@
             </div>
 
             <!-- API & Developer -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="advanced">
                 <h3>👨‍💻 API & Developer Settings</h3>
 
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>API Key</h4>
-                        <p class="setting-description">mk_live_********************************</p>
+                        <p class="setting-description" id="apiKeyDisplayMasked">Loading...</p>
                     </div>
                     <div class="setting-action">
                         <button class="btn btn-secondary btn-sm" onclick="viewApiKey()">
@@ -866,7 +926,7 @@
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Webhook URL</h4>
-                        <p class="setting-description">http://localhost:4000/webhook</p>
+                        <p class="setting-description" id="webhookUrlDisplay">Loading...</p>
                     </div>
                     <div class="setting-action">
                         <button class="btn btn-secondary btn-sm" onclick="editWebhook()">
@@ -892,13 +952,13 @@
             </div>
 
             <!-- Security -->
-            <div class="settings-section">
+            <div class="settings-section settings-panel" data-settings-panel="advanced">
                 <h3>🔒 Security</h3>
 
                 <div class="setting-row">
                     <div class="setting-info">
                         <h4>Password</h4>
-                        <p class="setting-description">Last changed 3 months ago</p>
+                        <p class="setting-description" id="passwordLastChanged">Loading...</p>
                     </div>
                     <div class="setting-action">
                         <button class="btn btn-secondary btn-sm" onclick="changePassword()">
@@ -928,8 +988,12 @@
                         <button class="btn btn-secondary btn-sm" onclick="viewSessions()">
                             View Sessions
                         </button>
+                        <button class="btn btn-danger btn-sm" onclick="revokeOtherSessions()">
+                            Revoke Others
+                        </button>
                     </div>
                 </div>
+                <div id="activeSessionsList" style="font-size:12px;color:var(--gray-700);margin-top:8px;"></div>
             </div>
 
             <!-- Danger Zone -->
@@ -965,6 +1029,9 @@
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
         let userData = null;
+        let currentCustomer = null;
+        let currentMerchant = null;
+        let activeSettingsTab = 'profile';
 
         // Mobile sidebar toggle functions
         function toggleSidebar() {
@@ -1019,6 +1086,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             renderNavigation('settings');
             setupMobileNavClose();
+            setupSettingsTabs();
 
             // Close sidebar on window resize if switching to desktop
             window.addEventListener('resize', () => {
@@ -1037,7 +1105,72 @@
             loadCalendarStatus();
             loadMerchantInfo();
             loadVoiceAgentSettings();
+            loadNotificationSettings();
+            loadServiceStatuses();
+            loadSecurityMeta();
+            if (typeof loadBillingUsage === 'function') loadBillingUsage();
         });
+
+        function setupSettingsTabs() {
+            const tabButtons = document.querySelectorAll('[data-settings-tab]');
+            tabButtons.forEach((btn) => {
+                btn.addEventListener('click', () => setSettingsTab(btn.dataset.settingsTab));
+            });
+            setSettingsTab(activeSettingsTab);
+        }
+
+        function setSettingsTab(tabName) {
+            activeSettingsTab = tabName || 'profile';
+            document.querySelectorAll('[data-settings-tab]').forEach((btn) => {
+                btn.classList.toggle('active', btn.dataset.settingsTab === activeSettingsTab);
+            });
+            document.querySelectorAll('[data-settings-panel]').forEach((panel) => {
+                panel.hidden = panel.dataset.settingsPanel !== activeSettingsTab;
+            });
+        }
+
+        function providerLabelFromCustomer(customer) {
+            const profile = customer?.provider_profile || null;
+            if (profile && typeof profile === 'object') {
+                return profile.display_name || profile.provider_name || profile.name || null;
+            }
+            return null;
+        }
+
+        function roleLabelFromCustomer(customer) {
+            const profile = customer?.provider_profile || null;
+            if (profile && typeof profile === 'object' && profile.role) return profile.role;
+            return 'Owner';
+        }
+
+        function applyProfileData() {
+            const customer = currentCustomer || {};
+            const merchant = currentMerchant || {};
+            const businessName = customer.company_name || merchant.name || customer.name || customer.email || 'Business';
+            const providerLabel = providerLabelFromCustomer(customer) || businessName;
+            const roleLabel = roleLabelFromCustomer(customer);
+            const phone = customer.phone_number || customer.twilio_phone_number || 'Not set';
+            const email = customer.email || 'Not set';
+
+            const userNameEl = document.getElementById('userName');
+            const userAvatarEl = document.getElementById('userAvatar');
+            const businessNameEl = document.getElementById('businessNameSetting');
+            const businessEmailEl = document.getElementById('businessEmail');
+            const businessPhoneEl = document.getElementById('businessPhone');
+            const providerDisplayEl = document.getElementById('providerDisplayName');
+            const roleEl = document.querySelector('.user-role');
+
+            if (userNameEl) userNameEl.textContent = providerLabel;
+            if (userAvatarEl) {
+                const initials = providerLabel.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+                userAvatarEl.textContent = initials || 'HP';
+            }
+            if (roleEl) roleEl.textContent = roleLabel;
+            if (businessNameEl) businessNameEl.textContent = businessName;
+            if (businessEmailEl) businessEmailEl.textContent = email;
+            if (businessPhoneEl) businessPhoneEl.textContent = phone;
+            if (providerDisplayEl) providerDisplayEl.textContent = providerLabel;
+        }
 
         async function loadUserInfo() {
             if (userData) {
@@ -1056,10 +1189,9 @@
                     const data = await response.json();
                     if (data.success && data.customer) {
                         userData = { ...userData, ...data.customer };
-                        const name = data.customer.business_name || data.customer.merchant_name || data.customer.name || data.customer.email || 'Business';
-                        document.getElementById('userName').textContent = name;
-                        const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-                        document.getElementById('userAvatar').textContent = initials;
+                        currentCustomer = data.customer;
+                        applyProfileData();
+                        loadSecurityMeta();
                     }
                 }
             } catch (error) {
@@ -1082,7 +1214,7 @@
                 const customerData = await customerResponse.json();
 
                 if (!customerData.success || !customerData.customer || !customerData.customer.merchant_id) {
-                    document.getElementById('merchantIdDisplay').textContent = 'No merchant account';
+                    document.getElementById('merchantIdDisplay').textContent = 'No organization linked';
                     document.getElementById('merchantNameDisplay').textContent = 'Please complete onboarding';
                     return;
                 }
@@ -1099,21 +1231,22 @@
                     const merchantData = await merchantResponse.json();
                     if (merchantData.success && merchantData.merchant) {
                         const m = merchantData.merchant;
-                        const displayName = m.name || 'Unnamed Merchant';
+                        currentMerchant = m;
+                        const displayName = m.name || 'Unnamed practice';
                         document.getElementById('merchantNameDisplay').textContent = displayName;
                         document.getElementById('merchantApiKeyDisplay').textContent = m.api_key ?
                             `${m.api_key.substring(0, 12)}...${m.api_key.substring(m.api_key.length - 4)}` :
                             'Not available';
+                        const masked = m.api_key ? `${m.api_key.substring(0, 12)}...${m.api_key.substring(m.api_key.length - 4)}` : 'Not available';
+                        document.getElementById('apiKeyDisplayMasked').textContent = masked;
+                        document.getElementById('webhookUrlDisplay').textContent = m.webhook_url || 'Not configured';
                         document.getElementById('merchantWebhookDisplay').textContent = m.webhook_url || 'Not configured';
                         document.getElementById('merchantPlatformsDisplay').textContent =
                             (m.enabled_platforms && Array.isArray(m.enabled_platforms))
                                 ? m.enabled_platforms.join(', ')
                                 : (m.enabled_platforms || 'Not configured');
 
-                        // Sync footer name/avatar to merchant name
-                        document.getElementById('userName').textContent = displayName;
-                        const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-                        document.getElementById('userAvatar').textContent = initials;
+                        applyProfileData();
                     }
                 }
 
@@ -1126,8 +1259,45 @@
 
             } catch (error) {
                 console.error('Error loading merchant info:', error);
-                document.getElementById('merchantIdDisplay').textContent = 'Error loading merchant info';
+                document.getElementById('merchantIdDisplay').textContent = 'Error loading organization info';
             }
+        }
+
+        async function loadServiceStatuses() {
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/services-status`, { credentials: 'include' });
+                const json = await res.json();
+                if (!res.ok || !json.success) return;
+                const s = json.services || {};
+                const stripeEl = document.getElementById('stripeServiceStatus');
+                const twilioEl = document.getElementById('twilioServiceStatus');
+                const shopifyEl = document.getElementById('shopifyServiceStatus');
+                if (stripeEl) stripeEl.textContent = `${s.stripe?.connected ? '✅ Connected' : '⚠️ Not configured'} - ${s.stripe?.detail || ''}`;
+                if (twilioEl) twilioEl.textContent = `${s.twilio?.connected ? '✅ Connected' : '⚠️ Not configured'} - ${s.twilio?.detail || ''}`;
+                if (shopifyEl) shopifyEl.textContent = `${s.shopify?.connected ? '✅ Connected' : 'Not connected'} - ${s.shopify?.detail || ''}`;
+            } catch (_) {}
+        }
+
+        async function loadNotificationSettings() {
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/notification-settings`, { credentials: 'include' });
+                const json = await res.json();
+                if (!res.ok || !json.success) return;
+                document.getElementById('notifOrders').checked = !!json.settings?.order_notifications;
+                document.getElementById('notifFraud').checked = !!json.settings?.fraud_alerts;
+                document.getElementById('notifReports').checked = !!json.settings?.weekly_reports;
+            } catch (_) {}
+        }
+
+        async function loadSecurityMeta() {
+            try {
+                if (currentCustomer?.password_updated_at) {
+                    document.getElementById('passwordLastChanged').textContent = `Last changed ${new Date(currentCustomer.password_updated_at).toLocaleString()}`;
+                } else {
+                    document.getElementById('passwordLastChanged').textContent = 'Not available';
+                }
+            } catch (_) {}
+            try { await viewSessions(); } catch (_) {}
         }
 
         // Voice Agent Settings (UI → backend)
@@ -1216,10 +1386,10 @@
 
         // Business Information
         function editBusinessName() {
-            const newName = prompt('Enter new business name:', 'VitaminCo');
+            const current = (currentCustomer && currentCustomer.company_name) || document.getElementById('businessNameSetting').textContent || '';
+            const newName = prompt('Enter new business name:', current);
             if (newName) {
-                alert('Business name updated!\n\nIn production, this would update your business name across the platform.');
-                document.getElementById('businessNameSetting').textContent = newName;
+                saveProfileSettings({ company_name: newName.trim() });
             }
         }
 
@@ -1420,80 +1590,296 @@
             }
         }
 
-        function editEmail() {
-            const newEmail = prompt('Enter new email address:', 'owner@vitamins.com');
-            if (newEmail) {
-                alert('Email updated!\n\nIn production, we would send a verification email.');
-                document.getElementById('businessEmail').textContent = newEmail;
+        async function editEmail() {
+            const current = (currentCustomer && currentCustomer.email) || '';
+            const newEmail = prompt('Enter new email address:', current);
+            if (!newEmail || newEmail.trim() === current) return;
+            try {
+                const reqRes = await fetch(`${API_BASE}/api/customers/me/email-change/request`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_email: newEmail.trim() })
+                });
+                const reqJson = await reqRes.json();
+                if (!reqRes.ok || !reqJson.success) throw new Error(reqJson.error || 'Could not request email change');
+                const code = prompt(`Verification code sent to ${newEmail}. Enter code to confirm:`, '');
+                if (!code) return;
+                const cRes = await fetch(`${API_BASE}/api/customers/me/email-change/confirm`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_email: newEmail.trim(), code: code.trim() })
+                });
+                const cJson = await cRes.json();
+                if (!cRes.ok || !cJson.success) throw new Error(cJson.error || 'Could not confirm email change');
+                currentCustomer = { ...(currentCustomer || {}), email: cJson.email };
+                applyProfileData();
+                alert('Email updated.');
+            } catch (e) {
+                alert(e.message || 'Email change failed');
             }
         }
 
         function editPhone() {
-            const newPhone = prompt('Enter new phone number:', '+1 (862) 230-7479');
+            const current = (currentCustomer && (currentCustomer.phone_number || currentCustomer.twilio_phone_number)) || '';
+            const newPhone = prompt('Enter new phone number:', current);
             if (newPhone) {
-                alert('Phone number updated!');
+                saveProfileSettings({ phone_number: newPhone.trim() });
+            }
+        }
+
+        function editProviderDisplayName() {
+            const current = providerLabelFromCustomer(currentCustomer) || '';
+            const next = prompt('Enter provider display name:', current);
+            if (!next) return;
+            const existing = (currentCustomer && currentCustomer.provider_profile && typeof currentCustomer.provider_profile === 'object')
+                ? currentCustomer.provider_profile
+                : {};
+            saveProfileSettings({
+                provider_profile: {
+                    ...existing,
+                    display_name: next.trim()
+                }
+            });
+        }
+
+        async function saveProfileSettings(payload) {
+            try {
+                const response = await fetch(`${API_BASE}/api/customers/me/profile`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload || {})
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to save profile');
+                }
+                if (data.customer) {
+                    currentCustomer = { ...(currentCustomer || {}), ...data.customer };
+                    userData = { ...(userData || {}), ...data.customer };
+                }
+                applyProfileData();
+                alert('Profile updated.');
+            } catch (error) {
+                console.error('saveProfileSettings error:', error);
+                alert(error.message || 'Failed to save profile');
             }
         }
 
         // Connected Services
         function manageStripe() {
-            alert('💳 Stripe Settings\n\nIn production, this would show:\n\n• Connected account details\n• Payout schedule\n• Transaction fees\n• Disconnect option\n• View Stripe dashboard');
+            window.location.href = 'billing.html?section=overview';
         }
 
         function manageTwilio() {
-            alert('📱 Twilio Settings\n\nIn production, this would show:\n\n• Phone numbers\n• SMS usage\n• Billing details\n• Message templates\n• Disconnect option');
+            alert(`Twilio number: ${(currentCustomer && currentCustomer.twilio_phone_number) || 'Not configured'}`);
         }
 
         function connectShopify() {
-            alert('🛍️ Connect Shopify\n\nIn production, this would:\n\n1. Open Shopify OAuth\n2. Request permissions\n3. Import products\n4. Sync inventory\n5. Enable auto-sync');
+            const status = (document.getElementById('shopifyServiceStatus')?.textContent || '').toLowerCase();
+            if (status.includes('connected')) {
+                alert('Shopify is connected. Manage your store integration in the developer settings.');
+            } else {
+                alert('Shopify integration is coming soon. Your practice uses voice and calendar integrations today.');
+            }
         }
 
         // Notifications
-        function toggleNotification(type) {
-            alert(`Notification settings updated for: ${type}`);
+        async function toggleNotification(type) {
+            try {
+                const payload = {
+                    order_notifications: !!document.getElementById('notifOrders')?.checked,
+                    fraud_alerts: !!document.getElementById('notifFraud')?.checked,
+                    weekly_reports: !!document.getElementById('notifReports')?.checked
+                };
+                const res = await fetch(`${API_BASE}/api/customers/me/notification-settings`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Failed to save notification settings');
+            } catch (e) {
+                alert(e.message || `Failed to update ${type}`);
+            }
         }
 
         // Billing
         function viewPlans() {
-            alert('💰 Subscription Plans\n\n📦 Basic - $99/month\n• Up to 1,000 calls\n• Basic support\n\n🚀 Pro - $299/month (Current)\n• Up to 10,000 calls\n• Priority support\n• Advanced analytics\n\n⭐ Enterprise - Custom\n• Unlimited calls\n• Dedicated support\n• Custom integration');
+            const tier = (currentCustomer?.plan_tier || currentCustomer?.pricing_tier || 'starter').toLowerCase();
+            const tierLabels = { starter: 'Starter', pro: 'Pro', enterprise: 'Enterprise', basic: 'Basic' };
+            const label = tierLabels[tier] || tier;
+            alert(`Your plan: ${label}\n\nYour current tier is stored in your account. Contact support to upgrade or change your plan.`);
         }
 
-        function viewInvoices() {
-            alert('📄 Invoices\n\nIn production, this would show:\n\n• All past invoices\n• Payment history\n• Download PDFs\n• Tax information');
+        async function viewInvoices() {
+            try {
+                const response = await fetch(`${API_BASE}/api/customer/billing/invoices`, { credentials: 'include' });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Failed to load invoices');
+                if (!data.invoices || data.invoices.length === 0) {
+                    alert('No invoices yet. Invoices are generated monthly based on your usage.');
+                    return;
+                }
+                showInvoicesModal(data.invoices);
+            } catch (e) {
+                alert(e.message || 'Failed to load invoices. Please try again.');
+            }
         }
 
-        function updatePaymentMethod() {
-            alert('💳 Update Payment Method\n\nIn production, this would open Stripe checkout to:\n\n• Add new card\n• Update billing address\n• Set default payment method');
+        function showInvoicesModal(invoices) {
+            const existing = document.getElementById('invoicesModalOverlay');
+            if (existing) existing.remove();
+            const overlay = document.createElement('div');
+            overlay.id = 'invoicesModalOverlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+            overlay.innerHTML = `
+                <div style="background:white;border-radius:12px;max-width:520px;width:100%;max-height:80vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);padding:24px;">
+                    <h3 style="margin:0 0 16px 0;">Invoices</h3>
+                    <div style="font-size:14px;color:var(--gray-600);margin-bottom:16px;">
+                        ${invoices.map(inv => `
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee;">
+                                <span>${inv.invoice_number || inv.id} — ${inv.billing_month || ''}</span>
+                                <span><strong>$${(inv.total || 0).toFixed(2)}</strong> — ${inv.status || 'pending'}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <button onclick="document.getElementById('invoicesModalOverlay').remove()" class="btn btn-primary btn-sm">Close</button>
+                </div>
+            `;
+            overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+            document.body.appendChild(overlay);
+        }
+
+        async function paymentMethodAction() {
+            try {
+                const portalRes = await fetch(`${API_BASE}/api/customer/billing/portal`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const portalData = await portalRes.json();
+                if (portalData.success && portalData.url) {
+                    window.location.href = portalData.url;
+                    return;
+                }
+            } catch (_) {}
+            setupPaymentMethod();
+        }
+
+        async function updatePaymentMethod() {
+            paymentMethodAction();
         }
 
         // API & Developer
         function viewApiKey() {
-            const confirmed = confirm('⚠️ Your API key will be visible. Only share this with trusted developers.\n\nShow API key?');
-            if (confirmed) {
-                alert('🔑 API Key:\n\nmk_live_' + userData.merchant_id);
+            if (!currentMerchant?.api_key) {
+                alert('No API key available');
+                return;
+            }
+            alert(`API Key:\n\n${currentMerchant.api_key}`);
+        }
+
+        async function regenerateApiKey() {
+            if (!confirm('⚠️ Warning: This will invalidate your current API key.\n\nAll applications using the old key will stop working.\n\nContinue?')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/merchant/me/regenerate-api-key`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    currentMerchant = data.merchant;
+                    const m = data.merchant;
+                    document.getElementById('merchantApiKeyDisplay').textContent = m.api_key ?
+                        `${m.api_key.substring(0, 12)}...${m.api_key.substring(m.api_key.length - 4)}` : 'Not available';
+                    document.getElementById('apiKeyDisplayMasked').textContent = m.api_key ?
+                        `${m.api_key.substring(0, 12)}...${m.api_key.substring(m.api_key.length - 4)}` : 'Not available';
+                    alert('✅ New API key generated! Update your applications with the new key.');
+                } else {
+                    alert(data.error || 'Failed to regenerate API key');
+                }
+            } catch (e) {
+                alert('Failed to regenerate API key. Please try again.');
             }
         }
 
-        function regenerateApiKey() {
-            const confirmed = confirm('⚠️ Warning: This will invalidate your current API key.\n\nAll applications using the old key will stop working.\n\nContinue?');
-            if (confirmed) {
-                alert('✅ New API key generated!\n\nYour old key has been revoked. Update your applications with the new key.');
+        async function editMerchantName() {
+            const current = currentMerchant?.name || '';
+            const next = prompt('Enter practice / organization name:', current);
+            if (!next) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/merchant/me`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: next.trim() })
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update practice name');
+                currentMerchant = json.merchant || currentMerchant;
+                document.getElementById('merchantNameDisplay').textContent = currentMerchant?.name || 'Unnamed practice';
+                applyProfileData();
+            } catch (e) {
+                alert(e.message || 'Failed to update practice name');
             }
         }
 
-        function editWebhook() {
-            const newUrl = prompt('Enter webhook URL:', 'http://localhost:4000/webhook');
-            if (newUrl) {
-                alert('Webhook URL updated!\n\nMake sure your endpoint is ready to receive events.');
+        function editPlatforms() {
+            alert('Enabled platforms are managed by your onboarding/admin flow.');
+        }
+
+        function viewTwilioPhone() {
+            alert((currentCustomer && currentCustomer.twilio_phone_number) || 'No Twilio phone number configured');
+        }
+
+        async function editWebhook() {
+            const current = currentMerchant?.webhook_url || '';
+            const newUrl = prompt('Enter webhook URL:', current);
+            if (newUrl == null) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/merchant/me`, {
+                    method: 'PATCH',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ webhook_url: newUrl.trim() || null })
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Failed to update webhook');
+                currentMerchant = json.merchant || currentMerchant;
+                document.getElementById('webhookUrlDisplay').textContent = currentMerchant?.webhook_url || 'Not configured';
+                document.getElementById('merchantWebhookDisplay').textContent = currentMerchant?.webhook_url || 'Not configured';
+            } catch (e) {
+                alert(e.message || 'Failed to update webhook');
             }
         }
 
-        function testWebhook() {
-            alert('🧪 Testing webhook...\n\nSending test event to your endpoint.\n\nCheck your server logs for the test payload.');
+        async function testWebhook() {
+            if (!currentMerchant?.webhook_url) {
+                alert('Please configure a webhook URL first.');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/merchant/me/test-webhook`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ ' + (data.message || 'Test webhook sent. Check your endpoint.'));
+                } else {
+                    alert(data.error || 'Webhook test failed.');
+                }
+            } catch (e) {
+                alert('Failed to send test webhook. Please try again.');
+            }
         }
 
         function viewApiDocs() {
-            window.open('https://docs.yourplatform.com', '_blank');
+            const docsUrl = (typeof API_BASE !== 'undefined' ? API_BASE : '') + '/docs';
+            window.open(docsUrl, '_blank');
         }
 
         // Security
@@ -1621,30 +2007,108 @@
         }
 
         function enable2FA() {
-            alert('🔐 Enable Two-Factor Authentication\n\nIn production, this would:\n\n1. Show QR code\n2. Scan with authenticator app\n3. Enter verification code\n4. Generate backup codes\n5. Enable 2FA');
+            alert('Two-factor authentication is coming soon. We\'ll notify you when it\'s available.');
         }
 
-        function viewSessions() {
-            alert('📱 Active Sessions\n\nIn production, this would show:\n\n• Current session (this device)\n• Chrome on MacBook - Last active now\n• Safari on iPhone - Last active 2h ago\n\n[Log out other sessions]');
-        }
-
-        // Danger Zone
-        function exportData() {
-            const confirmed = confirm('📦 Export All Data\n\nThis will create a downloadable archive containing:\n\n• All orders\n• Customer data\n• Product catalog\n• Transaction history\n• Call logs\n\nContinue?');
-            if (confirmed) {
-                alert('✅ Data export started!\n\nYou\'ll receive an email with a download link when ready (usually within 5 minutes).');
+        async function viewSessions() {
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/sessions`, { credentials: 'include' });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Failed to load sessions');
+                const list = document.getElementById('activeSessionsList');
+                if (!list) return;
+                const rows = Array.isArray(json.sessions) ? json.sessions : [];
+                if (!rows.length) {
+                    list.innerHTML = 'No active sessions.';
+                    return;
+                }
+                list.innerHTML = rows.map((s) => `
+                    <div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid #eef2f7;">
+                      <span>${s.is_current ? 'Current' : 'Session'} • ${s.ip_address || 'unknown ip'} • ${new Date(s.last_accessed_at || s.created_at).toLocaleString()}</span>
+                      ${s.is_current ? '' : `<button class="btn btn-secondary btn-sm" onclick="revokeSession('${s.id}')">Revoke</button>`}
+                    </div>
+                `).join('');
+            } catch (e) {
+                alert(e.message || 'Failed to load sessions');
             }
         }
 
-        function closeAccount() {
-            const confirmed = confirm('⚠️ DANGER: Close Account\n\nThis will PERMANENTLY delete:\n\n• Your business account\n• All orders and data\n• Customer information\n• Call history\n• Everything\n\nThis CANNOT be undone!\n\nAre you absolutely sure?');
-
-            if (confirmed) {
-                const finalConfirm = prompt('Type "DELETE FOREVER" to confirm:', '');
-                if (finalConfirm === 'DELETE FOREVER') {
-                    alert('Account closed.\n\nWe\'re sorry to see you go. You\'ll receive a final data export via email.');
-                    logout();
+        async function exportData() {
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/export`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                if (!res.ok) {
+                    const j = await res.json().catch(() => ({}));
+                    throw new Error(j.error || 'Export failed');
                 }
+                const blob = await res.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `doclittle-export-${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+                alert('Data export downloaded.');
+            } catch (e) {
+                alert(e.message || 'Failed to export data.');
+            }
+        }
+
+        async function closeAccount() {
+            const confirm1 = confirm('Are you sure you want to close your account? This action cannot be undone.');
+            if (!confirm1) return;
+            const phrase = prompt('Type DELETE FOREVER to confirm:');
+            if (phrase !== 'DELETE FOREVER') {
+                alert('Account closure cancelled.');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/close-account`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ confirm_phrase: phrase })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Account closed. You have been signed out.');
+                    logout();
+                } else {
+                    alert(data.error || 'Failed to close account');
+                }
+            } catch (e) {
+                alert('Failed to close account. Please try again.');
+            }
+        }
+
+        async function revokeSession(sessionId) {
+            if (!sessionId) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/sessions/${encodeURIComponent(sessionId)}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Failed to revoke session');
+                await viewSessions();
+            } catch (e) {
+                alert(e.message || 'Failed to revoke session');
+            }
+        }
+
+        async function revokeOtherSessions() {
+            if (!confirm('Revoke all other sessions?')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/customers/me/sessions/revoke-others`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                const json = await res.json();
+                if (!res.ok || !json.success) throw new Error(json.error || 'Failed to revoke sessions');
+                await viewSessions();
+            } catch (e) {
+                alert(e.message || 'Failed to revoke sessions');
             }
         }
 

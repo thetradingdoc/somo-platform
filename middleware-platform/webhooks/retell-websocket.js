@@ -574,7 +574,10 @@ class RetellWebSocketHandler {
 
             // orch-1 + orch-4: Persist voice session (skip when fallback—orchestrator already persisted)
             try {
-                if (!kellyResult?.usedFallback && this.db?.upsertOrchestrateSession) {
+                // Persist voice session context even when Kelly returns a fallback/error reply.
+                // Otherwise the next transcript turn may lose triage/OPQRST continuity and
+                // increase the chance of additional LLM/tool retries (bad UX).
+                if (this.db?.upsertOrchestrateSession) {
                     const row = this.db.getOrchestrateSessionBySessionId?.(callId);
                     let preferredLang = row?.preferred_language || 'en';
                     try {

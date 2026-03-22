@@ -207,11 +207,55 @@
       #calendarWrap { margin: 8px 0; }
       #calendar { min-height: 400px; padding: 8px; }
       .legend { flex-wrap: wrap; gap: 8px; }
+
+      /* FullCalendar mobile toolbar/list layout */
+      .fc .fc-header-toolbar {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .fc .fc-toolbar-chunk {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .fc .fc-toolbar-title {
+        font-size: 18px;
+        line-height: 1.2;
+        text-align: center;
+        word-break: break-word;
+      }
+      .fc .fc-button {
+        min-height: 40px;
+        font-size: 15px;
+        padding: 8px 10px;
+      }
+      .fc .fc-button-group {
+        display: inline-flex;
+        flex-wrap: nowrap;
+      }
+      .fc .fc-list-day-cushion {
+        padding: 10px 8px;
+      }
+      .fc .fc-list-event-time {
+        width: 90px;
+        white-space: normal;
+      }
+      .fc .fc-list-event-title a {
+        white-space: normal;
+        word-break: break-word;
+      }
     }
     @media (max-width: 480px) {
       .main-content { padding: 12px; padding-top: 68px; }
       .filters { flex-direction: column; width: 100%; }
       .filters .input, .filters .select { width: 100%; }
+      .fc .fc-button { min-height: 36px; font-size: 14px; padding: 6px 8px; }
+      .fc .fc-toolbar-title { font-size: 16px; }
+      .fc .fc-list-event-time { width: 78px; font-size: 12px; }
     }
 
     .page-header {
@@ -642,6 +686,14 @@
         <div style="font-weight:700; color:#0e7490">Appointment Details</div>
         <button onclick="closeModal()" style="border:none;background:none;font-size:20px;cursor:pointer">✖</button>
       </div>
+      <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; justify-content:space-between;">
+        <div style="display:flex; gap:8px;">
+        <button id="tabOverview" class="btn btn-primary" style="padding:6px 10px;">Overview</button>
+        <button id="tabEHR" class="btn" style="padding:6px 10px;">EHR</button>
+        </div>
+        <button id="btnSyncEhrNow" class="btn" style="padding:6px 10px; background:#0ea5e9; color:#fff; border:none;">Sync EHR Now</button>
+      </div>
+      <div id="ehrSyncStatus" style="display:none; margin-bottom:8px; font-size:12px; color:#6b7280;"></div>
       <div id="modalContent" style="font-size:14px; color:#374151; margin-bottom:12px;"></div>
       <div class="section">
         <h4>Reschedule</h4>
@@ -898,18 +950,27 @@
       }
     }
 
-    async function fetchAppointments() {
+    function getClinicId() {
+      return (window.TENANT_CONFIG && window.TENANT_CONFIG.clinic_id) || 'clinic-default';
+    }
+    async function fetchAppointments(visibleStart, visibleEnd) {
       const params = new URLSearchParams();
       const status = document.getElementById('statusFilter').value;
       const date = document.getElementById('dateFilter').value;
       const provider = document.getElementById('providerFilter').value;
 
+      params.append('clinic_id', getClinicId());
       if (status) params.append('status', status);
       if (date) params.append('date', date);
       if (provider) params.append('provider', provider);
+      if (visibleStart && visibleEnd) {
+        params.append('start_date', visibleStart);
+        params.append('end_date', visibleEnd);
+      }
+      params.append('_', Date.now());
 
       const url = `${API_BASE}/api/admin/appointments?${params.toString()}`;
-      const res = await fetch(url, { credentials: 'include' });
+      const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to load appointments');
       return data.appointments || [];
@@ -952,7 +1013,9 @@
             start_time: a.start_time,
             end_time: a.end_time,
             notes: a.notes || '',
-            video_room: a.video_room_name || (a.id ? (String(a.id).startsWith('appt-') ? a.id : 'appt-' + a.id) : null)
+            video_room: a.video_room_name || (a.id ? (String(a.id).startsWith('appt-') ? a.id : 'appt-' + a.id) : null),
+            ehr_sync_status: a.ehr_sync_status || null,
+            ehr_sync_last_error: a.ehr_sync_last_error || null
           }
         });
       });
@@ -1034,13 +1097,137 @@
     let currentApptId = null;
     let currentVideoRoom = null;
     let showPHI = false;
+    let activeDetailsTab = 'overview';
+    let currentDetailsProps = null;
+    let currentEhrData = null;
+
+    function escapeHtml(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    async function loadEhrSummary(apptId, patientId) {
+      currentEhrData = { loading: true };
+      if (activeDetailsTab === 'ehr') renderEhrDetails();
+      try {
+        const apptRes = await fetch(`${API_BASE}/api/admin/appointments/${encodeURIComponent(apptId)}/ehr-summary`, { credentials: 'include' });
+        const apptJson = await apptRes.json();
+        if (apptJson?.success && apptJson?.synced) {
+          currentEhrData = { source: 'appointment', data: apptJson };
+          if (activeDetailsTab === 'ehr') renderEhrDetails();
+          return;
+        }
+        if (patientId) {
+          const pRes = await fetch(`${API_BASE}/api/admin/patients/${encodeURIComponent(patientId)}/ehr-summary`, { credentials: 'include' });
+          const pJson = await pRes.json();
+          if (pJson?.success && Array.isArray(pJson?.encounters) && pJson.encounters.length > 0) {
+            currentEhrData = { source: 'patient', data: pJson };
+            if (activeDetailsTab === 'ehr') renderEhrDetails();
+            return;
+          }
+        }
+        currentEhrData = { empty: true, message: apptJson?.message || 'No EHR data found for this appointment.' };
+      } catch (e) {
+        currentEhrData = { error: true, message: e?.message || 'Failed to load EHR summary' };
+      }
+      if (activeDetailsTab === 'ehr') renderEhrDetails();
+    }
+
+    async function syncEhrNow(apptId, patientId) {
+      const btn = document.getElementById('btnSyncEhrNow');
+      const statusEl = document.getElementById('ehrSyncStatus');
+      if (!apptId || !btn || !statusEl) return;
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = 'Syncing...';
+      statusEl.style.display = 'block';
+      statusEl.style.color = '#6b7280';
+      statusEl.textContent = 'Sync started...';
+      try {
+        const res = await fetch(`${API_BASE}/api/ehr/sync/appointment/${encodeURIComponent(apptId)}`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const json = await res.json();
+        if (!json?.success) {
+          statusEl.style.color = '#ef4444';
+          statusEl.textContent = `Sync failed: ${json?.error || 'Unknown error'}`;
+        } else {
+          statusEl.style.color = '#059669';
+          statusEl.textContent = json?.message || 'Sync completed.';
+        }
+      } catch (e) {
+        statusEl.style.color = '#ef4444';
+        statusEl.textContent = `Sync failed: ${e?.message || 'Network error'}`;
+      } finally {
+        await loadEhrSummary(apptId, patientId || null);
+        if (activeDetailsTab !== 'ehr') setDetailsTab('ehr');
+        btn.disabled = false;
+        btn.textContent = oldText;
+      }
+    }
+
+    function renderEhrDetails() {
+      const target = document.getElementById('modalContent');
+      if (!target) return;
+      if (!currentEhrData || currentEhrData.loading) {
+        target.innerHTML = '<div style="color:#6b7280;">Loading EHR summary...</div>';
+        return;
+      }
+      if (currentEhrData.error) {
+        target.innerHTML = `<div style="color:#ef4444;">${escapeHtml(currentEhrData.message || 'Failed to load EHR data')}</div>`;
+        return;
+      }
+      if (currentEhrData.empty) {
+        target.innerHTML = `<div style="color:#6b7280;">${escapeHtml(currentEhrData.message || 'No EHR data available yet.')}</div>`;
+        return;
+      }
+
+      const rows = currentEhrData.source === 'appointment'
+        ? [{ encounter: currentEhrData.data.encounter, conditions: currentEhrData.data.conditions || [], procedures: currentEhrData.data.procedures || [], observations: currentEhrData.data.observations || [] }]
+        : (currentEhrData.data.encounters || []);
+      const blocks = rows.map((row, idx) => {
+        const enc = row.encounter || {};
+        const conditions = (row.conditions || []).map(c => `<li>${escapeHtml(c.icd10_code || '')} - ${escapeHtml(c.description || '')}${c.is_primary ? ' (primary)' : ''}</li>`).join('') || '<li>None</li>';
+        const procedures = (row.procedures || []).map(p => `<li>${escapeHtml(p.cpt_code || '')}${p.modifier ? `-${escapeHtml(p.modifier)}` : ''} - ${escapeHtml(p.description || '')}</li>`).join('') || '<li>None</li>';
+        const observations = (row.observations || []).map(o => `<li>${escapeHtml(o.type || '')}: ${escapeHtml(o.value || '')}${o.unit ? ` ${escapeHtml(o.unit)}` : ''}</li>`).join('') || '<li>None</li>';
+        return `
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;">
+            <div style="font-weight:600;margin-bottom:6px;">Encounter ${idx + 1}: ${escapeHtml(enc.id || 'N/A')}</div>
+            <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">${escapeHtml(enc.start_time || 'N/A')} -> ${escapeHtml(enc.end_time || 'N/A')} (${escapeHtml(enc.status || 'unknown')})</div>
+            <div><strong>Conditions</strong><ul style="margin:4px 0 8px 18px;">${conditions}</ul></div>
+            <div><strong>Procedures</strong><ul style="margin:4px 0 8px 18px;">${procedures}</ul></div>
+            <div><strong>Observations</strong><ul style="margin:4px 0 0 18px;">${observations}</ul></div>
+          </div>
+        `;
+      }).join('');
+      const sourceLabel = currentEhrData.source === 'appointment' ? 'appointment-linked EHR summary' : 'patient EHR history';
+      target.innerHTML = `<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Auto-populated from ${sourceLabel}.</div>${blocks}`;
+    }
+
+    function setDetailsTab(tab) {
+      activeDetailsTab = tab === 'ehr' ? 'ehr' : 'overview';
+      const tabOverview = document.getElementById('tabOverview');
+      const tabEhr = document.getElementById('tabEHR');
+      if (tabOverview) tabOverview.className = activeDetailsTab === 'overview' ? 'btn btn-primary' : 'btn';
+      if (tabEhr) tabEhr.className = activeDetailsTab === 'ehr' ? 'btn btn-primary' : 'btn';
+      if (activeDetailsTab === 'ehr') renderEhrDetails();
+      else if (currentDetailsProps) renderDetails(currentDetailsProps);
+    }
 
     function openModal(contentHtml, apptId, status, extProps) {
       currentApptId = apptId;
+      currentDetailsProps = extProps;
       const rawRoom = extProps && extProps.video_room ? extProps.video_room : null;
       const fallbackRoom = (apptId && String(apptId) !== 'undefined') ? (String(apptId).startsWith('appt-') ? apptId : 'appt-' + apptId) : null;
       currentVideoRoom = (rawRoom && rawRoom !== 'appt-undefined' && rawRoom !== 'appt-null') ? rawRoom : fallbackRoom;
       showPHI = false;
+      activeDetailsTab = 'overview';
+      currentEhrData = null;
       document.getElementById('modalContent').innerHTML = contentHtml;
       const modal = document.getElementById('detailsModal');
       modal.style.display = 'block';
@@ -1070,10 +1257,36 @@
 
       const btnPHI = document.getElementById('btnPHI');
       btnPHI.onclick = () => { showPHI = !showPHI; btnPHI.textContent = showPHI ? 'Hide PHI' : 'Show PHI'; renderDetails(extProps); };
+      const tabOverview = document.getElementById('tabOverview');
+      const tabEhr = document.getElementById('tabEHR');
+      const btnSyncEhrNow = document.getElementById('btnSyncEhrNow');
+      const ehrSyncStatus = document.getElementById('ehrSyncStatus');
+      if (tabOverview) tabOverview.onclick = () => setDetailsTab('overview');
+      if (tabEhr) tabEhr.onclick = () => setDetailsTab('ehr');
+      if (btnSyncEhrNow) btnSyncEhrNow.onclick = () => syncEhrNow(apptId, extProps?.patient_id || null);
+      if (ehrSyncStatus) {
+        ehrSyncStatus.style.display = 'none';
+        ehrSyncStatus.textContent = '';
+      }
+      setDetailsTab('overview');
+      loadEhrSummary(apptId, extProps?.patient_id || null);
       renderDetails(extProps);
     }
     function renderDetails(p) {
+      if (activeDetailsTab !== 'overview') return;
       const statusBadge = (s) => { const cls = s === 'confirmed' ? 'badge-confirmed' : (s === 'cancelled' ? 'badge-cancelled' : 'badge-scheduled'); return `<span class=\"badge ${cls}\">${s}</span>`; };
+      const ehrSyncBadge = (s) => {
+        const status = String(s || 'not_synced').toLowerCase();
+        const map = {
+          queued: { bg: '#e0f2fe', fg: '#0369a1', text: 'queued' },
+          in_progress: { bg: '#fef3c7', fg: '#92400e', text: 'in progress' },
+          done: { bg: '#dcfce7', fg: '#166534', text: 'synced' },
+          dead: { bg: '#fee2e2', fg: '#991b1b', text: 'failed' },
+          not_synced: { bg: '#f3f4f6', fg: '#4b5563', text: 'not synced' }
+        };
+        const m = map[status] || map.not_synced;
+        return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:${m.bg};color:${m.fg};text-transform:uppercase;letter-spacing:.02em;">${m.text}</span>`;
+      };
       const patientName = showPHI ? (p.patient_name || 'N/A') : (p.patient_initials || 'N/A');
       const phone = showPHI ? (p.patient_phone || 'N/A') : (p.phone_masked || 'N/A');
       const email = showPHI ? (p.patient_email || 'N/A') : (p.email || 'N/A');
@@ -1085,6 +1298,7 @@
           <div>
             <div><strong>Confirmation:</strong> ${p.confirmation}</div>
             <div><strong>Status:</strong> ${statusBadge(p.status)}</div>
+            <div><strong>EHR Sync:</strong> ${ehrSyncBadge(p.ehr_sync_status)}${p.ehr_sync_last_error ? ` <span style="color:#b91c1c;font-size:11px;">(${escapeHtml(String(p.ehr_sync_last_error).slice(0, 80))})</span>` : ''}</div>
             <div><strong>Type:</strong> ${p.appointment_type}</div>
             <div><strong>Provider:</strong> ${p.provider || 'Team'}</div>
             <div><strong>When:</strong> ${when} (${p.timezone || 'America/New_York'})</div>
@@ -1134,7 +1348,19 @@
       const calendarEl = document.getElementById('calendar');
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
-        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+        customButtons: {
+          goToday: {
+            text: 'today',
+            click: function () {
+              // Navigate to today's date in the calendar UI. Do not lock backend to
+              // an exact date filter, otherwise week/day navigation can appear empty.
+              if (dateInput) dateInput.value = '';
+              calendar.today();
+              refresh();
+            }
+          }
+        },
+        headerToolbar: { left: 'prev,next goToday', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
         datesSet: function () { refresh(); },
         eventClick: function (info) {
           const p = info.event.extendedProps;
@@ -1155,8 +1381,10 @@
       });
 
       async function refresh() {
-        const appts = await fetchAppointments();
-        const events = toCalendarEvents(appts);
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const firstOfMonth = (y, m) => `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        const lastOfMonth = (y, m) => new Date(y, m + 1, 0).toISOString().slice(0, 10);
         let start = null, end = null;
         try {
           const view = calendar.view;
@@ -1164,10 +1392,16 @@
           if (view && view.activeEnd) end = view.activeEnd.toISOString().slice(0, 10);
         } catch (_) {}
         if (!start || !end) {
-          const d = new Date();
-          start = new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString().slice(0, 10);
-          end = new Date(d.getFullYear(), d.getMonth() + 2, 0).toISOString().slice(0, 10);
+          start = firstOfMonth(currentYear, now.getMonth() - 1);
+          end = lastOfMonth(currentYear, now.getMonth() + 1);
         }
+        const startYear = start ? parseInt(start.slice(0, 4), 10) : currentYear;
+        if (Math.abs(startYear - currentYear) > 1) {
+          start = firstOfMonth(currentYear, now.getMonth());
+          end = lastOfMonth(currentYear, now.getMonth() + 2);
+        }
+        const appts = await fetchAppointments(start, end);
+        const events = toCalendarEvents(appts);
         const blocks = await fetchAvailabilityBlocks(start, end);
         const avbEvents = toAvailabilityEvents(blocks);
         calendar.removeAllEvents();
@@ -1195,16 +1429,26 @@
         }
         searchTimeout = setTimeout(async () => {
           try {
-            const res = await fetch(`${API_BASE}/fhir/Patient?name=${encodeURIComponent(q)}&_count=10`, { credentials: 'include' });
-            const bundle = await res.json();
-            const patients = (bundle.entry || []).map(e => e.resource).map(r => {
-              const nameObj = r.name && r.name[0] ? r.name[0] : {};
-              const name = `${(nameObj.given || []).join(' ')} ${nameObj.family || ''}`.trim() || 'Unknown';
-              const telecom = r.telecom || [];
-              const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
-              const email = (telecom.find(t => t.system === 'email') || {}).value || '';
-              return { id: r.id, name, phone, email };
-            });
+            // Primary: admin patient search (includes existing appointment patients).
+            const adminRes = await fetch(`${API_BASE}/api/admin/patients/search?q=${encodeURIComponent(q)}&limit=10`, { credentials: 'include' });
+            let patients = [];
+            if (adminRes.ok) {
+              const adminJson = await adminRes.json();
+              patients = Array.isArray(adminJson?.patients) ? adminJson.patients : [];
+            }
+            // Fallback: FHIR search for patients that may not appear in appointment history yet.
+            if (patients.length === 0) {
+              const res = await fetch(`${API_BASE}/fhir/Patient?name=${encodeURIComponent(q)}&_count=10`, { credentials: 'include' });
+              const bundle = await res.json();
+              patients = (bundle.entry || []).map(e => e.resource).map(r => {
+                const nameObj = r.name && r.name[0] ? r.name[0] : {};
+                const name = `${(nameObj.given || []).join(' ')} ${nameObj.family || ''}`.trim() || 'Unknown';
+                const telecom = r.telecom || [];
+                const phone = (telecom.find(t => t.system === 'phone') || {}).value || '';
+                const email = (telecom.find(t => t.system === 'email') || {}).value || '';
+                return { id: r.id, name, phone, email };
+              });
+            }
             if (patients.length === 0) {
               resultsEl.innerHTML = '<div style="padding:12px;color:#6b7280;">No patients found. Enter details manually below.</div>';
             } else {
@@ -1249,7 +1493,8 @@
           date: document.getElementById('createApptDate').value,
           time: document.getElementById('createApptTime').value,
           provider: document.getElementById('createProvider').value.trim() || 'Consult Care Team',
-          notes: document.getElementById('createNotes').value.trim() || ''
+          notes: document.getElementById('createNotes').value.trim() || '',
+          clinic_id: (typeof getClinicId === 'function' ? getClinicId() : 'clinic-default')
         };
 
         if (!formData.patient_name || !formData.patient_phone || !formData.date || !formData.time) {

@@ -24,6 +24,10 @@ class ReportRequest(BaseModel):
     transcript: str | None = None
     transcript_endpoint: str | None = None
     transcript_endpoint_token: str | None = None
+    document_context_endpoint: str | None = None
+    document_context_endpoint_token: str | None = None
+    vitals_endpoint: str | None = None
+    vitals_endpoint_token: str | None = None
     prior_report_id: str | None = None
     callback_url: str
     callback_token: str
@@ -44,6 +48,10 @@ def run_report_task(payload: ReportRequest) -> None:
             prior_report_id=payload.prior_report_id,
             transcript_endpoint=payload.transcript_endpoint,
             transcript_endpoint_token=payload.transcript_endpoint_token,
+            document_context_endpoint=payload.document_context_endpoint,
+            document_context_endpoint_token=payload.document_context_endpoint_token,
+            vitals_endpoint=payload.vitals_endpoint,
+            vitals_endpoint_token=payload.vitals_endpoint_token,
             appointment_id=payload.appointment_id,
             job_id=job_id,
         )

@@ -36,7 +36,7 @@ router.get('/:token', (req, res) => {
 router.get('/checkout/:token', async (req, res) => {
     try {
         const { token } = req.params;
-        const result = PaymentService.getCheckoutByToken(token);
+        const result = await PaymentService.getCheckoutByToken(token);
 
         if (!result.success) {
             try { db.incrementOpsCounter && db.incrementOpsCounter('payment_checkout_failed'); } catch (_) {}
@@ -170,7 +170,7 @@ router.post('/process', async (req, res) => {
         const db = require('../database');
 
         // Validate token
-        const checkoutResult = PaymentService.getCheckoutByToken(payment_token);
+        const checkoutResult = await PaymentService.getCheckoutByToken(payment_token);
         if (!checkoutResult.success) {
             try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(400).json(checkoutResult);

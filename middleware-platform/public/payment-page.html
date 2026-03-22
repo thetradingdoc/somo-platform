@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Complete your appointment payment — DocLittle</title>
+<script src="https://js.stripe.com/v3/"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f8f7f4;
+    color: #1a1a1a;
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    padding: 2rem;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .logo {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .logo svg { width: 24px; height: 24px; }
+
+  h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 1.5rem;
+  }
+
+  .appointment-summary {
+    background: #f3f1ee;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+  }
+
+  .appointment-summary .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+  }
+
+  .appointment-summary .row:last-child {
+    border-top: 1px solid #e0ddd9;
+    margin-top: 0.4rem;
+    padding-top: 0.7rem;
+    font-weight: 600;
+  }
+
+  .appointment-summary .label { color: #666; }
+
+  #payment-element {
+    margin-bottom: 1.5rem;
+  }
+
+  .pay-btn {
+    width: 100%;
+    background: #1a1a1a;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 0.9rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .pay-btn:hover { opacity: 0.85; }
+  .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .error-message {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+    display: none;
+  }
+
+  .success-state {
+    text-align: center;
+    padding: 2rem 0;
+    display: none;
+  }
+
+  .success-state .check {
+    width: 56px;
+    height: 56px;
+    background: #dcfce7;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    font-size: 1.5rem;
+  }
+
+  .success-state h2 { font-size: 1.2rem; margin-bottom: 0.5rem; }
+  .success-state p { color: #666; font-size: 0.9rem; }
+
+  .secure-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: #999;
+    margin-top: 1rem;
+  }
+
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 120px;
+    color: #999;
+    font-size: 0.9rem;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid #e5e5e5;
+    border-top-color: #1a1a1a;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 0.5rem;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M12 2L3 7l9 5 9-5-9-5z"/>
+      <path d="M3 17l9 5 9-5M3 12l9 5 9-5"/>
+    </svg>
+    DocLittle
+  </div>
+
+  <!-- Loading state -->
+  <div id="loading-state" class="loading-state">
+    <div class="spinner"></div>
+    Loading payment details…
+  </div>
+
+  <!-- Payment form (shown after loading) -->
+  <div id="payment-form" style="display:none">
+    <h1>Complete your booking</h1>
+    <p class="subtitle" id="subtitle-text">Secure payment for your appointment</p>
+
+    <div class="appointment-summary" id="appt-summary" style="display:none">
+      <div class="row">
+        <span class="label">Appointment type</span>
+        <span id="appt-type">—</span>
+      </div>
+      <div class="row">
+        <span class="label">Amount due</span>
+        <span id="appt-amount">—</span>
+      </div>
+    </div>
+
+    <div class="error-message" id="error-msg"></div>
+    <div id="payment-element"></div>
+
+    <button class="pay-btn" id="pay-btn">Pay now</button>
+
+    <div class="secure-badge">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      Secured by Stripe. DocLittle never stores card details.
+    </div>
+  </div>
+
+  <!-- Success state -->
+  <div id="success-state" class="success-state">
+    <div class="check">✓</div>
+    <h2>Payment complete</h2>
+    <p>Your appointment is confirmed. We've sent a receipt to your email.</p>
+  </div>
+
+  <!-- Already paid -->
+  <div id="already-paid-state" style="display:none; text-align:center; padding:2rem 0">
+    <p>This appointment has already been paid. Check your email for the receipt.</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="error-state" style="display:none; text-align:center; padding:2rem 0">
+    <p style="color:#991b1b" id="fatal-error-text">Something went wrong loading this payment page.</p>
+  </div>
+</div>
+
+<script>
+(async function() {
+  const token = window.location.pathname.split('/').filter(Boolean).pop();
+  if (!token) return showFatalError('Invalid payment link.');
+
+  let paymentData;
+  try {
+    const resp = await fetch(`/payment/${token}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    const json = await resp.json();
+    if (!resp.ok) {
+      if (json.status === 'already_paid') return showAlreadyPaid();
+      return showFatalError(json.error || 'Payment session not found.');
+    }
+    paymentData = json;
+  } catch (err) {
+    return showFatalError('Could not load payment details. Please try the link again.');
+  }
+
+  if (!paymentData.publishableKey || !paymentData.clientSecret) {
+    return showFatalError('Payment configuration error. Please contact support.');
+  }
+
+  document.getElementById('appt-type').textContent = paymentData.appointmentType || 'Medical consultation';
+  if (paymentData.amount) {
+    document.getElementById('appt-amount').textContent = `$${(paymentData.amount / 100).toFixed(2)}`;
+    document.getElementById('appt-summary').style.display = 'block';
+  }
+
+  const stripe = Stripe(paymentData.publishableKey);
+  const elements = stripe.elements({ clientSecret: paymentData.clientSecret });
+  const paymentElement = elements.create('payment');
+  paymentElement.mount('#payment-element');
+
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('payment-form').style.display = 'block';
+
+  document.getElementById('pay-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('pay-btn');
+    btn.disabled = true;
+    btn.textContent = 'Processing…';
+    hideError();
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/payment/${token}/success`
+      }
+    });
+
+    if (error) {
+      showError(error.message || 'Payment failed. Please try a different card.');
+      btn.disabled = false;
+      btn.textContent = 'Pay now';
+    }
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const redirectStatus = params.get('redirect_status');
+  if (redirectStatus === 'succeeded') {
+    showSuccess();
+  } else if (redirectStatus === 'failed') {
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('payment-form').style.display = 'block';
+    showError('Your previous payment attempt failed. Please try again.');
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function hideError() {
+    document.getElementById('error-msg').style.display = 'none';
+  }
+})();
+
+function showSuccess() {
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('payment-form').style.display = 'none';
+  document.getElementById('success-state').style.display = 'block';
+}
+
+function showAlreadyPaid() {
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('already-paid-state').style.display = 'block';
+}
+
+function showFatalError(msg) {
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('fatal-error-text').textContent = msg;
+  document.getElementById('error-state').style.display = 'block';
+}
+</script>
+</body>
+</html>

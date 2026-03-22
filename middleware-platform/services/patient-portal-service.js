@@ -279,20 +279,31 @@ class PatientPortalService {
       const normEmail = (session.email || '').toLowerCase().trim();
 
       if (normEmail) {
-        // 1) Try FHIR patient_id (appointments linked to longitudinal patient record)
+        // 1) FHIR patient_id (appointments linked to longitudinal patient record)
         const patient = db.getFHIRPatientByEmail(normEmail);
         if (patient) {
           const patientId = patient.resource_id;
-          appointments = db.db.prepare(`
-            SELECT * FROM appointments 
-            WHERE patient_id = ? 
-            ORDER BY date DESC, time DESC
-            LIMIT 50
+          const byPatientId = db.db.prepare(`
+            SELECT * FROM appointments WHERE patient_id = ?
           `).all(patientId);
-        }
-
-        // 2) Fallback: by patient_email (calendar-created appointments often lack patient_id)
-        if (appointments.length === 0) {
+          const byEmail = db.db.prepare(`
+            SELECT * FROM appointments WHERE LOWER(TRIM(patient_email)) = ?
+          `).all(normEmail);
+          const seen = new Set();
+          for (const a of [...byPatientId, ...byEmail]) {
+            if (!seen.has(a.id)) {
+              seen.add(a.id);
+              appointments.push(a);
+            }
+          }
+          appointments.sort((a, b) => {
+            const da = `${a.date || ''} ${a.time || ''}`;
+            const dbVal = `${b.date || ''} ${b.time || ''}`;
+            return dbVal.localeCompare(da);
+          });
+          appointments = appointments.slice(0, 50);
+        } else {
+          // 2) No FHIR patient: use patient_email only
           appointments = db.db.prepare(`
             SELECT * FROM appointments 
             WHERE LOWER(TRIM(patient_email)) = ? 

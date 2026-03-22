@@ -5,7 +5,7 @@
  * Adds: family_history, medications, prior_diagnoses, prior_workups,
  * allergies, alcohol_use, alcohol_cage_score (INTEGER), smoking_status,
  * phq2_score, gad2_score, safety_screen, substance_use, critical_unknowns,
- * soap_note, detected_language
+ * soap_note, detected_language, occupation, intake_complete_at
  */
 
 function addColumnIfMissing(db, table, colName, colDef) {
@@ -35,7 +35,10 @@ function up(db) {
     ['substance_use', 'TEXT'],
     ['critical_unknowns', 'TEXT'],
     ['soap_note', 'TEXT'],
-    ['detected_language', 'TEXT']
+    ['detected_language', 'TEXT'],
+    ['occupation', 'TEXT'],
+    // Stored as ISO timestamp string
+    ['intake_complete_at', 'TEXT']
   ];
   cols.forEach(([name, def]) => addColumnIfMissing(db, 'triage_sessions', name, def));
 }

@@ -187,6 +187,60 @@ router.post('/checkout', authLimiter, async (req, res) => {
 });
 
 /**
+ * POST /api/customer/billing/portal
+ * Create Stripe Customer Portal session for managing payment methods
+ */
+router.post('/portal', authLimiter, async (req, res) => {
+    try {
+        const customer = getCustomerFromSession(req);
+        if (!customer) {
+            return res.status(401).json({
+                success: false,
+                error: 'Unauthorized. Please sign in.'
+            });
+        }
+
+        if (!process.env.STRIPE_SECRET_KEY) {
+            return res.status(500).json({
+                success: false,
+                error: 'Stripe not configured'
+            });
+        }
+
+        let stripeCustomerId = customer.stripe_customer_id;
+        if (!stripeCustomerId) {
+            const stripeCustomer = await stripe.customers.create({
+                email: customer.email,
+                name: customer.name || customer.company_name,
+                metadata: { customer_id: customer.id }
+            });
+            stripeCustomerId = stripeCustomer.id;
+            db.updateCustomer(customer.id, { stripe_customer_id: stripeCustomerId });
+        }
+
+        const baseUrl = process.env.ADMIN_PORTAL_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+        const returnUrl = `${baseUrl}/business/settings.html`;
+
+        const portalSession = await stripe.billingPortal.sessions.create({
+            customer: stripeCustomerId,
+            return_url: returnUrl
+        });
+
+        res.json({
+            success: true,
+            url: portalSession.url
+        });
+    } catch (error) {
+        console.error('❌ Create portal session error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create billing portal session',
+            message: error.message
+        });
+    }
+});
+
+/**
  * GET /api/customer/billing/invoices
  * Get all invoices for customer
  */

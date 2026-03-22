@@ -78,6 +78,8 @@ class TriageRAGServiceV2 {
     const useDualSource = typeof knowledgeService.getCodeCandidatesDualSource === 'function';
     let icdCodes = [];
     let cptCodes = [];
+    /** True if at least one knowledge call completed without throw (empty arrays OK). */
+    let knowledgeFetchSucceeded = false;
 
     if (useDualSource) {
       try {
@@ -89,6 +91,7 @@ class TriageRAGServiceV2 {
         });
         icdCodes = result?.icd10 || result?.merged_codes?.icd10 || [];
         cptCodes = result?.cpt || result?.merged_codes?.cpt || [];
+        knowledgeFetchSucceeded = true;
       } catch (e) {
         console.warn('[TriageRAGv2] Dual-source failed, falling back to v1:', e.message);
       }
@@ -105,6 +108,7 @@ class TriageRAGServiceV2 {
         });
         icdCodes = ragResult?.icd10 || [];
         cptCodes = ragResult?.cpt || [];
+        knowledgeFetchSucceeded = true;
       } catch (e) {
         console.warn('[TriageRAGv2] knowledge-service unavailable:', e.message);
       }
@@ -126,11 +130,19 @@ class TriageRAGServiceV2 {
       // Rerank optional; keep original order on failure
     }
 
-    // Bug 8/9: Only pass override when we have results; empty override would skip local getCodeCandidates
-    const hasResults = (icdCodes?.length || 0) > 0 || (cptCodes?.length || 0) > 0;
+    // If every knowledge attempt threw, defer to V1's getCodeCandidates (do not pass empty override).
+    if (!knowledgeFetchSucceeded) {
+      return TriageRAGService.enrichFromSymptoms({
+        ...params,
+        _ragResultOverride: null,
+        _skipKnowledgeService: false
+      });
+    }
+    // Successful fetch (possibly empty codes): pass override so V1 does not duplicate the call.
     return TriageRAGService.enrichFromSymptoms({
       ...params,
-      ...(hasResults ? { _ragResultOverride: { icdCodes, cptCodes } } : {})
+      _ragResultOverride: { icdCodes, cptCodes },
+      _skipKnowledgeService: false
     });
   }
 }

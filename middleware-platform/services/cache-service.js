@@ -29,12 +29,55 @@ const BUCKETS = {
 const store = new Map(); // key -> { value, expiresAt }
 let stats = { hits: 0, misses: 0 };
 
+// Prevent unbounded heap growth from high-cardinality keys (e.g. slot availability).
+// TTL alone isn't enough because we don't purge unless the specific key is read.
+const MAX_STORE_ENTRIES = parseInt(process.env.CACHE_MAX_ENTRIES || '5000', 10);
+const PURGE_EVERY_MS = parseInt(process.env.CACHE_PURGE_EVERY_MS || String(60 * 1000), 10);
+let lastPurgeAt = 0;
+
+function purgeExpired() {
+  const now = Date.now();
+  for (const [k, entry] of store.entries()) {
+    if (!entry || entry.expiresAt <= now) store.delete(k);
+  }
+}
+
+function purgeExpiredIfDue() {
+  const now = Date.now();
+  if (now - lastPurgeAt >= PURGE_EVERY_MS) {
+    lastPurgeAt = now;
+    purgeExpired();
+  }
+}
+
+function ensureCapacity() {
+  purgeExpiredIfDue();
+  if (store.size <= MAX_STORE_ENTRIES) return;
+
+  // Evict entries with the earliest expiration first.
+  // (O(n^2) worst case, but store is capped and TTL purge reduces churn.)
+  while (store.size > MAX_STORE_ENTRIES) {
+    let oldestKey = null;
+    let oldestExpiresAt = Infinity;
+    for (const [k, entry] of store.entries()) {
+      const expiresAt = entry?.expiresAt ?? Infinity;
+      if (expiresAt < oldestExpiresAt) {
+        oldestExpiresAt = expiresAt;
+        oldestKey = k;
+      }
+    }
+    if (!oldestKey) break;
+    store.delete(oldestKey);
+  }
+}
+
 function makeKey(bucket, ...parts) {
   const normalized = parts.map(p => (p == null ? '' : String(p).trim())).join(':');
   return `${bucket}:${normalized}`;
 }
 
 function get(bucket, ...keyParts) {
+  purgeExpiredIfDue();
   const key = makeKey(bucket, ...keyParts);
   const entry = store.get(key);
   if (!entry) {
@@ -54,6 +97,7 @@ function get(bucket, ...keyParts) {
 }
 
 function set(bucket, value, ...keyParts) {
+  ensureCapacity();
   const key = makeKey(bucket, ...keyParts);
   const ttl = BUCKETS[bucket] ?? MS_PER_DAY;
   store.set(key, {
@@ -100,6 +144,10 @@ function warm() {
     console.warn('⚠️  Cache warm failed:', e.message);
   }
 }
+
+// Periodically purge expired entries to keep heap stable even if a workload stops
+// touching older keys.
+setInterval(() => purgeExpiredIfDue(), PURGE_EVERY_MS).unref?.();
 
 module.exports = {
   get,

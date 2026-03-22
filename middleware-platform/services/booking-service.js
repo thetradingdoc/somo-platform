@@ -242,16 +242,25 @@ class BookingService {
       );
 
       const clinicHours = getClinicBusinessHours(clinicId);
-      const dateStr = normalizeDateStr(appointmentData.date) || appointmentData.date;
+      let dateStr = normalizeDateStr(appointmentData.date) || appointmentData.date;
       if (!isBusinessDay(dateStr, clinicHours)) {
+        // Instead of hard-failing (which can cause the LLM to retry indefinitely),
+        // auto-advance to the next available business day.
+        const nextOpen = getNextBusinessDay(dateStr, clinicHours);
         const d = new Date(dateStr + 'T12:00:00');
         const dayName = isNaN(d.getTime()) ? '' : DAY_NAMES[d.getDay()] || '';
-        const nextOpen = getNextBusinessDay(dateStr, clinicHours);
         const nextDayName = nextOpen ? DAY_NAMES[new Date(nextOpen + 'T12:00:00').getDay()] : '';
         const hint = nextOpen ? ` Next available: ${nextDayName} ${nextOpen}.` : '';
-        throw new Error(
-          `We're open Monday–Friday. ${dayName ? dayName + ' isn\'t available. ' : ''}Please select a weekday.${hint}`
-        );
+
+        if (nextOpen) {
+          console.log(`[BookingService] Weekend/holiday date ${dateStr} (${dayName}) → auto-advancing to ${nextOpen}`);
+          appointmentData.date = nextOpen;
+          dateStr = nextOpen;
+        } else {
+          throw new Error(
+            `We're open Monday–Friday. ${dayName ? dayName + ' isn\'t available. ' : ''}Please select a weekday.${hint}`
+          );
+        }
       }
 
       // Get appointment type configuration

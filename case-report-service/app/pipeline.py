@@ -30,6 +30,34 @@ def _fetch_transcript(endpoint: str, token: str, job_id: str) -> Optional[str]:
         return None
 
 
+def _fetch_document_context(endpoint: str, token: str, job_id: str) -> Optional[str]:
+    """vc-7: Fetch patient document extracts from middleware for RAG context."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(endpoint)
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("text") or None
+    except Exception as e:
+        logger.warning("job_id=%s document_context fetch failed: %s", job_id, type(e).__name__)
+        return None
+
+
+def _fetch_vitals(endpoint: str, token: str, job_id: str) -> Optional[str]:
+    """vc-8: Fetch encounter vitals from middleware for case report."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(endpoint)
+        req.add_header("Authorization", f"Bearer {token}")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("text") or None
+    except Exception as e:
+        logger.warning("job_id=%s vitals fetch failed: %s", job_id, type(e).__name__)
+        return None
+
+
 def _layer1_perception(transcript: Optional[str], file_paths: List[str], job_id: str) -> Dict[str, Any]:
     """
     Task 41: Layer 1 — transcript as input path.
@@ -134,6 +162,10 @@ def process_patient(
     prior_report_id: Optional[str],
     transcript_endpoint: Optional[str] = None,
     transcript_endpoint_token: Optional[str] = None,
+    document_context_endpoint: Optional[str] = None,
+    document_context_endpoint_token: Optional[str] = None,
+    vitals_endpoint: Optional[str] = None,
+    vitals_endpoint_token: Optional[str] = None,
     appointment_id: Optional[str] = None,
     job_id: str = "",
 ) -> Dict[str, Any]:
@@ -149,6 +181,24 @@ def process_patient(
         # Task 41: Transcript — use passed string or fetch from endpoint
         if not transcript and transcript_endpoint and transcript_endpoint_token:
             transcript = _fetch_transcript(transcript_endpoint, transcript_endpoint_token, job_id)
+
+        # vc-7: Fetch patient document extracts and prepend to transcript for RAG context
+        if document_context_endpoint and document_context_endpoint_token:
+            doc_context = _fetch_document_context(
+                document_context_endpoint, document_context_endpoint_token, job_id
+            )
+            if doc_context and doc_context.strip():
+                transcript = (
+                    f"[Patient record excerpts]\n{doc_context.strip()}\n\n[Visit transcript]\n{(transcript or '')}"
+                )
+
+        # vc-8: Fetch encounter vitals and prepend to transcript
+        if vitals_endpoint and vitals_endpoint_token:
+            vitals_text = _fetch_vitals(vitals_endpoint, vitals_endpoint_token, job_id)
+            if vitals_text and vitals_text.strip():
+                transcript = (
+                    f"[Recorded vitals]\n{vitals_text.strip()}\n\n{(transcript or '')}"
+                )
 
         # Resolve file_paths: if empty, list from storage under patient_id/appointment_id
         if not file_paths and patient_id:

@@ -194,6 +194,8 @@ function translateToEnglish(text, langCode) {
 
 /**
  * Get or create session. Resume by session_id, caller_phone (s1-9), or patient_id (s1-7 handover).
+ * When session_id is provided but not found, create new (don't reuse patient_id session — chat triage
+ * uses per-conversation session_id; reusing would pull stale flow_state).
  */
 function getOrCreateSession(params) {
   const { session_id, caller_phone, patient_id, channel, clinic_id, portal_session_id } = params;
@@ -202,13 +204,15 @@ function getOrCreateSession(params) {
   if (session_id) {
     session = db.getOrchestrateSessionBySessionId(session_id);
   }
-  if (!session && caller_phone) {
+  // Only fall back to caller_phone/patient_id when no explicit session_id was provided,
+  // or when session_id matched an existing row (session already set above).
+  if (!session && !session_id && caller_phone) {
     session = db.getOrchestrateSessionByCallerPhone(caller_phone);
     if (session) {
       session = { ...session, resumed_from_voice: true };
     }
   }
-  if (!session && patient_id) {
+  if (!session && !session_id && patient_id) {
     const rows = db.db.prepare('SELECT * FROM patient_orchestrate_sessions WHERE patient_id = ? AND status = ? ORDER BY last_activity_at DESC LIMIT 1').all(patient_id, 'active');
     session = rows && rows[0] ? { ...rows[0], conversation_history: rows[0].conversation_history ? JSON.parse(rows[0].conversation_history) : [], flow_state: rows[0].flow_state ? JSON.parse(rows[0].flow_state) : {} } : null;
   }
@@ -275,6 +279,11 @@ function assessLanguage(session, userMessage) {
  */
 function ragToIntent(ragCandidates, message) {
   const msg = (message || '').toLowerCase().trim();
+  // fix-rag-opqrst: OPQRST signals take priority over insurance — treat as symptom/triage
+  const hasOpqrstSignals = /\b(onset|provocation|quality|severity|timing)\s*[:=]/i.test(msg) ||
+    /\bseverity\s+(is\s+)?\d+/i.test(msg) || /\b\d+\s*\/\s*10\b/.test(msg);
+  if (hasOpqrstSignals) return { intent: 'collect_reason', specialty: 'general' };
+
   const hasInsurance = /\b(insurance|coverage|eligibility|member\s*id|check\s*my\s*insurance|verify\s*insurance)\b/i.test(msg);
   const hasUpload = /\b(upload|photo|picture|image|send\s+(you\s+)?(a\s+)?(photo|pic|picture)|rash|skin\s+issue|show\s+you)\b/i.test(msg);
   if (/\b(upload|send)\s+(my\s+)?(insurance\s+card|card)\b/i.test(msg) || /\binsurance\s+card\s*(upload|photo)?\b/i.test(msg)) {
@@ -358,6 +367,9 @@ async function orchestrate(input) {
 
   const state = session.flow_state || { current_state: 'collect_reason', step: 'collect_reason', reason: '', appointment_type: 'General Consult', timezone: 'America/New_York' };
   if (!state.current_state) state.current_state = state.step || 'collect_reason';
+
+  // fix-state-verify: log flow_state at start of each orchestrator turn
+  console.log('[orchestrator] existingFlowState: step=%s insurance_started=%s', state.step, state.insurance_started);
 
   // Phase 3.2: Generate case number at first meaningful turn (turn_count === 1)
   if (session.turn_count === 1 && !state.case_id && db.createCaseRecord) {

@@ -100,6 +100,13 @@ class KellyToolExecutor {
     return Number.isFinite(n) ? n : 0.7;
   }
 
+  /** Missing/invalid DB rag_confidence → 0 for gating (do not default to threshold). */
+  static _confidenceFromTriageRow(triageResult) {
+    if (!triageResult || triageResult.rag_confidence == null || triageResult.rag_confidence === '') return 0;
+    const n = parseFloat(triageResult.rag_confidence);
+    return Number.isFinite(n) ? n : 0;
+  }
+
   static _bumpOpsCounter(name) {
     try {
       if (db.incrementOpsCounter) db.incrementOpsCounter(name);
@@ -181,7 +188,7 @@ class KellyToolExecutor {
             };
           }
 
-          const confidence = triageForNotes.rag_confidence != null ? parseFloat(triageForNotes.rag_confidence) : THRESHOLD;
+          const confidence = KellyToolExecutor._confidenceFromTriageRow(triageForNotes);
           const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
           const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
           const allowBorderlineProgress = !!(
@@ -484,6 +491,21 @@ class KellyToolExecutor {
         message: 'Please complete triage first. Ask the patient to describe their symptoms, then call run_triage_rag to determine the right specialty. Only after triage can we look up available slots.'
       };
     }
+    // Block orphan/stale RAG: triage_sessions must point at this exact RAG row (set on run_triage_rag).
+    if (
+      sessionRow &&
+      sessionRow.rag_result_id != null &&
+      String(sessionRow.rag_result_id).trim() !== '' &&
+      String(sessionRow.rag_result_id) !== String(triageResult.id)
+    ) {
+      bump('voice_agent_misuse_get_available_slots_no_rag_result');
+      return {
+        success: false,
+        error: 'TRIAGE_REQUIRED',
+        error_code: 'TRIAGE_REQUIRED',
+        message: 'Triage is out of date for this visit. Please call run_triage_rag again with the current symptoms before looking up slots.'
+      };
+    }
     // W3-S5.1: Assert differentials or target_specialty before resolver
     const hasDifferentials = (triageResult.differentials || []).length >= 1;
     const hasSpecialty = !!(triageResult.target_specialty);
@@ -501,7 +523,7 @@ class KellyToolExecutor {
     // IMPORTANT: Check this BEFORE `triage_complete`, otherwise we may return TRIAGE_INCOMPLETE
     // and the UX falls back to a generic "tell me more" question even when the real blocker
     // is confidence.
-    const confidence = triageResult.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+    const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
     // Controlled borderline override:
     // after repeated clarification loops, allow slot lookup when confidence is only
     // slightly below threshold, but only if OPQRST + rich intake are complete and
@@ -921,14 +943,10 @@ class KellyToolExecutor {
   static _storeTriageRichIntake(args, sessionId, patientId) {
     try {
       if (!db.upsertTriageSession) return { success: true };
+      // Re-read immediately before upsert so we never downgrade flags after a same-turn OPQRST write.
       const stored = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
-
-      // IMPORTANT:
-      // db.upsertTriageSession overwrites opqrst_complete/triage_complete based on which
-      // fields exist on the passed object. If we omit them, they are treated as falsy
-      // and can incorrectly reset progress back to incomplete.
-      const preservedOpqrstComplete = stored.opqrst_complete;
-      const preservedTriageComplete = stored.triage_complete;
+      const opqrstWasComplete = KellyToolExecutor._isCompleteFlag(stored.opqrst_complete);
+      const triageWasComplete = KellyToolExecutor._isCompleteFlag(stored.triage_complete);
 
       // Set once (idempotent). If already stored, keep the original timestamp.
       const intakeCompleteAt = stored?.intake_complete_at
@@ -938,8 +956,8 @@ class KellyToolExecutor {
       const payload = {
         session_id: sessionId,
         patient_id: patientId,
-        opqrst_complete: preservedOpqrstComplete,
-        triage_complete: preservedTriageComplete,
+        opqrst_complete: opqrstWasComplete,
+        triage_complete: triageWasComplete,
 
         family_history: args.family_history ?? null,
         medications: this._normalizeListToText(args.medications),
@@ -1019,7 +1037,7 @@ class KellyToolExecutor {
       };
     }
 
-    const confidence = triageResult.rag_confidence != null ? parseFloat(triageResult.rag_confidence) : THRESHOLD;
+    const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
     const forceAfterClarified = args.force_after_clarified === true || args.force_after_clarified === 'true';
     const confidenceNearThreshold = confidence >= Math.max(0, THRESHOLD - 0.2);
     const allowBorderlineProgress = !!(
@@ -1177,7 +1195,7 @@ class KellyToolExecutor {
       const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
       const hasDifferential = (result.differentials || []).length >= 1;
       const hasSpecialty = !!(result.target_specialty);
-      const conf = result.rag_confidence != null ? parseFloat(result.rag_confidence) : THRESHOLD;
+      const conf = KellyToolExecutor._confidenceFromTriageRow(result);
       // Allow a small "near threshold" window when we already have a specialty, so
       // we don't get stuck in clarifying loops when the external differential
       // generation is flaky but a target_specialty is still present.

@@ -1,8 +1,9 @@
 /**
  * LLMRouter
  *
- * Routes LLM requests to Claude (primary) or Groq (fallback).
- * Handles tool-calling format differences between providers.
+ * Routes LLM requests to Claude (default primary) or Groq (fallback).
+ * Set KELLY_PRIMARY_PROVIDER=groq to force Groq-only. If the key is missing,
+ * resolvePrimaryProvider() falls back to Groq when ANTHROPIC_API_KEY is unset.
  */
 
 'use strict';
@@ -124,6 +125,63 @@ function _toAnthropicMessages(messages) {
   return { system: systemMsg?.content || '', messages: safe };
 }
 
+const PROVIDER_TIMEOUT_MS = parseInt(process.env.KELLY_PROVIDER_TIMEOUT_MS || '20000', 10);
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(label || `Timeout after ${ms}ms`)), ms)
+    )
+  ]);
+}
+
+function _sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function _hasAnthropicKey() {
+  return !!(process.env.ANTHROPIC_API_KEY || '').trim();
+}
+
+function _hasGroqKey() {
+  return !!(process.env.GROQ_API_KEY || '').trim();
+}
+
+/** True when failing over from primary to secondary provider is reasonable. */
+function _isCrossFallbackTransient(err) {
+  const status = err?.status ?? err?.statusCode ?? 0;
+  if (status === 401 || status === 403) return false;
+  const msg = String(err?.message || '').toLowerCase();
+  if (msg.includes('anthropic provider timeout') || msg.includes('groq provider timeout')) return true;
+  return (
+    status === 529 ||
+    msg.includes('overloaded') ||
+    status === 429 ||
+    msg.includes('rate limit') ||
+    msg.includes('rate_limit') ||
+    status === 400 ||
+    msg.includes('invalid_request') ||
+    msg.includes('bad request') ||
+    status === 408 ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    msg.includes('etimedout') ||
+    msg.includes('deadline') ||
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('socket hang up') ||
+    msg.includes('fetch failed') ||
+    msg.includes('network error') ||
+    msg.includes('enotfound') ||
+    msg.includes('eai_again') ||
+    (typeof status === 'number' && status >= 500 && status < 600) ||
+    status === 413 ||
+    msg.includes('too large') ||
+    msg.includes('tokens per minute')
+  );
+}
+
 function _fromAnthropicResponse(response) {
   const toolCalls = [];
   let textContent = '';
@@ -159,30 +217,64 @@ function _fromAnthropicResponse(response) {
   };
 }
 
-async function call({ messages, tools, maxTokens, channel }) {
-  const provider = process.env.KELLY_PRIMARY_PROVIDER || 'groq';
+/**
+ * Effective Kelly primary: Claude when ANTHROPIC_API_KEY is set (default),
+ * unless KELLY_PRIMARY_PROVIDER=groq. Missing Anthropic key → Groq only + warning.
+ */
+function resolvePrimaryProvider() {
+  const raw = (process.env.KELLY_PRIMARY_PROVIDER || 'anthropic').trim().toLowerCase();
+  if (raw === 'groq') return 'groq';
+  if (!(process.env.ANTHROPIC_API_KEY || '').trim()) {
+    console.warn('[LLMRouter] Claude is the default primary but ANTHROPIC_API_KEY is not set; using Groq only');
+    return 'groq';
+  }
+  return 'anthropic';
+}
 
-  if (provider === 'anthropic') {
+/**
+ * @param {object} opts
+ * @param {string} [opts.forceProvider] - 'groq' | 'anthropic' — no cross-fallback
+ */
+async function call({ messages, tools, maxTokens, channel, forceProvider = null }) {
+  if (forceProvider === 'groq') {
+    return await _callGroq({ messages, tools, maxTokens, channel });
+  }
+  if (forceProvider === 'anthropic') {
+    return await _callAnthropic({ messages, tools, maxTokens });
+  }
+
+  const primary = resolvePrimaryProvider();
+  const order = [];
+  if (primary === 'anthropic') {
+    order.push('anthropic');
+    if (_hasGroqKey()) order.push('groq');
+  } else {
+    order.push('groq');
+    if (_hasAnthropicKey() && process.env.KELLY_GROQ_FALLBACK_TO_ANTHROPIC !== '0') {
+      order.push('anthropic');
+    }
+  }
+
+  let lastErr;
+  for (let i = 0; i < order.length; i++) {
+    const p = order[i];
     try {
-      return await _callAnthropic({ messages, tools, maxTokens });
+      if (p === 'anthropic') {
+        return await _callAnthropic({ messages, tools, maxTokens });
+      }
+      return await _callGroq({ messages, tools, maxTokens, channel });
     } catch (err) {
-      const status = err?.status ?? err?.statusCode ?? 0;
-      const msg = String(err?.message || '').toLowerCase();
-
-      const isOverload = status === 529 || msg.includes('overloaded');
-      const isRateLimit = status === 429 || msg.includes('rate limit') || msg.includes('rate_limit');
-      const isBadRequest = status === 400 || msg.includes('invalid_request') || msg.includes('bad request');
-
-      if (isOverload || isRateLimit || isBadRequest) {
-        console.warn('[LLMRouter] Claude unavailable (status=%s), falling back to Groq: %s',
-          status || '?', err.message);
-        return await _callGroq({ messages, tools, maxTokens, channel });
+      lastErr = err;
+      const hasNext = i < order.length - 1;
+      if (hasNext && _isCrossFallbackTransient(err)) {
+        console.warn(`[LLMRouter] ${p} failed, trying ${order[i + 1]}:`, err?.message || err);
+        await _sleep(450);
+        continue;
       }
       throw err;
     }
   }
-
-  return await _callGroq({ messages, tools, maxTokens, channel });
+  throw lastErr || new Error('No LLM provider available');
 }
 
 async function _callAnthropic({ messages, tools, maxTokens }) {
@@ -197,13 +289,18 @@ async function _callAnthropic({ messages, tools, maxTokens }) {
   }
 
   try {
-    const response = await client.messages.create({
+    const payload = {
       model,
       max_tokens: maxTokens || 1024,
       system,
-      messages: converted,
-      tools: anthropicTools
-    });
+      messages: converted
+    };
+    if (anthropicTools.length > 0) payload.tools = anthropicTools;
+    const response = await withTimeout(
+      client.messages.create(payload),
+      PROVIDER_TIMEOUT_MS,
+      `Anthropic provider timeout after ${PROVIDER_TIMEOUT_MS}ms`
+    );
     return _fromAnthropicResponse(response);
   } catch (err) {
     const status = err?.status ?? err?.statusCode ?? err?.httpStatus ?? '?';
@@ -232,14 +329,42 @@ async function _callGroq({ messages, tools, maxTokens, channel }) {
       ? parseInt(process.env.KELLY_VOICE_MAX_TOKENS || '150', 10)
       : parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '200', 10));
 
-  return await client.chat.completions.create({
-    model,
-    messages,
-    tools: tools || [],
-    tool_choice: 'auto',
-    temperature: 0.3,
-    max_tokens: tokens
-  });
+  const maxAttempts = Math.max(1, parseInt(process.env.KELLY_GROQ_MAX_RETRIES || '4', 10));
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await withTimeout(
+        client.chat.completions.create({
+          model,
+          messages,
+          tools: tools || [],
+          tool_choice: 'auto',
+          temperature: 0.3,
+          max_tokens: tokens
+        }),
+        PROVIDER_TIMEOUT_MS,
+        `Groq provider timeout after ${PROVIDER_TIMEOUT_MS}ms`
+      );
+    } catch (err) {
+      lastErr = err;
+      const status = err?.status ?? err?.statusCode ?? 0;
+      const msg = String(err?.message || '').toLowerCase();
+      const is429 = status === 429 || msg.includes('rate_limit') || msg.includes('rate limit');
+      const isTooLarge =
+        status === 413 || msg.includes('tokens per minute') || msg.includes('too large');
+      if ((!is429 && !isTooLarge) || attempt >= maxAttempts) {
+        throw err;
+      }
+      const delay = Math.min(
+        12000,
+        parseInt(process.env.KELLY_GROQ_RETRY_BASE_MS || '1200', 10) * Math.pow(2, attempt - 1)
+      );
+      console.warn('[LLMRouter] Groq busy (attempt %s/%s), waiting %sms: %s',
+        attempt, maxAttempts, delay, err?.message || err);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
 }
 
-module.exports = { call };
+module.exports = { call, resolvePrimaryProvider, withTimeout };

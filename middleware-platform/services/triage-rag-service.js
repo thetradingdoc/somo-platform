@@ -169,7 +169,7 @@ class TriageRAGService {
    * @param {string} [params.clinicId]
    * @returns {Promise<TriageRAGResult>}
    */
-  static async enrichFromSymptoms({ sessionId, symptomText, opqrst = {}, richIntake = {}, patientId = null, clinicId = null, _ragResultOverride = null }) {
+  static async enrichFromSymptoms({ sessionId, symptomText, opqrst = {}, richIntake = {}, patientId = null, clinicId = null, _ragResultOverride = null, _skipKnowledgeService = false }) {
     let combinedText = this._buildCombinedText(symptomText, opqrst, richIntake);
     combinedText = normalizeForRAG(combinedText);
 
@@ -190,7 +190,7 @@ class TriageRAGService {
       icdCodes = rawIcd.map(c => typeof c === 'string' ? { code: c, description: '', confidence: 0.8 } : c);
       const rawCpt = _ragResultOverride.cptCodes || _ragResultOverride.cpt || [];
       cptCodes = rawCpt.map(c => typeof c === 'string' ? { code: c, description: '', confidence: 0.8 } : c);
-    } else {
+    } else if (!_skipKnowledgeService) {
       try {
         const knowledgeService = require('./knowledge-service');
         const ragResult = await knowledgeService.getCodeCandidates(combinedText, {
@@ -215,13 +215,10 @@ class TriageRAGService {
     // W2-S2.4: Specialty from differential generation, not ICD prefix alone. ICD only when differentials empty.
     if (differentials && differentials.length > 0) {
       const prim = differentials[0];
-      specialty = this._specialtyFromDifferential(prim.condition) || this._resolveSpecialty(combinedText, icdCodes).specialty;
-      const specs = new Set();
-      for (const d of differentials.slice(1)) {
-        const s = this._specialtyFromDifferential(d.condition);
-        if (s && s !== specialty) specs.add(s);
-      }
-      secondarySpecialties = Array.from(specs);
+      const resolved = this._resolveSpecialtyFromDifferentials(differentials, combinedText, icdCodes);
+      specialty = resolved.primary_specialty;
+      secondarySpecialties = resolved.secondary_specialties;
+
       // W3-S4.1: Primary ICD-10 = differential #1's icd10; put it first for billing
       if (prim.icd10 && prim.icd10.trim()) {
         const existing = (icdCodes || []).filter(c => (c.code || '').trim() !== prim.icd10.trim());
@@ -252,13 +249,21 @@ class TriageRAGService {
     const specialistContext = this._buildSpecialistContext(specialty, icdCodes, opqrst);
 
     // gap13: rag_confidence — low when PrimaryCare fallback, weak signals, or M-S3.B cap
-    let ragConfidence = this._computeRagConfidence(
-      combinedText, icdCodes, specialty
-    );
+    let ragConfidence = this._computeRagConfidence(combinedText, icdCodes, cptCodes, specialty, richIntake);
     if (confidenceCapped) ragConfidence = Math.min(ragConfidence, 0.65);
 
     // gap14: Auto-generate SOAP note after triage (M-S6.B: includes rich intake)
-    const soapNote = this._buildSoapNote(symptomText, opqrst, richIntake, specialty, urgency);
+    const soapNote = this._buildSoapNote({
+      symptomText,
+      opqrst,
+      richIntake,
+      specialty,
+      urgency,
+      safetyLevel,
+      icdCodes,
+      criticalUnknowns,
+      recommendedLane
+    });
 
     // M-S2.D: Two-pass RAG — second call (after specialty deep-dive) upserts in place, no new row
     // Bug 3: Include patient_id to avoid overwriting when two patients share session_id (race)
@@ -293,19 +298,18 @@ class TriageRAGService {
           id, session_id, patient_id, symptom_text, opqrst_json,
           icd_codes, cpt_codes, target_specialty, secondary_specialties,
           urgency, safety_level, red_flags, recommended_lane,
-          patient_friendly_summary, specialist_context, differentials, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          patient_friendly_summary, specialist_context, differentials,
+          soap_note, rag_confidence, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(
         resultId, sessionId, patientId, symptomText,
         JSON.stringify(opqrst),
         JSON.stringify(icdCodes), JSON.stringify(cptCodes),
         specialty, JSON.stringify(secondarySpecialties),
         urgency, safetyLevel, JSON.stringify(redFlags), recommendedLane,
-        patientFriendlySummary, specialistContext, JSON.stringify(differentials || [])
+        patientFriendlySummary, specialistContext, JSON.stringify(differentials || []),
+        soapNote, ragConfidence
       );
-      try {
-        db.db.prepare(`UPDATE triage_rag_results SET soap_note = ?, rag_confidence = ? WHERE id = ?`).run(soapNote, ragConfidence, resultId);
-      } catch (_) {}
       }
     } catch (e) {
       console.warn('[TriageRAG] Failed to persist result:', e.message);
@@ -517,6 +521,31 @@ class TriageRAGService {
     return null;
   }
 
+  /**
+   * T7: Resolve primary + secondary specialties from structured differentials.
+   * Falls back to keyword/ICD-prefix specialty only when no differential→specialty mapping exists.
+   *
+   * @param {Array} differentials - differential objects from _generateDifferentials
+   * @param {string} combinedText - combined clinical text (for fallback)
+   * @param {Array} icdCodes - retrieved ICD candidates (for fallback)
+   * @returns {{ primary_specialty: string, secondary_specialties: string[] }}
+   */
+  static _resolveSpecialtyFromDifferentials(differentials, combinedText, icdCodes) {
+    const primary = differentials?.[0];
+    const primarySpecialty = this._specialtyFromDifferential(primary?.condition) || this._resolveSpecialty(combinedText, icdCodes).specialty;
+
+    const secondary = new Set();
+    for (const d of (differentials || []).slice(1)) {
+      const s = this._specialtyFromDifferential(d?.condition);
+      if (s && s !== primarySpecialty) secondary.add(s);
+    }
+
+    return {
+      primary_specialty: primarySpecialty,
+      secondary_specialties: Array.from(secondary)
+    };
+  }
+
   /** W2-S2.3: combinedText = symptom + full history (OPQRST + PMH + FHx + meds) — not just symptom string */
   static _buildCombinedText(symptomText, opqrst, richIntake = {}) {
     const parts = [symptomText];
@@ -528,54 +557,168 @@ class TriageRAGService {
     if (opqrst.timing) parts.push(`Duration: ${opqrst.timing}`);
     if (opqrst.associated_sx) parts.push(`Also experiencing: ${opqrst.associated_sx}`);
     if (richIntake.family_history) parts.push(`Family history: ${richIntake.family_history}`);
-    if (richIntake.medications) parts.push(`Medications: ${richIntake.medications}`);
+    if (richIntake.medications !== undefined && richIntake.medications !== null) {
+      parts.push(`Medications: ${String(richIntake.medications).trim() || 'none reported'}`);
+    }
     if (richIntake.prior_diagnoses) parts.push(`Prior diagnoses: ${richIntake.prior_diagnoses}`);
     if (richIntake.prior_workups) parts.push(`Prior workups: ${richIntake.prior_workups}`);
-    if (richIntake.allergies) parts.push(`Allergies: ${richIntake.allergies}`);
+    if (richIntake.allergies !== undefined && richIntake.allergies !== null) {
+      parts.push(`Allergies: ${String(richIntake.allergies).trim() || 'none reported'}`);
+    }
     if (richIntake.alcohol_use) parts.push(`Alcohol use: ${richIntake.alcohol_use}`);
     if (richIntake.alcohol_cage_score != null) parts.push(`CAGE score: ${richIntake.alcohol_cage_score}`);
     if (richIntake.smoking_status) parts.push(`Smoking: ${richIntake.smoking_status}`);
     return parts.join('. ');
   }
 
-  /** gap13: Compute confidence 0–1. Low when PrimaryCare fallback or weak signals. */
-  static _computeRagConfidence(combinedText, icdCodes, specialty) {
+  /**
+   * T8: Compute rag_confidence 0–1 using:
+   * - retrieval strength (code candidate confidence scores)
+   * - presence of key rich-intake fields (meds, alcohol, prior workups)
+   *
+   * Lower confidence when key history is missing even if the retrieval layer found something.
+   *
+   * @param {string} combinedText
+   * @param {Array} icdCodes
+   * @param {Array} cptCodes
+   * @param {string} specialty
+   * @param {Object} richIntake
+   * @returns {number}
+   */
+  static _computeRagConfidence(combinedText, icdCodes, cptCodes, specialty, richIntake = {}) {
     const lower = (combinedText || '').toLowerCase();
     const keywordMatch = SYMPTOM_SPECIALTY_KEYWORDS.some(entry =>
       entry.keywords.some(kw => lower.includes(kw))
     );
-    const hasIcd = icdCodes && icdCodes.length > 0;
-    if (specialty === 'PrimaryCare' && !keywordMatch && !hasIcd) return 0.5;
-    if (keywordMatch && specialty !== 'PrimaryCare') return 0.9;
-    if (hasIcd && specialty !== 'PrimaryCare') return 0.8;
-    if (keywordMatch || hasIcd) return 0.75;
-    return 0.6;
+
+    const getConf = (c) => {
+      if (!c) return null;
+      if (typeof c.confidence === 'number') return c.confidence;
+      if (typeof c.score === 'number') return c.score;
+      return null;
+    };
+
+    const icdTop = (icdCodes || []).slice(0, 3).map(getConf).filter(v => typeof v === 'number');
+    const cptTop = (cptCodes || []).slice(0, 3).map(getConf).filter(v => typeof v === 'number');
+    const retrievalConfs = [...icdTop, ...cptTop];
+
+    // Retrieval-driven baseline when candidates include confidence.
+    const retrievalAvg = retrievalConfs.length ? (retrievalConfs.reduce((a, b) => a + b, 0) / retrievalConfs.length) : null;
+
+    // Fallback to old keyword-ish logic only when retrieval confs are absent.
+    let base;
+    if (typeof retrievalAvg === 'number') {
+      // Map ~[0..1] confidence into a safe [0.45..0.95] band.
+      base = 0.45 + 0.5 * retrievalAvg;
+    } else {
+      const hasIcd = (icdCodes || []).length > 0;
+      if (specialty === 'PrimaryCare' && !keywordMatch && !hasIcd) base = 0.5;
+      else if (keywordMatch && specialty !== 'PrimaryCare') base = 0.9;
+      else if (hasIcd && specialty !== 'PrimaryCare') base = 0.8;
+      else if (keywordMatch || hasIcd) base = 0.75;
+      else base = 0.6;
+    }
+
+    // Rich-intake completeness penalties (T8 requirement).
+    // Meaningful content only — default '' from merge still counts as *not* collected.
+    const hasMeds = !!(richIntake?.medications && String(richIntake.medications).trim());
+    const hasPriorWorkups = !!String(richIntake?.prior_workups || '').trim();
+    const hasAlcohol = !!String(richIntake?.alcohol_use || '').trim() || richIntake?.alcohol_cage_score != null;
+
+    // Allergies: require non-empty documentation (including explicit "none").
+    const hasAllergies = !!(richIntake?.allergies && String(richIntake.allergies).trim());
+
+    let penalty = 0;
+    if (specialty && specialty !== 'PrimaryCare') {
+      if (!hasMeds) penalty += 0.10;
+      if (!hasPriorWorkups) penalty += 0.12;
+      // Alcohol history is especially relevant for GI/hepatology routes.
+      if (specialty === 'Gastroenterology' && !hasAlcohol) penalty += 0.18;
+    } else {
+      // Even for PrimaryCare, meds absence slightly reduces specificity.
+      if (!hasMeds) penalty += 0.06;
+    }
+    if (!hasAllergies) penalty += 0.06;
+
+    // Small bonus if keywordMatch strongly suggests a specialty (without being overconfident).
+    const bonus = keywordMatch && specialty && specialty !== 'PrimaryCare' ? 0.03 : 0;
+
+    const conf = Math.max(0.4, Math.min(0.99, base + bonus - penalty));
+    return conf;
   }
 
-  /** gap14 + M-S6.B: Build SOAP note from triage data, including rich intake in Subjective */
-  static _buildSoapNote(symptomText, opqrst, richIntake = {}, specialty, urgency) {
-    const s = [];
-    s.push('**Subjective:**');
-    s.push(`CC: ${(symptomText || 'Patient-reported symptoms').slice(0, 200)}`);
-    const parts = [];
-    if (opqrst?.onset) parts.push(`Onset: ${opqrst.onset}`);
-    if (opqrst?.quality) parts.push(`Quality: ${opqrst.quality}`);
-    if (opqrst?.severity) parts.push(`Severity: ${opqrst.severity}/10`);
-    if (opqrst?.radiation) parts.push(`Radiation: ${opqrst.radiation}`);
-    if (opqrst?.timing) parts.push(`Timing: ${opqrst.timing}`);
-    if (richIntake?.medications) parts.push(`Meds: ${String(richIntake.medications).slice(0, 100)}`);
-    if (richIntake?.allergies) parts.push(`Allergies: ${String(richIntake.allergies).slice(0, 80)}`);
-    if (richIntake?.family_history) parts.push(`FHx: ${String(richIntake.family_history).slice(0, 80)}`);
-    if (richIntake?.prior_diagnoses) parts.push(`PMH: ${String(richIntake.prior_diagnoses).slice(0, 80)}`);
-    if (richIntake?.alcohol_cage_score != null) parts.push(`CAGE: ${richIntake.alcohol_cage_score}`);
-    if (parts.length) s.push(parts.join('. '));
-    s.push('');
-    s.push('**Objective:** Triage intake (no physical exam).');
-    s.push('');
-    s.push(`**Assessment:** ${specialty || 'PrimaryCare'} referral, ${urgency || 'routine'} urgency.`);
-    s.push('');
-    s.push('**Plan:** Route to specialist, await appointment confirmation.');
-    return s.join('\n');
+  /** gap14 + M-S6.B: Build rich multi-section SOAP note for specialists */
+  static _buildSoapNote({
+    symptomText,
+    opqrst,
+    richIntake = {},
+    specialty,
+    urgency,
+    safetyLevel,
+    icdCodes = [],
+    criticalUnknowns = [],
+    recommendedLane
+  }) {
+    const note = [];
+
+    const cc = (symptomText || 'Patient-reported symptoms').slice(0, 220);
+    const opqrstParts = [];
+    if (opqrst?.onset) opqrstParts.push(`Onset: ${opqrst.onset}`);
+    if (opqrst?.provocation) opqrstParts.push(`Provocation/Palliation: ${opqrst.provocation}`);
+    if (opqrst?.quality) opqrstParts.push(`Quality: ${opqrst.quality}`);
+    if (opqrst?.radiation) opqrstParts.push(`Radiation: ${opqrst.radiation}`);
+    if (opqrst?.severity != null && opqrst.severity !== '') opqrstParts.push(`Severity: ${opqrst.severity}/10`);
+    if (opqrst?.timing) opqrstParts.push(`Timing: ${opqrst.timing}`);
+    if (opqrst?.associated_sx) opqrstParts.push(`Associated symptoms: ${opqrst.associated_sx}`);
+
+    // Subjective
+    note.push('**Subjective**');
+    note.push(`- CC: ${cc}`);
+    if (opqrstParts.length) note.push(`- OPQRST: ${opqrstParts.join(' | ')}`);
+
+    // PMH / meds / allergies / family/social / workups
+    const pmhParts = [];
+    if (richIntake?.prior_diagnoses) pmhParts.push(`Prior diagnoses: ${String(richIntake.prior_diagnoses).slice(0, 160)}`);
+    if (richIntake?.prior_workups) pmhParts.push(`Prior workups: ${String(richIntake.prior_workups).slice(0, 160)}`);
+    if (richIntake?.medications) pmhParts.push(`Medications: ${String(richIntake.medications).slice(0, 180)}`);
+    if (richIntake?.allergies) pmhParts.push(`Allergies: ${String(richIntake.allergies).slice(0, 160)}`);
+    if (richIntake?.family_history) pmhParts.push(`Family history: ${String(richIntake.family_history).slice(0, 160)}`);
+    if (richIntake?.alcohol_use) pmhParts.push(`Alcohol use: ${String(richIntake.alcohol_use).slice(0, 120)}`);
+    if (richIntake?.smoking_status) pmhParts.push(`Smoking: ${String(richIntake.smoking_status).slice(0, 120)}`);
+    if (richIntake?.substance_use) pmhParts.push(`Substance use: ${String(richIntake.substance_use).slice(0, 120)}`);
+    if (richIntake?.occupation) pmhParts.push(`Occupation: ${String(richIntake.occupation).slice(0, 120)}`);
+    if (richIntake?.alcohol_cage_score != null) pmhParts.push(`CAGE-4 score: ${richIntake.alcohol_cage_score}`);
+
+    note.push('');
+    note.push('**PMH / Context**');
+    if (pmhParts.length) note.push(pmhParts.map(p => `- ${p}`).join('\n'));
+    else note.push('- (Not provided)');
+
+    // Assessment
+    const topIcd10 = (icdCodes || []).slice(0, 4).map(c => {
+      const code = (c?.code || '').trim();
+      if (!code) return null;
+      const desc = c?.description ? ` — ${String(c.description).slice(0, 70)}` : '';
+      return `${code}${desc}`;
+    }).filter(Boolean);
+
+    const cu = Array.isArray(criticalUnknowns) ? criticalUnknowns : [];
+
+    note.push('');
+    note.push('**Assessment**');
+    note.push(`- Target specialty: ${specialty || 'PrimaryCare'}`);
+    note.push(`- Urgency: ${urgency || 'routine'}`);
+    note.push(`- Safety level: ${safetyLevel || 'green'}`);
+    note.push(`- Top ICD-10 candidates: ${topIcd10.length ? topIcd10.join(' | ') : '(unknown)'}`);
+    note.push(`- Critical unknowns: ${cu.length ? cu.join(', ') : '(none flagged)'}`);
+
+    // Plan
+    note.push('');
+    note.push('**Plan**');
+    note.push(`- Routing lane: ${recommendedLane || 'async'}`);
+    note.push('- Next steps: complete any critical-unknown questions (if flagged), then proceed to specialist appointment confirmation.');
+
+    return note.join('\n');
   }
 
   static getLatestForSession(sessionId) {
@@ -598,7 +741,10 @@ class TriageRAGService {
         red_flags: JSON.parse(row.red_flags || '[]'),
         differentials: diffs,
         primary_icd10: primaryIcd10,
-        rag_confidence: row.rag_confidence != null ? parseFloat(row.rag_confidence) : 0.7
+        // null = not persisted / unknown — callers must not treat as passing threshold
+        rag_confidence: row.rag_confidence != null && row.rag_confidence !== ''
+          ? parseFloat(row.rag_confidence)
+          : null
       };
     } catch (_) { return null; }
   }

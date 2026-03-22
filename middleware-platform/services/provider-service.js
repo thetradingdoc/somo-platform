@@ -11,7 +11,7 @@ const db = require('../database');
 
 class ProviderService {
   /**
-   * Get today's schedule for a provider
+   * Get today's schedule for a provider s
    * @param {string} providerName - Provider name (defaults to all if not specified)
    * @returns {Array} Today's appointments sorted by time
    */

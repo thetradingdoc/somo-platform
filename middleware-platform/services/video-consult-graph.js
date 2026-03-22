@@ -127,11 +127,27 @@ async function processEvent(roomId, eventType, payload, options = {}) {
 
     try {
       const transcript = state.audio_transcript || [];
-      const text = transcript
+      let text = transcript
         .map(t => (typeof t === 'string' ? t : (t.text || t.content || '')))
         .filter(Boolean)
         .join(' ')
         .slice(0, 2000);
+
+      // vc-14: Prepend patient document extracts for live during-call RAG context
+      const patientId = state.patient_id;
+      if (patientId && db.getPatientDocumentExtractsByPatient) {
+        try {
+          const extracts = db.getPatientDocumentExtractsByPatient(patientId) || [];
+          const docContext = extracts
+            .filter(e => e.extracted_text?.trim())
+            .slice(0, 5)
+            .map(e => (e.extracted_text || '').trim().slice(0, 800))
+            .join('\n');
+          if (docContext) text = `[Patient record excerpts]\n${docContext}\n\n[Visit]\n${text}`;
+        } catch (e) {
+          console.warn('[video-consult][RAG] patient extracts fetch failed:', e.message);
+        }
+      }
 
       if (!text.trim()) {
         return { rag_context: emptyRagContext(), current_stage: 'RAG_SKIPPED_NO_TEXT' };
@@ -363,6 +379,8 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     }
     const baseUrl = (process.env.API_BASE_URL || process.env.BASE_URL || '').replace(/\/$/, '');
     const transcriptEndpoint = `${baseUrl}/internal/communications/${encounterId}/text`;
+    const documentContextEndpoint = `${baseUrl}/internal/communications/${encounterId}/document-context`;
+    const vitalsEndpoint = `${baseUrl}/internal/communications/${encounterId}/vitals`;
     const callbackUrl = `${baseUrl}/api/case-report/callback`;
     const payload = {
       job_id: jobId,
@@ -371,6 +389,10 @@ async function processEvent(roomId, eventType, payload, options = {}) {
       appointment_id: appointmentId || null,
       transcript_endpoint: transcriptEndpoint,
       transcript_endpoint_token: callbackToken,
+      document_context_endpoint: documentContextEndpoint,
+      document_context_endpoint_token: callbackToken,
+      vitals_endpoint: vitalsEndpoint,
+      vitals_endpoint_token: callbackToken,
       prior_report_id: priorReportId,
       callback_url: callbackUrl,
       callback_token: callbackToken

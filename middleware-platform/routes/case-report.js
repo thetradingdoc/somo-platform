@@ -137,13 +137,82 @@ function validateCaseReportToken(req) {
  * Task 53: GET /internal/communications/:encounterId/text
  * Auth: Bearer CASE_REPORT_SERVICE_TOKEN. Returns { text: "Doctor: ... \nPatient: ..." }. Audit logged.
  */
+/**
+ * vc-7: GET /internal/communications/:encounterId/document-context
+ * Returns patient document extracts for case report RAG. Auth: Bearer CASE_REPORT_SERVICE_TOKEN.
+ */
+router.get('/internal/communications/:encounterId/document-context', async (req, res) => {
+  if (!validateCaseReportToken(req)) return res.status(401).json({ error: 'Unauthorized' });
+  const { encounterId } = req.params;
+  try {
+    const { resolveVideoConsultIds } = require('../utils/video-consult-resolver');
+    let patientId = null;
+    try {
+      const r = await resolveVideoConsultIds({ encounter_id: encounterId });
+      if (r?.patient_id) patientId = r.patient_id;
+    } catch (_) {}
+    if (!patientId) {
+      const appt = await db.getAppointment(encounterId);
+      patientId = appt?.patient_id;
+    }
+    if (!patientId) return res.json({ text: '' });
+    const extracts = db.getPatientDocumentExtractsByPatient?.(patientId) || [];
+    const text = extracts
+      .filter(e => e.extracted_text?.trim())
+      .slice(0, 10)
+      .map(e => `[Document ${e.doc_id}]: ${(e.extracted_text || '').trim().slice(0, 4000)}`)
+      .join('\n\n');
+    return res.json({ text: text || '' });
+  } catch (err) {
+    return res.json({ text: '' });
+  }
+});
+
+/**
+ * vc-8: GET /internal/communications/:encounterId/vitals
+ * Returns encounter vitals for case report. Auth: Bearer CASE_REPORT_SERVICE_TOKEN.
+ */
+router.get('/internal/communications/:encounterId/vitals', (req, res) => {
+  if (!validateCaseReportToken(req)) return res.status(401).json({ error: 'Unauthorized' });
+  const { encounterId } = req.params;
+  try {
+    const roomId = `appt-${encounterId}`;
+    const rows = db.getEncounterVitals?.(encounterId) || db.getEncounterVitals?.(roomId) || [];
+    const latest = rows[0] || {};
+    const lines = [];
+    if (latest.blood_pressure_systolic != null || latest.blood_pressure_diastolic != null) {
+      lines.push(`BP: ${latest.blood_pressure_systolic ?? '?'}/${latest.blood_pressure_diastolic ?? '?'} mmHg`);
+    }
+    if (latest.heart_rate != null) lines.push(`HR: ${latest.heart_rate} bpm`);
+    if (latest.temperature_f != null) lines.push(`Temp: ${latest.temperature_f}°F`);
+    if (latest.blood_sugar_mgdl != null) lines.push(`Glucose: ${latest.blood_sugar_mgdl} mg/dL`);
+    if (latest.notes) lines.push(`Notes: ${latest.notes}`);
+    const text = lines.length ? lines.join('; ') : '';
+    return res.json({ text, vitals: latest });
+  } catch (err) {
+    return res.json({ text: '', vitals: {} });
+  }
+});
+
 router.get('/internal/communications/:encounterId/text', (req, res) => {
   if (!validateCaseReportToken(req)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const { encounterId } = req.params;
   try {
-    const text = FHIRService.getTranscriptText(encounterId);
+    let text = FHIRService.getTranscriptText(encounterId);
+    if (!text || !text.trim()) {
+      const roomId = `appt-${encounterId}`;
+      const rows = db.getVideoConsultTranscripts?.(roomId, encounterId) || [];
+      if (rows.length) {
+        const label = (s) => (s === 'patient' ? 'Patient' : s === 'provider' ? 'Doctor' : s || 'Unknown');
+        text = rows
+          .sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+          .map(r => `${label(r.speaker)}: ${(r.text || '').trim()}`)
+          .filter(Boolean)
+          .join('\n');
+      }
+    }
     if (db.auditLog) {
       db.auditLog('system', 'case-report-service', 'transcript_access', 'Communication', encounterId, req.ip, req.get('User-Agent') || '', 'success');
     }

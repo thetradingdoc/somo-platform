@@ -36,8 +36,9 @@ class PaymentService {
     /**
      * Get checkout details by payment token
      * Validates token is not expired or already used
+     * Note: getVoiceCheckout is async — must await or checkout row is a Promise and breaks payment UI.
      */
-    static getCheckoutByToken(token) {
+    static async getCheckoutByToken(token) {
         const paymentToken = db.getPaymentToken(token);
 
         if (!paymentToken) {
@@ -75,7 +76,7 @@ class PaymentService {
         }
 
         // Get checkout details (Task 53: return checkout with requires_verification when pending)
-        const checkout = db.getVoiceCheckout(paymentToken.checkout_id);
+        const checkout = await db.getVoiceCheckout(paymentToken.checkout_id);
 
         if (!checkout) {
             return {

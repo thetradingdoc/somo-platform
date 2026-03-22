@@ -1,8 +1,8 @@
 // Minimal service worker for installability and basic offline shell.
 
-const CACHE_NAME = 'doclittle-shell-v1';
+const CACHE_NAME = 'doclittle-shell-v2';
 const SHELL_URLS = [
-  '/unified-dashboard/',
+  '/unified-dashboard/business/business-dashboard.html',
   '/unified-dashboard/patients/patient-dashboard.html',
   '/unified-dashboard/patients/appointments.html',
   '/unified-dashboard/patients/wallet.html',
@@ -36,6 +36,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+  if (request.url.includes('/api/')) return;
 
   event.respondWith(
     caches.match(request).then((cached) => {
