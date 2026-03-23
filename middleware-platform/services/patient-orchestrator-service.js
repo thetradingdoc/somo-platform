@@ -1313,6 +1313,47 @@ async function orchestrate(input) {
     }
 
     try {
+      // C1 / impl-5: If orchestrator session_id matches a triage_sessions row (e.g. same id as Retell callId),
+      // apply the same DB gates as POST /voice/appointments/schedule. If no triage row, allow booking (orchestrator-only flow).
+      const { evaluateTriageGuardrailsForSession } = require('./voice-triage-guards');
+      const orchSid = session.session_id || null;
+      if (orchSid && db.getTriageSession && db.getTriageSession(orchSid)) {
+        const ev = evaluateTriageGuardrailsForSession(orchSid, {}, 'schedule');
+        if (!ev.ok) {
+          try {
+            db.incrementOpsCounter && db.incrementOpsCounter('orchestrator_triage_guard_blocked');
+          } catch (_) {}
+          const reply =
+            ev.body?.message ||
+            'Clinical triage must be completed before we can book. Please finish triage in chat or call.';
+          appendTurn(session, 'assistant', reply);
+          db.upsertOrchestrateSession({
+            session_id: session.session_id,
+            channel: session.channel,
+            patient_id: session.patient_id,
+            caller_phone: session.caller_phone,
+            clinic_id: session.clinic_id,
+            preferred_language: session.preferred_language,
+            turn_count: session.turn_count,
+            conversation_history: session.conversation_history,
+            flow_state: state,
+            status: session.status
+          });
+          return buildResponse(
+            {
+              reply,
+              session_id: session.session_id,
+              state,
+              next_chips: [],
+              triage_guard_blocked: true,
+              error_code: ev.body?.error_code || null
+            },
+            channel,
+            session
+          );
+        }
+      }
+
       const booked = await BookingService.scheduleAppointment({
         clinic_id: clinicId,
         patient_name: state.patient_name || 'Patient',
@@ -1350,24 +1391,20 @@ async function orchestrate(input) {
       // Auto-checkout (align with voice): create checkout so wallet shows "Pay now"
       if (booked.appointment?.id && clinicId) {
         try {
-          const axios = require('axios');
+          const { autoCheckoutAfterSchedule } = require('./auto-checkout-after-schedule');
           const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
-          const checkoutRes = await axios.post(`${base}/voice/appointments/checkout`, {
-            appointment_id: booked.appointment.id,
+          const checkout = await autoCheckoutAfterSchedule({
+            base,
+            appointmentId: booked.appointment.id,
             patient_phone: patientPhone || booked.appointment.patient_phone,
             patient_email: patientEmail || booked.appointment.patient_email,
             patient_name: state.patient_name || booked.appointment.patient_name || 'Patient',
             clinic_id: clinicId,
-            appointment_type: state.appointment_type || 'General Consult'
-          }, { timeout: 10000 });
-          if (checkoutRes.data?.success) {
-            booked.checkout = {
-              checkout_id: checkoutRes.data.checkout_id,
-              payment_token: checkoutRes.data.payment_token,
-              amount: checkoutRes.data.amount,
-              requires_verification: !!checkoutRes.data.requires_verification
-            };
-          }
+            appointment_type: state.appointment_type || 'General Consult',
+            triage_session_id: session.session_id || null,
+            timeoutMs: 10000
+          });
+          if (checkout) booked.checkout = checkout;
         } catch (e) {
           console.warn('[orchestrator] Auto-checkout failed (wallet will create on demand):', e.message);
         }

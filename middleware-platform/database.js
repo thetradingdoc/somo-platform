@@ -6,6 +6,19 @@ const { hashApiKey } = require('./utils/api-keys');
 const usePostgres = !!process.env.POSTGRES_URL;
 let pgPool = null;
 let pgSql = null;
+/** impl-9: ensure Postgres voice_checkouts has triage_session_id before INSERT */
+let voiceCheckoutsPgColumnEnsured = false;
+async function ensureVoiceCheckoutsTriageColumnPg() {
+  if (!usePostgres || !pgPool || voiceCheckoutsPgColumnEnsured) return;
+  try {
+    await pgPool.unsafe(
+      'ALTER TABLE voice_checkouts ADD COLUMN IF NOT EXISTS triage_session_id TEXT'
+    );
+    voiceCheckoutsPgColumnEnsured = true;
+  } catch (e) {
+    console.warn('[postgres] voice_checkouts.triage_session_id column ensure failed:', e.message);
+  }
+}
 let sqliteDb = null;
 let activeAdapter = null;
 
@@ -183,8 +196,8 @@ function canTransitionCheckoutStatus(current, next) {
     failed: [],
     completed: ['refunded'],
     refunded: [],
-    cancelled: [],
-    canceled: []
+    cancelled: ['completed'], // Allow recovery when payment succeeded but webhook race marked cancelled
+    canceled: ['completed']
   };
   if (!allowed[cur]) return ['completed', 'failed', 'refunded', 'cancelled', 'canceled'].includes(nxt);
   return allowed[cur].includes(nxt);
@@ -4866,16 +4879,36 @@ function runMigrations() {
 }
 runMigrations();
 
-// Extra safeguard: if rich intake/phase1 columns are missing (common when a prior migration
-// version was applied but didn't include later columns), attempt Phase 1 schema fix again.
-// This keeps triage->booking gate logic from getting stuck on missing `occupation` /
-// `intake_complete_at`.
+// Extra safeguard for BUG-011/015:
+// if rich-intake columns are missing (common when older environments skipped 011/015),
+// apply 011 first, then 015 as a final patch so triage->booking gates can persist/read
+// `intake_complete_at` and related fields reliably.
 try {
   const triageInfo = db.prepare(`PRAGMA table_info(triage_sessions)`).all();
   const existingCols = new Set(triageInfo.map(c => c.name));
-  const missing = ['occupation', 'intake_complete_at'].filter(c => !existingCols.has(c));
+  const requiredRichIntakeCols = [
+    'family_history',
+    'medications',
+    'prior_diagnoses',
+    'prior_workups',
+    'allergies',
+    'alcohol_use',
+    'alcohol_cage_score',
+    'smoking_status',
+    'phq2_score',
+    'gad2_score',
+    'safety_screen',
+    'substance_use',
+    'critical_unknowns',
+    'soap_note',
+    'detected_language',
+    'occupation',
+    'intake_complete_at'
+  ];
+  const missing = requiredRichIntakeCols.filter(c => !existingCols.has(c));
   if (missing.length) {
-    console.warn(`[migration] triage_sessions missing: ${missing.join(', ')}. Applying 015...`);
+    console.warn(`[migration] triage_sessions missing rich-intake cols: ${missing.join(', ')}. Applying 011 + 015...`);
+    require('./migrations/011_triage_rich_intake').up(db);
     require('./migrations/015_triage_rich_intake_phase1_columns').up(db);
   }
 } catch (e) {
@@ -4957,6 +4990,8 @@ function migrateSoftDeleteColumns() {
   addColIfMissing('voice_checkouts', 'deleted_at DATETIME');
   addColIfMissing('voice_checkouts', 'stripe_checkout_session_id TEXT');
   addColIfMissing('voice_checkouts', 'stripe_session_expires_at DATETIME');
+  /** C9: link checkout row to triage_sessions.session_id (voice callId / Kelly session) for audit */
+  addColIfMissing('voice_checkouts', 'triage_session_id TEXT');
   addColIfMissing('payment_receipts', 'deleted_at DATETIME');
   addColIfMissing('patient_documents', 'deleted_at DATETIME');
   addColIfMissing('patient_portal_sessions', 'emergency_flag BOOLEAN DEFAULT 0');
@@ -6664,11 +6699,13 @@ module.exports = {
     const customerPhone = checkout.customer_phone || '0000000000';
 
     if (usePostgres && pgPool) {
-      // Postgres path
+      await ensureVoiceCheckoutsTriageColumnPg();
+      // Postgres path (impl-9: triage_session_id — audit / C9)
+      const triageSid = checkout.triage_session_id || null;
       await pgPool`
         INSERT INTO voice_checkouts 
         (id, clinic_id, merchant_id, product_id, product_name, quantity, amount, 
-         customer_phone, customer_name, customer_email, appointment_id, payment_method, status, created_at)
+         customer_phone, customer_name, customer_email, appointment_id, payment_method, status, created_at, triage_session_id)
         VALUES (
           ${checkout.id},
           ${checkout.clinic_id || null},
@@ -6683,12 +6720,43 @@ module.exports = {
           ${checkout.appointment_id || null},
           ${checkout.payment_method || null},
           ${checkout.status || 'pending'},
-          ${checkout.created_at || new Date().toISOString()}
+          ${checkout.created_at || new Date().toISOString()},
+          ${triageSid}
         )
       `;
       return { changes: 1, lastInsertRowid: checkout.id };
     } else {
       // SQLite path
+      const hasTriageCol = db.prepare(`PRAGMA table_info(voice_checkouts)`).all();
+      const triageCol = hasTriageCol.some((c) => c.name === 'triage_session_id');
+      const triageVal = checkout.triage_session_id || null;
+      if (triageCol) {
+        const result = db.prepare(`
+          INSERT INTO voice_checkouts 
+          (id, clinic_id, merchant_id, product_id, product_name, quantity, amount, 
+           customer_phone, customer_name, customer_email, appointment_id, payment_method, status,
+           stripe_checkout_session_id, stripe_session_expires_at, triage_session_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          checkout.id,
+          checkout.clinic_id || null,
+          checkout.merchant_id,
+          checkout.product_id,
+          checkout.product_name,
+          checkout.quantity || 1,
+          checkout.amount,
+          customerPhone,
+          checkout.customer_name || null,
+          checkout.customer_email || null,
+          checkout.appointment_id || null,
+          checkout.payment_method || null,
+          checkout.status || 'pending',
+          checkout.stripe_checkout_session_id || null,
+          checkout.stripe_session_expires_at || null,
+          triageVal
+        );
+        return result;
+      }
       const result = db.prepare(`
         INSERT INTO voice_checkouts 
         (id, clinic_id, merchant_id, product_id, product_name, quantity, amount, 

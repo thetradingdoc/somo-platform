@@ -24,6 +24,13 @@ if (isProd) {
     console.error('❌ JWT_SECRET must be set (min 32 chars) in production. Refusing to start.');
     process.exit(1);
   }
+  const rtfv =
+    process.env.REQUIRE_TRIAGE_FOR_VOICE === '1' || process.env.REQUIRE_TRIAGE_FOR_VOICE === 'true';
+  if (!rtfv) {
+    console.warn(
+      '⚠️  PRODUCTION: REQUIRE_TRIAGE_FOR_VOICE is not enabled. Voice /voice/... routes may skip DB triage when session_id/call_id is omitted. Set REQUIRE_TRIAGE_FOR_VOICE=1 (see middleware-platform/docs/VOICE_TRIAGE_PARITY.md).'
+    );
+  }
 }
 
 // LangSmith: route traces to Doctor Little project
@@ -102,6 +109,11 @@ const FHIRAdapter = require('./adapters/fhir-adapter');
 const BookingService = require('./services/booking-service');
 const ReminderScheduler = require('./services/reminder-scheduler');
 const KellyToolExecutor = require('./services/kelly-tool-executor');
+const {
+  resolveVoiceSessionIdForGuard,
+  requireVoiceSessionIdForTriageParity,
+  enforceVoiceTriageGuardrailsForSession
+} = require('./services/voice-triage-guards');
 const PostgresSyncWorker = require('./services/postgres-sync-worker');
 const ToolCallDlqWorker = require('./services/tool-call-dlq-worker');
 const EhrSyncJobWorker = require('./services/ehr-sync-job-worker');
@@ -507,6 +519,30 @@ function withIdempotency(operationType) {
     });
     return next();
   };
+}
+
+/** C2 / impl-11: When LEGACY_APPOINTMENTS_API_DISABLED=1, legacy booking APIs return 410 Gone with replacement routes. */
+function legacyAppointmentsApiDisabled(res) {
+  const off =
+    process.env.LEGACY_APPOINTMENTS_API_DISABLED === '1' ||
+    process.env.LEGACY_APPOINTMENTS_API_DISABLED === 'true';
+  if (!off) return false;
+  res.status(410).json({
+    success: false,
+    error: 'GONE',
+    error_code: 'LEGACY_APPOINTMENTS_API_DEPRECATED',
+    message:
+      'This legacy /api/appointments/* endpoint is disabled. Integrations must migrate to authenticated patient routes or voice routes.',
+    replacement_routes: {
+      schedule: 'POST /api/patient/booking/schedule (requires patient session)',
+      available_slots: 'GET /api/patient/booking/available-slots or POST /voice/appointments/available-slots',
+      reschedule: 'PUT /api/patient/appointments/:id/reschedule (patient session) or POST /voice/appointments/reschedule'
+    },
+    documentation: 'docs/architecture/BOOKING_CHECKOUT_ARCHITECTURE_ANALYSIS.md §6.5',
+    runbook: 'middleware-platform/docs/VOICE_TRIAGE_PARITY.md',
+    hint: 'Set LEGACY_APPOINTMENTS_API_DISABLED=0 only for a short migration window.'
+  });
+  return true;
 }
 
 // Patient: Support config (mvp-60)
@@ -2845,6 +2881,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
+    const triageSessionIdForAudit = resolveVoiceSessionIdForGuard(args, req);
     let clinicId = resolveClinicIdFromRequest(req, args);
 
     // Calculate amount based on insurance coverage if available
@@ -2859,7 +2896,22 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
 
     // Try to find appointment by ID, phone, or email (S-2: tenant-scoped)
     let appointmentId = args.appointment_id || null;
+    let appointmentRecord = null;
     const customerId = args.metadata?.customer_id || args.customer_id || req.body?.metadata?.customer_id || null;
+    if (appointmentId) {
+      appointmentRecord = await db.getAppointment(appointmentId, clinicId || null, customerId || null);
+      if (!appointmentRecord) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid appointment_id. Appointment not found for this clinic/tenant context.',
+          error_code: 'INVALID_APPOINTMENT_ID',
+          appointment_id: appointmentId
+        });
+      }
+      if (!clinicId) {
+        clinicId = appointmentRecord.clinic_id || clinicId;
+      }
+    }
     if (!appointmentId) {
       // Search for most recent appointment for this customer
       const BookingService = require('./services/booking-service');
@@ -2883,6 +2935,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
               .sort((a, b) => new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time))[0];
             if (recentAppt) {
               appointmentId = recentAppt.id;
+              appointmentRecord = await db.getAppointment(appointmentId, scopedClinic || null, customerId || null);
               console.log(`📋 Linked checkout to appointment: ${appointmentId}`);
             }
           }
@@ -2895,20 +2948,21 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     // If appointment_id is available, calculate patient responsibility based on insurance
     if (appointmentId && amount == null) {
       try {
-        const appointment = await db.getAppointment(appointmentId, clinicId || null);
+        const appointment = appointmentRecord || await db.getAppointment(appointmentId, clinicId || null, customerId || null);
         if (appointment && !clinicId) {
           clinicId = appointment.clinic_id || clinicId;
         }
         if (appointment && appointment.patient_id) {
           // Try to get latest eligibility for this patient
-          const eligibilityChecks = db.db.prepare(`
+          const eligibility_checks = db.db.prepare(`
             SELECT * FROM eligibility_checks 
             WHERE patient_id = ? 
             ORDER BY created_at DESC LIMIT 1
           `).all(appointment.patient_id);
+          const eligibilityChecks = eligibility_checks;
 
-          if (eligibilityChecks && eligibilityChecks.length > 0) {
-            const latestEligibility = eligibilityChecks[0];
+          if (eligibility_checks && eligibility_checks.length > 0) {
+            const latestEligibility = eligibility_checks[0];
             // Calculate patient responsibility based on EOB
             if (latestEligibility.allowed_amount !== null && latestEligibility.insurance_pays !== null) {
               const patientOwe = latestEligibility.allowed_amount - latestEligibility.insurance_pays;
@@ -2931,7 +2985,7 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       try {
         let appointmentType = args.appointment_type || null;
         if (!appointmentType && appointmentId) {
-          const appointment = await db.getAppointment(appointmentId, clinicId || null);
+          const appointment = appointmentRecord || await db.getAppointment(appointmentId, clinicId || null, customerId || null);
           appointmentType = appointment?.appointment_type || appointmentType;
           if (appointment && !clinicId) {
             clinicId = appointment.clinic_id || clinicId;
@@ -2950,15 +3004,22 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     let merchantId = args.merchant_id;
     if (!merchantId && clinicId) {
       const clinic = await db.getClinicById(clinicId);
+      if (clinic && !clinic.merchant_id) {
+        // Chk-C4: single-tenant fallback to managed merchant creation
+        clinic.merchant_id = ensureMerchantForClinic(clinic);
+      }
       if (clinic && clinic.merchant_id) {
         merchantId = clinic.merchant_id;
       }
     }
     if (!merchantId && appointmentId) {
       // Try to get from appointment
-      const appointment = await db.getAppointment(appointmentId);
+      const appointment = appointmentRecord || await db.getAppointment(appointmentId, clinicId || null, customerId || null);
       if (appointment && appointment.clinic_id) {
         const clinic = await db.getClinicById(appointment.clinic_id);
+        if (clinic && !clinic.merchant_id) {
+          clinic.merchant_id = ensureMerchantForClinic(clinic);
+        }
         if (clinic && clinic.merchant_id) {
           merchantId = clinic.merchant_id;
         }
@@ -2968,26 +3029,26 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     // If still no merchant_id, return error instead of creating default
     if (!merchantId) {
       console.error('❌ ERROR: Could not determine merchant_id for appointment booking');
-      return {
+      return res.status(500).json({
         success: false,
         error: 'Merchant not found. Please ensure clinic is properly configured with a merchant.',
         appointment_id: null
-      };
+      });
     }
 
     // Verify merchant exists
     const existingMerchant = db.getMerchant(merchantId);
     if (!existingMerchant) {
       console.error(`❌ ERROR: Merchant ${merchantId} not found in database`);
-      return {
+      return res.status(500).json({
         success: false,
         error: `Merchant ${merchantId} not found. Please ensure merchant is configured.`,
         appointment_id: null
-      };
+      });
     }
 
     if (!clinicId && appointmentId) {
-      const appointmentRecord = await db.getAppointment(appointmentId);
+      appointmentRecord = appointmentRecord || await db.getAppointment(appointmentId, clinicId || null, customerId || null);
       clinicId = appointmentRecord?.clinic_id || clinicId;
     }
 
@@ -3010,7 +3071,8 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       customer_email: args.customer_email || args.patient_email || null,
       appointment_id: appointmentId, // Link to appointment
       status: 'pending',
-      clinic_id: clinicId
+      clinic_id: clinicId,
+      triage_session_id: triageSessionIdForAudit || null
     };
 
     // Store checkout
@@ -3023,9 +3085,10 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
         if (appointment && appointment.patient_id) {
           const FHIRService = require('./services/fhir-service');
           // Guard: fetch eligibility in this scope (was undefined when amount came from pricing)
-          const eligibilityChecks = db.getEligibilityChecksByPatient?.(appointment.patient_id) || [];
-          const isCopay = eligibilityChecks.length > 0 &&
-            eligibilityChecks[0].copay_amount === amount;
+          const eligibility_checks = db.getEligibilityChecksByPatient?.(appointment.patient_id) || [];
+          const eligibilityChecks = eligibility_checks;
+          const isCopay = eligibility_checks.length > 0 &&
+            eligibility_checks[0].copay_amount === amount;
 
           if (isCopay) {
             console.log(`💳 Creating payment card for appointment copay: $${amount.toFixed(2)}`);
@@ -3117,7 +3180,8 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       checkout_id: checkoutId,
       appointment_id: appointmentId,
       clinic_id: clinicId,
-      merchant_id: merchantId
+      merchant_id: merchantId,
+      triage_session_id: triageSessionIdForAudit || null
     });
     return res.json(checkoutResponse);
   } catch (error) {
@@ -3125,6 +3189,21 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
     return res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Development-only helper: create a test PaymentMethod for e2e tests (do NOT enable in production)
+if (process.env.NODE_ENV !== 'production' && stripe) {
+  app.get('/dev/create-test-payment-method', async (req, res) => {
+    try {
+      const pm = await stripe.paymentMethods.create({
+        type: 'card',
+        card: { token: 'tok_visa' }
+      });
+      return res.json({ success: true, payment_method_id: pm.id });
+    } catch (e) {
+      return res.status(400).json({ success: false, error: e.message });
+    }
+  });
+}
 
 // Development-only helper: fetch verification code by token (do NOT enable in production)
 if (process.env.NODE_ENV !== 'production') {
@@ -3156,14 +3235,36 @@ app.post('/voice/checkout/verify', async (req, res) => {
     const args = req.body.args || req.body;
     const token = args.payment_token || args.token;
     const code = args.code || args.verification_code;
+    const triageSessionVerify = resolveVoiceSessionIdForGuard(args, req);
 
     if (!token || !code) {
-      return res.status(400).json({ success: false, error: 'payment_token and code are required' });
+      return res.status(400).json({
+        success: false,
+        error: 'payment_token and code are required',
+        error_code: 'MISSING_VERIFY_FIELDS',
+        next_step: 'Provide payment_token and the 6-digit verification_code, then retry.'
+      });
+    }
+
+    if (triageSessionVerify) {
+      try {
+        console.log(
+          JSON.stringify({
+            event: 'voice_checkout_verify',
+            triage_session_id: triageSessionVerify
+          })
+        );
+      } catch (_) {}
     }
 
     const tokenRecord = db.getPaymentToken(token);
     if (!tokenRecord) {
-      return res.status(404).json({ success: false, error: 'Invalid token' });
+      return res.status(404).json({
+        success: false,
+        error: 'Invalid token',
+        error_code: 'INVALID_PAYMENT_TOKEN',
+        next_step: 'Create a new checkout and request a fresh verification code.'
+      });
     }
 
     // Check expiration
@@ -3171,13 +3272,23 @@ app.post('/voice/checkout/verify', async (req, res) => {
       const now = new Date();
       const exp = new Date(tokenRecord.verification_code_expires);
       if (now > exp) {
-        return res.status(400).json({ success: false, error: 'Verification code expired' });
+        return res.status(400).json({
+          success: false,
+          error: 'Verification code expired',
+          error_code: 'VERIFICATION_CODE_EXPIRED',
+          next_step: 'Re-run create_appointment_checkout to resend a new verification code.'
+        });
       }
     }
 
     // Check code match
     if ((tokenRecord.verification_code || '').trim() !== String(code).trim()) {
-      return res.status(400).json({ success: false, error: 'Invalid verification code' });
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid verification code',
+        error_code: 'INVALID_VERIFICATION_CODE',
+        next_step: 'Ask the patient to re-check the 6-digit code and retry.'
+      });
     }
 
     // Fetch checkout to email link
@@ -6400,11 +6511,6 @@ function resolveClinicIdFromRequest(req, args = {}) {
     return directClinicId;
   }
 
-  // Task 6: Fallback when Retell/API doesn't provide clinic_id
-  if (FALLBACK_CLINIC_ID) {
-    return FALLBACK_CLINIC_ID;
-  }
-
   const fromPhone = req.body?.From || req.body?.from_number || req.body?.patient_phone || args?.patient_phone;
   if (fromPhone && db && db.getClinicPhoneNumber) {
     try {
@@ -6418,9 +6524,45 @@ function resolveClinicIdFromRequest(req, args = {}) {
     } catch (_) {}
   }
 
+  // Final fallback only when explicit/request-scoped clinic cannot be resolved.
+  if (FALLBACK_CLINIC_ID) {
+    return FALLBACK_CLINIC_ID;
+  }
+
   // S-1: Do NOT fall back to arbitrary clinic - cross-tenant leak. Return null when clinic cannot be determined.
   return null;
 }
+
+function ensureSlotBundles(result, date, practitionerId = null) {
+  if (!result || !result.success) return result;
+  if (Array.isArray(result.slot_bundles) && result.slot_bundles.length) return result;
+
+  const fromDisplay = Array.isArray(result.slots_with_display) ? result.slots_with_display : [];
+  const fromSlots = Array.isArray(result.available_slots) ? result.available_slots : (Array.isArray(result.slots) ? result.slots : []);
+  const base = fromDisplay.length
+    ? fromDisplay.map((s) => ({
+      time: s.time,
+      date: date || null,
+      display: s.slot_display || s.time,
+      slot_start_iso: s.slot_start_iso || null,
+      practitioner_id: practitionerId || null,
+      lane: 'sync',
+      is_async: false
+    }))
+    : fromSlots.map((t) => ({
+      time: t,
+      date: date || null,
+      display: String(t),
+      slot_start_iso: null,
+      practitioner_id: practitionerId || null,
+      lane: 'sync',
+      is_async: false
+    }));
+
+  return { ...result, slot_bundles: base };
+}
+
+// Voice triage guards: ./services/voice-triage-guards.js (resolveVoiceSessionIdForGuard, requireVoiceSessionIdForTriageParity, enforceVoiceTriageGuardrailsForSession)
 
 // Schedule new appointment (for voice agent)
 app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, res) => {
@@ -6459,6 +6601,7 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       patient_name: args.patient_name,
       patient_phone: args.patient_phone,
       patient_email: args.patient_email,
+      patient_id: args.patient_id || args.confirmed_patient_id || null,
       appointment_type: args.appointment_type || 'Mental Health Consultation',
       date: args.date,  // YYYY-MM-DD
       time: args.time,  // HH:MM or "2:00 PM"
@@ -6474,110 +6617,63 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       primary_cpt: args.primary_cpt || null
     };
 
-    // Phase 5: Backend guardrails (enforce triage_complete/confidence + safety lock)
-    // Only apply when we can identify the triage session (metadata.session_id from caller).
-    const sessionIdForGuard =
-      args?.metadata?.session_id ||
-      args?.session_id ||
-      req.body?.metadata?.session_id ||
-      null;
-    if (sessionIdForGuard && db?.getTriageSession) {
-      const THRESHOLD = (() => {
-        const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
-        const n = parseFloat(v);
-        return Number.isFinite(n) ? n : 0.7;
-      })();
+    if (!requireVoiceSessionIdForTriageParity(req, res)) return;
 
-      const bump = (name) => {
-        try { db.incrementOpsCounter && db.incrementOpsCounter(name); } catch (_) {}
-      };
+    // Phase 5: Backend guardrails when session_id / call_id present (Kelly + Retell direct parity)
+    const sessionIdForGuard = resolveVoiceSessionIdForGuard(args, req);
+    if (!enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'schedule')) return;
 
-      const sessionRow = db.getTriageSession(sessionIdForGuard);
-      const isSafetyRed =
-        sessionRow?.safety_level === 'red' ||
-        sessionRow?.referred_to_911 === 1 ||
-        sessionRow?.referred_to_911 === true;
-      const providerOverrideEmergency =
-        args?.provider_override_emergency === true || args?.provider_override_emergency === 'true';
-
-      const triageResult = require('./services/triage-rag-service').getLatestForSession?.(sessionIdForGuard) || null;
-      const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
-      const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
-
-      if (isSafetyRed && !providerOverrideEmergency) {
-        bump('voice_agent_misuse_http_schedule_safety_blocked');
-        return res.status(403).json({
-          success: false,
-          error: 'SAFETY_BLOCKED',
-          error_code: 'SAFETY_BLOCKED',
-          message: 'Scheduling is blocked because this session was flagged as emergency/red safety.'
-        });
-      }
-
-      if (!triageComplete) {
-        bump('voice_agent_misuse_http_schedule_triage_incomplete');
-        return res.status(403).json({
-          success: false,
-          error: 'TRIAGE_INCOMPLETE',
-          error_code: 'TRIAGE_INCOMPLETE',
-          message: 'Triage is not complete yet. Please complete triage (run_triage_rag) before scheduling.'
-        });
-      }
-
-      if (confidence < THRESHOLD) {
-        bump('voice_agent_misuse_http_schedule_low_confidence');
-        return res.status(403).json({
-          success: false,
-          error: 'LOW_CONFIDENCE',
-          error_code: 'LOW_CONFIDENCE',
-          message: 'RAG confidence is low. Please clarify symptoms and re-run triage before scheduling.'
-        });
-      }
-
-      if (!(sessionRow?.opqrst_complete === 1 || sessionRow?.opqrst_complete === true)) {
-        bump('voice_agent_misuse_http_schedule_opqrst_missing');
-        return res.status(403).json({
-          success: false,
-          error: 'OPQRST_REQUIRED',
-          error_code: 'OPQRST_REQUIRED',
-          message: 'Please complete the OPQRST clinical history before we schedule.'
-        });
-      }
-
-      if (!sessionRow?.intake_complete_at) {
-        bump('voice_agent_misuse_http_schedule_rich_intake_missing');
-        return res.status(403).json({
-          success: false,
-          error: 'RICH_INTAKE_REQUIRED',
-          error_code: 'RICH_INTAKE_REQUIRED',
-          message: 'Please complete the rich intake (medications, allergies, and key history) before we schedule.'
-        });
-      }
+    // S4: hard-stop wrong linkage when a known patient_id name disagrees unless explicitly confirmed.
+    if (appointmentData.patient_id && appointmentData.patient_name && db.getFHIRPatient) {
+      try {
+        const existing = db.getFHIRPatient(appointmentData.patient_id);
+        const existingName = String(existing?.name || '').trim();
+        const providedName = String(appointmentData.patient_name || '').trim();
+        const allowNameMismatch =
+          args.confirm_name_mismatch === true ||
+          String(args.confirm_name_mismatch || '').toLowerCase() === 'true';
+        if (existingName && providedName && !namesMatch(existingName, providedName) && !allowNameMismatch) {
+          return res.status(409).json({
+            success: false,
+            error: 'NAME_MISMATCH',
+            requires_name_confirmation: true,
+            patient_id: appointmentData.patient_id,
+            expected_name: existingName,
+            provided_name: providedName,
+            next_step: 'Confirm this is the same person, then retry with confirm_name_mismatch=true, or use the correct patient_id.'
+          });
+        }
+      } catch (_) {}
     }
 
     const result = await BookingService.scheduleAppointment(appointmentData);
+    if (result.success) invalidateSlotAvailabilityCache();
+
+    // S1: duplicate detection should return explicit actionable 409 for voice clients.
+    if (!result.success && result.duplicate && result.requiresPhoneConfirmation) {
+      return res.status(409).json({
+        ...result,
+        error_code: 'DUPLICATE_PATIENT_PHONE_CONFIRMATION_REQUIRED',
+        next_step: 'Ask the patient to confirm phone number. If it matches an existing patient, retry with confirmed_patient_id. Otherwise collect corrected contact details.'
+      });
+    }
 
     // Task 10: Auto-checkout fallback when agent skips create_appointment_checkout
     if (result.success && result.appointment?.id) {
       try {
-        const axios = require('axios');
+        const { autoCheckoutAfterSchedule } = require('./services/auto-checkout-after-schedule');
         const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
-        const checkoutRes = await axios.post(`${base}/voice/appointments/checkout`, {
-          appointment_id: result.appointment.id,
+        const checkout = await autoCheckoutAfterSchedule({
+          base,
+          appointmentId: result.appointment.id,
           patient_phone: args.patient_phone || result.appointment.patient_phone,
           patient_email: args.patient_email || result.appointment.patient_email,
           patient_name: args.patient_name || result.appointment.patient_name,
           clinic_id: clinicId,
-          appointment_type: args.appointment_type
-        }, { timeout: 30000 });
-        if (checkoutRes.data && checkoutRes.data.success) {
-          result.checkout = {
-            checkout_id: checkoutRes.data.checkout_id,
-            payment_token: checkoutRes.data.payment_token,
-            amount: checkoutRes.data.amount,
-            requires_verification: !!checkoutRes.data.requires_verification
-          };
-        }
+          appointment_type: args.appointment_type,
+          triage_session_id: resolveVoiceSessionIdForGuard(args, req) || null
+        });
+        if (checkout) result.checkout = checkout;
       } catch (e) {
         console.warn('⚠️  Auto-checkout failed (agent can still call create_appointment_checkout):', e.message);
       }
@@ -6792,11 +6888,19 @@ app.post('/voice/appointments/reschedule', async (req, res) => {
     safeLogRequestBody('Request body:', req);
 
     const args = req.body.args || req.body;
+    if (!requireVoiceSessionIdForTriageParity(req, res)) return;
+
     const appointmentId = args.appointment_id || args.confirmation_number;
     const newDate = args.new_date || args.date;
     const newTime = args.new_time || args.time;
     const reason = args.reason || null;
     const timezone = args.timezone || null;
+    if (timezone && !isValidIanaTimezone(timezone)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".'
+      });
+    }
     const clinicId = resolveClinicIdFromRequest(req, args);
     if (!clinicId) {
       return res.status(400).json({
@@ -6820,6 +6924,7 @@ app.post('/voice/appointments/reschedule', async (req, res) => {
       timezone,
       clinicId
     );
+    if (result?.success) invalidateSlotAvailabilityCache();
 
     res.json(result);
   } catch (error) {
@@ -6849,6 +6954,7 @@ app.post('/voice/appointments/cancel', async (req, res) => {
     }
 
     const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
+    if (result?.success) invalidateSlotAvailabilityCache();
 
     res.json(result);
   } catch (error) {
@@ -6865,10 +6971,18 @@ app.post('/voice/appointments/cancel', async (req, res) => {
 app.post('/voice/appointments/available-slots', async (req, res) => {
   try {
     const args = req.body.args || req.body;
+    if (!requireVoiceSessionIdForTriageParity(req, res)) return;
+
     const date = args.date;  // YYYY-MM-DD
     const provider = args.provider || null;
     const appointmentType = args.appointment_type || null;
     const timezone = args.timezone || 'America/New_York';
+    if (!isValidIanaTimezone(timezone)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".'
+      });
+    }
     const lane = args.lane || 'sync';
     const clinicId = resolveClinicIdFromRequest(req, args) || args.clinic_id;
     if (!clinicId) {
@@ -6878,9 +6992,18 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
       });
     }
 
+    const sessionIdForGuard = resolveVoiceSessionIdForGuard(args, req);
+    if (!enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'slots')) return;
+
     const practitionerId = args.practitioner_id || null;
     const cache = require('./services/cache-service');
-    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone || '', practitionerId || '', lane || ''].join('|');
+    const cacheSession = sessionIdForGuard || 'no_session';
+    // C10: namespace cache when REQUIRE_TRIAGE_FOR_VOICE flips so stale no_session entries are not reused
+    const rtfvSeg =
+      process.env.REQUIRE_TRIAGE_FOR_VOICE === '1' || process.env.REQUIRE_TRIAGE_FOR_VOICE === 'true'
+        ? 'rtfv1'
+        : 'rtfv0';
+    const cacheKey = [clinicId, date || '', provider || '', appointmentType || '', timezone || '', practitionerId || '', lane || '', cacheSession, rtfvSeg].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) {
       return res.json(cached);
@@ -6895,7 +7018,7 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
         const { getAvailableSlotsWithSpecialist } = require('./services/specialist-slot-service');
         let language = 'en';
         let patientState = null;
-        const callId = args.call_id || null;
+        const callId = args.call_id || args.session_id || sessionIdForGuard || null;
         let urgency = args.urgency || 'routine';
         if (callId && db) {
           try {
@@ -6950,7 +7073,8 @@ app.post('/voice/appointments/available-slots', async (req, res) => {
       }
     }
 
-    const result = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId, practitionerId);
+    const resultRaw = await BookingService.getAvailableSlots(date, provider, appointmentType, timezone, clinicId, practitionerId);
+    const result = ensureSlotBundles(resultRaw, date, practitionerId);
     if (result.success) {
       cache.set('slot_availability', result, cacheKey);
     }
@@ -7004,8 +7128,16 @@ function apiAppointmentArgs(req) {
   return req.body?.args || req.body;
 }
 
+function invalidateSlotAvailabilityCache() {
+  try {
+    const cache = require('./services/cache-service');
+    cache.clear('slot_availability');
+  } catch (_) {}
+}
+
 app.post('/api/appointments/schedule', async (req, res) => {
   try {
+    if (legacyAppointmentsApiDisabled(res)) return;
     const args = apiAppointmentArgs(req);
     const clinicId = resolveClinicIdFromRequest(req, args);
     if (!clinicId) {
@@ -7028,29 +7160,31 @@ app.post('/api/appointments/schedule', async (req, res) => {
       primary_icd10: args.primary_icd10 || null,
       primary_cpt: args.primary_cpt || null
     };
+    if (!isValidIanaTimezone(appointmentData.timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".' });
+    }
+    const sessionIdForGuard = resolveVoiceSessionIdForGuard(args, req);
+    if (sessionIdForGuard && !enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'schedule')) return;
+
     const result = await BookingService.scheduleAppointment(appointmentData);
+    if (result.success) invalidateSlotAvailabilityCache();
 
     // Task 10: Auto-checkout fallback
     if (result.success && result.appointment?.id) {
       try {
-        const axios = require('axios');
+        const { autoCheckoutAfterSchedule } = require('./services/auto-checkout-after-schedule');
         const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
-        const checkoutRes = await axios.post(`${base}/voice/appointments/checkout`, {
-          appointment_id: result.appointment.id,
+        const checkout = await autoCheckoutAfterSchedule({
+          base,
+          appointmentId: result.appointment.id,
           patient_phone: args.patient_phone,
           patient_email: args.patient_email,
           patient_name: args.patient_name,
           clinic_id: clinicId,
-          appointment_type: args.appointment_type
-        }, { timeout: 30000 });
-        if (checkoutRes.data && checkoutRes.data.success) {
-          result.checkout = {
-            checkout_id: checkoutRes.data.checkout_id,
-            payment_token: checkoutRes.data.payment_token,
-            amount: checkoutRes.data.amount,
-            requires_verification: !!checkoutRes.data.requires_verification
-          };
-        }
+          appointment_type: args.appointment_type,
+          triage_session_id: sessionIdForGuard || null
+        });
+        if (checkout) result.checkout = checkout;
       } catch (e) {
         console.warn('⚠️  Auto-checkout failed:', e.message);
       }
@@ -7071,6 +7205,7 @@ app.post('/api/appointments/schedule', async (req, res) => {
 
 app.get('/api/appointments/available-slots', async (req, res) => {
   try {
+    if (legacyAppointmentsApiDisabled(res)) return;
     const args = apiAppointmentArgs(req);
     const clinicId = resolveClinicIdFromRequest(req, args);
     if (!clinicId) {
@@ -7080,12 +7215,20 @@ app.get('/api/appointments/available-slots', async (req, res) => {
     if (!date) {
       return res.status(400).json({ success: false, error: 'date is required' });
     }
+    const sessionIdForGuard = resolveVoiceSessionIdForGuard(args, req);
+    if (sessionIdForGuard && !enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'slots')) return;
+    const timezone = args.timezone || 'America/New_York';
+    if (!isValidIanaTimezone(timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".' });
+    }
+
     const practitionerId = args.practitioner_id || null;
     const cache = require('./services/cache-service');
-    const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', args.timezone || 'America/New_York', practitionerId || ''].join('|');
+    const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', timezone, practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) return res.json(cached);
-    const result = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, args.timezone || 'America/New_York', clinicId, practitionerId);
+    const resultRaw = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, timezone, clinicId, practitionerId);
+    const result = ensureSlotBundles(resultRaw, date, practitionerId);
     if (result.success) cache.set('slot_availability', result, cacheKey);
     res.json(result);
   } catch (error) {
@@ -7096,6 +7239,7 @@ app.get('/api/appointments/available-slots', async (req, res) => {
 
 app.post('/api/appointments/available-slots', async (req, res) => {
   try {
+    if (legacyAppointmentsApiDisabled(res)) return;
     const args = apiAppointmentArgs(req);
     const clinicId = resolveClinicIdFromRequest(req, args);
     if (!clinicId) {
@@ -7105,12 +7249,20 @@ app.post('/api/appointments/available-slots', async (req, res) => {
     if (!date) {
       return res.status(400).json({ success: false, error: 'date is required' });
     }
+    const sessionIdForGuard = resolveVoiceSessionIdForGuard(args, req);
+    if (sessionIdForGuard && !enforceVoiceTriageGuardrailsForSession(sessionIdForGuard, args, res, 'slots')) return;
+    const timezone = args.timezone || 'America/New_York';
+    if (!isValidIanaTimezone(timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".' });
+    }
+
     const practitionerId = args.practitioner_id || null;
     const cache = require('./services/cache-service');
-    const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', args.timezone || 'America/New_York', practitionerId || ''].join('|');
+    const cacheKey = [clinicId, date, args.provider || '', args.appointment_type || '', timezone, practitionerId || ''].join('|');
     const cached = cache.get('slot_availability', cacheKey);
     if (cached) return res.json(cached);
-    const result = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, args.timezone || 'America/New_York', clinicId, practitionerId);
+    const resultRaw = await BookingService.getAvailableSlots(date, args.provider, args.appointment_type, timezone, clinicId, practitionerId);
+    const result = ensureSlotBundles(resultRaw, date, practitionerId);
     if (result.success) cache.set('slot_availability', result, cacheKey);
     res.json(result);
   } catch (error) {
@@ -7136,6 +7288,7 @@ app.post('/api/appointments/confirm', async (req, res) => {
 
 app.post('/api/appointments/reschedule', async (req, res) => {
   try {
+    if (legacyAppointmentsApiDisabled(res)) return;
     const args = apiAppointmentArgs(req);
     const clinicId = resolveClinicIdFromRequest(req, args);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required' });
@@ -7145,7 +7298,11 @@ app.post('/api/appointments/reschedule', async (req, res) => {
     if (!appointmentId || !newDate || !newTime) {
       return res.status(400).json({ success: false, error: 'appointment_id, new_date and new_time are required' });
     }
+    if (args.timezone && !isValidIanaTimezone(args.timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".' });
+    }
     const result = await BookingService.rescheduleAppointment(appointmentId, newDate, newTime, args.reason, args.timezone, clinicId);
+    if (result?.success) invalidateSlotAvailabilityCache();
     res.json(result);
   } catch (error) {
     console.error('❌ API reschedule error:', error);
@@ -7161,6 +7318,7 @@ app.post('/api/appointments/cancel', async (req, res) => {
     const appointmentId = args.appointment_id || args.confirmation_number;
     if (!appointmentId) return res.status(400).json({ success: false, error: 'appointment_id is required' });
     const result = await BookingService.cancelAppointment(appointmentId, args.reason, clinicId);
+    if (result?.success) invalidateSlotAvailabilityCache();
     res.json(result);
   } catch (error) {
     console.error('❌ API cancel error:', error);
@@ -7252,6 +7410,9 @@ app.post('/voice/insurance/collect', async (req, res) => {
 
     const args = req.body.args || req.body;
 
+    // C4: Same session id requirement as schedule/slots when REQUIRE_TRIAGE_FOR_VOICE=1
+    if (!requireVoiceSessionIdForTriageParity(req, res)) return;
+
     // Required: member_id
     if (!args.member_id) {
       return res.status(400).json({
@@ -7260,79 +7421,9 @@ app.post('/voice/insurance/collect', async (req, res) => {
       });
     }
 
-    // Phase 5: Backend guardrails (enforce triage_complete/confidence + safety lock)
-    // Only apply when we can identify the triage session via call_id.
-    const guardCallId = args?.call_id || args?.callId || null;
-    if (guardCallId && db?.getTriageSession) {
-      const THRESHOLD = (() => {
-        const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
-        const n = parseFloat(v);
-        return Number.isFinite(n) ? n : 0.7;
-      })();
-
-      const bump = (name) => {
-        try { db.incrementOpsCounter && db.incrementOpsCounter(name); } catch (_) {}
-      };
-
-      const sessionRow = db.getTriageSession(guardCallId);
-      const isSafetyRed =
-        sessionRow?.safety_level === 'red' ||
-        sessionRow?.referred_to_911 === 1 ||
-        sessionRow?.referred_to_911 === true;
-      if (isSafetyRed) {
-        bump('voice_agent_misuse_http_collect_insurance_safety_blocked');
-        return res.status(403).json({
-          success: false,
-          error: 'SAFETY_BLOCKED',
-          error_code: 'SAFETY_BLOCKED',
-          message: 'Insurance verification is blocked because this session was flagged as emergency/red safety.'
-        });
-      }
-
-      const triageResult = require('./services/triage-rag-service').getLatestForSession?.(guardCallId) || null;
-      const confidence = KellyToolExecutor._confidenceFromTriageRow(triageResult);
-      const triageComplete = sessionRow && (sessionRow.triage_complete === 1 || sessionRow.triage_complete === true);
-
-      if (!triageComplete) {
-        bump('voice_agent_misuse_http_collect_insurance_triage_incomplete');
-        return res.status(403).json({
-          success: false,
-          error: 'TRIAGE_INCOMPLETE',
-          error_code: 'TRIAGE_INCOMPLETE',
-          message: 'Triage is not complete yet. Please complete triage (run_triage_rag) before verifying insurance.'
-        });
-      }
-
-      if (confidence < THRESHOLD) {
-        bump('voice_agent_misuse_http_collect_insurance_low_confidence');
-        return res.status(403).json({
-          success: false,
-          error: 'LOW_CONFIDENCE',
-          error_code: 'LOW_CONFIDENCE',
-          message: 'RAG confidence is low. Please clarify symptoms and re-run triage before verifying insurance.'
-        });
-      }
-
-      if (!(sessionRow?.opqrst_complete === 1 || sessionRow?.opqrst_complete === true)) {
-        bump('voice_agent_misuse_http_collect_insurance_opqrst_missing');
-        return res.status(403).json({
-          success: false,
-          error: 'OPQRST_REQUIRED',
-          error_code: 'OPQRST_REQUIRED',
-          message: 'Please complete the OPQRST clinical history before verifying insurance.'
-        });
-      }
-
-      if (!sessionRow?.intake_complete_at) {
-        bump('voice_agent_misuse_http_collect_insurance_rich_intake_missing');
-        return res.status(403).json({
-          success: false,
-          error: 'RICH_INTAKE_REQUIRED',
-          error_code: 'RICH_INTAKE_REQUIRED',
-          message: 'Please complete the rich intake (medications, allergies, and key history) before verifying insurance.'
-        });
-      }
-    }
+    // Phase 5: Same DB triage guardrails as schedule/slots (impl-1); uses resolveVoiceSessionIdForGuard (session_id > metadata > call_id)
+    const insuranceSessionId = resolveVoiceSessionIdForGuard(args, req);
+    if (!enforceVoiceTriageGuardrailsForSession(insuranceSessionId, args, res, 'insurance')) return;
 
     // Optional: patient_id to link insurance to patient
     const patientId = args.patient_id || args.patientId || null;
@@ -7652,11 +7743,13 @@ app.post('/voice/insurance/collect', async (req, res) => {
             duplicate: true,
             requiresPhoneConfirmation: true,
             error: patientResult.message || 'Duplicate patient found. Phone number confirmation required.',
+            error_code: 'DUPLICATE_PATIENT_PHONE_CONFIRMATION_REQUIRED',
             duplicates: patientResult.duplicates || [],
             provided_name: patientResult.provided_name,
             provided_phone: patientResult.provided_phone,
             message: 'I found a patient with a similar name in our system. To verify your identity, please confirm your phone number. This helps ensure we have the correct patient record.',
-            voice_agent_instruction: 'Ask the caller to confirm their phone number. If the phone number matches an existing patient, use that patient. If not, ask the caller to verify their information.'
+            voice_agent_instruction: 'Ask the caller to confirm their phone number. If the phone number matches an existing patient, use that patient. If not, ask the caller to verify their information.',
+            next_step: 'Confirm phone number (or email) and retry insurance collection with confirmed patient identity.'
           });
         }
 
@@ -13107,6 +13200,13 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
 
             // Antivirus / content scan (PATIENT_WEB_PORTAL_TODO 12.2.3)
             const AntivirusService = require('./services/antivirus-service');
+            if (!f.path || !fs.existsSync(f.path)) {
+              return res.status(400).json({
+                success: false,
+                error: 'Uploaded file could not be read (temporary file missing). Please upload again.',
+                error_code: 'UPLOAD_TEMP_FILE_MISSING'
+              });
+            }
             const avResult = await AntivirusService.scanFile(f.path);
             if (!avResult.safe) {
               const msg = avResult.error || AntivirusService.BLOCKED_MESSAGE;
@@ -13383,11 +13483,18 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
 });
 
 // Patient: Create Stripe Checkout Session for an appointment (Phase 1 web checkout)
-app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSession, express.json(), async (req, res) => {
+// C3: Idempotency-Key prevents duplicate Stripe Checkout sessions on double-submit (BE4).
+app.post(
+  '/api/patient/appointments/:id/checkout',
+  apiLimiter,
+  requirePatientSession,
+  withIdempotency('patient_checkout'),
+  express.json(),
+  async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
     if (!stripe) {
-      return res.status(503).json({ success: false, error: 'Stripe is not configured' });
+      return res.status(503).json({ success: false, error: 'Stripe is not configured', request_id: req.id });
     }
 
     const sessionValidation = req.patientSession;
@@ -13395,17 +13502,17 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
     const appointmentId = req.params.id;
 
     const appt = await db.getAppointment(appointmentId);
-    if (!appt) return res.status(404).json({ success: false, error: 'Appointment not found' });
+    if (!appt) return res.status(404).json({ success: false, error: 'Appointment not found', request_id: req.id });
 
     // Ownership + authz
     try {
       assertPatientOwnsAppointmentOrThrow(sessionValidation, appt);
     } catch (e) {
-      return res.status(e.status || 403).json({ success: false, error: e.message });
+      return res.status(e.status || 403).json({ success: false, error: e.message, request_id: req.id });
     }
 
     const clinicId = appt.clinic_id || resolveClinicIdFromRequest(req) || FALLBACK_CLINIC_ID;
-    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id missing for appointment checkout' });
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id missing for appointment checkout', request_id: req.id });
 
     // If a pending checkout already exists, reuse it (idempotent UX)
     const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(appointmentId);
@@ -13419,7 +13526,8 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
         success: true,
         checkout_id: pending.checkout.id,
         stripe_checkout_session_id: pending.checkout.stripe_checkout_session_id,
-        checkout_url: url
+        checkout_url: url,
+        request_id: req.id
       });
     }
 
@@ -13433,7 +13541,7 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
     }
     amount = parseFloat(amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, error: 'Invalid amount_due for checkout' });
+      return res.status(400).json({ success: false, error: 'Invalid amount_due for checkout', request_id: req.id });
     }
 
     const { v4: uuidv4 } = require('uuid');
@@ -13456,7 +13564,7 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
     };
 
     if (!checkout.merchant_id) {
-      return res.status(500).json({ success: false, error: 'Clinic merchant is not configured' });
+      return res.status(500).json({ success: false, error: 'Clinic merchant is not configured', request_id: req.id });
     }
     await db.createVoiceCheckout(checkout);
 
@@ -13501,7 +13609,8 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
       metadata: {
         checkout_id: checkoutId,
         appointment_id: appointmentId,
-        patient_id: patientId || ''
+        patient_id: patientId || '',
+        request_id: req.id || ''
       }
     });
 
@@ -13510,6 +13619,8 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
       stripe_session_expires_at: new Date(expiresAt * 1000).toISOString()
     });
 
+    auditBookingEvent(req, 'create_checkout', 'VoiceCheckout', checkoutId, 'success');
+
     // Expose the session URL to the patient UI
     return res.json({
       success: true,
@@ -13517,11 +13628,45 @@ app.post('/api/patient/appointments/:id/checkout', apiLimiter, requirePatientSes
       appointment_id: appointmentId,
       amount_due: amount,
       currency: 'USD',
-      checkout_url: session.url
+      checkout_url: session.url,
+      request_id: req.id
     });
   } catch (error) {
     console.error('❌ Error creating patient appointment checkout session:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message, request_id: req.id });
+  }
+  }
+);
+
+// Patient: Poll appointment/checkout payment status after Stripe redirect (BE7)
+app.get('/api/patient/appointments/:id/payment-status', apiLimiter, requirePatientSession, async (req, res) => {
+  try {
+    const appointmentId = req.params.id;
+    const sessionValidation = req.patientSession;
+    const appt = await db.getAppointment(appointmentId);
+    if (!appt) return res.status(404).json({ success: false, error: 'Appointment not found', request_id: req.id });
+    try {
+      assertPatientOwnsAppointmentOrThrow(sessionValidation, appt);
+    } catch (e) {
+      return res.status(e.status || 403).json({ success: false, error: e.message, request_id: req.id });
+    }
+
+    const checkout = db.getLatestCheckoutForAppointment ? db.getLatestCheckoutForAppointment(appointmentId) : null;
+    const paymentSettled = String(appt.payment_status || '').toLowerCase() === 'paid'
+      || String(checkout?.status || '').toLowerCase() === 'completed';
+
+    auditBookingEvent(req, 'read_payment_status', 'Appointment', appointmentId, 'success');
+    return res.json({
+      success: true,
+      appointment_id: appointmentId,
+      payment_status: appt.payment_status || null,
+      checkout_status: checkout?.status || null,
+      checkout_id: checkout?.id || null,
+      settled: paymentSettled,
+      request_id: req.id
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });
 
@@ -13560,23 +13705,64 @@ function parseTimeFromText(text) {
   return null;
 }
 
-app.get('/api/patient/booking/available-slots', apiLimiter, requirePatientSession, async (req, res) => {
+function isValidIanaTimezone(value) {
+  const tz = (value || '').toString().trim();
+  if (!tz) return false;
   try {
-    const BookingService = require('./services/booking-service');
+    Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+const { validateRequired, validateDate, combineValidators } = require('./middleware/input-validator');
+const validatePatientBookingScheduleBody = combineValidators(
+  validateRequired(['date', 'time']),
+  validateDate('date')
+);
+const validatePatientTriageBody = validateRequired(['message']);
+
+function validatePatientAvailableSlotsQuery(req, res, next) {
+  const date = (req.query?.date || '').toString().trim();
+  if (!date) {
+    return res.status(400).json({ success: false, error: 'date query parameter is required', request_id: req.id });
+  }
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    return res.status(400).json({ success: false, error: 'Invalid date format. Use YYYY-MM-DD.', request_id: req.id });
+  }
+  return next();
+}
+
+function auditBookingEvent(req, action, resourceType, resourceId, result = 'success') {
+  try {
+    if (db.auditLog) {
+      db.auditLog('patient', req?.patientSession?.patient_id || req?.patientSessionId || 'unknown', action, resourceType, resourceId, req.ip, req.get('User-Agent') || '', result);
+    }
+  } catch (_) {}
+}
+
+app.get('/api/patient/booking/available-slots', apiLimiter, requirePatientSession, validatePatientAvailableSlotsQuery, async (req, res) => {
+  try {
     const args = req.query || {};
-    const date = args.date;
+    const date = (args.date || '').toString().trim();
+    const BookingService = require('./services/booking-service');
     const appointmentType = args.appointment_type || 'General Consult';
     const timezone = args.timezone || 'America/New_York';
+    if (!isValidIanaTimezone(timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Use a valid IANA timezone (e.g., America/New_York).', request_id: req.id });
+    }
     const clinicId = resolveClinicIdFromRequest(req, args) || FALLBACK_CLINIC_ID;
-    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required' });
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required', request_id: req.id });
     const result = await BookingService.getAvailableSlots(date, null, appointmentType, timezone, clinicId, null);
-    return res.json(result);
+    return res.json({ ...result, request_id: req.id });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });
 
-app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, withIdempotency('patient_booking_schedule'), express.json(), async (req, res) => {
+app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, validatePatientBookingScheduleBody, withIdempotency('patient_booking_schedule'), express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const BookingService = require('./services/booking-service');
@@ -13584,7 +13770,7 @@ app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, wit
 
     const args = req.body || {};
     const clinicId = resolveClinicIdFromRequest(req, args) || FALLBACK_CLINIC_ID;
-    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required' });
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id required', request_id: req.id });
 
     const sid = req.patientSessionId;
     const sessionValidation = PatientPortalService.validateSession(sid);
@@ -13616,8 +13802,11 @@ app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, wit
     const timezone = args.timezone || 'America/New_York';
     const notes = args.reason || args.notes || null;
 
-    if (!email) return res.status(400).json({ success: false, error: 'Patient session missing email' });
-    if (!date || !time) return res.status(400).json({ success: false, error: 'date and time required' });
+    if (!email) return res.status(400).json({ success: false, error: 'Patient session missing email', request_id: req.id });
+    if (!date || !time) return res.status(400).json({ success: false, error: 'date and time required', request_id: req.id });
+    if (!isValidIanaTimezone(timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Use a valid IANA timezone (e.g., America/New_York).', request_id: req.id });
+    }
 
     const result = await BookingService.scheduleAppointment({
       clinic_id: clinicId,
@@ -13632,14 +13821,18 @@ app.post('/api/patient/booking/schedule', apiLimiter, requirePatientSession, wit
       patient_id: mappedPatientId || null,
       visit_mode: args.visit_mode || 'sync_video'
     });
-    if (!result.success) return res.status(400).json(result);
+    if (result.success) invalidateSlotAvailabilityCache();
+    if (!result.success) return res.status(400).json({ ...result, request_id: req.id });
+
+    auditBookingEvent(req, 'schedule_appointment', 'Appointment', result.appointment?.id || null, 'success');
 
     return res.json({
       success: true,
-      appointment: result.appointment
+      appointment: result.appointment,
+      request_id: req.id
     });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });
 
@@ -13659,6 +13852,10 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
     if (!email) return res.status(400).json({ success: false, error: 'Patient session missing email' });
 
     const body = req.body || {};
+    const timezone = body.timezone || 'America/New_York';
+    if (!isValidIanaTimezone(timezone)) {
+      return res.status(400).json({ success: false, error: 'Invalid timezone. Expected a valid IANA timezone like "America/New_York".' });
+    }
     const patient_name = body.patient_name || [sessionValidation?.first_name, sessionValidation?.last_name].filter(Boolean).join(' ').trim() || 'Patient';
     const patient_phone = body.patient_phone || sessionValidation?.phone || null;
     const result = await BookingService.createAsyncReviewAppointment({
@@ -13670,7 +13867,7 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
       attachment_ids: body.attachment_ids || [],
       customer_id: body.customer_id || null,
       patient_id: mappedPatientId || null,
-      timezone: body.timezone || 'America/New_York'
+      timezone
     });
 
     return res.json({
@@ -13700,16 +13897,32 @@ async function handlePatientTriageMessage(req) {
       clinicId = patientClinics?.[0] || null;
     } catch (_) {}
   }
-  if (!clinicId) return { status: 400, json: { success: false, error: 'clinic_id required. Set DEFAULT_CLINIC_ID in .env, include clinic_id in request, or ensure patient has appointments.' } };
+  if (!clinicId) return { status: 400, json: { success: false, error: 'clinic_id required. Set DEFAULT_CLINIC_ID in .env, include clinic_id in request, or ensure patient has appointments.', request_id: req.id } };
   const message = (req.body?.message || '').toString();
+  const trimmedMessage = message.trim();
+  const MAX_TRIAGE_MESSAGE_LENGTH = 4000;
+  if (!trimmedMessage) {
+    return { status: 400, json: { success: false, error: 'message is required', request_id: req.id } };
+  }
+  if (trimmedMessage.length > MAX_TRIAGE_MESSAGE_LENGTH) {
+    return {
+      status: 400,
+      json: {
+        success: false,
+        error: `message too long (max ${MAX_TRIAGE_MESSAGE_LENGTH} characters)`,
+        code: 'TRIAGE_MESSAGE_TOO_LONG',
+        request_id: req.id
+      }
+    };
+  }
   const state = req.body?.state || {};
   const meta = req.body?.meta || {};
   let session_id = (req.body?.session_id || state.session_id || '').toString().trim() || null;
   if (!session_id) session_id = require('uuid').v4();
 
   const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
-  const conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
-  const existingFlowState = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
+  let conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
+  let existingFlowState = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
 
   // Fresh chat session only: wipe stale triage/RAG/Kelly rows when there is no orchestrate
   // row yet OR turn_count === 0 (first persisted turn). We intentionally do NOT wipe when
@@ -13718,12 +13931,29 @@ async function handlePatientTriageMessage(req) {
   // not collide on shared dev DB.
   const turns = Number(row?.turn_count ?? 0);
   const orchestrateEmpty = !row || turns === 0;
-  if (orchestrateEmpty && db?.wipeChatSessionClinicalState) {
+  const staleResetHours = (() => {
+    const n = Number(process.env.CHAT_SESSION_STALE_RESET_HOURS ?? 8);
+    return Number.isFinite(n) && n > 0 ? n : 8;
+  })();
+  const inactiveHours = (() => {
+    if (!row?.last_activity_at) return 0;
+    const t = new Date(row.last_activity_at).getTime();
+    if (!Number.isFinite(t)) return 0;
+    return (Date.now() - t) / (1000 * 60 * 60);
+  })();
+  const explicitSessionReset = meta?.new_session === true || String(meta?.new_session || '').toLowerCase() === 'true';
+  const staleSessionReset = !!row && turns >= 1 && inactiveHours >= staleResetHours;
+  const shouldWipeClinicalState = orchestrateEmpty || explicitSessionReset || staleSessionReset;
+  if (shouldWipeClinicalState && db?.wipeChatSessionClinicalState) {
     db.wipeChatSessionClinicalState(session_id);
+    if (explicitSessionReset || staleSessionReset) {
+      conversationHistory = [];
+      existingFlowState = {};
+    }
   }
 
   const result = await KellyAgentService.processTurn({
-    message,
+    message: trimmedMessage,
     sessionId: session_id,
     channel: 'chat',
     clinicId,
@@ -13738,19 +13968,20 @@ async function handlePatientTriageMessage(req) {
   if (db?.upsertOrchestrateSession) {
     const updatedHistory = [
       ...conversationHistory,
-      { role: 'user', content: message },
+      { role: 'user', content: trimmedMessage },
       { role: 'assistant', content: result.reply }
     ];
-    const newTurnCount = (row?.turn_count || 0) + 1;
+    const baseTurnCount = (explicitSessionReset || staleSessionReset) ? 0 : (row?.turn_count || 0);
+    const newTurnCount = baseTurnCount + 1;
     let preferredLanguage = row?.preferred_language || 'en';
     // orch-4: Persist preferred_language from first 1–2 turns or explicit language request
     try {
       const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./services/patient-orchestrator-service');
-      const langReq = detectLanguagePreferenceRequest(message);
+      const langReq = detectLanguagePreferenceRequest(trimmedMessage);
       if (langReq?.isLanguageRequest && langReq?.code) {
         preferredLanguage = langReq.code;
       } else if (newTurnCount <= 2) {
-        preferredLanguage = detectLanguageFromText(message).code || preferredLanguage;
+        preferredLanguage = detectLanguageFromText(trimmedMessage).code || preferredLanguage;
       }
     } catch (_) {}
     try {
@@ -13781,31 +14012,33 @@ async function handlePatientTriageMessage(req) {
       // Expose tool usage for E2E metrics harness (used by scripts/run-kelly-tests.sh)
       toolsUsed: Array.isArray(result.toolsUsed) ? result.toolsUsed : [],
       next_chips: result.next_chips || [],
+      clear_chips: !Array.isArray(result.next_chips) || result.next_chips.length === 0,
       chips_display: result.chips_display,
       redirect_to: result.redirect_to,
-      next_step: result.next_step
+      next_step: result.next_step,
+      request_id: req.id
     }
   };
 }
 
 // POST /api/patient/orchestrate — Alias for triage/message (deprecated: use triage/message) (P-1: CSRF)
-app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, express.json(), async (req, res) => {
+app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const out = await handlePatientTriageMessage(req);
     return res.status(out.status).json(out.json);
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });
 
-app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, express.json(), async (req, res) => {
+app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const out = await handlePatientTriageMessage(req);
     return res.status(out.status).json(out.json);
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message });
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });
 
@@ -14507,6 +14740,7 @@ app.put('/api/patient/appointments/:id/reschedule', requirePatientSession, requi
       null,
       clinicId
     );
+    if (result.success) invalidateSlotAvailabilityCache();
 
     if (result.success) {
       try {
@@ -14566,6 +14800,7 @@ app.delete('/api/patient/appointments/:id', requirePatientSession, requireCsrfFo
 
     // Use existing cancel endpoint logic
     const result = await BookingService.cancelAppointment(appointmentId, reason, clinicId);
+    if (result.success) invalidateSlotAvailabilityCache();
 
     if (result.success) {
       try {
@@ -15237,6 +15472,13 @@ app.post('/webhook/retell/end-of-call', async (req, res) => {
 
 // Stripe webhook
 app.post('/webhook/stripe', async (req, res) => {
+  if (process.env.ALLOW_LEGACY_STRIPE_WEBHOOK !== '1') {
+    return res.status(410).json({
+      success: false,
+      error: 'Legacy webhook path disabled. Use POST /webhooks/stripe.',
+      canonical_path: '/webhooks/stripe'
+    });
+  }
   try {
     console.log('\n💳 STRIPE: Webhook received');
 
@@ -16416,7 +16658,7 @@ app.get('/api', (req, res) => {
       webhooks: {
         retell_llm: `wss://${req.headers.host.replace('http', 'ws')}/webhook/retell/llm`,
         retell_events: `${baseUrl}/webhook/retell/events`,
-        stripe: `${baseUrl}/webhook/stripe`
+        stripe: `${baseUrl}/webhooks/stripe`
       }
     },
     documentation: `${baseUrl}/docs`,
@@ -17185,7 +17427,7 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`   WS     ws://localhost:${PORT}/webhook/retell/llm ⭐ NEW (Retell LLM)`);
   console.log(`   POST   http://localhost:${PORT}/webhook/retell/events`);
   console.log(`   POST   http://localhost:${PORT}/webhook/retell/end-of-call`);
-  console.log(`   POST   http://localhost:${PORT}/webhook/stripe`);
+  console.log(`   POST   http://localhost:${PORT}/webhooks/stripe`);
   console.log('\n🏥 Health:');
   console.log(`   GET    http://localhost:${PORT}/health`);
   console.log('\n' + '='.repeat(60));

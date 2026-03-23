@@ -2231,7 +2231,9 @@ class RetellWebSocketHandler {
         try {
             const connection = this.activeConnections.get(callId);
 
-            // SAFETY: Red-flag check before scheduling (orch-9, V-2: ensure voice history available)
+            // SAFETY: Red-flag check before scheduling (orch-9, V-2: ensure voice history available).
+            // Defense-in-depth: runs in addition to DB triage guardrails on /voice/appointments/schedule
+            // when session_id is passed (conversation-based emergency vs triage_sessions state).
             const providerOverrideEmergency = args.provider_override_emergency === true || args.provider_override_emergency === 'true';
             if (!providerOverrideEmergency) {
                 let recentTurns = [];
@@ -2356,7 +2358,9 @@ class RetellWebSocketHandler {
                 timezone: args.timezone || 'America/New_York',
                 notes: args.notes,
                 clinic_id: clinicId,
-                visit_mode: args.visit_mode || 'sync_video'
+                visit_mode: args.visit_mode || 'sync_video',
+                session_id: callId,
+                metadata: { session_id: callId }
             });
 
             // If duplicate was detected, return the duplicate response
@@ -2393,9 +2397,19 @@ class RetellWebSocketHandler {
                 if (error.response.data.duplicate && error.response.data.requiresPhoneConfirmation) {
                     return error.response.data;
                 }
+                const st = error.response.status;
+                const d = error.response.data;
+                if (st === 403 && d && (d.error_code || d.error)) {
+                    return {
+                        success: false,
+                        error: d.error || d.message,
+                        error_code: d.error_code || d.error,
+                        message: d.message || d.error
+                    };
+                }
                 return {
                     success: false,
-                    error: error.response.data.error || error.response.data.message || error.message
+                    error: d.error || d.message || error.message
                 };
             }
 
@@ -2471,11 +2485,29 @@ class RetellWebSocketHandler {
                 practitioner_id: args.practitioner_id || null,
                 timezone: args.timezone || 'America/New_York',
                 clinic_id: clinicId,
-                call_id: callId
+                call_id: callId,
+                session_id: callId,
+                metadata: { session_id: callId }
             });
 
             return response.data;
         } catch (error) {
+            if (error.response && error.response.data) {
+                const d = error.response.data;
+                const st = error.response.status;
+                if (st === 403 && d && (d.error_code || d.error)) {
+                    return {
+                        success: false,
+                        error: d.error || d.message,
+                        error_code: d.error_code || d.error,
+                        message: d.message || d.error
+                    };
+                }
+                return {
+                    success: false,
+                    error: d.error || d.message || error.message
+                };
+            }
             return {
                 success: false,
                 error: error.message
@@ -2576,11 +2608,27 @@ class RetellWebSocketHandler {
                 new_time: args.new_time,
                 reason: args.reason,
                 timezone: args.timezone || 'America/New_York',
-                clinic_id: clinicId
+                clinic_id: clinicId,
+                session_id: callId,
+                metadata: { session_id: callId }
             });
 
             return response.data;
         } catch (error) {
+            if (error.response && error.response.data) {
+                const d = error.response.data;
+                if (error.response.status === 400 && d.error_code === 'SESSION_ID_REQUIRED') {
+                    return {
+                        success: false,
+                        error: d.error || d.message,
+                        error_code: d.error_code
+                    };
+                }
+                return {
+                    success: false,
+                    error: d.error || d.message || error.message
+                };
+            }
             return {
                 success: false,
                 error: error.message
@@ -2591,6 +2639,7 @@ class RetellWebSocketHandler {
     // Handle create_appointment_checkout function
     async handleCreateAppointmentCheckout(callId, args) {
         try {
+            const connection = this.activeConnections.get(callId);
             const clinicId = this.getClinicId(callId);
             if (!clinicId) {
                 return {
@@ -2599,17 +2648,34 @@ class RetellWebSocketHandler {
                 };
             }
 
+            const customerPhoneRaw = args.customer_phone || this.getCustomerPhone(callId);
+            const customerPhone = customerPhoneRaw ? SMSService.formatPhoneNumber(customerPhoneRaw) : null;
+            const patientPhoneRaw = args.patient_phone || args.customer_phone || this.getCustomerPhone(callId);
+            const patientPhone = patientPhoneRaw ? SMSService.formatPhoneNumber(patientPhoneRaw) : null;
+
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/appointments/checkout`, {
                 appointment_id: args.appointment_id,
                 customer_name: args.customer_name,
                 customer_email: args.customer_email,
-                customer_phone: args.customer_phone ? SMSService.formatPhoneNumber(args.customer_phone) : this.getCustomerPhone(callId),
+                customer_phone: customerPhone,
+                // A4/A10: mirror patient_* fields for a single payload contract.
+                patient_name: args.patient_name || args.customer_name,
+                patient_email: args.patient_email || args.customer_email,
+                patient_phone: patientPhone,
                 appointment_type: args.appointment_type,
                 amount: args.amount,
                 clinic_id: clinicId,
                 payment_method: args.payment_method || 'link',
-                mandate_id: args.mandate_id || null
+                mandate_id: args.mandate_id || null,
+                session_id: callId,
+                call_id: callId,
+                metadata: { session_id: callId }
             });
+
+            if (response?.data?.payment_token && connection) {
+                connection.lastPaymentToken = response.data.payment_token;
+                connection.lastCheckoutId = response.data.checkout_id || null;
+            }
 
             return response.data;
         } catch (error) {
@@ -2623,11 +2689,31 @@ class RetellWebSocketHandler {
     // Handle verify_checkout_code function
     async handleVerifyCheckoutCode(callId, args) {
         try {
+            const connection = this.activeConnections.get(callId);
             const clinicId = this.getClinicId(callId);
+            let paymentToken = args.payment_token;
+            if (!paymentToken && connection?.lastPaymentToken) {
+                paymentToken = connection.lastPaymentToken;
+            }
+            if (!paymentToken && connection?.lastCheckoutId && this.db?.getVoiceCheckout) {
+                const row = this.db.getVoiceCheckout(connection.lastCheckoutId);
+                paymentToken = row?.payment_token || null;
+            }
+            if (!paymentToken) {
+                return {
+                    success: false,
+                    error: 'Missing payment token. Please resend checkout code first.',
+                    error_code: 'MISSING_TOKEN',
+                    voice_agent_instruction: 'If payment_token is missing, re-run create_appointment_checkout to resend verification, then retry verify_checkout_code.'
+                };
+            }
             const response = await axios.post(`${this.config.apiBaseUrl || 'http://localhost:4000'}/voice/checkout/verify`, {
-                payment_token: args.payment_token,
+                payment_token: paymentToken,
                 verification_code: args.verification_code,
-                clinic_id: clinicId
+                clinic_id: clinicId,
+                session_id: callId,
+                call_id: callId,
+                metadata: { session_id: callId }
             });
 
             return response.data;

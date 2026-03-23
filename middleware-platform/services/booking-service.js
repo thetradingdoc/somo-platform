@@ -283,7 +283,8 @@ class BookingService {
         appointmentDateTime.date,
         appointmentDateTime.timezone,
         clinicId,
-        null // No appointment to exclude for new bookings
+        null, // No appointment to exclude for new bookings
+        appointmentData.practitioner_id || null
       );
 
       if (!availabilityCheck.available) {
@@ -300,17 +301,20 @@ class BookingService {
 
       // Upsert FHIR patient record to ensure a longitudinal EHR
       // RULE: Each person has a unique identity. If similar names exist, phone number must be confirmed.
-      let fhirPatientId = null;
+      let fhirPatientId = appointmentData.patient_id || null;
       try {
-        const patientResult = await FHIRService.getOrCreatePatient({
-          name: appointmentData.patient_name,
-          phone: appointmentData.patient_phone,
-          email: appointmentData.patient_email,
-          timezone: appointmentData.timezone || BUSINESS_HOURS.timezone
-        }, true); // requirePhoneConfirmation = true
+        const shouldResolvePatient = !fhirPatientId;
+        const patientResult = shouldResolvePatient
+          ? await FHIRService.getOrCreatePatient({
+              name: appointmentData.patient_name,
+              phone: appointmentData.patient_phone,
+              email: appointmentData.patient_email,
+              timezone: appointmentData.timezone || BUSINESS_HOURS.timezone
+            }, true) // requirePhoneConfirmation = true
+          : null;
 
         // Check if duplicate was detected (Task 8: phone or email confirmation)
-        if (patientResult.duplicate && patientResult.requiresPhoneConfirmation) {
+        if (patientResult?.duplicate && patientResult.requiresPhoneConfirmation) {
           console.warn('🚨 DUPLICATE DETECTED: Similar name found, confirmation required');
 
           return {
@@ -329,7 +333,7 @@ class BookingService {
         }
 
         // Patient was found or created successfully
-        if (patientResult.patient) {
+        if (patientResult?.patient) {
           fhirPatientId = patientResult.patient.id || patientResult.patient.resource_id;
           console.log(`✅ Patient record ${patientResult.foundBy}: ${fhirPatientId}`);
 
@@ -747,7 +751,8 @@ class BookingService {
         appointmentDateTime.date,
         appointmentDateTime.timezone,
         scopedClinicId,
-        appointment.id // Exclude current appointment from conflict check
+        appointment.id, // Exclude current appointment from conflict check
+        appointment.practitioner_id || null
       );
 
       if (!availabilityCheck.available) {
@@ -1415,14 +1420,14 @@ Appointment ID: ${appointment.id}
    * Check if a specific slot is available for booking
    * @param {String} excludeAppointmentId - Appointment ID to exclude from conflict check (for reschedules)
    */
-  static async _checkSlotAvailability(startISO, endISO, typeConfig, date, timezone = BUSINESS_HOURS.timezone, clinicId = null, excludeAppointmentId = null) {
+  static async _checkSlotAvailability(startISO, endISO, typeConfig, date, timezone = BUSINESS_HOURS.timezone, clinicId = null, excludeAppointmentId = null, practitionerId = null) {
     const slotStart = new Date(startISO);
     const slotEnd = new Date(endISO);
     const clinicHours = clinicId ? getClinicBusinessHours(clinicId) : BUSINESS_HOURS;
     const tz = timezone || clinicHours.timezone;
 
     // Get existing appointments for the date
-    let existingAppointments = await db.getAppointmentsByDate(date, clinicId || null);
+    let existingAppointments = await db.getAppointmentsByDate(date, clinicId || null, practitionerId || null);
 
     // Exclude the appointment being rescheduled from conflict check
     if (excludeAppointmentId) {

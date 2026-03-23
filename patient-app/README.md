@@ -1,3 +1,14 @@
+# Patient App (Mobile)
+
+## Booking Scope
+
+Mobile self-booking (`triage`, calendar scheduling, and checkout) is currently out of scope for this app build.
+Use the web patient portal for booking:
+- `unified-dashboard/patients/book.html`
+- `unified-dashboard/patients/schedule.html`
+
+The mobile app currently focuses on authentication and appointment visibility.
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).

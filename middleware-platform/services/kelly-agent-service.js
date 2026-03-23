@@ -261,6 +261,72 @@ function _extractPatientName(text) {
   return intro?.[2] || null;
 }
 
+function _parseSlotOrdinal(text) {
+  const t = String(text || '').toLowerCase().trim();
+  if (!t) return null;
+  const num = t.match(/\boption\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)?\s*(?:one|option|slot)?\b/);
+  if (num) {
+    const n = parseInt(num[1] || num[2], 10);
+    if (Number.isFinite(n) && n >= 1) return n;
+  }
+  if (/\bfirst\b/.test(t)) return 1;
+  if (/\bsecond\b/.test(t)) return 2;
+  if (/\bthird\b/.test(t)) return 3;
+  if (/\bfourth\b/.test(t)) return 4;
+  return null;
+}
+
+function _parseTimeLikeFromText(text) {
+  const t = String(text || '').toLowerCase();
+  const m24 = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (m24) return `${m24[1].padStart(2, '0')}:${m24[2]}`;
+  const m12 = t.match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b/);
+  if (m12) {
+    let h = parseInt(m12[1], 10);
+    const min = m12[2] ? parseInt(m12[2], 10) : 0;
+    const ampm = m12[3];
+    if (ampm === 'pm' && h !== 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function _normalizeTimeString(text) {
+  const parsed = _parseTimeLikeFromText(text);
+  return parsed || String(text || '').trim().toLowerCase();
+}
+
+function _resolveSlotBundleFromUserMessage(bundles, userMessage) {
+  const arr = Array.isArray(bundles) ? bundles : [];
+  if (!arr.length) return null;
+  const msg = String(userMessage || '').trim().toLowerCase();
+  if (!msg) return null;
+
+  const ordinal = _parseSlotOrdinal(msg);
+  if (ordinal && arr[ordinal - 1]) return arr[ordinal - 1];
+
+  const msgTime = _parseTimeLikeFromText(msg);
+  if (msgTime) {
+    const byTime = arr.find((s) => {
+      const candidates = [s?.time, s?.start_time, s?.start, s?.display];
+      return candidates.some((c) => _normalizeTimeString(c) === msgTime);
+    });
+    if (byTime) return byTime;
+  }
+
+  const byLabel = arr.find((s) => {
+    const label = String(s?.display || s?.time || s?.start_time || s?.start || '').toLowerCase();
+    return label && (msg.includes(label) || label.includes(msg));
+  });
+  if (byLabel) return byLabel;
+
+  if (/\b(that works|that one|works for me|sounds good|book it|yes)\b/.test(msg)) {
+    return arr[0];
+  }
+  return null;
+}
+
 function _extractPayerName(text) {
   const t = String(text || '');
   const tagged = t.match(/payer\s*[:#]?\s*([A-Za-z][A-Za-z0-9 &.-]{1,80})/i)?.[1]?.trim();
@@ -349,7 +415,7 @@ const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300
 // Kelly system prompt (the full medical-assistant persona)
 // ─────────────────────────────────────────────────────────────
 function buildSystemPrompt(context) {
-  const { channel, clinicId, patientName, preferredLanguage } = context;
+  const { channel, clinicId, patientName, preferredLanguage, kellyScriptHint } = context;
   const isVoice = channel === 'voice';
 
   return `You are Kelly, a warm and empathetic medical voice assistant for DocLittle.
@@ -530,6 +596,7 @@ Examples:
 ${isVoice ? '## Voice Format\nKeep all replies SHORT. Max 2 sentences per turn. No bullet points. No headers. Just natural speech.' : '## Chat Format\nYou can use slightly longer replies. Bullet points OK when listing options. Keep it conversational.'}
 
 ${preferredLanguage && preferredLanguage !== 'en' ? `## Current Language\nRespond in language code: ${preferredLanguage}. Maintain this for the entire session.` : ''}
+${kellyScriptHint ? `## Recent Specialist Routing Context\nWhen presenting availability this turn, preserve this exact routing note before slot options: "${kellyScriptHint}"` : ''}
 `;
 }
 
@@ -925,7 +992,8 @@ class KellyAgentService {
     }
 
     // ── 3. Build context ──────────────────────────────────────
-    const context = { channel, clinicId, patientId, patientName, callerPhone, preferredLanguage, sessionId, message };
+    const kellyScriptHint = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_script_hint') || null;
+    const context = { channel, clinicId, patientId, patientName, callerPhone, preferredLanguage, sessionId, message, kellyScriptHint };
 
     // ── 4. Append user message ────────────────────────────────
     this._appendToHistory(sessionId, 'user', message);
@@ -1029,9 +1097,9 @@ class KellyAgentService {
             const bundles = Array.isArray(slotOut.slot_bundles) ? slotOut.slot_bundles : [];
             const available = Array.isArray(slotOut.available_slots) ? slotOut.available_slots : [];
             const source = bundles.length ? bundles : available;
-            const chips = source.slice(0, 8).map((s) => {
+            const chips = source.slice(0, 8).map((s, idx) => {
               const label = s?.display || s?.time || s?.start_time || s?.start || String(s);
-              return { label, value: String(label), action: 'select_slot', slot: s };
+              return { label: `Option ${idx + 1}: ${label}`, value: `option ${idx + 1}`, action: 'select_slot', slot: s };
             });
             if (chips.length) {
               nextChips = chips;
@@ -1804,11 +1872,31 @@ class KellyAgentService {
           process.env.KELLY_RATE_LIMIT_REPLY_CHAT ||
           "I'm temporarily busy — please send your message again in about 30 seconds and I'll continue.";
         _kellyDebugTurn('degraded_rate_limit_chat', { sessionId, errSnippet: String(err?.message || '').slice(0, 120) });
+        try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
+        return {
+          reply,
+          endCall: false,
+          toolsUsed: [],
+          language: preferredLanguage,
+          usedFallback: true,
+          next_step: 'rate_limited_retry_30s',
+          next_chips: []
+        };
       } else if (isRateLimit && channel === 'voice') {
         reply =
           process.env.KELLY_RATE_LIMIT_REPLY_VOICE ||
           "I'm temporarily busy — please hold a moment and I'll be right with you.";
         _kellyDebugTurn('degraded_rate_limit_voice', { sessionId, errSnippet: String(err?.message || '').slice(0, 120) });
+        try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
+        return {
+          reply,
+          endCall: false,
+          toolsUsed: [],
+          language: preferredLanguage,
+          usedFallback: true,
+          next_step: 'rate_limited_hold_and_retry',
+          next_chips: []
+        };
       } else {
         const PatientOrchestratorService = require('./patient-orchestrator-service');
         try {
@@ -2031,13 +2119,13 @@ class KellyAgentService {
             if (raw) {
               const bundles = JSON.parse(raw);
               const userMsgLc = String(context?.message || '').toLowerCase().trim();
-              const matched =
-                (bundles || []).find((s) => {
-                  const label = String(s?.display || s?.time || s?.start_time || s?.start || '').toLowerCase();
-                  return label && (userMsgLc.includes(label) || label.includes(userMsgLc));
-                }) || bundles[0];
+              const matched = _resolveSlotBundleFromUserMessage(bundles || [], userMsgLc) || bundles[0];
               if (matched?.practitioner_id) toolArgs.practitioner_id = matched.practitioner_id;
               if (matched?.lane && !toolArgs.lane) toolArgs.lane = matched.lane;
+              if (matched?.date && !toolArgs.date) toolArgs.date = matched.date;
+              if ((matched?.time || matched?.start_time || matched?.start) && !toolArgs.time) {
+                toolArgs.time = matched.time || matched.start_time || matched.start;
+              }
             }
           } catch (_) {}
         }

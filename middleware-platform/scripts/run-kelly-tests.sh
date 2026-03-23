@@ -247,8 +247,19 @@ choose_reply() {
   local r
   r="$(echo "$reply" | tr '[:upper:]' '[:lower:]')"
 
-  # Upload gate
-  if [[ "$next_step" == "UPLOAD_IMAGE" ]] || echo "$r" | grep -qiE "upload|photo|send.*link|picture"; then
+  # Async vs live video: MUST come before upload gate - Kelly often asks lane choice while mentioning photo
+  if echo "$r" | grep -qiE "would you prefer|prefer.*live video|lower\\.cost|lower-cost|option 1|option 2|lower cost review|live video visit today|live video visit|which works better|which would you like|which one would you prefer|which option works"; then
+    case "$case_lang" in
+      es) echo "Visita en video en vivo." ;;
+      sw) echo "Ushauriano wa video moja kwa moja." ;;
+      fr) echo "Visite vidéo en direct." ;;
+      *)  echo "Live video visit." ;;
+    esac
+    return
+  fi
+
+  # Upload gate - only when actively requesting upload (not when mentioning photo in passing)
+  if [[ "$next_step" == "UPLOAD_IMAGE" ]] || echo "$r" | grep -qiE "upload your|please upload|send.*photo|upload.*ready|upload when|go ahead.*upload"; then
     case "$case_lang" in
       es) echo "Voy a subir la foto ahora." ;;
       sw) echo "Nitapakia picha sasa." ;;
@@ -258,8 +269,8 @@ choose_reply() {
     return
   fi
 
-  # Safety questions (numbness/tingling)
-  if echo "$r" | grep -qiE "numb|tingling|weakness|legs"; then
+  # Safety questions (numbness/tingling) - avoid "legs" which appears in summaries like "no radiation down your legs"
+  if echo "$r" | grep -qiE "does the pain spread|numbness|tingling|weakness|spread anywhere"; then
     case "$case_lang" in
       es) echo "No, sin adormecimiento ni hormigueo." ;;
       sw) echo "Hapana, hakuna ganzi wala kuuma." ;;
@@ -307,8 +318,19 @@ choose_reply() {
   fi
 
   # Date selection for available slots (always prefer these over lane selection).
-  if echo "$r" | grep -qiE "what date works best|what date would you like|what date works for you|which date|starting from today|starting from today's date|today's date|from today|starting date"; then
-    echo "$NEXT_WEEKDAY"
+  if echo "$r" | grep -qiE "what date works best|what date would you like|what date works for you|which date|starting from today|starting from today's date|today's date|from today|starting date|date would you like|date works for"; then
+    echo "${NEXT_WEEKDAY:-$(date +%Y-%m-%d)}"
+    return
+  fi
+
+  # Timezone (often asked right after or with date)
+  if echo "$r" | grep -qiE "timezone|time zone|what.?s your timezone"; then
+    case "$case_lang" in
+      es) echo "America/New_York" ;;
+      sw) echo "Africa/Nairobi" ;;
+      fr) echo "Europe/Paris" ;;
+      *) echo "America/New_York" ;;
+    esac
     return
   fi
 
@@ -374,6 +396,17 @@ choose_reply() {
     return
   fi
 
+  # Known conditions / outdoors / skin (dermatology intake)
+  if echo "$r" | grep -qiE "known.*condition|skin condition|eczema|psoriasis|outdoors|plants.*chemical|contact with"; then
+    case "$case_lang" in
+      es) echo "No tengo condiciones conocidas. No he estado al aire libre recientemente." ;;
+      sw) echo "Sina hali yoyote inayojulikana. Sijakuwa nje hivi karibuni." ;;
+      fr) echo "Pas de conditions connues. Pas d'exposition récente en plein air." ;;
+      *) echo "No known conditions. No recent outdoor exposure." ;;
+    esac
+    return
+  fi
+
   # Medications / allergies / conditions
   if echo "$r" | grep -qiE "medication|medicine|drug|taking any|current.*med|supplement"; then
     case "$case_lang" in
@@ -403,18 +436,16 @@ choose_reply() {
     return
   fi
 
-  # Async vs live video: prefer live to reach checkout faster.
-  # Put this before specialty routing because some prompts include words
-  # like "specialist" alongside the lane choice.
-  # (Important) Do NOT match on any "live video" mention; this block should
-  # only trigger when Kelly is explicitly asking the user to choose a lane.
-  if echo "$r" | grep -qiE "would you prefer|prefer.*live video|lower\\.cost|lower-cost|option 1|option 2|lower cost review|live video visit today|live video visit"; then
-    case "$case_lang" in
-      es) echo "Visita en video en vivo." ;;
-      sw) echo "Ushauriano wa video moja kwa moja." ;;
-      fr) echo "Visite vidéo en direct." ;;
-      *)  echo "Live video visit." ;;
-    esac
+  # Slot selection - MUST come before specialty (reply often lists "Orthopedics" alongside times)
+  if echo "$r" | grep -qiE "available time|available slot|which time|choose.*slot|prefer.*time|which time works|which time would you like|pick one of these times"; then
+    # Extract first time from reply (e.g. "4:15 PM" or "09:00")
+    local first_slot
+    first_slot="$(echo "$reply" | grep -oE '[0-9]{1,2}:[0-9]{2}\s*(AM|PM)?|[0-9]{1,2}\s*:[0-9]{2}' | head -1 | tr -d ' ')"
+    if [[ -n "$first_slot" ]]; then
+      echo "$first_slot"
+    else
+      echo "I'll take the first available slot."
+    fi
     return
   fi
 
@@ -433,11 +464,6 @@ choose_reply() {
   fi
 
   # Slot selection
-  if echo "$r" | grep -qiE "available time|available slot|which time|choose.*slot|prefer.*time"; then
-    echo "I'll take the first available slot."
-    return
-  fi
-
   # Email
   if echo "$r" | grep -qiE "verification code|6.digit|enter.*code"; then
     echo "123456"
@@ -879,6 +905,8 @@ run_case() {
         next_user="$(choose_reply "$reply" "$lang" "$next_step" "$patient_email" "$expected_specialty")"
       fi
     fi
+    # Never send empty message (confuses agent)
+    [[ -z "$next_user" || "$next_user" == "null" ]] && next_user="Please continue."
     current_message="$next_user"
 
     echo "[Turn $turn] Next user: $current_message" >> "$log_file"

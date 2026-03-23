@@ -136,6 +136,9 @@
       <div class="card">
         <div class="title">Book a visit</div>
         <p class="sub">Tell us what’s going on, and we’ll guide you to a booked appointment and payment.</p>
+        <div id="returnToScheduleWrap" style="display:none; margin-bottom:12px;">
+          <a id="returnToScheduleLink" href="schedule.html" class="btn secondary">Return to calendar</a>
+        </div>
 
         <div id="resumeBanner" class="resume-banner" style="display:none;">
           <span>You have a previous conversation. Would you like to continue or start fresh?</span>
@@ -175,15 +178,22 @@
 
   <script>
     const API_BASE = (window.API_BASE_URL || window.API_BASE || '').replace(/\/$/, '');
+    const urlParams = new URLSearchParams(window.location.search || '');
+    const returnParam = urlParams.get('return') || '';
+    const visitModeParam = (urlParams.get('visit_mode') || '').toLowerCase();
     const sid = localStorage.getItem('patient_session_id') || '';
-    if (!sid) window.location.href = 'patient-login.html';
+    if (!sid) {
+      const returnTo = encodeURIComponent(`triage.html${window.location.search || ''}`);
+      window.location.href = `patient-login.html?expired=1&return=${returnTo}`;
+    }
 
     function handleSessionExpired(res, j) {
       if (res && res.status === 401 && (j?.error === 'Invalid or expired session' || j?.error === 'x-session-id required')) {
         localStorage.removeItem('patient_session_id');
         localStorage.removeItem('patient_email');
         localStorage.removeItem('patient_phone');
-        window.location.href = 'patient-login.html?expired=1';
+        const returnTo = encodeURIComponent(`triage.html${window.location.search || ''}`);
+        window.location.href = `patient-login.html?expired=1&return=${returnTo}`;
         return true;
       }
       return false;
@@ -427,8 +437,17 @@
       { label: 'I have symptoms', value: 'I have symptoms' },
       { label: 'Billing / receipt', value: 'I need help with my receipt', action: 'billing' }
     ];
+    if (visitModeParam === 'async_review') {
+      initialChips.unshift({ label: 'Start async review', value: 'I want an async photo review', action: 'start_async', visit_mode: 'async_review' });
+    }
     const hasSession = triageState?.session_id;
     (async function initGreeting() {
+      const returnWrap = document.getElementById('returnToScheduleWrap');
+      const returnLink = document.getElementById('returnToScheduleLink');
+      if (returnParam && returnWrap && returnLink) {
+        returnWrap.style.display = 'block';
+        returnLink.href = decodeURIComponent(returnParam);
+      }
       const firstName = await fetchPatientAndHydrate();
       const greeting = buildKellyGreeting(firstName);
       if (hasSession) {

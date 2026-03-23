@@ -954,7 +954,7 @@ paths:
   # ==========================================
   # Webhooks
   # ==========================================
-  /webhook/stripe:
+  /webhooks/stripe:
     post:
       tags: [Payment]
       summary: Stripe webhook handler

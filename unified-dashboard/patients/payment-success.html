@@ -95,6 +95,11 @@
       border: 1px solid #bbf7d0;
       margin: 10px 0 14px;
     }
+    .pill-warn {
+      background: #fff7ed;
+      color: #9a3412;
+      border-color: #fed7aa;
+    }
   </style>
 </head>
 
@@ -103,7 +108,7 @@
     <div style="text-align:center; margin-bottom: 10px;">
       <div style="font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; letter-spacing: -2px; font-size: 44px; color: #1e40af; line-height: 1;">Consʌlt</div>
     </div>
-    <div class="pill">✅ Payment successful</div>
+    <div id="paymentStatePill" class="pill pill-warn">⏳ Confirming payment...</div>
     <h1 class="title">You’re all set</h1>
     <p class="sub">
       Your receipt is available in your Wallet. If you booked a visit, you can see it under Appointments.
@@ -123,10 +128,35 @@
     (function() {
       const params = new URLSearchParams(window.location.search);
       const appointmentId = params.get('appointment_id');
+      const paymentPill = document.getElementById('paymentStatePill');
       if (!appointmentId) return;
       const API_BASE = window.API_BASE || 'http://localhost:4000';
       const sid = localStorage.getItem('patient_session_id');
       if (!sid) return;
+      async function pollPaymentStatus() {
+        const maxAttempts = 15;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const r = await fetch(`${API_BASE}/api/patient/appointments/${encodeURIComponent(appointmentId)}/payment-status`, {
+              headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+            });
+            const data = await r.json();
+            if (data && data.success && data.settled) {
+              if (paymentPill) {
+                paymentPill.classList.remove('pill-warn');
+                paymentPill.textContent = '✅ Payment confirmed';
+              }
+              return;
+            }
+          } catch (_) {}
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        if (paymentPill) {
+          paymentPill.textContent = '✅ Payment received (processing confirmation)';
+        }
+      }
+      pollPaymentStatus();
+
       fetch(`${API_BASE}/api/patient/appointments`, { headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' } })
         .then(r => r.json())
         .then(data => {

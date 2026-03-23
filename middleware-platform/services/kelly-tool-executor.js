@@ -16,6 +16,7 @@ const TriageRAGService = require('./triage-rag-service');
 const TriageRAGServiceV2 = require('./triage-rag-service-v2');
 const SpecialistResolverService = require('./specialist-resolver-service');
 const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./specialist-slot-service');
+const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, normalizeDateStr } = require('../config/clinic-business-hours');
 
 const BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
 
@@ -65,18 +66,16 @@ class KellyToolExecutor {
   }
 
   // ── Date helpers ───────────────────────────────────────────────────────
-  static _nextWeekday(dateStr) {
-    if (!dateStr) return dateStr;
-    const d = new Date(dateStr + 'T12:00:00');
-    if (Number.isNaN(d.getTime())) return dateStr;
-    const day = d.getDay(); // 0=Sun,6=Sat
-    if (day === 6) d.setDate(d.getDate() + 2); // Sat → Mon
-    if (day === 0) d.setDate(d.getDate() + 1); // Sun → Mon
-    const normalized = d.toISOString().slice(0, 10);
-    if (normalized !== dateStr) {
-      console.log(`[KellyToolExecutor] Weekend date ${dateStr} → ${normalized}`);
+  static _normalizeToBusinessDate(dateStr, clinicId) {
+    const normalized = normalizeDateStr(dateStr);
+    if (!normalized) return dateStr;
+    const clinicHours = getClinicBusinessHours(clinicId);
+    if (isBusinessDay(normalized, clinicHours)) return normalized;
+    const next = getNextBusinessDay(normalized, clinicHours) || normalized;
+    if (next !== normalized) {
+      console.log(`[KellyToolExecutor] Non-business date ${normalized} → ${next}`);
     }
-    return normalized;
+    return next;
   }
 
   static _httpTimeoutMs() {
@@ -249,20 +248,8 @@ class KellyToolExecutor {
           const rawLane = String(args.lane || '').trim();
           const isAsyncSlot = rawTime.toUpperCase().includes('ASYNC') || rawLane.toLowerCase().includes('async');
 
-          // Normalize weekend dates to the next weekday before scheduling.
-          // This avoids backend rejecting with "Saturday isn't available" while the LLM retries.
           if (args.date) {
-            const d = new Date(args.date + 'T12:00:00');
-            if (!Number.isNaN(d.getTime())) {
-              const day = d.getDay(); // 0=Sun,6=Sat
-              if (day === 6) d.setDate(d.getDate() + 2); // Sat → Mon
-              if (day === 0) d.setDate(d.getDate() + 1); // Sun → Mon
-              const normalizedDate = d.toISOString().slice(0, 10);
-              if (normalizedDate !== args.date) {
-                console.log(`[KellyToolExecutor] Weekend date ${args.date} → ${normalizedDate}`);
-                args = { ...args, date: normalizedDate };
-              }
-            }
+            args = { ...args, date: KellyToolExecutor._normalizeToBusinessDate(args.date, clinicId) };
           }
 
           const normalizedTime = (() => {
@@ -296,8 +283,8 @@ class KellyToolExecutor {
             session_id: sessionId
           });
 
-          // Auto-chain schedule -> checkout so the agent doesn't get stuck
-          // repeating specialist summaries.
+          // Auto-chain schedule -> checkout through shared helper so all entry points
+          // use one deduped checkout path (A2).
           if (scheduleResult?.success && scheduleResult?.appointment?.id) {
             try {
               const appointmentId = scheduleResult.appointment.id;
@@ -315,8 +302,11 @@ class KellyToolExecutor {
                 callerPhone ||
                 null;
 
-              const checkoutResult = await this._post('/voice/appointments/checkout', {
-                appointment_id: appointmentId,
+              const { autoCheckoutAfterSchedule } = require('./auto-checkout-after-schedule');
+              const base = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+              const checkoutResult = await autoCheckoutAfterSchedule({
+                base,
+                appointmentId,
                 patient_phone: patientPhone,
                 patient_email: patientEmail,
                 patient_name: patientName,
@@ -324,7 +314,9 @@ class KellyToolExecutor {
                 appointment_type:
                   normalizedArgs.appointment_type ||
                   triageForNotes?.target_specialty ||
-                  scheduleResult.appointment.appointment_type
+                  scheduleResult.appointment.appointment_type,
+                triage_session_id: sessionId || null,
+                timeoutMs: KellyToolExecutor._httpTimeoutMs()
               });
 
               if (checkoutResult?.payment_token) {
@@ -561,7 +553,7 @@ class KellyToolExecutor {
     }
 
     const dateRaw = args.date || new Date().toISOString().slice(0, 10);
-    const date = KellyToolExecutor._nextWeekday(dateRaw);
+    const date = KellyToolExecutor._normalizeToBusinessDate(dateRaw, clinicId);
     const timezone = args.timezone || 'America/New_York';
     const lane = args.lane || triageResult.recommended_lane || 'sync';
     // W3-S5.2: specialty from differential (triageResult.target_specialty)
@@ -670,6 +662,7 @@ class KellyToolExecutor {
             secondary_specialties: multiSpecialty ? secondarySpecialties : [],
             kelly_script: kellyScript
           };
+          KellyToolExecutor._setSessionMeta(sessionId, 'kelly_script_hint', kellyScript || '');
           if (kellyScript) out.say_to_patient = `Say this to the patient before presenting slots: "${kellyScript}"`;
           return out;
         }
@@ -680,7 +673,7 @@ class KellyToolExecutor {
 
     // Fallback: standard HTTP endpoint
     const slotsEndpoint = channel === 'chat' ? '/api/appointments/available-slots' : '/voice/appointments/available-slots';
-    return await this._post(slotsEndpoint, {
+    const fallbackOut = await this._post(slotsEndpoint, {
       date,
       appointment_type: appointmentType,
       timezone,
@@ -690,6 +683,8 @@ class KellyToolExecutor {
       metadata: { session_id: sessionId },
       session_id: sessionId
     });
+    KellyToolExecutor._setSessionMeta(sessionId, 'kelly_script_hint', fallbackOut?.kelly_script || '');
+    return fallbackOut;
   }
 
   // ─────────────────────────────────────────────────────────────

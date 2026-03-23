@@ -126,6 +126,7 @@ function _toAnthropicMessages(messages) {
 }
 
 const PROVIDER_TIMEOUT_MS = parseInt(process.env.KELLY_PROVIDER_TIMEOUT_MS || '20000', 10);
+const GROQ_FALLBACK_MODEL = process.env.KELLY_GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -330,13 +331,16 @@ async function _callGroq({ messages, tools, maxTokens, channel }) {
       : parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '200', 10));
 
   const maxAttempts = Math.max(1, parseInt(process.env.KELLY_GROQ_MAX_RETRIES || '4', 10));
+  let requestMessages = messages;
+  let requestModel = model;
+  let compactedFor413 = false;
   let lastErr;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await withTimeout(
         client.chat.completions.create({
-          model,
-          messages,
+          model: requestModel,
+          messages: requestMessages,
           tools: tools || [],
           tool_choice: 'auto',
           temperature: 0.3,
@@ -355,6 +359,17 @@ async function _callGroq({ messages, tools, maxTokens, channel }) {
       if ((!is429 && !isTooLarge) || attempt >= maxAttempts) {
         throw err;
       }
+      if (isTooLarge && !compactedFor413) {
+        compactedFor413 = true;
+        requestModel = GROQ_FALLBACK_MODEL;
+        requestMessages = _compactMessagesForGroq413(messages, 4);
+        console.warn(
+          '[LLMRouter] Groq 413 detected; retrying with compact prompt (last 4 messages) on fallback model %s',
+          requestModel
+        );
+        await _sleep(200);
+        continue;
+      }
       const delay = Math.min(
         12000,
         parseInt(process.env.KELLY_GROQ_RETRY_BASE_MS || '1200', 10) * Math.pow(2, attempt - 1)
@@ -367,4 +382,25 @@ async function _callGroq({ messages, tools, maxTokens, channel }) {
   throw lastErr;
 }
 
-module.exports = { call, resolvePrimaryProvider, withTimeout };
+function _compactSystemPromptFor413(content, maxChars = 700) {
+  const text = String(content || '').replace(/\s+/g, ' ').trim();
+  if (!text) return 'You are Kelly. Ask one focused question at a time. Use tools only when needed.';
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}...`;
+}
+
+function _compactMessagesForGroq413(messages, keepLast = 4) {
+  const input = Array.isArray(messages) ? messages : [];
+  const system = input.find((m) => m && m.role === 'system');
+  const tail = input.filter((m) => m && m.role !== 'system').slice(-Math.max(1, keepLast));
+  if (!system) return tail;
+  return [
+    {
+      role: 'system',
+      content: _compactSystemPromptFor413(system.content)
+    },
+    ...tail
+  ];
+}
+
+module.exports = { call, resolvePrimaryProvider, withTimeout, _compactMessagesForGroq413 };

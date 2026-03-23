@@ -9,6 +9,23 @@ const UsageMonitor = require('./usage-monitor');
 const db = require('../database');
 
 class SMSService {
+    static _testNumbers() {
+        const raw = String(process.env.SMS_TEST_NUMBERS || process.env.TEST_SMS_NUMBERS || '').trim();
+        if (!raw) return new Set();
+        return new Set(
+            raw
+                .split(',')
+                .map((p) => this.formatPhoneNumber(p))
+                .filter(Boolean)
+        );
+    }
+
+    static isTestNumber(phoneNumber) {
+        const formatted = this.formatPhoneNumber(phoneNumber);
+        if (!formatted) return false;
+        if (formatted === '+15555555555' || formatted === '+15005550006') return true;
+        return this._testNumbers().has(formatted);
+    }
     /**
      * Get Twilio client
      * Returns null if credentials not configured
@@ -50,6 +67,17 @@ class SMSService {
             const messageSegments = Math.ceil(message.length / 160); // SMS segments (160 chars each)
 
             // If Twilio is configured, send real SMS
+            if (this.isTestNumber(formattedPhone)) {
+                return {
+                    success: true,
+                    simulated: true,
+                    message: 'SMS simulated for test number',
+                    phone: formattedPhone,
+                    provider: 'test',
+                    real_sms: false
+                };
+            }
+
             if (client && fromNumber) {
                 console.log('\n📱 SENDING REAL SMS VIA TWILIO');
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -162,6 +190,17 @@ class SMSService {
                 throw new Error(`Invalid phone number format: ${phoneNumber}`);
             }
 
+            if (this.isTestNumber(formattedPhone)) {
+                return {
+                    success: true,
+                    simulated: true,
+                    message: 'SMS simulated for test number',
+                    phone: formattedPhone,
+                    provider: 'test',
+                    real_sms: false
+                };
+            }
+
             if (client && fromNumber) {
                 console.log('\n📱 SENDING SMS VIA TWILIO');
                 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -229,6 +268,17 @@ class SMSService {
             const formattedPhone = this.formatPhoneNumber(phoneNumber);
 
             const message = `Order confirmed! Your ${orderDetails.product_name} will be shipped soon. Order #${orderDetails.order_id}`;
+
+            if (this.isTestNumber(formattedPhone)) {
+                return {
+                    success: true,
+                    simulated: true,
+                    message: 'SMS simulated for test number',
+                    phone: formattedPhone,
+                    provider: 'test',
+                    real_sms: false
+                };
+            }
 
             if (client && fromNumber) {
                 console.log('\n📱 SENDING ORDER CONFIRMATION');

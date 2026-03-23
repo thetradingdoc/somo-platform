@@ -298,7 +298,13 @@ async function postUpload(req, res) {
       let storagePath = null;
       if (blobService.isConfigured()) {
         const result = await blobService.uploadBuffer(patientId, appointmentId, filename, finalBuffer, contentType);
-        if (result) storagePath = result.storagePath;
+        if (!result || !result.storagePath) {
+          return res.status(503).json({
+            success: false,
+            error: 'Upload storage is temporarily unavailable. Please try again in a moment.'
+          });
+        }
+        storagePath = result.storagePath;
       }
       const uploadId = uuidv4();
       const now = new Date().toISOString();

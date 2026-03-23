@@ -319,7 +319,7 @@
                 call your local emergency number instead.
               </div>
             </div>
-            <button type="button" id="openChatModal" class="hidden sm:inline-flex items-center justify-center rounded-full bg-sky-500/90 hover:bg-sky-400 text-xs font-semibold px-4 py-2 shadow">
+            <button type="button" id="openChatModal" class="inline-flex items-center justify-center rounded-full bg-sky-500/90 hover:bg-sky-400 text-xs font-semibold px-4 py-2 shadow">
               Chat with agent
             </button>
           </div>
@@ -354,7 +354,7 @@
 
           <div id="asyncLaneCard" class="hidden mb-4 p-4 rounded-xl bg-sky-800/80 border border-sky-500/40">
             <p class="text-sm text-sky-100 mb-3">Upload photos and notes — a specialist will review within ~4 hours. No live video needed.</p>
-            <a href="triage.html" class="inline-flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold px-4 py-2">Start async review</a>
+            <a id="asyncReviewLink" href="triage.html" class="inline-flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold px-4 py-2">Start async review</a>
           </div>
           <div id="priceBox" class="mb-3 text-sm text-sky-100/90">
             <div id="priceLine" style="font-weight:700;">Consultation — …</div>
@@ -399,6 +399,14 @@
               <div id="slotsMorning"></div>
               <div id="slotsAfternoon"></div>
               <div id="slotsEvening"></div>
+              <div id="slotsFallbackActions" class="hidden mt-2 flex flex-wrap gap-2">
+                <button id="retrySlotsBtn" type="button" class="inline-flex items-center justify-center rounded-full border border-sky-400/60 bg-sky-900/40 text-sky-50 text-xs font-semibold px-3 py-2 hover:bg-sky-900/60">
+                  Retry loading times
+                </button>
+                <button id="tryAnotherDateBtn" type="button" class="inline-flex items-center justify-center rounded-full border border-sky-400/60 bg-sky-900/40 text-sky-50 text-xs font-semibold px-3 py-2 hover:bg-sky-900/60">
+                  Try another date
+                </button>
+              </div>
             </div>
           </div>
 
@@ -433,6 +441,13 @@
         <div class="flex-1 overflow-y-auto px-3 py-3 space-y-2 text-sm" id="chatMsgs"></div>
         <div class="border-t border-gray-200 px-3 py-2">
           <div id="chatChips" class="flex flex-wrap gap-2 mb-2"></div>
+          <div id="chatCodeEntry" class="hidden mb-2 p-2 rounded-lg border border-indigo-200 bg-indigo-50">
+            <div class="text-xs text-indigo-700 mb-1">Enter your 6-digit verification code</div>
+            <div class="flex gap-2">
+              <input id="chatCodeInput" maxlength="6" inputmode="numeric" pattern="[0-9]*" class="w-full border border-indigo-200 rounded-xl px-3 py-2 text-sm" placeholder="123456" />
+              <button id="chatCodeSubmitBtn" type="button" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Submit</button>
+            </div>
+          </div>
           <div class="flex gap-2">
             <input id="chatInput" class="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm" placeholder="Describe your symptoms or what you need help with…" />
             <button id="chatSendBtn" class="px-3 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold">Send</button>
@@ -463,6 +478,9 @@
     const holdBoxEl = document.getElementById('holdBox');
     const holdTimerEl = document.getElementById('holdTimer');
     const retryPayBtn = document.getElementById('retryPayBtn');
+    const retrySlotsBtn = document.getElementById('retrySlotsBtn');
+    const tryAnotherDateBtn = document.getElementById('tryAnotherDateBtn');
+    const slotsFallbackActionsEl = document.getElementById('slotsFallbackActions');
     const reasonInput = { value: '' }; // lightweight stub; reason optional for calendar-only flow
 
     let currentYear;
@@ -549,6 +567,7 @@
           if (retryPayBtn) retryPayBtn.classList.add('hidden');
           showMsg('That hold expired. Please pick a new time.', 'error');
           selectedTime = null;
+          if (selectedDate) loadSlotsForDate(selectedDate);
           setCtaState();
         }
       }, 250);
@@ -667,6 +686,17 @@
       return 'evening';
     }
 
+    function redirectToLoginWithReturn() {
+      const returnTo = encodeURIComponent(`schedule.html${window.location.search || ''}`);
+      window.location.href = `patient-login.html?expired=1&return=${returnTo}`;
+    }
+
+    function showSlotFallbackActions(show) {
+      if (!slotsFallbackActionsEl) return;
+      if (show) slotsFallbackActionsEl.classList.remove('hidden');
+      else slotsFallbackActionsEl.classList.add('hidden');
+    }
+
     async function loadSlotsForDate(date) {
       clearMsg();
       slotsLoading = true;
@@ -675,6 +705,7 @@
       slotsMorningEl.innerHTML = '';
       slotsAfternoonEl.innerHTML = '';
       slotsEveningEl.innerHTML = '';
+      showSlotFallbackActions(false);
       slotsMorningEl.insertAdjacentHTML('beforebegin', '<div id="slotsLoading" class="text-xs text-sky-100/80">Loading…</div>');
       const apptType = document.getElementById('apptTypeInput').value;
 
@@ -692,13 +723,19 @@
         slotsLoading = false;
         setCtaState();
         if (!res.ok || !data.success) {
+          if (res.status === 401) {
+            redirectToLoginWithReturn();
+            return;
+          }
           showMsg(data.error || 'Unable to load availability for that day.', 'error');
-          slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">No slots available.</span>';
+          slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">Unable to load slots for this date.</span>';
+          showSlotFallbackActions(true);
           return;
         }
         const slots = data.slots_with_display || data.slots || data.available_slots || [];
         if (!slots.length) {
-          slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">No slots available for this date.</span>';
+          slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">No slots available for this date. Try another date or use chat help.</span>';
+          showSlotFallbackActions(true);
           return;
         }
 
@@ -756,6 +793,7 @@
           });
           if (match) match.classList.add('bg-emerald-500', 'border-emerald-400');
         }
+        showSlotFallbackActions(false);
       } catch (e) {
         console.error('Error loading slots:', e);
         const loadingNode = document.getElementById('slotsLoading');
@@ -764,6 +802,7 @@
         setCtaState();
         slotsMorningEl.innerHTML = '<span class="text-xs text-sky-100/80">Unable to load availability.</span>';
         showMsg('Network error while loading availability.', 'error');
+        showSlotFallbackActions(true);
       }
     }
 
@@ -907,10 +946,21 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       if (!sessionId) {
-        window.location.href = 'patient-login.html';
+        redirectToLoginWithReturn();
         return;
       }
+      const asyncLink = document.getElementById('asyncReviewLink');
+      if (asyncLink) {
+        const returnTo = encodeURIComponent(`schedule.html${window.location.search || ''}`);
+        asyncLink.href = `triage.html?visit_mode=async_review&return=${returnTo}`;
+      }
       document.getElementById('visitModeInput')?.addEventListener('change', toggleVisitModeUI);
+      retrySlotsBtn?.addEventListener('click', () => { if (selectedDate) loadSlotsForDate(selectedDate); });
+      tryAnotherDateBtn?.addEventListener('click', () => {
+        selectedTime = null;
+        const d = new Date(currentYear, currentMonth + 1, 1);
+        renderCalendar(d.getFullYear(), d.getMonth());
+      });
       await loadScheduleConfig();
       const nowParts = nowPartsInTz(CLINIC_TIMEZONE);
       currentYear = nowParts.year;
@@ -975,6 +1025,9 @@
     const chatChips = document.getElementById('chatChips');
     const chatInput = document.getElementById('chatInput');
     const chatSendBtn = document.getElementById('chatSendBtn');
+    const chatCodeEntry = document.getElementById('chatCodeEntry');
+    const chatCodeInput = document.getElementById('chatCodeInput');
+    const chatCodeSubmitBtn = document.getElementById('chatCodeSubmitBtn');
     const triageStateKey = 'patient_triage_state_v1';
     let triageState = (() => {
       try { return JSON.parse(sessionStorage.getItem(triageStateKey) || 'null') || {}; } catch (_) { return {}; }
@@ -1002,7 +1055,7 @@
           // If the assistant is offering concrete times, allow a direct handoff into the calendar UI.
           if (opt.action === 'select_slot') {
             const slot = opt.slot || null;
-            const date = (triageState && triageState.date) ? triageState.date : selectedDate;
+            const date = slot?.date || slot?.start_time?.slice?.(0, 10) || (triageState && triageState.date) || selectedDate || isoDateInTz(new Date(), CLINIC_TIMEZONE);
             const time = slot?.display || slot?.time || slot?.start_time || opt.value || null;
             if (date && time) {
               clearHold();
@@ -1047,6 +1100,7 @@
       if (!t) return;
       chatAdd('user', t);
       chatInput.value = '';
+      if (chatCodeEntry) chatCodeEntry.classList.add('hidden');
       chatSetChips([]);
       chatSendBtn.disabled = true;
       try {
@@ -1060,6 +1114,8 @@
         triageState = { ...(j.state || {}), session_id: j.session_id || triageState?.session_id };
         sessionStorage.setItem(triageStateKey, JSON.stringify(triageState));
         if (j.reply) chatAdd('assistant', j.reply);
+        const needsCodeInput = /6-?digit|verification code|enter the code/i.test(String(j.reply || ''));
+        if (chatCodeEntry) chatCodeEntry.classList.toggle('hidden', !needsCodeInput);
         const chips = j.next_chips || [];
         if (j.next_step === 'UPLOAD_IMAGE') {
           chips.push({ label: 'Upload photo', value: '[upload]', action: 'upload' });
@@ -1102,6 +1158,12 @@
     chatSendBtn.addEventListener('click', () => chatSendMessage(chatInput.value));
     chatInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); chatSendMessage(chatInput.value); }
+    });
+    chatCodeSubmitBtn?.addEventListener('click', () => {
+      const code = String(chatCodeInput?.value || '').replace(/\D/g, '').slice(0, 6);
+      if (code.length !== 6) return;
+      chatSendMessage(code, { action: 'verify_checkout_code' });
+      if (chatCodeInput) chatCodeInput.value = '';
     });
 
     function toggleMobileMenu() {

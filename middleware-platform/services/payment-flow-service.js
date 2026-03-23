@@ -75,7 +75,8 @@ class PaymentFlowService {
         appointment_id: context.appointment_id || null,
         clinic_id: context.clinic_id || null,
         merchant_id: context.merchant_id || null,
-        payment_method: context.payment_method || null
+        payment_method: context.payment_method || null,
+        triage_session_id: context.triage_session_id || null
       };
       console.log(`[Payments] transition=${label}`, ctx);
     } catch (_) {}

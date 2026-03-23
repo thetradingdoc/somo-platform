@@ -298,7 +298,7 @@ Deep assessment of Voice Agent, FHIR, Payment, EPIC, Stedi, Circle, and Stripe i
 1. **Stripe Payment Processing**:
    - `POST /api/payment/process` - Process payment ✅
    - `GET /payment/:token` - Payment page ✅
-   - `POST /webhook/stripe` - Webhook handler ✅
+   - `POST /webhooks/stripe` - Webhook handler ✅ (canonical; legacy `/webhook/stripe` disabled by default)
 
 2. **Stripe Service** (`services/payment-service.js`):
    - Payment token generation ✅
