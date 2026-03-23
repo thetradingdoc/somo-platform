@@ -105,7 +105,7 @@ The listed constraints (LLM non-determinism, pattern matching, order of checks, 
 | `triage_sessions` | `session_id`, `opqrst_complete`, `triage_complete`, `rag_result_id`, `intake_complete_at`, `safety_level`, `referred_to_911` | **Kelly executor** and **`/voice/...` HTTP** (when `session_id` / `call_id` present) read this for gates — see §3. |
 | `triage_rag_results` | `session_id`, `target_specialty`, `rag_confidence`, `safety_level`, `urgency`, `soap_note`, `primary_icd10` | RAG output, CPT/ICD for billing |
 | `patient_orchestrate_sessions` | `session_id`, `flow_state`, `conversation_history`, `turn_count`, `initial_name` | Session continuity, fraud check |
-| `kelly_session_meta` | `session_id`, `payment_token`, `checkout_id`, `last_slot_bundles`, `preferred_language` | Token recovery, slot lookup; **`preferred_language`** is the session language anchor (LLM-4 / gap18: persist on first detection, read thereafter — not dead metadata). |
+| `kelly_session_meta_kv` | `session_id`, `meta_key`, `meta_value`, `updated_at` | Generic Kelly session metadata KV store. Common keys include `payment_token`, `checkout_id`, `last_slot_bundles`, `preferred_language`, `routine_no_symptoms`, `preferred_lane`, `preferred_date`, `slot_presented`. |
 | `kelly_conversation_history` | `session_id`, `role`, `content` | Chat history for LLM |
 | `appointments` | `id`, `clinic_id`, `patient_id`, `date`, `time`, `status`, `appointment_type` | Booked appointments |
 | `voice_checkouts` | `id`, `appointment_id`, `merchant_id`, `amount`, `customer_phone`, `status` | Checkout records; ties to Stripe session / payment intent metadata |

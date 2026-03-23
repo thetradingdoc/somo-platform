@@ -139,6 +139,78 @@ function _replyForTriageIncomplete(errorCode, channel, preferredLanguage, sessio
   const msg = String(userMessage || '').toLowerCase();
   const langHint = preferredLanguage && preferredLanguage !== 'en' ? ` (${preferredLanguage})` : '';
   const isVoice = channel === 'voice';
+  const lang = (preferredLanguage || 'en').toLowerCase();
+  const routineMode = (() => {
+    try {
+      const sid = stored?.session_id || stored?.id || null;
+      if (!sid) return false;
+      const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sid, 'routine_no_symptoms') : null;
+      if (String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true') return true;
+      const rows = db.db.prepare(`
+        SELECT content
+        FROM kelly_conversation_history
+        WHERE session_id = ? AND role = 'user'
+        ORDER BY created_at DESC
+        LIMIT 12
+      `).all(sid);
+      const corpus = rows.map((r) => String(r?.content || '').toLowerCase()).join('\n');
+      return (
+        /\b(no symptoms?|without symptoms?|don't have symptoms?|do not have symptoms?|routine visit|annual check|just routine)\b/i.test(corpus) ||
+        /\b(нет симптом|без симптом|только осмотр|профилактическ)\b/i.test(corpus)
+      );
+    } catch (_) {
+      return false;
+    }
+  })();
+  const isNoSymptoms =
+    /\b(no symptoms?|without symptoms?|don't have symptoms?|do not have symptoms?|just routine|routine visit|annual check)\b/i.test(msg) ||
+    /\b(нет симптом|без симптом|только осмотр|профилактическ)\b/i.test(msg);
+
+  const i18n = (key, fallback) => {
+    const t = {
+      ru: {
+        ask_onset: 'Когда это началось?',
+        ask_quality_rash: 'Как это ощущается - зуд, жжение или боль?',
+        ask_quality_pain: 'Как бы вы описали боль - острая, тупая, пульсирующая или жгучая?',
+        ask_quality_generic: 'Что вы чувствуете?',
+        ask_severity: 'Оцените по шкале от 1 до 10.',
+        ask_timing: 'Это постоянно или приходит и уходит?',
+        ask_quality_final: 'Опишите, пожалуйста, характер ощущений (например: зуд, жжение, острая боль).',
+        no_symptoms: 'Поняла. Если активных симптомов нет, можем перейти к обычному визиту. Вам нужно к врачу срочно сейчас или хотите запланировать прием на позже? И какая дата вам подходит?'
+      },
+      es: {
+        ask_onset: 'Cuando comenzo?',
+        ask_quality_rash: 'Como se siente: picazon, ardor o dolor?',
+        ask_quality_pain: 'Como describiria el dolor: punzante, sordo, pulsante o ardor?',
+        ask_quality_generic: 'Que sensacion tiene?',
+        ask_severity: 'Que tan fuerte es del 1 al 10?',
+        ask_timing: 'Es constante o va y viene?',
+        ask_quality_final: 'Puede describir la sensacion (por ejemplo: picazon, ardor, dolor agudo)?',
+        no_symptoms: 'Entiendo. Si no hay sintomas activos, podemos pasar a una cita de rutina. Necesita ver al medico de inmediato o prefiere programar para despues? Que fecha le funciona mejor?'
+      },
+      fr: {
+        ask_onset: 'Quand cela a-t-il commence ?',
+        ask_quality_rash: 'Comment le decririez-vous : demangeaison, brulure ou douleur ?',
+        ask_quality_pain: 'Comment decririez-vous la douleur : vive, sourde, pulsatile ou brulante ?',
+        ask_quality_generic: 'Que ressentez-vous exactement ?',
+        ask_severity: 'Sur une echelle de 1 a 10, quelle est l intensite ?',
+        ask_timing: 'Est-ce constant ou intermittent ?',
+        ask_quality_final: 'Pouvez-vous decrire la sensation (par ex. demangeaison, brulure, douleur vive) ?',
+        no_symptoms: 'Compris. S il n y a pas de symptomes actifs, on peut passer a une visite de routine. Avez-vous besoin de voir un medecin immediatement, ou preferez-vous planifier plus tard ? Quelle date vous convient ?'
+      },
+      sw: {
+        ask_onset: 'Ilianza lini?',
+        ask_quality_rash: 'Inajisikiaje - kuwasha, kuungua, au maumivu?',
+        ask_quality_pain: 'Unaweza kuelezea maumivu - makali, hafifu, yanadunda, au yanachoma?',
+        ask_quality_generic: 'Inajisikiaje hasa?',
+        ask_severity: 'Ukali wake ni kiasi gani kati ya 1 hadi 10?',
+        ask_timing: 'Ni ya muda wote au inakuja na kuondoka?',
+        ask_quality_final: 'Tafadhali elezea hisia unazopata (mfano: kuwasha, kuungua, maumivu makali).',
+        no_symptoms: 'Sawa. Kama huna dalili za sasa, tunaweza kuendelea na miadi ya kawaida. Unahitaji kumuona daktari mara moja au ungependa kupanga miadi ya baadaye? Ni tarehe gani inakufaa?'
+      }
+    };
+    return t[lang]?.[key] || fallback;
+  };
 
   // Acknowledge what the user just described before asking the next question
   let ack = '';
@@ -156,34 +228,41 @@ function _replyForTriageIncomplete(errorCode, channel, preferredLanguage, sessio
     return `${q} Then I can check available times.${langHint}`;
   };
 
+  if (isNoSymptoms || routineMode) {
+    return i18n(
+      'no_symptoms',
+      "Understood. If you don't have active symptoms, we can switch to a routine visit. Do you need to see a doctor immediately, or would you like to schedule for later? What date works best for you?"
+    );
+  }
+
   const onsetMissing = !String(stored.onset || '').trim();
   const qualityMissing = !String(stored.quality || '').trim();
   const severityMissing = stored.severity === null || stored.severity === undefined || stored.severity === '';
   const timingMissing = !String(stored.timing || '').trim();
 
   if (errorCode === 'LOW_CONFIDENCE') {
-    if (onsetMissing) return askOne('When did it start?');
+    if (onsetMissing) return askOne(i18n('ask_onset', 'When did it start?'));
     if (qualityMissing) {
-      if (msg.includes('rash')) return askOne('How would you describe it — itchy, burning, or painful?');
-      if (msg.includes('pain')) return askOne('How would you describe the pain — sharp, dull, throbbing, or burning?');
-      return askOne('What does it feel like?');
+      if (msg.includes('rash')) return askOne(i18n('ask_quality_rash', 'How would you describe it - itchy, burning, or painful?'));
+      if (msg.includes('pain')) return askOne(i18n('ask_quality_pain', 'How would you describe the pain - sharp, dull, throbbing, or burning?'));
+      return askOne(i18n('ask_quality_generic', 'What does it feel like?'));
     }
-    if (severityMissing) return askOne('How bad is it from 1 to 10?');
-    if (timingMissing) return askOne('Is it constant or does it come and go?');
-    return askOne('Can you describe what it feels like (for example: sharp, dull, burning)?');
+    if (severityMissing) return askOne(i18n('ask_severity', 'How bad is it from 1 to 10?'));
+    if (timingMissing) return askOne(i18n('ask_timing', 'Is it constant or does it come and go?'));
+    return askOne(i18n('ask_quality_final', 'Can you describe what it feels like (for example: sharp, dull, burning)?'));
   }
 
   // TRIAGE_INCOMPLETE / TRIAGE_REQUIRED / other triage blockers
-  if (onsetMissing) return askOne('When did it start?');
+  if (onsetMissing) return askOne(i18n('ask_onset', 'When did it start?'));
   if (qualityMissing) {
-    if (msg.includes('rash')) return askOne('How would you describe it — itchy, burning, or painful?');
-    if (msg.includes('pain')) return askOne('How would you describe the pain — sharp, dull, throbbing, or burning?');
-    return askOne('What does it feel like?');
+    if (msg.includes('rash')) return askOne(i18n('ask_quality_rash', 'How would you describe it - itchy, burning, or painful?'));
+    if (msg.includes('pain')) return askOne(i18n('ask_quality_pain', 'How would you describe the pain - sharp, dull, throbbing, or burning?'));
+    return askOne(i18n('ask_quality_generic', 'What does it feel like?'));
   }
-  if (severityMissing) return askOne('How bad is it from 1 to 10?');
-  if (timingMissing) return askOne('Is it constant or does it come and go?');
+  if (severityMissing) return askOne(i18n('ask_severity', 'How bad is it from 1 to 10?'));
+  if (timingMissing) return askOne(i18n('ask_timing', 'Is it constant or does it come and go?'));
 
-  return askOne('Can you describe the quality of what you feel (for example: itchy, burning, sharp)?');
+  return askOne(i18n('ask_quality_final', 'Can you describe the quality of what you feel (for example: itchy, burning, sharp)?'));
 }
 
 function _sanitizeToolNameLeaks(text) {
@@ -277,17 +356,25 @@ function _parseSlotOrdinal(text) {
 }
 
 function _parseTimeLikeFromText(text) {
-  const t = String(text || '').toLowerCase();
+  const t = String(text || '').toLowerCase().trim();
   const m24 = t.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
   if (m24) return `${m24[1].padStart(2, '0')}:${m24[2]}`;
-  const m12 = t.match(/\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s*(am|pm)\b/);
-  if (m12) {
-    let h = parseInt(m12[1], 10);
-    const min = m12[2] ? parseInt(m12[2], 10) : 0;
-    const ampm = m12[3];
+  const m12WithMinutes = t.match(/\b(1[0-2]|0?[1-9])[.:]([0-5]\d)\s*(am|pm)\b/);
+  if (m12WithMinutes) {
+    let h = parseInt(m12WithMinutes[1], 10);
+    const min = parseInt(m12WithMinutes[2], 10);
+    const ampm = m12WithMinutes[3];
     if (ampm === 'pm' && h !== 12) h += 12;
     if (ampm === 'am' && h === 12) h = 0;
     return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  }
+  const m12 = t.match(/\b(1[0-2]|0?[1-9])\s*(am|pm)\b/);
+  if (m12) {
+    let h = parseInt(m12[1], 10);
+    const ampm = m12[2];
+    if (ampm === 'pm' && h !== 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:00`;
   }
   return null;
 }
@@ -352,7 +439,10 @@ const ROUTINE_BOOKING_KEYWORDS = [
   'annual physical', 'annual check', 'wellness visit', 'routine physical',
   'routine check', 'general visit', 'general check', 'yearly physical',
   'wellness check', 'routine visit', 'annual exam', 'regular checkup',
-  'just a checkup', 'just a check-up', 'prescription refill', 'refill my prescription'
+  'just a checkup', 'just a check-up', 'prescription refill', 'refill my prescription',
+  'no symptoms', "don't have symptoms", 'do not have symptoms', 'without symptoms',
+  'no pain', 'just routine', 'preventive visit',
+  'нет симптомов', 'без симптомов', 'только осмотр', 'профилактический осмотр'
 ];
 
 const SYMPTOM_KEYWORDS = [
@@ -369,6 +459,89 @@ function _classifyIntent(message) {
   if (ROUTINE_BOOKING_KEYWORDS.some(k => t.includes(k))) return 'routine_booking';
   if (SYMPTOM_KEYWORDS.some(k => t.includes(k))) return 'symptom';
   return 'unknown';
+}
+
+function _hasNoSymptomsRoutineSignal(text) {
+  const t = String(text || '').toLowerCase();
+  return (
+    /\b(no symptoms?|without symptoms?|don't have symptoms?|do not have symptoms?|just routine|routine visit|annual check)\b/i.test(t) ||
+    /\b(нет симптом|без симптом|только осмотр|профилактическ)\b/i.test(t)
+  );
+}
+
+function _hasGeneralVisitSignal(text) {
+  const t = String(text || '').toLowerCase();
+  return /\b(general visit|general check|routine visit|wellness visit|checkup|check-up)\b/i.test(t);
+}
+
+function _isNoSymptomsReply(text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (['no', 'none', 'nope', 'nah', 'нет', 'неа', 'ningependa hapana', 'hapana'].includes(t)) return true;
+  return (
+    /\b(no symptoms?|without symptoms?|no concerns?|nothing right now|none)\b/i.test(t) ||
+    /\b(нет симптом|без симптом|жалоб нет)\b/i.test(t)
+  );
+}
+
+function _isRoutineLockedForSession(sessionId, history = []) {
+  try {
+    const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms') : null;
+    if (String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true') return true;
+  } catch (_) {}
+  try {
+    const corpus = (Array.isArray(history) ? history : [])
+      .filter((m) => m?.role === 'user')
+      .map((m) => String(m?.content || '').toLowerCase())
+      .join('\n');
+    return _hasNoSymptomsRoutineSignal(corpus);
+  } catch (_) {
+    return false;
+  }
+}
+
+function _extractUrgencyFromText(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\b(immediately|urgent|asap|right away|now|today|emergency)\b/i.test(t)) return 'sync';
+  if (/\b(schedule for later|schedule later|later|not urgent|tomorrow|next week|whenever|no rush)\b/i.test(t)) return 'async';
+  return null;
+}
+
+function _extractPreferredDateToken(text) {
+  const t = String(text || '').toLowerCase();
+  const explicit = t.match(/\b(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})\b/i);
+  if (explicit) return explicit[1];
+  if (/\btomorrow\b/i.test(t)) return 'tomorrow';
+  if (/\btoday\b/i.test(t)) return 'today';
+  return null;
+}
+
+function _resolvePreferredDateFromMeta(preferredDate, clinicId) {
+  const raw = String(preferredDate || '').trim().toLowerCase();
+  const d = new Date();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return KellyToolExecutor._normalizeToBusinessDate(raw, clinicId);
+  }
+  const md = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (md) {
+    const year = new Date().getFullYear();
+    const mm = String(Math.max(1, Math.min(12, parseInt(md[1], 10)))).padStart(2, '0');
+    const dd = String(Math.max(1, Math.min(31, parseInt(md[2], 10)))).padStart(2, '0');
+    return KellyToolExecutor._normalizeToBusinessDate(`${year}-${mm}-${dd}`, clinicId);
+  }
+  if (raw === 'tomorrow') d.setDate(d.getDate() + 1);
+  if (raw === 'today') d.setDate(d.getDate());
+  // business-day normalization to keep weekday behavior consistent
+  return KellyToolExecutor._normalizeToBusinessDate(d.toISOString().slice(0, 10), clinicId);
+}
+
+function _historyShowsSlotChosen(history = []) {
+  const corpus = (Array.isArray(history) ? history : [])
+    .map((m) => String(m?.content || '').toLowerCase())
+    .join('\n');
+  const timeLike = /\b(\d{1,2}[:.]\d{2}\s?(am|pm)?)\b/i.test(corpus);
+  const chooseLike = /\b(i'?ll pick|i pick|choose|selected|that works|works for me|works|book (that|it)|confirm (that|it)|that one|sounds good|book me|i('ll| will) take)\b/i.test(corpus);
+  const assistantConfirmed = /\b(i('ll| will) book you|booked you for|your appointment is|confirmed for)\b/i.test(corpus);
+  return (timeLike && chooseLike) || assistantConfirmed;
 }
 
 function _isBookingProgressIntent(text) {
@@ -417,6 +590,8 @@ const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300
 function buildSystemPrompt(context) {
   const { channel, clinicId, patientName, preferredLanguage, kellyScriptHint } = context;
   const isVoice = channel === 'voice';
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const currentYear = new Date().getUTCFullYear();
 
   return `You are Kelly, a warm and empathetic medical voice assistant for DocLittle.
 
@@ -428,9 +603,16 @@ You help patients:
 - Answer questions about medical claims and billing
 - Triage symptoms to route patients to the right specialist
 
+## Date/Year Accuracy
+- Today's date is ${todayIso} (year ${currentYear}).
+- If the patient gives month/day without a year, assume ${currentYear}.
+- Do not mention a past year unless the patient explicitly said it or a tool returned it.
+
 ## Greeting Policy (VERY IMPORTANT)
-- Only include the full greeting/introduction (name, languages list, emergency disclaimer) on the very first assistant turn in the session.
-- On subsequent turns, do NOT repeat the greeting or the language list. Continue directly with triage questions or next steps.
+- First turn greeting must be short and natural: one sentence like "Hi, I'm Kelly. How can I help today?"
+- Do NOT enumerate language lists in greeting.
+- Do NOT include emergency disclaimers in normal greeting unless the patient reports red-flag symptoms.
+- On subsequent turns, do NOT repeat the greeting. Continue directly with triage questions or next steps.
 - When triage is incomplete, ask exactly ONE OPQRST field per turn (start with onset).
 
 ## Language
@@ -557,8 +739,10 @@ When the patient asks about their own records — "explain my labs", "what did m
 
 Hard rule: query_patient_records is ONLY for Q&A about existing labs/last visits. Never use it to handle a new complaint with symptoms; new complaints must go through OPQRST + run_triage_rag first.
 
-## Async vs Sync
-Async = lower cost, 4-24h review. Sync = live video, higher cost. Ask: "Lower-cost review in hours, or live video today?"
+## Urgency Framing (Patient-Facing)
+Internally lanes are async/sync, but NEVER ask callers "async or sync."
+Ask in patient terms: "Do you need to see a doctor immediately, or do you want to schedule for later?"
+Map "immediately/urgent/now" -> sync. Map "scheduled/later/not urgent" -> async.
 
 ## Booking Flow (cash-only; insurance Phase 2 not active)
 1. Collect patient name (if not known)
@@ -570,6 +754,11 @@ Async = lower cost, 4-24h review. Sync = live video, higher cost. Ask: "Lower-co
 7. Collect email
 8. Schedule with schedule_appointment (practitioner_id from the slot is REQUIRED)
 9. create_appointment_checkout → verify_checkout_code for payment
+
+## Routine Visit Constraints
+- If caller says routine/general visit with NO symptoms, default specialty is Primary Care unless caller explicitly asks for another specialty.
+- Do not invent doctor names or specialties. Only use provider/specialty values returned by tools.
+- Do not claim a specific doctor is booked until schedule_appointment returns success.
 
 ## gap12: Before run_triage_rag — assemble OPQRST from session
 Call get_triage_session first. Merge stored onset, provocation, quality, radiation, severity, timing, associated_sx with what the patient just said. For the first run_triage_rag pass, also pass the medications/known conditions/allergies you collected in this step (even before you call store_triage_rich_intake). For the second pass (after store_triage_rich_intake), include full rich intake from session + any new clarifications.
@@ -591,7 +780,13 @@ Examples:
 - Always confirm insurance before booking
 - Email is required before calling schedule_appointment — never skip this
 - Never say "I've booked it" until schedule_appointment returns success
+- NEVER say you've booked, confirmed, or scheduled an appointment until schedule_appointment returns { success: true }.
+- NEVER invent practitioner names, doctor names, or specialties. Only use provider names and specialties from tool output.
 - Be empathetic. Healthcare is stressful.
+
+## Slot Lookup Rules
+- Call get_available_slots for ONE date per turn. If no slots are available, ask the patient for another date.
+- Once slots are found, present them and wait for a user choice. Do not automatically fetch additional dates in the same turn.
 
 ${isVoice ? '## Voice Format\nKeep all replies SHORT. Max 2 sentences per turn. No bullet points. No headers. Just natural speech.' : '## Chat Format\nYou can use slightly longer replies. Bullet points OK when listing options. Keep it conversational.'}
 
@@ -950,21 +1145,52 @@ class KellyAgentService {
       return { reply: emergencyReply, endCall: false, toolsUsed: [], language: 'en' };
     }
 
+    // Load a short history snapshot before fast-intent routing so routine sessions
+    // do not get reset to "do you have symptoms?" on every subsequent turn.
+    const historyEarly = this._loadHistory(sessionId);
+    const routineLockedEarly = _isRoutineLockedForSession(sessionId, historyEarly);
+
     // ── 1b. Fast intent pre-check (billing/routine) ────────────
     const intent = _classifyIntent(message);
-    const fastIntentResponse = await this._handleFastIntentPrecheck({
-      intent,
-      message,
-      sessionId,
-      patientId,
-      clinicId,
-      callerPhone,
-      channel
-    });
-    if (fastIntentResponse) return fastIntentResponse;
+    if (!(routineLockedEarly && intent === 'routine_booking')) {
+      const fastIntentResponse = await this._handleFastIntentPrecheck({
+        intent,
+        message,
+        sessionId,
+        patientId,
+        clinicId,
+        callerPhone,
+        channel
+      });
+      if (fastIntentResponse) return fastIntentResponse;
+    }
 
     // ── 2. Load conversation history ──────────────────────────
-    const history = this._loadHistory(sessionId);
+    const history = historyEarly;
+    const lastAssistantText = (() => {
+      const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
+      return String(lastAssistant?.content || '').toLowerCase();
+    })();
+    const askedSymptomsConfirmation =
+      /current symptoms or concerns today|any current symptoms|симптом|sintoma|symptome|dalili/i.test(lastAssistantText);
+    if (askedSymptomsConfirmation && _isNoSymptomsReply(message)) {
+      try {
+        if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
+      } catch (_) {}
+      const preferredLanguageQuick = this._detectPreferredLanguage(history, message);
+      const noSymptomsByLang = {
+        ru: 'Отлично. Поняла, симптомов нет. Вам нужно к врачу срочно сейчас или хотите запланировать прием на позже? И какая дата вам подходит?',
+        es: 'Perfecto. Entiendo que no hay sintomas. Necesita ver al medico de inmediato o prefiere programar para despues? Que fecha le funciona mejor?',
+        fr: 'Parfait. J ai compris qu il n y a pas de symptomes. Avez-vous besoin de voir un medecin immediatement, ou preferez-vous planifier plus tard ? Quelle date vous convient ?',
+        sw: 'Vizuri. Nimeelewa hakuna dalili za sasa. Unahitaji kumuona daktari mara moja au ungependa kupanga miadi ya baadaye? Ni tarehe gani inakufaa?'
+      };
+      const noSymptomsReply =
+        noSymptomsByLang[preferredLanguageQuick] ||
+        'Perfect. Since there are no current symptoms, do you need to see a doctor immediately, or would you like to schedule for later? What date works best for you?';
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', noSymptomsReply);
+      return { reply: noSymptomsReply, endCall: false, toolsUsed: [], language: preferredLanguageQuick || 'en' };
+    }
     // gap18 + M-S1.E: use persisted language first, else detect and persist to kelly_session_meta AND triage_sessions
     let preferredLanguage = db.getKellySessionLanguage ? db.getKellySessionLanguage(sessionId) : null;
     if (!preferredLanguage) {
@@ -989,6 +1215,122 @@ class KellyAgentService {
         // Last-resort fallback
       db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
       }
+    }
+
+    const routineLockedByHistory = Array.isArray(history) && history.some((m) => m?.role === 'user' && _hasNoSymptomsRoutineSignal(m?.content));
+    const routineLockedByMeta = (() => {
+      try {
+        const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms') : null;
+        return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+      } catch (_) {
+        return false;
+      }
+    })();
+    const routineLocked = routineLockedByHistory || routineLockedByMeta;
+    const msgLcForRoutine = String(message || '').toLowerCase();
+    const hasSymptomNow = SYMPTOM_KEYWORDS.some((k) => msgLcForRoutine.includes(k)) && !_hasNoSymptomsRoutineSignal(msgLcForRoutine);
+    const hasEmailNow = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(String(message || ''));
+    const slotAlreadyChosen = _historyShowsSlotChosen(history);
+    const slotWasPresented = (() => {
+      try {
+        const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'slot_presented') : null;
+        return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+      } catch (_) {
+        return false;
+      }
+    })();
+    const hasDateLikeNow = /\b(tomorrow|today|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2})\b/i.test(String(message || ''));
+    const urgencyFromMessage = _extractUrgencyFromText(message);
+    const urgencyAlreadySet = (() => {
+      try {
+        const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'preferred_lane') : null;
+        return !!String(v || '').trim();
+      } catch (_) {
+        return false;
+      }
+    })();
+    if (routineLocked && !hasSymptomNow && hasEmailNow && !slotAlreadyChosen && !slotWasPresented) {
+      const routineFollowupByLang = {
+        ru: 'Спасибо, email записала. Вам нужно к врачу срочно сейчас или хотите запланировать прием на позже?',
+        es: 'Perfecto, ya tengo su correo. Necesita ver al medico de inmediato o prefiere programar para despues?',
+        fr: 'Parfait, j ai bien note votre e-mail. Avez-vous besoin de voir un medecin immediatement, ou preferez-vous planifier plus tard ?',
+        sw: 'Asante, nimepokea barua pepe yako. Unahitaji kumuona daktari mara moja au ungependa kupanga miadi ya baadaye?'
+      };
+      const routineFollowup =
+        routineFollowupByLang[preferredLanguage] ||
+        'Thanks, I saved your email. Do you need to see a doctor immediately, or would you like to schedule for later?';
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', routineFollowup);
+      return { reply: routineFollowup, endCall: false, toolsUsed: [], language: preferredLanguage || 'en' };
+    }
+    if (routineLocked && !hasSymptomNow && hasDateLikeNow) {
+      if (urgencyFromMessage) {
+        try {
+          if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'preferred_lane', urgencyFromMessage);
+          const dateToken = _extractPreferredDateToken(message);
+          if (dateToken && KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'preferred_date', dateToken);
+        } catch (_) {}
+      } else if (!urgencyAlreadySet) {
+      const routineDateFollowupByLang = {
+        ru: 'Отлично, записала дату. Вам нужно к врачу срочно сейчас или хотите запланировать прием на позже?',
+        es: 'Perfecto, ya tengo la fecha. Necesita ver al medico de inmediato o prefiere programar para despues?',
+        fr: 'Parfait, j ai bien note la date. Avez-vous besoin de voir un medecin immediatement, ou preferez-vous planifier plus tard ?',
+        sw: 'Vizuri, nimepokea tarehe. Unahitaji kumuona daktari mara moja au ungependa kupanga miadi ya baadaye?'
+      };
+      const routineDateFollowup =
+        routineDateFollowupByLang[preferredLanguage] ||
+        'Great, I have your date. Do you need to see a doctor immediately, or would you like to schedule for later?';
+      try {
+        const dateToken = _extractPreferredDateToken(message);
+        if (dateToken && KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'preferred_date', dateToken);
+      } catch (_) {}
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', routineDateFollowup);
+      return { reply: routineDateFollowup, endCall: false, toolsUsed: [], language: preferredLanguage || 'en' };
+      }
+    }
+
+    const justAnsweredUrgency = routineLocked && !hasSymptomNow && urgencyFromMessage && !slotAlreadyChosen && !slotWasPresented;
+    if (justAnsweredUrgency) {
+      try {
+        if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'preferred_lane', urgencyFromMessage);
+      } catch (_) {}
+      this._appendToHistory(sessionId, 'user', message);
+      const preferredDate = (() => {
+        try {
+          return KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'preferred_date') : null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      const date = _resolvePreferredDateFromMeta(preferredDate, clinicId);
+      const slotOut = await KellyToolExecutor.execute(
+        'get_available_slots',
+        { date, appointment_type: 'Primary Care', lane: urgencyFromMessage, force_after_clarified: true },
+        { sessionId, clinicId, patientId, callerPhone, channel }
+      );
+      if (slotOut?.success) {
+        const source = Array.isArray(slotOut.slot_bundles) && slotOut.slot_bundles.length
+          ? slotOut.slot_bundles
+          : (Array.isArray(slotOut.available_slots) ? slotOut.available_slots : []);
+        const chips = source.slice(0, 8).map((s, i) => ({
+          label: `Option ${i + 1}: ${s?.display || s?.time || String(s)}`,
+          value: `option ${i + 1}`,
+          action: 'select_slot',
+          slot: s
+        }));
+        try {
+          if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
+        } catch (_) {}
+        const reply = source.length
+          ? 'Here are some available times. Please choose one.'
+          : 'I could not find openings for that date. What date works best for you?';
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return { reply, endCall: false, toolsUsed: ['get_available_slots'], language: preferredLanguage || 'en', next_chips: chips, chips_display: 'list' };
+      }
+      const reply = 'Let me check availability. What date works best for you?';
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return { reply, endCall: false, toolsUsed: [], language: preferredLanguage || 'en' };
     }
 
     // ── 3. Build context ──────────────────────────────────────
@@ -1061,7 +1403,13 @@ class KellyAgentService {
           ((sessionRow.triage_complete === 1) || (sessionRow.triage_complete === true));
         const askedToProceed = _isBookingProgressIntent(message);
         const alreadyLookedUpSlots = Array.isArray(toolsUsed) && toolsUsed.includes('get_available_slots');
+        const scheduleActuallyRan = Array.isArray(toolsUsed) && toolsUsed.includes('schedule_appointment');
+        const modelClaimedBooking = /i('ll| will) book you|booked you for|your appointment is|confirmed for/i.test(String(reply || ''));
         const replyLooksLikeSummaryLoop = /benefit from seeing|specialist/i.test(String(reply || ''));
+
+        if (modelClaimedBooking && !scheduleActuallyRan) {
+          reply = "I have that slot available. To confirm your booking, I need your email address. What's the best email for the confirmation?";
+        }
 
         if (triageComplete && askedToProceed && !alreadyLookedUpSlots && replyLooksLikeSummaryLoop) {
           const requestedSpecialty = _extractRequestedSpecialty(message);
@@ -1107,6 +1455,9 @@ class KellyAgentService {
               reply = slotOut?.kelly_script
                 ? `${slotOut.kelly_script} Here are some available times. Please choose one.`
                 : 'Here are some available times. Please choose one.';
+              try {
+                KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
+              } catch (_) {}
               if (bundles.length) {
                 try {
                   KellyToolExecutor._setSessionMeta(
@@ -1725,9 +2076,14 @@ class KellyAgentService {
               if (selectedSlotLikeInput && source.length) {
                 const msgLc = String(message || '').toLowerCase();
                 let selected = source[0];
-                if (msgLc.includes('async')) {
+                const wantsImmediate = /\b(now|immediately|urgent|asap|right away|срочно|немедленно|ahora|inmediatamente)\b/i.test(msgLc);
+                const wantsScheduled = /\b(schedule|scheduled|later|not urgent|tomorrow|next week|заплан|позже|programar|despues)\b/i.test(msgLc);
+                if (msgLc.includes('async') || wantsScheduled) {
                   const asyncMatch = source.find((s) => String(s?.time || '').toUpperCase() === 'ASYNC' || s?.is_async === true);
                   if (asyncMatch) selected = asyncMatch;
+                } else if (msgLc.includes('sync') || wantsImmediate) {
+                  const syncMatch = source.find((s) => !(String(s?.time || '').toUpperCase() === 'ASYNC' || s?.is_async === true));
+                  if (syncMatch) selected = syncMatch;
                 } else {
                   const byText = source.find((s) => {
                     const label = String(s?.display || s?.time || s?.start_time || s?.start || '').toLowerCase();
@@ -2171,6 +2527,7 @@ class KellyAgentService {
               'last_slot_bundles',
               JSON.stringify(toolResult.slot_bundles.slice(0, 12))
             );
+            KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
           } catch (_) {}
         }
 
@@ -2187,16 +2544,104 @@ class KellyAgentService {
           )
         });
 
+        if (
+          toolName === 'get_available_slots' &&
+          toolResult?.success &&
+          (
+            (Array.isArray(toolResult.available_slots) && toolResult.available_slots.length > 0) ||
+            (Array.isArray(toolResult.slot_bundles) && toolResult.slot_bundles.length > 0)
+          )
+        ) {
+          toolCallCounts.get_available_slots = Math.max(toolCallCounts.get_available_slots || 0, 99);
+          messages.push({
+            role: 'user',
+            content: '[SYSTEM: Slots found for this date. Present these options to the patient. Do not check additional dates in this turn.]'
+          });
+          break;
+        }
+
         // Guardrail: if slot lookup is refused because triage isn't ready yet, do not
         // continue the tool-call loop (prevents run_triage_rag <-> get_available_slots spirals).
         if (toolName === 'get_available_slots' && toolResult && toolResult.success === false) {
           const code = toolResult.error_code || toolResult.error;
           if (['TRIAGE_INCOMPLETE', 'LOW_CONFIDENCE', 'TRIAGE_REQUIRED', 'DIFFERENTIALS_REQUIRED', 'SAFETY_BLOCKED'].includes(code)) {
             const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+            const routineLocked = _isRoutineLockedForSession(sessionId, history) && !SYMPTOM_KEYWORDS.some((k) => String(context?.message || '').toLowerCase().includes(k));
+            if (routineLocked) {
+              const preferredLane = (() => {
+                try {
+                  return KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'preferred_lane') : null;
+                } catch (_) {
+                  return null;
+                }
+              })();
+              if (preferredLane) {
+                const preferredDate = (() => {
+                  try {
+                    return KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'preferred_date') : null;
+                  } catch (_) {
+                    return null;
+                  }
+                })();
+                const date = _resolvePreferredDateFromMeta(preferredDate, context?.clinicId);
+                const slotOut = await KellyToolExecutor.execute(
+                  'get_available_slots',
+                  { date, appointment_type: 'Primary Care', lane: preferredLane, force_after_clarified: true },
+                  { sessionId, clinicId: context?.clinicId, patientId: context?.patientId, callerPhone: context?.callerPhone, channel }
+                );
+                if (slotOut?.success) {
+                  const source = Array.isArray(slotOut.slot_bundles) && slotOut.slot_bundles.length
+                    ? slotOut.slot_bundles
+                    : (Array.isArray(slotOut.available_slots) ? slotOut.available_slots : []);
+                  if (source.length) {
+                    try {
+                      KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
+                    } catch (_) {}
+                    return {
+                      reply: 'Here are some available times. Please choose one.',
+                      toolsUsed: [...toolsUsed, 'get_available_slots'],
+                      endCall: false,
+                      next_step: null,
+                      next_chips: source.slice(0, 8).map((s, i) => ({
+                        label: `Option ${i + 1}: ${s?.display || s?.time || String(s)}`,
+                        value: `option ${i + 1}`,
+                        action: 'select_slot',
+                        slot: s
+                      })),
+                      chips_display: 'list'
+                    };
+                  }
+                }
+                return {
+                  reply: "I couldn't find available times for that date. What date would you like to try?",
+                  toolsUsed,
+                  endCall: false,
+                  next_step: null,
+                  next_chips: null,
+                  chips_display: null
+                };
+              }
+              return {
+                reply: 'Got it. Since this is a routine visit with no current symptoms, do you need to see a doctor immediately, or would you like to schedule for later?',
+                toolsUsed,
+                endCall: false,
+                next_step: null,
+                next_chips: null,
+                chips_display: null
+              };
+            }
             const toolMsgRaw = typeof toolResult.message === 'string' && toolResult.message.trim()
               ? toolResult.message.trim()
               : '';
-            const toolMsg = toolMsgRaw ? _sanitizeToolMessageForPatient(toolMsgRaw) : '';
+            const routineMode = (() => {
+              try {
+                const v = KellyToolExecutor._getSessionMeta?.(sessionId, 'routine_no_symptoms');
+                return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+              } catch (_) {
+                return false;
+              }
+            })();
+            const toolMsg = (!routineMode && toolMsgRaw) ? _sanitizeToolMessageForPatient(toolMsgRaw) : '';
             return {
               reply: _replyForTriageIncomplete(code, channel, context?.preferredLanguage, sessionRow, context?.message) +
                 (toolMsg ? ` ${toolMsg}` : ''),
@@ -2333,10 +2778,46 @@ class KellyAgentService {
     }
 
     if (intent === 'routine_booking') {
+      const preferredLanguage = this._detectPreferredLanguage([], message);
+      const explicitNoSymptoms = _hasNoSymptomsRoutineSignal(message);
+      const likelyGeneralVisit = _hasGeneralVisitSignal(message);
+      // Do not assume "no symptoms" from "general visit" alone.
+      // Ask one confirmation question first; only skip triage when the caller explicitly says no symptoms.
+      if (!explicitNoSymptoms && likelyGeneralVisit) {
+        const confirmByLang = {
+          ru: 'Поняла. Это плановый визит. У вас сейчас есть какие-либо симптомы или жалобы?',
+          es: 'Entiendo. Es una visita general. Tiene algun sintoma o molestia hoy?',
+          fr: 'Compris. C est une visite generale. Avez-vous des symptomes ou une gene aujourd hui ?',
+          sw: 'Nimeelewa. Hii ni miadi ya kawaida. Je, una dalili au usumbufu wowote kwa sasa?'
+        };
+        const confirmReply =
+          confirmByLang[preferredLanguage] ||
+          'Understood. This is a general visit. Do you have any current symptoms or concerns today?';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', confirmReply);
+        return {
+          reply: confirmReply,
+          endCall: false,
+          toolsUsed: [],
+          language: preferredLanguage || 'en',
+          usedFallback: false
+        };
+      }
+
+      const routineReplyByLang = {
+        ru: 'Отлично, помогу с плановым визитом. Если активных симптомов нет, мы можем пропустить симптомный опрос. Вам нужно к врачу срочно сейчас или хотите запланировать прием на позже? И какая дата вам подходит?',
+        es: 'Perfecto, puedo ayudarle con una visita de rutina. Si no tiene sintomas activos, podemos omitir el triage de sintomas. Necesita ver al medico de inmediato o prefiere programar para despues? Que fecha le funciona mejor?',
+        fr: 'Parfait, je peux vous aider pour une visite de routine. S il n y a pas de symptomes actifs, nous pouvons sauter le triage des symptomes. Avez-vous besoin de voir un medecin immediatement, ou preferez-vous planifier plus tard ? Quelle date vous convient ?',
+        sw: 'Vizuri, naweza kusaidia kwa miadi ya kawaida. Kama hakuna dalili za sasa, tunaweza kuruka triage ya dalili. Unahitaji kumuona daktari mara moja au ungependa kupanga miadi ya baadaye? Ni tarehe gani inakufaa?'
+      };
       const routineReply =
-        "Great — I can help with a routine wellness visit. Since you don't have active symptoms, we can skip symptom triage. Do you prefer live video or async review, and what date works best for you?";
+        routineReplyByLang[preferredLanguage] ||
+        "Great - I can help with a routine wellness visit. Since you don't have active symptoms, we can skip symptom triage. Do you need to see a doctor immediately, or would you like to schedule for later? What date works best for you?";
       this._appendToHistory(sessionId, 'user', message);
       this._appendToHistory(sessionId, 'assistant', routineReply);
+      try {
+        if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
+      } catch (_) {}
       try {
         if (db.upsertTriageSession) {
           const existing = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
@@ -2371,7 +2852,7 @@ class KellyAgentService {
         reply: routineReply,
         endCall: false,
         toolsUsed: ['run_triage_rag'],
-        language: 'en',
+        language: preferredLanguage || 'en',
         usedFallback: false
       };
     }
@@ -2388,6 +2869,7 @@ class KellyAgentService {
 
     const t = currentMessage || '';
     if (/\p{Script=Cyrillic}/u.test(t)) return 'ru';
+    if (/\b(russian|speak russian|russki|по-русски)\b/i.test(t)) return 'ru';
     if (/[\u4e00-\u9fff]/.test(t)) return 'zh';
     if (/^(hola|buenos|gracias|por favor|necesito|dolor|quiero)\b/i.test(t)) return 'es';
     if (/^(bonjour|merci|je veux|oui|non)\b/i.test(t)) return 'fr';

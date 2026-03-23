@@ -27,12 +27,12 @@ class KellyToolExecutor {
   static _ensureSessionMetaTable() {
     try {
       db.db.prepare(`
-        CREATE TABLE IF NOT EXISTS kelly_session_meta (
+        CREATE TABLE IF NOT EXISTS kelly_session_meta_kv (
           session_id  TEXT NOT NULL,
-          key         TEXT NOT NULL,
+          meta_key    TEXT NOT NULL,
           value       TEXT NOT NULL,
           updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
-          PRIMARY KEY (session_id, key)
+          PRIMARY KEY (session_id, meta_key)
         )
       `).run();
     } catch (_) {}
@@ -43,7 +43,7 @@ class KellyToolExecutor {
       if (!sessionId || !key) return;
       KellyToolExecutor._ensureSessionMetaTable();
       db.db.prepare(`
-        INSERT OR REPLACE INTO kelly_session_meta (session_id, key, value, updated_at)
+        INSERT OR REPLACE INTO kelly_session_meta_kv (session_id, meta_key, value, updated_at)
         VALUES (?, ?, ?, datetime('now'))
       `).run(sessionId, key, String(value));
     } catch (_) {}
@@ -55,8 +55,8 @@ class KellyToolExecutor {
       KellyToolExecutor._ensureSessionMetaTable();
       const row = db.db.prepare(`
         SELECT value
-        FROM kelly_session_meta
-        WHERE session_id = ? AND key = ?
+        FROM kelly_session_meta_kv
+        WHERE session_id = ? AND meta_key = ?
         LIMIT 1
       `).get(sessionId, key);
       return row?.value ?? null;
@@ -454,6 +454,14 @@ class KellyToolExecutor {
   static async _getAvailableSlots(args, { sessionId, clinicId, patientId, channel }) {
     const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
     const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
+    const routineNoSymptoms = (() => {
+      try {
+        const v = KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms');
+        return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+      } catch (_) {
+        return false;
+      }
+    })();
 
     // gap1: block slots until run_triage_rag has completed
     const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
@@ -473,7 +481,19 @@ class KellyToolExecutor {
       };
     }
 
-    const triageResult = TriageRAGService.getLatestForSession(sessionId);
+    let triageResult = TriageRAGService.getLatestForSession(sessionId);
+    let usingRoutineBypass = false;
+    if (!triageResult && routineNoSymptoms) {
+      usingRoutineBypass = true;
+      triageResult = {
+        id: `routine-${sessionId}`,
+        target_specialty: args.appointment_type || 'PrimaryCare',
+        urgency: 'routine',
+        recommended_lane: args.lane || 'sync',
+        rag_confidence: THRESHOLD,
+        differentials: [{ specialty: args.appointment_type || 'PrimaryCare', probability: 1 }]
+      };
+    }
     if (!triageResult) {
       bump('voice_agent_misuse_get_available_slots_no_rag_result');
       return {
@@ -485,6 +505,7 @@ class KellyToolExecutor {
     }
     // Block orphan/stale RAG: triage_sessions must point at this exact RAG row (set on run_triage_rag).
     if (
+      !usingRoutineBypass &&
       sessionRow &&
       sessionRow.rag_result_id != null &&
       String(sessionRow.rag_result_id).trim() !== '' &&
@@ -531,7 +552,8 @@ class KellyToolExecutor {
       hasSpecialty &&
       confidenceNearThreshold
     );
-    if (confidence < THRESHOLD && !allowBorderlineProgress) {
+    const bypassConfidenceForRoutine = routineNoSymptoms || usingRoutineBypass;
+    if (confidence < THRESHOLD && !allowBorderlineProgress && !bypassConfidenceForRoutine) {
       bump('voice_agent_misuse_get_available_slots_low_confidence');
       return {
         success: false,
@@ -541,7 +563,10 @@ class KellyToolExecutor {
       };
     }
 
-    const triageComplete = sessionRow && KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete);
+    const triageComplete =
+      usingRoutineBypass ||
+      routineNoSymptoms ||
+      (sessionRow && KellyToolExecutor._isCompleteFlag(sessionRow.triage_complete));
     if (!triageComplete) {
       bump('voice_agent_misuse_get_available_slots_triage_incomplete');
       return {
@@ -557,7 +582,9 @@ class KellyToolExecutor {
     const timezone = args.timezone || 'America/New_York';
     const lane = args.lane || triageResult.recommended_lane || 'sync';
     // W3-S5.2: specialty from differential (triageResult.target_specialty)
-    const appointmentType = args.appointment_type || triageResult.target_specialty || 'General Consult';
+    const appointmentType = routineNoSymptoms
+      ? 'Primary Care'
+      : (args.appointment_type || triageResult.target_specialty || 'General Consult');
 
     // gap5: pass patient price_tier
     const pricing = db.getPatientPricing ? db.getPatientPricing(patientId) : { price_tier: 2 };
@@ -671,8 +698,10 @@ class KellyToolExecutor {
       }
     }
 
-    // Fallback: standard HTTP endpoint
-    const slotsEndpoint = channel === 'chat' ? '/api/appointments/available-slots' : '/voice/appointments/available-slots';
+    // Fallback: use the shared voice availability endpoint for BOTH chat and voice.
+    // The legacy /api/appointments/available-slots route can be disabled and diverges
+    // from triage/session parity behavior, causing 403s in chat while voice succeeds.
+    const slotsEndpoint = '/voice/appointments/available-slots';
     const fallbackOut = await this._post(slotsEndpoint, {
       date,
       appointment_type: appointmentType,
@@ -683,6 +712,13 @@ class KellyToolExecutor {
       metadata: { session_id: sessionId },
       session_id: sessionId
     });
+    if (fallbackOut?.slot_bundles && Array.isArray(fallbackOut.slot_bundles)) {
+      fallbackOut.slot_bundles = fallbackOut.slot_bundles.map((s) => ({
+        ...s,
+        practitioner_name: s?.practitioner_name || null,
+        practitioner_id: s?.practitioner_id || null
+      }));
+    }
     KellyToolExecutor._setSessionMeta(sessionId, 'kelly_script_hint', fallbackOut?.kelly_script || '');
     return fallbackOut;
   }
