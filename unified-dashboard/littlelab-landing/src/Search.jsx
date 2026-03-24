@@ -27,7 +27,7 @@ export function Search({ query, setQuery, loading, error, empty }) {
           className="search-input"
           type="text"
           aria-label="Search symptoms, conditions, procedures"
-          placeholder="Search symptoms, conditions, procedures…"
+          placeholder="Explore medical concepts, symptoms, procedures…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           spellCheck={false}
@@ -42,7 +42,7 @@ export function Search({ query, setQuery, loading, error, empty }) {
       </div>
       {query && query.trim().length > 1 && !error && !empty && (
         <p className="search-hint">
-          {loading ? 'Searching knowledge base…' : 'Hover cards to explore matches'}
+          {loading ? 'Searching knowledge base…' : 'Click a card to inspect details'}
         </p>
       )}
       {error && (
