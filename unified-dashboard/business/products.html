@@ -523,6 +523,10 @@
                 gap: 16px;
             }
 
+            .agentic-grid {
+                grid-template-columns: 1fr;
+            }
+
             .product-card {
                 padding: 16px;
             }
@@ -639,6 +643,49 @@
             border-color: var(--primary);
         }
 
+        .agentic-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--gray-200);
+        }
+
+        .agentic-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .agentic-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .agentic-subtitle {
+            font-size: 13px;
+            color: var(--gray-600);
+        }
+
+        .agentic-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .agentic-result {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--gray-700);
+            min-height: 18px;
+        }
+
         .empty-state-icon {
             font-size: 64px;
             margin-bottom: 16px;
@@ -703,6 +750,42 @@
                     ➕ Add Product
                 </button>
             </div>
+
+            <section class="agentic-panel" id="agenticCommercePanel">
+                <div class="agentic-header">
+                    <div>
+                        <div class="agentic-title">Agentic Commerce</div>
+                        <div class="agentic-subtitle">Ask for an outcome, then create a draft order in seconds.</div>
+                    </div>
+                </div>
+                <div class="agentic-grid">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="agentSearchInput">Customer Intent</label>
+                        <input id="agentSearchInput" class="form-input" type="text" placeholder="e.g. vitamin c for dark circles" />
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="agentProductSelect">Recommended Product</label>
+                        <select id="agentProductSelect" class="form-input"></select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="agentCustomerEmail">Customer Email</label>
+                        <input id="agentCustomerEmail" class="form-input" type="email" placeholder="customer@email.com" />
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label" for="agentQuantity">Qty</label>
+                        <input id="agentQuantity" class="form-input" type="number" min="1" value="1" />
+                    </div>
+                    <button class="btn btn-primary" type="button" onclick="createAgenticOrder()">Create Order</button>
+                </div>
+                <div style="margin-top:10px; color: var(--gray-600); font-size: 13px;">
+                    Tip: click <b>Recommend</b> first, then <b>Create Order</b> to show the order in <b>Orders</b>.
+                </div>
+                <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="runAgentRecommendation()">Recommend</button>
+                    <button class="btn btn-secondary btn-sm" type="button" onclick="openAgentOrders()">Open Orders</button>
+                </div>
+                <div id="agenticResult" class="agentic-result" aria-live="polite"></div>
+            </section>
 
             <!-- Category Filters -->
             <div class="filters-bar" id="categoryFilters">
@@ -788,6 +871,17 @@
             // Navigation is now handled by navigation.js
             renderNavigation('products');
             setupMobileNavClose();
+
+            // Feature flag: disable agentic commerce UI without removing backend logic.
+            const agenticEnabled = !(
+                new URLSearchParams(window.location.search).get('agentic') === '0' ||
+                localStorage.getItem('agentic_commerce_ui') === '0'
+            );
+            const panelEl = document.getElementById('agenticCommercePanel');
+            if (panelEl && !agenticEnabled) {
+                panelEl.style.display = 'none';
+            }
+
             loadUserInfo();
             loadProducts();
 
@@ -909,6 +1003,89 @@
             }
         }
 
+        function setAgenticResult(message, isError = false) {
+            const el = document.getElementById('agenticResult');
+            if (!el) return;
+            el.textContent = message || '';
+            el.style.color = isError ? 'var(--danger)' : 'var(--gray-700)';
+        }
+
+        function populateAgentProductSelect(products = []) {
+            const select = document.getElementById('agentProductSelect');
+            if (!select) return;
+            if (!products.length) {
+                select.innerHTML = '<option value="">No products available</option>';
+                return;
+            }
+            select.innerHTML = products
+                .map((p) => `<option value="${p.id}">${escapeHtml(p.name)} - $${parseFloat(p.price || 0).toFixed(2)}</option>`)
+                .join('');
+        }
+
+        async function runAgentRecommendation() {
+            const query = (document.getElementById('agentSearchInput')?.value || '').trim();
+            if (!query) {
+                setAgenticResult('Enter a customer intent (e.g. “vitamin C for dark circles”).', true);
+                return;
+            }
+            try {
+                const response = await fetch(`${MERCHANT_API}/products/search?q=${encodeURIComponent(query)}`, {
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Search failed');
+                const results = data.products || [];
+                if (!results.length) {
+                    setAgenticResult(`No product match found for “${query}”. Try a different intent or add more products.`, true);
+                    return;
+                }
+                populateAgentProductSelect(results);
+                setAgenticResult(`Recommended ${results.length} product(s). Choose one (if needed) and create the draft order.`);
+            } catch (error) {
+                console.error('Agent recommendation error:', error);
+                setAgenticResult(error.message || 'Recommendation is temporarily unavailable. Please try again.', true);
+            }
+        }
+
+        async function createAgenticOrder() {
+            const productId = document.getElementById('agentProductSelect')?.value;
+            const customerEmail = (document.getElementById('agentCustomerEmail')?.value || '').trim();
+            const quantity = parseInt(document.getElementById('agentQuantity')?.value || '1', 10);
+
+            if (!productId || !customerEmail) {
+                setAgenticResult('Select a product and enter the customer email.', true);
+                return;
+            }
+            if (!Number.isFinite(quantity) || quantity < 1) {
+                setAgenticResult('Quantity must be at least 1.', true);
+                return;
+            }
+
+            try {
+                const response = await fetch(`${MERCHANT_API}/orders`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_id: productId,
+                        quantity,
+                        customer_email: customerEmail,
+                        source: 'agentic_ui'
+                    })
+                });
+                const data = await response.json();
+                if (!data.success) throw new Error(data.error || 'Order creation failed');
+                setAgenticResult(`Order created: ${data.order?.id || 'success'}`);
+            } catch (error) {
+                console.error('Create order error:', error);
+                setAgenticResult(error.message || 'Could not create order. Check inventory and try again.', true);
+            }
+        }
+
+        function openAgentOrders() {
+            window.navigateToBusinessPage('orders.html');
+        }
+
         async function loadProducts() {
             try {
                 const response = await fetch(`${MERCHANT_API}/products`, {
@@ -940,6 +1117,7 @@
 
                 if (data.success && data.products) {
                     allProducts = data.products;
+                    populateAgentProductSelect(allProducts);
                     renderCategoryFilters(allProducts);
                     applyCategoryFilter(activeCategory);
 
@@ -968,7 +1146,7 @@
                 <div class="empty-state">
                     <div class="empty-state-icon">📦</div>
                     <h3>No Products Yet</h3>
-                    <p>Add your first product to enable voice orders. Customers can call and order via your AI voice agent.</p>
+                    <p>Add your first product to enable agentic ordering. Customers can call and order via your AI voice agent.</p>
                     <button class="btn btn-primary" onclick="openAddProductModal()">
                         ➕ Add Your First Product
                     </button>

@@ -363,6 +363,98 @@
       font-weight: 600;
     }
 
+    /* Pinned today's appointments (above calendar; stays visible while scrolling) */
+    #todayPinnedWrap {
+      max-width: 1200px;
+      margin: 16px auto 0;
+      position: sticky;
+      top: 0;
+      z-index: 25;
+      background: linear-gradient(180deg, #f8fafc 0%, #f8fafc 85%, transparent 100%);
+      padding-bottom: 12px;
+    }
+    #todayPinnedInner {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 6px 24px rgba(8, 145, 178, 0.1);
+      overflow: hidden;
+    }
+    #todayPinnedHeader {
+      margin: 0;
+      padding: 10px 12px 10px 16px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #0e7490;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border);
+      background: #ecfeff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #todayPinnedHeadingText { margin: 0; }
+    #todayPinnedToggle {
+      border: 1px solid #bae6fd;
+      background: #fff;
+      color: #0e7490;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      text-transform: none;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+    #todayPinnedWrap.is-collapsed #todayPinnedList { display: none; }
+    #todayPinnedList {
+      display: flex;
+      flex-direction: column;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .today-pinned-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      padding: 12px 16px;
+      border: none;
+      border-bottom: 1px solid #f3f4f6;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+      color: #111827;
+      transition: background 0.15s;
+    }
+    .today-pinned-row:last-child { border-bottom: none; }
+    .today-pinned-row:hover { background: #f9fafb; }
+    .today-pinned-time {
+      flex: 0 0 130px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+    .today-pinned-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+    .today-pinned-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    #todayPinnedEmpty {
+      padding: 14px 16px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+
     #calendarWrap {
       max-width: 1200px;
       margin: 16px auto;
@@ -394,6 +486,20 @@
       border: 1px solid var(--border);
       padding: 6px 10px;
       border-radius: 9999px;
+    }
+    .legend-filter {
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .legend-filter:hover {
+      border-color: #9ca3af;
+      transform: translateY(-1px);
+    }
+    .legend-filter.is-off {
+      opacity: 0.45;
+      background: #f9fafb;
+      text-decoration: line-through;
     }
 
     .dot {
@@ -510,6 +616,25 @@
     .details-panel-inner {
       padding: 20px;
     }
+
+    #detailsModalSubtitle {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0e7490;
+      margin: 0 0 12px 0;
+      line-height: 1.4;
+    }
+    #detailsModalSubtitle .details-sub-muted {
+      color: #64748b;
+      font-weight: 600;
+    }
+    #detailsModalSubtitle .details-sub-when {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+      margin-top: 4px;
+    }
   </style>
 </head>
 
@@ -575,11 +700,21 @@
       </div>
 
       <div class="legend" style="margin-top:8px;">
-        <div class="item"><span class="dot" style="background:#06b6d4"></span> Scheduled</div>
-        <div class="item"><span class="dot" style="background:#10b981"></span> Confirmed</div>
-        <div class="item"><span class="dot" style="background:#ef4444"></span> Cancelled</div>
-        <div class="item"><span class="dot" style="background:#3b82f6"></span> Available</div>
-        <div class="item"><span class="dot" style="background:#6b7280"></span> Out of Office</div>
+        <button type="button" class="item legend-filter" data-status-key="scheduled"><span class="dot" style="background:#06b6d4"></span> Scheduled</button>
+        <button type="button" class="item legend-filter" data-status-key="confirmed"><span class="dot" style="background:#10b981"></span> Confirmed</button>
+        <button type="button" class="item legend-filter" data-status-key="cancelled"><span class="dot" style="background:#ef4444"></span> Cancelled</button>
+        <button type="button" class="item legend-filter" data-status-key="available"><span class="dot" style="background:#3b82f6"></span> Available</button>
+        <button type="button" class="item legend-filter" data-status-key="out_of_office"><span class="dot" style="background:#6b7280"></span> Out of Office</button>
+      </div>
+
+      <div id="todayPinnedWrap" style="display:none;">
+        <div id="todayPinnedInner">
+          <div id="todayPinnedHeader">
+            <h2 id="todayPinnedHeadingText">Today</h2>
+            <button type="button" id="todayPinnedToggle">Hide</button>
+          </div>
+          <div id="todayPinnedList"></div>
+        </div>
       </div>
 
       <div id="calendarWrap">
@@ -686,9 +821,11 @@
         <div style="font-weight:700; color:#0e7490">Appointment Details</div>
         <button onclick="closeModal()" style="border:none;background:none;font-size:20px;cursor:pointer">✖</button>
       </div>
+      <div id="detailsModalSubtitle" style="display:none;" aria-live="polite"></div>
       <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; justify-content:space-between;">
         <div style="display:flex; gap:8px;">
         <button id="tabOverview" class="btn btn-primary" style="padding:6px 10px;">Overview</button>
+        <button id="tabClinical" class="btn" style="padding:6px 10px;">Clinical prep</button>
         <button id="tabEHR" class="btn" style="padding:6px 10px;">EHR</button>
         </div>
         <button id="btnSyncEhrNow" class="btn" style="padding:6px 10px; background:#0ea5e9; color:#fff; border:none;">Sync EHR Now</button>
@@ -981,15 +1118,46 @@
       try { const obj = JSON.parse(notes); return obj || {}; } catch { return {}; }
     }
 
+    /** Align calendar + lists with patient portal: use legacy date + time as local wall clock. Raw start_time is often UTC (Z) and displayed ~4h off in US. */
+    function wallClockStartEnd(a) {
+      if (!a || !a.date || a.time == null || a.time === '') return null;
+      const tm = String(a.time);
+      const parts = tm.split(':');
+      const hh = String(parts[0] || '0').padStart(2, '0');
+      const mm = String(parts[1] != null ? parts[1] : '0').padStart(2, '0');
+      const ss = parts[2] != null ? String(parts[2]).padStart(2, '0') : '00';
+      const isoLocal = `${String(a.date).slice(0, 10)}T${hh}:${mm}:${ss}`;
+      const start = new Date(isoLocal);
+      if (Number.isNaN(start.getTime())) return null;
+      let durMs = 30 * 60 * 1000;
+      if (a.duration_minutes) durMs = Number(a.duration_minutes) * 60 * 1000;
+      if (a.start_time && a.end_time) {
+        const d = new Date(a.end_time) - new Date(a.start_time);
+        if (d > 0) durMs = d;
+      }
+      const end = new Date(start.getTime() + durMs);
+      return { start, end };
+    }
+
     function toCalendarEvents(appts) {
       return appts.map(a => {
         const meta = parseBufferFromNotes(a.notes);
         const patientLabel = (a.patient_name || 'Unknown').trim();
+        const provLabel = ((a.provider || '').trim() || 'Team');
+        const we = wallClockStartEnd(a);
+        let start = we ? we.start : null;
+        let end = we ? we.end : null;
+        if (!start) {
+          start = a.start_time ? new Date(a.start_time) : (a.date && a.time ? new Date(`${a.date}T${String(a.time).split(':').length === 2 ? `${a.time}:00` : a.time}`) : null);
+        }
+        if (!end) {
+          end = a.end_time ? new Date(a.end_time) : undefined;
+        }
         return ({
           id: a.id,
-          title: `${patientLabel} • ${a.appointment_type || 'Consultation'}`,
-          start: a.start_time || `${a.date}T${a.time}:00`,
-          end: a.end_time || undefined,
+          title: `${patientLabel} • ${a.appointment_type || 'Consultation'} · ${provLabel}`,
+          start: start || a.start_time || `${a.date}T${a.time}:00`,
+          end: end,
           backgroundColor: statusColor(a.status),
           borderColor: statusColor(a.status),
           textColor: '#ffffff',
@@ -1003,10 +1171,12 @@
             appointment_type: a.appointment_type,
             status: a.status,
             provider: a.provider,
+            date: a.date || null,
+            time: a.time != null ? a.time : null,
             confirmation: (a.id || '').substring(5, 13).toUpperCase(),
             calendar_link: a.calendar_link || null,
             patient_id: a.patient_id || null,
-            timezone: meta.timezone || 'America/New_York',
+            timezone: a.timezone || meta.timezone || 'America/New_York',
             duration_minutes: a.duration_minutes,
             buffer_before_minutes: meta.buffer_before_minutes || null,
             buffer_after_minutes: meta.buffer_after_minutes || null,
@@ -1019,6 +1189,137 @@
           }
         });
       });
+    }
+
+    function getLocalDateString(d) {
+      const x = d instanceof Date ? d : new Date(d);
+      if (Number.isNaN(x.getTime())) return null;
+      const y = x.getFullYear();
+      const m = String(x.getMonth() + 1).padStart(2, '0');
+      const day = String(x.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function isAppointmentLocalDate(a, ymd) {
+      if (!a || !ymd) return false;
+      if (a.date) {
+        const d = String(a.date).slice(0, 10);
+        if (d === ymd) return true;
+      }
+      if (a.start_time) {
+        if (getLocalDateString(new Date(a.start_time)) === ymd) return true;
+      }
+      return false;
+    }
+
+    let scrollPinnedNextRefresh = false;
+    let todayPinnedCollapsed = false;
+    const legendStatusVisibility = {
+      scheduled: true,
+      confirmed: true,
+      cancelled: true,
+      available: true,
+      out_of_office: true
+    };
+
+    function statusKeyFromAppointment(a) {
+      return String(a?.status || 'scheduled').toLowerCase();
+    }
+
+    function statusKeyFromEvent(ev) {
+      const p = ev?.extendedProps || {};
+      if (p.isAvailabilityBlock) {
+        return p.blockType === 'out_of_office' ? 'out_of_office' : 'available';
+      }
+      return String(p.status || 'scheduled').toLowerCase();
+    }
+
+    function isVisibleByLegendStatus(key) {
+      const k = String(key || '').toLowerCase();
+      return Object.prototype.hasOwnProperty.call(legendStatusVisibility, k)
+        ? !!legendStatusVisibility[k]
+        : true;
+    }
+
+    function updateLegendChipsUi() {
+      document.querySelectorAll('.legend-filter').forEach((btn) => {
+        const key = btn.getAttribute('data-status-key');
+        btn.classList.toggle('is-off', !isVisibleByLegendStatus(key));
+      });
+    }
+
+    function setTodayPinnedCollapsed(nextCollapsed) {
+      todayPinnedCollapsed = !!nextCollapsed;
+      const wrap = document.getElementById('todayPinnedWrap');
+      const toggle = document.getElementById('todayPinnedToggle');
+      if (wrap) wrap.classList.toggle('is-collapsed', todayPinnedCollapsed);
+      if (toggle) toggle.textContent = todayPinnedCollapsed ? 'Show' : 'Hide';
+    }
+
+    function renderTodayPinned(appts) {
+      const wrap = document.getElementById('todayPinnedWrap');
+      const list = document.getElementById('todayPinnedList');
+      const heading = document.getElementById('todayPinnedHeadingText');
+      if (!wrap || !list || !heading) return;
+
+      const todayYmd = getLocalDateString(new Date());
+      const todayAppts = (appts || [])
+        .filter(a => isAppointmentLocalDate(a, todayYmd))
+        .filter(a => isVisibleByLegendStatus(statusKeyFromAppointment(a)))
+        .sort((a, b) => {
+          const wa = wallClockStartEnd(a);
+          const wb = wallClockStartEnd(b);
+          const ta = wa ? wa.start.getTime() : new Date(a.start_time || `${a.date}T${a.time || '00:00'}:00`).getTime();
+          const tb = wb ? wb.start.getTime() : new Date(b.start_time || `${b.date}T${b.time || '00:00'}:00`).getTime();
+          return ta - tb;
+        });
+
+      if (todayAppts.length === 0) {
+        wrap.style.display = 'none';
+        list.innerHTML = '';
+        return;
+      }
+
+      wrap.style.display = 'block';
+      heading.textContent = `Today · ${new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      })}`;
+
+      list.innerHTML = todayAppts.map(a => {
+        const ev = toCalendarEvents([a])[0];
+        const we = wallClockStartEnd(a);
+        const start = we ? we.start : (ev.start ? new Date(ev.start) : null);
+        const end = we ? we.end : (ev.end ? new Date(ev.end) : null);
+        let timeStr = '';
+        if (start && !Number.isNaN(start.getTime())) {
+          const opts = { hour: 'numeric', minute: '2-digit' };
+          timeStr = end && !Number.isNaN(end.getTime())
+            ? `${start.toLocaleTimeString([], opts)} – ${end.toLocaleTimeString([], opts)}`
+            : start.toLocaleTimeString([], opts);
+        }
+        const dot = statusColor(a.status);
+        const title = ev.title || `${a.patient_name} • ${a.appointment_type || 'Consultation'}`;
+        const idAttr = escapeHtml(a.id);
+        return `<button type="button" class="today-pinned-row" data-appt-id="${idAttr}">
+      <span class="today-pinned-time">${escapeHtml(timeStr)}</span>
+      <span class="today-pinned-dot" style="background:${dot}"></span>
+      <span class="today-pinned-title">${escapeHtml(title)}</span>
+    </button>`;
+      }).join('');
+
+      list.querySelectorAll('.today-pinned-row').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.getAttribute('data-appt-id');
+          const a = todayAppts.find(x => x.id === id);
+          if (!a) return;
+          const ev = toCalendarEvents([a])[0];
+          openModal('<div/>', ev.id, a.status, ev.extendedProps);
+        });
+      });
+      setTodayPinnedCollapsed(todayPinnedCollapsed);
     }
 
     function getVideoJoinUrl(roomName) {
@@ -1100,6 +1401,9 @@
     let activeDetailsTab = 'overview';
     let currentDetailsProps = null;
     let currentEhrData = null;
+    let currentClinicalPrep = null;
+    let showFullCase = false;
+    let showFullTriage = false;
 
     function escapeHtml(v) {
       return String(v == null ? '' : v)
@@ -1108,6 +1412,205 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function looksLikeJson(s) {
+      if (s == null) return false;
+      const t = String(s).trim();
+      return (t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'));
+    }
+
+    function parseMaybeJson(v) {
+      if (v == null) return null;
+      if (typeof v === 'object') return v;
+      if (!looksLikeJson(v)) return null;
+      try { return JSON.parse(v); } catch (_) { return null; }
+    }
+
+    function shortText(v, max = 260) {
+      const s = String(v || '').trim();
+      if (!s) return '';
+      return s.length > max ? (s.slice(0, max).trim() + '…') : s;
+    }
+
+    async function loadClinicalPrep(apptId) {
+      currentClinicalPrep = { loading: true };
+      if (activeDetailsTab === 'clinical') renderClinicalPrep();
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/appointments/${encodeURIComponent(apptId)}/clinical-prep`, { credentials: 'include' });
+        const json = await res.json();
+        if (!json?.success || !json?.prep) {
+          currentClinicalPrep = { empty: true, message: json?.error || 'No clinical prep available.' };
+        } else {
+          currentClinicalPrep = { data: json.prep };
+        }
+      } catch (e) {
+        currentClinicalPrep = { error: true, message: e?.message || 'Failed to load clinical prep.' };
+      }
+      const btnPHI = document.getElementById('btnPHI');
+      if (btnPHI) {
+        const allowed = !!(currentClinicalPrep && currentClinicalPrep.data && currentClinicalPrep.data.phi_allowed);
+        btnPHI.disabled = !allowed;
+        btnPHI.style.opacity = allowed ? '1' : '0.55';
+        btnPHI.title = allowed ? 'Toggle PHI' : 'PHI hidden by policy for this session';
+        if (!allowed) {
+          showPHI = false;
+          btnPHI.textContent = 'Show PHI';
+        }
+      }
+      if (activeDetailsTab === 'clinical') renderClinicalPrep();
+    }
+
+    function renderClinicalPrep() {
+      const target = document.getElementById('modalContent');
+      if (!target) return;
+      if (!currentClinicalPrep || currentClinicalPrep.loading) {
+        target.innerHTML = `
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;color:#6b7280;">Loading case summary...</div>
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;color:#6b7280;">Loading triage details...</div>
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;color:#6b7280;">Loading documents...</div>
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fff;color:#6b7280;">Loading EHR activity...</div>
+        `;
+        return;
+      }
+      if (currentClinicalPrep.error) {
+        target.innerHTML = `<div style="color:#ef4444;">${escapeHtml(currentClinicalPrep.message || 'Failed to load clinical prep')}</div>`;
+        return;
+      }
+      if (currentClinicalPrep.empty) {
+        target.innerHTML = `<div style="color:#6b7280;">${escapeHtml(currentClinicalPrep.message || 'No clinical prep available')}</div>`;
+        return;
+      }
+
+      const prep = currentClinicalPrep.data || {};
+      const triage = prep.triage_session || {};
+      const cs = prep.case_summary || {};
+      const docs = prep.documents || {};
+      const activity = prep.activity || {};
+      const sectionStatus = prep.section_status || {};
+      const phiAllowed = !!prep.phi_allowed;
+
+      const urgency = cs.urgency || triage.urgency || 'unknown';
+      const safety = cs.safety_level || triage.safety_level || 'unknown';
+      const chiefComplaint = cs.chief_complaint || triage.soap_note || 'No chief complaint documented yet.';
+      const patientName = phiAllowed ? (prep.appointment?.patient_name || 'N/A') : ((prep.appointment?.patient_name || 'N/A'));
+      const patientPhone = phiAllowed ? (prep.appointment?.patient_phone || 'N/A') : (prep.appointment?.patient_phone || 'N/A');
+      const patientEmail = phiAllowed ? (prep.appointment?.patient_email || 'N/A') : (prep.appointment?.patient_email || 'N/A');
+
+      const triageData = [
+        ['Onset', triage.onset],
+        ['Provocation', triage.provocation],
+        ['Quality', triage.quality],
+        ['Radiation', triage.radiation],
+        ['Severity', triage.severity],
+        ['Timing', triage.timing],
+        ['Associated symptoms', triage.associated_sx],
+        ['Medications', triage.medications],
+        ['Allergies', triage.allergies],
+        ['Prior diagnoses', triage.prior_diagnoses],
+        ['Family history', triage.family_history]
+      ].filter((x) => x[1]);
+
+      const triageRows = (showFullTriage ? triageData : triageData.slice(0, 5))
+        .map(([k, v]) => `<div style="margin:2px 0;"><strong>${escapeHtml(k)}:</strong> ${escapeHtml(String(v))}</div>`)
+        .join('');
+
+      const rawSoap = cs.soap_note || triage.soap_note || '';
+      const soapObj = parseMaybeJson(rawSoap);
+      const soapText = soapObj ? JSON.stringify(soapObj, null, 2) : String(rawSoap || '');
+      const soapDisplay = showFullCase ? soapText : shortText(soapText, 360);
+
+      const keyProblems = Array.isArray(cs.key_problems) && cs.key_problems.length
+        ? cs.key_problems
+        : (String(triage.associated_sx || '').split(/[,;\n]+/).map(s => s.trim()).filter(Boolean));
+      const keyProblemsHtml = (keyProblems || []).slice(0, 6).map(p => `<li>${escapeHtml(String(p))}</li>`).join('') || '<li>Not captured yet</li>';
+      const redFlags = [
+        ...(Array.isArray(cs.red_flags) ? cs.red_flags : []),
+        ...(Array.isArray(triage.red_flags) ? triage.red_flags : [])
+      ].filter(Boolean);
+      const uniqueRedFlags = Array.from(new Set(redFlags));
+      const redFlagsHtml = uniqueRedFlags.length
+        ? uniqueRedFlags.slice(0, 8).map(f => `<span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:11px;margin:0 6px 6px 0;">${escapeHtml(String(f).replace(/_/g, ' '))}</span>`).join('')
+        : '<span style="font-size:12px;color:#64748b;">No explicit red flags captured.</span>';
+
+      const categories = docs.categories || {};
+      const categoryChips = Object.entries(categories).map(([k, v]) => {
+        const label = `${k}: ${v}`;
+        return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;font-size:11px;color:#475569;margin-right:6px;margin-bottom:6px;">${escapeHtml(label)}</span>`;
+      }).join('');
+
+      const docsHtml = (docs.items || []).map(d => `
+        <div style="padding:8px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;background:#fff;">
+          <div style="font-weight:600;">${escapeHtml(d.title || 'Untitled')}</div>
+          <div style="font-size:12px;color:#6b7280;">${escapeHtml(d.type || 'document')}</div>
+          ${d.ai_summary
+            ? `<div style="margin-top:4px;font-size:12px;color:#334155;"><strong>AI:</strong> ${escapeHtml(d.ai_summary)}</div>`
+            : `<div style="margin-top:4px;font-size:12px;color:#64748b;">No extracted text yet. Try Sync EHR or refresh later.</div>`}
+          ${d.detail_url ? `<div style="margin-top:6px;"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-size:12px;color:#2563eb;">View details</a></div>` : ''}
+        </div>
+      `).join('') || '<div style="color:#6b7280;">No triage-linked documents.</div>';
+
+      const patientId = prep.appointment?.patient_id || '';
+      const profileHref = patientId
+        ? `patients.html?patient_id=${encodeURIComponent(patientId)}&patientId=${encodeURIComponent(patientId)}`
+        : 'patients.html';
+
+      target.innerHTML = `
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#f8fafc;">
+          <div style="font-size:12px;color:#475569;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Chief complaint & safety</div>
+          <div style="margin-top:6px;"><strong>Chief complaint:</strong> ${escapeHtml(chiefComplaint)}</div>
+          <div style="margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span class="badge badge-scheduled">Urgency: ${escapeHtml(String(urgency))}</span>
+            <span class="badge badge-confirmed">Safety: ${escapeHtml(String(safety))}</span>
+          </div>
+          <div style="margin-top:6px;"><strong>Red flags:</strong> ${redFlagsHtml}</div>
+          <div style="margin-top:6px;"><strong>Patient:</strong> ${escapeHtml(patientName)} · ${escapeHtml(patientPhone)} · ${escapeHtml(patientEmail)}</div>
+          <div style="margin-top:6px;"><strong>FHIR Patient ID:</strong> ${escapeHtml(patientId || 'N/A')}</div>
+          <div style="margin-top:6px;"><a href="${profileHref}" target="_blank" rel="noopener" style="font-size:12px;color:#2563eb;">Open patient profile</a></div>
+          ${!phiAllowed ? '<div style="margin-top:4px;color:#92400e;font-size:12px;">PHI is masked by policy for this session.</div>' : ''}
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div style="font-size:12px;color:#475569;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Case summary</div>
+            <button type="button" id="toggleFullCaseBtn" class="btn" style="padding:3px 8px;font-size:12px;">${showFullCase ? 'View less case' : 'View full case'}</button>
+          </div>
+          ${sectionStatus.case_summary && !sectionStatus.case_summary.ready ? `<div style="margin-top:6px;font-size:12px;color:#92400e;">${escapeHtml(sectionStatus.case_summary.error || 'Case summary not ready.')}</div>` : ''}
+          <div style="margin-top:6px;white-space:pre-wrap;">${escapeHtml(soapDisplay || 'No summary note yet')}</div>
+          <div style="margin-top:8px;"><strong>Key problems</strong><ul style="margin:4px 0 0 18px;">${keyProblemsHtml}</ul></div>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div style="font-size:12px;color:#475569;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Triage details</div>
+            <button type="button" id="toggleFullTriageBtn" class="btn" style="padding:3px 8px;font-size:12px;">${showFullTriage ? 'View less triage' : 'View full triage'}</button>
+          </div>
+          ${sectionStatus.triage && !sectionStatus.triage.ready ? `<div style="margin-top:6px;font-size:12px;color:#92400e;">${escapeHtml(sectionStatus.triage.error || 'Triage data unavailable.')}</div>` : ''}
+          <div style="margin-top:6px;">${triageRows || '<div style="color:#6b7280;">No triage details linked.</div>'}</div>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px;background:#fff;">
+          <div style="font-size:12px;color:#475569;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Documents (${Number(docs.count || 0)})</div>
+          ${sectionStatus.documents && !sectionStatus.documents.ready ? `<div style="margin-top:6px;font-size:12px;color:#92400e;">${escapeHtml(sectionStatus.documents.error || 'Documents unavailable.')}</div>` : ''}
+          <div style="margin-top:6px;">${categoryChips || '<span style="font-size:12px;color:#64748b;">No category data</span>'}</div>
+          <div style="margin-top:6px;">${docsHtml}</div>
+        </div>
+
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fff;">
+          <div style="font-size:12px;color:#475569;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">EHR & activity</div>
+          <div style="margin-top:6px;"><strong>Case summary ready:</strong> ${activity.has_case_summary ? 'Yes' : 'No'}</div>
+          <div><strong>Triage linked:</strong> ${activity.triage_linked ? 'Yes' : 'No'}</div>
+          <div><strong>Summary ready at:</strong> ${escapeHtml(activity.summary_ready_at || 'N/A')}</div>
+          <div style="margin-top:8px;"><button type="button" id="jumpEhrBtn" class="btn btn-primary" style="padding:4px 10px;">Open EHR tab</button></div>
+        </div>
+      `;
+
+      const t1 = document.getElementById('toggleFullCaseBtn');
+      const t2 = document.getElementById('toggleFullTriageBtn');
+      const j = document.getElementById('jumpEhrBtn');
+      if (t1) t1.onclick = () => { showFullCase = !showFullCase; renderClinicalPrep(); };
+      if (t2) t2.onclick = () => { showFullTriage = !showFullTriage; renderClinicalPrep(); };
+      if (j) j.onclick = () => setDetailsTab('ehr');
     }
 
     async function loadEhrSummary(apptId, patientId) {
@@ -1210,12 +1713,15 @@
     }
 
     function setDetailsTab(tab) {
-      activeDetailsTab = tab === 'ehr' ? 'ehr' : 'overview';
+      activeDetailsTab = tab === 'ehr' ? 'ehr' : (tab === 'clinical' ? 'clinical' : 'overview');
       const tabOverview = document.getElementById('tabOverview');
+      const tabClinical = document.getElementById('tabClinical');
       const tabEhr = document.getElementById('tabEHR');
       if (tabOverview) tabOverview.className = activeDetailsTab === 'overview' ? 'btn btn-primary' : 'btn';
+      if (tabClinical) tabClinical.className = activeDetailsTab === 'clinical' ? 'btn btn-primary' : 'btn';
       if (tabEhr) tabEhr.className = activeDetailsTab === 'ehr' ? 'btn btn-primary' : 'btn';
       if (activeDetailsTab === 'ehr') renderEhrDetails();
+      else if (activeDetailsTab === 'clinical') renderClinicalPrep();
       else if (currentDetailsProps) renderDetails(currentDetailsProps);
     }
 
@@ -1228,6 +1734,9 @@
       showPHI = false;
       activeDetailsTab = 'overview';
       currentEhrData = null;
+      currentClinicalPrep = null;
+      showFullCase = false;
+      showFullTriage = false;
       document.getElementById('modalContent').innerHTML = contentHtml;
       const modal = document.getElementById('detailsModal');
       modal.style.display = 'block';
@@ -1256,19 +1765,37 @@
       btnSendVideoLink.disabled = s === 'cancelled';
 
       const btnPHI = document.getElementById('btnPHI');
-      btnPHI.onclick = () => { showPHI = !showPHI; btnPHI.textContent = showPHI ? 'Hide PHI' : 'Show PHI'; renderDetails(extProps); };
+      if (btnPHI) {
+        btnPHI.disabled = true;
+        btnPHI.style.opacity = '0.55';
+        btnPHI.title = 'Loading PHI policy...';
+        btnPHI.textContent = 'Show PHI';
+      }
+      if (btnPHI) {
+        btnPHI.onclick = () => {
+          const allowed = !!(currentClinicalPrep && currentClinicalPrep.data && currentClinicalPrep.data.phi_allowed);
+          if (!allowed) return;
+          showPHI = !showPHI;
+          btnPHI.textContent = showPHI ? 'Hide PHI' : 'Show PHI';
+          if (activeDetailsTab === 'overview') renderDetails(extProps);
+          if (activeDetailsTab === 'clinical') renderClinicalPrep();
+        };
+      }
       const tabOverview = document.getElementById('tabOverview');
+      const tabClinical = document.getElementById('tabClinical');
       const tabEhr = document.getElementById('tabEHR');
       const btnSyncEhrNow = document.getElementById('btnSyncEhrNow');
       const ehrSyncStatus = document.getElementById('ehrSyncStatus');
       if (tabOverview) tabOverview.onclick = () => setDetailsTab('overview');
+      if (tabClinical) tabClinical.onclick = () => setDetailsTab('clinical');
       if (tabEhr) tabEhr.onclick = () => setDetailsTab('ehr');
       if (btnSyncEhrNow) btnSyncEhrNow.onclick = () => syncEhrNow(apptId, extProps?.patient_id || null);
       if (ehrSyncStatus) {
         ehrSyncStatus.style.display = 'none';
         ehrSyncStatus.textContent = '';
       }
-      setDetailsTab('overview');
+      setDetailsTab('clinical');
+      loadClinicalPrep(apptId);
       loadEhrSummary(apptId, extProps?.patient_id || null);
       renderDetails(extProps);
     }
@@ -1287,12 +1814,24 @@
         const m = map[status] || map.not_synced;
         return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:${m.bg};color:${m.fg};text-transform:uppercase;letter-spacing:.02em;">${m.text}</span>`;
       };
-      const patientName = showPHI ? (p.patient_name || 'N/A') : (p.patient_initials || 'N/A');
-      const phone = showPHI ? (p.patient_phone || 'N/A') : (p.phone_masked || 'N/A');
-      const email = showPHI ? (p.patient_email || 'N/A') : (p.email || 'N/A');
+      const phiAllowed = !!(currentClinicalPrep && currentClinicalPrep.data && currentClinicalPrep.data.phi_allowed);
+      const canShowPhi = showPHI && phiAllowed;
+      const patientName = canShowPhi ? (p.patient_name || 'N/A') : (p.patient_initials || 'N/A');
+      const phone = canShowPhi ? (p.patient_phone || 'N/A') : (p.phone_masked || 'N/A');
+      const email = canShowPhi ? (p.patient_email || 'N/A') : (p.email || 'N/A');
       const link = p.calendar_link ? `<div style=\"margin-top:8px\"><a href=\"${p.calendar_link}\" target=\"_blank\" class=\"link\">Open in Google Calendar</a></div>` : '';
       const buffers = (p.buffer_before_minutes || p.buffer_after_minutes) ? `<div><strong>Buffers:</strong> before ${p.buffer_before_minutes || 0}m • after ${p.buffer_after_minutes || 0}m</div>` : '';
-      const when = (p.start_time) ? `${new Date(p.start_time).toLocaleString()}` : 'N/A';
+      const we = wallClockStartEnd(p);
+      const when = we
+        ? `${we.start.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })} – ${we.end.toLocaleString(undefined, { timeStyle: 'short' })}`
+        : (p.start_time ? `${new Date(p.start_time).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}` : 'N/A');
+      const providerLabel = escapeHtml((p.provider || '').trim() || 'Team');
+      const typeLabel = escapeHtml((p.appointment_type || 'Visit').trim());
+      const subEl = document.getElementById('detailsModalSubtitle');
+      if (subEl) {
+        subEl.style.display = 'block';
+        subEl.innerHTML = `${typeLabel} <span class="details-sub-muted">scheduled with</span> ${providerLabel}<span class="details-sub-when">${escapeHtml(when)} · ${escapeHtml(p.timezone || 'America/New_York')}</span>`;
+      }
       document.getElementById('modalContent').innerHTML = `
         <div style=\"display:grid;grid-template-columns:1fr 1fr;gap:12px;\">
           <div>
@@ -1300,8 +1839,8 @@
             <div><strong>Status:</strong> ${statusBadge(p.status)}</div>
             <div><strong>EHR Sync:</strong> ${ehrSyncBadge(p.ehr_sync_status)}${p.ehr_sync_last_error ? ` <span style="color:#b91c1c;font-size:11px;">(${escapeHtml(String(p.ehr_sync_last_error).slice(0, 80))})</span>` : ''}</div>
             <div><strong>Type:</strong> ${p.appointment_type}</div>
-            <div><strong>Provider:</strong> ${p.provider || 'Team'}</div>
-            <div><strong>When:</strong> ${when} (${p.timezone || 'America/New_York'})</div>
+            <div><strong>Clinician / provider:</strong> ${p.provider || 'Team'}</div>
+            <div><strong>When:</strong> ${escapeHtml(when)} (${escapeHtml(p.timezone || 'America/New_York')})</div>
           </div>
           <div>
             <div><strong>Client:</strong> ${patientName}</div>
@@ -1311,11 +1850,16 @@
           </div>
         </div>
         <div style=\"margin-top:8px;\">${buffers}</div>
-        ${p.notes ? `<div style=\"margin-top:6px;color:#6b7280\"><strong>Notes:</strong> ${showPHI ? p.notes : '•••'}</div>` : ''}
+        ${p.notes ? `<div style=\"margin-top:6px;color:#6b7280\"><strong>Notes:</strong> ${canShowPhi ? p.notes : '•••'}</div>` : ''}
         ${link}
       `;
     }
     function closeModal() {
+      const sub = document.getElementById('detailsModalSubtitle');
+      if (sub) {
+        sub.innerHTML = '';
+        sub.style.display = 'none';
+      }
       document.getElementById('detailsModal').style.display = 'none';
     }
 
@@ -1347,7 +1891,7 @@
 
       const calendarEl = document.getElementById('calendar');
       const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
+        initialView: 'listWeek',
         customButtons: {
           goToday: {
             text: 'today',
@@ -1355,12 +1899,12 @@
               // Navigate to today's date in the calendar UI. Do not lock backend to
               // an exact date filter, otherwise week/day navigation can appear empty.
               if (dateInput) dateInput.value = '';
+              scrollPinnedNextRefresh = true;
               calendar.today();
-              refresh();
             }
           }
         },
-        headerToolbar: { left: 'prev,next goToday', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek' },
+        headerToolbar: { left: 'prev,next goToday', center: 'title', right: 'listWeek,dayGridMonth,timeGridWeek,timeGridDay' },
         datesSet: function () { refresh(); },
         eventClick: function (info) {
           const p = info.event.extendedProps;
@@ -1401,12 +1945,22 @@
           end = lastOfMonth(currentYear, now.getMonth() + 2);
         }
         const appts = await fetchAppointments(start, end);
+        renderTodayPinned(appts);
         const events = toCalendarEvents(appts);
         const blocks = await fetchAvailabilityBlocks(start, end);
         const avbEvents = toAvailabilityEvents(blocks);
+        const visibleEvents = events.filter(ev => isVisibleByLegendStatus(statusKeyFromEvent(ev)));
+        const visibleAvailabilityEvents = avbEvents.filter(ev => isVisibleByLegendStatus(statusKeyFromEvent(ev)));
         calendar.removeAllEvents();
-        calendar.addEventSource(events);
-        calendar.addEventSource(avbEvents);
+        calendar.addEventSource(visibleEvents);
+        calendar.addEventSource(visibleAvailabilityEvents);
+        if (scrollPinnedNextRefresh) {
+          scrollPinnedNextRefresh = false;
+          const wrap = document.getElementById('todayPinnedWrap');
+          if (wrap && wrap.style.display !== 'none') {
+            requestAnimationFrame(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+          }
+        }
       }
       window.calendarRefresh = refresh;
 
@@ -1415,6 +1969,20 @@
       document.getElementById('statusFilter').addEventListener('change', refresh);
       document.getElementById('dateFilter').addEventListener('change', refresh);
       document.getElementById('providerFilter').addEventListener('keydown', (e) => { if (e.key === 'Enter') refresh(); });
+      document.querySelectorAll('.legend-filter').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = String(btn.getAttribute('data-status-key') || '').toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(legendStatusVisibility, key)) return;
+          legendStatusVisibility[key] = !legendStatusVisibility[key];
+          updateLegendChipsUi();
+          refresh();
+        });
+      });
+      const todayPinnedToggle = document.getElementById('todayPinnedToggle');
+      if (todayPinnedToggle) {
+        todayPinnedToggle.addEventListener('click', () => setTodayPinnedCollapsed(!todayPinnedCollapsed));
+      }
+      updateLegendChipsUi();
 
       // Patient search for create appointment
       let searchTimeout = null;

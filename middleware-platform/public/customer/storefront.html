@@ -81,6 +81,7 @@
 
     function resolveMerchantIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
+      if (params.get('provider_id')) return params.get('provider_id');
       if (params.get('merchant_id')) return params.get('merchant_id');
       return null; // will use subdomain/default on API side
     }
@@ -88,8 +89,8 @@
     async function loadProducts() {
       const merchantId = resolveMerchantIdFromUrl();
       const url = merchantId
-        ? `${API_BASE}/api/public/products?merchant_id=${encodeURIComponent(merchantId)}`
-        : `${API_BASE}/api/public/products`;
+        ? `${API_BASE}/api/public/prescriptions?provider_id=${encodeURIComponent(merchantId)}`
+        : `${API_BASE}/api/public/prescriptions`;
       const res = await fetch(url);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -104,7 +105,7 @@
         wrap.textContent = data.message || 'Failed to load products';
         return;
       }
-      const products = data.products || [];
+      const products = data.prescriptions || data.products || [];
       document.getElementById('storeSubtitle').textContent = `Products · ${products.length} items`;
       if (products.length === 0) {
         wrap.textContent = 'No products available.';
@@ -131,7 +132,7 @@
       const email = prompt('Enter your email for checkout:');
       if (!email) return;
       try {
-        const body = { email, product_id: productId };
+        const body = { email, prescription_id: productId };
         const res = await fetch(`${API_BASE}/api/public/checkout/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

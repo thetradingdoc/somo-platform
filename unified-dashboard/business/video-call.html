@@ -52,6 +52,41 @@
     .status { margin-top: 12px; padding: 12px; background: #f0fdf4; border-radius: 8px; color: #166534; font-size: 14px; }
     .status.error { background: #fef2f2; color: #991b1b; }
   .status.connecting { background: #fefce8; color: #854d0e; }
+  .video-page-title {
+    margin-bottom: 8px;
+  }
+  .video-workspace {
+    position: relative;
+    width: 100%;
+  }
+  .workspace-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 0 12px;
+    flex-wrap: wrap;
+  }
+  .workspace-toolbar-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .workspace-chip {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .workspace-chip.active {
+    border-color: #2563eb;
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
 
   /* AI assistant HUD overlay (inspired by smart glasses UI) */
   .assistant-overlay {
@@ -310,7 +345,23 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    position: fixed;
+    right: 16px;
+    top: 78px;
+    height: calc(100vh - 110px);
+    z-index: 1206;
+    transform: translateX(112%);
+    transition: transform 0.22s ease;
   }
+  .telehealth-right-panel.open { transform: translateX(0); }
+  .telehealth-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.55);
+    z-index: 1205;
+    display: none;
+  }
+  .telehealth-panel-backdrop.open { display: block; }
   .telehealth-right-panel-header {
     padding: 10px 12px;
     background: rgba(15, 23, 42, 0.95);
@@ -405,11 +456,16 @@
     .main-content {
       margin-left: 0;
       padding: 16px;
+      padding-top: 76px;
+    }
+    .video-page-title {
+      padding-left: 56px;
+      line-height: 1.1;
     }
     .video-container {
       aspect-ratio: auto;
       max-height: none;
-      height: 60vh;
+      height: 68vh;
     }
     .room-input {
       width: 100%;
@@ -418,6 +474,50 @@
     .controls {
       justify-content: space-between;
     }
+    .workspace-toolbar {
+      margin-top: 6px;
+    }
+    .transcript-panel {
+      position: fixed;
+      left: 8px;
+      right: 8px;
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      top: 80px;
+      bottom: 130px;
+      z-index: 1206;
+      margin-left: 0;
+      transform: translateY(120%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .transcript-panel.open-mobile {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .transcript-panel.collapsed {
+      margin-left: 0;
+      width: auto;
+      min-width: 0;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .telehealth-right-panel {
+      left: 8px;
+      right: 8px;
+      top: auto;
+      bottom: 88px;
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      height: 62vh;
+      border-radius: 14px;
+      transform: translateY(120%);
+    }
+    .telehealth-right-panel.open { transform: translateY(0); }
   }
   </style>
 </head>
@@ -442,7 +542,7 @@
     </aside>
 
     <main class="main-content">
-      <h1 style="margin-bottom: 8px;">Video Call</h1>
+      <h1 class="video-page-title">Video Call</h1>
       <p style="color: #64748b; margin-bottom: 8px;">Start or join a telehealth video room.</p>
       <p id="roomTip" style="color: #0f766e; font-size: 14px; margin-bottom: 16px; padding: 10px 12px; background: #ecfdf5; border-radius: 8px; border-left: 4px solid #0d9488;">
         <strong>To see the patient:</strong> open <strong>Calendar</strong> → click the appointment → <strong>Join</strong>. The room (e.g. appt-xxx) will be set automatically so you're in the same room as the patient.
@@ -458,6 +558,15 @@
       </div>
 
       <div id="videoSection" style="display: none;">
+        <div class="video-workspace">
+          <div class="workspace-toolbar">
+            <div id="connectionStatus" class="connection-status" style="font-size:14px;color:#94a3b8;"></div>
+            <div class="workspace-toolbar-actions">
+              <button type="button" id="toggleTranscriptDockBtn" class="workspace-chip">Transcript</button>
+              <button type="button" id="toggleClinicalPanelBtn" class="workspace-chip">Clinical panel</button>
+              <div id="sseStatusBadge" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:6px 10px;border-radius:999px;background:#166534;color:#dcfce7;" title="Real-time updates">● Live</div>
+            </div>
+          </div>
         <div class="transcript-panel-wrap" style="display:flex;gap:16px;">
           <aside id="caseReportPanel" class="case-report-panel" aria-label="Case report" style="display:none;">
             <div class="case-report-panel-header">Case Report</div>
@@ -465,7 +574,7 @@
               <div class="case-report-empty">Loading…</div>
             </div>
           </aside>
-          <aside id="transcriptPanel" class="transcript-panel" aria-label="Live transcript">
+          <aside id="transcriptPanel" class="transcript-panel collapsed" aria-label="Live transcript">
             <div class="transcript-panel-header">
               <span class="transcript-panel-title">Transcript</span>
               <button type="button" id="transcriptToggleBtn" class="transcript-toggle-btn" title="Collapse (T)">⟨</button>
@@ -531,8 +640,6 @@
             </div>
           </div>
         </div>
-        <div class="connection-status" id="connectionStatus" style="margin-bottom:12px;font-size:14px;color:#94a3b8;"></div>
-        <div id="sseStatusBadge" style="display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;padding:4px 10px;border-radius:999px;background:#166534;color:#dcfce7;" title="Real-time updates">● Live</div>
         <div class="controls">
           <button id="toggleVideoBtn" class="btn btn-primary">Stop Video</button>
           <button id="toggleMicBtn" class="btn btn-primary">Mute</button>
@@ -584,6 +691,8 @@
               </div>
             </div>
           </aside>
+        </div>
+        <div id="telehealthPanelBackdrop" class="telehealth-panel-backdrop" aria-hidden="true"></div>
         </div>
       </div>
 
@@ -651,6 +760,38 @@
     let transcriptLines = [];
     let transcriptPauseAutoscroll = false;
 
+    function isMobileViewport() {
+      return window.innerWidth <= 768;
+    }
+
+    function setClinicalPanelOpen(open) {
+      const panel = document.getElementById('telehealthRightPanel');
+      const backdrop = document.getElementById('telehealthPanelBackdrop');
+      const btn = document.getElementById('toggleClinicalPanelBtn');
+      if (!panel) return;
+      panel.classList.toggle('open', !!open);
+      if (backdrop) backdrop.classList.toggle('open', !!open);
+      if (btn) btn.classList.toggle('active', !!open);
+      if (backdrop) backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+
+    function setTranscriptOpen(open) {
+      const panel = document.getElementById('transcriptPanel');
+      const toggleBtn = document.getElementById('transcriptToggleBtn');
+      const dockBtn = document.getElementById('toggleTranscriptDockBtn');
+      if (!panel) return;
+      if (isMobileViewport()) {
+        panel.classList.toggle('open-mobile', !!open);
+      } else {
+        panel.classList.toggle('collapsed', !open);
+      }
+      if (toggleBtn) {
+        toggleBtn.textContent = open ? '⟨' : '⟩';
+        toggleBtn.title = open ? 'Collapse (T)' : 'Expand (T)';
+      }
+      if (dockBtn) dockBtn.classList.toggle('active', !!open);
+    }
+
     function formatTs(ts) {
       if (!ts) return '--:--';
       try {
@@ -661,16 +802,39 @@
 
     function appendTranscriptLine(item) {
       transcriptLines.push(item);
+      renderTranscriptList();
+    }
+
+    function shouldUseTranslatedTranscript() {
+      const toggle = document.getElementById('transcriptTranslateToggle');
+      return !!(toggle && toggle.checked);
+    }
+
+    function lineToHtml(item) {
+      const speaker = item.speaker || 'unknown';
+      const showTranslated = shouldUseTranslatedTranscript() && item.text_translated;
+      const text = showTranslated ? item.text_translated : (item.text || '');
+      const langBadge = item.detected_language ? `<span style="font-size:10px;color:#64748b;margin-left:6px;">${String(item.detected_language).toUpperCase()}</span>` : '';
+      return '<span class="transcript-ts">' + formatTs(item.ts) + '</span><span class="transcript-speaker">' + speaker + langBadge + '</span><span class="transcript-text">' + text.replace(/</g, '&lt;') + '</span>';
+    }
+
+    function renderTranscriptList() {
       const list = document.getElementById('transcriptList');
       if (!list) return;
-      const li = document.createElement('li');
-      li.className = 'transcript-line';
-      li.setAttribute('data-ts', item.ts || '');
-      li.setAttribute('data-speaker', item.speaker || 'unknown');
-      li.id = 'transcript-' + (item.id || transcriptLines.length);
-      li.innerHTML = '<span class="transcript-ts">' + formatTs(item.ts) + '</span><span class="transcript-speaker">' + (item.speaker || 'unknown') + '</span><span class="transcript-text">' + (item.text || '').replace(/</g, '&lt;') + '</span>';
-      list.appendChild(li);
-      if (!transcriptPauseAutoscroll) li.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const prevScrollBottom = list.scrollHeight - list.scrollTop - list.clientHeight;
+      list.innerHTML = '';
+      transcriptLines.forEach((item, idx) => {
+        const li = document.createElement('li');
+        li.className = 'transcript-line';
+        li.setAttribute('data-ts', item.ts || '');
+        li.setAttribute('data-speaker', item.speaker || 'unknown');
+        li.id = 'transcript-' + (item.id || idx + 1);
+        li.innerHTML = lineToHtml(item);
+        list.appendChild(li);
+      });
+      if (!transcriptPauseAutoscroll && prevScrollBottom < 80 && list.lastChild) {
+        list.lastChild.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
 
     function loadTranscriptFromSession(transcript) {
@@ -679,7 +843,9 @@
         id: 't-' + i,
         ts: t.timestamp || t.ts,
         speaker: t.speaker || 'unknown',
-        text: typeof t === 'string' ? t : (t.text || t.content || '')
+        text: typeof t === 'string' ? t : (t.text || t.content || ''),
+        text_translated: typeof t === 'string' ? null : (t.text_translated || null),
+        detected_language: typeof t === 'string' ? null : (t.detected_language || null)
       }));
     }
 
@@ -717,9 +883,10 @@
       const copyBtn = document.getElementById('transcriptCopyBtn');
       const exportBtn = document.getElementById('transcriptExportBtn');
       if (toggleBtn) toggleBtn.addEventListener('click', () => {
-        panel.classList.toggle('collapsed');
-        toggleBtn.textContent = panel.classList.contains('collapsed') ? '⟩' : '⟨';
-        toggleBtn.title = panel.classList.contains('collapsed') ? 'Expand (T)' : 'Collapse (T)';
+        const openNow = isMobileViewport()
+          ? panel.classList.contains('open-mobile')
+          : !panel.classList.contains('collapsed');
+        setTranscriptOpen(!openNow);
       });
       if (jumpBtn) jumpBtn.addEventListener('click', transcriptJumpToLatest);
       if (pauseBtn) pauseBtn.addEventListener('click', () => {
@@ -731,16 +898,79 @@
       const translateToggle = document.getElementById('transcriptTranslateToggle');
       if (translateToggle) {
         translateToggle.checked = localStorage.getItem('videoConsultTranslate') === 'true';
-        translateToggle.addEventListener('change', () => localStorage.setItem('videoConsultTranslate', translateToggle.checked));
+        translateToggle.addEventListener('change', async () => {
+          localStorage.setItem('videoConsultTranslate', translateToggle.checked);
+          renderTranscriptList();
+          if (!currentRoomName) return;
+          try {
+            await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/transcript-translation`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                enabled: !!translateToggle.checked,
+                target_language: 'en'
+              })
+            });
+          } catch (_) {}
+        });
       }
       document.addEventListener('keydown', (e) => {
         if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey && panel) {
-          panel.classList.toggle('collapsed');
-          if (toggleBtn) toggleBtn.textContent = panel.classList.contains('collapsed') ? '⟩' : '⟨';
+          const openNow = isMobileViewport()
+            ? panel.classList.contains('open-mobile')
+            : !panel.classList.contains('collapsed');
+          setTranscriptOpen(!openNow);
         }
       });
     }
     initTranscriptPanel();
+
+    function initVideoWorkspaceControls() {
+      const transcriptBtn = document.getElementById('toggleTranscriptDockBtn');
+      const clinicalBtn = document.getElementById('toggleClinicalPanelBtn');
+      const backdrop = document.getElementById('telehealthPanelBackdrop');
+
+      if (transcriptBtn) {
+        transcriptBtn.addEventListener('click', () => {
+          const panel = document.getElementById('transcriptPanel');
+          if (!panel) return;
+          const openNow = isMobileViewport()
+            ? panel.classList.contains('open-mobile')
+            : !panel.classList.contains('collapsed');
+          setTranscriptOpen(!openNow);
+        });
+      }
+      if (clinicalBtn) {
+        clinicalBtn.addEventListener('click', () => {
+          const panel = document.getElementById('telehealthRightPanel');
+          if (!panel) return;
+          setClinicalPanelOpen(!panel.classList.contains('open'));
+        });
+      }
+      if (backdrop) {
+        backdrop.addEventListener('click', () => {
+          setClinicalPanelOpen(false);
+          setTranscriptOpen(false);
+        });
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          setClinicalPanelOpen(false);
+          setTranscriptOpen(false);
+        }
+      });
+      window.addEventListener('resize', () => {
+        const panel = document.getElementById('transcriptPanel');
+        if (!panel) return;
+        if (isMobileViewport()) {
+          panel.classList.remove('collapsed');
+        } else {
+          panel.classList.remove('open-mobile');
+        }
+      });
+    }
+    initVideoWorkspaceControls();
 
     function initTelehealthRightPanel() {
       const panel = document.getElementById('telehealthRightPanel');
@@ -983,6 +1213,15 @@
       if (statusBadge) statusBadge.textContent = 'Listening';
 
       const sseUrl = `${API_BASE}/api/video-consult/sse/${encodeURIComponent(currentRoomName)}`;
+      const translateEnabled = localStorage.getItem('videoConsultTranslate') === 'true';
+      try {
+        await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/transcript-translation`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: translateEnabled, target_language: 'en' })
+        });
+      } catch (_) {}
 
       function connectSse() {
         if (sseAbortController) sseAbortController.abort();
@@ -1051,10 +1290,24 @@
           const codesEl = document.getElementById('assistantCodes');
           const yoloEl = document.getElementById('assistantYolo');
           const updatedEl = document.getElementById('assistantUpdatedAt');
-          if (summaryEl) summaryEl.textContent = view.summary || '';
+          if (summaryEl) {
+            const cc = view.chief_complaint ? `Chief complaint: ${view.chief_complaint}` : '';
+            const sf = Array.isArray(view.safety_flags) && view.safety_flags.length
+              ? `Safety: ${view.safety_flags.slice(0, 3).join(', ')}`
+              : '';
+            summaryEl.textContent = [cc, sf, view.summary || ''].filter(Boolean).join(' | ');
+          }
           if (problemsEl) {
             problemsEl.innerHTML = '';
             (view.key_problems || []).slice(0, 4).forEach((p) => { const li = document.createElement('li'); li.textContent = '• ' + p; problemsEl.appendChild(li); });
+            (view.doc_citations || []).slice(0, 2).forEach((d) => {
+              const li = document.createElement('li');
+              const docId = d.doc_id || 'doc';
+              const title = d.doc_title || 'document';
+              const reason = d.reason ? ` (${d.reason})` : '';
+              li.textContent = `• Source ${docId}: ${title}${reason}`;
+              problemsEl.appendChild(li);
+            });
           }
           if (followupsEl) {
             followupsEl.innerHTML = '';
@@ -1211,6 +1464,8 @@
           attachExistingRemoteVideos(room);
           startSseAndAssistant();
           loadCaseReport(roomName);
+          setClinicalPanelOpen(false);
+          setTranscriptOpen(false);
         });
 
         room.on(RoomEvent.Disconnected, () => {
@@ -1221,6 +1476,8 @@
           document.getElementById('videoSection').style.display = 'none';
           document.getElementById('joinBtn').disabled = false;
           stopAssistantPolling();
+          setClinicalPanelOpen(false);
+          setTranscriptOpen(false);
         });
 
         room.on(RoomEvent.ParticipantConnected, (participant) => {

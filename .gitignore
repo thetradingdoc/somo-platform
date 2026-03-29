@@ -61,6 +61,14 @@ tmp/
 temp/
 *.tmp
 
+# Middleware artifacts (local runs)
+middleware-platform/test-results/
+middleware-platform/uploads/
+
+# Local scratch (do not commit)
+/step0.md
+/step1b
+
 # Railway/Netlify
 .railway/
 .netlify/

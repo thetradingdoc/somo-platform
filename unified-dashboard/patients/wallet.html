@@ -81,7 +81,19 @@
         }
 
         .nav-icon {
-            font-size: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+        }
+        .nav-icon svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
         .sidebar-footer {
@@ -128,12 +140,27 @@
         }
 
         .logout-btn {
-            background: none;
-            border: none;
-            font-size: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border: 1px solid var(--gray-200);
+            background: #ffffff;
+            color: var(--gray-600);
             cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+        .logout-btn:hover {
+            border-color: #93c5fd;
+            color: #1e40af;
+            background: #eff6ff;
+        }
+        .logout-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
         }
 
         .main-content {
@@ -324,19 +351,19 @@
                 </div>
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
-                    <span class="nav-icon">🏠</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span>
                     <span>Dashboard</span>
                 </a>
                 <a href="wallet.html" class="nav-item active">
-                    <span class="nav-icon">💳</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span>
                     <span>Wallet</span>
                 </a>
                 <a href="appointments.html" class="nav-item">
-                    <span class="nav-icon">📅</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
                     <span>Appointments</span>
                 </a>
                 <a href="my-records.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>
                     <span>My Records</span>
                 </a>
             </nav>
@@ -347,7 +374,7 @@
                         <div class="user-name" id="userName">Patient</div>
                         <div class="user-role">Patient Account</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
+                    <button class="logout-btn" onclick="logout()" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path></svg></button>
                 </div>
             </div>
         </aside>
@@ -519,10 +546,12 @@
                         mount.innerHTML = pending.slice(0, 5).map(a => {
                             const when = `${a.date || ''} ${a.time || ''}`.trim();
                             const amt = fmtMoney(a.amount_due, a.currency || 'USD');
+                            const prov = a.provider ? `<div class="receipt-meta" style="font-weight:600;color:var(--gray-800);">${String(a.provider).replace(/</g, '&lt;')}</div>` : '';
                             return `
                               <div class="receipt-row" style="align-items:center;">
                                 <div style="min-width:0;">
                                   <div style="font-weight:900;color:var(--gray-900);">${(a.appointment_type || 'Appointment')}</div>
+                                  ${prov}
                                   <div class="receipt-meta">${when || '—'}</div>
                                 </div>
                                 <div style="display:flex;align-items:center;gap:10px;">
@@ -573,7 +602,7 @@
                 if (!data.success) throw new Error(data.error || 'Failed to load');
                 const receipts = Array.isArray(data.receipts) ? data.receipts : [];
                 if (!receipts.length) {
-                    el.innerHTML = `<div style="padding:12px;border:1px dashed #e5e7eb;border-radius:12px;color:var(--gray-600);font-size:14px;">No receipts yet.</div>`;
+                    el.innerHTML = `<div style="padding:12px;border:1px dashed #e5e7eb;border-radius:12px;color:var(--gray-600);font-size:14px;">No receipts or invoices yet.</div>`;
                     return;
                 }
                 el.innerHTML = `
@@ -581,15 +610,17 @@
                     ${receipts.map(r => {
                         const when = (r.issued_at || r.created_at || '').toString();
                         const status = (r.status || 'issued').toString();
+                        const ref = (r.invoice_number || r.id || '').toString().replace(/</g, '&lt;');
+                        const kind = (r.source === 'invoice') ? 'Invoice' : 'Receipt';
                 return `
                           <div class="receipt-row">
                             <div style="min-width:0;">
                               <div class="receipt-amt">${fmtMoney(r.amount, r.currency)}</div>
+                              <div class="receipt-meta">${kind}${ref ? ` · ${ref}` : ''}</div>
                               <div class="receipt-meta">${when}</div>
                             </div>
                             <div style="text-align:right;">
                               <div style="font-size:12px;color:var(--gray-700);text-transform:capitalize;">${status}</div>
-                              <div class="receipt-meta">${r.id}</div>
                     </div>
                 </div>
                 `;

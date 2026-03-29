@@ -147,15 +147,28 @@ class PaymentService {
             };
         }
 
-        // ATOMIC: Update token to 'used' only if 'verified' (Task 53) or 'pending' (legacy)
-        let updateResult = db.updatePaymentTokenAtomic(token, 'verified', 'used');
-        if (!updateResult.success) updateResult = db.updatePaymentTokenAtomic(token, 'pending', 'used');
-        
-        if (!updateResult.success) {
+        // ATOMIC: Update token to 'used' only after identity verification when verification_code exists.
+        const requiresVerification = !!tokenRecord.verification_code;
+        let updateResult = null;
+
+        if (requiresVerification) {
+            updateResult = db.updatePaymentTokenAtomic(token, 'verified', 'used');
+        } else {
+            // Legacy flow: allow redemption from pending tokens.
+            updateResult = db.updatePaymentTokenAtomic(token, 'pending', 'used');
+            if (!updateResult.success) {
+                updateResult = db.updatePaymentTokenAtomic(token, 'verified', 'used');
+            }
+        }
+
+        if (!updateResult?.success) {
             // Token was already used or in wrong state
             return {
                 success: false,
-                error: updateResult.error || 'Payment link already used or invalid state'
+                error: requiresVerification
+                    ? (updateResult?.error || 'Identity verification required')
+                    : (updateResult?.error || 'Payment link already used or invalid state'),
+                error_code: requiresVerification ? 'IDENTITY_NOT_VERIFIED' : undefined
             };
         }
 

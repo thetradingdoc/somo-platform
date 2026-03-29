@@ -17,8 +17,10 @@ async function extractTenantFromRequest(req) {
   const tenant = {
     clinic_id: null,
     merchant_id: null,
+    provider_id: null,
     clinic: null,
     merchant: null,
+    provider: null,
     method: null,
     validated: false
   };
@@ -37,12 +39,15 @@ async function extractTenantFromRequest(req) {
   }
 
   // Method 2: Explicit merchant_id in request body/query/params
-  const merchantId = req.body?.merchant_id || req.query?.merchant_id || req.params?.merchant_id;
+  const merchantId = req.body?.provider_id || req.query?.provider_id || req.params?.provider_id ||
+    req.body?.merchant_id || req.query?.merchant_id || req.params?.merchant_id;
   if (merchantId) {
     const merchant = db.getMerchant(merchantId);
     if (merchant) {
       tenant.merchant_id = merchantId;
+      tenant.provider_id = merchantId;
       tenant.merchant = merchant;
+      tenant.provider = merchant;
       tenant.method = constants.TENANTS.RESOLUTION_METHODS.MERCHANT_ID;
       
       // Try to find associated clinic
@@ -78,7 +83,9 @@ async function extractTenantFromRequest(req) {
       const merchant = db.getMerchantBySubdomain(subdomain);
       if (merchant) {
         tenant.merchant_id = merchant.id;
+        tenant.provider_id = merchant.id;
         tenant.merchant = merchant;
+        tenant.provider = merchant;
         tenant.method = constants.TENANTS.RESOLUTION_METHODS.SUBDOMAIN;
         tenant.validated = true;
         return tenant;
@@ -108,7 +115,9 @@ async function extractTenantFromRequest(req) {
         const merchant = db.getMerchantBySubdomain(originSubdomain);
         if (merchant) {
           tenant.merchant_id = merchant.id;
+          tenant.provider_id = merchant.id;
           tenant.merchant = merchant;
+          tenant.provider = merchant;
           tenant.method = constants.TENANTS.RESOLUTION_METHODS.SUBDOMAIN;
           tenant.validated = true;
           return tenant;
@@ -146,7 +155,9 @@ async function extractTenantFromRequest(req) {
         const merchant = db.getMerchant(customer.merchant_id);
         if (merchant) {
           tenant.merchant_id = merchant.id;
+          tenant.provider_id = merchant.id;
           tenant.merchant = merchant;
+          tenant.provider = merchant;
           tenant.method = 'session';
           
           // Try to find associated clinic
@@ -224,7 +235,9 @@ function tenantContext(options = {}) {
         
         if (fallbackMerchant) {
           tenant.merchant_id = fallbackMerchant.id;
+          tenant.provider_id = fallbackMerchant.id;
           tenant.merchant = fallbackMerchant;
+          tenant.provider = fallbackMerchant;
           tenant.method = 'fallback';
           tenant.validated = true;
           console.warn(`⚠️  Using fallback tenant: ${defaultSubdomain} (backward compatibility)`);
@@ -239,10 +252,11 @@ function tenantContext(options = {}) {
         return res.status(400).json({
           success: false,
           error: 'Tenant not found',
-          message: 'Could not determine tenant from request. Please provide clinic_id, merchant_id, subdomain, or phone number.',
+          message: 'Could not determine tenant from request. Please provide clinic_id, provider_id/merchant_id, subdomain, or phone number.',
           details: {
             provided: {
               clinic_id: req.body?.clinic_id || req.query?.clinic_id || req.params?.clinic_id || null,
+              provider_id: req.body?.provider_id || req.query?.provider_id || req.params?.provider_id || null,
               merchant_id: req.body?.merchant_id || req.query?.merchant_id || req.params?.merchant_id || null,
               subdomain: extractSubdomain(req.headers.host),
               phone_number: req.body?.To || req.body?.to_number || req.body?.phone_number || null
@@ -263,8 +277,10 @@ function tenantContext(options = {}) {
       req.tenant = {
         clinic_id: null,
         merchant_id: null,
+        provider_id: null,
         clinic: null,
         merchant: null,
+        provider: null,
         method: null,
         validated: false
       };

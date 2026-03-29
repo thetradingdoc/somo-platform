@@ -12,7 +12,6 @@ The unified dashboard is the frontend interface for DocLittle, providing web-bas
 ### Main Pages
 - **landing.html** - Public landing page
 - **login.html** - User authentication
-- **index.html** - Dashboard entry point
 
 ### Business Dashboard (`business/`)
 Provider-facing dashboard pages:

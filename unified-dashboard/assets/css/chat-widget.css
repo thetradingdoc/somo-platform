@@ -382,6 +382,10 @@
 
 /* Mobile */
 @media (max-width: 768px) {
+  .chat-widget-button {
+    bottom: 92px;
+  }
+
   .chat-widget-window {
     width: 100vw;
     height: 100vh;

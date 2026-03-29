@@ -16,10 +16,19 @@ import * as SecureStore from 'expo-secure-store';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { API_BASE_URL } from '@/config';
+import { API_BASE_URL, DEMO_PATIENT_EMAIL, getApiReachabilityIssue } from '@/config';
 
 const API_BASE = API_BASE_URL;
+const API_REACHABILITY = getApiReachabilityIssue();
 const SESSION_KEY = 'patient_session_id';
+
+function formatFetchError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : 'Network error';
+  if (msg === 'Network request failed') {
+    return `${msg}. Set EXPO_PUBLIC_API_BASE_URL in patient-app/.env to your ngrok URL (https://…ngrok-free.app) or http://<Mac-LAN-IP>:4000, then restart Expo with --clear.`;
+  }
+  return msg;
+}
 
 // ngrok free tier returns HTML interstitial unless this header is sent
 const API_HEADERS: HeadersInit = {
@@ -27,13 +36,17 @@ const API_HEADERS: HeadersInit = {
   'ngrok-skip-browser-warning': 'true',
 };
 const EMAIL_KEY = 'patient_session_email';
+/** Persisted so we clear stale sessions when switching EXPO_PUBLIC_API_BASE_URL (local vs production). */
+const API_BASE_KEY = 'patient_api_base_url';
 
 type Appointment = {
   id: string;
   patient_name: string;
   appointment_type: string;
+  provider?: string | null;
   date: string;
   time: string;
+  timezone?: string | null;
   status: string;
   datetime_display?: string;
   video_room?: string;
@@ -45,9 +58,21 @@ const { width } = Dimensions.get('window');
 const CARD_MAX_WIDTH = 400;
 const HORIZONTAL_PADDING = Math.max(16, (width - Math.min(width, CARD_MAX_WIDTH)) / 2);
 
+async function clearStoredPatientSession() {
+  await SecureStore.deleteItemAsync(SESSION_KEY);
+  await SecureStore.deleteItemAsync(EMAIL_KEY);
+  try {
+    await SecureStore.deleteItemAsync(API_BASE_KEY);
+  } catch {
+    /* optional key */
+  }
+}
+
 export default function HomeScreen() {
   const [step, setStep] = useState<Step>('email');
-  const [email, setEmail] = useState('patient@doclittle.com');
+  const [email, setEmail] = useState(
+    DEMO_PATIENT_EMAIL || 'doctorjay254@gmail.com'
+  );
   const [code, setCode] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -60,6 +85,15 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       try {
+        const storedBase = await SecureStore.getItemAsync(API_BASE_KEY);
+        if (storedBase && storedBase !== API_BASE) {
+          await clearStoredPatientSession();
+          setError(
+            'This app was signed in against a different API URL. Sign in again after changing EXPO_PUBLIC_API_BASE_URL.'
+          );
+          setRestoring(false);
+          return;
+        }
         const [sid, storedEmail] = await Promise.all([
           SecureStore.getItemAsync(SESSION_KEY),
           SecureStore.getItemAsync(EMAIL_KEY),
@@ -80,6 +114,10 @@ export default function HomeScreen() {
   const loadAppointments = useCallback(async (sid?: string) => {
     const effectiveSessionId = sid ?? sessionId;
     if (!effectiveSessionId) return;
+    if (API_REACHABILITY) {
+      setError(API_REACHABILITY);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -88,12 +126,28 @@ export default function HomeScreen() {
       });
       const json = await res.json();
       if (!json.success) {
-        setError(json.error || 'Failed to load appointments');
+        const msg = String(json.error || '');
+        const authFail =
+          res.status === 401 ||
+          /invalid or expired session|invalid session|session expired|session id required|x-session-id required/i.test(
+            msg
+          );
+        if (authFail) {
+          await clearStoredPatientSession();
+          setSessionId(null);
+          setAppointments([]);
+          setStep('email');
+          setError(
+            `${msg} — Sign in again. Each API server has its own sessions; switching hosts (e.g. ngrok → api.doclittle.site) requires a new login.`
+          );
+          return;
+        }
+        setError(msg || 'Failed to load appointments');
         return;
       }
       setAppointments(json.appointments || []);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Network error');
+      setError(formatFetchError(e));
     } finally {
       setLoading(false);
     }
@@ -107,6 +161,10 @@ export default function HomeScreen() {
   }, [restoring, step, sessionId, loadAppointments]);
 
   async function sendCode() {
+    if (API_REACHABILITY) {
+      setError(API_REACHABILITY);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -124,13 +182,17 @@ export default function HomeScreen() {
       if (json.session_id) setSessionId(json.session_id);
       setStep('code');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Network error');
+      setError(formatFetchError(e));
     } finally {
       setLoading(false);
     }
   }
 
   async function confirmCode() {
+    if (API_REACHABILITY) {
+      setError(API_REACHABILITY);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -148,10 +210,11 @@ export default function HomeScreen() {
       setSessionId(sid);
       await SecureStore.setItemAsync(SESSION_KEY, sid);
       await SecureStore.setItemAsync(EMAIL_KEY, email.trim());
+      await SecureStore.setItemAsync(API_BASE_KEY, API_BASE);
       await loadAppointments(sid);
       setStep('appointments');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Network error');
+      setError(formatFetchError(e));
     } finally {
       setLoading(false);
     }
@@ -176,8 +239,7 @@ export default function HomeScreen() {
   }
 
   async function handleSignOut() {
-    await SecureStore.deleteItemAsync(SESSION_KEY);
-    await SecureStore.deleteItemAsync(EMAIL_KEY);
+    await clearStoredPatientSession();
     setSessionId(null);
     setAppointments([]);
     setStep('email');
@@ -214,6 +276,27 @@ export default function HomeScreen() {
           </ThemedText>
           <ThemedText style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>
             Patient Portal
+          </ThemedText>
+
+          {API_REACHABILITY ? (
+            <View
+              style={{
+                marginBottom: 14,
+                padding: 12,
+                borderRadius: 12,
+                backgroundColor: '#fef3c7',
+                borderWidth: 1,
+                borderColor: '#f59e0b',
+              }}>
+              <ThemedText style={{ fontSize: 13, color: '#92400e' }}>
+                {API_REACHABILITY}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          <ThemedText style={{ fontSize: 12, opacity: 0.65, marginBottom: 8 }}>
+            Sign in with the same email stored on your visits in middleware (Jeremiah demo: the email on
+            the appointment row; pre-fill via EXPO_PUBLIC_DEMO_PATIENT_EMAIL in .env).
           </ThemedText>
 
       {step === 'email' && (
@@ -339,9 +422,22 @@ export default function HomeScreen() {
                             <ThemedText type="defaultSemiBold" lightColor="#111827" darkColor="#111827" style={{ fontSize: 16 }}>
                               {apt.appointment_type || 'Consultation'}
                             </ThemedText>
+                            {apt.provider ? (
+                              <ThemedText
+                                lightColor="#374151"
+                                darkColor="#374151"
+                                style={{ marginTop: 4, fontSize: 15, fontWeight: '600' }}>
+                                {apt.provider}
+                              </ThemedText>
+                            ) : null}
                             <ThemedText lightColor="#374151" darkColor="#374151" style={{ marginTop: 4 }}>
                               {apt.datetime_display || `${apt.date} at ${apt.time}`}
                             </ThemedText>
+                            {apt.timezone ? (
+                              <ThemedText lightColor="#6b7280" darkColor="#6b7280" style={{ marginTop: 4, fontSize: 12 }}>
+                                Times in {apt.timezone}
+                              </ThemedText>
+                            ) : null}
                             <View
                               style={{
                                 marginTop: 6,

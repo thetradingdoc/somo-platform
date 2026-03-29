@@ -10,6 +10,142 @@
 const db = require('../database');
 
 class ProviderService {
+  _toBool(value) {
+    if (value === true || value === 1) return true;
+    const v = String(value || '').toLowerCase();
+    return v === 'true' || v === '1' || v === 'yes';
+  }
+
+  isProviderCalendarConnected(providerRef) {
+    const email = typeof providerRef === 'string' ? providerRef : providerRef?.email;
+    const providerId = typeof providerRef === 'object' ? providerRef?.provider_id : null;
+    if (!email && !providerId) return false;
+    try {
+      let row = null;
+      if (providerId) {
+        row = db.db.prepare(`
+          SELECT u.google_calendar_connected, u.google_refresh_token
+          FROM provider_profiles pp
+          LEFT JOIN users u ON u.id = pp.user_id
+          WHERE pp.id = ?
+          LIMIT 1
+        `).get(providerId);
+      }
+      if (!row && email) {
+        row = db.db.prepare(`
+          SELECT google_calendar_connected, google_refresh_token
+          FROM users
+          WHERE lower(email) = lower(?)
+          LIMIT 1
+        `).get(email.trim().toLowerCase());
+      }
+      if (!row) return false;
+      return this._toBool(row.google_calendar_connected) && !!row.google_refresh_token;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  hasProviderAvailabilityBlocks(providerRef, date = null) {
+    const email = typeof providerRef === 'string' ? providerRef : providerRef?.email;
+    if (!email) return false;
+    try {
+      const blocks = this.getAvailabilityBlocks(email, date || null, date || null);
+      return Array.isArray(blocks) && blocks.some((b) => b.block_type === 'available');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  getProviderBookingTier(providerRef, lane = 'sync') {
+    const calendarConnected = this.isProviderCalendarConnected(providerRef);
+    const hasBlocks = this.hasProviderAvailabilityBlocks(providerRef);
+    if (lane !== 'sync') {
+      return { tier: 'async', calendar_connected: calendarConnected, has_availability_blocks: hasBlocks };
+    }
+    if (calendarConnected && hasBlocks) return { tier: 'A', calendar_connected: true, has_availability_blocks: true };
+    if (!calendarConnected && hasBlocks) return { tier: 'B', calendar_connected: false, has_availability_blocks: true };
+    return { tier: 'C', calendar_connected: calendarConnected, has_availability_blocks: hasBlocks };
+  }
+  /**
+   * Resolve a canonical provider profile by email.
+   * Returns null when no profile exists yet.
+   */
+  getProviderProfileByEmail(email) {
+    if (!email || typeof email !== 'string') return null;
+    return db.db.prepare(`
+      SELECT id, clinic_id, display_name, email, specialty, languages, supported_lanes, is_active, price_tier, accepts_urgent
+      FROM provider_profiles
+      WHERE lower(email) = lower(?)
+      LIMIT 1
+    `).get(email.trim().toLowerCase()) || null;
+  }
+
+  /**
+   * Ensure a canonical provider_profiles row exists for a provider email.
+   * Backfills from customers.provider_profile when available.
+   */
+  ensureProviderProfileForEmail(email, clinicId = null) {
+    if (!email || typeof email !== 'string') return null;
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = this.getProviderProfileByEmail(normalizedEmail);
+    if (existing) return existing;
+
+    const customer = db.db.prepare(`
+      SELECT id, name, email, merchant_id, provider_profile
+      FROM customers
+      WHERE lower(email) = lower(?)
+      LIMIT 1
+    `).get(normalizedEmail);
+    if (!customer) return null;
+
+    let specialty = ['PrimaryCare'];
+    try {
+      const profile = customer.provider_profile ? JSON.parse(customer.provider_profile) : null;
+      if (profile?.specialty && typeof profile.specialty === 'string') {
+        specialty = [String(profile.specialty).replace(/\s+/g, '')];
+      } else if (Array.isArray(profile?.specialty) && profile.specialty.length > 0) {
+        specialty = profile.specialty.map((s) => String(s).replace(/\s+/g, ''));
+      }
+    } catch (_) {}
+
+    // Resolve clinic from merchant when possible
+    let resolvedClinicId = clinicId || null;
+    if (!resolvedClinicId && customer.merchant_id) {
+      const clinic = db.db.prepare(`
+        SELECT clinic_id
+        FROM clinics
+        WHERE merchant_id = ?
+        ORDER BY created_at ASC
+        LIMIT 1
+      `).get(customer.merchant_id);
+      resolvedClinicId = clinic?.clinic_id || null;
+    }
+    if (!resolvedClinicId) {
+      resolvedClinicId = process.env.DEFAULT_CLINIC_ID || 'clinic-default';
+    }
+
+    const providerId = `prov_${require('crypto').randomBytes(10).toString('hex')}`;
+    const displayName = customer.name || normalizedEmail.split('@')[0];
+
+    db.db.prepare(`
+      INSERT INTO provider_profiles (
+        id, clinic_id, user_id, display_name, email, specialty, languages,
+        license_states, credentials, supported_lanes, review_capacity,
+        min_rate, price_tier, accepts_urgent, accepts_emergency_triage, is_active,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, '["en"]', '[]', '[]', '["sync","async"]', 5, 0, 2, 1, 0, 1, datetime('now'), datetime('now'))
+    `).run(
+      providerId,
+      resolvedClinicId,
+      customer.id,
+      displayName,
+      normalizedEmail,
+      JSON.stringify(specialty)
+    );
+
+    return this.getProviderProfileByEmail(normalizedEmail);
+  }
   /**
    * Get today's schedule for a provider s
    * @param {string} providerName - Provider name (defaults to all if not specified)
@@ -224,19 +360,44 @@ class ProviderService {
    */
   getProviderStatus(email) {
     if (!email || typeof email !== 'string') return null;
-    const row = db.db.prepare(`
-      SELECT is_online, availability_rules, updated_at
-      FROM provider_status
-      WHERE email = ?
-    `).get(email.trim().toLowerCase());
-    if (!row) return { is_online: false, availability_rules: null, updated_at: null };
+    const normalizedEmail = email.trim().toLowerCase();
+    const profile = this.getProviderProfileByEmail(normalizedEmail) || this.ensureProviderProfileForEmail(normalizedEmail);
+    const providerId = profile?.id || null;
+    const row = providerId
+      ? db.db.prepare(`
+        SELECT provider_id, email, is_online, availability_rules, last_seen_at, heartbeat_expires_at, updated_at
+        FROM provider_status
+        WHERE provider_id = ? OR email = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `).get(providerId, normalizedEmail)
+      : db.db.prepare(`
+        SELECT provider_id, email, is_online, availability_rules, last_seen_at, heartbeat_expires_at, updated_at
+        FROM provider_status
+        WHERE email = ?
+      `).get(normalizedEmail);
+    if (!row) {
+      return {
+        provider_id: providerId,
+        email: normalizedEmail,
+        is_online: false,
+        availability_rules: null,
+        last_seen_at: null,
+        heartbeat_expires_at: null,
+        updated_at: null
+      };
+    }
     let rules = null;
     try {
       rules = row.availability_rules ? JSON.parse(row.availability_rules) : null;
     } catch (_) {}
     return {
+      provider_id: row.provider_id || providerId || null,
+      email: row.email || normalizedEmail,
       is_online: !!row.is_online,
       availability_rules: rules,
+      last_seen_at: row.last_seen_at || null,
+      heartbeat_expires_at: row.heartbeat_expires_at || null,
       updated_at: row.updated_at
     };
   }
@@ -249,13 +410,54 @@ class ProviderService {
   setProviderOnline(email, isOnline) {
     if (!email || typeof email !== 'string') return;
     const e = email.trim().toLowerCase();
+    const profile = this.getProviderProfileByEmail(e) || this.ensureProviderProfileForEmail(e);
+    const providerId = profile?.id || null;
     db.db.prepare(`
-      INSERT INTO provider_status (email, is_online, updated_at)
-      VALUES (?, ?, datetime('now'))
+      INSERT INTO provider_status (provider_id, email, is_online, last_seen_at, heartbeat_expires_at, updated_at)
+      VALUES (?, ?, ?, datetime('now'), datetime('now', '+90 seconds'), datetime('now'))
       ON CONFLICT(email) DO UPDATE SET
+        provider_id = COALESCE(excluded.provider_id, provider_status.provider_id),
         is_online = excluded.is_online,
+        last_seen_at = excluded.last_seen_at,
+        heartbeat_expires_at = excluded.heartbeat_expires_at,
         updated_at = datetime('now')
-    `).run(e, isOnline ? 1 : 0);
+    `).run(providerId, e, isOnline ? 1 : 0);
+  }
+
+  /**
+   * Heartbeat keeps provider online; extends expiry window.
+   */
+  heartbeatProvider(email) {
+    if (!email || typeof email !== 'string') return null;
+    const e = email.trim().toLowerCase();
+    const profile = this.getProviderProfileByEmail(e) || this.ensureProviderProfileForEmail(e);
+    const providerId = profile?.id || null;
+    db.db.prepare(`
+      INSERT INTO provider_status (provider_id, email, is_online, last_seen_at, heartbeat_expires_at, updated_at)
+      VALUES (?, ?, 1, datetime('now'), datetime('now', '+90 seconds'), datetime('now'))
+      ON CONFLICT(email) DO UPDATE SET
+        provider_id = COALESCE(excluded.provider_id, provider_status.provider_id),
+        is_online = 1,
+        last_seen_at = datetime('now'),
+        heartbeat_expires_at = datetime('now', '+90 seconds'),
+        updated_at = datetime('now')
+    `).run(providerId, e);
+    return this.getProviderStatus(e);
+  }
+
+  /**
+   * Expire stale heartbeats and mark providers offline.
+   */
+  expireStaleHeartbeats() {
+    try {
+      db.db.prepare(`
+        UPDATE provider_status
+        SET is_online = 0, updated_at = datetime('now')
+        WHERE is_online = 1
+          AND heartbeat_expires_at IS NOT NULL
+          AND datetime(heartbeat_expires_at) <= datetime('now')
+      `).run();
+    } catch (_) {}
   }
 
   /**
@@ -286,9 +488,16 @@ class ProviderService {
   getAvailabilityBlocks(email, startDate = null, endDate = null) {
     if (!email || typeof email !== 'string') return [];
     const e = email.trim().toLowerCase();
-    let query = `SELECT id, provider_email, block_type, start_datetime, end_datetime, title, created_at
-      FROM provider_availability_blocks WHERE provider_email = ?`;
+    const profile = this.getProviderProfileByEmail(e) || this.ensureProviderProfileForEmail(e);
+    const providerId = profile?.id || null;
+    let query = `SELECT id, provider_id, provider_email, block_type, start_datetime, end_datetime, title, created_at
+      FROM provider_availability_blocks WHERE (provider_email = ?`;
     const params = [e];
+    if (providerId) {
+      query += ` OR provider_id = ?`;
+      params.push(providerId);
+    }
+    query += `)`;
     if (startDate) {
       query += ` AND date(end_datetime) >= date(?)`;
       params.push(startDate);
@@ -312,11 +521,13 @@ class ProviderService {
     }
     const id = block.id || `avb_${require('crypto').randomBytes(12).toString('hex')}`;
     const e = block.provider_email.trim().toLowerCase();
+    const profile = this.getProviderProfileByEmail(e) || this.ensureProviderProfileForEmail(e);
+    const providerId = profile?.id || null;
     db.db.prepare(`
-      INSERT INTO provider_availability_blocks (id, provider_email, block_type, start_datetime, end_datetime, title)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, e, block.block_type, block.start_datetime, block.end_datetime, block.title || null);
-    return { id, provider_email: e, block_type: block.block_type, start_datetime: block.start_datetime, end_datetime: block.end_datetime, title: block.title };
+      INSERT INTO provider_availability_blocks (id, provider_id, provider_email, block_type, start_datetime, end_datetime, title)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, providerId, e, block.block_type, block.start_datetime, block.end_datetime, block.title || null);
+    return { id, provider_id: providerId, provider_email: e, block_type: block.block_type, start_datetime: block.start_datetime, end_datetime: block.end_datetime, title: block.title };
   }
 
   /**
@@ -340,25 +551,91 @@ class ProviderService {
    * @param {string} clinicId - Clinic ID
    * @returns {string[]} Array of provider emails who are online
    */
-  getOnlineProviderEmailsForClinic(clinicId) {
+  getOnlineProvidersForClinic(clinicId) {
     if (!clinicId) return [];
     try {
-      const clinic = db.db.prepare('SELECT merchant_id FROM clinics WHERE clinic_id = ?').get(clinicId);
-      if (!clinic?.merchant_id) return [];
-      const customers = db.db.prepare(`
-        SELECT id, email FROM customers
-        WHERE merchant_id = ? AND provider_profile IS NOT NULL AND provider_profile != ''
-      `).all(clinic.merchant_id);
-      const online = [];
-      for (const c of customers) {
-        if (!c.email) continue;
-        const status = this.getProviderStatus(c.email);
-        if (status && status.is_online) online.push(c.email.trim().toLowerCase());
-      }
-      return online;
+      this.expireStaleHeartbeats();
+      const rows = db.db.prepare(`
+        SELECT pp.id as provider_id, lower(pp.email) as email, pp.display_name
+        FROM provider_profiles pp
+        INNER JOIN provider_status ps
+          ON (
+            (ps.provider_id IS NOT NULL AND ps.provider_id = pp.id)
+            OR lower(ps.email) = lower(pp.email)
+          )
+        WHERE pp.clinic_id = ?
+          AND pp.is_active = 1
+          AND ps.is_online = 1
+      `).all(clinicId);
+      console.log(`[ProviderService] clinic=${clinicId} canonical_online_providers=${rows.length}`);
+      return rows.map((r) => ({
+        provider_id: r.provider_id,
+        email: r.email,
+        display_name: r.display_name,
+        ...this.getProviderBookingTier({ provider_id: r.provider_id, email: r.email }, 'sync')
+      }));
     } catch (_) {
       return [];
     }
+  }
+
+  getBookableProvidersForClinic(clinicId, lane = 'sync') {
+    const all = this.getOnlineProvidersForClinic(clinicId).map((p) => ({
+      ...p,
+      ...this.getProviderBookingTier(p, lane)
+    }));
+    if (lane !== 'sync') return all;
+    const calendarRequired = this._toBool(process.env.CALENDAR_REQUIRED_FOR_SYNC || 'false');
+    const blocksOnlyAllowed = this._toBool(process.env.BLOCKS_ONLY_ALLOWED === undefined ? 'true' : process.env.BLOCKS_ONLY_ALLOWED);
+    // If calendar is required OR blocks-only mode is disabled, allow only tier A.
+    if (calendarRequired || !blocksOnlyAllowed) {
+      return all.filter((p) => p.tier === 'A');
+    }
+    return all.filter((p) => p.tier === 'A' || p.tier === 'B');
+  }
+
+  getProviderBookingReadinessForClinic(clinicId) {
+    if (!clinicId) return [];
+    try {
+      const rows = db.db.prepare(`
+        SELECT id as provider_id, display_name, lower(email) as email, is_active
+        FROM provider_profiles
+        WHERE clinic_id = ?
+        ORDER BY display_name ASC
+      `).all(clinicId);
+      return rows.map((r) => {
+        const status = this.getProviderStatus(r.email);
+        const tierInfo = this.getProviderBookingTier(r, 'sync');
+        return {
+          ...r,
+          is_online: !!status?.is_online,
+          calendar_connected: tierInfo.calendar_connected,
+          has_availability_blocks: tierInfo.has_availability_blocks,
+          booking_tier: tierInfo.tier,
+          booking_ready: !!r.is_active && !!status?.is_online && (tierInfo.tier === 'A' || tierInfo.tier === 'B')
+        };
+      });
+    } catch (_) {
+      return [];
+    }
+  }
+
+  getActiveProviderCountForClinic(clinicId) {
+    if (!clinicId) return 0;
+    try {
+      const row = db.db.prepare(`
+        SELECT COUNT(*) AS cnt
+        FROM provider_profiles
+        WHERE clinic_id = ? AND is_active = 1
+      `).get(clinicId);
+      return row?.cnt || 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  getOnlineProviderEmailsForClinic(clinicId) {
+    return this.getOnlineProvidersForClinic(clinicId).map((p) => p.email);
   }
 
   /**
@@ -369,7 +646,8 @@ class ProviderService {
    * @param {string} date - YYYY-MM-DD
    * @returns {boolean}
    */
-  isSlotInProviderAvailability(providerEmail, slotStart, slotEnd, date) {
+  isSlotInProviderAvailability(providerRef, slotStart, slotEnd, date) {
+    const providerEmail = typeof providerRef === 'string' ? providerRef : providerRef?.email;
     const blocks = this.getAvailabilityBlocks(providerEmail, date, date);
     const outOfOffice = blocks.filter(b => b.block_type === 'out_of_office');
     const available = blocks.filter(b => b.block_type === 'available');

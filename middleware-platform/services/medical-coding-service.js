@@ -129,7 +129,10 @@ async function buildFallbackResult(clinicalNote, perceptualState, reason, option
     cpt: cptWithConf.map(c => c.code).filter(Boolean)
   };
   const trustRag = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
-  const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRag });
+  const validation = knowledgeService.validateCodesExist(codesToValidate, {
+    trustExternalSource: trustRag,
+    trustFormattedCodes: true
+  });
   let validIcd = icdWithConf;
   let validCpt = cptWithConf;
   if (!validation.valid) {
@@ -149,6 +152,36 @@ async function buildFallbackResult(clinicalNote, perceptualState, reason, option
     needsReview: conf < CONFIDENCE_THRESHOLD_ESCALATE,
     ...(options.costCapExceeded && { costCapExceeded: true })
   };
+}
+
+/** Heuristic: PDF/text is likely a radiology or ultrasound report (for CPT hints). */
+function noteLooksLikeRadiologyImaging(note) {
+  if (!note || typeof note !== 'string') return false;
+  const n = note.toLowerCase();
+  return (
+    /\b(sonograph|sonography|ultrasound|echogenic|radiologist|radiology)\b/.test(n) ||
+    /\bdiagnostic\s+imaging\b/.test(n) ||
+    /\b(us|u\/s)\s+abdomen\b|\babdomen(al)?\s+(us|ultrasound)\b/.test(n)
+  );
+}
+
+/**
+ * Prepend common abdominal ultrasound CPTs when the note looks like an imaging report
+ * so the model sees procedure options even if keyword CPT search returned none.
+ */
+function mergeRadiologyCptCandidates(note, candidates) {
+  const list = Array.isArray(candidates) ? [...candidates] : [];
+  if (!noteLooksLikeRadiologyImaging(note)) return list;
+  const existing = new Set(list.map(c => String(c.code || '').trim()).filter(Boolean));
+  const hints = [
+    { code: '76700', description: 'Ultrasound, abdominal, complete (real time with image documentation)' },
+    { code: '76705', description: 'Ultrasound, abdominal, limited' }
+  ];
+  const prepend = [];
+  for (const h of hints) {
+    if (!existing.has(h.code)) prepend.push({ ...h, confidence: typeof h.confidence === 'number' ? h.confidence : 0.72 });
+  }
+  return [...prepend, ...list];
 }
 
 function buildPrompt({ clinicalNote, encounterType, patientContext, cptCandidates, icdReference, perceptualState, retrievedGuidelines }) {
@@ -195,10 +228,18 @@ CRITICAL: Prioritize visual findings over text when both exist. For each ICD-10 
     ? `\nRelevant Guidelines:\n${retrievedGuidelines.slice(0, 5).map(g => typeof g === 'string' ? g : g.text || g).join('\n---\n')}\n`
     : '';
 
+  const imagingSection = noteLooksLikeRadiologyImaging(clinicalNote)
+    ? `
+IMAGING / RADIOLOGY: If this document describes a performed imaging study (e.g. abdominal ultrasound, sonography), include the most specific standard AMA CPT for that study when it is clearly the procedure documented (e.g. complete vs limited abdomen US). Prefer a listed CPT candidate when it matches; otherwise still output the best-matching 5-digit CPT.
+Use ICD-10-CM codes supported by the findings and impression (not abbreviations like "BPH" alone — use N40.1 when benign prostatic hyperplasia is documented).
+`
+    : '';
+
   return `You are a certified medical coding specialist. Review the clinical note and select appropriate codes.
 Respond with JSON: {"icd10": [{"code": "...", "description": "...", "confidence": 0.0-1.0}], "cpt": [{"code": "...", "description": "...", "confidence": 0.0-1.0, "modifiers": ["-25", "-59", "-51"]}], "rationale": "..."}
 Include modifiers when applicable: -25 when E/M and procedure same visit (on E/M); -59 when distinct procedures; -51 when multiple surgery.
-Only use codes from the reference lists below. Return empty arrays if no codes apply.
+Prefer CPT and ICD-10 codes from the candidate/reference lists when they fit the documentation. You MUST still output clinically accurate ICD-10-CM and CPT codes supported by the note even when the lists are incomplete (e.g. a valid code not shown in the list). Use standard US ICD-10-CM formatting (letter + digits + optional dot extension). Return empty arrays only when truly no defensible code applies.
+${imagingSection}
 ${evidenceInstruction}
 
 Clinical Note:
@@ -316,11 +357,13 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
         icd10: knowledgeService.getReferenceIcdCodes(12)
       };
 
+  const cptCandidatesForPrompt = mergeRadiologyCptCandidates(truncatedNote, cptCandidates);
+
   const prompt = buildPrompt({
     clinicalNote: truncatedNote,
     encounterType,
     patientContext,
-    cptCandidates,
+    cptCandidates: cptCandidatesForPrompt,
     icdReference,
     perceptualState,
     retrievedGuidelines
@@ -390,7 +433,12 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       cpt: cpt.map(c => (typeof c === 'object' ? c.code : c)).filter(Boolean)
     };
     const trustRagCodes = !!(process.env.RAG_API_URL && process.env.RAG_API_URL.trim());
-    const validation = knowledgeService.validateCodesExist(codesToValidate, { trustExternalSource: trustRagCodes });
+    // LLM often returns valid ICD-10-CM/CPT not present in the local SQLite slice; trusting canonical
+    // format avoids empty claims when RAG_API_URL is unset (RAG retrieval is separate from this gate).
+    const validation = knowledgeService.validateCodesExist(codesToValidate, {
+      trustExternalSource: trustRagCodes,
+      trustFormattedCodes: true
+    });
     let validIcd10 = icd10;
     let validCpt = cpt;
     if (!validation.valid) {
@@ -417,7 +465,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       reason: 'low_confidence',
       escalateToHuman: true,
       codingConfidence: finalConfidence,
-      promptContext: { cptCandidates, icdReference }
+      promptContext: { cptCandidates: cptCandidatesForPrompt, icdReference }
     };
     }
     if (finalConfidence < CONFIDENCE_THRESHOLD_ESCALATE) {
@@ -444,7 +492,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
 
     if (callId && typeof db.logDecision === 'function') {
       try {
-        db.logDecision(callId, 'code', { candidates: cptCandidates?.length, icd_ref: icdReference?.length }, { icd10: validIcd10?.length, cpt: validCpt?.length, confidence: finalConfidence }, (parsed?.rationale || '').slice(0, 500));
+        db.logDecision(callId, 'code', { candidates: cptCandidatesForPrompt?.length, icd_ref: icdReference?.length }, { icd10: validIcd10?.length, cpt: validCpt?.length, confidence: finalConfidence }, (parsed?.rationale || '').slice(0, 500));
       } catch (_) {}
     }
 
@@ -458,7 +506,7 @@ async function generateCodingSuggestion({ clinicalNote, encounterType, patientCo
       evidenceTrace: evidenceTrace.links,
       model: DEFAULT_MODEL,
       raw: parsed,
-      promptContext: { cptCandidates, icdReference },
+      promptContext: { cptCandidates: cptCandidatesForPrompt, icdReference },
       codingConfidence: finalConfidence,
       needsReview: finalConfidence < CONFIDENCE_THRESHOLD_ESCALATE
     };

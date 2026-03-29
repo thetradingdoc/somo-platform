@@ -1425,15 +1425,32 @@ class FHIRService {
       console.log('[FHIR] Processing voice call:', callData.callId);
 
       // 1. Get or create patient
-      const patient = await this.getOrCreatePatient({
+      const patientResult = await this.getOrCreatePatient({
         phone: callData.customerPhone,
         email: callData.customerEmail,
         name: callData.customerName
       });
 
+      // getOrCreatePatient returns a wrapper ({ patient, ... }) in most paths.
+      // Normalize to the underlying FHIR Patient resource and resolve a persisted resource_id.
+      const patientResource = patientResult?.patient || patientResult;
+      let patientId = patientResource?.id;
+
+      if (!patientId && callData.customerPhone) {
+        const byPhone = db.getFHIRPatientByPhone(callData.customerPhone);
+        if (byPhone?.resource_id) patientId = byPhone.resource_id;
+      }
+      if (!patientId && callData.customerEmail) {
+        const byEmail = db.getFHIRPatientByEmail(callData.customerEmail);
+        if (byEmail?.resource_id) patientId = byEmail.resource_id;
+      }
+      if (!patientId) {
+        throw new Error('FHIR patient resolution failed before encounter creation');
+      }
+
       // 2. Create encounter for this call
       const encounter = await this.createEncounter({
-        patientId: patient.id,
+        patientId,
         patientName: callData.customerName,
         callId: callData.callId,
         status: 'in-progress',
@@ -1442,10 +1459,10 @@ class FHIRService {
         agentVersion: callData.agentVersion
       });
 
-      console.log(`[FHIR] Voice call processed: Patient ${patient.id}, Encounter ${encounter.id}`);
+      console.log(`[FHIR] Voice call processed: Patient ${patientId}, Encounter ${encounter.id}`);
 
       return {
-        patient,
+        patient: patientResource,
         encounter
       };
     } catch (error) {

@@ -678,7 +678,7 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-logo"><strong>Billy</strong></div>
+                <div class="sidebar-logo"><span class="doc">Doc</span><span class="little">Little</span></div>
                 <div class="sidebar-subtitle">Cannabis E-Commerce</div>
             </div>
 
@@ -750,12 +750,12 @@
             <div class="controls-section">
                 <div class="controls-header">
                     <div class="filter-buttons">
-                        <button class="filter-btn active" onclick="filterOrders('all')">All</button>
-                        <button class="filter-btn" onclick="filterOrders('pending')">Pending</button>
-                        <button class="filter-btn" onclick="filterOrders('paid')">Paid</button>
-                        <button class="filter-btn" onclick="filterOrders('processing')">Processing</button>
-                        <button class="filter-btn" onclick="filterOrders('shipped')">Shipped</button>
-                        <button class="filter-btn" onclick="filterOrders('delivered')">Delivered</button>
+                        <button class="filter-btn active" onclick="filterOrders('all', this)">All</button>
+                        <button class="filter-btn" onclick="filterOrders('pending', this)">Pending</button>
+                        <button class="filter-btn" onclick="filterOrders('paid', this)">Paid</button>
+                        <button class="filter-btn" onclick="filterOrders('processing', this)">Processing</button>
+                        <button class="filter-btn" onclick="filterOrders('shipped', this)">Shipped</button>
+                        <button class="filter-btn" onclick="filterOrders('delivered', this)">Delivered</button>
                     </div>
                 </div>
                 <div class="search-input-wrapper">
@@ -969,7 +969,8 @@
                     document.getElementById('ordersList').innerHTML = `
                         <div class="empty-state">
                             <div class="empty-state-icon">📦</div>
-                            <p>No orders yet</p>
+                            <h3>No orders yet</h3>
+                            <p>Create one from <b>Products → Agentic Commerce</b> to see it appear here.</p>
                         </div>
                     `;
                 }
@@ -1007,14 +1008,20 @@
             document.getElementById('weekRevenue').textContent = `$${weekRevenue.toFixed(2)}`;
         }
 
-        function filterOrders(status) {
+        function filterOrders(status, buttonElement) {
             currentFilter = status;
 
             // Update filter buttons
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('active');
             });
-            event?.target?.classList.add('active');
+            if (buttonElement) {
+                buttonElement.classList.add('active');
+            } else {
+                const matching = Array.from(document.querySelectorAll('.filter-btn'))
+                    .find((btn) => btn.textContent.trim().toLowerCase() === status.toLowerCase());
+                if (matching) matching.classList.add('active');
+            }
 
             if (status === 'all') {
                 filteredOrders = allOrders;
@@ -1153,8 +1160,8 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
 
         async function updateOrderStatus(orderId, newStatus) {
             try {
-                const response = await fetch(`${MERCHANT_API}/orders/${orderId}`, {
-                    method: 'PATCH',
+                const response = await fetch(`${MERCHANT_API}/orders/${orderId}/status`, {
+                    method: 'PUT',
                     credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1164,14 +1171,14 @@ ${order.shipping_address ? `Shipping: ${order.shipping_address}` : ''}
 
                 const data = await response.json();
                 if (data.success) {
-                    alert('Order status updated successfully!');
+                    alert(`Order updated: ${newStatus}`);
                     loadOrders();
                 } else {
-                    alert('Failed to update order: ' + (data.error || 'Unknown error'));
+                    alert('Could not update order: ' + (data.error || 'Please try again.'));
                 }
             } catch (error) {
                 console.error('Error updating order:', error);
-                alert('Failed to update order status');
+                alert('Network error while updating order status. Please retry.');
             }
         }
 

@@ -99,9 +99,21 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
   }
 
   const THRESHOLD = threshold();
+  const routineNoSymptoms = (() => {
+    try {
+      const v = KellyToolExecutor._getSessionMeta
+        ? KellyToolExecutor._getSessionMeta(sessionIdForGuard, 'routine_no_symptoms')
+        : null;
+      return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+    } catch (_) {
+      return false;
+    }
+  })();
+  const allowRoutineBypass = routineNoSymptoms && (bumpOp === 'slots' || bumpOp === 'schedule');
   const sessionRow = db.getTriageSession(sessionIdForGuard);
 
   if (!sessionRow) {
+    if (allowRoutineBypass) return { ok: true };
     const ins = bumpOp === 'insurance';
     return {
       ok: false,
@@ -147,6 +159,11 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
         message: safetyMsg
       }
     };
+  }
+
+  if (allowRoutineBypass) {
+    // Routine/no-symptoms booking path: allow slots/schedule without full symptom triage.
+    return { ok: true };
   }
 
   if (!triageComplete) {

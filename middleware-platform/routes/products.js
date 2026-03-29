@@ -7,6 +7,14 @@
 const express = require('express');
 const db = require('../database');
 const { requireCustomerAuth, requireMerchant } = require('../middleware/customer-auth');
+const {
+  resolvePrescriptionId,
+  withProviderAliases,
+  withPrescriptionAliases,
+  mapProductToPrescription,
+  mapProductsToPrescriptions,
+  logAliasUsage
+} = require('../utils/naming-aliases');
 const router = express.Router();
 
 /**
@@ -16,16 +24,18 @@ const router = express.Router();
  */
 router.get('/', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
+    logAliasUsage('products-list', req);
     // Scope to customer's merchant_id (from auth middleware)
     const merchant_id = req.merchant_id;
     const products = db.getProductsByMerchant(merchant_id);
     
-    res.json({ 
+    res.json(withProviderAliases({
       success: true, 
       products,
+      prescriptions: mapProductsToPrescriptions(products),
       merchant_id,
       count: products.length
-    });
+    }, merchant_id));
   } catch (error) {
     console.error('❌ Error fetching products:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -39,7 +49,8 @@ router.get('/', requireCustomerAuth, requireMerchant, (req, res) => {
  */
 router.get('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
-    const product = db.getProduct(req.params.id);
+    const lookupId = resolvePrescriptionId({ prescription_id: req.params.id, product_id: req.params.id });
+    const product = db.getProduct(lookupId);
     if (!product) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
@@ -53,7 +64,11 @@ router.get('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
       });
     }
     
-    res.json({ success: true, product });
+    res.json(withProviderAliases({
+      success: true,
+      product,
+      prescription: mapProductToPrescription(product)
+    }, req.merchant_id));
   } catch (error) {
     console.error('❌ Error fetching product:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -67,6 +82,7 @@ router.get('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
  */
 router.get('/search', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
+    logAliasUsage('products-search', req);
     const { q } = req.query;
     if (!q) {
       return res.status(400).json({ success: false, error: 'Search query required' });
@@ -75,13 +91,14 @@ router.get('/search', requireCustomerAuth, requireMerchant, (req, res) => {
     // Scope search to customer's merchant_id
     const merchant_id = req.merchant_id;
     const products = db.searchProducts(q, merchant_id);
-    res.json({ 
+    res.json(withProviderAliases({
       success: true, 
       products, 
+      prescriptions: mapProductsToPrescriptions(products),
       count: products.length,
       merchant_id,
       query: q
-    });
+    }, merchant_id));
   } catch (error) {
     console.error('❌ Error searching products:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -95,7 +112,10 @@ router.get('/search', requireCustomerAuth, requireMerchant, (req, res) => {
  */
 router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
-    const { name, description, price, inventory, image_url, category } = req.body;
+    logAliasUsage('products-create', req);
+    const body = req.body || {};
+    const name = body.name || body.prescription_name;
+    const { description, price, inventory, image_url, category } = body;
     
     if (!name || price === undefined) {
       return res.status(400).json({ success: false, error: 'Name and price are required' });
@@ -115,7 +135,11 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
     });
 
     const product = db.getProduct(result.lastInsertRowid.toString());
-    res.status(201).json({ success: true, product });
+    res.status(201).json(withProviderAliases({
+      success: true,
+      product,
+      prescription: mapProductToPrescription(product)
+    }, merchant_id));
   } catch (error) {
     console.error('❌ Error creating product:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -129,7 +153,9 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
  */
 router.put('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
-    const product = db.getProduct(req.params.id);
+    logAliasUsage('products-update', req);
+    const lookupId = resolvePrescriptionId({ prescription_id: req.params.id, product_id: req.params.id });
+    const product = db.getProduct(lookupId);
     if (!product) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
@@ -144,15 +170,20 @@ router.put('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
     }
 
     // Remove merchant_id from update body (cannot change merchant)
-    const { merchant_id, ...updateData } = req.body;
+    const { merchant_id, provider_id, prescription_name, ...updateData } = req.body || {};
+    if (prescription_name && !updateData.name) updateData.name = prescription_name;
 
-    const result = db.updateProduct(req.params.id, updateData);
+    const result = db.updateProduct(lookupId, updateData);
     if (result.changes === 0) {
       return res.status(400).json({ success: false, error: 'No fields to update' });
     }
 
-    const updatedProduct = db.getProduct(req.params.id);
-    res.json({ success: true, product: updatedProduct });
+    const updatedProduct = db.getProduct(lookupId);
+    res.json(withProviderAliases({
+      success: true,
+      product: updatedProduct,
+      prescription: mapProductToPrescription(updatedProduct)
+    }, req.merchant_id));
   } catch (error) {
     console.error('❌ Error updating product:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -166,7 +197,9 @@ router.put('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
  */
 router.delete('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
-    const product = db.getProduct(req.params.id);
+    logAliasUsage('products-delete', req);
+    const lookupId = resolvePrescriptionId({ prescription_id: req.params.id, product_id: req.params.id });
+    const product = db.getProduct(lookupId);
     if (!product) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
@@ -180,8 +213,11 @@ router.delete('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
       });
     }
 
-    db.deleteProduct(req.params.id);
-    res.json({ success: true, message: 'Product deleted' });
+    db.deleteProduct(lookupId);
+    res.json(withProviderAliases(withPrescriptionAliases({
+      success: true,
+      message: 'Product deleted'
+    }, lookupId), req.merchant_id));
   } catch (error) {
     console.error('❌ Error deleting product:', error);
     res.status(500).json({ success: false, error: error.message });

@@ -1066,12 +1066,16 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
  * Prevents hallucinated codes from being suggested.
  * When trustExternalSource (RAG) is enabled, accepts well-formatted codes even if not in local DB.
  * @param {Object} codes - { icd10: string[], cpt: string[], hcpcs?: string[] }
- * @param {Object} options - { trustExternalSource: boolean } - when true, accept format-valid codes (from RAG)
+ * @param {Object} options - { trustExternalSource?: boolean, trustFormattedCodes?: boolean }
+ *   When either is true, accept ICD-10/CPT/HCPCS that match canonical format without a local DB row
+ *   (used for RAG-backed flows and for LLM coding output where the KB may be incomplete).
  * @returns {{ valid: boolean, invalid: { icd10: string[], cpt: string[], hcpcs: string[] } }}
  */
 function validateCodesExist(codes = {}, options = {}) {
   const invalid = { icd10: [], cpt: [], hcpcs: [] };
-  const trustExternal = options.trustExternalSource === true;
+  const trustByFormat =
+    options.trustExternalSource === true ||
+    options.trustFormattedCodes === true;
 
   const isIcd10Format = (s) => /^[A-Z]\d{2}(\.[A-Z0-9]{1,4})?$/.test(String(s).trim().toUpperCase());
   const isCptFormat = (s) => /^\d{5}$/.test(String(s).trim());
@@ -1080,19 +1084,19 @@ function validateCodesExist(codes = {}, options = {}) {
   (codes.icd10 || []).forEach(c => {
     if (!c) return;
     const str = String(c).trim();
-    if (trustExternal && isIcd10Format(str)) return;
+    if (trustByFormat && isIcd10Format(str)) return;
     if (!db.codeExists?.(c, 'icd10')) invalid.icd10.push(str);
   });
   (codes.cpt || []).forEach(c => {
     if (!c) return;
     const str = String(c).trim();
-    if (trustExternal && isCptFormat(str)) return;
+    if (trustByFormat && isCptFormat(str)) return;
     if (!db.codeExists?.(c, 'cpt')) invalid.cpt.push(str);
   });
   (codes.hcpcs || []).forEach(c => {
     if (!c) return;
     const str = String(c).trim();
-    if (trustExternal && isHcpcsFormat(str)) return;
+    if (trustByFormat && isHcpcsFormat(str)) return;
     if (!db.codeExists?.(c, 'hcpcs')) invalid.hcpcs.push(str);
   });
   const hasInvalid = invalid.icd10.length > 0 || invalid.cpt.length > 0 || invalid.hcpcs.length > 0;

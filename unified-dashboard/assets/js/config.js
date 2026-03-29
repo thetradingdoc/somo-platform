@@ -84,16 +84,16 @@
 
   // Tenant-aware navigation (single source of truth)
   // Medical/clinic: Claims = create + view. Revenue = money collected.
-  // Icons use emojis for consistency with patient portal (🏠💳📅📄)
+  // Icons use Tailwind/Heroicons SVG keys for consistency.
   const MEDICAL_NAV_ITEMS = [
-    { id: 'dashboard', label: 'Home', icon: '🏠', href: 'business-dashboard.html' },
-    { id: 'calendar', label: 'Calendar', icon: '📅', href: 'calendar.html' },
-    { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
-    { id: 'profile', label: 'My Profile', icon: '👤', href: 'settings.html' },
-    { id: 'wallet', label: 'My Wallet', icon: '💳', href: 'wallets.html' },
-    { id: 'claims', label: 'Claims', icon: '📋', href: 'billing.html?section=claims' },
-    { id: 'billing', label: 'Revenue', icon: '💰', href: 'billing.html?section=overview' },
-    { id: 'video', label: 'Video', icon: '🎥', href: 'video-call.html' }
+    { id: 'dashboard', label: 'Home', icon: 'home', href: 'business-dashboard.html' },
+    { id: 'calendar', label: 'Calendar', icon: 'calendar-days', href: 'calendar.html' },
+    { id: 'patients', label: 'Patients', icon: 'user-group', href: 'patients.html' },
+    { id: 'profile', label: 'My Profile', icon: 'user', href: 'settings.html' },
+    { id: 'wallet', label: 'My Wallet', icon: 'wallet', href: 'wallets.html' },
+    { id: 'claims', label: 'Claims', icon: 'clipboard-document-list', href: 'billing.html?section=claims' },
+    { id: 'billing', label: 'Revenue', icon: 'banknotes', href: 'billing.html?section=overview' },
+    { id: 'video', label: 'Video', icon: 'video-camera', href: 'video-call.html' }
   ];
 
   const ECOMMERCE_NAV_ITEMS = [
@@ -320,4 +320,24 @@
         console.warn('⚠️  Service worker registration failed:', err.message);
       });
   }
-})(); 
+})();
+
+/** Landing / shop base URL for “Back to shop” from patient checkout (override in env if needed). */
+(function () {
+  if (typeof window.LANDING_BASE === 'string' && window.LANDING_BASE.length) {
+    return;
+  }
+  try {
+    var base = new URL(window.location.href);
+    var path = base.pathname || '';
+    if (path.indexOf('/patients/') !== -1) {
+      window.LANDING_BASE = new URL('../../littlelab-landing/public/index.html', base.href).href;
+    } else if (path.indexOf('unified-dashboard') !== -1) {
+      window.LANDING_BASE = new URL('littlelab-landing/public/index.html', base.href).href;
+    } else {
+      window.LANDING_BASE = base.origin + '/';
+    }
+  } catch (_) {
+    window.LANDING_BASE = '../littlelab-landing/public/index.html';
+  }
+})();

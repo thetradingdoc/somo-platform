@@ -2,12 +2,19 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const constants = require('../utils/constants');
+const {
+  resolveProviderId,
+  withProviderAliases,
+  mapProductsToPrescriptions,
+  logAliasUsage
+} = require('../utils/naming-aliases');
 
 /**
  * Resolve merchant_id from query or subdomain.
  */
 function resolveMerchantId(req) {
-  if (req.query.merchant_id) return req.query.merchant_id;
+  const providerId = resolveProviderId(req.query || {});
+  if (providerId) return providerId;
 
   // Try from subdomain
   const host = req.headers.host || '';
@@ -31,12 +38,18 @@ function resolveMerchantId(req) {
  */
 router.get('/', (req, res) => {
   try {
+    logAliasUsage('public-products', req);
     const merchantId = resolveMerchantId(req);
     if (!merchantId) {
       return res.status(404).json({ success: false, error: 'merchant_not_found' });
     }
     const products = db.getProductsByMerchant(merchantId) || [];
-    return res.json({ success: true, products, merchant_id: merchantId, count: products.length });
+    return res.json(withProviderAliases({
+      success: true,
+      products,
+      prescriptions: mapProductsToPrescriptions(products),
+      count: products.length
+    }, merchantId));
   } catch (error) {
     console.error('Public products error:', error);
     return res.status(500).json({ success: false, error: 'server_error', message: error.message });

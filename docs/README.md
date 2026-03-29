@@ -4,13 +4,28 @@
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.
 
+### For new developers
+
+1. Read **root [`CONTRIBUTING.md`](../CONTRIBUTING.md)** — PR checklist and commands that mirror CI.
+2. Follow **[Setup Guide](./setup/getting-started/SETUP.md)** and copy env files from `middleware-platform/.env.example` / `patient-app/.env.example`.
+3. Kelly LLM env and debug flags: **[KELLY_ENV_AND_DEBUG.md](./development/KELLY_ENV_AND_DEBUG.md)**.
+4. What CI actually runs vs deploy: **[CI_AND_DEPLOY_SOURCE_OF_TRUTH.md](./deployment/CI_AND_DEPLOY_SOURCE_OF_TRUTH.md)**.
+5. Code layout: **[CODE_STRUCTURE.md](./development/guides/CODE_STRUCTURE.md)**.
+6. Staging-only product checks (quote parity, chat → pay): **[STAGING_PRODUCT_VERIFICATION.md](./testing/STAGING_PRODUCT_VERIFICATION.md)**.
+7. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/decisions/README.md)**.
+8. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/AGENTIC_CHECKOUT_FILE_MAP.md)**.
+9. `server.js` policy: **[SERVER_JS_REFACTOR_POLICY.md](./development/SERVER_JS_REFACTOR_POLICY.md)**.
+10. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/PERIODIC_MAINTENANCE.md)**.
+11. Secret scanning expectations: **[SECRET_SCANNING.md](./security/SECRET_SCANNING.md)**.
+12. Browser E2E status: **[E2E_STATUS.md](./testing/E2E_STATUS.md)**.
+
 ---
 
 ## 📊 Documentation Audit (March 2026)
 
 - **Total .md files:** 142 (down from 167; Phases 1–5 consolidation applied)
 - **Consolidation plan:** [DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
-- **Phase 1 & 2 applied:** Empty file + placeholder folders removed; patient/triage/matching/specialist merged into [PATIENT_BOOKING_AND_TRIAGE_GAPS.md](./PATIENT_BOOKING_AND_TRIAGE_GAPS.md)
+- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; use [triage todos](../todos/TRIAGE_CONSOLIDATED_PHASED_TODOS.md) and [GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
 
 ---
 
@@ -24,6 +39,8 @@
 ### 📖 Core Documentation
 
 #### Architecture
+- **[Architecture decisions (ADRs)](./architecture/decisions/README.md)** — SQLite, Kelly LLM, agentic checkout surfaces
+- **[Agentic checkout file map](./architecture/AGENTIC_CHECKOUT_FILE_MAP.md)** — web, RN, API ownership
 - **[Platform Vision](./architecture/vision/VISION.md)** - Platform goals and roadmap
 - **[Healthcare Assessment](./architecture/healthcare/HEALTHCARE_ASSESSMENT.md)** - Healthcare platform analysis
 - **[Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)** - Payment system design
@@ -70,9 +87,11 @@
 - **[Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)** - Invoice generation workflow
 - **[Clinic Onboarding](./onboarding/CLINIC_ONBOARDING_CHECKLIST.md)** - Clinic setup
 
-#### Patient Booking & Triage Gaps
-- **[Patient Booking & Triage Gaps](./PATIENT_BOOKING_AND_TRIAGE_GAPS.md)** - Flow, all gaps (T/M/S/C/U), golden path, phased execution
-- **[Richer Triage & Records](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** - Schema, records Q&A
+#### Patient booking, triage & agentic commerce
+- **[Richer Triage & Records](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** — Schema, records Q&A
+- **[Public agentic checkout](./architecture/PUBLIC_AGENTIC_CHECKOUT.md)** — Landing → quote → pay, Kelly tools, APIs
+- **[Triage phased todos](../todos/TRIAGE_CONSOLIDATED_PHASED_TODOS.md)** — Consolidated triage backlog
+- **[Agentic checkout backlog / status](../todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md)** — Checkout UI/backend items (partially implemented; read the status note at top)
 
 #### Voice Agent, Video Consult & Medical Coding
 - **[Hybrid Architecture Overview](./architecture/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries

@@ -9,6 +9,13 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 const { requireCustomerAuth, requireMerchant } = require('../middleware/customer-auth');
 const { apiLimiter } = require('../middleware/rate-limiter');
+const {
+  resolvePrescriptionId,
+  withProviderAliases,
+  mapOrderRow,
+  mapOrdersRows,
+  logAliasUsage
+} = require('../utils/naming-aliases');
 const router = express.Router();
 
 /**
@@ -48,16 +55,17 @@ function validateCoordinates(latitude, longitude) {
  */
 router.get('/', requireCustomerAuth, requireMerchant, (req, res) => {
   try {
+    logAliasUsage('orders-list', req);
     // Scope to customer's merchant_id (from auth middleware)
     const merchant_id = req.merchant_id;
     const orders = db.getOrdersByMerchant(merchant_id);
-    
-    res.json({ 
-      success: true, 
-      orders,
-      merchant_id,
+    const mapped = mapOrdersRows(orders);
+    res.json(withProviderAliases({
+      success: true,
+      orders: mapped,
+      prescription_orders: mapped,
       count: orders.length
-    });
+    }, merchant_id));
   } catch (error) {
     console.error('❌ Error fetching orders:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -85,7 +93,7 @@ router.get('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
       });
     }
     
-    res.json({ success: true, order });
+    res.json(withProviderAliases({ success: true, order: mapOrderRow(order) }, req.merchant_id));
   } catch (error) {
     console.error('❌ Error fetching order:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -98,17 +106,47 @@ router.get('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
  * Creates order for customer's merchant (merchant_id from auth)
  */
 router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
+  try { db.incrementOpsCounter && db.incrementOpsCounter('merchant_order_create_attempt'); } catch (_) {}
+  const idempotencyKey = req.header('Idempotency-Key') || req.body?.idempotency_key || null;
+  const operationType = 'order_create';
+  const reservation = db.reserveIdempotencyKey(idempotencyKey, operationType);
+  if (reservation === 'completed') {
+    const cached = db.getIdempotentResult(idempotencyKey, operationType);
+    if (cached?.result) return res.status(200).json(cached.result);
+  }
+  if (reservation === 'in_progress') {
+    return res.status(409).json({ success: false, error: 'Duplicate order request in progress' });
+  }
+
   try {
-    const { 
-      product_id, quantity, customer_email, customer_name, customer_phone, 
-      shipping_address, pickup_address, pickup_latitude, pickup_longitude, 
-      drop_point, source 
+    logAliasUsage('orders-create', req);
+    const {
+      quantity,
+      customer_email,
+      customer_name,
+      customer_phone,
+      shipping_address,
+      pickup_address,
+      pickup_latitude,
+      pickup_longitude,
+      drop_point,
+      source
     } = req.body;
+    const product_id = resolvePrescriptionId(req.body || {});
 
     if (!product_id || !quantity || !customer_email) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'product_id, quantity, and customer_email are required' 
+      db.releaseIdempotencyKey(idempotencyKey, operationType);
+      return res.status(400).json({
+        success: false,
+        error: 'prescription_id (or product_id), quantity, and customer_email are required'
+      });
+    }
+
+    if (!Number.isInteger(Number(quantity)) || Number(quantity) < 1) {
+      db.releaseIdempotencyKey(idempotencyKey, operationType);
+      return res.status(400).json({
+        success: false,
+        error: 'quantity must be a positive integer'
       });
     }
 
@@ -116,6 +154,7 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
     if (pickup_latitude !== undefined || pickup_longitude !== undefined) {
       const coordValidation = validateCoordinates(pickup_latitude, pickup_longitude);
       if (!coordValidation.valid) {
+        db.releaseIdempotencyKey(idempotencyKey, operationType);
         return res.status(400).json({
           success: false,
           error: `Invalid pickup coordinates: ${coordValidation.error || 'Invalid coordinates'}`
@@ -129,11 +168,13 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
     // Validate product and inventory
     const product = db.getProduct(product_id);
     if (!product) {
+      db.releaseIdempotencyKey(idempotencyKey, operationType);
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
     // Verify product belongs to customer's merchant
     if (product.merchant_id !== merchant_id) {
+      db.releaseIdempotencyKey(idempotencyKey, operationType);
       return res.status(403).json({ 
         success: false, 
         error: 'Access denied',
@@ -142,6 +183,7 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
     }
 
     if (product.inventory < quantity) {
+      db.releaseIdempotencyKey(idempotencyKey, operationType);
       return res.status(400).json({ success: false, error: 'Insufficient inventory' });
     }
 
@@ -163,8 +205,8 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
       pickup_longitude: pickup_longitude || null,
       drop_point: drop_point || shipping_address, // Drop point (delivery address)
       total_amount,
-      status: 'confirmed',
-      payment_status: 'completed',
+      status: 'pending',
+      payment_status: 'pending_payment',
       source: source || 'direct'
     };
 
@@ -176,11 +218,22 @@ router.post('/', requireCustomerAuth, requireMerchant, (req, res) => {
     // Fetch full order with product details
     const fullOrder = db.getOrder(order.id);
 
-    res.status(201).json({
+    const payload = withProviderAliases({
       success: true,
-      order: fullOrder
+      order: mapOrderRow(fullOrder)
+    }, merchant_id);
+    db.completeIdempotentResult(idempotencyKey, operationType, payload);
+    try { db.incrementOpsCounter && db.incrementOpsCounter('merchant_order_create_success'); } catch (_) {}
+    console.log('📊 [agentic-commerce] order_created', {
+      order_id: fullOrder?.id,
+      merchant_id,
+      source: source || 'direct',
+      payment_status: fullOrder?.payment_status
     });
+    res.status(201).json(payload);
   } catch (error) {
+    db.releaseIdempotencyKey(idempotencyKey, operationType);
+    try { db.incrementOpsCounter && db.incrementOpsCounter('merchant_order_create_failed'); } catch (_) {}
     console.error('❌ Error creating order:', error);
     res.status(500).json({ success: false, error: error.message });
   }
@@ -214,8 +267,14 @@ router.put('/:id/status', requireCustomerAuth, requireMerchant, (req, res) => {
 
     db.updateOrderStatus(req.params.id, status);
     const updatedOrder = db.getOrder(req.params.id);
+    try { db.incrementOpsCounter && db.incrementOpsCounter('merchant_order_status_updated'); } catch (_) {}
+    console.log('📊 [agentic-commerce] order_status_updated', {
+      order_id: req.params.id,
+      merchant_id: req.merchant_id,
+      status
+    });
     
-    res.json({ success: true, order: updatedOrder });
+    res.json(withProviderAliases({ success: true, order: mapOrderRow(updatedOrder) }, req.merchant_id));
   } catch (error) {
     console.error('❌ Error updating order status:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -243,8 +302,8 @@ router.put('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
       });
     }
 
-    // Remove merchant_id from update body (cannot change merchant)
-    const { merchant_id, pickup_latitude, pickup_longitude, ...updateData } = req.body;
+    // Remove merchant_id / provider_id from update body (cannot change tenant)
+    const { merchant_id, provider_id, pickup_latitude, pickup_longitude, ...updateData } = req.body;
 
     // Validate coordinates if provided
     if (pickup_latitude !== undefined || pickup_longitude !== undefined) {
@@ -266,7 +325,7 @@ router.put('/:id', requireCustomerAuth, requireMerchant, (req, res) => {
     }
 
     const updatedOrder = db.getOrder(req.params.id);
-    res.json({ success: true, order: updatedOrder });
+    res.json(withProviderAliases({ success: true, order: mapOrderRow(updatedOrder) }, req.merchant_id));
   } catch (error) {
     console.error('❌ Error updating order:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -310,6 +369,10 @@ router.get('/:id/tracking', requireCustomerAuth, requireMerchant, (req, res) => 
       success: true,
       tracking: {
         order_id: order.id,
+        provider_id: order.merchant_id,
+        merchant_id: order.merchant_id,
+        prescription_id: order.product_id,
+        product_id: order.product_id,
         delivery_status: order.delivery_status || 'pending',
         driver_name: order.driver_name || null,
         driver_phone: order.driver_phone || null,
@@ -457,13 +520,13 @@ router.post('/:id/tracking', apiLimiter, requireCustomerAuth, requireMerchant, a
           console.log(`✅ Auto-confirmed delivery for order ${id}`);
           // Re-fetch order to get updated status
           const finalOrder = db.getOrder(id);
-          return res.json({
+          return res.json(withProviderAliases({
             success: true,
             message: 'Tracking updated and delivery auto-confirmed',
-            order: finalOrder,
+            order: mapOrderRow(finalOrder),
             autoConfirmed: true,
             distance: confirmationResult.distance
-          });
+          }, req.merchant_id));
         }
       } catch (confirmationError) {
         console.warn('⚠️  Auto-confirmation check failed:', confirmationError.message);
@@ -473,11 +536,11 @@ router.post('/:id/tracking', apiLimiter, requireCustomerAuth, requireMerchant, a
 
     console.log(`✅ Tracking updated for order ${id}: ${delivery_status || 'location update'}`);
 
-    res.json({
+    res.json(withProviderAliases({
       success: true,
       message: 'Tracking updated successfully',
-      order: updatedOrder
-    });
+      order: mapOrderRow(updatedOrder)
+    }, req.merchant_id));
   } catch (error) {
     console.error('❌ Error updating tracking:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -537,11 +600,11 @@ router.post('/:id/confirm-delivery', requireCustomerAuth, requireMerchant, async
     }
 
     if (order.delivery_status === 'delivered') {
-      return res.json({
+      return res.json(withProviderAliases({
         success: true,
         message: 'Order already delivered',
-        order: order
-      });
+        order: mapOrderRow(order)
+      }, req.merchant_id));
     }
 
     // Use delivery confirmation service
@@ -553,11 +616,11 @@ router.post('/:id/confirm-delivery', requireCustomerAuth, requireMerchant, async
 
     if (result.success) {
       const updatedOrder = db.getOrder(id);
-      res.json({
+      res.json(withProviderAliases({
         success: true,
         message: 'Delivery confirmed successfully',
-        order: updatedOrder
-      });
+        order: mapOrderRow(updatedOrder)
+      }, req.merchant_id));
     } else {
       res.status(400).json({
         success: false,

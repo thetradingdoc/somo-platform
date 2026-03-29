@@ -1,15 +1,25 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, StyleSheet } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { DEMO_CHECKOUT_PRODUCT_ID, DEMO_PROVIDER_ID, getApiReachabilityIssue } from '@/config';
 import { Fonts } from '@/constants/theme';
 
-export default function TabTwoScreen() {
+/**
+ * Explore: entry to agentic checkout chat (same shell as web) via modal route /checkout-chat.
+ */
+export default function ExploreScreen() {
+  const apiIssue = getApiReachabilityIssue();
+
+  const openCheckoutChat = () => {
+    const q = new URLSearchParams({ product_id: DEMO_CHECKOUT_PRODUCT_ID });
+    if (DEMO_PROVIDER_ID) q.set('provider_id', DEMO_PROVIDER_ID);
+    router.push(`/checkout-chat?${q.toString()}` as never);
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
@@ -17,83 +27,43 @@ export default function TabTwoScreen() {
         <IconSymbol
           size={310}
           color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
+          name="bag.fill"
           style={styles.headerImage}
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
+        <ThemedText type="title" style={{ fontFamily: Fonts.rounded }}>
+          Shop & checkout
         </ThemedText>
       </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
+
+      {apiIssue ? (
+        <ThemedView style={styles.warn}>
+          <ThemedText style={styles.warnText}>{apiIssue}</ThemedText>
+        </ThemedView>
+      ) : null}
+
+      <ThemedText>
+        Chat with Kelly in the app (streaming replies), switch products from the catalog, then pay — same trusted
+        checkout as the website.
+      </ThemedText>
+
+      <Pressable
+        style={styles.cta}
+        onPress={openCheckoutChat}
+        accessibilityRole="button"
+        accessibilityLabel="Open checkout chat in the app">
+        <ThemedText type="defaultSemiBold" style={styles.ctaText}>
+          Open checkout chat
         </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
+      </Pressable>
+
+      <ThemedText style={styles.muted}>
+        Configure <ThemedText type="defaultSemiBold">EXPO_PUBLIC_API_BASE_URL</ThemedText>, optional{' '}
+        <ThemedText type="defaultSemiBold">EXPO_PUBLIC_MERCHANT_ID</ThemedText> and{' '}
+        <ThemedText type="defaultSemiBold">EXPO_PUBLIC_DEMO_PRODUCT_ID</ThemedText> in{' '}
+        <ThemedText type="defaultSemiBold">patient-app/.env</ThemedText>.
+      </ThemedText>
     </ParallaxScrollView>
   );
 }
@@ -103,10 +73,39 @@ const styles = StyleSheet.create({
     color: '#808080',
     bottom: -90,
     left: -35,
-    position: 'absolute',
+    position: 'absolute'
   },
   titleContainer: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8
   },
+  warn: {
+    backgroundColor: '#fff7ed',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#fed7aa'
+  },
+  warnText: {
+    color: '#9a3412',
+    fontSize: 14
+  },
+  cta: {
+    backgroundColor: '#1e40af',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginVertical: 16
+  },
+  ctaText: {
+    color: '#fff',
+    fontSize: 16
+  },
+  muted: {
+    fontSize: 13,
+    opacity: 0.85,
+    marginTop: 8
+  }
 });

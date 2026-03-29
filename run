@@ -3,6 +3,7 @@ cd middleware-platform
 export DB_PATH=./middleware-dev.db
 export NVM_DIR="$HOME/.nvm"
 source "$(brew --prefix nvm)/nvm.sh"
+export KELLY_DEBUG_TURN=1
 npm start
 
 

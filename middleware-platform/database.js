@@ -647,6 +647,8 @@ db.exec(`
     inventory INTEGER NOT NULL DEFAULT 0,
     image_url TEXT,
     category TEXT,
+    tags TEXT,
+    protocol_stage TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (merchant_id) REFERENCES merchants(id)
@@ -1270,6 +1272,24 @@ try {
   console.warn('⚠️  Payment tokens migration check failed:', migrationError.message);
 }
 
+// Migration: products.tags / protocol_stage for catalog UI (serum labels, filtering)
+try {
+  const productsExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='products'`).get();
+  if (productsExists) {
+    const pinfo = db.prepare(`PRAGMA table_info(products)`).all();
+    if (!pinfo.some((c) => c.name === 'tags')) {
+      console.log('📦 Adding tags column to products table...');
+      db.exec(`ALTER TABLE products ADD COLUMN tags TEXT;`);
+    }
+    if (!pinfo.some((c) => c.name === 'protocol_stage')) {
+      console.log('📦 Adding protocol_stage column to products table...');
+      db.exec(`ALTER TABLE products ADD COLUMN protocol_stage TEXT;`);
+    }
+  }
+} catch (migrationError) {
+  console.warn('⚠️  products tags migration check failed:', migrationError.message);
+}
+
 // Migration: Add eligibility detail columns if they don't exist
 try {
   const eligExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='eligibility_checks'`).get();
@@ -1660,6 +1680,23 @@ try {
   }
 } catch (e) {
   console.warn('⚠️  appointments reminder_24h_sent migration failed:', e.message);
+}
+
+// Migration: appointment calendar metadata for booking confidence/source audits
+try {
+  const apptInfo = db.prepare(`PRAGMA table_info(appointments)`).all();
+  const hasCalendarSource = apptInfo.some(c => c.name === 'calendar_source');
+  const hasCalendarConfidence = apptInfo.some(c => c.name === 'calendar_confidence');
+  if (!hasCalendarSource) {
+    db.exec(`ALTER TABLE appointments ADD COLUMN calendar_source TEXT`);
+    console.log('✅ Migration: appointments.calendar_source added');
+  }
+  if (!hasCalendarConfidence) {
+    db.exec(`ALTER TABLE appointments ADD COLUMN calendar_confidence TEXT`);
+    console.log('✅ Migration: appointments.calendar_confidence added');
+  }
+} catch (e) {
+  console.warn('⚠️  appointments calendar metadata migration failed:', e.message);
 }
 
 // ============================================
@@ -3174,7 +3211,10 @@ function migrateOrderTracking() {
       'pickup_address': 'TEXT', // Pickup/from location (store/warehouse)
       'pickup_latitude': 'REAL', // Pickup location coordinates
       'pickup_longitude': 'REAL',
-      'drop_point': 'TEXT' // Drop point/delivery address (same as shipping_address but explicit)
+      'drop_point': 'TEXT', // Drop point/delivery address (same as shipping_address but explicit)
+      commerce_quote_id: 'TEXT',
+      voice_checkout_id: 'TEXT',
+      stripe_payment_intent_id: 'TEXT'
     };
 
     let addedCount = 0;
@@ -3193,6 +3233,41 @@ function migrateOrderTracking() {
     db.pragma('foreign_keys = ON');
   } catch (error) {
     console.warn('⚠️  Order tracking migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: external_order_id + partial unique indexes for commerce idempotency (PI / voice checkout)
+function migrateMerchantOrderCommerceIdempotency() {
+  try {
+    db.pragma('foreign_keys = OFF');
+    const tableInfo = db.prepare('PRAGMA table_info(merchant_orders)').all();
+    const columnNames = tableInfo.map((col) => col.name);
+    if (!columnNames.includes('external_order_id')) {
+      console.log('📦 Adding external_order_id column to merchant_orders...');
+      db.prepare('ALTER TABLE merchant_orders ADD COLUMN external_order_id TEXT').run();
+    }
+    try {
+      db.prepare(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_merchant_orders_pi_unique
+        ON merchant_orders(stripe_payment_intent_id)
+        WHERE stripe_payment_intent_id IS NOT NULL AND length(trim(stripe_payment_intent_id)) > 0
+      `).run();
+    } catch (e) {
+      console.warn('⚠️  merchant_orders stripe_payment_intent_id unique index:', e.message);
+    }
+    try {
+      db.prepare(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_merchant_orders_vc_unique
+        ON merchant_orders(voice_checkout_id)
+        WHERE voice_checkout_id IS NOT NULL AND length(trim(voice_checkout_id)) > 0
+      `).run();
+    } catch (e) {
+      console.warn('⚠️  merchant_orders voice_checkout_id unique index:', e.message);
+    }
+    db.pragma('foreign_keys = ON');
+  } catch (error) {
+    console.warn('⚠️  merchant_orders commerce idempotency migration failed:', error.message);
     db.pragma('foreign_keys = ON');
   }
 }
@@ -3658,6 +3733,78 @@ function migrateCustomersTable() {
   } catch (migrationError) {
     console.warn('⚠️  Customers table migration failed:', migrationError.message);
     db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Canonical provider links (provider_id) for status + availability
+function migrateProviderCanonicalLinks() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const statusCols = db.prepare("PRAGMA table_info(provider_status)").all().map((c) => c.name);
+    if (!statusCols.includes('provider_id')) {
+      db.exec('ALTER TABLE provider_status ADD COLUMN provider_id TEXT');
+      console.log('✅ Migration: provider_status.provider_id added');
+    }
+    if (!statusCols.includes('last_seen_at')) {
+      db.exec('ALTER TABLE provider_status ADD COLUMN last_seen_at DATETIME');
+      console.log('✅ Migration: provider_status.last_seen_at added');
+    }
+    if (!statusCols.includes('heartbeat_expires_at')) {
+      db.exec('ALTER TABLE provider_status ADD COLUMN heartbeat_expires_at DATETIME');
+      console.log('✅ Migration: provider_status.heartbeat_expires_at added');
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_provider_status_provider_id ON provider_status(provider_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_provider_status_heartbeat_expiry ON provider_status(heartbeat_expires_at)');
+
+    const blockCols = db.prepare("PRAGMA table_info(provider_availability_blocks)").all().map((c) => c.name);
+    if (!blockCols.includes('provider_id')) {
+      db.exec('ALTER TABLE provider_availability_blocks ADD COLUMN provider_id TEXT');
+      console.log('✅ Migration: provider_availability_blocks.provider_id added');
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_availability_blocks_provider_id ON provider_availability_blocks(provider_id)');
+
+    // Backfill provider_id by provider email
+    db.exec(`
+      UPDATE provider_status
+      SET provider_id = (
+        SELECT pp.id
+        FROM provider_profiles pp
+        WHERE lower(pp.email) = lower(provider_status.email)
+        LIMIT 1
+      )
+      WHERE provider_id IS NULL
+    `);
+
+    db.exec(`
+      UPDATE provider_availability_blocks
+      SET provider_id = (
+        SELECT pp.id
+        FROM provider_profiles pp
+        WHERE lower(pp.email) = lower(provider_availability_blocks.provider_email)
+        LIMIT 1
+      )
+      WHERE provider_id IS NULL
+    `);
+
+    db.pragma('foreign_keys = ON');
+  } catch (e) {
+    console.warn('⚠️  provider canonical links migration failed:', e.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: persist booking persona in triage session for reconnect/restart resilience
+function migrateTriageSessionBookingFor() {
+  try {
+    const info = db.prepare("PRAGMA table_info(triage_sessions)").all();
+    const cols = info.map((c) => c.name);
+    if (!cols.includes('booking_for')) {
+      db.exec('ALTER TABLE triage_sessions ADD COLUMN booking_for TEXT');
+      console.log('✅ Migration: triage_sessions.booking_for added');
+    }
+  } catch (e) {
+    console.warn('⚠️  triage_sessions.booking_for migration failed:', e.message);
   }
 }
 
@@ -4339,11 +4486,14 @@ migratePatientPortalSessionsEmail();
 migratePatientPortalSessionsSecurityMeta();
 migrateMonthlyInvoicesJobCalls();
 migrateOrderTracking();
+migrateMerchantOrderCommerceIdempotency();
 migrateLeadsPipeline();
 migrateLeadsPhase1(); // Phase 1: Admin portal agentic capabilities
 migrateSequences(); // Phase 2: Sequences for automation
 migrateQualificationRules(); // Phase 2: Configurable qualification rules
 migrateCustomersTable();
+migrateProviderCanonicalLinks();
+migrateTriageSessionBookingFor();
 migrateVoiceCallLogCosts();
 migrateVoiceCallStateTables();
 migrateIcd10CodesTable();
@@ -4992,6 +5142,9 @@ function migrateSoftDeleteColumns() {
   addColIfMissing('voice_checkouts', 'stripe_session_expires_at DATETIME');
   /** C9: link checkout row to triage_sessions.session_id (voice callId / Kelly session) for audit */
   addColIfMissing('voice_checkouts', 'triage_session_id TEXT');
+  addColIfMissing('voice_checkouts', 'shipping_address TEXT');
+  /** Commerce: link voice_checkout to checkout_sessions quote row for PI metadata / webhooks */
+  addColIfMissing('voice_checkouts', 'commerce_quote_id TEXT');
   addColIfMissing('payment_receipts', 'deleted_at DATETIME');
   addColIfMissing('patient_documents', 'deleted_at DATETIME');
   addColIfMissing('patient_portal_sessions', 'emergency_flag BOOLEAN DEFAULT 0');
@@ -5812,6 +5965,45 @@ module.exports = {
       return null;
     }
   },
+
+  /**
+   * Ensure there is a tenant-level customer row for a clinic.
+   * This prevents "No customer_id found for clinic..." and enables tenant-scoped billing/payment.
+   */
+  ensureCustomerIdForClinic(clinicId) {
+    if (!clinicId) return null;
+    try {
+      const clinic = db.prepare('SELECT clinic_id, name, merchant_id FROM clinics WHERE clinic_id = ?').get(clinicId);
+      if (!clinic?.merchant_id) return null;
+
+      const existing = db.prepare('SELECT id FROM customers WHERE merchant_id = ? LIMIT 1').get(clinic.merchant_id);
+      if (existing?.id) return existing.id;
+
+      const tableInfo = db.prepare('PRAGMA table_info(customers)').all();
+      const columnNames = new Set(tableInfo.map((c) => c.name));
+
+      const { v4: uuidv4 } = require('uuid');
+      const customerId = uuidv4();
+      const name = clinic.name || clinicId;
+      // Unique per-tenant so we avoid email uniqueness collisions.
+      const email = `tenant-${clinicId}-${customerId}@example.com`;
+
+      const insertCols = ['id', 'name', 'email'];
+      const values = [customerId, name, email];
+
+      if (columnNames.has('merchant_id')) {
+        insertCols.push('merchant_id');
+        values.push(clinic.merchant_id);
+      }
+
+      const placeholders = insertCols.map(() => '?').join(', ');
+      db.prepare(`INSERT INTO customers (${insertCols.join(', ')}) VALUES (${placeholders})`).run(...values);
+
+      return customerId;
+    } catch (_) {
+      return null;
+    }
+  },
   /**
    * Return effective visit price for an appointment type at a clinic.
    * - Falls back to sensible defaults when not configured.
@@ -6567,6 +6759,21 @@ module.exports = {
     `).run(status, safeStringify(sessionData), id);
   },
 
+  /** Remove expired pending/quoted commerce sessions (scheduled cleanup). */
+  purgeExpiredCheckoutSessions: () => {
+    try {
+      const r = db.prepare(`
+        DELETE FROM checkout_sessions
+        WHERE expires_at IS NOT NULL
+          AND datetime(expires_at) < datetime('now')
+          AND status IN ('pending', 'quoted')
+      `).run();
+      return r.changes || 0;
+    } catch (_) {
+      return 0;
+    }
+  },
+
   // ============================================
   // AP2 MANDATES
   // ============================================
@@ -6724,6 +6931,17 @@ module.exports = {
           ${triageSid}
         )
       `;
+      if (checkout.shipping_address != null && checkout.shipping_address !== '') {
+        const ser =
+          typeof checkout.shipping_address === 'object'
+            ? JSON.stringify(checkout.shipping_address)
+            : String(checkout.shipping_address);
+        try {
+          await pgPool`UPDATE voice_checkouts SET shipping_address = ${ser} WHERE id = ${checkout.id}`;
+        } catch (e) {
+          console.warn('[DB] voice_checkouts shipping_address (pg) skipped:', e.message);
+        }
+      }
       return { changes: 1, lastInsertRowid: checkout.id };
     } else {
       // SQLite path
@@ -6755,6 +6973,31 @@ module.exports = {
           checkout.stripe_session_expires_at || null,
           triageVal
         );
+        if (checkout.shipping_address != null && checkout.shipping_address !== '') {
+          const ser =
+            typeof checkout.shipping_address === 'object'
+              ? JSON.stringify(checkout.shipping_address)
+              : String(checkout.shipping_address);
+          try {
+            const hasShip = db.prepare(`PRAGMA table_info(voice_checkouts)`).all().some((c) => c.name === 'shipping_address');
+            if (hasShip) {
+              db.prepare('UPDATE voice_checkouts SET shipping_address = ? WHERE id = ?').run(ser, checkout.id);
+            }
+          } catch (e) {
+            console.warn('[DB] voice_checkouts shipping_address update skipped:', e.message);
+          }
+        }
+        try {
+          const hasCq = db.prepare(`PRAGMA table_info(voice_checkouts)`).all().some((c) => c.name === 'commerce_quote_id');
+          if (hasCq && checkout.commerce_quote_id) {
+            db.prepare('UPDATE voice_checkouts SET commerce_quote_id = ? WHERE id = ?').run(
+              String(checkout.commerce_quote_id),
+              checkout.id
+            );
+          }
+        } catch (e) {
+          console.warn('[DB] voice_checkouts commerce_quote_id update skipped:', e.message);
+        }
         return result;
       }
       const result = db.prepare(`
@@ -6780,6 +7023,31 @@ module.exports = {
         checkout.stripe_checkout_session_id || null,
         checkout.stripe_session_expires_at || null
       );
+      if (checkout.shipping_address != null && checkout.shipping_address !== '') {
+        const ser =
+          typeof checkout.shipping_address === 'object'
+            ? JSON.stringify(checkout.shipping_address)
+            : String(checkout.shipping_address);
+        try {
+          const hasShip = db.prepare(`PRAGMA table_info(voice_checkouts)`).all().some((c) => c.name === 'shipping_address');
+          if (hasShip) {
+            db.prepare('UPDATE voice_checkouts SET shipping_address = ? WHERE id = ?').run(ser, checkout.id);
+          }
+        } catch (e) {
+          console.warn('[DB] voice_checkouts shipping_address update skipped:', e.message);
+        }
+      }
+      try {
+        const hasCq = db.prepare(`PRAGMA table_info(voice_checkouts)`).all().some((c) => c.name === 'commerce_quote_id');
+        if (hasCq && checkout.commerce_quote_id) {
+          db.prepare('UPDATE voice_checkouts SET commerce_quote_id = ? WHERE id = ?').run(
+            String(checkout.commerce_quote_id),
+            checkout.id
+          );
+        }
+      } catch (e) {
+        console.warn('[DB] voice_checkouts commerce_quote_id update skipped:', e.message);
+      }
       return result;
     }
   },
@@ -6808,7 +7076,7 @@ module.exports = {
       const allowedFields = [
         'status', 'payment_intent_id', 'merchant_order_id', 'payment_token',
         'fhir_patient_id', 'fhir_encounter_id', 'appointment_id', 'payment_method', 'customer_id'
-        , 'stripe_checkout_session_id', 'stripe_session_expires_at'
+        , 'stripe_checkout_session_id', 'stripe_session_expires_at', 'triage_session_id'
       ];
 
       // Build dynamic update using parameterized query (safe)
@@ -6852,6 +7120,10 @@ module.exports = {
       if (updates.customer_id !== undefined) {
         setParts.push(`customer_id = $${paramIndex++}`);
         values.push(updates.customer_id);
+      }
+      if (updates.triage_session_id !== undefined) {
+        setParts.push(`triage_session_id = $${paramIndex++}`);
+        values.push(updates.triage_session_id);
       }
       if (updates.status === 'completed') {
         setParts.push('completed_at = NOW()');
@@ -6914,6 +7186,10 @@ module.exports = {
       if (updates.customer_id !== undefined) {
         fields.push('customer_id = ?');
         values.push(updates.customer_id);
+      }
+      if (updates.triage_session_id !== undefined) {
+        fields.push('triage_session_id = ?');
+        values.push(updates.triage_session_id);
       }
       if (updates.status === 'completed') {
         fields.push('completed_at = CURRENT_TIMESTAMP');
@@ -6999,6 +7275,58 @@ module.exports = {
     } catch (e) {
       console.warn('getPaymentReceiptsForPatient failed:', e.message);
       return [];
+    }
+  },
+
+  /**
+   * Patient portal: combine payment_receipts with clinic invoices (draft/sent/etc.)
+   * so wallet and dashboard show balances from PDF→claim→invoice flow.
+   */
+  getMergedReceiptsForPatient(patientId, patientEmail = null, limit = 50) {
+    try {
+      const lim = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+      const receiptRows = this.getPaymentReceiptsForPatient
+        ? this.getPaymentReceiptsForPatient(patientId, patientEmail, lim)
+        : [];
+      const asReceipts = (receiptRows || []).map((r) => ({ ...r, source: r.source || 'receipt' }));
+      const invoiceExtras = [];
+      if (patientId && typeof this.getInvoicesByPatient === 'function') {
+        const seen = new Set();
+        const variants = new Set([patientId]);
+        if (typeof patientId === 'string') {
+          if (patientId.startsWith('patient-')) variants.add(patientId.slice('patient-'.length));
+          else variants.add(`patient-${patientId}`);
+        }
+        for (const pid of variants) {
+          for (const inv of this.getInvoicesByPatient(pid)) {
+            if (seen.has(inv.id)) continue;
+            seen.add(inv.id);
+            invoiceExtras.push({
+              id: inv.id,
+              source: 'invoice',
+              amount: inv.amount,
+              currency: 'USD',
+              status: inv.status,
+              issued_at: inv.created_at,
+              created_at: inv.created_at,
+              invoice_number: inv.invoice_number,
+              due_date: inv.due_date || null
+            });
+          }
+        }
+      }
+      const combined = [...asReceipts, ...invoiceExtras];
+      combined.sort((a, b) => {
+        const ta = new Date(a.issued_at || a.created_at || 0).getTime();
+        const tb = new Date(b.issued_at || b.created_at || 0).getTime();
+        return tb - ta;
+      });
+      return combined.slice(0, lim);
+    } catch (e) {
+      console.warn('getMergedReceiptsForPatient failed:', e.message);
+      return this.getPaymentReceiptsForPatient
+        ? this.getPaymentReceiptsForPatient(patientId, patientEmail, limit)
+        : [];
     }
   },
 
@@ -8595,13 +8923,29 @@ module.exports = {
 
   // Get clinic phone number by phone
   getClinicPhoneNumber(phoneNumber) {
+    if (!phoneNumber) return null;
+    const normalized = normalizePhoneNumber(phoneNumber);
+    const digitsOnly = String(phoneNumber).replace(/\D/g, '');
+    const plusDigits = digitsOnly ? `+${digitsOnly}` : null;
+    const plusOneDigits = digitsOnly && digitsOnly.length === 10 ? `+1${digitsOnly}` : null;
+
+    const candidates = Array.from(
+      new Set(
+        [phoneNumber, normalized, digitsOnly, plusDigits, plusOneDigits]
+          .filter((v) => typeof v === 'string' && v.trim().length > 0)
+          .map((v) => v.trim())
+      )
+    );
+
+    const placeholders = candidates.map(() => '?').join(', ');
     const stmt = db.prepare(`
       SELECT cpn.*, c.name as clinic_name, c.slug as clinic_slug
       FROM clinic_phone_numbers cpn
       JOIN clinics c ON cpn.clinic_id = c.clinic_id
-      WHERE cpn.phone_number = ? AND c.is_active = 1
+      WHERE cpn.phone_number IN (${placeholders}) AND c.is_active = 1
+      LIMIT 1
     `);
-    return stmt.get(phoneNumber);
+    return stmt.get(...candidates);
   },
 
   // Get all phone numbers for a clinic
@@ -8994,6 +9338,13 @@ module.exports = {
 
   // Create new appointment
   async createAppointment(appointment) {
+    try {
+      const { enforceCanonicalPatientPhone } = require('./services/patient-contact-canonical');
+      enforceCanonicalPatientPhone(appointment, { logTag: '[createAppointment]' });
+    } catch (e) {
+      console.warn('[createAppointment] Canonical patient phone skipped:', e.message);
+    }
+
     // Store buffer times in notes as JSON if not already JSON
     let notes = appointment.notes || '';
     if (appointment.buffer_before_minutes || appointment.buffer_after_minutes) {
@@ -9054,9 +9405,11 @@ module.exports = {
       const hasSlotState = info.some(c => c.name === 'slot_state');
       const hasPrimaryIcd10 = info.some(c => c.name === 'primary_icd10');
       const hasPrimaryCpt = info.some(c => c.name === 'primary_cpt');
+      const hasCalendarSource = info.some(c => c.name === 'calendar_source');
+      const hasCalendarConfidence = info.some(c => c.name === 'calendar_confidence');
       const baseCols = 'id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id, appointment_type, date, time, start_time, end_time, duration_minutes, provider';
       const baseVals = [appointment.id, appointment.clinic_id || null, appointment.customer_id || null, appointment.patient_name, appointment.patient_phone, appointment.patient_email, appointment.patient_id || null, appointment.appointment_type, appointment.date, appointment.time, appointment.start_time, appointment.end_time, appointment.duration_minutes, appointment.provider];
-      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + ', created_at';
+      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + (hasCalendarSource ? ', calendar_source' : '') + (hasCalendarConfidence ? ', calendar_confidence' : '') + ', created_at';
       let vals = [...baseVals];
       if (hasPractitioner) vals.push(appointment.practitioner_id || null);
       vals.push(appointment.status, notes, appointment.calendar_event_id, appointment.calendar_link, appointment.video_room_name || null);
@@ -9065,6 +9418,8 @@ module.exports = {
       if (hasSlotState) vals.push(appointment.slot_state || 'soft_reserved');
       if (hasPrimaryIcd10) vals.push(appointment.primary_icd10 || null);
       if (hasPrimaryCpt) vals.push(appointment.primary_cpt || null);
+      if (hasCalendarSource) vals.push(appointment.calendar_source || null);
+      if (hasCalendarConfidence) vals.push(appointment.calendar_confidence || null);
       vals.push(appointment.created_at);
       const placeholders = vals.map(() => '?').join(', ');
       const stmt = db.prepare(`INSERT INTO appointments (${cols}) VALUES (${placeholders})`);
@@ -9302,8 +9657,24 @@ module.exports = {
     }
 
     if (filters.provider) {
-      query += ' AND a.provider = ?';
-      params.push(filters.provider);
+      // Accept either provider display name or provider email in the filter.
+      // Some appointments persist display_name, while UI/users may type email.
+      query += `
+        AND (
+          a.provider = ?
+          OR a.provider IN (
+            SELECT p.display_name
+            FROM provider_profiles p
+            WHERE p.email = ?
+          )
+          OR a.provider IN (
+            SELECT p.email
+            FROM provider_profiles p
+            WHERE p.display_name = ?
+          )
+        )
+      `;
+      params.push(filters.provider, filters.provider, filters.provider);
     }
 
     query += ' ORDER BY a.date DESC, a.time DESC';
@@ -13810,8 +14181,8 @@ module.exports = {
     const id = productData.id || uuidv4();
 
     return db.prepare(`
-      INSERT INTO products (id, merchant_id, name, description, price, inventory, image_url, category)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO products (id, merchant_id, name, description, price, inventory, image_url, category, tags, protocol_stage)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       productData.merchant_id || null,
@@ -13820,19 +14191,25 @@ module.exports = {
       productData.price,
       productData.inventory !== undefined ? productData.inventory : 0,
       productData.image_url || null,
-      productData.category || null
+      productData.category || null,
+      productData.tags != null ? (typeof productData.tags === 'string' ? productData.tags : JSON.stringify(productData.tags)) : null,
+      productData.protocol_stage || null
     );
   },
 
   updateProduct(id, updates) {
-    const allowedFields = ['name', 'description', 'price', 'inventory', 'image_url', 'category', 'merchant_id'];
+    const allowedFields = ['name', 'description', 'price', 'inventory', 'image_url', 'category', 'merchant_id', 'tags', 'protocol_stage'];
     const setParts = [];
     const values = [];
 
     for (const key of allowedFields) {
       if (updates[key] !== undefined) {
         setParts.push(`${key} = ?`);
-        values.push(updates[key]);
+        let v = updates[key];
+        if (key === 'tags' && v != null && typeof v !== 'string') {
+          v = JSON.stringify(v);
+        }
+        values.push(v);
       }
     }
 
@@ -13880,6 +14257,36 @@ module.exports = {
     `).get(id);
   },
 
+  getMerchantOrderByStripePaymentIntentId(piId) {
+    if (!piId) return null;
+    try {
+      return db.prepare(`
+        SELECT o.*, p.name as product_name, p.price as product_price
+        FROM merchant_orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.stripe_payment_intent_id = ?
+        LIMIT 1
+      `).get(piId);
+    } catch (_) {
+      return null;
+    }
+  },
+
+  getMerchantOrderByVoiceCheckoutId(voiceCheckoutId) {
+    if (!voiceCheckoutId) return null;
+    try {
+      return db.prepare(`
+        SELECT o.*, p.name as product_name, p.price as product_price
+        FROM merchant_orders o
+        LEFT JOIN products p ON o.product_id = p.id
+        WHERE o.voice_checkout_id = ?
+        LIMIT 1
+      `).get(voiceCheckoutId);
+    } catch (_) {
+      return null;
+    }
+  },
+
   getOrdersByMerchant(merchantId) {
     return db.prepare(`
       SELECT o.*, p.name as product_name, p.price as product_price
@@ -13907,7 +14314,7 @@ module.exports = {
       ? JSON.stringify(orderData.drop_point)
       : (orderData.drop_point || orderData.shipping_address || null);
 
-    return db.prepare(`
+    const insertResult = db.prepare(`
       INSERT INTO merchant_orders (
         id, merchant_id, product_id, quantity, customer_email, customer_name,
         customer_phone, shipping_address, pickup_address, pickup_latitude, pickup_longitude,
@@ -13931,6 +14338,33 @@ module.exports = {
       orderData.payment_status || 'pending',
       orderData.source || 'direct'
     );
+    try {
+      const cols = db.prepare(`PRAGMA table_info(merchant_orders)`).all();
+      const names = new Set(cols.map((c) => c.name));
+      const sets = [];
+      const vals = [];
+      if (names.has('commerce_quote_id') && orderData.commerce_quote_id != null && orderData.commerce_quote_id !== '') {
+        sets.push('commerce_quote_id = ?');
+        vals.push(String(orderData.commerce_quote_id));
+      }
+      if (names.has('voice_checkout_id') && orderData.voice_checkout_id != null && orderData.voice_checkout_id !== '') {
+        sets.push('voice_checkout_id = ?');
+        vals.push(String(orderData.voice_checkout_id));
+      }
+      if (names.has('stripe_payment_intent_id') && orderData.stripe_payment_intent_id != null && orderData.stripe_payment_intent_id !== '') {
+        sets.push('stripe_payment_intent_id = ?');
+        vals.push(String(orderData.stripe_payment_intent_id));
+      }
+      if (names.has('external_order_id') && orderData.external_order_id != null && orderData.external_order_id !== '') {
+        sets.push('external_order_id = ?');
+        vals.push(String(orderData.external_order_id));
+      }
+      if (sets.length) {
+        vals.push(id);
+        db.prepare(`UPDATE merchant_orders SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+      }
+    } catch (_) {}
+    return insertResult;
   },
 
   updateOrder(id, updates) {

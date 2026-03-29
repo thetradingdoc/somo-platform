@@ -135,10 +135,23 @@ function detectLanguagePreferenceRequest(message) {
     if (re.test(lower)) return { isLanguageRequest: true, code, name };
   }
 
+  const russianLangPatterns = [
+    { re: /(?:можем|можно)\s+(?:говорить|общаться)\s+(?:по-русски|на\s+русском)/i, code: 'ru', name: 'Russian' },
+    { re: /\b(?:говорить|говорите)\s+по-русски\b/i, code: 'ru', name: 'Russian' },
+    { re: /\bпереключ(?:итесь|ись)\s+на\s+русский\b/i, code: 'ru', name: 'Russian' }
+  ];
+  for (const { re, code, name } of russianLangPatterns) {
+    if (re.test(m)) return { isLanguageRequest: true, code, name };
+  }
+
   // Blocklist: common words that match "in X" but are NOT languages (e.g. "rash in my eyelid")
   const NOT_LANGUAGE = new Set(['my', 'your', 'their', 'his', 'her', 'the', 'a', 'an', 'this', 'that', 'order', 'way', 'mind', 'detail', 'general', 'particular']);
   const patterns = [
     /\b(?:can you|could you|can we|could we)\s+speak\s+(?:in\s+)?(\w+)/i,
+    /\b(?:can you|could you|can we|could we)\s+talk\s+(?:in\s+)?(\w+)/i,
+    /\b(?:can you|could you|can we|could we)\s+(?:speak|talk)\s+(?:in\s+)?(russian|spanish|french|english|swahili|german|chinese|arabic|portuguese)\b/i,
+    /\bswitch\s+(?:the\s+)?(?:language\s+)?to\s+(russian|spanish|french|english|swahili|german|chinese)\b/i,
+    /\b(?:use|prefer)\s+(russian|spanish|french|english|swahili)\b/i,
     /\bspeak\s+(?:in\s+)?(\w+)\s*(?:please)?/i,
     /\b(?:respond|reply|answer|write)\s+(?:in\s+)?(\w+)/i,
     /\bI\s+(?:don'?t\s+)?speak\s+(\w+)/i,

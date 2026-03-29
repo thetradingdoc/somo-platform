@@ -627,7 +627,11 @@
         });
         const data = await res.json();
         if (!data.success) {
-          showMsg(data.error || 'Unable to upload documents.', 'error');
+          if (data.error_code === 'LIMIT_FILE_COUNT') {
+            showMsg(`Too many files selected. Upload up to ${data.max_files || 30} files per batch.`, 'error');
+          } else {
+            showMsg(data.error || 'Unable to upload documents.', 'error');
+          }
           return;
         }
         window.location.href = 'patient-dashboard.html';

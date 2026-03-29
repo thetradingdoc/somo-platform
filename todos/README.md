@@ -11,13 +11,14 @@ This folder holds task lists, checklists, and todo documents for the DocLittle p
 | [PRODUCTION_READINESS_TASKS.md](PRODUCTION_READINESS_TASKS.md) | Production readiness checklist, Azure setup, security, telemedicine, payments, monitoring |
 | [TELEMEDICINE_TODOS.md](TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2): appointment completion, JWT, case report, etc. |
 | [TELEMEDICINE_ARCHITECTURE_REVIEW.md](TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: flow, gaps, recommendations for video consult → case report path |
-| [TRIAGE_CLINICAL_GRADE_ROADMAP.md](TRIAGE_CLINICAL_GRADE_ROADMAP.md) | Clinical-grade triage: history, RAG, differentials, ICD/CPT, specialist matching, SOAP (6 stages, W1–W4) |
+| [TRIAGE_CONSOLIDATED_PHASED_TODOS.md](TRIAGE_CONSOLIDATED_PHASED_TODOS.md) | Consolidated triage phases / roadmap |
+| [AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout (chat-first + pay), landing handoff, P0 pricing/visit_mode/calendar/payment-status fixes, testing matrix |
 
 ## Related in docs/
 
 Task/gap content also lives in these docs (linked from here for context):
 
-- [PATIENT_PORTAL_AND_TELEHEALTH_TODO.md](../docs/architecture/patients/PATIENT_PORTAL_AND_TELEHEALTH_TODO.md)
+- [PATIENT_ARCHITECTURE.md](../docs/architecture/patients/PATIENT_ARCHITECTURE.md) (older `PATIENT_PORTAL_AND_TELEHEALTH_TODO.md` was removed in doc cleanup)
 - [VOICE_AGENT_TODO_AND_STATUS.md](../docs/architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)
 - [MASTER_TODO_FULL.md](../docs/development/MASTER_TODO_FULL.md)
 

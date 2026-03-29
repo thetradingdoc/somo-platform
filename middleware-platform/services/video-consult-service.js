@@ -12,6 +12,47 @@ const ENABLE_VISION = process.env.VIDEO_CONSULT_ENABLE_VISION === 'true' || proc
 const liveTranscripts = new Map();
 const roomParticipants = new Map();
 const roomRiskSeenRules = new Map(); // room_id -> Set of rule_id (idempotency)
+const roomTranscriptTranslation = new Map(); // room_id -> { enabled, target_language }
+
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+// Deep merge for JSON metadata blobs.
+// - Objects: recurse
+// - Arrays/primitives: source replaces target
+function deepMerge(target, source) {
+  if (!isPlainObject(target) || !isPlainObject(source)) return source;
+  const out = { ...target };
+  for (const [k, v] of Object.entries(source)) {
+    if (v === undefined) continue;
+    const prev = out[k];
+    if (isPlainObject(prev) && isPlainObject(v)) out[k] = deepMerge(prev, v);
+    else out[k] = v;
+  }
+  return out;
+}
+
+function mergeSessionMetadata(roomId, partialMetadata = {}) {
+  if (!roomId) return null;
+  const session = db.getVideoConsultSession(roomId);
+  const existingMeta = session?.metadata || {};
+  const incoming = partialMetadata || {};
+  const merged = deepMerge(existingMeta, incoming);
+
+  // Preserve any existing pre_visit unless caller explicitly provides it.
+  if (existingMeta?.pre_visit && incoming?.pre_visit === undefined) {
+    merged.pre_visit = existingMeta.pre_visit;
+  }
+
+  db.db?.prepare(`
+    UPDATE video_consult_sessions
+    SET metadata = ?, updated_at = datetime('now')
+    WHERE room_id = ?
+  `).run(JSON.stringify(merged), roomId);
+
+  return db.getVideoConsultSession(roomId);
+}
 
 /**
  * Append a live transcript event for a room.
@@ -32,6 +73,8 @@ function appendLiveTranscript(roomId, payload) {
   const isString = typeof payload === 'string';
   const normalized = {
     text: isString ? payload : (payload?.text || payload?.content || ''),
+    text_translated: isString ? null : (payload?.text_translated || null),
+    detected_language: isString ? null : (payload?.detected_language || null),
     speaker: payload?.speaker || 'unknown',
     timestamp: payload?.timestamp || now,
     source: payload?.source || (payload?.event_source || 'agent_stt'),
@@ -58,6 +101,8 @@ function appendLiveTranscript(roomId, payload) {
       participant_identity: normalized.participant_identity,
       speaker: normalized.speaker,
       text: normalized.text,
+      text_translated: normalized.text_translated,
+      detected_language: normalized.detected_language,
       timestamp: normalized.timestamp,
       source: normalized.source
     });
@@ -108,6 +153,66 @@ function shouldProcessFrameForParticipant(roomId, framePayload) {
 function clearRoomParticipants(roomId) {
   roomParticipants.delete(roomId);
   roomRiskSeenRules.delete(roomId);
+  roomTranscriptTranslation.delete(roomId);
+}
+
+function setTranscriptTranslationConfig(roomId, config = {}) {
+  if (!roomId) return { enabled: false, target_language: 'en' };
+  const normalized = {
+    enabled: !!config.enabled,
+    target_language: String(config.target_language || 'en').trim().toLowerCase() || 'en'
+  };
+  roomTranscriptTranslation.set(roomId, normalized);
+  return normalized;
+}
+
+function getTranscriptTranslationConfig(roomId) {
+  return roomTranscriptTranslation.get(roomId) || { enabled: false, target_language: 'en' };
+}
+
+async function maybeTranslateTranscriptText(text, roomId) {
+  const cfg = getTranscriptTranslationConfig(roomId);
+  const input = String(text || '').trim();
+  if (!cfg.enabled || !input) {
+    return { text_translated: null, detected_language: null, translated: false };
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return { text_translated: null, detected_language: null, translated: false, reason: 'OPENAI_API_KEY_MISSING' };
+  }
+  try {
+    const OpenAI = require('openai');
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const target = cfg.target_language || 'en';
+    const comp = await openai.chat.completions.create({
+      model: process.env.VIDEO_TRANSLATION_MODEL || 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Detect the source language and translate into ${target}. Return strict JSON: {"detected_language":"<iso-639-1>","translated_text":"<text>"}.`
+        },
+        { role: 'user', content: input }
+      ],
+      temperature: 0.1,
+      max_tokens: 220
+    });
+    const raw = comp.choices?.[0]?.message?.content || '';
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_) {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) parsed = JSON.parse(m[0]);
+    }
+    const translated = String(parsed?.translated_text || '').trim();
+    const detected = String(parsed?.detected_language || '').trim().toLowerCase() || null;
+    if (!translated) {
+      return { text_translated: null, detected_language: detected, translated: false };
+    }
+    return { text_translated: translated, detected_language: detected, translated: true };
+  } catch (error) {
+    console.warn('[video-consult] transcript translation failed:', error.message);
+    return { text_translated: null, detected_language: null, translated: false, reason: error.message };
+  }
 }
 
 function getRiskSeenRules(roomId) {
@@ -161,6 +266,25 @@ function getSession(roomId) {
  * End session and optionally attach metadata
  */
 function endSession(roomId, metadata = null) {
+  try {
+    const existing = db.getVideoConsultSession(roomId);
+    const existingMeta = existing?.metadata || {};
+    const incoming = metadata || null;
+
+    if (incoming && typeof incoming === 'object') {
+      const merged = deepMerge(existingMeta, incoming);
+
+      // If pipeline didn't include pre_visit, keep it.
+      if (existingMeta?.pre_visit && merged?.pre_visit === undefined) {
+        merged.pre_visit = existingMeta.pre_visit;
+      }
+
+      return db.endVideoConsultSession(roomId, merged);
+    }
+  } catch (_) {
+    // fall back to non-merge
+  }
+
   return db.endVideoConsultSession(roomId, metadata);
 }
 
@@ -214,9 +338,13 @@ module.exports = {
   createSession,
   getSession,
   endSession,
+  mergeSessionMetadata,
   getSessionState,
   appendLiveTranscript,
   clearLiveTranscript,
+  setTranscriptTranslationConfig,
+  getTranscriptTranslationConfig,
+  maybeTranslateTranscriptText,
   trackParticipant,
   shouldProcessFrameForParticipant,
   clearRoomParticipants,

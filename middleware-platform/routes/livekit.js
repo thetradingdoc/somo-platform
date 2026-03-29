@@ -17,6 +17,73 @@ const router = express.Router();
 const db = require('../database');
 const PatientPortalService = require('../services/patient-portal-service');
 
+/**
+ * YYYY-MM-DD + HH:mm interpreted in IANA tz → UTC epoch ms (aligns with patient/calendar wall-clock).
+ */
+function wallClockToUtcMs(dateStr, timeStr, timeZone) {
+  const tz = timeZone || 'America/New_York';
+  const dm = String(dateStr || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const tm = String(timeStr || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!dm || !tm) return NaN;
+  const y = +dm[1];
+  const mo = +dm[2];
+  const d = +dm[3];
+  const h = +tm[1];
+  const mi = +tm[2];
+  const partsFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    calendar: 'gregory',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+  function readParts(epochMs) {
+    const o = {};
+    for (const p of partsFormatter.formatToParts(new Date(epochMs))) {
+      if (p.type !== 'literal') o[p.type] = parseInt(p.value, 10);
+    }
+    return o;
+  }
+  let t = Date.UTC(y, mo - 1, d, h, mi, 0, 0);
+  for (let i = 0; i < 48; i++) {
+    const p = readParts(t);
+    if (p.year === y && p.month === mo && p.day === d && p.hour === h && p.minute === mi) return t;
+    const diffMin = (h * 60 + mi) - (p.hour * 60 + p.minute);
+    const diffDay = d - p.day;
+    t += (diffMin + diffDay * 24 * 60) * 60 * 1000;
+  }
+  return NaN;
+}
+
+function patientAppointmentJoinBoundsMs(appointment) {
+  const tz = appointment.timezone || process.env.DEFAULT_CLINIC_TZ || 'America/New_York';
+  const dur =
+    typeof appointment.duration_minutes === 'number' && appointment.duration_minutes > 0
+      ? appointment.duration_minutes
+      : 30;
+
+  if (appointment.date && appointment.time) {
+    const start = wallClockToUtcMs(appointment.date, appointment.time, tz);
+    if (!Number.isNaN(start)) {
+      return { startMs: start, endMs: start + dur * 60 * 1000, source: 'wall_clock' };
+    }
+  }
+
+  const startMs = appointment.start_time ? new Date(appointment.start_time).getTime() : NaN;
+  const endMs = appointment.end_time ? new Date(appointment.end_time).getTime() : NaN;
+  if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
+    return { startMs, endMs, source: 'iso' };
+  }
+  if (!Number.isNaN(startMs)) {
+    return { startMs, endMs: startMs + dur * 60 * 1000, source: 'iso_start_only' };
+  }
+  return { startMs: NaN, endMs: NaN, source: 'none' };
+}
+
 let AccessToken;
 try {
   const livekit = require('livekit-server-sdk');
@@ -204,11 +271,11 @@ router.get('/patient/video/token', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Appointment not found' });
     }
 
-    // Enforce join window (mvp-26). Store times in UTC; compare using Date().
+    // Enforce join window (mvp-26). Prefer legacy date+time in appointment.timezone (wall clock)
+    // so we match provider/patient UIs; raw start_time/end_time are often mis-stored as "local-looking" UTC.
     const earlyMin = parseInt(process.env.PATIENT_JOIN_EARLY_MINUTES || '10', 10);
     const lateMin = parseInt(process.env.PATIENT_JOIN_LATE_MINUTES || '15', 10);
-    const startMs = appointment.start_time ? new Date(appointment.start_time).getTime() : NaN;
-    const endMs = appointment.end_time ? new Date(appointment.end_time).getTime() : NaN;
+    const { startMs, endMs } = patientAppointmentJoinBoundsMs(appointment);
     const nowMs = Date.now();
     if (!Number.isNaN(startMs) && !Number.isNaN(endMs)) {
       const earliest = startMs - Math.max(0, earlyMin) * 60 * 1000;

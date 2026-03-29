@@ -1,7 +1,7 @@
 /**
  * CUSTOMER AUTHENTICATION MIDDLEWARE
  * Protects routes that require customer authentication
- * Attaches customer and merchant_id to request object
+ * Attaches customer and merchant_id/provider_id to request object
  */
 
 const db = require('../database');
@@ -90,7 +90,9 @@ function requireCustomerAuth(req, res, next) {
     // Attach to request object
     req.customer = customer;
     req.merchant = merchant;
-    req.merchant_id = customer.merchant_id; // For easy access
+    req.provider = merchant;
+    req.merchant_id = customer.merchant_id; // Legacy naming
+    req.provider_id = customer.merchant_id; // Preferred naming alias
     req.session = session;
 
     // Continue to next middleware/route
@@ -122,8 +124,10 @@ function optionalCustomerAuth(req, res, next) {
         if (customer && customer.email_verified) {
           req.customer = customer;
           req.merchant_id = customer.merchant_id;
+          req.provider_id = customer.merchant_id;
           if (customer.merchant_id) {
             req.merchant = db.getMerchant(customer.merchant_id);
+            req.provider = req.merchant;
           }
           req.session = session;
         }

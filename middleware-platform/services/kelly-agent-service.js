@@ -25,11 +25,12 @@
 
 const Groq = require('groq-sdk');
 const LLMRouter = require('./llm-router');
-const { resolvePrimaryProvider } = LLMRouter;
+const { resolvePrimaryProvider, callStreamWithDeltas } = LLMRouter;
 const db = require('../database');
 
 // Startup config log — confirm intended Kelly LLM path (fix-startup)
 (function _logKellyConfig() {
+  if (process.env.KELLY_QUIET === '1' || process.env.KELLY_QUIET === 'true') return;
   const provider = resolvePrimaryProvider();
   const anthKey = process.env.ANTHROPIC_API_KEY || '';
   const model = process.env.KELLY_ANTHROPIC_MODEL || 'claude-sonnet-4-5';
@@ -108,6 +109,11 @@ function _kellyDebugTurn(tag, payload) {
   } catch (_) {}
 }
 
+/** Slot/contact/inject/tool-payload traces. Set KELLY_DEBUG=1 — off in production by default. */
+function _kellyDebugVerbose() {
+  return process.env.KELLY_DEBUG === '1' || process.env.KELLY_DEBUG === 'true';
+}
+
 /**
  * Compact system prompt for fallback models.
  * Groq TPM limits can be hit when the full prompt + tool payloads are too large.
@@ -133,6 +139,17 @@ ${preferredLanguage && preferredLanguage !== 'en' ? `Language: ${preferredLangua
 }
 
 function _replyForTriageIncomplete(errorCode, channel, preferredLanguage, sessionRow, userMessage) {
+  const TRIAGE_ERROR_MESSAGES = {
+    TRIAGE_REQUIRED: "To find the right specialist, I need one quick detail first: what's the main symptom or concern bothering you today?",
+    TRIAGE_INCOMPLETE: "I'm almost done with triage. Can you describe the main thing you're experiencing?",
+    LOW_CONFIDENCE: 'Just one more detail - can you describe what it feels like (for example: sharp, dull, constant, or comes and goes)?',
+    DIFFERENTIALS_REQUIRED: "I need a bit more to route you correctly. What's the main symptom bringing you in?",
+    OPQRST_REQUIRED: 'I need to collect a bit of medical history before booking. When did this start?',
+    RICH_INTAKE_REQUIRED: 'Are you currently taking any medications?',
+    SAFETY_BLOCKED: 'Based on what you have described, please call 911 or go to your nearest emergency room right away.'
+  };
+  if (TRIAGE_ERROR_MESSAGES[errorCode]) return TRIAGE_ERROR_MESSAGES[errorCode];
+
   // Server-side guardrail: avoid tool-call spirals when triage is incomplete.
   // We ask ONE OPQRST field at a time (voice UX) and acknowledge what the user just said.
   const stored = sessionRow || {};
@@ -298,6 +315,28 @@ function _sanitizeToolMessageForPatient(text) {
   return s;
 }
 
+async function _findNextAvailableDate(startDate, clinicId, appointmentType, lane, sessionId, patientId, callerPhone, channel) {
+  const d = new Date(String(startDate || '').slice(0, 10) || new Date().toISOString().slice(0, 10));
+  for (let i = 0; i < 7; i++) {
+    d.setDate(d.getDate() + 1);
+    const day = d.getDay();
+    if (day === 0 || day === 6) continue;
+    const dateStr = d.toISOString().slice(0, 10);
+    const slotOut = await KellyToolExecutor.execute(
+      'get_available_slots',
+      { date: dateStr, appointment_type: appointmentType, lane, force_after_clarified: true },
+      { sessionId, clinicId, patientId, callerPhone, channel }
+    );
+    const source = Array.isArray(slotOut?.slot_bundles) && slotOut.slot_bundles.length
+      ? slotOut.slot_bundles
+      : (Array.isArray(slotOut?.available_slots) ? slotOut.available_slots : []);
+    if (slotOut?.success && source.length) {
+      return { date: dateStr, slotOut };
+    }
+  }
+  return null;
+}
+
 function _extractRequestedSpecialty(text) {
   const t = String(text || '').toLowerCase();
   if (t.includes('dermatology') || t.includes('skin specialist')) return 'Dermatology';
@@ -313,6 +352,7 @@ function _looksLikeSlotChoice(text) {
   if (t === 'async' || t === 'sync') return true;
   if (/\b\d{1,2}:\d{2}\s*(am|pm)?\b/i.test(t)) return true;
   if (/\bfirst available\b/.test(t)) return true;
+  if (/\boption\s*\d+\b/i.test(t)) return true;
   return false;
 }
 
@@ -331,13 +371,67 @@ function _extractPhone(text) {
   return t.match(/\+?\d[\d\s().-]{7,}\d/)?.[0] || null;
 }
 
+function _normalizePhoneE164(phone) {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits[0] === '1') return `+${digits}`;
+  if (digits.length > 8) return `+${digits}`;
+  return null;
+}
+
+function _maskPhoneTail(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 4) return null;
+  return digits.slice(-4);
+}
+
 function _extractPatientName(text) {
-  const t = String(text || '');
+  const t = String(text || '').trim();
+  if (!t) return null;
   const tagged = t.match(/name\s*:\s*([A-Za-z][A-Za-z'\- ]{1,80})/i)?.[1]?.trim();
   if (tagged) return tagged;
-  // Fallback: detect simple two-word proper name sequence after "I am"/"I'm".
   const intro = t.match(/\b(i am|i'm)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})/);
-  return intro?.[2] || null;
+  if (intro?.[2]) return intro[2];
+  // Standalone 2–4 word title-cased string (e.g. "Jeremiah Richard")
+  const words = t.split(/\s+/).filter(w => !/^(name|email|phone|number|and|the|my|i'm|im|is)$/i.test(w));
+  if (words.length >= 2 && words.length <= 4 && words.every(w => /^[A-Za-z'-]+$/.test(w)) && !t.includes('@') && !/\d{3,}/.test(t)) {
+    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+  return null;
+}
+
+function _extractCollectedBookingInfo(history) {
+  if (!Array.isArray(history) || history.length === 0) return null;
+  let name = null, email = null, phone = null;
+  const emailRe = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const phoneRe = /\+?1?[\s\-.]*\(?[0-9]{3}\)?[\s\-.]*[0-9]{3}[\s\-.]*[0-9]{4}\b/g;
+
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i];
+    const content = (m?.content || '').toString().trim();
+    if (!content || m.role !== 'user') continue;
+
+    const emails = content.match(emailRe);
+    if (emails && emails.length) email = emails[emails.length - 1];
+
+    const phones = content.match(phoneRe);
+    if (phones && phones.length) {
+      const p = phones[phones.length - 1].replace(/\D/g, '');
+      if (p.length >= 10) phone = p.length === 10 ? `+1${p}` : `+${p}`;
+    }
+
+    const withoutEmailAndPhone = content.replace(emailRe, '').replace(phoneRe, '');
+    const namePart = withoutEmailAndPhone.replace(/\s*(?:name|email|phone|number)\s*$/gi, '').replace(/^[&\-,\s]+|[&\-,\s]+$/g, '').trim();
+    if (namePart) {
+      const words = namePart.split(/\s+/).filter(w => !/^(name|email|phone|number|and|the|my|i'm|im|is)$/i.test(w));
+      if (words.length >= 2 && words.length <= 5 && words.every(w => /^[A-Za-z'-]+$/.test(w))) {
+        name = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      }
+    }
+  }
+  if (name && email && phone) return { name, email, phone };
+  return null;
 }
 
 function _parseSlotOrdinal(text) {
@@ -348,10 +442,10 @@ function _parseSlotOrdinal(text) {
     const n = parseInt(num[1] || num[2], 10);
     if (Number.isFinite(n) && n >= 1) return n;
   }
-  if (/\bfirst\b/.test(t)) return 1;
-  if (/\bsecond\b/.test(t)) return 2;
-  if (/\bthird\b/.test(t)) return 3;
-  if (/\bfourth\b/.test(t)) return 4;
+  const ordinals = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10 };
+  for (const [word, n] of Object.entries(ordinals)) {
+    if (new RegExp(`\\b${word}\\b`).test(t)) return n;
+  }
   return null;
 }
 
@@ -464,7 +558,7 @@ function _classifyIntent(message) {
 function _hasNoSymptomsRoutineSignal(text) {
   const t = String(text || '').toLowerCase();
   return (
-    /\b(no symptoms?|without symptoms?|don't have symptoms?|do not have symptoms?|just routine|routine visit|annual check)\b/i.test(t) ||
+    /\b(no symptoms?|without symptoms?|don't have symptoms?|do not have symptoms?|just routine|routine|routine visit|routine check(?:-?up)?|annual check|checkup|check-up)\b/i.test(t) ||
     /\b(нет симптом|без симптом|только осмотр|профилактическ)\b/i.test(t)
   );
 }
@@ -476,9 +570,23 @@ function _hasGeneralVisitSignal(text) {
 
 function _isNoSymptomsReply(text) {
   const t = String(text || '').trim().toLowerCase();
-  if (['no', 'none', 'nope', 'nah', 'нет', 'неа', 'ningependa hapana', 'hapana'].includes(t)) return true;
+
+  // Exact matches including common typos
+  const exactMatches = [
+    'no', 'none', 'nope', 'nah', 'non', 'non3', 'noo', 'noe', 'nom',
+    'nil', 'nill', 'zero', 'nothing', 'none at all',
+    'нет', 'неа', 'ningependa hapana', 'hapana'
+  ];
+  if (exactMatches.includes(t)) return true;
+
+  // Fuzzy: short reply that starts with "no" and has at most 2 extra chars (covers non3, noo, noe, etc.)
+  if (/^no.{0,2}$/i.test(t) && t.length <= 5) return true;
+
+  // Phrase patterns
   return (
-    /\b(no symptoms?|without symptoms?|no concerns?|nothing right now|none)\b/i.test(t) ||
+    /\b(no symptoms?|without symptoms?|no concerns?|nothing right now|none|non[e3]?)\b/i.test(t) ||
+    /\b(routine|routine check(?:-?up)?|routine visit|just a checkup|checkup only|check-up only)\b/i.test(t) ||
+    /\b(i (don'?t|do not) have (any )?symptoms?)\b/i.test(t) ||
     /\b(нет симптом|без симптом|жалоб нет)\b/i.test(t)
   );
 }
@@ -681,6 +789,9 @@ Store each answer via store_triage_opqrst immediately — do not wait.
 - **Psychiatry**: PHQ-2, GAD-2, safety screen (see below). Prior meds, therapy, psychiatrist.
 - **Orthopedics**: Mechanism of injury? Prior treatment for this?
 
+## Async vs Sync (UX)
+When discussing visit types: **async review** = patient uploads photos/info for a specialist to review later (no live video). **Sync** = live video visit at a scheduled time. Follow triage severity and lane rules (e.g. high urgency → sync).
+
 ## Mental Health Intake (gap8) — NOT OPQRST Radiation
 For mood, anxiety, depression, PTSD, ADHD, bipolar: Do NOT ask "does it spread anywhere."
 - **PHQ-2**: "Over the last 2 weeks, have you felt little interest or pleasure? Down, depressed, or hopeless?"
@@ -744,16 +855,23 @@ Internally lanes are async/sync, but NEVER ask callers "async or sync."
 Ask in patient terms: "Do you need to see a doctor immediately, or do you want to schedule for later?"
 Map "immediately/urgent/now" -> sync. Map "scheduled/later/not urgent" -> async.
 
-## Booking Flow (cash-only; insurance Phase 2 not active)
+## Booking Flow — Contact Collection (voice and chat)
 1. Collect patient name (if not known)
 2. Complete triage with run_triage_rag first
 3. Find available slots with get_available_slots (MUST run triage first; pass specialty from run_triage_rag)
 4. If kelly_script is in the slot result, say it to the patient
 5. If secondary_specialties, offer optional additional review (ask which they want)
-6. Confirm slot with patient
-7. Collect email
-8. Schedule with schedule_appointment (practitioner_id from the slot is REQUIRED)
-9. create_appointment_checkout → verify_checkout_code for payment
+6. Confirm the slot with the patient
+7. Ask for ONE piece of contact info at a time in this order:
+   - If name is unknown: "Can I get your full name?"
+   - Once name is known, ask: "What's the best email address for your confirmation?"
+     (Voice: let them spell it out, confirm back: "I have [email], is that correct?")
+   - Once email is confirmed, ask: "And your phone number?"
+8. As soon as you have name + email + phone, call schedule_appointment IMMEDIATELY.
+   Do NOT ask for anything else first. Do NOT summarize. Just call the tool.
+   The server will fill in any missing fields from what was collected earlier in the session.
+9. After schedule_appointment returns { success: true }, THEN confirm the booking to the patient.
+10. create_appointment_checkout → verify_checkout_code for payment
 
 ## Routine Visit Constraints
 - If caller says routine/general visit with NO symptoms, default specialty is Primary Care unless caller explicitly asks for another specialty.
@@ -778,21 +896,47 @@ Examples:
 ## Rules
 - Never collect card numbers over phone/chat
 - Always confirm insurance before booking
-- Email is required before calling schedule_appointment — never skip this
+- Name, email, and phone are ALL required before calling schedule_appointment — never skip any of them
+- When the user provides their phone number (after you asked for it), you have all three—call schedule_appointment immediately. Never re-ask for email or name if you already collected them in prior turns. Do NOT say "that looks like a phone number, I still need your email"—if you asked for phone and they gave a number, you have it; proceed to book
+- If schedule_appointment returns requiresPhone, ask for phone then retry with the SAME name and email—do NOT re-ask for name or email
 - Never say "I've booked it" until schedule_appointment returns success
 - NEVER say you've booked, confirmed, or scheduled an appointment until schedule_appointment returns { success: true }.
 - NEVER invent practitioner names, doctor names, or specialties. Only use provider names and specialties from tool output.
+- NEVER invent or assume a provider name. If slot_bundles returns practitioner_name: null, say "a provider" or "a doctor" and never a specific name.
+- NEVER say "Dr. [name]" unless that exact name appeared in a tool result in this conversation.
 - Be empathetic. Healthcare is stressful.
 
 ## Slot Lookup Rules
 - Call get_available_slots for ONE date per turn. If no slots are available, ask the patient for another date.
 - Once slots are found, present them and wait for a user choice. Do not automatically fetch additional dates in the same turn.
+- **Slot selection (CRITICAL)**: When the user selects a slot (e.g. "option 7", "option 1", "7", "5:00 PM", "the first one"), treat it as a FINAL choice. Immediately ask for name, email, and phone to complete the booking. Do NOT re-list the slots, do NOT ask "Does that work for you?" or "Would that work?" — that adds a pointless extra turn. Go straight to: "To complete your booking, I'll need your full name, email, and phone number."
 
 ${isVoice ? '## Voice Format\nKeep all replies SHORT. Max 2 sentences per turn. No bullet points. No headers. Just natural speech.' : '## Chat Format\nYou can use slightly longer replies. Bullet points OK when listing options. Keep it conversational.'}
 
-${preferredLanguage && preferredLanguage !== 'en' ? `## Current Language\nRespond in language code: ${preferredLanguage}. Maintain this for the entire session.` : ''}
+${KellyAgentService._languageDirective(preferredLanguage)}
 ${kellyScriptHint ? `## Recent Specialist Routing Context\nWhen presenting availability this turn, preserve this exact routing note before slot options: "${kellyScriptHint}"` : ''}
 `;
+}
+
+function buildCommerceCheckoutSystemPrompt(ctx) {
+  const productId = String(ctx?.productId || '').trim();
+  const providerId = String(ctx?.providerId || '').trim();
+  const patientEmail = ctx?.patientEmail ? String(ctx.patientEmail).trim() : '';
+  const lang = KellyAgentService._languageDirective(ctx?.preferredLanguage);
+  return `You are Kelly, helping a patient complete a secure retail product purchase from their clinic's shop.
+## Locked context (do not claim a different product or merchant)
+- product_id: ${productId}
+- provider_id (merchant): ${providerId}
+${patientEmail ? `- Patient email on file (use for prepare_commerce_checkout if they confirm): ${patientEmail}` : ''}
+
+## Rules
+- This session is **retail checkout only**. Do NOT book appointments, run triage, or call scheduling tools.
+- NEVER invent prices. For any price or total, call get_product_quote and only repeat amounts returned by that tool.
+- When they are ready to pay, call prepare_commerce_checkout with quote_id from get_product_quote, customer_email, and shipping_address (full delivery address: street, city, state, ZIP).
+- You may answer general questions about skincare routine or ingredients from general knowledge; for price or checkout, use tools.
+- Keep replies concise and friendly.
+
+${lang}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -829,21 +973,21 @@ const KELLY_TOOLS = [
     type: 'function',
     function: {
       name: 'schedule_appointment',
-      description: 'Book an appointment. REQUIRES email and practitioner_id from the slot.',
+      description: 'Book an appointment. REQUIRES patient_name, patient_email, patient_phone, date, time. Collect all three (name, email, phone) BEFORE calling.',
       parameters: {
         type: 'object',
         properties: {
-          patient_name: { type: 'string' },
-          patient_phone: { type: 'string' },
-          patient_email: { type: 'string', description: 'REQUIRED — must be collected before calling this' },
+          patient_name: { type: 'string', description: 'REQUIRED — full name' },
+          patient_phone: { type: 'string', description: 'REQUIRED — phone number (e.g. +1234567890)' },
+          patient_email: { type: 'string', description: 'REQUIRED — email for confirmation' },
           appointment_type: { type: 'string' },
           date: { type: 'string', description: 'YYYY-MM-DD' },
           time: { type: 'string', description: 'HH:MM or "2:00 PM"' },
           timezone: { type: 'string' },
-          practitioner_id: { type: 'string', description: 'REQUIRED — specialist ID from get_available_slots' },
+          practitioner_id: { type: 'string', description: 'From slot_bundles when available' },
           notes: { type: 'string' }
         },
-        required: ['patient_name', 'patient_email', 'date', 'time']
+        required: ['patient_name', 'patient_email', 'patient_phone', 'date', 'time']
       }
     }
   },
@@ -892,6 +1036,45 @@ const KELLY_TOOLS = [
           verification_code: { type: 'string' }
         },
         required: ['payment_token', 'verification_code']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_product_quote',
+      description:
+        'Retail product checkout: get a server-locked quote (amount + quote_id). Use before prepare_commerce_checkout. Do not state a dollar amount from user text — only values returned by this tool.',
+      parameters: {
+        type: 'object',
+        properties: {
+          product_id: { type: 'string', description: 'Catalog product id' },
+          provider_id: { type: 'string', description: 'Optional override; otherwise uses clinic merchant' },
+          quantity: { type: 'integer' }
+        },
+        required: ['product_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_commerce_checkout',
+      description:
+        'Retail product checkout: start payment using quote_id from get_product_quote. Returns payment_link / client_secret from the server — never set charge amount in tool args.',
+      parameters: {
+        type: 'object',
+        properties: {
+          quote_id: { type: 'string' },
+          customer_email: { type: 'string' },
+          customer_phone: { type: 'string' },
+          customer_name: { type: 'string' },
+          shipping_address: {
+            type: 'string',
+            description: 'Full shipping address for delivery (street, city, state, ZIP, country if needed)'
+          }
+        },
+        required: ['quote_id', 'customer_email']
       }
     }
   },
@@ -1088,10 +1271,40 @@ const KELLY_TOOLS = [
   }
 ];
 
+const COMMERCE_CHECKOUT_TOOLS = KELLY_TOOLS.filter(
+  (t) => t?.function?.name === 'get_product_quote' || t?.function?.name === 'prepare_commerce_checkout'
+);
+
 // ─────────────────────────────────────────────────────────────
 // Main entry point
 // ─────────────────────────────────────────────────────────────
 class KellyAgentService {
+  /**
+   * Strong LLM instruction for non-English sessions (ISO-639-1 codes).
+   * Weak "respond in language code: ru" was often ignored on voice.
+   */
+  static _languageDirective(preferredLanguage) {
+    const code = String(preferredLanguage || 'en').toLowerCase();
+    if (!code || code === 'en') return '';
+    const map = {
+      ru: `## Текущий язык / Current language (MANDATORY)
+The patient is speaking Russian. You MUST reply ONLY in Russian for every message in this session.
+Use natural spoken Russian. Keep Latin for emails, phone numbers, and proper nouns if given that way.
+If they just asked to switch to Russian, start with a short Russian acknowledgment, then continue care in Russian.`,
+      es: `## Idioma actual (OBLIGATORIO)
+Responde SOLO en español durante toda la sesión.`,
+      fr: `## Langue actuelle (OBLIGATOIRE)
+Répondez UNIQUEMENT en français pendant toute la session.`,
+      sw: `## Lugha (LAZIMA)
+Jibu kwa Kiswahili tu kwa kipindi hicho.`,
+      de: `## Aktuelle Sprache (VERBINDLICH)
+Antworten Sie durchgehend auf Deutsch.`,
+      zh: `## 当前语言（必须）
+全程使用中文回复患者。`
+    };
+    return map[code] || `## Current language (MANDATORY)\nRespond ONLY in language "${code}" for the entire session. Do not use English unless the patient switches back to English.`;
+  }
+
   /**
    * Process one turn of conversation.
    *
@@ -1122,7 +1335,10 @@ class KellyAgentService {
       callerPhone = null,
       patientName = null,
       patientEmail = null,
-      portalSessionId = null
+      portalSessionId = null,
+      commerceCheckout = null,
+      onStreamDelta = null,
+      onToolStatus = null
     } = params;
 
     _kellyDebugTurn('turn_start', {
@@ -1145,10 +1361,126 @@ class KellyAgentService {
       return { reply: emergencyReply, endCall: false, toolsUsed: [], language: 'en' };
     }
 
+    if (commerceCheckout && commerceCheckout.productId && commerceCheckout.providerId) {
+      if (!clinicId) {
+        return {
+          reply:
+            'Checkout chat needs a clinic context. Please open this page from your provider or shop link.',
+          endCall: false,
+          toolsUsed: [],
+          language: 'en',
+          error_code: 'CLINIC_REQUIRED'
+        };
+      }
+      return await this._processCommerceCheckoutTurn({
+        message,
+        sessionId,
+        channel,
+        clinicId,
+        patientId,
+        patientEmail,
+        commerceCheckout,
+        onStreamDelta,
+        onToolStatus
+      });
+    }
+
     // Load a short history snapshot before fast-intent routing so routine sessions
     // do not get reset to "do you have symptoms?" on every subsequent turn.
     const historyEarly = this._loadHistory(sessionId);
     const routineLockedEarly = _isRoutineLockedForSession(sessionId, historyEarly);
+    const msgLcEarly = String(message || '').toLowerCase().trim();
+
+    // Rehydrate booking persona from persisted triage session if meta is missing.
+    if (!KellyToolExecutor._getSessionMeta?.(sessionId, 'booking_for')) {
+      try {
+        const triage = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+        if (triage?.booking_for) {
+          KellyToolExecutor._setSessionMeta?.(sessionId, 'booking_for', String(triage.booking_for));
+        }
+      } catch (_) {}
+    }
+
+    // Booking persona intercept: for me vs for someone else.
+    const bookingFor = KellyToolExecutor._getSessionMeta?.(sessionId, 'booking_for');
+    const bookingPromptPending = KellyToolExecutor._getSessionMeta?.(sessionId, 'booking_for_prompt_pending');
+    if (!bookingFor && String(bookingPromptPending || '') === '1') {
+      if (/\bfor me\b|booking_for_self|myself|my (own|appointment)/i.test(msgLcEarly)) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'booking_for', 'self');
+        KellyToolExecutor._setSessionMeta(sessionId, 'booking_for_prompt_pending', '0');
+        try { db.upsertTriageSession?.({ session_id: sessionId, booking_for: 'self' }); } catch (_) {}
+        if (patientId) {
+          try {
+            const profile = db.getFHIRPatient ? db.getFHIRPatient(patientId) : null;
+            if (profile?.resource_data) {
+              const data = typeof profile.resource_data === 'string'
+                ? JSON.parse(profile.resource_data) : profile.resource_data;
+              const email = data?.telecom?.find((t) => t.system === 'email')?.value;
+              const phone = data?.telecom?.find((t) => t.system === 'phone')?.value;
+              const name = [data?.name?.[0]?.given?.[0], data?.name?.[0]?.family].filter(Boolean).join(' ');
+              if (email) KellyToolExecutor._setSessionMeta(sessionId, 'collected_email', email);
+              if (phone) KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', _normalizePhoneE164(phone) || phone);
+              if (name) KellyToolExecutor._setSessionMeta(sessionId, 'collected_name', name);
+            }
+          } catch (_) {}
+        }
+      } else if (/\bfor someone else\b|booking_for_other|another person|my (kid|child|wife|husband|son|daughter|parent|mom|dad)/i.test(msgLcEarly)) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'booking_for', 'other');
+        KellyToolExecutor._setSessionMeta(sessionId, 'booking_for_prompt_pending', '0');
+        try { db.upsertTriageSession?.({ session_id: sessionId, booking_for: 'other' }); } catch (_) {}
+      }
+    }
+
+    // Identity conflict recovery intercept: if prior schedule hit duplicate and user now gave phone, retry immediately.
+    const identityConflict = KellyToolExecutor._getSessionMeta?.(sessionId, 'identity_conflict');
+    const justGavePhoneEarly = !!_extractPhone(message);
+    if (identityConflict === '1' && justGavePhoneEarly) {
+      const retryCountRaw = KellyToolExecutor._getSessionMeta?.(sessionId, 'identity_conflict_retry_count') || '0';
+      const retryCount = Number.parseInt(String(retryCountRaw), 10) || 0;
+      if (retryCount >= 3) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'identity_conflict', '0');
+        const safeStopReply = 'I am still unable to verify this identity after multiple attempts. Please call us directly so our team can complete booking securely.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', safeStopReply);
+        return {
+          reply: safeStopReply,
+          endCall: false,
+          toolsUsed: [],
+          language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+          error_code: 'IDENTITY_VERIFICATION_MAX_RETRIES',
+          duplicate: true
+        };
+      }
+      const confirmedPhoneRaw = _extractPhone(message);
+      const confirmedPhone = _normalizePhoneE164(confirmedPhoneRaw) || confirmedPhoneRaw;
+      if (!confirmedPhone) {
+        const invalidPhoneReply = 'That number did not look valid. Please provide your phone in +1XXXXXXXXXX format so I can verify your identity.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', invalidPhoneReply);
+        return {
+          reply: invalidPhoneReply,
+          endCall: false,
+          toolsUsed: [],
+          language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+          error_code: 'INVALID_PHONE_FORMAT'
+        };
+      }
+      KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', confirmedPhone);
+      KellyToolExecutor._setSessionMeta(sessionId, 'identity_conflict_retry_count', String(retryCount + 1));
+      KellyToolExecutor._setSessionMeta(sessionId, 'identity_conflict', '0');
+      this._appendToHistory(sessionId, 'user', message);
+      if (_kellyDebugVerbose()) {
+        console.log('[IDENTITY-RETRY] Retrying schedule with confirmed phone:', String(confirmedPhone || '').slice(0, 6) + '…');
+      }
+      return await this._serverSideSchedule({
+        sessionId, clinicId, patientId, callerPhone, channel,
+        preferredLanguage: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+        confirmedEmail: KellyToolExecutor._getSessionMeta(sessionId, 'collected_email'),
+        confirmedPhone,
+        confirmedName: KellyToolExecutor._getSessionMeta(sessionId, 'collected_name'),
+        phoneConfirmed: true
+      });
+    }
 
     // ── 1b. Fast intent pre-check (billing/routine) ────────────
     const intent = _classifyIntent(message);
@@ -1171,9 +1503,11 @@ class KellyAgentService {
       const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
       return String(lastAssistant?.content || '').toLowerCase();
     })();
+    const llmAlreadyAcceptedNoSymptoms =
+      /routine.*no symptoms|no.*symptoms.*routine|skip.*triage|no active symptoms|routine.*general visit|routine wellness/i.test(lastAssistantText);
     const askedSymptomsConfirmation =
       /current symptoms or concerns today|any current symptoms|симптом|sintoma|symptome|dalili/i.test(lastAssistantText);
-    if (askedSymptomsConfirmation && _isNoSymptomsReply(message)) {
+    if (askedSymptomsConfirmation && (_isNoSymptomsReply(message) || llmAlreadyAcceptedNoSymptoms)) {
       try {
         if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
       } catch (_) {}
@@ -1191,29 +1525,126 @@ class KellyAgentService {
       this._appendToHistory(sessionId, 'assistant', noSymptomsReply);
       return { reply: noSymptomsReply, endCall: false, toolsUsed: [], language: preferredLanguageQuick || 'en' };
     }
-    // gap18 + M-S1.E: use persisted language first, else detect and persist to kelly_session_meta AND triage_sessions
-    let preferredLanguage = db.getKellySessionLanguage ? db.getKellySessionLanguage(sessionId) : null;
-    if (!preferredLanguage) {
-      preferredLanguage = this._detectPreferredLanguage(history, message);
-      if (preferredLanguage) {
-        if (db.upsertKellySessionLanguage) db.upsertKellySessionLanguage(sessionId, preferredLanguage);
-        // Do *not* use upsertTriageSession here: it overwrites triage gating/flags
-        // (media_received, opqrst_complete, triage_complete, etc.) with defaults when
-        // only detected_language is provided.
-        try {
-          db.db?.prepare('UPDATE triage_sessions SET detected_language = ? WHERE session_id = ?').run(preferredLanguage, sessionId);
-        } catch (_) {
-          // Fallback to legacy upsert only if direct update is unavailable.
-        if (db.upsertTriageSession) db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
-        }
+
+    // ── Email confirmation intercept ──────────────────────────────
+    // When Kelly just confirmed an email and user says "yes/correct/right",
+    // mark email as confirmed and proceed to next step without hitting LLM
+    const lastAssistantConfirmedEmail = /i have .{3,80}@.{2,40}\.|is that (correct|right)\?/i.test(lastAssistantText);
+    const userConfirmedYes = /^(yes|correct|right|yep|yeah|yup|확인|да|si|oui|ndio|ndiyo)$/i.test(String(message || '').trim().toLowerCase());
+
+    if (lastAssistantConfirmedEmail && userConfirmedYes) {
+      const langForIntercept = (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || this._detectPreferredLanguage(history, message) || 'en';
+      const confirmedEmail = KellyToolExecutor._getSessionMeta(sessionId, 'collected_email');
+      const confirmedPhone = KellyToolExecutor._getSessionMeta(sessionId, 'collected_phone');
+      const confirmedName = KellyToolExecutor._getSessionMeta(sessionId, 'collected_name');
+
+      this._appendToHistory(sessionId, 'user', message);
+
+      if (confirmedEmail && !confirmedPhone) {
+        const phoneAsk = 'Got it! And what\'s the best phone number to reach you?';
+        this._appendToHistory(sessionId, 'assistant', phoneAsk);
+        return { reply: phoneAsk, endCall: false, toolsUsed: [], language: langForIntercept };
       }
-    } else if (db.upsertTriageSession) {
-      // M-S1.E: Sync detected_language to triage_sessions on each turn (prevent drift)
+
+      if (confirmedEmail && confirmedPhone && confirmedName) {
+        return await this._serverSideSchedule({
+          sessionId, clinicId, patientId, callerPhone, channel,
+          preferredLanguage: langForIntercept, confirmedEmail, confirmedPhone, confirmedName
+        });
+      }
+
+      if (!confirmedName) {
+        const nameAsk = 'Got it! Could I get your full name to complete the booking?';
+        this._appendToHistory(sessionId, 'assistant', nameAsk);
+        return { reply: nameAsk, endCall: false, toolsUsed: [], language: langForIntercept };
+      }
+    }
+
+    // gap18 + M-S1.E: never stay stuck on persisted English after "can we speak Russian?" etc.
+    const priorStored = db.getKellySessionLanguage ? db.getKellySessionLanguage(sessionId) : null;
+    let preferredLanguage = priorStored;
+
+    let languageExplicit = false;
+    try {
+      const { detectLanguagePreferenceRequest } = require('./patient-orchestrator-service');
+      const langReq = detectLanguagePreferenceRequest(String(message || ''));
+      if (langReq && langReq.isLanguageRequest && langReq.code) {
+        preferredLanguage = langReq.code;
+        languageExplicit = true;
+      }
+    } catch (_) {}
+
+    const fromCurrentUtterance = KellyAgentService._detectPreferredLanguage([], message);
+    if (!languageExplicit && fromCurrentUtterance && fromCurrentUtterance !== 'en') {
+      if (!preferredLanguage || preferredLanguage === 'en' || fromCurrentUtterance !== preferredLanguage) {
+        preferredLanguage = fromCurrentUtterance;
+      }
+    }
+
+    if (!preferredLanguage) {
+      preferredLanguage = KellyAgentService._detectPreferredLanguage(history, message);
+    }
+
+    if (preferredLanguage) {
+      if (preferredLanguage !== priorStored && db.upsertKellySessionLanguage) {
+        db.upsertKellySessionLanguage(sessionId, preferredLanguage);
+      }
       try {
         db.db?.prepare('UPDATE triage_sessions SET detected_language = ? WHERE session_id = ?').run(preferredLanguage, sessionId);
       } catch (_) {
-        // Last-resort fallback
-      db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+        if (db.upsertTriageSession) db.upsertTriageSession({ session_id: sessionId, detected_language: preferredLanguage });
+      }
+    }
+
+    // Persist contact info as soon as it appears — turn-by-turn accumulation.
+    // Prevents re-ask loops when LLM loses context across turns.
+    try {
+      const msgStr = String(message || '');
+      const emailFound = _extractEmail(msgStr);
+      if (emailFound && KellyToolExecutor._setSessionMeta) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'collected_email', emailFound);
+        if (_kellyDebugVerbose()) console.log('[CONTACT] Stored email:', emailFound.slice(0, 4) + '…');
+      }
+      const phoneFound = _extractPhone(msgStr);
+      if (phoneFound && KellyToolExecutor._setSessionMeta) {
+        const normalizedPhone = _normalizePhoneE164(phoneFound);
+        if (normalizedPhone) {
+          KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', normalizedPhone);
+          if (_kellyDebugVerbose()) console.log('[CONTACT] Stored phone:', normalizedPhone.slice(0, 6) + '…');
+        }
+      }
+      if (!KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_name') && patientName) {
+        if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'collected_name', patientName);
+      } else if (!KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_name')) {
+        const nameFound = _extractPatientName(msgStr);
+        if (nameFound && KellyToolExecutor._setSessionMeta) {
+          KellyToolExecutor._setSessionMeta(sessionId, 'collected_name', nameFound);
+          if (_kellyDebugVerbose()) console.log('[CONTACT] Stored name:', nameFound);
+        }
+      }
+    } catch (_) {}
+
+    // ── Server-side schedule trigger when contact collection is complete ──
+    // Fires after phone is given and we already have email + name
+    const justGavePhone = !!_extractPhone(String(message || ''));
+    if (justGavePhone) {
+      const collectedEmail = KellyToolExecutor._getSessionMeta(sessionId, 'collected_email');
+      const collectedPhone = KellyToolExecutor._getSessionMeta(sessionId, 'collected_phone');
+      const collectedName = KellyToolExecutor._getSessionMeta(sessionId, 'collected_name');
+      const slotPresented = KellyToolExecutor._getSessionMeta(sessionId, 'slot_presented');
+      const slotWasPresented = String(slotPresented || '').toLowerCase() === '1' || String(slotPresented || '').toLowerCase() === 'true';
+
+      if (collectedEmail && collectedPhone && collectedName && slotWasPresented) {
+        this._appendToHistory(sessionId, 'user', message);
+        if (_kellyDebugVerbose()) console.log('[CONTACT-COMPLETE] All three collected, triggering server-side schedule');
+        const langForSchedule = (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || this._detectPreferredLanguage(history, message) || 'en';
+        return await this._serverSideSchedule({
+          sessionId, clinicId, patientId, callerPhone, channel,
+          preferredLanguage: langForSchedule,
+          confirmedEmail: collectedEmail,
+          confirmedPhone: collectedPhone,
+          confirmedName: collectedName
+        });
       }
     }
 
@@ -1226,9 +1657,41 @@ class KellyAgentService {
         return false;
       }
     })();
-    const routineLocked = routineLockedByHistory || routineLockedByMeta;
+    let routineLocked = routineLockedByHistory || routineLockedByMeta;
     const msgLcForRoutine = String(message || '').toLowerCase();
     const hasSymptomNow = SYMPTOM_KEYWORDS.some((k) => msgLcForRoutine.includes(k)) && !_hasNoSymptomsRoutineSignal(msgLcForRoutine);
+
+    // Recovery: if LLM already told the patient this is a routine visit with no symptoms
+    // but the flag wasn't set (e.g. due to a typo), set it now before proceeding
+    if (!routineLocked && llmAlreadyAcceptedNoSymptoms && !hasSymptomNow) {
+      try {
+        if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
+        if (db.upsertTriageSession) {
+          const existing = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
+          if (!existing.triage_complete) {
+            db.upsertTriageSession({
+              session_id: sessionId,
+              patient_id: patientId || null,
+              detected_language: existing.detected_language || preferredLanguage || 'en',
+              safety_level: existing.safety_level || 'green',
+              urgency: existing.urgency || 'routine',
+              target_specialty: existing.target_specialty || 'PrimaryCare',
+              opqrst_complete: true,
+              triage_complete: true,
+              intake_complete_at: existing.intake_complete_at || new Date().toISOString()
+            });
+          }
+        }
+        try {
+          await KellyToolExecutor.execute(
+            'run_triage_rag',
+            { symptom_text: 'Routine wellness visit — no active symptoms' },
+            { sessionId, clinicId, patientId, callerPhone, channel }
+          );
+        } catch (_) {}
+        routineLocked = true;
+      } catch (_) {}
+    }
     const hasEmailNow = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(String(message || ''));
     const slotAlreadyChosen = _historyShowsSlotChosen(history);
     const slotWasPresented = (() => {
@@ -1290,6 +1753,41 @@ class KellyAgentService {
       }
     }
 
+    // Deterministic OPQRST capture guard:
+    // If Kelly just asked for a specific OPQRST field and user answered,
+    // store the field server-side so the LLM doesn't repeat previously answered prompts.
+    try {
+      const latestSession = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+      const triageIncomplete = !(latestSession && (latestSession.triage_complete === 1 || latestSession.triage_complete === true));
+      if (triageIncomplete && hasSymptomNow) {
+        const lastAssistant = [...history].reverse().find((m) => m?.role === 'assistant');
+        const lastText = String(lastAssistant?.content || '').toLowerCase();
+        const msgText = String(message || '').trim();
+        const upsertArgs = {};
+
+        if (!latestSession?.onset && /when did .* start|when .* start/i.test(lastText) && msgText) {
+          upsertArgs.onset = msgText;
+        } else if (!latestSession?.provocation && /better or worse|makes .* better|makes .* worse|rest help|light or movement/i.test(lastText) && msgText) {
+          upsertArgs.provocation = msgText;
+        } else if (!latestSession?.quality && /what .* feel like|sharp|dull|throbbing|pressure|burning/i.test(lastText) && msgText) {
+          upsertArgs.quality = msgText;
+        } else if ((latestSession?.severity == null || latestSession?.severity === '') && /scale of 1 to 10|1 to 10|how bad/i.test(lastText)) {
+          const sev = String(msgText).match(/\b([1-9]|10)\b/);
+          if (sev) upsertArgs.severity = parseInt(sev[1], 10);
+        } else if (!latestSession?.timing && /constant or comes and goes|comes and goes|is it constant|timing/i.test(lastText) && msgText) {
+          upsertArgs.timing = msgText;
+        }
+
+        if (Object.keys(upsertArgs).length > 0) {
+          await KellyToolExecutor.execute(
+            'store_triage_opqrst',
+            upsertArgs,
+            { sessionId, clinicId, patientId, callerPhone, channel }
+          );
+        }
+      }
+    } catch (_) {}
+
     const justAnsweredUrgency = routineLocked && !hasSymptomNow && urgencyFromMessage && !slotAlreadyChosen && !slotWasPresented;
     if (justAnsweredUrgency) {
       try {
@@ -1309,10 +1807,43 @@ class KellyAgentService {
         { date, appointment_type: 'Primary Care', lane: urgencyFromMessage, force_after_clarified: true },
         { sessionId, clinicId, patientId, callerPhone, channel }
       );
+      if (slotOut?.success === false) {
+        const code = slotOut?.error_code || slotOut?.error || null;
+        if (['PROVIDER_AVAILABILITY_NOT_SET', 'PROVIDER_CALENDAR_NOT_CONNECTED', 'NO_BOOKABLE_SYNC_PROVIDER', 'NO_ONLINE_PROVIDERS'].includes(code)) {
+          const fallbackMsgByCode = {
+            PROVIDER_AVAILABILITY_NOT_SET: 'Our care team is online, but availability has not been published yet. I can check the next date, switch this to async review, or arrange a callback.',
+            PROVIDER_CALENDAR_NOT_CONNECTED: 'No specialist has live calendar sync right now. I can check the next date, switch this to async review, or arrange a callback.',
+            NO_BOOKABLE_SYNC_PROVIDER: 'No sync-bookable specialist is available right now. I can check the next date, switch this to async review, or arrange a callback.',
+            NO_ONLINE_PROVIDERS: 'No specialists are online right now. I can check the next date, switch this to async review, or arrange a callback.'
+          };
+          const providerFallbackReply = fallbackMsgByCode[code] || 'No specialist is immediately bookable right now. I can check the next date, switch this to async review, or arrange a callback.';
+          this._appendToHistory(sessionId, 'assistant', providerFallbackReply);
+          return {
+            reply: providerFallbackReply,
+            endCall: false,
+            toolsUsed: ['get_available_slots'],
+            language: preferredLanguage || 'en',
+            next_chips: [
+              { label: 'Check next date', value: 'next_date_search', action: 'next_date_search' },
+              { label: 'Async review lane', value: 'async_review_lane', action: 'async_review_lane' },
+              { label: 'Request callback', value: 'request_callback', action: 'request_callback' }
+            ],
+            chips_display: 'list',
+            error_code: code
+          };
+        }
+      }
       if (slotOut?.success) {
         const source = Array.isArray(slotOut.slot_bundles) && slotOut.slot_bundles.length
           ? slotOut.slot_bundles
           : (Array.isArray(slotOut.available_slots) ? slotOut.available_slots : []);
+        if (source.length) {
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_bundles', JSON.stringify(source.slice(0, 12)));
+            KellyToolExecutor._setSessionMeta(sessionId, 'preferred_date_resolved', date || '');
+            if (_kellyDebugVerbose()) console.log('[DEBUG-MATCH] last_slot_bundles stored, count:', source.length, 'date:', date);
+          } catch (_) {}
+        }
         const chips = source.slice(0, 8).map((s, i) => ({
           label: `Option ${i + 1}: ${s?.display || s?.time || String(s)}`,
           value: `option ${i + 1}`,
@@ -1324,9 +1855,49 @@ class KellyAgentService {
         } catch (_) {}
         const reply = source.length
           ? 'Here are some available times. Please choose one.'
-          : 'I could not find openings for that date. What date works best for you?';
-        this._appendToHistory(sessionId, 'assistant', reply);
-        return { reply, endCall: false, toolsUsed: ['get_available_slots'], language: preferredLanguage || 'en', next_chips: chips, chips_display: 'list' };
+          : '';
+        if (source.length) {
+          this._appendToHistory(sessionId, 'assistant', reply);
+          return { reply, endCall: false, toolsUsed: ['get_available_slots'], language: preferredLanguage || 'en', next_chips: chips, chips_display: 'list' };
+        }
+        const next = await _findNextAvailableDate(
+          date,
+          clinicId,
+          'Primary Care',
+          urgencyFromMessage,
+          sessionId,
+          patientId,
+          callerPhone,
+          channel
+        );
+        if (next) {
+          const nextSource = Array.isArray(next.slotOut.slot_bundles) && next.slotOut.slot_bundles.length
+            ? next.slotOut.slot_bundles
+            : (Array.isArray(next.slotOut.available_slots) ? next.slotOut.available_slots : []);
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_bundles', JSON.stringify(nextSource.slice(0, 12)));
+            KellyToolExecutor._setSessionMeta(sessionId, 'preferred_date_resolved', next.date || '');
+          } catch (_) {}
+          const nextChipsAuto = nextSource.slice(0, 8).map((s, i) => ({
+            label: `Option ${i + 1}: ${s?.display || s?.time || String(s)}`,
+            value: `option ${i + 1}`,
+            action: 'select_slot',
+            slot: s
+          }));
+          const nextReply = `No openings on ${date}. I found availability on ${next.date}. Here are the times:`;
+          this._appendToHistory(sessionId, 'assistant', nextReply);
+          return {
+            reply: nextReply,
+            endCall: false,
+            toolsUsed: ['get_available_slots'],
+            language: preferredLanguage || 'en',
+            next_chips: nextChipsAuto,
+            chips_display: 'list'
+          };
+        }
+        const noneReply = `No openings on ${date}. I could not find nearby openings in the next few business days. What date works best for you?`;
+        this._appendToHistory(sessionId, 'assistant', noneReply);
+        return { reply: noneReply, endCall: false, toolsUsed: ['get_available_slots'], language: preferredLanguage || 'en', next_chips: [], chips_display: 'list' };
       }
       const reply = 'Let me check availability. What date works best for you?';
       this._appendToHistory(sessionId, 'assistant', reply);
@@ -1470,6 +2041,58 @@ class KellyAgentService {
             } else {
               reply = 'I could not find open times yet. Please tell me a preferred date and I will check again.';
             }
+          }
+        }
+
+        // B2: Server-side schedule trigger when contact is complete but LLM didn't call schedule_appointment.
+        // Prevents re-ask loops when LLM loses context across turns.
+        const slotWasPresentedNow = (() => {
+          try {
+            const v = KellyToolExecutor._getSessionMeta?.(sessionId, 'slot_presented');
+            return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+          } catch (_) { return false; }
+        })();
+        const collectedEmail = KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_email');
+        const collectedPhone = KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_phone');
+        const collectedName = KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_name');
+        if (
+          slotWasPresentedNow &&
+          collectedEmail &&
+          collectedPhone &&
+          collectedName &&
+          !(Array.isArray(toolsUsed) && toolsUsed.includes('schedule_appointment'))
+        ) {
+          try {
+            const rawBundles = KellyToolExecutor._getSessionMeta?.(sessionId, 'last_slot_bundles');
+            const resolvedDate = KellyToolExecutor._getSessionMeta?.(sessionId, 'preferred_date_resolved');
+            const bundles = rawBundles ? JSON.parse(rawBundles) : [];
+            const userMsg = String(message || '').toLowerCase().trim();
+            const matched = (Array.isArray(bundles) && bundles.length)
+              ? (_resolveSlotBundleFromUserMessage(bundles, userMsg) || bundles[0])
+              : null;
+            if (matched) {
+              const scheduleArgs = {
+                patient_name: collectedName,
+                patient_email: collectedEmail,
+                patient_phone: collectedPhone,
+                appointment_type: 'Primary Care',
+                date: resolvedDate || matched?.date || new Date().toISOString().slice(0, 10),
+                time: matched?.time || matched?.start_time || matched?.start || '11:30',
+                practitioner_id: matched?.practitioner_id || null
+              };
+              const scheduleResult = await KellyToolExecutor.execute(
+                'schedule_appointment',
+                scheduleArgs,
+                { sessionId, clinicId, patientId, callerPhone, channel }
+              );
+              if (scheduleResult?.success) {
+                toolsUsed = Array.isArray(toolsUsed) ? [...toolsUsed, 'schedule_appointment'] : ['schedule_appointment'];
+                reply = scheduleResult?.say_to_patient || 'Your appointment is confirmed.';
+                if (_kellyDebugVerbose()) console.log('[B2] Server-side schedule_appointment triggered, success');
+              }
+            }
+          } catch (b2Err) {
+            console.warn('[B2] Server-side schedule trigger failed:', b2Err?.message);
           }
         }
       } catch (_) {
@@ -2317,6 +2940,30 @@ class KellyAgentService {
       replySnippet: String(reply || '').slice(0, 100)
     });
 
+    if (process.env.KELLY_DEBUG_TURN === '1') {
+      console.log('[DEBUG-RESPONSE] session:', sessionId.slice(0, 8), {
+        toolsUsed: orderedTools,
+        hasNextChips: !!(nextChips?.length),
+        chipsCount: nextChips?.length || 0,
+        nextStep: nextStep || null,
+        replySnippet: String(reply || '').slice(0, 80),
+        lastSlotBundlesSet: !!KellyToolExecutor._getSessionMeta?.(sessionId, 'last_slot_bundles'),
+        slotPresented: KellyToolExecutor._getSessionMeta?.(sessionId, 'slot_presented'),
+        paymentTokenSet: !!KellyToolExecutor._getSessionMeta?.(sessionId, 'payment_token')
+      });
+    }
+
+    let redirectTo = null;
+    if (channel === 'chat' && orderedTools.includes('schedule_appointment')) {
+      try {
+        const token = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'payment_token') : null;
+        if (token) {
+          const base = (process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+          redirectTo = `${base}/payment/${token}`;
+        }
+      } catch (_) {}
+    }
+
     return {
       reply,
       endCall,
@@ -2324,14 +2971,111 @@ class KellyAgentService {
       language: preferredLanguage,
       next_step: nextStep,
       next_chips: nextChips,
-      chips_display: chipsDisplay
+      chips_display: chipsDisplay,
+      redirect_to: redirectTo
+    };
+  }
+
+  /**
+   * Retail checkout chat: only commerce quote + payment tools (no triage/scheduling).
+   */
+  static async _processCommerceCheckoutTurn({
+    message,
+    sessionId,
+    channel,
+    clinicId,
+    patientId,
+    patientEmail,
+    commerceCheckout,
+    onStreamDelta,
+    onToolStatus
+  }) {
+    const history = this._loadHistory(sessionId);
+    const preferredLanguage =
+      (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) ||
+      this._detectPreferredLanguage(history, message) ||
+      'en';
+    this._appendToHistory(sessionId, 'user', message);
+    history.push({ role: 'user', content: message });
+    const context = {
+      channel,
+      clinicId,
+      patientId,
+      patientName: null,
+      callerPhone: null,
+      preferredLanguage,
+      sessionId,
+      message,
+      kellyScriptHint: null,
+      patientEmail: patientEmail || null,
+      commerceContext: {
+        productId: String(commerceCheckout.productId),
+        providerId: String(commerceCheckout.providerId),
+        patientEmail: patientEmail || null,
+        preferredLanguage
+      }
+    };
+    let loopResult;
+    try {
+      const turnTimeoutMs = parseInt(process.env.KELLY_TURN_TIMEOUT_MS || '25000', 10);
+      loopResult = await Promise.race([
+        this._runLLMLoop({
+          history,
+          context,
+          clinicId,
+          patientId,
+          callerPhone: null,
+          sessionId,
+          channel,
+          onStreamDelta,
+          onToolStatus
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
+      ]);
+    } catch (err) {
+      console.error('[KellyAgent] Commerce checkout LLM loop failed:', err.message);
+      const reply =
+        "I'm having trouble connecting right now. You can still use Continue to secure checkout below — your total is always confirmed on our servers.";
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return {
+        reply,
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en'
+      };
+    }
+    let reply = loopResult.reply || '';
+    reply = _sanitizeToolNameLeaks(reply);
+    this._appendToHistory(sessionId, 'assistant', reply);
+    const quoteIdFromMeta = KellyToolExecutor._getSessionMeta(sessionId, 'last_commerce_quote_id');
+    return {
+      reply,
+      endCall: false,
+      toolsUsed: Array.isArray(loopResult.toolsUsed) ? loopResult.toolsUsed : [],
+      language: preferredLanguage,
+      redirect_to: loopResult.redirect_to || null,
+      next_chips: loopResult.next_chips || [],
+      chips_display: loopResult.chips_display,
+      next_step: loopResult.next_step,
+      quote_id: quoteIdFromMeta || null
     };
   }
 
   // ─────────────────────────────────────────────────────────────
   // LLM loop: call → check for tool_calls → execute → repeat
   // ─────────────────────────────────────────────────────────────
-  static async _runLLMLoop({ history, context, clinicId, patientId, callerPhone, sessionId, channel, forceProvider }) {
+  static async _runLLMLoop({
+    history,
+    context,
+    clinicId,
+    patientId,
+    callerPhone,
+    sessionId,
+    channel,
+    forceProvider,
+    onStreamDelta,
+    onToolStatus
+  }) {
     const groq = getGroq();
     const effectiveProvider = forceProvider || resolvePrimaryProvider();
     const maxTurns = channel === 'voice' ? Math.min(8, MAX_HISTORY_TURNS) : MAX_HISTORY_TURNS;
@@ -2340,8 +3084,24 @@ class KellyAgentService {
       .slice(-maxTurns)
       .map(m => ({ role: m.role, content: _truncateForLLM(m.content, maxChars) }));
 
+    const commerceCtx = context.commerceContext;
+    const useCommerceTools = !!(commerceCtx && commerceCtx.productId && commerceCtx.providerId);
+    const toolsForRequest = useCommerceTools ? COMMERCE_CHECKOUT_TOOLS : KELLY_TOOLS;
+    const streamCommerce = typeof onStreamDelta === 'function' && useCommerceTools;
+
+    let systemContent = useCommerceTools
+      ? buildCommerceCheckoutSystemPrompt({
+          ...commerceCtx,
+          preferredLanguage: context.preferredLanguage
+        })
+      : buildSystemPrompt(context);
+    const collected = useCommerceTools ? null : _extractCollectedBookingInfo(history);
+    if (collected) {
+      systemContent += `\n\n## BOOKING STATE (from conversation)\nYou have collected: name="${collected.name}", email="${collected.email}", phone="${collected.phone}". Call schedule_appointment NOW with these values. Do NOT ask for name, email, or phone again.\n`;
+    }
+
     let messages = [
-      { role: 'system', content: buildSystemPrompt(context) },
+      { role: 'system', content: systemContent },
       ...prunedHistory
     ];
 
@@ -2352,6 +3112,7 @@ class KellyAgentService {
     let nextStep = null;
     let nextChips = null;
     let chipsDisplay = null;
+    let commercePaymentRedirect = null;
 
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
@@ -2368,12 +3129,23 @@ class KellyAgentService {
               : KELLY_CHAT_MAX_TOKENS;
         const routerCall = {
           messages,
-          tools: KELLY_TOOLS,
+          tools: toolsForRequest,
           channel,
           maxTokens: maxTokRouter
         };
         if (forceProvider) routerCall.forceProvider = forceProvider;
-        response = await LLMRouter.call(routerCall);
+        if (streamCommerce) {
+          response = await callStreamWithDeltas({
+            messages,
+            tools: toolsForRequest,
+            maxTokens: maxTokRouter,
+            channel,
+            onDelta: onStreamDelta,
+            forceProvider: forceProvider || null
+          });
+        } else {
+          response = await LLMRouter.call(routerCall);
+        }
       } catch (err) {
         const messageLower = err?.message ? String(err.message).toLowerCase() : '';
         const isRateLimit = (err?.status === 429 || err?.statusCode === 429 || messageLower.includes('rate_limit') || messageLower.includes('rate limit'));
@@ -2389,7 +3161,12 @@ class KellyAgentService {
           // Small delay: Groq limits are per API-key, so immediate retry can hit again.
           await new Promise(r => setTimeout(r, 1000));
           try {
-            const compactSystem = _buildCompactSystemPrompt(context);
+            const compactSystem = useCommerceTools
+              ? buildCommerceCheckoutSystemPrompt({
+                  ...commerceCtx,
+                  preferredLanguage: context.preferredLanguage
+                }).slice(0, 3500)
+              : _buildCompactSystemPrompt(context);
 
             // Keep only a few messages when we're size-limited; tool payloads inflate fast.
             // Also re-truncate message content to make the retry request much smaller.
@@ -2408,14 +3185,25 @@ class KellyAgentService {
               ...trimmedHistory
             ];
 
-            response = await groq.chat.completions.create({
-              model: GROQ_FALLBACK_MODEL,
-              messages,
-              tools: KELLY_TOOLS,
-              tool_choice: 'auto',
-              temperature: 0.3,
-              max_tokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS
-            });
+            if (streamCommerce) {
+              response = await callStreamWithDeltas({
+                messages,
+                tools: toolsForRequest,
+                maxTokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS,
+                channel,
+                onDelta: onStreamDelta,
+                forceProvider: 'groq'
+              });
+            } else {
+              response = await groq.chat.completions.create({
+                model: GROQ_FALLBACK_MODEL,
+                messages,
+                tools: toolsForRequest,
+                tool_choice: 'auto',
+                temperature: 0.3,
+                max_tokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS
+              });
+            }
           } catch (err2) {
             console.error('[KellyAgent] Fallback model also failed:', err2.message);
             throw err2;
@@ -2434,7 +3222,15 @@ class KellyAgentService {
       // ── Text reply: done ──────────────────────────────────
       if (finish_reason === 'stop' || !assistantMsg.tool_calls?.length) {
         const reply = assistantMsg.content || "I'm sorry, I didn't catch that. Could you say that again?";
-        return { reply, toolsUsed, endCall, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay };
+        return {
+          reply,
+          toolsUsed,
+          endCall,
+          next_step: nextStep,
+          next_chips: nextChips,
+          chips_display: chipsDisplay,
+          redirect_to: commercePaymentRedirect || null
+        };
       }
 
       // ── Tool calls: execute each, append results ──────────
@@ -2442,6 +3238,17 @@ class KellyAgentService {
 
       for (const toolCall of assistantMsg.tool_calls) {
         const toolName = toolCall.function.name;
+        if (typeof onToolStatus === 'function' && useCommerceTools) {
+          const label =
+            toolName === 'get_product_quote'
+              ? 'Getting your price…'
+              : toolName === 'prepare_commerce_checkout'
+                ? 'Preparing secure checkout…'
+                : 'Working…';
+          try {
+            onToolStatus(toolName, label);
+          } catch (_) {}
+        }
         toolCallCounts[toolName] = (toolCallCounts[toolName] || 0) + 1;
         if (toolCallCounts[toolName] > 2) {
           console.warn(`[KellyAgent] Tool ${toolName} called ${toolCallCounts[toolName]} times — breaking loop`);
@@ -2470,20 +3277,63 @@ class KellyAgentService {
         }
 
         if (toolName === 'schedule_appointment' && !toolArgs.practitioner_id) {
+          const rawBundles = KellyToolExecutor._getSessionMeta(sessionId, 'last_slot_bundles');
+          if (_kellyDebugVerbose()) {
+            console.log('[DEBUG-MATCH] schedule called, practitioner_id missing');
+            console.log('[DEBUG-MATCH] last_slot_bundles from meta:', rawBundles ? `${rawBundles.slice(0, 200)}…` : 'NOT SET');
+            console.log('[DEBUG-MATCH] user message for resolution:', String(context?.message || '').slice(0, 100));
+          }
           try {
-            const raw = KellyToolExecutor._getSessionMeta(sessionId, 'last_slot_bundles');
+            const raw = rawBundles;
             if (raw) {
               const bundles = JSON.parse(raw);
               const userMsgLc = String(context?.message || '').toLowerCase().trim();
               const matched = _resolveSlotBundleFromUserMessage(bundles || [], userMsgLc) || bundles[0];
               if (matched?.practitioner_id) toolArgs.practitioner_id = matched.practitioner_id;
               if (matched?.lane && !toolArgs.lane) toolArgs.lane = matched.lane;
-              if (matched?.date && !toolArgs.date) toolArgs.date = matched.date;
+              if (!toolArgs.date) {
+                toolArgs.date = matched?.date || KellyToolExecutor._getSessionMeta?.(sessionId, 'preferred_date_resolved') || null;
+              }
               if ((matched?.time || matched?.start_time || matched?.start) && !toolArgs.time) {
                 toolArgs.time = matched.time || matched.start_time || matched.start;
               }
             }
           } catch (_) {}
+        }
+
+        // Server-side injection of contact info collected across previous turns.
+        // Prevents re-ask loops when LLM loses context in long conversations.
+        if (toolName === 'schedule_appointment') {
+          const storedEmail = KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_email');
+          const storedPhone = KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_phone');
+          const storedName = KellyToolExecutor._getSessionMeta?.(sessionId, 'collected_name');
+          if (!toolArgs.patient_email && storedEmail) {
+            toolArgs.patient_email = storedEmail;
+            if (_kellyDebugVerbose()) console.log('[INJECT] patient_email from session meta');
+          }
+          if (!toolArgs.patient_phone && storedPhone) {
+            toolArgs.patient_phone = _normalizePhoneE164(storedPhone) || storedPhone;
+            if (_kellyDebugVerbose()) console.log('[INJECT] patient_phone from session meta');
+          }
+          if (!toolArgs.patient_name && storedName) {
+            toolArgs.patient_name = storedName;
+            if (_kellyDebugVerbose()) console.log('[INJECT] patient_name from session meta');
+          }
+        }
+
+        if (commerceCtx && toolName === 'get_product_quote') {
+          if (!toolArgs.product_id && !toolArgs.prescription_id) {
+            toolArgs.product_id = commerceCtx.productId;
+          }
+          if (!toolArgs.provider_id) {
+            toolArgs.provider_id = commerceCtx.providerId;
+          }
+        }
+        if (commerceCtx && toolName === 'prepare_commerce_checkout') {
+          const pe = commerceCtx.patientEmail || context.patientEmail;
+          if (pe && !toolArgs.customer_email) {
+            toolArgs.customer_email = pe;
+          }
         }
 
         if (toolName === 'end_call') {
@@ -2511,8 +3361,30 @@ class KellyAgentService {
           toolResult = { success: false, error: err.message };
         }
 
+        if (
+          toolName === 'get_product_quote' &&
+          toolResult?.success &&
+          (toolResult.quote_id || toolResult.checkout_session_id)
+        ) {
+          KellyToolExecutor._setSessionMeta(
+            sessionId,
+            'last_commerce_quote_id',
+            toolResult.quote_id || toolResult.checkout_session_id
+          );
+        }
+
         if (deferSlotMetric && toolResult?.success) {
           toolsUsed.push('get_available_slots');
+        }
+
+        // Normalize slot provider identity fields on all slot paths
+        // (specialist and fallback) to avoid name hallucination.
+        if (toolName === 'get_available_slots' && Array.isArray(toolResult?.slot_bundles)) {
+          toolResult.slot_bundles = toolResult.slot_bundles.map((s) => ({
+            ...s,
+            practitioner_name: s?.practitioner_name || null,
+            practitioner_id: s?.practitioner_id || null
+          }));
         }
 
         if (
@@ -2531,8 +3403,17 @@ class KellyAgentService {
           } catch (_) {}
         }
 
-        // Debug: log tool result to diagnose infinite loops (e.g. collect_insurance)
-        console.log(`[KellyAgent] Tool result for ${toolName}:`, JSON.stringify(toolResult)?.slice(0, 500));
+        if (_kellyDebugVerbose()) {
+          console.log(`[KellyAgent] Tool result for ${toolName}:`, JSON.stringify(toolResult)?.slice(0, 500));
+        }
+
+        if (
+          toolName === 'prepare_commerce_checkout' &&
+          toolResult?.success &&
+          toolResult?.checkout?.payment_link
+        ) {
+          commercePaymentRedirect = toolResult.checkout.payment_link;
+        }
 
         messages.push({
           role: 'tool',
@@ -2552,10 +3433,10 @@ class KellyAgentService {
             (Array.isArray(toolResult.slot_bundles) && toolResult.slot_bundles.length > 0)
           )
         ) {
-          toolCallCounts.get_available_slots = Math.max(toolCallCounts.get_available_slots || 0, 99);
+          toolCallCounts.get_available_slots = 99; // Hard stop — prevent any further slot calls this turn
           messages.push({
             role: 'user',
-            content: '[SYSTEM: Slots found for this date. Present these options to the patient. Do not check additional dates in this turn.]'
+            content: '[SYSTEM: Slots found for this date. Present these options to the patient. Do not check additional dates in this turn. Do not call get_available_slots again.]'
           });
           break;
         }
@@ -2652,6 +3533,27 @@ class KellyAgentService {
               chips_display: null
             };
           }
+          if (['PROVIDER_AVAILABILITY_NOT_SET', 'PROVIDER_CALENDAR_NOT_CONNECTED', 'NO_BOOKABLE_SYNC_PROVIDER', 'NO_ONLINE_PROVIDERS'].includes(code)) {
+            const fallbackMsgByCode = {
+              PROVIDER_AVAILABILITY_NOT_SET: 'Our care team is online, but availability has not been published yet. I can check the next date, switch this to async review, or arrange a callback.',
+              PROVIDER_CALENDAR_NOT_CONNECTED: 'No specialist has live calendar sync right now. I can check the next date, switch this to async review, or arrange a callback.',
+              NO_BOOKABLE_SYNC_PROVIDER: 'No sync-bookable specialist is available right now. I can check the next date, switch this to async review, or arrange a callback.',
+              NO_ONLINE_PROVIDERS: 'No specialists are online right now. I can check the next date, switch this to async review, or arrange a callback.'
+            };
+            return {
+              reply: fallbackMsgByCode[code] || 'No specialist is immediately bookable right now. I can check the next date, switch this to async review, or arrange a callback.',
+              toolsUsed,
+              endCall: false,
+              next_step: null,
+              next_chips: [
+                { label: 'Check next date', value: 'next_date_search', action: 'next_date_search' },
+                { label: 'Async review lane', value: 'async_review_lane', action: 'async_review_lane' },
+                { label: 'Request callback', value: 'request_callback', action: 'request_callback' }
+              ],
+              chips_display: 'list',
+              error_code: code
+            };
+          }
         }
 
         // Capture next_step, next_chips from tool results for chat UX (upload zone, chips)
@@ -2703,7 +3605,192 @@ class KellyAgentService {
         fallback = `I have availability. Please tell me which time you prefer, or we can continue over the phone.`;
       }
     } catch (_) {}
-    return { reply: fallback, toolsUsed, endCall: false, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay };
+    return {
+      reply: fallback,
+      toolsUsed,
+      endCall: false,
+      next_step: nextStep,
+      next_chips: nextChips,
+      chips_display: chipsDisplay,
+      redirect_to: commercePaymentRedirect || null
+    };
+  }
+
+  /**
+   * Fire schedule_appointment server-side when contact is complete.
+   * Used by email confirmation and phone-complete intercepts to bypass LLM.
+   */
+  static async _serverSideSchedule({
+    sessionId, clinicId, patientId, callerPhone, channel,
+    preferredLanguage, confirmedEmail, confirmedPhone, confirmedName, phoneConfirmed = false
+  }) {
+    const scheduleLock = KellyToolExecutor._getSessionMeta?.(sessionId, 'server_schedule_lock');
+    if (String(scheduleLock || '') === '1') {
+      return {
+        reply: 'I am still processing your booking request. Please give me one moment.',
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en',
+        error_code: 'SCHEDULE_IN_PROGRESS'
+      };
+    }
+    KellyToolExecutor._setSessionMeta?.(sessionId, 'server_schedule_lock', '1');
+    try {
+      const rawBundles = KellyToolExecutor._getSessionMeta(sessionId, 'last_slot_bundles');
+      const bundles = rawBundles ? JSON.parse(rawBundles) : [];
+      let slot = bundles[0] || null;
+
+      const preferredDate = KellyToolExecutor._getSessionMeta(sessionId, 'preferred_date');
+      const preferredDateResolved = KellyToolExecutor._getSessionMeta(sessionId, 'preferred_date_resolved');
+      const date = slot?.date
+        || preferredDateResolved
+        || (preferredDate ? _resolvePreferredDateFromMeta(preferredDate, clinicId) : null)
+        || (() => {
+          const d = new Date();
+          const day = d.getDay();
+          if (day === 6) d.setDate(d.getDate() + 2);
+          if (day === 0) d.setDate(d.getDate() + 1);
+          return d.toISOString().slice(0, 10);
+        })();
+
+      const time = slot?.time || slot?.start_time || slot?.start || '09:00';
+      const practitioner_id = slot?.practitioner_id || null;
+      const lane = slot?.lane || KellyToolExecutor._getSessionMeta(sessionId, 'preferred_lane') || 'sync';
+
+      if (!slot) {
+        const next = await _findNextAvailableDate(
+          date,
+          clinicId,
+          'Primary Care',
+          lane,
+          sessionId,
+          patientId,
+          callerPhone,
+          channel
+        );
+        if (next) {
+          const source = Array.isArray(next.slotOut.slot_bundles) && next.slotOut.slot_bundles.length
+            ? next.slotOut.slot_bundles
+            : (Array.isArray(next.slotOut.available_slots) ? next.slotOut.available_slots : []);
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, 'last_slot_bundles', JSON.stringify(source.slice(0, 12)));
+            KellyToolExecutor._setSessionMeta(sessionId, 'preferred_date_resolved', next.date || '');
+            KellyToolExecutor._setSessionMeta(sessionId, 'slot_presented', '1');
+          } catch (_) {}
+          const chips = source.slice(0, 8).map((s, i) => ({
+            label: `Option ${i + 1}: ${s?.display || s?.time || String(s)}`,
+            value: `option ${i + 1}`,
+            action: 'select_slot',
+            slot: s
+          }));
+          const nextReply = `No openings on ${date}. I found availability on ${next.date}. Here are the times:`;
+          this._appendToHistory(sessionId, 'assistant', nextReply);
+          return {
+            reply: nextReply,
+            endCall: false,
+            toolsUsed: ['get_available_slots'],
+            language: preferredLanguage || 'en',
+            next_chips: chips,
+            chips_display: 'list',
+            error_code: 'NO_SLOTS_ON_REQUESTED_DATE'
+          };
+        }
+      }
+
+      if (_kellyDebugVerbose()) {
+        console.log('[SERVER-SCHEDULE] Firing schedule_appointment server-side:', {
+          email: confirmedEmail.slice(0, 4) + '…',
+          date, time, practitioner_id, lane
+        });
+      }
+
+      const scheduleResult = await KellyToolExecutor.execute(
+        'schedule_appointment',
+        {
+          patient_name: confirmedName,
+          patient_email: confirmedEmail,
+          patient_phone: _normalizePhoneE164(confirmedPhone) || confirmedPhone,
+          appointment_type: 'Primary Care',
+          date,
+          time,
+          timezone: 'America/New_York',
+          practitioner_id,
+          lane,
+          phone_confirmed: !!phoneConfirmed,
+          force_after_clarified: true,
+          notes: 'Booked via routine visit flow'
+        },
+        { sessionId, clinicId, patientId, callerPhone, channel }
+      );
+
+      let reply;
+      let errorCode = null;
+      let duplicate = false;
+      if (scheduleResult?.success) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'identity_conflict', '0');
+        KellyToolExecutor._setSessionMeta(sessionId, 'identity_conflict_retry_count', '0');
+        const apptDate = slot?.display || `${date} at ${time}`;
+        reply = scheduleResult?.next_step
+          || scheduleResult?.say_to_patient
+          || scheduleResult?.message
+          || `Your appointment is confirmed for ${apptDate}. I've sent a verification code to ${confirmedEmail} to complete checkout. Please share the 6-digit code when you receive it.`;
+      } else {
+        if (scheduleResult?.duplicate && scheduleResult?.requiresPhoneConfirmation) {
+          KellyToolExecutor._setSessionMeta(sessionId, 'identity_conflict', '1');
+          duplicate = true;
+          errorCode = 'DUPLICATE_IDENTITY_PHONE_CONFIRMATION';
+          const candidate = Array.isArray(scheduleResult?.duplicates) ? scheduleResult.duplicates[0] : null;
+          const maskedTail = _maskPhoneTail(candidate?.phone || candidate?.telecom?.phone || candidate?.phone_number || '');
+          const hint = maskedTail ? ` I found a matching profile ending in ${maskedTail}.` : '';
+          reply = `I found an existing record with a similar name.${hint} To confirm your identity, could you verify your phone number? Please provide it in the format +1 followed by your 10-digit number.`;
+        } else if (scheduleResult?.error === 'TRIAGE_REQUIRED') {
+          errorCode = 'TRIAGE_REQUIRED';
+          reply = 'I need to complete a quick triage check before booking. Could you briefly describe what brings you in today?';
+        } else if (scheduleResult?.error === 'SAFETY_BLOCKED') {
+          errorCode = 'SAFETY_BLOCKED';
+          reply = 'I am unable to complete this booking due to a safety flag on this session. Please call us directly for assistance.';
+        } else if (scheduleResult?.error === 'TRIAGE_INCOMPLETE') {
+          errorCode = 'TRIAGE_INCOMPLETE';
+          reply = 'I still need a bit more information before I can book. Could you answer one more question about your visit?';
+        } else if (scheduleResult?.error === 'PROVIDER_AVAILABILITY_NOT_SET') {
+          errorCode = 'PROVIDER_AVAILABILITY_NOT_SET';
+          reply = 'Our care team is online, but availability has not been published yet. I can check the next date, switch this to async review, or arrange a callback.';
+        } else if (scheduleResult?.error === 'PROVIDER_CALENDAR_NOT_CONNECTED') {
+          errorCode = 'PROVIDER_CALENDAR_NOT_CONNECTED';
+          reply = 'No specialist has live calendar sync right now. I can check the next date, switch this to async review, or arrange a callback.';
+        } else if (scheduleResult?.error === 'NO_BOOKABLE_SYNC_PROVIDER') {
+          errorCode = 'NO_BOOKABLE_SYNC_PROVIDER';
+          reply = 'No sync-bookable specialist is available right now. I can check the next date, switch this to async review, or arrange a callback.';
+        } else if (scheduleResult?.error === 'NO_ONLINE_PROVIDERS') {
+          errorCode = 'NO_ONLINE_PROVIDERS';
+          reply = 'No specialists are online right now. I can check the next date, switch this to async review, or arrange a callback.';
+        } else {
+          console.error('[SERVER-SCHEDULE] Unhandled failure:', JSON.stringify(scheduleResult));
+          errorCode = scheduleResult?.error || 'UNKNOWN_SCHEDULE_ERROR';
+          reply = `I wasn't able to confirm that booking (${scheduleResult?.error || 'unknown error'}). Please try again or call us directly.`;
+        }
+      }
+
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return {
+        reply,
+        endCall: false,
+        toolsUsed: ['schedule_appointment'],
+        language: preferredLanguage || 'en',
+        error_code: errorCode,
+        duplicate,
+        schedule_result: scheduleResult || null,
+        next_step: scheduleResult?.next_step || null,
+        next_chips: []
+      };
+    } catch (err) {
+      console.error('[SERVER-SCHEDULE] Exception:', err.message);
+      const fallback = 'Something went wrong completing your booking. Please try again.';
+      this._appendToHistory(sessionId, 'assistant', fallback);
+      return { reply: fallback, endCall: false, toolsUsed: [], language: preferredLanguage || 'en', error_code: 'SERVER_SCHEDULE_EXCEPTION' };
+    } finally {
+      KellyToolExecutor._setSessionMeta?.(sessionId, 'server_schedule_lock', '0');
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -2784,6 +3871,24 @@ class KellyAgentService {
       // Do not assume "no symptoms" from "general visit" alone.
       // Ask one confirmation question first; only skip triage when the caller explicitly says no symptoms.
       if (!explicitNoSymptoms && likelyGeneralVisit) {
+        const bookingForSelf = KellyToolExecutor._getSessionMeta?.(sessionId, 'booking_for');
+        if (!bookingForSelf && patientId) {
+          const selfOrOtherReply = 'Got it! Are we booking this appointment for you, or for someone else?';
+          this._appendToHistory(sessionId, 'user', message);
+          this._appendToHistory(sessionId, 'assistant', selfOrOtherReply);
+          try { KellyToolExecutor._setSessionMeta(sessionId, 'booking_for_prompt_pending', '1'); } catch (_) {}
+          return {
+            reply: selfOrOtherReply,
+            endCall: false,
+            toolsUsed: [],
+            language: preferredLanguage || 'en',
+            next_chips: [
+              { label: 'For me', value: 'booking_for_self', action: 'booking_for_self' },
+              { label: 'For someone else', value: 'booking_for_other', action: 'booking_for_other' }
+            ],
+            chips_display: 'list'
+          };
+        }
         const confirmByLang = {
           ru: 'Поняла. Это плановый визит. У вас сейчас есть какие-либо симптомы или жалобы?',
           es: 'Entiendo. Es una visita general. Tiene algun sintoma o molestia hoy?',
@@ -2864,12 +3969,21 @@ class KellyAgentService {
   // Language detection from history or current message
   // ─────────────────────────────────────────────────────────────
   static _detectPreferredLanguage(history, currentMessage) {
+    try {
+      const { detectLanguagePreferenceRequest } = require('./patient-orchestrator-service');
+      const langReq = detectLanguagePreferenceRequest(String(currentMessage || ''));
+      if (langReq?.isLanguageRequest && langReq?.code) return langReq.code;
+    } catch (_) {}
+
     const lastAssistantMsg = [...history].reverse().find(m => m.role === 'assistant');
     if (lastAssistantMsg?.language) return lastAssistantMsg.language;
 
     const t = currentMessage || '';
     if (/\p{Script=Cyrillic}/u.test(t)) return 'ru';
-    if (/\b(russian|speak russian|russki|по-русски)\b/i.test(t)) return 'ru';
+    if (/(?:можем|можно)\s+(?:говорить|общаться)\s+(?:по-русски|на\s+русском)/i.test(t)) return 'ru';
+    if (/\b(говорить|говорите)\s+по-русски\b/i.test(t)) return 'ru';
+    if (/\bна\s+русском\s+(?:языке)?\b/i.test(t)) return 'ru';
+    if (/\b(russian|speak russian|in russian|to russian|russki|русск)\b/i.test(t)) return 'ru';
     if (/[\u4e00-\u9fff]/.test(t)) return 'zh';
     if (/^(hola|buenos|gracias|por favor|necesito|dolor|quiero)\b/i.test(t)) return 'es';
     if (/^(bonjour|merci|je veux|oui|non)\b/i.test(t)) return 'fr';

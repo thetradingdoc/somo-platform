@@ -7,6 +7,14 @@ const express = require('express');
 const path = require('path');
 const PaymentService = require('../services/payment-service');
 const db = require('../database');
+const {
+  resolveProviderId,
+  enrichVoiceCheckout,
+  withCommercePaymentPayload,
+  withProviderAliases,
+  withPrescriptionAliases,
+  logAliasUsage
+} = require('../utils/naming-aliases');
 
 const router = express.Router();
 
@@ -19,6 +27,42 @@ const router = express.Router();
  */
 router.get('/success', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/payment/success.html'));
+});
+
+/**
+ * After Stripe 3DS redirect: return non-sensitive PaymentIntent metadata for resume links (kelly_session_id).
+ * GET /api/payment/intent-metadata?payment_intent=pi_...&payment_intent_client_secret=...
+ */
+router.get('/intent-metadata', async (req, res) => {
+  const piId = req.query.payment_intent;
+  const clientSecret = req.query.payment_intent_client_secret;
+  if (!piId || !clientSecret) {
+    return res.status(400).json({
+      success: false,
+      error: 'payment_intent and payment_intent_client_secret are required'
+    });
+  }
+  const stripeSecret = process.env.STRIPE_SECRET_KEY;
+  if (!stripeSecret) {
+    return res.status(503).json({ success: false, error: 'stripe_not_configured' });
+  }
+  try {
+    const stripe = require('stripe')(stripeSecret);
+    const pi = await stripe.paymentIntents.retrieve(String(piId));
+    if (!pi || pi.client_secret !== String(clientSecret)) {
+      return res.status(403).json({ success: false, error: 'invalid_intent' });
+    }
+    const m = pi.metadata || {};
+    return res.json({
+      success: true,
+      kelly_session_id: m.kelly_session_id || null,
+      checkout_id: m.checkout_id || null,
+      commerce_quote_id: m.commerce_quote_id || null
+    });
+  } catch (e) {
+    console.error('[Payment] intent-metadata error:', e.message);
+    return res.status(500).json({ success: false, error: 'retrieve_failed' });
+  }
 });
 
 /**
@@ -53,6 +97,8 @@ router.get('/checkout/:token', async (req, res) => {
                 checkout = { ...checkout, appointment_date: appt.date, appointment_time: appt.time, appointment_type: appt.appointment_type || checkout.product_name };
             }
         }
+
+        checkout = enrichVoiceCheckout(checkout);
 
         res.json({
             success: true,
@@ -135,16 +181,21 @@ router.get('/methods', (req, res) => {
  */
 router.post('/create-intent', async (req, res) => {
   try {
-    const { checkout_id, amount, merchant_id } = req.body;
+    logAliasUsage('payment-create-intent', req);
+    const body = req.body || {};
+    const checkout_id = body.checkout_id || body.prescription_checkout_id;
+    const amount = body.amount;
+    const merchant_id = resolveProviderId(body) || body.merchant_id;
     if (!checkout_id) {
-      return res.status(400).json({ success: false, error: 'checkout_id is required' });
+      return res.status(400).json({ success: false, error: 'checkout_id (or prescription_checkout_id) is required' });
     }
     const PaymentOrchestrator = require('../services/payment-orchestrator');
     const result = await PaymentOrchestrator.createStripePaymentIntent(checkout_id, amount, merchant_id);
     if (!result.success) {
       return res.status(400).json(result);
     }
-    res.json(result);
+    const checkoutRow = await db.getVoiceCheckout(checkout_id);
+    res.json(withPrescriptionAliases(withProviderAliases(result, checkoutRow?.merchant_id), checkoutRow?.product_id));
   } catch (error) {
     console.error('Create intent error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -175,17 +226,24 @@ router.post('/process', async (req, res) => {
             try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(400).json(checkoutResult);
         }
-        // Enforce payment ↔ appointment linking for telehealth portal (mvp-51)
-        // Patient portal checkouts must be tied to an appointment_id.
-        if (!checkoutResult.checkout.appointment_id) {
+
+        const checkout = checkoutResult.checkout;
+
+        // Telehealth checkouts require appointment_id (mvp-51). Commerce (retail) checkouts
+        // have product_id / merchant_id and no appointment — allow through to Stripe.
+        const isCommerceCheckout =
+            !checkout.appointment_id && !!(checkout.product_id || checkout.merchant_id);
+
+        if (!isCommerceCheckout && !checkout.appointment_id) {
             try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(400).json({
                 success: false,
                 error: 'Invalid checkout: appointment_id is required for patient payments.'
             });
         }
-        // Task 53: Reject payment until identity verified
-        if (checkoutResult.requires_verification && !checkoutResult.identity_verified) {
+
+        // Task 53: identity verification — telehealth only (commerce skips email code gate)
+        if (!isCommerceCheckout && checkoutResult.requires_verification && !checkoutResult.identity_verified) {
             try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
             return res.status(403).json({
                 success: false,
@@ -210,7 +268,7 @@ router.post('/process', async (req, res) => {
         }
 
         // Task 28: Amount revalidation - always use server-side checkout amount, never client
-        const checkoutAmount = parseFloat(checkoutResult.checkout.amount);
+        const checkoutAmount = parseFloat(checkout.amount);
         const requestAmount = parseFloat(amount);
         const amountDifference = Math.abs(checkoutAmount - requestAmount);
         
@@ -234,7 +292,7 @@ router.post('/process', async (req, res) => {
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('Payment Method ID:', payment_method_id);
         console.log('Amount:', checkoutAmount, currency);
-        console.log('Checkout:', checkoutResult.checkout.id);
+        console.log('Checkout:', checkout.id);
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
         let stripe;
@@ -251,18 +309,27 @@ router.post('/process', async (req, res) => {
         try {
             const { withRetry } = require('../utils/retry');
             const amountInCents = Math.round(checkoutAmount * 100);
+            const baseUrl = (process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+            const piMetadata = {
+                checkout_id: checkout.id,
+                payment_token: payment_token,
+                customer_email: checkout.customer_email || '',
+                customer_phone: checkout.customer_phone || ''
+            };
+            if (checkout.commerce_quote_id) {
+                piMetadata.commerce_quote_id = String(checkout.commerce_quote_id);
+            }
+            if (checkout.merchant_id) {
+                piMetadata.merchant_id = String(checkout.merchant_id);
+            }
+
             const paymentIntent = await withRetry(() => stripe.paymentIntents.create({
                 amount: amountInCents, // Convert dollars to cents
                 currency: currency || 'usd',
                 payment_method: payment_method_id,
                 confirm: true,
-                return_url: `${process.env.BASE_URL || 'http://localhost:4000'}/payment/success`,
-                metadata: {
-                    checkout_id: checkoutResult.checkout.id,
-                    payment_token: payment_token,
-                    customer_email: checkoutResult.checkout.customer_email || '',
-                    customer_phone: checkoutResult.checkout.customer_phone || ''
-                }
+                return_url: `${baseUrl}/api/payment/success`,
+                metadata: piMetadata
             }), { maxAttempts: 3 });
 
             console.log('✅ Stripe Payment Intent created:', paymentIntent.id);
@@ -278,7 +345,7 @@ router.post('/process', async (req, res) => {
                     payment_intent_id: paymentIntent.id
                 };
                 if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
-                return res.json(result);
+                return res.json(withCommercePaymentPayload(result, checkout));
             }
 
             // Payment succeeded or is processing
@@ -302,13 +369,26 @@ router.post('/process', async (req, res) => {
                 const PaymentProcessorService = require('../services/payment-processor-service');
                 try {
                   await PaymentProcessorService.completePaymentSuccess({
-                    checkout: checkoutResult.checkout,
+                    checkout,
                     amount: checkoutAmount,
                     paymentMethod: 'stripe',
                     paymentIntentId: paymentIntent.id
                   });
                 } catch (e) {
                   console.warn('⚠️  completePaymentSuccess failed:', e.message);
+                }
+
+                // Commerce: create merchant_orders synchronously (idempotent); webhook also runs this path.
+                if (isCommerceCheckout && paymentIntent.status === 'succeeded') {
+                  try {
+                    const { ensureMerchantOrderFromVoiceCheckout } = require('../services/ensure-merchant-order-from-voice-checkout');
+                    const voiceCheckout = await db.getVoiceCheckout(checkout.id);
+                    if (voiceCheckout) {
+                      await ensureMerchantOrderFromVoiceCheckout(paymentIntent, voiceCheckout, { source: 'process_route' });
+                    }
+                  } catch (orderErr) {
+                    console.warn('[Payment] Sync merchant order creation failed (non-fatal):', orderErr.message);
+                  }
                 }
 
                 console.log('✅ Payment processed successfully');
@@ -319,7 +399,7 @@ router.post('/process', async (req, res) => {
                     checkout_id: processResult.checkout_id
                 };
                 if (db.completeIdempotentResult) db.completeIdempotentResult(idemKey, claimOpType, result);
-                return res.json(result);
+                return res.json(withCommercePaymentPayload(result, checkout));
             }
 
             // Payment failed or was cancelled
@@ -417,7 +497,9 @@ router.post('/capture', async (req, res) => {
  */
 router.post('/refund', async (req, res) => {
   try {
-    const { checkout_id, payment_intent_id, amount, reason = 'refund' } = req.body;
+    logAliasUsage('payment-refund', req);
+    const { payment_intent_id, amount, reason = 'refund' } = req.body;
+    const checkout_id = req.body.checkout_id || req.body.prescription_checkout_id;
     const db = require('../database');
 
     let checkout = null;

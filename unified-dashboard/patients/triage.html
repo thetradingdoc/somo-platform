@@ -20,47 +20,48 @@
     .nav-item { display:flex; gap:12px; align-items:center; padding:12px 16px; border-radius:8px; color:var(--gray-700); text-decoration:none; margin-bottom:4px; }
     .nav-item:hover { background:var(--gray-50); color:#1e40af; }
     .nav-item.active { background:#1e40af; color:#fff; }
+    .nav-icon { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; }
+    .nav-icon svg { width:20px; height:20px; stroke:currentColor; fill:none; stroke-linecap:round; stroke-linejoin:round; }
     .sidebar-footer { padding:16px; border-top:1px solid var(--gray-200); position:absolute; bottom:0; width:260px; background:#fff; }
     .user-info { display:flex; align-items:center; gap:12px; cursor:pointer; }
     .user-avatar { width:40px; height:40px; border-radius:999px; background:#1e40af; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; }
     .user-details { flex:1; min-width:0; }
     .user-name { font-size:14px; font-weight:700; color:var(--gray-900); }
     .user-role { font-size:12px; color:var(--gray-500); }
-    .logout-btn { background:none; border:none; cursor:pointer; font-size:20px; padding:4px; border-radius:6px; }
-    .card { background:linear-gradient(135deg, #fff 0%, #f8fafc 100%); border-radius:16px; padding:20px; box-shadow:0 4px 24px rgba(30,64,175,0.08), 0 1px 3px rgba(0,0,0,0.06); border:1px solid rgba(30,64,175,0.12); }
-    .title { font-size:26px; font-weight:900; margin:0 0 6px 0; background:linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-    .sub { color:var(--gray-600); font-size:14px; margin:0 0 14px 0; }
-    .chat { border:2px solid rgba(30,64,175,0.15); border-radius:14px; overflow:hidden; box-shadow:inset 0 2px 8px rgba(0,0,0,0.03); }
-    .msgs { height:460px; overflow:auto; padding:16px; background:linear-gradient(180deg, #f0f9ff 0%, #f8fafc 50%, #fefce8 100%); display:flex; flex-direction:column; gap:12px; }
-    .msg { max-width:80%; padding:12px 16px; border-radius:16px; font-size:14px; line-height:1.4; box-shadow:0 1px 3px rgba(0,0,0,0.06); transition:transform 0.15s ease, box-shadow 0.15s ease; }
+    .logout-btn { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border:1px solid var(--gray-200); background:#fff; color:var(--gray-600); cursor:pointer; border-radius:10px; transition:all .2s ease; }
+    .logout-btn:hover { border-color:#93c5fd; color:#1e40af; background:#eff6ff; }
+    .logout-btn svg { width:20px; height:20px; stroke:currentColor; }
+    .card { background:#fff; border-radius:16px; padding:20px; box-shadow:0 4px 18px rgba(15,23,42,0.08); border:1px solid #dbeafe; }
+    .title { font-size:30px; font-weight:900; margin:0 0 6px 0; background:linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1.2; }
+    .sub { color:var(--gray-600); font-size:16px; margin:0 0 14px 0; line-height:1.45; }
+    .chat { border:1px solid #bfdbfe; border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(30,64,175,0.08); }
+    .msgs { height:460px; overflow:auto; padding:16px; background:#f8fbff; display:flex; flex-direction:column; gap:12px; }
+    .msg { max-width:85%; padding:14px 18px; border-radius:16px; font-size:16px; line-height:1.55; box-shadow:0 1px 2px rgba(15,23,42,0.05); transition:transform 0.15s ease, box-shadow 0.15s ease; }
     .msg:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,0.08); }
-    .msg.user { background:linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%); color:#fff; align-self:flex-end; border-bottom-right-radius:6px; border:1px solid rgba(255,255,255,0.2); }
+    .msg.user { background:#1d4ed8; color:#fff; align-self:flex-end; border-bottom-right-radius:6px; border:1px solid #1e40af; }
     .msg.user:hover { box-shadow:0 4px 16px rgba(30,64,175,0.4); }
-    .msg.assistant { background:linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); color:#166534; align-self:flex-start; border:1px solid #86efac; border-bottom-left-radius:6px; }
-    .msg.assistant:hover { box-shadow:0 4px 12px rgba(34,197,94,0.15); }
-    .composer { display:flex; gap:12px; padding:14px; background:linear-gradient(180deg, #fff 0%, #f8fafc 100%); border-top:2px solid rgba(30,64,175,0.12); align-items:center; }
+    .msg.assistant { background:#ffffff; color:#1e293b; align-self:flex-start; border:1px solid #dbeafe; border-bottom-left-radius:6px; }
+    .msg.assistant:hover { box-shadow:0 4px 12px rgba(30,64,175,0.12); }
+    .composer { display:flex; gap:12px; padding:14px; background:#ffffff; border-top:1px solid #dbeafe; align-items:center; }
     .upload-attach-btn { min-width:44px; padding:10px; font-size:18px; }
-    .input { flex:1; border:2px solid #e5e7eb; border-radius:12px; padding:10px 14px; font-size:14px; transition:border-color 0.2s, box-shadow 0.2s; }
+    .input { flex:1; border:2px solid #e5e7eb; border-radius:12px; padding:12px 16px; font-size:16px; transition:border-color 0.2s, box-shadow 0.2s; }
     .input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.2); }
-    .btn { border:none; border-radius:12px; padding:10px 16px; font-weight:900; cursor:pointer; min-height:44px; transition:transform 0.15s, box-shadow 0.15s; }
+    .btn { border:none; border-radius:12px; padding:11px 18px; font-weight:900; font-size:15px; cursor:pointer; min-height:46px; transition:transform 0.15s, box-shadow 0.15s; }
     .btn:hover:not(:disabled) { transform:translateY(-2px); }
-    .btn.primary { background:linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color:#fff; box-shadow:0 4px 14px rgba(30,64,175,0.35); }
+    .btn.primary { background:#1d4ed8; color:#fff; box-shadow:0 4px 14px rgba(30,64,175,0.3); }
     .btn.primary:hover:not(:disabled) { box-shadow:0 6px 20px rgba(30,64,175,0.45); }
-    .btn.secondary { background:linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); color:#475569; border:1px solid #cbd5e1; }
-    .btn.secondary:hover { background:linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%); }
-    .chips { display:flex; gap:10px; flex-wrap:wrap; padding:14px; border-top:1px solid rgba(30,64,175,0.1); background:linear-gradient(180deg, #fefce8 0%, #fff 100%); }
-    .chip { border:2px solid #e5e7eb; background:linear-gradient(180deg, #fff 0%, #f8fafc 100%); border-radius:999px; padding:10px 14px; font-weight:800; font-size:13px; cursor:pointer; transition:all 0.2s ease; }
-    .chip:hover { background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-color:#3b82f6; color:#1e40af; box-shadow:0 2px 8px rgba(59,130,246,0.25); transform:translateY(-1px); }
-    .chip:nth-child(1):hover { border-color:#0ea5e9; background:linear-gradient(135deg, #ecfeff 0%, #cffafe 100%); color:#0369a1; }
-    .chip:nth-child(2):hover { border-color:#10b981; background:linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color:#047857; }
-    .chip:nth-child(3):hover { border-color:#f59e0b; background:linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); color:#b45309; }
+    .btn.secondary { background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; }
+    .btn.secondary:hover { background:#e2e8f0; }
+    .chips { display:flex; gap:10px; flex-wrap:wrap; padding:14px; border-top:1px solid #dbeafe; background:#ffffff; }
+    .chip { border:1px solid #cbd5e1; background:#ffffff; border-radius:999px; padding:11px 15px; font-weight:700; font-size:14px; cursor:pointer; transition:all 0.2s ease; color:#0f172a; }
+    .chip:hover { background:#eff6ff; border-color:#93c5fd; color:#1e40af; box-shadow:0 2px 8px rgba(59,130,246,0.2); transform:translateY(-1px); }
     .chip-modal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.4); align-items:center; justify-content:center; padding:20px; }
     .chip-modal.show { display:flex; }
     .chip-modal-content { background:#fff; border-radius:20px; padding:28px; max-width:420px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.25); border:2px solid rgba(30,64,175,0.15); }
-    .chip-modal-title { font-size:18px; font-weight:800; color:#1e40af; margin:0 0 18px 0; }
+    .chip-modal-title { font-size:20px; font-weight:800; color:#1e40af; margin:0 0 18px 0; }
     .chip-modal-btns { display:flex; flex-direction:column; gap:12px; }
     .chip-modal-btns .chip { width:100%; justify-content:center; padding:14px 20px; font-size:15px; }
-    .upload-zone { padding:14px; border-top:1px solid #e5e7eb; background:linear-gradient(180deg, #f0f9ff 0%, #f8fafc 100%); }
+    .upload-zone { padding:14px; border-top:1px solid #dbeafe; background:#f8fbff; }
     .resume-banner { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:12px 16px; margin-bottom:12px; background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border:1px solid #93c5fd; border-radius:12px; font-size:14px; color:#1e40af; }
     .resume-banner-btns { display:flex; gap:8px; flex-shrink:0; }
     .resume-banner .btn { padding:8px 14px; font-size:13px; min-height:36px; }
@@ -100,6 +101,12 @@
       .sidebar.mobile-open { transform:translateX(0); }
       .mobile-menu-overlay.active { display:block; }
       .main { margin-left:0; padding:16px; padding-top:80px; }
+      .title { font-size:34px; }
+      .sub { font-size:17px; }
+      .msg { font-size:17px; line-height:1.6; }
+      .chip { font-size:15px; }
+      .input { font-size:16px; }
+      .btn { font-size:15px; }
     }
   </style>
 </head>
@@ -115,10 +122,10 @@
         <div class="sidebar-subtitle">Patient Portal</div>
       </div>
       <nav class="sidebar-nav">
-        <a href="patient-dashboard.html" class="nav-item"><span style="font-size:20px;">🏠</span><span>Dashboard</span></a>
-        <a href="wallet.html" class="nav-item"><span style="font-size:20px;">💳</span><span>Wallet</span></a>
-        <a href="appointments.html" class="nav-item active"><span style="font-size:20px;">📅</span><span>Appointments</span></a>
-        <a href="my-records.html" class="nav-item"><span style="font-size:20px;">📄</span><span>My Records</span></a>
+        <a href="patient-dashboard.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Dashboard</span></a>
+        <a href="wallet.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span><span>Wallet</span></a>
+        <a href="appointments.html" class="nav-item active"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Appointments</span></a>
+        <a href="my-records.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>My Records</span></a>
       </nav>
       <div class="sidebar-footer">
         <div class="user-info" id="userInfo">
@@ -127,7 +134,7 @@
             <div class="user-name" id="userName">Patient</div>
             <div class="user-role">Patient Account</div>
           </div>
-          <button class="logout-btn" id="logoutBtn" title="Logout">🚪</button>
+          <button class="logout-btn" id="logoutBtn" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path></svg></button>
         </div>
       </div>
     </aside>
@@ -137,7 +144,7 @@
         <div class="title">Book a visit</div>
         <p class="sub">Tell us what’s going on, and we’ll guide you to a booked appointment and payment.</p>
         <div id="returnToScheduleWrap" style="display:none; margin-bottom:12px;">
-          <a id="returnToScheduleLink" href="schedule.html" class="btn secondary">Return to calendar</a>
+          <a id="returnToScheduleLink" href="appointments.html" class="btn secondary">Return to appointments</a>
         </div>
 
         <div id="resumeBanner" class="resume-banner" style="display:none;">
@@ -175,6 +182,13 @@
       <div class="chip-modal-btns" id="chipModalBtns"></div>
     </div>
   </div>
+
+  <script type="module">
+    import { mountBottomTabs } from '../assets/js/patient-shell.js';
+    document.addEventListener('DOMContentLoaded', () => {
+      mountBottomTabs();
+    });
+  </script>
 
   <script>
     const API_BASE = (window.API_BASE_URL || window.API_BASE || '').replace(/\/$/, '');
@@ -371,7 +385,10 @@
           add('assistant', 'Thanks, we received your upload.');
           if (fromZone) showUploadZone(false);
         } else {
-          const errMsg = j.error || 'Upload failed';
+          let errMsg = j.error || 'Upload failed';
+          if (j.error_code === 'LIMIT_FILE_COUNT') {
+            errMsg = `Too many files selected. Upload up to ${j.max_files || 30} files per batch.`;
+          }
           if (statusEl) statusEl.textContent = errMsg;
           else add('assistant', 'Sorry, upload failed: ' + errMsg);
         }

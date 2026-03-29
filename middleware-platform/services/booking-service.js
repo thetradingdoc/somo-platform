@@ -21,6 +21,22 @@ const EmailService = require('./email-service');
 const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, DAY_NAMES, normalizeDateStr } = require('../config/clinic-business-hours');
 const { getClinicCalendarConfig, useSingleCalendarPerEnv } = require('../config/clinic-calendar-config');
 const ProviderService = require('./provider-service');
+const CALENDAR_REQUIRED_FOR_SYNC = String(process.env.CALENDAR_REQUIRED_FOR_SYNC || 'false').toLowerCase() === 'true';
+const BLOCKS_ONLY_ALLOWED = String(process.env.BLOCKS_ONLY_ALLOWED === undefined ? 'true' : process.env.BLOCKS_ONLY_ALLOWED).toLowerCase() !== 'false';
+const PREFER_SYNCED_PROVIDERS = String(process.env.PREFER_SYNCED_PROVIDERS || 'true').toLowerCase() !== 'false';
+
+// Prevent log spam: only warn once per clinic when calendar integration is disabled.
+const SUPPRESS_CALENDAR_WARNING =
+  process.env.SUPPRESS_CALENDAR_WARNING === '1' || process.env.SUPPRESS_CALENDAR_WARNING === 'true';
+const warnedCalendarIntegrationByClinic = new Set();
+let warnedGoogleCalendarCredentials = false;
+const calendarMetricsWindow = {
+  started_at: Date.now(),
+  confidence: { high: 0, medium: 0, low: 0 },
+  blocks_only_bookings: 0,
+  total_bookings: 0,
+  no_bookable_provider_failures: {}
+};
 
 /**
  * Appointment Type Configuration
@@ -152,6 +168,13 @@ class BookingService {
     try {
       const clinicConfig = useSingleCalendarPerEnv() ? null : (clinicId ? getClinicCalendarConfig(clinicId) : null);
       const preferUserEmail = (clinicConfig?.userEmail || userEmail);
+      const providerSelectedCalendarId = clinicConfig?.calendarId || null;
+
+      // Deterministic order:
+      // 1) provider user selected calendar (from provider user row, if present)
+      // 2) provider primary calendar (same provider with google connected)
+      // 3) clinic calendar fallback (clinic config)
+      // 4) env shared calendar fallback (GOOGLE_CALENDAR_ID/primary)
 
       // Option 1: Service Account - single calendar ID from env (Task 1)
       if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
@@ -164,11 +187,12 @@ class BookingService {
           credentials,
           scopes: ['https://www.googleapis.com/auth/calendar']
         });
-        const calendarId = clinicConfig?.calendarId || process.env.GOOGLE_CALENDAR_ID || 'primary';
+        const calendarId = providerSelectedCalendarId || process.env.GOOGLE_CALENDAR_ID || 'primary';
         return {
           client: google ? google.calendar({ version: 'v3', auth }) : null,
           calendarId,
-          authType: 'service_account'
+          authType: 'service_account',
+          calendar_resolution_source: providerSelectedCalendarId ? 'clinic_selected_calendar' : (process.env.GOOGLE_CALENDAR_ID ? 'env_shared_calendar' : 'primary')
         };
       }
 
@@ -197,27 +221,78 @@ class BookingService {
             expiry_date: user.google_token_expiry || undefined
           });
 
-          const calendarId = clinicConfig?.calendarId || user.google_calendar_id || process.env.GOOGLE_CALENDAR_ID || 'primary';
+          const calendarId = user.google_calendar_id || providerSelectedCalendarId || process.env.GOOGLE_CALENDAR_ID || 'primary';
+          const resolutionSource = user.google_calendar_id
+            ? 'provider_user_selected_calendar'
+            : (providerSelectedCalendarId
+              ? 'clinic_selected_calendar'
+              : (process.env.GOOGLE_CALENDAR_ID ? 'env_shared_calendar' : 'primary'));
           return {
             client: google ? google.calendar({ version: 'v3', auth: oauth2Client }) : null,
             calendarId,
             auth: oauth2Client,
             user,
-            authType: 'oauth'
+            authType: 'oauth',
+            calendar_resolution_source: resolutionSource
           };
         }
       }
 
       const isMock = process.env.GOOGLE_CALENDAR_MOCK === '1' || process.env.GOOGLE_CALENDAR_MOCK === 'true';
-      console.warn(
-        `⚠️  Google Calendar credentials not configured. Running in ${isMock ? 'MOCK mode (GOOGLE_CALENDAR_MOCK=1)' : 'mock mode'} — external events ignored; double-booking risk when calendar not configured.`
-      );
+      if (!SUPPRESS_CALENDAR_WARNING && !warnedGoogleCalendarCredentials) {
+        console.warn(
+          `⚠️  Google Calendar credentials not configured. Running in ${isMock ? 'MOCK mode (GOOGLE_CALENDAR_MOCK=1)' : 'mock mode'} — external events ignored; double-booking risk when calendar not configured.`
+        );
+        warnedGoogleCalendarCredentials = true;
+      }
       return null;
 
     } catch (error) {
       console.error('❌ Error initializing Google Calendar:', error);
       return null;
     }
+  }
+
+  static _trackCalendarObservability(eventName, payload = {}) {
+    try {
+      if (db.incrementOpsCounter) db.incrementOpsCounter(eventName);
+      if (eventName === 'booking_calendar_confidence_high') calendarMetricsWindow.confidence.high += 1;
+      if (eventName === 'booking_calendar_confidence_medium') calendarMetricsWindow.confidence.medium += 1;
+      if (eventName === 'booking_calendar_confidence_low') calendarMetricsWindow.confidence.low += 1;
+      if (eventName === 'booking_blocks_only_booking') calendarMetricsWindow.blocks_only_bookings += 1;
+      if (eventName === 'booking_total_bookings') calendarMetricsWindow.total_bookings += 1;
+      if (eventName === 'booking_no_bookable_provider_failure') {
+        const clinic = payload.clinic_id || 'unknown';
+        calendarMetricsWindow.no_bookable_provider_failures[clinic] =
+          (calendarMetricsWindow.no_bookable_provider_failures[clinic] || 0) + 1;
+      }
+    } catch (_) {}
+  }
+
+  static getCalendarObservabilitySnapshot() {
+    const conf = calendarMetricsWindow.confidence;
+    const totalConf = conf.high + conf.medium + conf.low;
+    const blocksRatio = calendarMetricsWindow.total_bookings > 0
+      ? calendarMetricsWindow.blocks_only_bookings / calendarMetricsWindow.total_bookings
+      : 0;
+    return {
+      window_started_at: new Date(calendarMetricsWindow.started_at).toISOString(),
+      confidence_counts: { ...conf, total: totalConf },
+      confidence_percentages: {
+        high: totalConf ? Number(((conf.high / totalConf) * 100).toFixed(2)) : 0,
+        medium: totalConf ? Number(((conf.medium / totalConf) * 100).toFixed(2)) : 0,
+        low: totalConf ? Number(((conf.low / totalConf) * 100).toFixed(2)) : 0
+      },
+      booking_counts: {
+        total: calendarMetricsWindow.total_bookings,
+        blocks_only: calendarMetricsWindow.blocks_only_bookings
+      },
+      blocks_only_ratio: Number(blocksRatio.toFixed(4)),
+      no_bookable_provider_failures_by_clinic: { ...calendarMetricsWindow.no_bookable_provider_failures },
+      alerts: {
+        blocks_only_drift: blocksRatio >= 0.35
+      }
+    };
   }
 
   /**
@@ -240,6 +315,13 @@ class BookingService {
         appointmentData.clinic_id,
         'scheduling appointments'
       );
+
+      try {
+        const { enforceCanonicalPatientPhone } = require('./patient-contact-canonical');
+        enforceCanonicalPatientPhone(appointmentData, { logTag: '[BookingService.schedule]' });
+      } catch (e) {
+        console.warn('[BookingService.schedule] Canonical patient phone skipped:', e.message);
+      }
 
       const clinicHours = getClinicBusinessHours(clinicId);
       let dateStr = normalizeDateStr(appointmentData.date) || appointmentData.date;
@@ -405,6 +487,29 @@ class BookingService {
         primary_cpt: appointmentData.primary_cpt || null
       };
 
+      try {
+        const { enforceCanonicalPatientPhone } = require('./patient-contact-canonical');
+        enforceCanonicalPatientPhone(appointment, { logTag: '[BookingService.schedule.final]' });
+      } catch (e) {
+        console.warn('[BookingService.schedule.final] Canonical patient phone skipped:', e.message);
+      }
+
+      appointmentData.patient_phone = appointment.patient_phone;
+      if (fhirPatientId && PatientIntakeService && PatientIntakeService.upsertIntakeByPatientId) {
+        try {
+          const full = (appointment.patient_name || '').toString().trim();
+          const parts = full.split(' ').filter(Boolean);
+          const first_name = parts[0] || '';
+          const last_name = parts.slice(1).join(' ') || '';
+          await PatientIntakeService.upsertIntakeByPatientId(fhirPatientId, {
+            first_name,
+            last_name,
+            phone: appointment.patient_phone || '',
+            email: appointment.patient_email || ''
+          });
+        } catch (_) {}
+      }
+
       console.log('📋 Appointment Details:', {
         id: appointment.id,
         patient: appointment.patient_name,
@@ -568,6 +673,13 @@ class BookingService {
       timezone: tz,
       created_at: new Date().toISOString()
     };
+
+    try {
+      const { enforceCanonicalPatientPhone } = require('./patient-contact-canonical');
+      enforceCanonicalPatientPhone(appointment, { logTag: '[BookingService.asyncReview]' });
+    } catch (e) {
+      console.warn('[BookingService.asyncReview] Canonical patient phone skipped:', e.message);
+    }
 
     await db.createAppointment(appointment);
     return {
@@ -1154,7 +1266,40 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       }
 
       // Filter by provider availability (provider_availability_blocks + is_online)
-      const onlineProviders = ProviderService.getOnlineProviderEmailsForClinic(scopedClinicId);
+      const onlineProviders = ProviderService.getBookableProvidersForClinic(scopedClinicId, 'sync');
+      const activeProviderCount = ProviderService.getActiveProviderCountForClinic(scopedClinicId);
+      if (activeProviderCount > 0 && onlineProviders.length === 0) {
+        const readiness = ProviderService.getProviderBookingReadinessForClinic(scopedClinicId);
+        const hasOnline = readiness.some((r) => r.is_online);
+        const hasBlocks = readiness.some((r) => r.has_availability_blocks);
+        const hasCalendar = readiness.some((r) => r.calendar_connected);
+        let errorCode = 'NO_ONLINE_PROVIDERS';
+        let errorMsg = 'No specialists are currently online. Please try again shortly.';
+        if (hasOnline && !hasBlocks) {
+          errorCode = 'PROVIDER_AVAILABILITY_NOT_SET';
+          errorMsg = 'No specialist availability is configured yet. Please try again shortly.';
+        } else if (hasOnline && !hasCalendar && CALENDAR_REQUIRED_FOR_SYNC) {
+          errorCode = 'PROVIDER_CALENDAR_NOT_CONNECTED';
+          errorMsg = 'No specialist has a connected calendar for sync booking right now.';
+        } else if (hasOnline && !hasCalendar && BLOCKS_ONLY_ALLOWED) {
+          errorCode = 'NO_BOOKABLE_SYNC_PROVIDER';
+          errorMsg = 'No sync-bookable specialist is available right now. Try another date or async review.';
+        }
+        console.warn(`[BookingService] ${errorCode} clinic=${scopedClinicId} active=${activeProviderCount}`);
+        this._trackCalendarObservability('booking_no_bookable_provider_failure', { clinic_id: scopedClinicId });
+        return {
+          success: false,
+          error_code: errorCode,
+          error: errorMsg,
+          clinic_id: scopedClinicId,
+          active_provider_count: activeProviderCount,
+          booking_policy: {
+            calendar_required_for_sync: CALENDAR_REQUIRED_FOR_SYNC,
+            blocks_only_allowed: BLOCKS_ONLY_ALLOWED,
+            prefer_synced_providers: PREFER_SYNCED_PROVIDERS
+          }
+        };
+      }
       if (onlineProviders.length > 0) {
         const filtered = [];
         const filteredDisplay = [];
@@ -1163,8 +1308,8 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
           const slotStart = this._timeToDate(date, slotTime, requestedTimezone);
           const slotEnd = new Date(slotStart.getTime() +
             (typeConfig.duration_minutes + typeConfig.buffer_before_minutes + typeConfig.buffer_after_minutes) * 60 * 1000);
-          const anyProviderAvailable = onlineProviders.some(email =>
-            ProviderService.isSlotInProviderAvailability(email, slotStart, slotEnd, date)
+          const anyProviderAvailable = onlineProviders.some((providerRef) =>
+            ProviderService.isSlotInProviderAvailability(providerRef, slotStart, slotEnd, date)
           );
           if (anyProviderAvailable) {
             filtered.push(slotTime);
@@ -1175,13 +1320,25 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
         availableSlots.push(...filtered);
         slotsWithDisplay.length = 0;
         slotsWithDisplay.push(...filteredDisplay);
-        console.log('📋 Filtered by provider availability:', onlineProviders.length, 'online provider(s),', availableSlots.length, 'slots after filter');
+        console.log('📋 Filtered by canonical provider availability:', onlineProviders.length, 'online provider(s),', availableSlots.length, 'slots after filter');
       }
 
       console.log('✅ Available slots:', availableSlots.length);
       console.log('📊 Booked slots:', bookedSlots.length);
-      if (calendar_warning) console.warn('⚠️  ' + calendar_warning);
+      if (calendar_warning && !SUPPRESS_CALENDAR_WARNING) {
+        if (!warnedCalendarIntegrationByClinic.has(scopedClinicId)) {
+          console.warn('⚠️  ' + calendar_warning);
+          warnedCalendarIntegrationByClinic.add(scopedClinicId);
+        }
+      }
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      const confidence = onlineProviders.some((p) => p.calendar_connected) ? 'high' : 'medium';
+      if (confidence === 'high') this._trackCalendarObservability('booking_calendar_confidence_high');
+      else if (confidence === 'medium') this._trackCalendarObservability('booking_calendar_confidence_medium');
+      else this._trackCalendarObservability('booking_calendar_confidence_low');
+      if (confidence === 'medium') this._trackCalendarObservability('booking_blocks_only_booking');
+      this._trackCalendarObservability('booking_total_bookings');
 
       return {
         success: true,
@@ -1197,7 +1354,9 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
         buffer_before_minutes: typeConfig.buffer_before_minutes,
         buffer_after_minutes: typeConfig.buffer_after_minutes,
         calendar_configured,
-        calendar_warning
+        calendar_warning,
+        calendar_confidence: confidence,
+        calendar_source: onlineProviders.some((p) => p.calendar_connected) ? 'google_plus_blocks' : 'availability_blocks_only'
       };
 
     } catch (error) {

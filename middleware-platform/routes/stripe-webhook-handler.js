@@ -2,11 +2,10 @@
  * Stripe webhook handler for payment settlement pipeline.
  *
  * On payment_intent.succeeded:
- *   1. Mark appointment paid in DB
- *   2. Resolve provider wallet (PaymentFlowService or practitioners.circle_wallet_id)
- *   3. Trigger Circle USDC transfer to provider
- *   4. Send patient receipt email
- *   5. Build case summary for provider portal
+ *   1. reconcileMerchantOrderPaymentSucceeded — create/update merchant_orders (always first).
+ *   2. Mark checkout_sessions quote row paid when commerce_quote_id is in PI metadata.
+ *   3. If no appointment_id: skip telehealth (Circle, receipt, case summary) — commerce retail.
+ *   4. Telehealth: appointment paid, Circle payout, receipt email, case summary.
  *
  * Mount in server.js BEFORE express.json() (Stripe requires raw body):
  *   app.use('/webhooks/stripe', stripeWebhookRouter);
@@ -21,6 +20,8 @@ const Stripe = require('stripe');
 const axios = require('axios');
 const db = require('../database');
 const PaymentFlowService = require('../services/payment-flow-service');
+const { ensureMerchantOrderFromVoiceCheckout } = require('../services/ensure-merchant-order-from-voice-checkout');
+const { parseCheckoutSessionData } = require('../utils/public-commerce-helpers');
 
 const router = express.Router();
 
@@ -140,21 +141,56 @@ router.post(
 
 async function handlePaymentSucceeded(paymentIntent) {
   const { id: stripePaymentIntentId, amount, metadata } = paymentIntent;
+
+  await reconcileMerchantOrderPaymentSucceeded(paymentIntent);
+
   const appointmentId = metadata?.appointment_id;
   const patientEmail = metadata?.patient_email;
   const patientName = metadata?.patient_name;
   const practitionerId = metadata?.practitioner_id;
   const sessionId = metadata?.session_id;
+  const commerceQuoteId = metadata?.commerce_quote_id;
+  const checkoutIdMeta = metadata?.checkout_id;
 
   console.log('[StripeWebhook] Payment succeeded:', {
     stripePaymentIntentId,
     amount,
-    appointmentId,
-    practitionerId
+    appointmentId: appointmentId || null,
+    practitionerId: practitionerId || null,
+    commerce_quote_id: commerceQuoteId || null,
+    checkout_id: checkoutIdMeta || null
   });
 
+  if (commerceQuoteId && db.getCheckoutSession && db.updateCheckoutSession) {
+    try {
+      const row = db.getCheckoutSession(commerceQuoteId);
+      if (row && row.platform === 'commerce_quote') {
+        const prev = parseCheckoutSessionData(row.session_data) || {};
+        const next = {
+          ...prev,
+          kind: 'commerce_quote',
+          stripe_payment_intent_id: stripePaymentIntentId,
+          paid_at: new Date().toISOString()
+        };
+        if (checkoutIdMeta) next.voice_checkout_id = checkoutIdMeta;
+        db.updateCheckoutSession(commerceQuoteId, 'paid', next);
+        console.log('[StripeWebhook] Commerce quote session marked paid:', commerceQuoteId);
+      }
+    } catch (e) {
+      console.warn('[StripeWebhook] Commerce quote session update failed (non-fatal):', e.message);
+    }
+  }
+
   if (!appointmentId) {
-    console.warn('[StripeWebhook] No appointment_id in metadata — cannot reconcile');
+    if (commerceQuoteId) {
+      console.log('[StripeWebhook] Commerce order reconciled. Skipping telehealth path for:', stripePaymentIntentId);
+      return;
+    }
+    console.warn(
+      '[StripeWebhook] No appointment_id or commerce_quote_id in PI metadata:',
+      stripePaymentIntentId,
+      '— order may still exist if reconcile used checkout_id from metadata.'
+    );
     return;
   }
 
@@ -223,6 +259,7 @@ async function handlePaymentSucceeded(paymentIntent) {
 }
 
 async function handlePaymentFailed(paymentIntent) {
+  await reconcileMerchantOrderPaymentFailed(paymentIntent);
   const appointmentId = paymentIntent.metadata?.appointment_id;
   if (!appointmentId) return;
   try {
@@ -231,6 +268,97 @@ async function handlePaymentFailed(paymentIntent) {
     `).run(appointmentId);
     console.log('[StripeWebhook] Payment failed recorded for:', appointmentId);
   } catch (_) {}
+}
+
+async function reconcileMerchantOrderPaymentSucceeded(paymentIntent) {
+  try {
+    const metadata = paymentIntent?.metadata || {};
+    const directOrderId = metadata.order_id || metadata.merchant_order_id || null;
+    const checkoutId = metadata.checkout_id || null;
+    let orderId = directOrderId;
+
+    if (!orderId && checkoutId && db.getVoiceCheckout) {
+      try {
+        const checkout = await db.getVoiceCheckout(checkoutId);
+        if (checkout?.merchant_order_id) orderId = checkout.merchant_order_id;
+      } catch (_) {}
+    }
+
+    if (orderId) {
+      const order = db.getOrder(orderId);
+      if (!order) {
+        console.warn('[StripeWebhook] merchant order not found for payment success:', orderId);
+        if (!checkoutId || !db.getVoiceCheckout) return;
+        // Fall through: create from voice_checkout
+      } else {
+        const updates = {
+          payment_status: 'paid'
+        };
+        if (!order.status || order.status === 'pending') {
+          updates.status = 'confirmed';
+        }
+        db.updateOrder(orderId, updates);
+
+        try {
+          db.incrementOpsCounter && db.incrementOpsCounter('merchant_order_payment_paid');
+        } catch (_) {}
+        console.log('[StripeWebhook] merchant order paid (existing):', {
+          order_id: orderId,
+          payment_intent_id: paymentIntent?.id
+        });
+        return;
+      }
+    }
+
+    if (!checkoutId || !db.getVoiceCheckout) {
+      console.warn(
+        '[StripeWebhook] No checkout_id in PI metadata and no orderId — cannot create order for:',
+        paymentIntent?.id
+      );
+      return;
+    }
+
+    const checkout = await db.getVoiceCheckout(checkoutId);
+    if (!checkout) {
+      console.warn('[StripeWebhook] voice checkout not found for PI metadata.checkout_id:', checkoutId);
+      return;
+    }
+
+    await ensureMerchantOrderFromVoiceCheckout(paymentIntent, checkout, { source: 'webhook' });
+  } catch (error) {
+    console.error('[StripeWebhook] merchant order reconcile (success) failed:', error.message);
+  }
+}
+
+async function reconcileMerchantOrderPaymentFailed(paymentIntent) {
+  try {
+    const metadata = paymentIntent?.metadata || {};
+    const directOrderId = metadata.order_id || metadata.merchant_order_id || null;
+    const checkoutId = metadata.checkout_id || null;
+    let orderId = directOrderId;
+
+    if (!orderId && checkoutId && db.getVoiceCheckout) {
+      try {
+        const checkout = await db.getVoiceCheckout(checkoutId);
+        if (checkout?.merchant_order_id) orderId = checkout.merchant_order_id;
+      } catch (_) {}
+    }
+
+    if (!orderId) return;
+    const order = db.getOrder(orderId);
+    if (!order) return;
+
+    db.updateOrder(orderId, { payment_status: 'failed' });
+    try {
+      db.incrementOpsCounter && db.incrementOpsCounter('merchant_order_payment_failed');
+    } catch (_) {}
+    console.log('[StripeWebhook] merchant order payment failed', {
+      order_id: orderId,
+      payment_intent_id: paymentIntent?.id
+    });
+  } catch (error) {
+    console.error('[StripeWebhook] merchant order reconcile (failed) failed:', error.message);
+  }
 }
 
 async function _transferToProvider({

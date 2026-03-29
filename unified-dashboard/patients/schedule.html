@@ -4,12 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1e40af" />
+  <meta http-equiv="refresh" content="0; url=appointments.html" />
   <link rel="manifest" href="../manifest.webmanifest" />
   <title>Schedule a Visit - Consult</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="../assets/js/config.js" defer></script>
   <script>
+    window.location.replace('appointments.html');
     // Self-scheduling is now a first-class feature for the patient portal.
     // The old FEATURE_PATIENT_SELF_SCHEDULING gate has been removed.
   </script>
@@ -629,8 +631,8 @@
       const todayStr = isoDateInTz(new Date(), CLINIC_TIMEZONE);
 
       for (let day = 1; day <= daysInMonth; day++) {
-        const d = new Date(year, month, day);
-        const iso = d.toISOString().slice(0, 10);
+        // Civil YYYY-MM-DD for this grid cell — do not use toISOString() (UTC shifts local dates).
+        const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -874,7 +876,7 @@
           window.location.href = checkoutData.checkout_url;
         } catch (err) {
           console.error('Error creating checkout session:', err);
-          showMsg('Appointment booked, but starting payment failed. You can complete payment from Wallet.', 'error');
+          showMsg('Appointment booked. Payment couldn’t start automatically—complete it from Wallet to finish your visit.', 'error');
           if (retryPayBtn) retryPayBtn.classList.remove('hidden');
         }
       } catch (e) {

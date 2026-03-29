@@ -5,6 +5,12 @@ on:
     branches: [ main, master, develop ]
   pull_request:
     branches: [ main, master, develop ]
+  workflow_dispatch:
+    inputs:
+      clinical_prep_appointment_id:
+        description: "Appointment ID for clinical prep gate"
+        required: false
+        default: "appt-5f04ffbd3a29"
 
 jobs:
   test:
@@ -52,22 +58,25 @@ jobs:
         working-directory: ./middleware-platform
         run: |
           if [ -f "openapi.yaml" ]; then
-            # Check if swagger-cli is available, otherwise skip
-            npx -y @apidevtools/swagger-cli validate openapi.yaml || echo "OpenAPI validation skipped (install @apidevtools/swagger-cli for full validation)"
+            npx -y @apidevtools/swagger-cli validate openapi.yaml
           else
             echo "No OpenAPI spec found, skipping validation"
           fi
-        continue-on-error: true
       
-      - name: Run tests (if available)
+      - name: Run Jest tests (middleware-platform)
         working-directory: ./middleware-platform
+        run: npm test
+
+      - name: Clinical prep payload gate
+        working-directory: ./middleware-platform
+        env:
+          CLINICAL_PREP_APPOINTMENT_ID: ${{ github.event.inputs.clinical_prep_appointment_id || vars.CLINICAL_PREP_APPOINTMENT_ID || 'appt-5f04ffbd3a29' }}
         run: |
-          if [ -f "package.json" ] && grep -q '"test"' package.json; then
-            npm test || echo "Tests failed or not configured"
+          if [ -f "scripts/check-clinical-prep-payload.js" ]; then
+            npm run check:clinical-prep -- --appointment "$CLINICAL_PREP_APPOINTMENT_ID"
           else
-            echo "No test script found, skipping tests"
+            echo "No clinical prep payload script found, skipping"
           fi
-        continue-on-error: true
 
       # mvp-79: CI gates (perf budgets + retention dry-run + Cypress E2E)
       - name: Performance budgets (repo root)
@@ -96,6 +105,17 @@ jobs:
             echo "No retention script found, skipping"
           fi
 
+      - name: Agentic checkout static verification (repo root)
+        run: node scripts/verify-agentic-checkout.cjs
+
+      - name: Install patient-app dependencies
+        working-directory: ./patient-app
+        run: npm ci
+
+      - name: Typecheck patient-app (Expo)
+        working-directory: ./patient-app
+        run: npx tsc --noEmit
+
       - name: Start API server (for Cypress)
         working-directory: ./middleware-platform
         env:
@@ -116,7 +136,7 @@ jobs:
           if [ -d "cypress" ]; then
             npx cypress run
           else
-            echo "No cypress folder found, skipping"
+            echo "No middleware-platform/cypress directory — browser E2E skipped (see docs/deployment/CI_AND_DEPLOY_SOURCE_OF_TRUTH.md)"
           fi
 
       - name: Stop API server
@@ -139,6 +159,7 @@ jobs:
 
   security:
     name: Security Scan
+    # Heuristic grep below is not a substitute for GitHub Advanced Security / secret scanning / gitleaks in org settings.
     runs-on: ubuntu-latest
     
     steps:

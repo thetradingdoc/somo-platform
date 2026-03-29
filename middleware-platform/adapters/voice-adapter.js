@@ -144,10 +144,17 @@ class VoiceAdapter {
      * Convert checkout to merchant order format
      */
     static toMerchantOrderFormat(checkout) {
+        const ship =
+            checkout.shipping_address != null && checkout.shipping_address !== ''
+                ? typeof checkout.shipping_address === 'string'
+                    ? checkout.shipping_address
+                    : JSON.stringify(checkout.shipping_address)
+                : null;
         return {
             customer_name: checkout.customer_name,
             customer_email: checkout.customer_email || checkout.customer_phone,
             customer_phone: checkout.customer_phone,
+            shipping_address: ship,
             items: [{
                 product_id: checkout.product_id,
                 quantity: checkout.quantity,

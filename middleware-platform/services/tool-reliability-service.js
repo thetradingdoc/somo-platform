@@ -22,10 +22,13 @@ class ToolReliabilityService {
 
     const runOnce = async () => {
       attempt += 1;
-      const timer = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Tool timeout')), timeoutMs)
-      );
-      return Promise.race([fn(), timer]);
+      let timerId;
+      const timer = new Promise((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('Tool timeout')), timeoutMs);
+      });
+      return Promise.race([fn(), timer]).finally(() => {
+        if (timerId) clearTimeout(timerId);
+      });
     };
 
     // eslint-disable-next-line no-constant-condition

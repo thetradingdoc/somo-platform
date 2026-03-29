@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Successful</title>
-    <script src="https://js.stripe.com/v3/"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -45,6 +44,7 @@
         .btn-primary:hover { opacity: 0.9; }
         .btn-secondary { background: #f7fafc; color: #667eea; border: 2px solid #667eea; }
         .btn-secondary:hover { background: #edf2f7; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -55,15 +55,33 @@
         <div id="appointmentContext" class="appointment-info hidden"></div>
         <div class="next-steps">
             <h3>Next steps</h3>
+            <a id="continueChatLink" href="#" class="btn btn-primary hidden">Continue chatting with Kelly</a>
             <a id="appointmentsLink" href="/patients/appointments.html" class="btn btn-primary">View my appointments</a>
             <a id="profileLink" href="/patients/profile.html" class="btn btn-secondary">Patient portal</a>
         </div>
     </div>
     <script>
         (function() {
-            var origin = window.location.origin;
-            document.getElementById('appointmentsLink').href = origin.replace(/\/$/, '') + '/patients/appointments.html';
-            document.getElementById('profileLink').href = origin.replace(/\/$/, '') + '/patients/profile.html';
+            var origin = window.location.origin.replace(/\/$/, '');
+            document.getElementById('appointmentsLink').href = origin + '/patients/appointments.html';
+            document.getElementById('profileLink').href = origin + '/patients/profile.html';
+
+            var params = new URLSearchParams(window.location.search);
+            var pi = params.get('payment_intent');
+            var cs = params.get('payment_intent_client_secret');
+            var chatLink = document.getElementById('continueChatLink');
+            if (!pi || !cs) return;
+
+            fetch(origin + '/api/payment/intent-metadata?payment_intent=' + encodeURIComponent(pi) + '&payment_intent_client_secret=' + encodeURIComponent(cs))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data || !data.success || !data.kelly_session_id) return;
+                    var u = origin + '/patients/checkout-chat.html?kelly_session_id=' + encodeURIComponent(data.kelly_session_id);
+                    if (data.checkout_id) u += '&checkout_id=' + encodeURIComponent(data.checkout_id);
+                    chatLink.href = u;
+                    chatLink.classList.remove('hidden');
+                })
+                .catch(function() { /* optional resume link */ });
         })();
     </script>
 </body>

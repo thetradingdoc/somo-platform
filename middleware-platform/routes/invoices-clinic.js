@@ -9,7 +9,7 @@ const db = require('../database');
 const InvoiceService = require('../services/invoice-service');
 const PDFInvoiceService = require('../services/pdf-invoice-service');
 const EmailService = require('../services/email-service');
-const rateLimiter = require('../middleware/rate-limiter').authLimiter;
+const { authLimiter, apiLimiter } = require('../middleware/rate-limiter');
 
 const router = express.Router();
 
@@ -17,7 +17,7 @@ const router = express.Router();
  * POST /api/invoices/create-from-claim
  * Generate invoice from claim (calculates patient responsibility from EOB)
  */
-router.post('/create-from-claim', rateLimiter, async (req, res) => {
+router.post('/create-from-claim', authLimiter, async (req, res) => {
   try {
     const { claim_id, due_date, notes, allow_multiple } = req.body;
 
@@ -53,7 +53,7 @@ router.post('/create-from-claim', rateLimiter, async (req, res) => {
  * GET /api/invoices
  * List all invoices with filters
  */
-router.get('/', rateLimiter, async (req, res) => {
+router.get('/', apiLimiter, async (req, res) => {
   try {
     const { status, patient_id, claim_id, start_date, end_date, limit } = req.query;
 
@@ -116,7 +116,7 @@ router.get('/', rateLimiter, async (req, res) => {
  * GET /api/invoices/:id
  * Get invoice details with items and payments
  */
-router.get('/:id', rateLimiter, async (req, res) => {
+router.get('/:id', apiLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const summary = InvoiceService.getInvoiceSummary(id);
@@ -158,7 +158,7 @@ router.get('/:id', rateLimiter, async (req, res) => {
  * PUT /api/invoices/:id
  * Update invoice (status, due date, notes)
  */
-router.put('/:id', rateLimiter, async (req, res) => {
+router.put('/:id', authLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, due_date, notes } = req.body;
@@ -197,7 +197,7 @@ router.put('/:id', rateLimiter, async (req, res) => {
  * POST /api/invoices/:id/send
  * Send invoice email to patient
  */
-router.post('/:id/send', rateLimiter, async (req, res) => {
+router.post('/:id/send', authLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const summary = InvoiceService.getInvoiceSummary(id);
@@ -307,7 +307,7 @@ router.post('/:id/send', rateLimiter, async (req, res) => {
  * POST /api/invoices/:id/payments
  * Record payment against invoice
  */
-router.post('/:id/payments', rateLimiter, async (req, res) => {
+router.post('/:id/payments', authLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const { payment_date, amount, payment_method, reference_number, notes } = req.body;
@@ -373,7 +373,7 @@ router.post('/:id/payments', rateLimiter, async (req, res) => {
  * GET /api/invoices/:id/payments
  * Get payment history for an invoice
  */
-router.get('/:id/payments', rateLimiter, async (req, res) => {
+router.get('/:id/payments', apiLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const invoice = db.getInvoice(id);

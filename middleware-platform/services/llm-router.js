@@ -4,6 +4,9 @@
  * Routes LLM requests to Claude (default primary) or Groq (fallback).
  * Set KELLY_PRIMARY_PROVIDER=groq to force Groq-only. If the key is missing,
  * resolvePrimaryProvider() falls back to Groq when ANTHROPIC_API_KEY is unset.
+ *
+ * Streaming (commerce checkout SSE): use callStreamWithDeltas — it respects the same
+ * primary as call(); callGroqStreamWithDeltas is Groq-only.
  */
 
 'use strict';
@@ -129,12 +132,13 @@ const PROVIDER_TIMEOUT_MS = parseInt(process.env.KELLY_PROVIDER_TIMEOUT_MS || '2
 const GROQ_FALLBACK_MODEL = process.env.KELLY_GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
 
 function withTimeout(promise, ms, label) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(label || `Timeout after ${ms}ms`)), ms)
-    )
-  ]);
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label || `Timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 function _sleep(ms) {
@@ -382,6 +386,196 @@ async function _callGroq({ messages, tools, maxTokens, channel }) {
   throw lastErr;
 }
 
+/**
+ * Groq streaming completion (OpenAI-compatible). Invokes onDelta for each content token.
+ * Accumulates tool_calls from stream chunks and returns a non-stream-shaped response for the Kelly loop.
+ * @param {function(string): void} [opts.onDelta]
+ */
+async function callGroqStreamWithDeltas({ messages, tools, maxTokens, channel, onDelta }) {
+  const client = getGroq();
+  const model = process.env.KELLY_GROQ_MODEL || 'llama-3.3-70b-versatile';
+  const tokens =
+    maxTokens ||
+    (channel === 'voice'
+      ? parseInt(process.env.KELLY_VOICE_MAX_TOKENS || '150', 10)
+      : parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '200', 10));
+
+  const stream = await withTimeout(
+    client.chat.completions.create({
+      model,
+      messages,
+      tools: tools || [],
+      tool_choice: 'auto',
+      temperature: 0.3,
+      max_tokens: tokens,
+      stream: true
+    }),
+    PROVIDER_TIMEOUT_MS,
+    `Groq stream timeout after ${PROVIDER_TIMEOUT_MS}ms`
+  );
+
+  let accumulatedContent = '';
+  const toolCallsByIndex = [];
+  let finishReason = null;
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices?.[0];
+    if (!choice) continue;
+    const delta = choice.delta;
+    if (delta?.content) {
+      accumulatedContent += delta.content;
+      if (typeof onDelta === 'function') onDelta(delta.content);
+    }
+    if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+      for (const tc of delta.tool_calls) {
+        const idx = typeof tc.index === 'number' ? tc.index : 0;
+        if (!toolCallsByIndex[idx]) {
+          toolCallsByIndex[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+        }
+        if (tc.id) toolCallsByIndex[idx].id = tc.id;
+        if (tc.function?.name) toolCallsByIndex[idx].function.name += tc.function.name;
+        if (tc.function?.arguments) toolCallsByIndex[idx].function.arguments += tc.function.arguments;
+      }
+    }
+    if (choice.finish_reason) finishReason = choice.finish_reason;
+  }
+
+  const toolCalls = toolCallsByIndex
+    .filter(Boolean)
+    .map((tc, i) => ({
+      id: tc.id || `call_${i}`,
+      type: 'function',
+      function: {
+        name: tc.function.name,
+        arguments: tc.function.arguments
+      }
+    }));
+
+  const hasTools = toolCalls.length > 0;
+  return {
+    choices: [
+      {
+        finish_reason: finishReason || (hasTools ? 'tool_calls' : 'stop'),
+        message: {
+          role: 'assistant',
+          content: accumulatedContent || null,
+          tool_calls: hasTools ? toolCalls : undefined
+        }
+      }
+    ]
+  };
+}
+
+/**
+ * Anthropic Messages API streaming; returns OpenAI-shaped { choices[0] } like callGroqStreamWithDeltas.
+ */
+async function _callAnthropicStreamWithDeltas({ messages, tools, maxTokens, onDelta }) {
+  const client = getAnthropic();
+  const model = process.env.KELLY_ANTHROPIC_MODEL || 'claude-sonnet-4-5';
+  const { system, messages: converted } = _toAnthropicMessages(messages);
+  const anthropicTools = _toAnthropicTools(tools || []);
+
+  const payload = {
+    model,
+    max_tokens: maxTokens || 1024,
+    system,
+    messages: converted
+  };
+  if (anthropicTools.length > 0) payload.tools = anthropicTools;
+
+  const stream = client.messages.stream(payload);
+
+  let textContent = '';
+  const toolCalls = [];
+  let currentToolUse = null;
+  let finishReason = null;
+
+  for await (const event of stream) {
+    if (event.type === 'content_block_start') {
+      const block = event.content_block;
+      if (block && block.type === 'tool_use') {
+        currentToolUse = {
+          id: block.id,
+          type: 'function',
+          function: { name: block.name, arguments: '' }
+        };
+      }
+    }
+    if (event.type === 'content_block_delta') {
+      const d = event.delta;
+      if (d.type === 'text_delta') {
+        textContent += d.text;
+        if (typeof onDelta === 'function') onDelta(d.text);
+      }
+      if (d.type === 'input_json_delta' && currentToolUse) {
+        currentToolUse.function.arguments += d.partial_json || '';
+      }
+    }
+    if (event.type === 'content_block_stop') {
+      if (currentToolUse) {
+        toolCalls.push(currentToolUse);
+        currentToolUse = null;
+      }
+    }
+    if (event.type === 'message_delta' && event.delta && event.delta.stop_reason) {
+      finishReason = event.delta.stop_reason === 'tool_use' ? 'tool_calls' : 'stop';
+    }
+  }
+
+  finishReason = finishReason || (toolCalls.length > 0 ? 'tool_calls' : 'stop');
+
+  return {
+    choices: [
+      {
+        finish_reason: finishReason,
+        message: {
+          role: 'assistant',
+          content: textContent || null,
+          tool_calls: toolCalls.length > 0 ? toolCalls : undefined
+        }
+      }
+    ]
+  };
+}
+
+function _callAnthropicStreamWithDeltasTimed({ messages, tools, maxTokens, onDelta }) {
+  return withTimeout(
+    _callAnthropicStreamWithDeltas({ messages, tools, maxTokens, onDelta }),
+    PROVIDER_TIMEOUT_MS,
+    `Anthropic stream timeout after ${PROVIDER_TIMEOUT_MS}ms`
+  );
+}
+
+/**
+ * Provider-aware streaming for Kelly: respects KELLY_PRIMARY_PROVIDER (and optional forceProvider).
+ * Use instead of callGroqStreamWithDeltas in commerce SSE paths so prod matches non-stream / harness.
+ *
+ * @param {string|null} [opts.forceProvider] - 'groq' | 'anthropic' — when set, skips primary resolution (no cross-fallback except noted).
+ */
+async function callStreamWithDeltas({ messages, tools, maxTokens, channel, onDelta, forceProvider = null }) {
+  if (forceProvider === 'groq') {
+    return await callGroqStreamWithDeltas({ messages, tools, maxTokens, channel, onDelta });
+  }
+  if (forceProvider === 'anthropic') {
+    return await _callAnthropicStreamWithDeltasTimed({ messages, tools, maxTokens, onDelta });
+  }
+
+  const provider = resolvePrimaryProvider();
+  if (provider === 'anthropic' && _hasAnthropicKey()) {
+    try {
+      return await _callAnthropicStreamWithDeltasTimed({ messages, tools, maxTokens, onDelta });
+    } catch (err) {
+      if (_isCrossFallbackTransient(err) && _hasGroqKey()) {
+        console.warn('[LLMRouter] Anthropic stream failed, falling back to Groq:', err?.message || err);
+        await _sleep(450);
+        return await callGroqStreamWithDeltas({ messages, tools, maxTokens, channel, onDelta });
+      }
+      throw err;
+    }
+  }
+  return await callGroqStreamWithDeltas({ messages, tools, maxTokens, channel, onDelta });
+}
+
 function _compactSystemPromptFor413(content, maxChars = 700) {
   const text = String(content || '').replace(/\s+/g, ' ').trim();
   if (!text) return 'You are Kelly. Ask one focused question at a time. Use tools only when needed.';
@@ -403,4 +597,11 @@ function _compactMessagesForGroq413(messages, keepLast = 4) {
   ];
 }
 
-module.exports = { call, resolvePrimaryProvider, withTimeout, _compactMessagesForGroq413 };
+module.exports = {
+  call,
+  callGroqStreamWithDeltas,
+  callStreamWithDeltas,
+  resolvePrimaryProvider,
+  withTimeout,
+  _compactMessagesForGroq413
+};

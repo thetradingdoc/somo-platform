@@ -2,6 +2,7 @@
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../database');
+const { ensureMerchantOrderFromVoiceCheckout } = require('./ensure-merchant-order-from-voice-checkout');
 const PaymentRequest = require('../models/payment-request');
 const PaymentResponse = require('../models/payment-response');
 const PaymentService = require('./payment-service');
@@ -105,6 +106,11 @@ class PaymentOrchestrator {
             // Get first item (primary product)
             const primaryItem = enrichedItems[0];
 
+            const commerceQuoteId =
+                (paymentRequest.metadata && paymentRequest.metadata.commerce_quote_id) || null;
+            const shippingAddr =
+                (paymentRequest.metadata && paymentRequest.metadata.shipping_address) || null;
+
             // Create checkout record
             const checkoutId = uuidv4();
             const checkout = {
@@ -117,6 +123,8 @@ class PaymentOrchestrator {
                 customer_phone: normalizedPhone,
                 customer_name: paymentRequest.customer?.name || null,
                 customer_email: paymentRequest.customer?.email || null,
+                commerce_quote_id: commerceQuoteId,
+                shipping_address: shippingAddr,
                 status: 'pending'
             };
 
@@ -179,6 +187,7 @@ class PaymentOrchestrator {
     }
 
     static _calculateTotals(items, providedTotals = {}) {
+        // Subtotal from enriched line items (DB prices only). Never accept client-provided subtotal/total for capture.
         const subtotal = items.reduce((sum, item) => sum + item.total, 0);
         const tax = providedTotals.tax || 0;
         const shipping = providedTotals.shipping || 0;
@@ -238,6 +247,13 @@ class PaymentOrchestrator {
         const paymentMethodId = paymentRequest.payment?.payment_method_id || paymentRequest.metadata?.payment_method_id;
 
         try {
+            const metaExtra = {};
+            const cq =
+                checkout.commerce_quote_id ||
+                (paymentRequest.metadata && paymentRequest.metadata.commerce_quote_id);
+            if (cq) metaExtra.commerce_quote_id = String(cq);
+            const ks = paymentRequest.metadata && paymentRequest.metadata.kelly_session_id;
+            if (ks) metaExtra.kelly_session_id = String(ks);
             const createParams = {
                 amount: amountCents,
                 currency: 'usd',
@@ -245,14 +261,18 @@ class PaymentOrchestrator {
                 metadata: {
                     checkout_id: checkout.id,
                     merchant_id: String(merchant?.id || ''),
-                    transaction_id: paymentRequest.transaction_id || ''
+                    transaction_id: paymentRequest.transaction_id || '',
+                    customer_email: checkout.customer_email || '',
+                    customer_phone: checkout.customer_phone || '',
+                    ...metaExtra
                 }
             };
 
             if (paymentMethodId) {
                 createParams.payment_method = paymentMethodId;
                 createParams.confirm = true;
-                createParams.return_url = `${process.env.BASE_URL || 'http://localhost:4000'}/payment/success`;
+                const base = (process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+                createParams.return_url = `${base}/api/payment/success`;
             }
 
             const paymentIntent = await stripe.paymentIntents.create(createParams);
@@ -283,6 +303,20 @@ class PaymentOrchestrator {
                     payment_intent_id: paymentIntent.id,
                     payment_method: 'stripe'
                 });
+                try {
+                    const fresh = await db.getVoiceCheckout(checkout.id);
+                    if (fresh) {
+                        const webhookOnly = process.env.COMMERCE_ORDER_FROM_WEBHOOK_ONLY === '1'
+                            || process.env.COMMERCE_ORDER_FROM_WEBHOOK_ONLY === 'true';
+                        if (webhookOnly) {
+                            console.log('[PaymentOrchestrator] skipping ensureMerchantOrderFromVoiceCheckout (COMMERCE_ORDER_FROM_WEBHOOK_ONLY)');
+                        } else {
+                            await ensureMerchantOrderFromVoiceCheckout(paymentIntent, fresh, { source: 'orchestrator' });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[PaymentOrchestrator] ensureMerchantOrderFromVoiceCheckout:', e.message);
+                }
                 return new PaymentResponse({
                     success: true,
                     transaction_id: paymentRequest.transaction_id,
@@ -535,14 +569,23 @@ class PaymentOrchestrator {
 
         try {
             const stripe = require('stripe')(stripeSecret);
+            const baseUrl = (process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+            const piMeta = {
+                checkout_id: checkout.id,
+                merchant_id: String(merchant?.id || checkout.merchant_id || '')
+            };
+            if (checkout.commerce_quote_id) {
+                piMeta.commerce_quote_id = String(checkout.commerce_quote_id);
+            }
+            if (checkout.customer_email) {
+                piMeta.customer_email = String(checkout.customer_email);
+            }
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: amountCents,
                 currency: 'usd',
                 automatic_payment_methods: { enabled: true },
-                metadata: {
-                    checkout_id: checkout.id,
-                    merchant_id: String(merchant?.id || checkout.merchant_id || '')
-                }
+                return_url: `${baseUrl}/api/payment/success`,
+                metadata: piMeta
             });
             return {
                 success: true,

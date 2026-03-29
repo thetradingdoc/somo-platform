@@ -35,7 +35,7 @@
       font-size: 32px;
       line-height: 1;
       letter-spacing: -2px;
-      color: #2d3748;
+      color: #1d4ed8;
       margin-bottom: 4px;
       font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-weight: 700;
@@ -70,7 +70,19 @@
       color: white;
     }
     .nav-icon {
-      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+    }
+    .nav-icon svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .sidebar-footer {
       padding: 16px;
@@ -101,12 +113,27 @@
     .user-name { font-size: 14px; font-weight: 600; color: var(--gray-900); }
     .user-role { font-size: 12px; color: var(--gray-500); }
     .logout-btn {
-      background: none;
-      border: none;
-      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--gray-200);
+      background: #ffffff;
+      color: var(--gray-600);
       cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+    .logout-btn:hover {
+      border-color: #93c5fd;
+      color: #1e40af;
+      background: #eff6ff;
+    }
+    .logout-btn svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
     }
     .main-content {
       margin-left: 260px;
@@ -126,6 +153,188 @@
       border-radius: 12px;
       padding: 24px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .records-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .records-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .stat-pill {
+      border: 1px solid var(--gray-200);
+      background: #f8fafc;
+      color: var(--gray-700);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover {
+      background: var(--primary-dark);
+    }
+    .btn-secondary {
+      background: #eef2ff;
+      color: #1e3a8a;
+      border: 1px solid #c7d2fe;
+    }
+    .btn-secondary:hover {
+      background: #e0e7ff;
+    }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .upload-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .upload-input {
+      font-size: 13px;
+      max-width: 280px;
+    }
+    .helper-text {
+      font-size: 12px;
+      color: var(--gray-600);
+      margin-top: 8px;
+    }
+    .record-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .record-item {
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fff;
+    }
+    .record-item-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 6px;
+    }
+    .record-item-title {
+      font-weight: 700;
+      color: var(--gray-900);
+    }
+    .record-item-meta {
+      font-size: 12px;
+      color: var(--gray-600);
+      line-height: 1.5;
+    }
+    .record-item-summary {
+      margin-top: 6px;
+      color: var(--gray-700);
+      font-size: 13px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      border: 1px solid transparent;
+    }
+    .badge-current { background: #ecfeff; color: #155e75; border-color: #a5f3fc; }
+    .badge-final { background: #ecfdf5; color: #166534; border-color: #bbf7d0; }
+    .badge-unknown { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+    .doc-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .muted-empty {
+      font-size: 13px;
+      color: var(--gray-600);
+      background: #f8fafc;
+      border: 1px dashed var(--gray-300);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .preview-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.72);
+      z-index: 3000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .preview-modal.open {
+      display: flex;
+    }
+    .preview-card {
+      width: min(920px, 96vw);
+      max-height: 92vh;
+      background: #fff;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+    }
+    .preview-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .preview-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-900);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-body {
+      background: #0f172a;
+      min-height: 240px;
+      max-height: calc(92vh - 64px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+    }
+    .preview-body img {
+      max-width: 100%;
+      max-height: calc(92vh - 90px);
+      object-fit: contain;
+      border-radius: 8px;
+      background: #0f172a;
     }
     .card-title {
       font-size: 18px;
@@ -179,6 +388,8 @@
       .sidebar.mobile-open { transform: translateX(0); }
       .mobile-menu-overlay.active { display: block; }
       .main-content { margin-left: 0; padding: 16px; padding-top: 80px; }
+      .records-toolbar { align-items: stretch; }
+      .upload-input { max-width: 100%; }
     }
   </style>
 </head>
@@ -193,17 +404,17 @@
       </div>
       <nav class="sidebar-nav">
         <a href="patient-dashboard.html" class="nav-item">
-          <span class="nav-icon">🏠</span><span>Dashboard</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Dashboard</span>
         </a>
         <!-- Benefits/Claims removed from telehealth MVP -->
         <a href="wallet.html" class="nav-item">
-          <span class="nav-icon">💳</span><span>Wallet</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span><span>Wallet</span>
         </a>
         <a href="appointments.html" class="nav-item">
-          <span class="nav-icon">📅</span><span>Appointments</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Appointments</span>
         </a>
         <a href="my-records.html" class="nav-item active">
-          <span class="nav-icon">📄</span><span>My Records</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>My Records</span>
         </a>
       </nav>
       <div class="sidebar-footer">
@@ -213,7 +424,7 @@
             <div class="user-name" id="userName">Patient</div>
             <div class="user-role">Patient Account</div>
           </div>
-          <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
+          <button class="logout-btn" onclick="logout()" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path></svg></button>
         </div>
       </div>
     </aside>
@@ -221,14 +432,34 @@
     <main class="main-content">
       <div class="page-header">
         <h1 class="page-title">My Records</h1>
-        <p class="page-subtitle">Visit summaries and case reports</p>
+        <p class="page-subtitle">Your visit summaries and uploaded documents in one place.</p>
       </div>
 
       <div id="errorMessage" class="error-message" style="display:none;"></div>
 
       <div class="dashboard-card" style="margin-bottom: 24px;">
+        <div class="records-toolbar">
+          <div>
+            <h2 class="card-title" style="margin-bottom:6px;">Records center</h2>
+            <p class="helper-text" style="margin:0;">Source of truth for what your care team and your visits have produced.</p>
+          </div>
+          <button id="refreshBtn" class="btn btn-secondary" type="button">Refresh</button>
+        </div>
+        <div class="records-stats">
+          <span class="stat-pill" id="totalReportsPill">Visit summaries: 0</span>
+          <span class="stat-pill" id="totalDocsPill">Documents: 0</span>
+          <span class="stat-pill" id="lastUpdatedPill">Last updated: -</span>
+        </div>
+        <div class="upload-controls">
+          <input id="uploadInput" class="upload-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+          <button id="uploadBtn" class="btn btn-primary" type="button">Upload documents</button>
+        </div>
+        <p class="helper-text">Accepted types: PDF, JPEG, PNG. Max file size depends on clinic policy. Upload up to 30 files per batch; if you have more, run a second upload.</p>
+      </div>
+
+      <div class="dashboard-card" style="margin-bottom: 24px;">
         <h2 class="card-title">Case reports</h2>
-        <div id="recordsList">Loading…</div>
+        <div id="recordsList" class="record-list">Loading...</div>
       </div>
 
       <div class="dashboard-card">
@@ -236,87 +467,270 @@
         <p style="font-size: 13px; color: var(--gray-600); margin-bottom: 12px;">
           These are documents you or your clinic have uploaded for your care (e.g. insurance cards, prior reports).
         </p>
-        <div id="docsList">Loading…</div>
+        <div id="docsList" class="record-list">Loading...</div>
       </div>
     </main>
+  </div>
+  <div id="imagePreviewModal" class="preview-modal" aria-hidden="true">
+    <div class="preview-card" role="dialog" aria-modal="true" aria-label="Image preview">
+      <div class="preview-head">
+        <div id="previewTitle" class="preview-title">Preview</div>
+        <button id="closePreviewBtn" class="btn btn-secondary" type="button">Close</button>
+      </div>
+      <div class="preview-body">
+        <img id="previewImage" alt="Uploaded document preview">
+      </div>
+    </div>
   </div>
 
   <script type="module">
     import { patientApi } from '../assets/js/patient-api.js';
     import { mountBottomTabs } from '../assets/js/patient-shell.js';
 
+    function toLocalDate(iso) {
+      if (!iso) return '-';
+      const dt = new Date(iso);
+      if (Number.isNaN(dt.getTime())) return '-';
+      return dt.toLocaleString();
+    }
+
+    function normalizeFileName(name) {
+      const raw = String(name || 'Document');
+      if (!/[ÃÂâ]/.test(raw)) return raw;
+      try {
+        const bytes = Uint8Array.from(raw.split('').map(c => c.charCodeAt(0) & 0xff));
+        const repaired = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim();
+        return repaired || raw;
+      } catch (_) {
+        return raw;
+      }
+    }
+
+    function statusClass(status) {
+      const s = String(status || '').toLowerCase();
+      if (s === 'current') return 'badge-current';
+      if (s === 'final' || s === 'completed') return 'badge-final';
+      return 'badge-unknown';
+    }
+    function isImageType(mime) {
+      return String(mime || '').toLowerCase().startsWith('image/');
+    }
+    function encounterFromRef(ref) {
+      const val = ref && ref.context && Array.isArray(ref.context.encounter) && ref.context.encounter[0] && ref.context.encounter[0].reference
+        ? String(ref.context.encounter[0].reference)
+        : '';
+      return val.replace(/^Encounter\//, '') || null;
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
       mountBottomTabs();
       const errorEl = document.getElementById('errorMessage');
       const listEl = document.getElementById('recordsList');
       const docsEl = document.getElementById('docsList');
+      const uploadInput = document.getElementById('uploadInput');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const refreshBtn = document.getElementById('refreshBtn');
+      const totalReportsPill = document.getElementById('totalReportsPill');
+      const totalDocsPill = document.getElementById('totalDocsPill');
+      const lastUpdatedPill = document.getElementById('lastUpdatedPill');
+      const imagePreviewModal = document.getElementById('imagePreviewModal');
+      const previewImage = document.getElementById('previewImage');
+      const previewTitle = document.getElementById('previewTitle');
+      const closePreviewBtn = document.getElementById('closePreviewBtn');
 
-      // Load case reports
-      try {
+      let recordsState = [];
+      let docsState = [];
+      let activePreviewDataUrl = null;
+
+      function closePreview() {
+        imagePreviewModal.classList.remove('open');
+        imagePreviewModal.setAttribute('aria-hidden', 'true');
+        previewImage.removeAttribute('src');
+        previewTitle.textContent = 'Preview';
+        activePreviewDataUrl = null;
+      }
+
+      function renderSummary() {
+        totalReportsPill.textContent = `Visit summaries: ${recordsState.length}`;
+        totalDocsPill.textContent = `Documents: ${docsState.length}`;
+        lastUpdatedPill.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+      }
+
+      function renderRecords() {
+        if (!recordsState.length) {
+          listEl.innerHTML = '<div class="muted-empty">No visit summaries are available yet. Once a visit is completed, your summary appears here.</div>';
+          return;
+        }
+        listEl.innerHTML = recordsState.map((rec) => `
+          <article class="record-item">
+            <div class="record-item-head">
+              <div class="record-item-title">Visit summary</div>
+              <span class="badge ${statusClass(rec.status)}">${String(rec.status || 'unknown').toUpperCase()}</span>
+            </div>
+            <div class="record-item-meta">Created: ${toLocalDate(rec.created_at)}</div>
+            <div class="record-item-meta">${rec.encounter_id ? `Linked appointment: ${rec.encounter_id}` : 'Linked appointment: pending linkage'}</div>
+            <div class="record-item-summary">${(rec.summary || 'No summary text available yet.').toString()}</div>
+          </article>
+        `).join('');
+      }
+
+      function renderDocuments() {
+        if (!docsState.length) {
+          docsEl.innerHTML = '<div class="muted-empty">No documents uploaded yet. You can upload a report, lab PDF, or image above.</div>';
+          return;
+        }
+        docsEl.innerHTML = docsState.map((d) => {
+          const name = normalizeFileName(d.file_name || 'Document');
+          return `
+            <article class="record-item">
+              <div class="record-item-head">
+                <div class="record-item-title">${name}</div>
+                <span class="badge ${statusClass(d.status)}">${String(d.status || 'available').toUpperCase()}</span>
+              </div>
+              <div class="record-item-meta">Uploaded: ${toLocalDate(d.created_at)}</div>
+              <div class="record-item-meta">${d.encounter_id ? `Linked appointment: ${d.encounter_id}` : 'Uploaded outside a specific appointment'}</div>
+              <div class="doc-actions">
+                ${isImageType(d.file_type) ? `<button type="button" class="btn btn-secondary" onclick="window.previewPatientDocument('${String(d.id || '').replace(/'/g, "\\'")}')">Preview</button>` : ''}
+                <button type="button" class="btn btn-secondary" onclick="window.downloadPatientDocument('${String(d.id || '').replace(/'/g, "\\'")}')">Download</button>
+              </div>
+            </article>
+          `;
+        }).join('');
+      }
+
+      async function loadRecords() {
         const body = await patientApi.request('/api/patient/my-records', { method: 'GET' });
-        if (!body.success) {
-          errorEl.textContent = body.error || 'Failed to load records.';
+        if (!body.success) throw new Error(body.error || 'Failed to load records.');
+        recordsState = body.records || [];
+      }
+
+      async function loadDocuments() {
+        const body2 = await patientApi.request('/api/patient/documents', { method: 'GET' });
+        if (!body2.success) throw new Error(body2.error || 'Unable to load documents.');
+        const refs = Array.isArray(body2.documentReferences) ? body2.documentReferences : [];
+        const refsById = new Map(refs.map((r) => [r.id, r]));
+        docsState = (body2.documents || []).map((doc) => {
+          const ref = refsById.get(doc.id) || {};
+          const att = ref && Array.isArray(ref.content) && ref.content[0] && ref.content[0].attachment ? ref.content[0].attachment : {};
+          return {
+            ...doc,
+            file_type: doc.file_type || att.contentType || null,
+            encounter_id: encounterFromRef(ref),
+            binary_url: (doc.fhir && doc.fhir.binary_url) || att.url || null
+          };
+        });
+      }
+
+      async function loadAll() {
+        errorEl.style.display = 'none';
+        try {
+          await Promise.all([loadRecords(), loadDocuments()]);
+          renderRecords();
+          renderDocuments();
+          renderSummary();
+        } catch (e) {
+          errorEl.textContent = e.message || 'Failed to load records.';
           errorEl.style.display = 'block';
-          listEl.textContent = '';
-        } else {
-          const records = body.records || [];
-          if (!records.length) {
-            listEl.textContent = 'No case reports are available yet.';
-          } else {
-            listEl.innerHTML = records.map(rec => {
-              const dt = rec.created_at ? new Date(rec.created_at).toLocaleString() : '—';
-              return `
-                <div class="appt">
-                  <div>
-                    <strong>Visit summary</strong>
-                    <span class="badge" style="margin-left:6px;">${(rec.status || 'unknown').toUpperCase()}</span>
-                  </div>
-                  <div style="font-size:12px;color:var(--gray-600);">
-                    Created: ${dt}<br>
-                    ${rec.summary || ''}
-                  </div>
-                </div>
-              `;
-            }).join('');
+          if (!recordsState.length) {
+            listEl.innerHTML = '<div class="muted-empty">Unable to load visit summaries right now.</div>';
+          }
+          if (!docsState.length) {
+            docsEl.innerHTML = '<div class="muted-empty">Unable to load documents right now.</div>';
           }
         }
-      } catch (e) {
-        errorEl.textContent = 'Network error loading records.';
-        errorEl.style.display = 'block';
-        listEl.textContent = '';
       }
 
-      // Load uploaded documents
-      try {
-        const body2 = await patientApi.request('/api/patient/documents', { method: 'GET' });
-        if (!body2.success) {
-          docsEl.textContent = 'Unable to load documents.';
+      window.downloadPatientDocument = async function downloadPatientDocument(docId) {
+        if (!docId) return;
+        const result = await patientApi.request(`/api/patient/documents/${encodeURIComponent(docId)}/download`, { method: 'GET' });
+        if (!result.success || !result.url) {
+          errorEl.textContent = result.error || 'Unable to generate download link.';
+          errorEl.style.display = 'block';
           return;
         }
-        const docs = body2.documents || [];
-        if (!docs.length) {
-          docsEl.textContent = 'No documents uploaded yet.';
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+      };
+
+      window.previewPatientDocument = async function previewPatientDocument(docId) {
+        const doc = docsState.find((d) => d.id === docId);
+        if (!doc) return;
+        if (!isImageType(doc.file_type)) {
+          errorEl.textContent = 'Preview is currently supported for image files only.';
+          errorEl.style.display = 'block';
           return;
         }
-        docsEl.innerHTML = docs
-          .map(d => {
-            const dt = d.created_at ? new Date(d.created_at).toLocaleString() : '';
-            const name = d.file_name || 'Document';
-            return `
-              <div class="appt">
-                <div>
-                  <strong>${name}</strong>
-                </div>
-                <div style="font-size:12px;color:var(--gray-600);">
-                  Uploaded: ${dt}
-                </div>
-              </div>
-            `;
-          })
-          .join('');
-      } catch (e) {
-        docsEl.textContent = 'Network error loading documents.';
-      }
+        try {
+          errorEl.style.display = 'none';
+          const signed = await patientApi.request(`/api/patient/documents/${encodeURIComponent(docId)}/download`, { method: 'GET' });
+          if (!signed.success || !signed.url) throw new Error(signed.error || 'Unable to get preview URL.');
+          const resp = await fetch(signed.url, { method: 'GET', headers: { 'ngrok-skip-browser-warning': 'true' } });
+          if (!resp.ok) throw new Error('Preview download failed.');
+          const blob = await resp.blob();
+          const dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Preview conversion failed.'));
+            reader.readAsDataURL(blob);
+          });
+          activePreviewDataUrl = String(dataUrl || '');
+          previewImage.src = activePreviewDataUrl;
+          previewTitle.textContent = normalizeFileName(doc.file_name || 'Image preview');
+          imagePreviewModal.classList.add('open');
+          imagePreviewModal.setAttribute('aria-hidden', 'false');
+        } catch (e) {
+          errorEl.textContent = e.message || 'Unable to preview this file right now.';
+          errorEl.style.display = 'block';
+        }
+      };
+
+      closePreviewBtn.addEventListener('click', closePreview);
+      imagePreviewModal.addEventListener('click', (e) => {
+        if (e.target === imagePreviewModal) closePreview();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && imagePreviewModal.classList.contains('open')) closePreview();
+      });
+
+      uploadBtn.addEventListener('click', async () => {
+        const files = uploadInput.files ? Array.from(uploadInput.files) : [];
+        if (!files.length) {
+          errorEl.textContent = 'Choose at least one file before uploading.';
+          errorEl.style.display = 'block';
+          return;
+        }
+        errorEl.style.display = 'none';
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+        try {
+          const formData = new FormData();
+          for (const f of files) formData.append('files', f);
+          const idemKey = `records-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const up = await patientApi.request('/api/patient/documents', {
+            method: 'POST',
+            headers: { 'idempotency-key': idemKey },
+            body: formData
+          });
+          if (!up.success) {
+            if (up.error_code === 'LIMIT_FILE_COUNT') {
+              const mf = up.max_files || 30;
+              throw new Error(`Too many files selected. Upload up to ${mf} files per batch, then run another batch.`);
+            }
+            throw new Error(up.error || 'Upload failed.');
+          }
+          uploadInput.value = '';
+          await loadAll();
+        } catch (e) {
+          errorEl.textContent = e.message || 'Upload failed. Please try again.';
+          errorEl.style.display = 'block';
+        } finally {
+          uploadBtn.disabled = false;
+          uploadBtn.textContent = 'Upload documents';
+        }
+      });
+
+      refreshBtn.addEventListener('click', loadAll);
+
+      await loadAll();
     });
 
     function toggleMobileMenu() {

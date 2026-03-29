@@ -512,6 +512,7 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
             return res.json({
                 success: true,
                 message: 'Checkout already completed',
+                order_id: checkout.merchant_order_id || null,
                 checkout
             });
         }
@@ -600,7 +601,9 @@ router.post('/checkout/complete/:checkout_id', async (req, res) => {
                 total_amount: checkout.amount,
                 status: 'paid',
                 payment_status: 'paid',
-                source: 'voice'
+                source: 'voice',
+                voice_checkout_id: checkout_id,
+                stripe_payment_intent_id: payment_intent_id || null
             });
             merchantOrder = { id: orderId };
         }

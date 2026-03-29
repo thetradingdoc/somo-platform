@@ -3,6 +3,8 @@
 **Last Updated**: January 27, 2025  
 **Status**: Ready for Production Deployment
 
+**CI vs Railway:** GitHub Actions runs tests and guardrails; the workflow’s “Deploy” job does not push artifacts by itself. See **[CI_AND_DEPLOY_SOURCE_OF_TRUTH.md](../CI_AND_DEPLOY_SOURCE_OF_TRUTH.md)** for how that maps to Railway or other hosts.
+
 ---
 
 ## 🎯 Quick Deploy

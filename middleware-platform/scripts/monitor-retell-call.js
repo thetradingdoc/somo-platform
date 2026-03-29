@@ -30,24 +30,25 @@ async function monitor() {
 
   for (let i = 0; i < 30; i++) {
     try {
-      const calls = await retellService.listCalls({ limit: 100 });
-      const call = calls.find(c => c.call_id === CALL_ID);
+      const call = await retellService.getCall(CALL_ID);
 
       if (call) {
-        console.log(`[${(i + 1) * 2}s] Status: ${call.status || 'unknown'}`);
+        const status = call.call_status || call.status || 'unknown';
+        console.log(`[${(i + 1) * 2}s] Status: ${status}`);
+        if (call.disconnection_reason) {
+          console.log(`    Reason: ${call.disconnection_reason}`);
+        }
         
-        if (call.status === 'ended' || call.status === 'ended_by_user') {
+        if (status === 'ended' || status === 'ended_by_user' || status === 'not_connected' || status === 'failed') {
           console.log(`\n✅ Call ended`);
-          console.log(`   Duration: ${call.duration || 'N/A'}`);
+          console.log(`   Duration: ${call.duration_ms ? `${Math.round(call.duration_ms / 1000)}s` : (call.duration || 'N/A')}`);
           break;
         }
         
-        if (call.status === 'on_hold' || call.status === 'speaking') {
+        if (status === 'on_hold' || status === 'speaking' || status === 'in_progress' || status === 'connected') {
           console.log(`\n✅ Call is active!`);
           break;
         }
-      } else {
-        console.log(`[${(i + 1) * 2}s] Call not found in recent calls...`);
       }
     } catch (error) {
       console.error(`Error: ${error.message}`);

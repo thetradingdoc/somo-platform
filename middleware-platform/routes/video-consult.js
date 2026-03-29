@@ -107,6 +107,140 @@ function checkRateLimit(roomId) {
   return bucket.count <= RATE_LIMIT_PER_ROOM;
 }
 
+function safeTruncate(s, maxChars = 600) {
+  if (s == null) return '';
+  const str = String(s);
+  if (str.length <= maxChars) return str;
+  return str.slice(0, maxChars).trim() + '…';
+}
+
+function normalizeKeyProblems(v) {
+  if (!v) return [];
+  if (Array.isArray(v)) return v.map(String).filter(Boolean).slice(0, 6);
+  const s = String(v).trim();
+  if (!s) return [];
+  const parts = s.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean);
+  return parts.length ? parts.slice(0, 6) : [s];
+}
+
+/**
+ * Build runtime pre-visit context for provider overlay + assistant.
+ * Strictly scoped to the appointment's linked triage session_id.
+ */
+async function buildPreVisitForAppointment(appointmentId) {
+  if (!appointmentId) return null;
+  try {
+    const caseSummaryRow = db.db.prepare(`
+      SELECT * FROM case_summaries WHERE appointment_id = ? LIMIT 1
+    `).get(appointmentId);
+
+    let caseSummary = null;
+    if (caseSummaryRow?.summary_json) {
+      try { caseSummary = JSON.parse(caseSummaryRow.summary_json); } catch (_) {}
+    }
+
+    const triageSessionId = caseSummaryRow?.session_id || null;
+    const triageRow = triageSessionId && db.getTriageSession
+      ? db.getTriageSession(triageSessionId)
+      : null;
+
+    const triage_media = triageSessionId && db.getTriageMediaForSession
+      ? db.getTriageMediaForSession(triageSessionId)
+      : [];
+
+    // Doc index is intentionally minimal so the assistant can cite/ground without loading PDFs.
+    const document_index = (triage_media || []).map(m => {
+      const mime = m?.mime_type || '';
+      const kind = mime.startsWith('image/') ? 'image' : (m?.media_type || 'document');
+      return {
+        id: m.id,
+        title: m.file_name || m.context_note || '',
+        type: kind
+      };
+    });
+
+    const chiefComplaint = caseSummary?.chief_complaint || triageRow?.soap_note || '';
+    const soapNoteShort = safeTruncate(
+      caseSummary?.soap_note || triageRow?.soap_note || triageRow?.safety_screen || '',
+      900
+    );
+
+    const key_problems = normalizeKeyProblems(
+      triageRow?.associated_sx || caseSummary?.opqrst?.associated_sx || []
+    );
+
+    const triage_snapshot = triageRow
+      ? {
+          onset: triageRow.onset,
+          provocation: triageRow.provocation,
+          quality: triageRow.quality,
+          radiation: triageRow.radiation,
+          severity: triageRow.severity,
+          timing: triageRow.timing,
+          associated_sx: triageRow.associated_sx,
+          medications: triageRow.medications,
+          allergies: triageRow.allergies,
+          prior_diagnoses: triageRow.prior_diagnoses,
+          prior_workups: triageRow.prior_workups,
+          family_history: triageRow.family_history,
+          alcohol_use: triageRow.alcohol_use,
+          smoking_status: triageRow.smoking_status,
+          phq2_score: triageRow.phq2_score,
+          gad2_score: triageRow.gad2_score,
+          safety_screen: triageRow.safety_screen,
+          soap_note: triageRow.soap_note,
+          target_specialty: triageRow.target_specialty,
+          urgency: triageRow.urgency,
+          safety_level: triageRow.safety_level,
+          referred_to_911: triageRow.referred_to_911
+        }
+      : null;
+
+    const case_summary_brief = {
+      chief_complaint: safeTruncate(chiefComplaint, 300),
+      target_specialty: caseSummary?.target_specialty || triageRow?.target_specialty || null,
+      urgency: caseSummary?.urgency || triageRow?.urgency || null,
+      safety_level: caseSummary?.safety_level || triageRow?.safety_level || null,
+      soap_note_short: soapNoteShort,
+      key_problems
+    };
+
+    const preVisit = {
+      version: 1,
+      appointment_id: appointmentId,
+      triage_session_id: triageSessionId,
+      triage_session: triage_snapshot,
+      case_summary_brief,
+      document_index,
+      // Assistant uses this as the authoritative pre-visit safety baseline.
+      safety_flags: {
+        urgency: triageRow?.urgency || caseSummary?.urgency || null,
+        safety_level: triageRow?.safety_level || caseSummary?.safety_level || null,
+        referred_to_911: triageRow?.referred_to_911 || false
+      },
+      assembled_at: new Date().toISOString()
+    };
+
+    try {
+      const appt = db.getAppointment ? db.getAppointment(appointmentId) : null;
+      db.insertAuditEvent && db.insertAuditEvent({
+        actor_type: 'system',
+        actor_id: 'video_consult',
+        patient_id: appt?.patient_id || null,
+        resource_type: 'appointment',
+        resource_id: appointmentId,
+        action: 'video_previsit_bootstrap',
+        metadata: { triage_session_id: triageSessionId, doc_count: (document_index || []).length }
+      });
+    } catch (_) {}
+
+    return preVisit;
+  } catch (e) {
+    console.warn('[video-consult] buildPreVisitForAppointment failed:', e.message);
+    return null;
+  }
+}
+
 /**
  * POST /api/video-consult/agent-events
  * Body: { room, event, payload, encounter_id?, clinic_id?, patient_id?, provider_id? }
@@ -156,19 +290,49 @@ router.post('/agent-events', async (req, res) => {
       let session = videoConsultService.getSession(room);
       const wasNewSession = !session;
       if (!session) {
+        const appointmentId = options.appointment_id
+          || (room.startsWith('appt-') ? room.replace(/^appt-/, '') : null);
+
+        try {
+          if (appointmentId) {
+            const preVisit = await buildPreVisitForAppointment(appointmentId);
+            if (preVisit) {
+              options.metadata = { ...(options.metadata || {}), pre_visit: preVisit };
+            }
+          }
+        } catch (_) {}
+
         session = videoConsultService.createSession(room, options);
+      } else {
+        // If the session exists but pre_visit is missing, merge it in.
+        try {
+          const appointmentId = options.appointment_id
+            || (room.startsWith('appt-') ? room.replace(/^appt-/, '') : null);
+          if (appointmentId && !session?.metadata?.pre_visit) {
+            const preVisit = await buildPreVisitForAppointment(appointmentId);
+            if (preVisit) videoConsultService.mergeSessionMetadata(room, { pre_visit: preVisit });
+          }
+        } catch (_) {}
       }
       options.session_metadata = { start_time: session.start_time || new Date().toISOString() };
       if (event === 'transcript') {
-        const transcriptArr = videoConsultService.appendLiveTranscript(room, payload);
+        const text = payload?.text || payload?.content || '';
+        const translated = await videoConsultService.maybeTranslateTranscriptText(text, room);
+        const transcriptPayload = {
+          ...payload,
+          text,
+          text_translated: translated?.text_translated || null,
+          detected_language: translated?.detected_language || null
+        };
+        const transcriptArr = videoConsultService.appendLiveTranscript(room, transcriptPayload);
         if (payload?.participant_identity && payload?.speaker) {
           videoConsultService.trackParticipant(room, payload.participant_identity, payload.speaker === 'patient' ? 'patient' : 'provider');
         }
-        const text = payload?.text || payload?.content || '';
         const deltaItem = buildTranscriptDeltaItem({
-          ts: payload?.timestamp || new Date().toISOString(),
-          speaker: payload?.speaker || 'unknown',
-          text
+          ts: transcriptPayload?.timestamp || new Date().toISOString(),
+          speaker: transcriptPayload?.speaker || 'unknown',
+          text,
+          text_translated: transcriptPayload.text_translated
         });
         videoConsultSse.broadcastTranscriptDelta(room, [deltaItem]);
         videoConsultSse.broadcastAssistantUpdate(room, buildAssistantUpdatePayload({ transcript_delta: [deltaItem], status: 'listening' }));
@@ -480,6 +644,40 @@ router.get('/session/:roomId', async (req, res) => {
   } catch (err) {
     console.error('[video-consult] get session error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/video-consult/rooms/:roomId/transcript-translation
+ * Body: { enabled: boolean, target_language?: string }
+ */
+router.post('/rooms/:roomId/transcript-translation', express.json(), (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const config = videoConsultService.setTranscriptTranslationConfig(roomId, {
+      enabled: req.body?.enabled,
+      target_language: req.body?.target_language || 'en'
+    });
+    return res.json({ success: true, translation: config });
+  } catch (err) {
+    console.error('[video-consult] set transcript translation error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/video-consult/rooms/:roomId/transcript-translation
+ */
+router.get('/rooms/:roomId/transcript-translation', (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const translation = videoConsultService.getTranscriptTranslationConfig(roomId);
+    return res.json({ success: true, translation });
+  } catch (err) {
+    console.error('[video-consult] get transcript translation error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

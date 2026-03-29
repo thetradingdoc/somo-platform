@@ -22,7 +22,6 @@ const allowlist = new Set([
   'unified-dashboard/portal.html',
   'unified-dashboard/login.html',
   'unified-dashboard/signup.html',
-  'unified-dashboard/index.html',
   'unified-dashboard/landing.html',
   'unified-dashboard/patients/patient-login.html'
 ]);

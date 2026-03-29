@@ -22,7 +22,7 @@ The middleware platform is the core backend API for DocLittle, handling all busi
 - **models/** - Data models
 - **webhooks/** - Webhook handlers (Retell, Circle, etc.)
 - **scripts/** - Utility scripts for setup and maintenance
-- **tests/** - Test suites
+- **__tests__/** - Jest tests (folder reserved; run `npm test` → `jest --passWithNoTests` if empty)
 
 ### Key Services
 
@@ -35,7 +35,9 @@ The middleware platform is the core backend API for DocLittle, handling all busi
 - **epic-adapter.js** - Epic SMART on FHIR adapter
 
 #### Payment Services
-- **payment-orchestrator.js** - Payment flow orchestration
+- **payment-orchestrator.js** - Payment flow orchestration (Stripe PI, 3DS `return_url` to `/api/payment/success`)
+- **ensure-merchant-order-from-voice-checkout.js** - Single path to create `merchant_orders` after pay (webhook + sync PI success; idempotent)
+- **commerce-alerts.js** - Optional `COMMERCE_ALERT_WEBHOOK_URL` + `audit_events` on commerce failures
 - **payment-service.js** - Stripe payment processing
 - **circle-service.js** - Circle USDC wallet payments
 - **mastercard-service.js** - Mastercard Agent Pay integration

@@ -250,6 +250,56 @@
             margin-bottom: 16px;
         }
 
+        .readiness-stack {
+            display: grid;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .readiness-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+
+        .readiness-badge {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-weight: 600;
+        }
+
+        .readiness-badge.live {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .readiness-badge.blocks {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .readiness-badge.unavailable {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .readiness-note {
+            color: #92400e;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
         .service-icon {
             width: 48px;
             height: 48px;
@@ -594,6 +644,24 @@
                         <button class="btn btn-primary btn-sm" onclick="connectGoogleCalendar()">
                             Connect
                         </button>
+                    </div>
+                </div>
+
+                <div class="service-card" id="providerBookingReadinessCard">
+                    <div class="service-icon" style="background:#dbeafe;">🩺</div>
+                    <div class="service-info" style="width:100%;">
+                        <h4>Specialist Booking Readiness</h4>
+                        <p class="service-status" id="providerReadinessStatus">Checking specialist readiness...</p>
+                        <div class="readiness-stack" id="providerReadinessRows"></div>
+                        <div class="readiness-note" id="providerReadinessWarning" style="display:none;">
+                            External calendar conflicts may not be detected.
+                        </div>
+                        <p class="service-status" id="bookingObservabilitySummary"></p>
+                    </div>
+                    <div class="service-action" id="providerReadinessActions">
+                        <button class="btn btn-primary btn-sm" onclick="connectGoogleCalendar()">Connect Google calendar</button>
+                        <button class="btn btn-secondary btn-sm" onclick="window.location.href='calendar.html'">Set availability blocks</button>
+                        <button class="btn btn-secondary btn-sm" onclick="loadProviderBookingReadiness()">Test booking readiness</button>
                     </div>
                 </div>
 
@@ -1103,6 +1171,7 @@
             });
             loadUserInfo();
             loadCalendarStatus();
+            loadProviderBookingReadiness();
             loadMerchantInfo();
             loadVoiceAgentSettings();
             loadNotificationSettings();
@@ -1520,6 +1589,77 @@
                         Retry
                     </button>
                 `;
+            }
+        }
+
+        function readinessBadge(row) {
+            if (row.calendar_connected) return '<span class="readiness-badge live">Live calendar connected</span>';
+            if (row.has_availability_blocks) return '<span class="readiness-badge blocks">Availability blocks only</span>';
+            return '<span class="readiness-badge unavailable">Unavailable</span>';
+        }
+
+        function readinessChecks(row) {
+            const checks = [
+                `online: ${row.is_online ? 'pass' : 'fail'}`,
+                `profile: ${row.is_active ? 'pass' : 'fail'}`,
+                `calendar: ${row.calendar_connected ? 'pass' : 'not connected'}`,
+                `blocks: ${row.has_availability_blocks ? 'pass' : 'missing'}`
+            ];
+            return checks.join(' | ');
+        }
+
+        async function loadProviderBookingReadiness() {
+            const statusEl = document.getElementById('providerReadinessStatus');
+            const rowsEl = document.getElementById('providerReadinessRows');
+            const warnEl = document.getElementById('providerReadinessWarning');
+            const obsEl = document.getElementById('bookingObservabilitySummary');
+            if (!statusEl || !rowsEl) return;
+            statusEl.textContent = 'Checking specialist readiness...';
+            rowsEl.innerHTML = '';
+            if (warnEl) warnEl.style.display = 'none';
+            if (obsEl) obsEl.textContent = '';
+
+            try {
+                const clinicId = (window.DEFAULT_CLINIC_ID || localStorage.getItem('clinicId') || '').trim();
+                const qs = clinicId ? `?clinic_id=${encodeURIComponent(clinicId)}` : '';
+                const readinessRes = await fetch(`${API_BASE}/api/provider/booking-readiness${qs}`);
+                const readiness = await readinessRes.json();
+                if (!readinessRes.ok || !readiness.success) {
+                    throw new Error(readiness.error || 'Failed to load readiness');
+                }
+
+                const providers = Array.isArray(readiness.providers) ? readiness.providers : [];
+                if (!providers.length) {
+                    statusEl.textContent = 'No specialists found. Add at least one active specialist profile.';
+                } else {
+                    statusEl.textContent = `Ready specialists: ${providers.filter((p) => p.booking_ready).length}/${providers.length}`;
+                }
+
+                rowsEl.innerHTML = providers.map((p) => `
+                    <div class="readiness-row">
+                        <div>
+                            <div style="font-weight:600;">${p.display_name || p.email || 'Specialist'}</div>
+                            <div style="color:var(--gray-600); font-size:12px;">${readinessChecks(p)}</div>
+                        </div>
+                        ${readinessBadge(p)}
+                    </div>
+                `).join('');
+
+                const hasBlocksOnly = providers.some((p) => !p.calendar_connected && p.has_availability_blocks);
+                if (hasBlocksOnly && warnEl) warnEl.style.display = 'block';
+
+                const obsRes = await fetch(`${API_BASE}/api/provider/booking-observability`);
+                const obsJson = await obsRes.json();
+                if (obsRes.ok && obsJson.success && obsEl) {
+                    const o = obsJson.observability || {};
+                    const pct = o.confidence_percentages || {};
+                    const ratio = Number(o.blocks_only_ratio || 0) * 100;
+                    obsEl.textContent = `Confidence mix: high ${pct.high || 0}% / medium ${pct.medium || 0}% / low ${pct.low || 0}% · Blocks-only bookings: ${ratio.toFixed(1)}%`;
+                }
+            } catch (error) {
+                console.error('Provider readiness error:', error);
+                statusEl.textContent = 'Failed to load specialist readiness.';
+                rowsEl.innerHTML = `<div class="readiness-row">Please retry after backend is available.</div>`;
             }
         }
 

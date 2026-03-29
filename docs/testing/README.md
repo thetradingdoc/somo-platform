@@ -2,22 +2,15 @@
 
 Test results, test suites, and testing guides.
 
-## Test Suites
+## Automated tests
 
-Tests live in `middleware-platform/tests/`:
-
-- **Medical coding**: `tests/medical-coding/` — evaluation, voice flow tests
-- **Tenant isolation**: `tests/test-tenant-isolation.js` — multi-tenant regression
-- **Voice agent flow**: `tests/test-voice-agent-flow.js` — Twilio + Retell simulation
-- **LangGraph**: `scripts/test-langgraph.js` — LangGraph state machine
+Jest tests are not checked in right now. Add `*.test.js` files under `middleware-platform/__tests__/` when you reintroduce suites.
 
 ## Running Tests
 
 ```bash
 cd middleware-platform
-npm test
-# Or run specific suites
-node scripts/test-langgraph.js
+npm test   # jest --passWithNoTests
 ```
 
 ## Related Documentation

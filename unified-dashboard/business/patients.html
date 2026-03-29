@@ -703,6 +703,12 @@
         const MERCHANT_API = `${API_BASE}/api`;
         let userData = null;
         let allCustomers = [];
+        const requestedPatientId = (() => {
+            try {
+                const p = new URLSearchParams(window.location.search);
+                return p.get('patient_id') || p.get('patientId') || '';
+            } catch (_) { return ''; }
+        })();
 
         // Mobile sidebar toggle functions
         function toggleSidebar() {
@@ -1029,6 +1035,24 @@
             }
 
             container.innerHTML = customers.map(customer => createCustomerCard(customer)).join('');
+            if (requestedPatientId) {
+                requestAnimationFrame(() => focusPatientCard(requestedPatientId));
+            }
+        }
+
+        function focusPatientCard(patientId) {
+            const id = String(patientId || '').trim();
+            if (!id) return;
+            const safe = id.replace(/"/g, '\\"');
+            const card = document.querySelector(`.customer-card[data-patient-id="${safe}"]`);
+            if (!card) return;
+            card.style.outline = '2px solid #2563eb';
+            card.style.outlineOffset = '2px';
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => {
+                card.style.outline = '';
+                card.style.outlineOffset = '';
+            }, 3000);
         }
 
         function createCustomerCard(patient) {
@@ -1045,8 +1069,9 @@
                 const orders = patient.total_orders || 0;
                 const spend = patient.total_spend || 0;
                 const lastOrder = patient.last_order_at ? new Date(patient.last_order_at).toLocaleDateString() : '—';
+                const pid = (patient.fhir_id || patient.fhir_patient_id || patient.id || '').replace(/"/g, '&quot;');
                 return `
-                <div class="customer-card">
+                <div class="customer-card" data-patient-id="${pid}">
                     <div class="customer-header">
                         <div class="customer-avatar">${initials}</div>
                         <div class="customer-info">
@@ -1165,8 +1190,9 @@
             }
 
 
+            const pid = (patient.fhir_id || patient.fhir_patient_id || patient.id || '').replace(/"/g, '&quot;');
             return `
-                <div class="customer-card">
+                <div class="customer-card" data-patient-id="${pid}">
                     <div class="customer-header">
                         <div class="customer-avatar">${initials}</div>
                         <div class="customer-info">

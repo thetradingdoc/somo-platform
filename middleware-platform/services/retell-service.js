@@ -546,7 +546,7 @@ Always be polite, patient, and professional. If you don't know something, ask fo
 
     try {
       const response = await axios.get(
-        `${this.apiBaseUrl}/v2/get-agent/${agentId}`,
+        `${this.apiBaseUrl}/get-agent/${agentId}`,
         {
           headers: {
             'Authorization': `Bearer ${this.apiKey}`
@@ -667,6 +667,58 @@ Always be polite, patient, and professional. If you don't know something, ask fo
       }
       throw new Error(`Failed to create outbound call: ${error.message}`);
     }
+  }
+
+  /**
+   * Get a single call by ID
+   * @param {string} callId
+   * @returns {Promise<Object>}
+   */
+  async getCall(callId) {
+    if (!this.apiKey) {
+      throw new Error('RETELL_API_KEY not configured');
+    }
+    if (!callId) {
+      throw new Error('callId is required');
+    }
+    const response = await axios.get(
+      `${this.apiBaseUrl}/v2/get-call/${callId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        timeout: 15000
+      }
+    );
+    return response.data;
+  }
+
+  /**
+   * List recent calls
+   * @param {Object} params
+   * @param {number} params.limit
+   * @returns {Promise<Array>}
+   */
+  async listCalls(params = {}) {
+    if (!this.apiKey) {
+      throw new Error('RETELL_API_KEY not configured');
+    }
+    const response = await axios.get(
+      `${this.apiBaseUrl}/v2/list-calls`,
+      {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`
+        },
+        params: {
+          limit: params.limit || 50
+        },
+        timeout: 15000
+      }
+    );
+    if (Array.isArray(response.data)) return response.data;
+    if (Array.isArray(response.data?.calls)) return response.data.calls;
+    if (Array.isArray(response.data?.data)) return response.data.data;
+    return [];
   }
 
   /**

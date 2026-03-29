@@ -1288,6 +1288,32 @@ function getUnifiedDashboardPath(...subPaths) {
   return path.join(__dirname, '..', 'unified-dashboard', ...subPaths);
 }
 
+// Helper function to get littlelab landing build path (works both locally and in Azure)
+function getLittleLabBuildPath(...subPaths) {
+  const fs = require('fs');
+  let azurePath = path.join(__dirname, 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
+  if (fs.existsSync(azurePath)) {
+    return azurePath;
+  }
+  return path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
+}
+
+/** Prefer CRA LittleLab landing build, then middleware public marketing page. */
+function trySendLittleLabOrPublicLanding(res) {
+  const fs = require('fs');
+  const landingBuild = getLittleLabBuildPath('index.html');
+  if (fs.existsSync(landingBuild)) {
+    res.sendFile(landingBuild);
+    return true;
+  }
+  const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
+  if (fs.existsSync(legacyLandingPath)) {
+    res.sendFile(legacyLandingPath);
+    return true;
+  }
+  return false;
+}
+
 // Root endpoint - route based on domain
 app.get('/', (req, res) => {
   const hostname = getHostname(req);
@@ -1321,35 +1347,18 @@ app.get('/', (req, res) => {
     // Subdomain not found - fall through to default routing
   }
 
-  // Localhost - serve voice agent marketing landing page (same as doclittle.site)
+  // Localhost — same marketing priority as production (LittleLab build, then public/landing.html)
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Keep the marketing landing page at "/" for local dev.
-    // Auth should still enter through the portal chooser via CTA buttons on the landing.
-    const fs = require('fs');
-
-    // Prefer LittleLab React landing build if present
-    const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'index.html');
-    if (fs.existsSync(landingBuild)) {
-      return res.sendFile(landingBuild);
-    }
-
-    // Otherwise serve the static unified-dashboard index page
-    const udIndex = getUnifiedDashboardPath('index.html');
-    if (fs.existsSync(udIndex)) {
-      return res.sendFile(udIndex);
-    }
-
-    // Fallback to unified-dashboard/landing.html if index isn't present
-    const udLanding = getUnifiedDashboardPath('landing.html');
-    if (fs.existsSync(udLanding)) {
-      return res.sendFile(udLanding);
-    }
-
-    // Last resort: middleware public landing
-    const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
-    if (fs.existsSync(legacyLandingPath)) {
-      return res.sendFile(legacyLandingPath);
-    }
+    if (trySendLittleLabOrPublicLanding(res)) return;
+    return res
+      .type('text/html')
+      .send(
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>DocLittle API</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;line-height:1.5;max-width:40rem">' +
+          '<p>Middleware API is running.</p>' +
+          '<p>To serve the Skin &amp; Care landing at <code>/</code>, build the LittleLab app:</p>' +
+          '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/littlelab-landing && npm install && npm run build</pre>' +
+          '</body></html>'
+      );
   }
 
   // API subdomain - check if user is already logged in
@@ -1386,14 +1395,13 @@ app.get('/', (req, res) => {
 
   // Root domain - prefer LittleLab React landing build, otherwise legacy marketing page
   if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname === 'doclittle.azurewebsites.net') {
-    const fs = require('fs');
-    const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'index.html');
-    if (fs.existsSync(landingBuild)) {
+    const landingBuild = getLittleLabBuildPath('index.html');
+    if (require('fs').existsSync(landingBuild)) {
       console.log('[ROOT ROUTE] Serving LittleLab landing build (doclittle.site)');
       return res.sendFile(landingBuild);
     }
     const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
-    if (fs.existsSync(legacyLandingPath)) {
+    if (require('fs').existsSync(legacyLandingPath)) {
       return res.sendFile(legacyLandingPath);
     }
   }
@@ -1463,9 +1471,17 @@ app.use('/assets', express.static(getUnifiedDashboardPath('assets'), {
 }));
 
 // Serve LittleLab React landing static assets
-app.use('/static', express.static(path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', 'static'), {
+app.use('/static', express.static(getLittleLabBuildPath('static'), {
   maxAge: '1y',
   immutable: true
+}));
+
+// Serve extra LittleLab landing assets emitted by CRA build
+app.use('/images', express.static(getLittleLabBuildPath('images'), {
+  maxAge: '1d'
+}));
+app.use('/videos', express.static(getLittleLabBuildPath('videos'), {
+  maxAge: '1d'
 }));
 
 // Serve unified-dashboard HTML pages
@@ -1636,7 +1652,8 @@ app.get('/index.html', (req, res) => {
   if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
-  res.sendFile(getUnifiedDashboardPath('index.html'));
+  if (trySendLittleLabOrPublicLanding(res)) return;
+  return res.status(404).type('text/plain').send('Not found');
 });
 
 // Serve unified-dashboard subdirectories
@@ -1727,6 +1744,8 @@ app.use('/api', invoiceRoutes);
 // Merchant settings/profile routes
 const merchantRoutes = require('./routes/merchant');
 app.use('/api/merchant', merchantRoutes);
+const providerRoutes = require('./routes/providers');
+app.use('/api/providers', providerRoutes);
 
 // Clinic Invoice Routes (Patient Billing)
 // ============================================
@@ -1737,7 +1756,10 @@ app.use('/api/invoices', clinicInvoiceRoutes);
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
 app.use('/api/products', productRoutes);
+const prescriptionRoutes = require('./routes/prescriptions');
+app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/prescription-orders', orderRoutes);
 
 // Onboarding routes
 const onboardingRoutes = require('./routes/onboarding');
@@ -1821,10 +1843,18 @@ app.use('/api/customer/wallet', customerWalletRoutes);
 // Public products (read-only)
 const publicProductsRoutes = require('./routes/public-products');
 app.use('/api/public/products', publicProductsRoutes);
+app.use('/api/public/prescriptions', publicProductsRoutes);
 
 // Public checkout (unauthenticated ensure customer)
 const publicCheckoutRoutes = require('./routes/public-checkout');
 app.use('/api/public/checkout', publicCheckoutRoutes);
+
+// Commerce quote (server-trusted amount; pairs with public checkout quote_id)
+const publicCommerceQuoteRoutes = require('./routes/public-commerce-quote');
+app.use('/api/public/commerce', publicCommerceQuoteRoutes);
+
+const publicCheckoutChatRoutes = require('./routes/public-checkout-chat');
+app.use('/api/public/checkout-chat', publicCheckoutChatRoutes);
 
 // ============================================
 // Customer Agent Routes (Prompt Management)
@@ -2333,12 +2363,15 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
     }
 
     // Use merchant_id from metadata if available, otherwise try to resolve from clinic
+    let merchantResolutionReason = 'none';
     let merchantId = metadata.merchant_id;
+    if (merchantId) merchantResolutionReason = 'metadata';
     if (!merchantId && customerId) {
       // Try to get merchant from customer's clinic
       const customer = db.getCustomer(customerId);
       if (customer && customer.merchant_id) {
         merchantId = customer.merchant_id;
+        merchantResolutionReason = 'customer_record';
       }
     }
     if (!merchantId && clinicId) {
@@ -2346,6 +2379,7 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
       const clinic = await db.getClinicById(clinicId);
       if (clinic && clinic.merchant_id) {
         merchantId = clinic.merchant_id;
+        merchantResolutionReason = 'clinic_record';
       }
     }
 
@@ -2363,6 +2397,7 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
         const mappedMerchant = db.getMerchantBySubdomain(mappedSubdomain);
         if (mappedMerchant) {
           merchantId = mappedMerchant.id;
+          merchantResolutionReason = 'agent_subdomain_map';
           console.log(`✅ Resolved merchant_id from explicit agent mapping: ${merchantId} (${mappedMerchant.name || 'unknown'}) for subdomain ${mappedSubdomain}`);
         }
       }
@@ -2373,6 +2408,7 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
           const merchantByAgent = db.db.prepare('SELECT id FROM merchants WHERE retell_agent_id = ? LIMIT 1').get(retellAgentId);
           if (merchantByAgent && merchantByAgent.id) {
             merchantId = merchantByAgent.id;
+            merchantResolutionReason = 'merchant_retell_agent_id';
             const merchant = db.getMerchant(merchantId);
             console.log(`✅ Resolved merchant_id directly from merchant agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
           }
@@ -2386,6 +2422,7 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
         const customerByAgent = db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(retellAgentId);
         if (customerByAgent && customerByAgent.merchant_id) {
           merchantId = customerByAgent.merchant_id;
+          merchantResolutionReason = 'customer_retell_agent_id';
           const merchant = db.getMerchant(merchantId);
           console.log(`✅ Resolved merchant_id from customer agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
         }
@@ -2396,6 +2433,7 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
         const clinicWithAgent = db.db.prepare('SELECT merchant_id FROM clinics WHERE retell_agent_id = ? AND merchant_id IS NOT NULL LIMIT 1').get(retellAgentId);
         if (clinicWithAgent && clinicWithAgent.merchant_id) {
           merchantId = clinicWithAgent.merchant_id;
+          merchantResolutionReason = 'clinic_retell_agent_id';
           const merchant = db.getMerchant(merchantId);
           console.log(`✅ Resolved merchant_id from clinic agent_id: ${merchantId} (${merchant?.name || 'unknown'})`);
         }
@@ -2407,15 +2445,36 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
         const defaultMerchant = db.getMerchantBySubdomain(defaultSubdomain);
         if (defaultMerchant) {
           merchantId = defaultMerchant.id;
+          merchantResolutionReason = 'default_tenant_subdomain';
           console.log(`✅ Resolved merchant_id from default tenant (${defaultSubdomain}): ${merchantId} (${defaultMerchant.name || 'unknown'})`);
         } else {
           console.error(`❌ CRITICAL: Default tenant (${defaultSubdomain}) not found in database!`);
+          // Final fallback: use first available merchant to keep voice flow alive in dev/misconfigured envs.
+          try {
+            const anyMerchant = (db.getAllMerchants && db.getAllMerchants()[0]) || null;
+            if (anyMerchant?.id) {
+              merchantId = anyMerchant.id;
+              merchantResolutionReason = 'first_available_merchant_fallback';
+              console.warn(`⚠️  Falling back to first available merchant: ${merchantId} (${anyMerchant.name || 'unknown'})`);
+            }
+          } catch (_) {}
         }
       }
     }
 
     if (!merchantId) {
       console.warn(`⚠️  No merchant_id found for customer ${customerId || 'unknown'} / clinic ${clinicId || 'unknown'}. Voice product/order functions may not work.`);
+      merchantResolutionReason = 'unresolved';
+    }
+
+    // Optional hard guard: enforce merchant resolution before calling Retell.
+    if (!merchantId && (process.env.REQUIRE_MERCHANT_ON_INBOUND === '1' || process.env.REQUIRE_MERCHANT_ON_INBOUND === 'true')) {
+      const missingMerchantTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">We are unable to route your call right now due to account configuration. Please try again shortly.</Say>
+  <Hangup/>
+</Response>`;
+      return res.type('text/xml').send(missingMerchantTwiml);
     }
 
     const dynamicVariables = {
@@ -2480,6 +2539,16 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
       retell_llm_dynamic_variables: dynamicVariables
     };
 
+    try {
+      console.log('[VoiceInbound] merchant_resolution', JSON.stringify({
+        merchant_id: merchantId || null,
+        reason: merchantResolutionReason,
+        clinic_id: clinicId || null,
+        customer_id: customerId || null,
+        retell_agent_id: retellAgentId || null
+      }));
+    } catch (_) {}
+
     console.log('📡 Registering call with Retell...');
 
     let callId = null;
@@ -2533,16 +2602,37 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
       if (customerId || clinicId) {
         setImmediate(async () => {
           try {
+            // Resolve a valid customers.id for FK-safe voice_call_log inserts.
+            // Legacy flows may only have clinic_id; map or create tenant customer as needed.
+            let resolvedCustomerId = customerId || null;
+            // Guard legacy values (e.g. clinic-default) that are not real customers.id rows.
+            if (resolvedCustomerId) {
+              const existingCustomer = db.getCustomer?.(resolvedCustomerId) ||
+                db.db.prepare('SELECT id FROM customers WHERE id = ? LIMIT 1').get(resolvedCustomerId);
+              if (!existingCustomer) {
+                resolvedCustomerId = null;
+              }
+            }
+            if (!resolvedCustomerId && clinicId) {
+              resolvedCustomerId =
+                db.getCustomerIdForClinic?.(clinicId) ||
+                db.ensureCustomerIdForClinic?.(clinicId) ||
+                null;
+              if (!resolvedCustomerId) {
+                console.warn(`⚠️  Could not resolve customer_id for clinic ${clinicId}; logging voice call without customer_id`);
+              }
+            }
+
             await db.logVoiceCall({
               id: `call-${callId}`,
-              customer_id: customerId || clinicId, // Use customer_id if available, fallback to clinic_id
+              customer_id: resolvedCustomerId,
               call_id: callId,
               twilio_call_sid: req.body.CallSid, // Store Twilio CallSid for cost tracking
               call_duration_seconds: null, // Will update when call ends
               function_calls_count: 0,
               status: 'active'
             });
-            console.log(`📝 Logged call to database for ${customerId ? 'customer' : 'clinic'}: ${customerId || clinicId}`);
+            console.log(`📝 Logged call to database for ${resolvedCustomerId ? 'customer' : 'clinic'}: ${resolvedCustomerId || clinicId}`);
             console.log(`   Twilio CallSid: ${req.body.CallSid}`);
           } catch (logError) {
             console.error('⚠️  Failed to log call:', logError.message);
@@ -2573,10 +2663,20 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
       } else if (retellError.request) {
         console.error('   No response received from Retell (request sent).');
       }
-      // If Retell fails, return error TwiML immediately
-      const errorTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+      // If Retell fails, return fallback TwiML (configurable strict/soft behavior).
+      const strictRetellFailure =
+        process.env.INBOUND_RETELL_STRICT_FAILURE === '1' ||
+        process.env.INBOUND_RETELL_STRICT_FAILURE === 'true';
+      const errorTwiml = strictRetellFailure ? `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">Sorry, we're experiencing technical difficulties. Please try again in a moment.</Say>
+  <Hangup/>
+</Response>` : `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">We are temporarily unable to connect you to the live agent. Please try again in about one minute, or leave your number after the tone and we will call you back.</Say>
+  <Pause length="1"/>
+  <Say voice="Polly.Joanna">Please leave your callback number now.</Say>
+  <Record maxLength="30" playBeep="true"/>
   <Hangup/>
 </Response>`;
       return res.type('text/xml').send(errorTwiml);
@@ -2875,10 +2975,14 @@ app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: 
 });
 
 // Create appointment checkout (appointment payment, not products)
-app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, async (req, res) => {
+app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, withIdempotency('voice_checkout'), async (req, res) => {
   try {
     console.log('\n💳 VOICE: Create Appointment Checkout');
     safeLogRequestBody('Request body:', req);
+
+    // TEST_MODE: bypass outbound email delivery and return verification_code directly
+    const TEST_MODE = process.env.TEST_MODE === '1' || process.env.TEST_MODE === 'true';
+    const includeTestVerificationCode = TEST_MODE && process.env.NODE_ENV !== 'production';
 
     const args = req.body.args || req.body;
     const triageSessionIdForAudit = resolveVoiceSessionIdForGuard(args, req);
@@ -3028,22 +3132,22 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
 
     // If still no merchant_id, return error instead of creating default
     if (!merchantId) {
-      console.error('❌ ERROR: Could not determine merchant_id for appointment booking');
+      console.error('[CHECKOUT] merchantId not found for clinic:', clinicId);
       return res.status(500).json({
         success: false,
-        error: 'Merchant not found. Please ensure clinic is properly configured with a merchant.',
-        appointment_id: null
+        error: 'MERCHANT_NOT_CONFIGURED',
+        message: 'Payment is not configured for this clinic. Please contact support.'
       });
     }
 
     // Verify merchant exists
     const existingMerchant = db.getMerchant(merchantId);
     if (!existingMerchant) {
-      console.error(`❌ ERROR: Merchant ${merchantId} not found in database`);
+      console.error(`[CHECKOUT] merchantId ${merchantId} not found in database for clinic:`, clinicId);
       return res.status(500).json({
         success: false,
-        error: `Merchant ${merchantId} not found. Please ensure merchant is configured.`,
-        appointment_id: null
+        error: 'MERCHANT_NOT_CONFIGURED',
+        message: 'Payment is not configured for this clinic. Please contact support.'
       });
     }
 
@@ -3057,6 +3161,176 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
         success: false,
         error: 'clinic_id is required to create a voice checkout'
       });
+    }
+
+    // Idempotency / dedupe: if a checkout already exists for this appointment_id,
+    // reuse it (prevents multi-path/concurrent "triple checkout" creation).
+    if (appointmentId) {
+      try {
+        const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(appointmentId);
+        const existingCheckout = pending?.checkout || null;
+        if (existingCheckout?.id && existingCheckout.deleted_at == null) {
+          const tokenRow = db.db.prepare(`
+            SELECT * FROM payment_tokens
+            WHERE checkout_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+          `).get(existingCheckout.id);
+
+          // Populate triage linkage for audit (C9) even when an older row exists.
+          if (triageSessionIdForAudit && !existingCheckout.triage_session_id) {
+            try { await db.updateVoiceCheckout(existingCheckout.id, { triage_session_id: triageSessionIdForAudit }); } catch (_) {}
+          }
+          if (triageSessionIdForAudit && appointmentId) {
+            try {
+              db.db?.prepare(
+                'UPDATE voice_checkouts SET triage_session_id = COALESCE(triage_session_id, ?) WHERE appointment_id = ?'
+              ).run(triageSessionIdForAudit, appointmentId);
+            } catch (_) {}
+          }
+
+          if (tokenRow?.token) {
+            const checkoutResponse = PaymentFlowService.buildLifecycleResponse({
+              stage: 'checkout_created',
+              nextAction: 'verify_identity_code',
+                message: includeTestVerificationCode
+                  ? 'Verification code returned (checkout reused in TEST_MODE)'
+                  : 'Verification code already generated (checkout reused)',
+              checkoutId: existingCheckout.id,
+              paymentToken: tokenRow.token,
+              requiresVerification: true,
+              extra: {
+                amount: existingCheckout.amount,
+                currency: 'USD',
+                  email_sent: includeTestVerificationCode ? false : !!existingCheckout.customer_email,
+                  verification_code: includeTestVerificationCode ? tokenRow.verification_code : undefined,
+                  verification_code_expires: includeTestVerificationCode ? tokenRow.verification_code_expires : undefined,
+                  verification_code_returned: includeTestVerificationCode ? true : undefined
+              }
+            });
+
+            PaymentFlowService.logTransition('checkout_created_reused', {
+              checkout_id: existingCheckout.id,
+              appointment_id: appointmentId,
+              clinic_id: clinicId,
+              merchant_id: merchantId,
+              triage_session_id: triageSessionIdForAudit || existingCheckout.triage_session_id || null
+            });
+
+            return res.json(checkoutResponse);
+          }
+
+          // Token missing (common when the first request timed out before reaching token generation):
+          // reuse the existing voice_checkouts row and generate the token/code on it.
+          let appointment = null;
+          try {
+            appointment = appointmentRecord || await db.getAppointment(appointmentId, clinicId);
+          } catch (_) {}
+
+          // Mirror the "card creation" block but target the existing checkout row.
+          if (amount > 0 && appointmentId) {
+            try {
+              if (appointment && appointment.patient_id) {
+                const FHIRService = require('./services/fhir-service');
+                const eligibility_checks = db.getEligibilityChecksByPatient?.(appointment.patient_id) || [];
+                const isCopay =
+                  eligibility_checks.length > 0 && eligibility_checks[0].copay_amount === amount;
+
+                if (isCopay) {
+                  await FHIRService.createCardForCopay(appointment.patient_id, amount, {
+                    appointment_id: appointmentId,
+                    checkout_id: existingCheckout.id
+                  });
+                } else {
+                  await FHIRService.createCardForBill(appointment.patient_id, amount, {
+                    appointment_id: appointmentId,
+                    checkout_id: existingCheckout.id
+                  });
+                }
+              }
+            } catch (_) {}
+          }
+
+          const crypto = require('crypto');
+          const paymentToken = crypto.randomBytes(32).toString('hex');
+          const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+          const codeExpires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+          await db.createPaymentToken({
+            token: paymentToken,
+            checkout_id: existingCheckout.id,
+            verification_code: verificationCode,
+            verification_code_expires: codeExpires,
+            status: 'pending'
+          });
+
+          const emailDeliveryQueued = !TEST_MODE && !!existingCheckout.customer_email;
+          if (emailDeliveryQueued) {
+            setImmediate(async () => {
+              try {
+                const EmailService = require('./services/email-service');
+                await EmailService.sendCheckoutVerificationCode(existingCheckout.customer_email, verificationCode);
+                console.log('[CHECKOUT] Verification email sent to:', String(existingCheckout.customer_email || '').slice(0, 4) + '…');
+              } catch (emailError) {
+                console.error('⚠️  Email delivery failed (token-missing reuse path):', emailError.message);
+              }
+              try {
+                if (appointmentId && appointment) {
+                  const EmailService = require('./services/email-service');
+                  const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+                  const paymentLink = `${baseUrl}/payment/${paymentToken}`;
+                  await EmailService.sendPatientBillingEmail(existingCheckout.customer_email, {
+                    patientName: existingCheckout.customer_name || appointment.patient_name,
+                    appointmentDate: appointment.date,
+                    serviceName: appointment.appointment_type || 'Therapy Session',
+                    totalAmount: amount + amount * 0.1,
+                    insuranceAmount: amount * 0.1,
+                    copayAmount: amount,
+                    amountDue: amount,
+                    paymentLink
+                  });
+                }
+              } catch (emailError) {
+                console.error('⚠️  Billing email delivery failed (token-missing reuse path):', emailError.message);
+              }
+            });
+          }
+
+          const checkoutResponse = PaymentFlowService.buildLifecycleResponse({
+            stage: 'checkout_created',
+            nextAction: 'verify_identity_code',
+            message: includeTestVerificationCode
+              ? 'Verification code returned (TEST_MODE: email skipped)'
+              : (emailDeliveryQueued ? 'Verification code generated (email queued)' : 'Verification code generated (email not sent)'),
+            checkoutId: existingCheckout.id,
+            paymentToken,
+            requiresVerification: true,
+            extra: {
+              amount: existingCheckout.amount,
+              currency: 'USD',
+              email_sent: false,
+              email_queued: emailDeliveryQueued,
+              billing_email_sent: false,
+              billing_email_queued: emailDeliveryQueued,
+              verification_code: includeTestVerificationCode ? verificationCode : undefined,
+              verification_code_expires: includeTestVerificationCode ? codeExpires : undefined,
+              verification_code_returned: includeTestVerificationCode ? true : undefined
+            }
+          });
+
+          PaymentFlowService.logTransition('checkout_created_reused_token_missing', {
+            checkout_id: existingCheckout.id,
+            appointment_id: appointmentId,
+            clinic_id: clinicId,
+            merchant_id: merchantId,
+            triage_session_id: triageSessionIdForAudit || existingCheckout.triage_session_id || null
+          });
+
+          return res.json(checkoutResponse);
+        }
+      } catch (dedupeErr) {
+        console.warn('⚠️ voice checkout dedupe failed:', dedupeErr.message);
+      }
     }
 
     const checkout = {
@@ -3124,56 +3398,61 @@ app.post('/voice/appointments/checkout', scheduleCheckoutLimiter, voiceLimiter, 
       status: 'pending'
     });
 
-    // Email the code
-    let emailResult = { success: false };
-    let billingEmailResult = { success: false };
-
-    if (checkout.customer_email) {
-      try {
-        const EmailService = require('./services/email-service');
-
-        // Send checkout verification code email
-        emailResult = await EmailService.sendCheckoutVerificationCode(checkout.customer_email, verificationCode);
-
-        // Send patient billing email
-        if (appointmentId) {
-          const appointment = await db.getAppointment(appointmentId, clinicId);
-          if (appointment) {
-            const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
-            const paymentLink = `${baseUrl}/payment/${paymentToken}`;
-
-            billingEmailResult = await EmailService.sendPatientBillingEmail(checkout.customer_email, {
-              patientName: checkout.customer_name || appointment.patient_name,
-              appointmentDate: appointment.date,
-              serviceName: appointment.appointment_type || 'Therapy Session',
-              totalAmount: amount + (amount * 0.1), // Total including insurance portion
-              insuranceAmount: amount * 0.1, // Estimated insurance coverage
-              copayAmount: amount,
-              amountDue: amount,
-              paymentLink: paymentLink
-            });
-
-            console.log(`📧 Patient billing email sent to: ${checkout.customer_email}`);
-          }
+    // Email the code (TEST_MODE bypass + fire-and-forget to avoid checkout latency tails)
+    const emailDeliveryQueued = !TEST_MODE && !!checkout.customer_email;
+    if (emailDeliveryQueued) {
+      setImmediate(async () => {
+        try {
+          const EmailService = require('./services/email-service');
+          await EmailService.sendCheckoutVerificationCode(checkout.customer_email, verificationCode);
+          console.log('[CHECKOUT] Verification email sent to:', String(checkout.customer_email || '').slice(0, 4) + '…');
+        } catch (emailError) {
+          console.error('⚠️  Email delivery failed:', emailError.message);
         }
-      } catch (emailError) {
-        console.error('⚠️  Email service error:', emailError.message);
-        emailResult = { success: false, error: emailError.message };
-      }
+        try {
+          if (appointmentId) {
+            const appointment = await db.getAppointment(appointmentId, clinicId);
+            if (appointment) {
+              const EmailService = require('./services/email-service');
+              const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+              const paymentLink = `${baseUrl}/payment/${paymentToken}`;
+              await EmailService.sendPatientBillingEmail(checkout.customer_email, {
+                patientName: checkout.customer_name || appointment.patient_name,
+                appointmentDate: appointment.date,
+                serviceName: appointment.appointment_type || 'Therapy Session',
+                totalAmount: amount + (amount * 0.1),
+                insuranceAmount: amount * 0.1,
+                copayAmount: amount,
+                amountDue: amount,
+                paymentLink: paymentLink
+              });
+            }
+          }
+        } catch (billingEmailError) {
+          console.error('⚠️  Billing email delivery failed:', billingEmailError.message);
+        }
+      });
     }
 
     const checkoutResponse = PaymentFlowService.buildLifecycleResponse({
       stage: 'checkout_created',
       nextAction: 'verify_identity_code',
-      message: emailResult.success ? 'Verification code emailed' : 'Verification code generated (email not sent)',
+      message: includeTestVerificationCode
+        ? 'Verification code returned (TEST_MODE: email skipped)'
+        : (emailDeliveryQueued ? 'Verification code generated (email queued)' : 'Verification code generated (email not sent)'),
       checkoutId,
       paymentToken,
       requiresVerification: true,
       extra: {
         amount,
         currency: 'USD',
-        email_sent: !!emailResult.success,
-        billing_email_sent: !!billingEmailResult.success
+        email_sent: false,
+        email_queued: emailDeliveryQueued,
+        billing_email_sent: false,
+        billing_email_queued: emailDeliveryQueued,
+        verification_code: includeTestVerificationCode ? verificationCode : undefined,
+        verification_code_expires: includeTestVerificationCode ? codeExpires : undefined,
+        verification_code_returned: includeTestVerificationCode ? true : undefined
       }
     });
     PaymentFlowService.logTransition('checkout_created', {
@@ -3231,6 +3510,9 @@ app.post('/voice/checkout/verify', async (req, res) => {
   try {
     console.log('\n🔐 VOICE: Verify Email Code');
     safeLogRequestBody('Request body:', req);
+
+    // TEST_MODE: bypass outbound email and keep verification fast/deterministic.
+    const TEST_MODE = process.env.TEST_MODE === '1' || process.env.TEST_MODE === 'true';
 
     const args = req.body.args || req.body;
     const token = args.payment_token || args.token;
@@ -3372,15 +3654,18 @@ app.post('/voice/checkout/verify', async (req, res) => {
     const paymentLink = `${baseUrl}/payment/${token}`;
     console.log(`🔗 Payment link: ${paymentLink}`);
 
-    let emailResult = { success: false, error: 'Missing customer email' };
-    if (checkout.customer_email) {
-      try {
+    const emailDeliveryQueued = !TEST_MODE && !!checkout.customer_email;
+    let emailResult = { success: false, error: null, queued: emailDeliveryQueued };
+    try {
+      if (emailDeliveryQueued) {
         const EmailService = require('./services/email-service');
         let appt = null;
         if (checkout.appointment_id) {
           appt = await db.getAppointment(checkout.appointment_id);
         }
-        emailResult = await EmailService.sendPaymentLinkEmail(checkout.customer_email, paymentLink, {
+
+        // Fire-and-forget: don't block identity verification on email delivery.
+        EmailService.sendPaymentLinkEmail(checkout.customer_email, paymentLink, {
           product_name: checkout.product_name,
           amount: checkout.amount,
           wallet_balance: walletInfo?.balance,
@@ -3388,11 +3673,12 @@ app.post('/voice/checkout/verify', async (req, res) => {
           appointment_date: appt?.date,
           appointment_time: appt?.time,
           appointment_type: appt?.appointment_type || checkout.product_name
+        }).catch((emailError) => {
+          console.error('⚠️  Payment link email delivery failed:', emailError.message);
         });
-      } catch (emailError) {
-        console.error('⚠️  Email service error:', emailError.message);
-        emailResult = { success: false, error: emailError.message };
       }
+    } catch (emailSetupError) {
+      emailResult = { success: false, error: emailSetupError.message, queued: false };
     }
 
     // Task 53: Mark token as identity-verified (required before payment redemption)
@@ -3401,7 +3687,11 @@ app.post('/voice/checkout/verify', async (req, res) => {
     const verifyResponse = PaymentFlowService.buildLifecycleResponse({
       stage: 'identity_verified',
       nextAction: 'process_payment',
-      message: emailResult.success ? 'Payment link emailed successfully' : (emailResult.error || 'Email not sent'),
+      message: TEST_MODE
+        ? 'Identity verified (TEST_MODE: payment link email skipped)'
+        : (emailResult.queued
+            ? 'Identity verified (payment link email queued)'
+            : (emailResult.error || 'Identity verified')),
       paymentToken: token,
       checkoutId: checkout.id,
       requiresVerification: false,
@@ -3819,6 +4109,30 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     idemKey = idempotency_key || req.headers['idempotency-key'] || `process_${resolvedCheckoutId}_${payment_method}`;
 
     console.log(`\n💳 Processing payment for checkout: ${resolvedCheckoutId}`);
+
+    // SECURITY: if this checkout/token requires identity verification, require the token to be verified
+    // before allowing payment redemption/settlement.
+    try {
+      let tokenRecord = null;
+      if (payment_token) tokenRecord = db.getPaymentToken ? db.getPaymentToken(payment_token) : null;
+      if (!tokenRecord && resolvedCheckoutId && db.db) {
+        tokenRecord = db.db
+          .prepare(`SELECT * FROM payment_tokens WHERE checkout_id = ? ORDER BY created_at DESC LIMIT 1`)
+          .get(resolvedCheckoutId);
+      }
+
+      const requiresVerification = !!tokenRecord?.verification_code;
+      const isVerified = tokenRecord?.status === 'verified' || !!tokenRecord?.identity_verified_at;
+
+      if (requiresVerification && !isVerified) {
+        return res.status(403).json({
+          success: false,
+          error: 'Identity verification required before processing payment.',
+          error_code: 'IDENTITY_NOT_VERIFIED',
+          next_step: 'Verify identity using /voice/checkout/verify, then retry /process-payment.'
+        });
+      }
+    } catch (_) {}
 
     const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
     if (cached) {
@@ -6592,8 +6906,17 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       // Try to find customer by clinic_id (legacy support)
       const clinic = await db.getClinicById(clinicId);
       if (clinic && clinic.merchant_id) {
-        // For legacy clinics, we might not have customer_id
-        console.warn(`⚠️  No customer_id found for clinic ${clinicId}. Appointment will be created without tenant isolation.`);
+        // Ensure a tenant-level customer exists for this clinic.
+        const ensuredCustomerId =
+          db.ensureCustomerIdForClinic?.(clinicId) ||
+          db.getCustomerIdForClinic?.(clinicId) ||
+          null;
+
+        if (ensuredCustomerId) {
+          customerId = ensuredCustomerId;
+        } else {
+          console.warn(`⚠️  No customer_id found for clinic ${clinicId}. Appointment will be created without tenant isolation.`);
+        }
       }
     }
 
@@ -6658,26 +6981,7 @@ app.post('/voice/appointments/schedule', scheduleCheckoutLimiter, async (req, re
       });
     }
 
-    // Task 10: Auto-checkout fallback when agent skips create_appointment_checkout
-    if (result.success && result.appointment?.id) {
-      try {
-        const { autoCheckoutAfterSchedule } = require('./services/auto-checkout-after-schedule');
-        const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
-        const checkout = await autoCheckoutAfterSchedule({
-          base,
-          appointmentId: result.appointment.id,
-          patient_phone: args.patient_phone || result.appointment.patient_phone,
-          patient_email: args.patient_email || result.appointment.patient_email,
-          patient_name: args.patient_name || result.appointment.patient_name,
-          clinic_id: clinicId,
-          appointment_type: args.appointment_type,
-          triage_session_id: resolveVoiceSessionIdForGuard(args, req) || null
-        });
-        if (checkout) result.checkout = checkout;
-      } catch (e) {
-        console.warn('⚠️  Auto-checkout failed (agent can still call create_appointment_checkout):', e.message);
-      }
-    }
+    // Auto-checkout is intentionally centralized in KellyToolExecutor to avoid multi-path duplicate checkout creation.
 
     res.json(result);
   } catch (error) {
@@ -7169,26 +7473,7 @@ app.post('/api/appointments/schedule', async (req, res) => {
     const result = await BookingService.scheduleAppointment(appointmentData);
     if (result.success) invalidateSlotAvailabilityCache();
 
-    // Task 10: Auto-checkout fallback
-    if (result.success && result.appointment?.id) {
-      try {
-        const { autoCheckoutAfterSchedule } = require('./services/auto-checkout-after-schedule');
-        const base = process.env.API_BASE_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 4000}`;
-        const checkout = await autoCheckoutAfterSchedule({
-          base,
-          appointmentId: result.appointment.id,
-          patient_phone: args.patient_phone,
-          patient_email: args.patient_email,
-          patient_name: args.patient_name,
-          clinic_id: clinicId,
-          appointment_type: args.appointment_type,
-          triage_session_id: sessionIdForGuard || null
-        });
-        if (checkout) result.checkout = checkout;
-      } catch (e) {
-        console.warn('⚠️  Auto-checkout failed:', e.message);
-      }
-    }
+    // Auto-checkout is intentionally centralized in KellyToolExecutor to avoid multi-path duplicate checkout creation.
 
     res.json(result);
   } catch (error) {
@@ -12118,6 +12403,187 @@ app.post('/api/admin/insurance/cache/refresh', async (req, res) => {
   }
 });
 
+function _maskEmail(email) {
+  const e = String(email || '').trim();
+  if (!e || !e.includes('@')) return '';
+  return e.replace(/(^.).+(@.+$)/, '$1***$2');
+}
+
+function _maskPhone(phone) {
+  const p = String(phone || '').trim();
+  if (!p) return '';
+  const digits = p.replace(/\D/g, '');
+  if (digits.length < 4) return '***';
+  return `(***) ***-${digits.slice(-4)}`;
+}
+
+function _canViewClinicalPhi(req) {
+  // Staff-only gate for clinical prep PHI.
+  const scope = String(req?.user?.scope || '').toLowerCase();
+  const role = String(req?.user?.role || '').toLowerCase();
+  const isStaffScope = scope === 'clinician' || scope === 'staff' || scope === 'admin';
+  const isStaffRole = role.includes('admin') || role.includes('clinician') || role.includes('staff');
+  return !!(req?.providerId || req?.headers?.['x-provider-id'] || isStaffScope || isStaffRole);
+}
+
+// Dashboard: merged clinical prep payload for provider drawer
+app.get('/api/admin/appointments/:id/clinical-prep', async (req, res) => {
+  try {
+    const appointmentId = String(req.params.id || '').trim();
+    if (!appointmentId) return res.status(400).json({ success: false, error: 'appointment id required' });
+
+    const appt = db.getAppointment ? await db.getAppointment(appointmentId) : null;
+    if (!appt) return res.status(404).json({ success: false, error: 'Appointment not found' });
+
+    let caseSummaryRow = null;
+    let caseSummary = null;
+    try {
+      caseSummaryRow = db.db.prepare('SELECT * FROM case_summaries WHERE appointment_id = ? LIMIT 1').get(appointmentId);
+      if (caseSummaryRow?.summary_json) {
+        caseSummary = typeof caseSummaryRow.summary_json === 'string'
+          ? JSON.parse(caseSummaryRow.summary_json)
+          : caseSummaryRow.summary_json;
+      }
+    } catch (_) {}
+
+    const triageSessionId = caseSummaryRow?.session_id || null;
+    const triage = triageSessionId && db.getTriageSession ? db.getTriageSession(triageSessionId) : null;
+    const triageMedia = triageSessionId && db.getTriageMediaForSession ? (db.getTriageMediaForSession(triageSessionId) || []) : [];
+    const phiAllowed = _canViewClinicalPhi(req);
+
+    const documentItems = triageMedia.map(m => {
+      const type = (m.mime_type || '').startsWith('image/') ? 'image' : (m.media_type || 'document');
+      const detailUrl = m.storage_url || `/api/media/${encodeURIComponent(m.id)}`;
+      const aiSummary = (() => {
+        try {
+          return (typeof m.ai_analysis === 'string' ? JSON.parse(m.ai_analysis) : m.ai_analysis)?.summary || null;
+        } catch (_) {
+          return null;
+        }
+      })();
+      return {
+        id: m.id,
+        title: m.file_name || m.context_note || '',
+        type,
+        detail_url: detailUrl,
+        ai_summary: aiSummary
+      };
+    });
+
+    const categoryCounts = documentItems.reduce((acc, d) => {
+      const k = String(d.type || 'document').toLowerCase();
+      acc[k] = (acc[k] || 0) + 1;
+      return acc;
+    }, {});
+
+    const prep = {
+      appointment: {
+        id: appt.id,
+        status: appt.status,
+        appointment_type: appt.appointment_type,
+        provider: appt.provider || null,
+        date: appt.date,
+        time: appt.time,
+        timezone: appt.timezone || 'America/New_York',
+        patient_id: appt.patient_id || null,
+        patient_name: phiAllowed ? (appt.patient_name || '') : ((appt.patient_name || '').split(' ').map(n => n.slice(0, 1).toUpperCase()).join('') || 'N/A'),
+        patient_phone: phiAllowed ? (appt.patient_phone || '') : _maskPhone(appt.patient_phone),
+        patient_email: phiAllowed ? (appt.patient_email || '') : _maskEmail(appt.patient_email)
+      },
+      phi_allowed: phiAllowed,
+      case_summary: caseSummary ? {
+        chief_complaint: caseSummary.chief_complaint || '',
+        target_specialty: caseSummary.target_specialty || null,
+        urgency: caseSummary.urgency || null,
+        safety_level: caseSummary.safety_level || null,
+        red_flags: (() => {
+          const out = [];
+          if ((caseSummary.safety_level || '').toLowerCase() === 'high') out.push('high_safety_level');
+          if ((caseSummary.urgency || '').toLowerCase() === 'emergency') out.push('emergency_urgency');
+          if (String(caseSummary.soap_note || '').toLowerCase().includes('chest pain')) out.push('chest_pain_mentioned');
+          if (String(caseSummary.soap_note || '').toLowerCase().includes('shortness of breath')) out.push('shortness_of_breath_mentioned');
+          return out;
+        })(),
+        soap_note: caseSummary.soap_note || '',
+        key_problems: (() => {
+          const v = caseSummary?.opqrst?.associated_sx;
+          if (Array.isArray(v)) return v.slice(0, 8);
+          if (typeof v === 'string' && v.trim()) return v.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean).slice(0, 8);
+          return [];
+        })()
+      } : null,
+      triage_session: triage ? {
+        session_id: triageSessionId,
+        onset: triage.onset,
+        provocation: triage.provocation,
+        quality: triage.quality,
+        radiation: triage.radiation,
+        severity: triage.severity,
+        timing: triage.timing,
+        associated_sx: triage.associated_sx,
+        medications: triage.medications,
+        allergies: triage.allergies,
+        prior_diagnoses: triage.prior_diagnoses,
+        prior_workups: triage.prior_workups,
+        family_history: triage.family_history,
+        alcohol_use: triage.alcohol_use,
+        smoking_status: triage.smoking_status,
+        phq2_score: triage.phq2_score,
+        gad2_score: triage.gad2_score,
+        safety_screen: triage.safety_screen,
+        soap_note: triage.soap_note,
+        target_specialty: triage.target_specialty,
+        urgency: triage.urgency,
+        safety_level: triage.safety_level,
+        red_flags: (() => {
+          const out = [];
+          if ((triage.safety_level || '').toLowerCase() === 'high') out.push('high_safety_level');
+          if ((triage.urgency || '').toLowerCase() === 'emergency') out.push('emergency_urgency');
+          if (triage.referred_to_911) out.push('referred_to_911');
+          if (String(triage.safety_screen || '').toLowerCase().includes('suic')) out.push('suicidality_screen_positive');
+          return out;
+        })()
+      } : null,
+      documents: {
+        triage_session_id: triageSessionId,
+        count: documentItems.length,
+        categories: categoryCounts,
+        items: documentItems
+      },
+      activity: {
+        has_case_summary: !!caseSummary,
+        summary_ready_at: caseSummaryRow?.created_at || null,
+        triage_linked: !!triageSessionId
+      },
+      section_status: {
+        case_summary: caseSummary ? { ready: true, error: null } : { ready: false, error: 'No case summary linked yet.' },
+        triage: triage ? { ready: true, error: null } : { ready: false, error: 'No triage session linked yet.' },
+        documents: documentItems.length > 0
+          ? { ready: true, count: documentItems.length, error: null }
+          : { ready: false, count: 0, error: 'No triage-linked documents yet.' },
+        ehr: { ready: false, error: 'Use EHR tab to load synced chart data.' }
+      }
+    };
+
+    try {
+      db.insertAuditEvent && db.insertAuditEvent({
+        actor_type: 'staff',
+        actor_id: req?.user?.sub || req?.providerId || req?.headers?.['x-provider-id'] || 'unknown',
+        patient_id: appt.patient_id || null,
+        resource_type: 'appointment',
+        resource_id: appointmentId,
+        action: 'clinical_prep_read',
+        metadata: { phi_allowed: phiAllowed, triage_session_id: triageSessionId, doc_count: triageMedia.length }
+      });
+    } catch (_) {}
+
+    return res.json({ success: true, prep });
+  } catch (error) {
+    console.error('❌ Error fetching clinical prep payload:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Dashboard: Get all appointments
 app.get('/api/admin/appointments', async (req, res) => {
   try {
@@ -12283,24 +12749,48 @@ app.get('/api/admin/patients/search', async (req, res) => {
       return res.json({ success: true, patients: [] });
     }
     const pattern = `%${q.toLowerCase()}%`;
-    const rows = db.db.prepare(`
+    const fetchCap = Math.min(Math.max(limit * 12, 48), 300);
+    const rawRows = db.db.prepare(`
       SELECT
         patient_name AS name,
         patient_phone AS phone,
         patient_email AS email,
-        MAX(created_at) AS last_seen_at
+        datetime(COALESCE(start_time, created_at)) AS last_seen_at
       FROM appointments
-      WHERE patient_name IS NOT NULL
+      WHERE deleted_at IS NULL
+        AND patient_name IS NOT NULL
         AND (
           LOWER(COALESCE(patient_name, '')) LIKE ?
           OR LOWER(COALESCE(patient_phone, '')) LIKE ?
           OR LOWER(COALESCE(patient_email, '')) LIKE ?
         )
-      GROUP BY patient_name, patient_phone, patient_email
-      ORDER BY last_seen_at DESC
+      ORDER BY datetime(COALESCE(start_time, created_at)) DESC
       LIMIT ?
-    `).all(pattern, pattern, pattern, limit);
-    return res.json({ success: true, patients: rows || [] });
+    `).all(pattern, pattern, pattern, fetchCap);
+
+    const {
+      adminPatientSearchDedupeKey,
+      formatE164Prefer,
+      normalizePatientName,
+      normalizeEmail
+    } = require('./services/patient-contact-canonical');
+
+    const seen = new Set();
+    const patients = [];
+    for (const row of rawRows || []) {
+      const key = adminPatientSearchDedupeKey(row.name, row.phone, row.email);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const emailNorm = normalizeEmail(row.email);
+      patients.push({
+        name: normalizePatientName(row.name),
+        phone: row.phone ? formatE164Prefer(row.phone) : row.phone,
+        email: emailNorm || row.email || null,
+        last_seen_at: row.last_seen_at
+      });
+      if (patients.length >= limit) break;
+    }
+    return res.json({ success: true, patients });
   } catch (error) {
     console.error('❌ Error searching patients for admin create-appointment:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -12555,10 +13045,19 @@ app.get('/api/provider/status', async (req, res) => {
   try {
     const email = (req.query.email || '').toString().trim();
     if (!email) {
-      return res.status(400).json({ success: false, error: 'email query required' });
+      return res.status(400).json({
+        success: false,
+        error_code: 'PROVIDER_EMAIL_REQUIRED',
+        error: 'email query required'
+      });
     }
     const status = ProviderService.getProviderStatus(email);
-    res.json({ success: true, status: status || { is_online: false, availability_rules: null } });
+    const providerProfile = ProviderService.getProviderProfileByEmail(email);
+    res.json({
+      success: true,
+      status: status || { is_online: false, availability_rules: null },
+      provider_profile: providerProfile || null
+    });
   } catch (error) {
     console.error('❌ Error fetching provider status:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -12570,7 +13069,19 @@ app.patch('/api/provider/status', async (req, res) => {
     const { email, is_online, availability_rules } = req.body || {};
     const e = (email || '').toString().trim();
     if (!e) {
-      return res.status(400).json({ success: false, error: 'email required' });
+      return res.status(400).json({
+        success: false,
+        error_code: 'PROVIDER_EMAIL_REQUIRED',
+        error: 'email required'
+      });
+    }
+    const profile = ProviderService.ensureProviderProfileForEmail(e);
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error_code: 'PROVIDER_NOT_FOUND',
+        error: `No provider account found for email ${e}`
+      });
     }
     if (typeof is_online === 'boolean') {
       ProviderService.setProviderOnline(e, is_online);
@@ -12579,10 +13090,37 @@ app.patch('/api/provider/status', async (req, res) => {
       ProviderService.setProviderAvailability(e, availability_rules);
     }
     const status = ProviderService.getProviderStatus(e);
-    res.json({ success: true, status });
+    res.json({ success: true, status, provider_profile: profile });
   } catch (error) {
     console.error('❌ Error updating provider status:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Provider: heartbeat extends online TTL and keeps presence fresh
+app.post('/api/provider/status/heartbeat', async (req, res) => {
+  try {
+    const email = ((req.body && req.body.email) || req.query.email || '').toString().trim();
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error_code: 'PROVIDER_EMAIL_REQUIRED',
+        error: 'email required'
+      });
+    }
+    const profile = ProviderService.ensureProviderProfileForEmail(email);
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error_code: 'PROVIDER_NOT_FOUND',
+        error: `No provider account found for email ${email}`
+      });
+    }
+    const status = ProviderService.heartbeatProvider(email);
+    return res.json({ success: true, status, provider_profile: profile });
+  } catch (error) {
+    console.error('❌ Error applying provider heartbeat:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -12613,6 +13151,52 @@ app.get('/api/provider/providers', async (req, res) => {
       success: false,
       error: error.message
     });
+  }
+});
+
+// Provider: booking readiness matrix (calendar + availability + online)
+app.get('/api/provider/booking-readiness', async (req, res) => {
+  try {
+    const clinicId = req.query.clinic_id || process.env.DEFAULT_CLINIC_ID || 'clinic-default';
+    const rows = ProviderService.getProviderBookingReadinessForClinic(clinicId);
+    return res.json({
+      success: true,
+      clinic_id: clinicId,
+      booking_policy: {
+        calendar_required_for_sync: String(process.env.CALENDAR_REQUIRED_FOR_SYNC || 'false').toLowerCase() === 'true',
+        blocks_only_allowed: String(process.env.BLOCKS_ONLY_ALLOWED === undefined ? 'true' : process.env.BLOCKS_ONLY_ALLOWED).toLowerCase() !== 'false',
+        prefer_synced_providers: String(process.env.PREFER_SYNCED_PROVIDERS || 'true').toLowerCase() !== 'false'
+      },
+      providers: rows,
+      count: rows.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching provider booking readiness:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Provider: booking observability (confidence ratios, fallback failures, drift alert)
+app.get('/api/provider/booking-observability', async (req, res) => {
+  try {
+    const snapshot = BookingService.getCalendarObservabilitySnapshot
+      ? BookingService.getCalendarObservabilitySnapshot()
+      : null;
+    return res.json({
+      success: true,
+      observability: snapshot || {
+        window_started_at: new Date().toISOString(),
+        confidence_counts: { high: 0, medium: 0, low: 0, total: 0 },
+        confidence_percentages: { high: 0, medium: 0, low: 0 },
+        booking_counts: { total: 0, blocks_only: 0 },
+        blocks_only_ratio: 0,
+        no_bookable_provider_failures_by_clinic: {},
+        alerts: { blocks_only_drift: false }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching booking observability:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -13132,6 +13716,7 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
   });
 
   const maxMb = parseInt(process.env.PATIENT_UPLOAD_MAX_MB || '10', 10);
+  const maxFiles = Math.max(1, Math.min(parseInt(process.env.PATIENT_UPLOAD_MAX_FILES || '30', 10) || 30, 100));
   const allowed = new Set([
     'application/pdf',
     'image/jpeg',
@@ -13140,18 +13725,26 @@ app.post('/api/patient/documents', apiLimiter, withIdempotency('patient_docs_upl
   ]);
   const upload = multer({
     storage,
-    limits: { fileSize: Math.max(1, maxMb) * 1024 * 1024, files: 10 },
+    limits: { fileSize: Math.max(1, maxMb) * 1024 * 1024, files: maxFiles },
     fileFilter: (req2, file, cb) => {
       if (!allowed.has(file.mimetype)) {
         return cb(new Error('Unsupported file type'));
       }
       cb(null, true);
     }
-  }).array('files', 10);
+  }).array('files', maxFiles);
 
   upload(req, res, async (err) => {
     if (err) {
       console.error('❌ Error handling upload:', err);
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({
+          success: false,
+          error: `Too many files in one request (max ${maxFiles}). Choose fewer files, or upload in batches.`,
+          error_code: 'LIMIT_FILE_COUNT',
+          max_files: maxFiles
+        });
+      }
       const msg = (err.message && String(err.message).trim()) || 'Upload failed';
       return res.status(400).json({ success: false, error: msg });
     }
@@ -13419,6 +14012,12 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
     const appts = await Promise.all(encounters.map(async (enc) => {
       const r = enc.resource_data || {};
       const apptId = r.id || enc.resource_id || enc.id;
+      if (apptId && db.db) {
+        try {
+          const tomb = db.db.prepare('SELECT deleted_at FROM appointments WHERE id = ?').get(apptId);
+          if (tomb && tomb.deleted_at) return null;
+        } catch (_) {}
+      }
       const subject = r.subject || {};
       const period = r.period || {};
       const typeText = (r.type && r.type[0] && (r.type[0].text || (r.type[0].coding && r.type[0].coding[0] && r.type[0].coding[0].display))) || '';
@@ -13437,11 +14036,12 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
       // Use appointment.date when available (avoids UTC date-shift; appointments use clinic-local date)
       let date = null;
       let time = null;
+      let legacyAppt = null;
       try {
-        const appt = apptId ? await db.getAppointment(apptId) : null;
-        if (appt && appt.date) {
-          date = appt.date;
-          time = appt.time || (dt ? dt.toISOString().slice(11, 16) : null);
+        legacyAppt = apptId ? await db.getAppointment(apptId) : null;
+        if (legacyAppt && legacyAppt.date) {
+          date = legacyAppt.date;
+          time = legacyAppt.time || (dt ? dt.toISOString().slice(11, 16) : null);
         }
       } catch (_) {}
       if (!date) {
@@ -13450,12 +14050,27 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
       }
       if (!time && dt) time = dt.toISOString().slice(11, 16);
 
+      const visitMode =
+        (legacyAppt && legacyAppt.visit_mode) ||
+        (() => {
+          const vmExt = ext.find((e) => e.url === 'https://doclittle.health/extension/visit-mode');
+          return vmExt && (vmExt.valueString || vmExt.valueCode);
+        })() ||
+        'sync_video';
+
+      const extPaymentStatus = (ext.find((e) => e.url === 'https://doclittle.health/extension/payment-status') || {}).valueString || null;
+      let paymentStatusOut = payInfo.payment_status || null;
+      if (!paymentStatusOut && extPaymentStatus) paymentStatusOut = extPaymentStatus;
+      if (!paymentStatusOut && legacyAppt && legacyAppt.payment_status) paymentStatusOut = legacyAppt.payment_status;
+
       return {
         id: apptId,
         patient_name: subject.display || '',
         appointment_type: typeText || 'Telehealth visit',
+        provider: legacyAppt && legacyAppt.provider ? legacyAppt.provider : null,
         date,
         time,
+        timezone: (legacyAppt && legacyAppt.timezone) ? legacyAppt.timezone : 'America/New_York',
         start_time: startIso,
         end_time: period.end || null,
         status,
@@ -13463,7 +14078,8 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
         can_reschedule: ['scheduled', 'confirmed'].includes(status),
         can_cancel: ['scheduled', 'confirmed'].includes(status),
         video_room: apptId,
-        payment_status: payInfo.payment_status || null,
+        visit_mode: visitMode,
+        payment_status: paymentStatusOut,
         payment_link: payInfo.payment_link || null,
         amount_due: (payInfo.amount_due != null ? payInfo.amount_due : null),
         currency: payInfo.currency || 'USD',
@@ -13471,8 +14087,9 @@ app.get('/api/patient/appointments', apiLimiter, requirePatientSession, async (r
       };
     }));
 
+    const appointmentsOut = (appts || []).filter(Boolean);
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    return res.json({ success: true, appointments: appts });
+    return res.json({ success: true, appointments: appointmentsOut });
   } catch (error) {
     console.error('❌ Error getting patient appointments:', error);
     res.status(500).json({
@@ -13514,59 +14131,90 @@ app.post(
     const clinicId = appt.clinic_id || resolveClinicIdFromRequest(req) || FALLBACK_CLINIC_ID;
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id missing for appointment checkout', request_id: req.id });
 
-    // If a pending checkout already exists, reuse it (idempotent UX)
+    // If a pending voice checkout already exists, reuse its checkout_id (prevents duplicate voice_checkouts).
     const pending = db.getPendingCheckoutForAppointment && db.getPendingCheckoutForAppointment(appointmentId);
-    if (pending && pending.checkout && pending.checkout.stripe_checkout_session_id) {
+    let voiceCheckout = null;
+    let checkoutId = null;
+    if (pending && pending.checkout) {
+      voiceCheckout = pending.checkout;
+      checkoutId = voiceCheckout.id;
+    }
+
+    if (voiceCheckout && voiceCheckout.stripe_checkout_session_id) {
       let url = null;
       try {
-        const s = await stripe.checkout.sessions.retrieve(pending.checkout.stripe_checkout_session_id);
+        const s = await stripe.checkout.sessions.retrieve(voiceCheckout.stripe_checkout_session_id);
         url = s?.url || null;
       } catch (_) {}
       return res.json({
         success: true,
-        checkout_id: pending.checkout.id,
-        stripe_checkout_session_id: pending.checkout.stripe_checkout_session_id,
+        checkout_id: voiceCheckout.id,
+        stripe_checkout_session_id: voiceCheckout.stripe_checkout_session_id,
         checkout_url: url,
         request_id: req.id
       });
     }
 
-    // Amount: prefer UI-provided amount_due (must be numeric) else resolve from visit_pricing
-    let amount = req.body?.amount_due;
-    if (amount == null) {
+    // Charge amount: server-resolved only (never trust req.body.amount_due for capture).
+    // Order: pending voice checkout row (if any) → visit_pricing for clinic + appointment type.
+    let amount = null;
+    if (voiceCheckout != null && voiceCheckout.amount != null) {
+      amount = parseFloat(voiceCheckout.amount);
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
       try {
         const pricing = db.getEffectiveVisitPrice(clinicId, appt.appointment_type || 'General Consult');
-        amount = pricing?.effective_price;
+        amount = pricing?.effective_price != null ? parseFloat(pricing.effective_price) : null;
       } catch (_) {}
     }
-    amount = parseFloat(amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ success: false, error: 'Invalid amount_due for checkout', request_id: req.id });
+      return res.status(400).json({
+        success: false,
+        error: 'Unable to resolve price for checkout',
+        request_id: req.id
+      });
+    }
+    const clientHint = req.body?.amount_due;
+    if (clientHint != null && Number.isFinite(parseFloat(clientHint))) {
+      const ch = parseFloat(clientHint);
+      if (Math.abs(ch - amount) > 0.009) {
+        console.warn('[patient checkout] Ignoring client amount_due mismatch', {
+          appointmentId,
+          client_amount_due: ch,
+          server_amount: amount,
+          request_id: req.id
+        });
+      }
     }
 
     const { v4: uuidv4 } = require('uuid');
-    const checkoutId = uuidv4();
+    let checkout = voiceCheckout;
+    if (!checkout) {
+      // Create checkout record only when a pending one doesn't already exist.
+      checkoutId = uuidv4();
+      checkout = {
+        id: checkoutId,
+        merchant_id: (await db.getClinicById(clinicId))?.merchant_id,
+        product_id: 'APPOINTMENT',
+        product_name: appt.appointment_type ? `Appointment - ${appt.appointment_type}` : 'Appointment',
+        quantity: 1,
+        amount,
+        customer_phone: appt.patient_phone || '0000000000',
+        customer_name: appt.patient_name || 'Patient',
+        customer_email: patientEmail || appt.patient_email || null,
+        appointment_id: appointmentId,
+        status: 'pending',
+        clinic_id: clinicId
+      };
 
-    // Create checkout record
-    const checkout = {
-      id: checkoutId,
-      merchant_id: (await db.getClinicById(clinicId))?.merchant_id,
-      product_id: 'APPOINTMENT',
-      product_name: appt.appointment_type ? `Appointment - ${appt.appointment_type}` : 'Appointment',
-      quantity: 1,
-      amount,
-      customer_phone: appt.patient_phone || '0000000000',
-      customer_name: appt.patient_name || 'Patient',
-      customer_email: patientEmail || appt.patient_email || null,
-      appointment_id: appointmentId,
-      status: 'pending',
-      clinic_id: clinicId
-    };
-
-    if (!checkout.merchant_id) {
-      return res.status(500).json({ success: false, error: 'Clinic merchant is not configured', request_id: req.id });
+      if (!checkout.merchant_id) {
+        return res.status(500).json({ success: false, error: 'Clinic merchant is not configured', request_id: req.id });
+      }
+      await db.createVoiceCheckout(checkout);
+    } else {
+      // Ensure the checkout_id is consistent even when voiceCheckout was used.
+      checkoutId = checkout.id;
     }
-    await db.createVoiceCheckout(checkout);
 
     const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || `http://localhost:${PORT}`;
     const ttlMinutes = parseInt(process.env.APPOINTMENT_PAYMENT_TTL_MINUTES || '30', 10);
@@ -13589,6 +14237,36 @@ app.post(
       paymentIntentData.capture_method = 'manual';
     }
 
+    // Tenant-scoped Stripe customer (clinic/merchant -> internal tenant customer -> Stripe customer).
+    // This avoids relying on Stripe's "create customer from email" behavior for multi-tenant reporting.
+    let stripeCustomerId = null;
+    try {
+      const tenantCustomerId =
+        db.getCustomerIdForClinic?.(clinicId) ||
+        db.ensureCustomerIdForClinic?.(clinicId) ||
+        null;
+
+      const tenantCustomer = tenantCustomerId ? db.getCustomer(tenantCustomerId) : null;
+      if (tenantCustomer?.stripe_customer_id) {
+        stripeCustomerId = tenantCustomer.stripe_customer_id;
+      } else if (tenantCustomer?.email && stripe?.customers?.create) {
+        const stripeCustomer = await stripe.customers.create({
+          email: tenantCustomer.email,
+          name: tenantCustomer.name || tenantCustomer.company_name || clinicId,
+          metadata: {
+            customer_id: tenantCustomer.id,
+            clinic_id: clinicId,
+          }
+        });
+        stripeCustomerId = stripeCustomer.id;
+        if (stripeCustomerId) {
+          db.updateCustomer && db.updateCustomer(tenantCustomer.id, { stripe_customer_id: stripeCustomerId });
+        }
+      }
+    } catch (tenantStripeErr) {
+      console.warn('⚠️ tenant Stripe customer resolution failed:', tenantStripeErr.message);
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       expires_at: expiresAt,
@@ -13604,6 +14282,7 @@ app.post(
       ],
       success_url: successUrl,
       cancel_url: cancelUrl,
+      customer: stripeCustomerId || undefined,
       customer_email: checkout.customer_email || undefined,
       payment_intent_data: paymentIntentData,
       metadata: {
@@ -13722,6 +14401,26 @@ const validatePatientBookingScheduleBody = combineValidators(
   validateDate('date')
 );
 const validatePatientTriageBody = validateRequired(['message']);
+
+function validatePatientCheckoutChatBody(req, res, next) {
+  const b = req.body || {};
+  const msg = (b.message || '').toString().trim();
+  if (!msg) {
+    return res.status(400).json({ success: false, error: 'message is required', request_id: req.id });
+  }
+  if (msg.length > 4000) {
+    return res.status(400).json({ success: false, error: 'message too long (max 4000 characters)', request_id: req.id });
+  }
+  const pid = (b.product_id || '').toString().trim();
+  const provid = (b.provider_id || '').toString().trim();
+  if (!pid) {
+    return res.status(400).json({ success: false, error: 'product_id is required', request_id: req.id });
+  }
+  if (!provid) {
+    return res.status(400).json({ success: false, error: 'provider_id is required', request_id: req.id });
+  }
+  return next();
+}
 
 function validatePatientAvailableSlotsQuery(req, res, next) {
   const date = (req.query?.date || '').toString().trim();
@@ -14021,6 +14720,200 @@ async function handlePatientTriageMessage(req) {
   };
 }
 
+// POST /api/patient/checkout-chat/turn — Kelly agent for retail checkout (commerce tools only)
+async function handlePatientCheckoutChatMessage(req) {
+  const PatientPortalService = require('./services/patient-portal-service');
+  const KellyAgentService = require('./services/kelly-agent-service');
+  const sid = req.patientSessionId;
+  const sessionValidation = PatientPortalService.validateSession(sid);
+  const email = sessionValidation?.email || null;
+  const mappedPatientId = sessionValidation?.patient_id || null;
+  let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
+  if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
+    try {
+      const patientClinics = db.getPatientClinicIds(mappedPatientId);
+      clinicId = patientClinics?.[0] || null;
+    } catch (_) {}
+  }
+  if (!clinicId) {
+    return {
+      status: 400,
+      json: {
+        success: false,
+        error: 'clinic_id required. Set DEFAULT_CLINIC_ID in .env, include clinic_id in request, or ensure patient has appointments.',
+        request_id: req.id
+      }
+    };
+  }
+  const message = (req.body?.message || '').toString().trim();
+  const productId = (req.body?.product_id || '').toString().trim();
+  const providerId = (req.body?.provider_id || '').toString().trim();
+  let session_id = (req.body?.session_id || '').toString().trim() || null;
+  if (!session_id) session_id = require('uuid').v4();
+
+  const result = await KellyAgentService.processTurn({
+    message,
+    sessionId: session_id,
+    channel: 'chat',
+    clinicId,
+    patientId: mappedPatientId,
+    patientName: null,
+    patientEmail: email,
+    portalSessionId: sid,
+    commerceCheckout: { productId, providerId }
+  });
+
+  const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
+  let conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
+  // Commerce flow does not use triage wipe rules — persist turns for continuity.
+  if (db?.upsertOrchestrateSession) {
+    const updatedHistory = [
+      ...conversationHistory,
+      { role: 'user', content: message },
+      { role: 'assistant', content: result.reply }
+    ];
+    const newTurnCount = (row?.turn_count || 0) + 1;
+    try {
+      db.upsertOrchestrateSession({
+        session_id,
+        channel: 'chat',
+        patient_id: mappedPatientId,
+        portal_session_id: sid,
+        clinic_id: clinicId,
+        conversation_history: updatedHistory,
+        flow_state: { ...(row?.flow_state || {}), commerce_checkout: { product_id: productId, provider_id: providerId } },
+        turn_count: newTurnCount,
+        preferred_language: row?.preferred_language || 'en'
+      });
+    } catch (e) {
+      console.warn('⚠️  Failed to persist checkout chat session:', e.message);
+    }
+  }
+
+  const reply = (result.reply && String(result.reply).trim()) || "I'm here. How can I help you today?";
+  return {
+    status: 200,
+    json: {
+      success: true,
+      reply,
+      session_id,
+      toolsUsed: Array.isArray(result.toolsUsed) ? result.toolsUsed : [],
+      redirect_to: result.redirect_to || null,
+      next_chips: result.next_chips || [],
+      chips_display: result.chips_display,
+      next_step: result.next_step,
+      quote_id: result.quote_id || null,
+      request_id: req.id
+    }
+  };
+}
+
+// POST /api/patient/checkout-chat/turn/stream — Same as /turn but streams Groq token deltas (SSE).
+async function handlePatientCheckoutChatMessageStream(req, res) {
+  const PatientPortalService = require('./services/patient-portal-service');
+  const KellyAgentService = require('./services/kelly-agent-service');
+  const sid = req.patientSessionId;
+  const sessionValidation = PatientPortalService.validateSession(sid);
+  const email = sessionValidation?.email || null;
+  const mappedPatientId = sessionValidation?.patient_id || null;
+  let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
+  if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
+    try {
+      const patientClinics = db.getPatientClinicIds(mappedPatientId);
+      clinicId = patientClinics?.[0] || null;
+    } catch (_) {}
+  }
+  const sseWrite = (obj) => {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  };
+  if (!clinicId) {
+    sseWrite({
+      type: 'error',
+      success: false,
+      error:
+        'clinic_id required. Set DEFAULT_CLINIC_ID in .env, include clinic_id in request, or ensure patient has appointments.',
+      request_id: req.id
+    });
+    return res.end();
+  }
+  const message = (req.body?.message || '').toString().trim();
+  const productId = (req.body?.product_id || '').toString().trim();
+  const providerId = (req.body?.provider_id || '').toString().trim();
+  let session_id = (req.body?.session_id || '').toString().trim() || null;
+  if (!session_id) session_id = require('uuid').v4();
+
+  const onStreamDelta = (text) => {
+    if (text) sseWrite({ type: 'delta', text: String(text) });
+  };
+
+  try {
+    const result = await KellyAgentService.processTurn({
+      message,
+      sessionId: session_id,
+      channel: 'chat',
+      clinicId,
+      patientId: mappedPatientId,
+      patientName: null,
+      patientEmail: email,
+      portalSessionId: sid,
+      commerceCheckout: { productId, providerId },
+      onStreamDelta,
+      onToolStatus: (toolName, text) => {
+        sseWrite({ type: 'tool_status', tool: toolName, text: text || '…' });
+      }
+    });
+
+    const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
+    let conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
+    if (db?.upsertOrchestrateSession) {
+      const updatedHistory = [
+        ...conversationHistory,
+        { role: 'user', content: message },
+        { role: 'assistant', content: result.reply }
+      ];
+      const newTurnCount = (row?.turn_count || 0) + 1;
+      try {
+        db.upsertOrchestrateSession({
+          session_id,
+          channel: 'chat',
+          patient_id: mappedPatientId,
+          portal_session_id: sid,
+          clinic_id: clinicId,
+          conversation_history: updatedHistory,
+          flow_state: {
+            ...(row?.flow_state || {}),
+            commerce_checkout: { product_id: productId, provider_id: providerId }
+          },
+          turn_count: newTurnCount,
+          preferred_language: row?.preferred_language || 'en'
+        });
+      } catch (e) {
+        console.warn('⚠️  Failed to persist checkout chat session (stream):', e.message);
+      }
+    }
+
+    const reply = (result.reply && String(result.reply).trim()) || "I'm here. How can I help you today?";
+    sseWrite({
+      type: 'done',
+      success: true,
+      reply,
+      session_id,
+      toolsUsed: Array.isArray(result.toolsUsed) ? result.toolsUsed : [],
+      redirect_to: result.redirect_to || null,
+      next_chips: result.next_chips || [],
+      chips_display: result.chips_display,
+      next_step: result.next_step,
+      quote_id: result.quote_id || null,
+      request_id: req.id
+    });
+    return res.end();
+  } catch (e) {
+    console.error('checkout-chat stream error:', e);
+    sseWrite({ type: 'error', success: false, error: e.message || 'stream_failed', request_id: req.id });
+    return res.end();
+  }
+}
+
 // POST /api/patient/orchestrate — Alias for triage/message (deprecated: use triage/message) (P-1: CSRF)
 app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
@@ -14041,6 +14934,52 @@ app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, requi
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });
+
+app.post(
+  '/api/patient/checkout-chat/turn',
+  apiLimiter,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  validatePatientCheckoutChatBody,
+  express.json(),
+  async (req, res) => {
+    try {
+      await rotatePatientSessionIfNeeded(req, res);
+      const out = await handlePatientCheckoutChatMessage(req);
+      return res.status(out.status).json(out.json);
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    }
+  }
+);
+
+app.post(
+  '/api/patient/checkout-chat/turn/stream',
+  apiLimiter,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  validatePatientCheckoutChatBody,
+  express.json(),
+  async (req, res) => {
+    try {
+      await rotatePatientSessionIfNeeded(req, res);
+      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      if (typeof res.flushHeaders === 'function') res.flushHeaders();
+      await handlePatientCheckoutChatMessageStream(req, res);
+    } catch (e) {
+      if (!res.headersSent) {
+        return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+      }
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'error', success: false, error: e.message })}\n\n`);
+      } catch (_) {}
+      return res.end();
+    }
+  }
+);
 
 // GET /api/patient/triage/history — Fetch conversation history for resume (orch-5)
 app.get('/api/patient/triage/history', apiLimiter, requirePatientSession, async (req, res) => {
@@ -15135,17 +16074,20 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
       if (body.event === 'call_ended' || body.call_status === 'ended' || body.call_status === 'completed') {
         try {
           // Get call duration from Retell
-          const durationSeconds = body.duration_seconds || body.call?.duration_seconds || null;
+          const durationSeconds =
+            body.duration_seconds ||
+            body.call?.duration_seconds ||
+            (body.call?.duration_ms ? Math.round(body.call.duration_ms / 1000) : null);
 
           // Update voice call log (for customer calls)
-          const existingCall = db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
+          const existingCall = db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
           if (existingCall) {
             // Get function call count for this call
-            const functionCalls = db.prepare('SELECT COUNT(*) as count FROM function_call_log WHERE call_id = ?').get(callId);
+            const functionCalls = db.db.prepare('SELECT COUNT(*) as count FROM function_call_log WHERE call_id = ?').get(callId);
             const functionCallCount = functionCalls ? functionCalls.count : 0;
 
             // Update call log
-            db.prepare(`
+            db.db.prepare(`
               UPDATE voice_call_log 
               SET call_duration_seconds = ?,
                   function_calls_count = ?,
@@ -15161,11 +16103,11 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
           }
 
           // Update lead call (for sales calls)
-          const leadCall = db.prepare('SELECT * FROM lead_calls WHERE call_id = ?').get(callId);
+          const leadCall = db.db.prepare('SELECT * FROM lead_calls WHERE call_id = ?').get(callId);
           if (leadCall) {
             const callCost = durationSeconds ? (durationSeconds / 60) * 0.05 : null;
 
-            db.prepare(`
+            db.db.prepare(`
               UPDATE lead_calls 
               SET call_status = 'completed',
                   call_duration_seconds = ?,
@@ -15314,9 +16256,11 @@ app.get('/api/patient/receipts', apiLimiter, requirePatientSession, async (req, 
     }
 
     const patientId = patient ? patient.resource_id : (sessionValidation.patient_id || null);
-    const receipts = db.getPaymentReceiptsForPatient
-      ? db.getPaymentReceiptsForPatient(patientId, sessionValidation.email || null, 50)
-      : [];
+    const receipts = db.getMergedReceiptsForPatient
+      ? db.getMergedReceiptsForPatient(patientId, sessionValidation.email || null, 50)
+      : db.getPaymentReceiptsForPatient
+        ? db.getPaymentReceiptsForPatient(patientId, sessionValidation.email || null, 50)
+        : [];
     return res.json({ success: true, receipts });
   } catch (error) {
     console.error('❌ Error fetching patient receipts:', error);
@@ -15340,10 +16284,22 @@ app.get('/api/v1/patient/appointments', apiLimiter, requirePatientSession, async
 app.get('/api/v1/patient/receipts', apiLimiter, requirePatientSession, async (req, res) => {
   try {
     const sessionValidation = req.patientSession;
-    const patientId = sessionValidation.patient_id || null;
-    const receipts = db.getPaymentReceiptsForPatient
-      ? db.getPaymentReceiptsForPatient(patientId, sessionValidation.email || null, 50)
-      : [];
+    let patient = null;
+    if (sessionValidation.patient_id && db.getFHIRPatient) {
+      patient = db.getFHIRPatient(sessionValidation.patient_id);
+    }
+    if (!patient && sessionValidation.email) {
+      patient = db.getFHIRPatientByEmail(sessionValidation.email);
+    }
+    if (!patient && sessionValidation.phone) {
+      patient = db.getFHIRPatientByPhone(sessionValidation.phone);
+    }
+    const patientId = patient ? patient.resource_id : (sessionValidation.patient_id || null);
+    const receipts = db.getMergedReceiptsForPatient
+      ? db.getMergedReceiptsForPatient(patientId, sessionValidation.email || null, 50)
+      : db.getPaymentReceiptsForPatient
+        ? db.getPaymentReceiptsForPatient(patientId, sessionValidation.email || null, 50)
+        : [];
     return res.json({ success: true, receipts });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, code: 'internal_error' });
@@ -16641,6 +17597,40 @@ app.get('/api/ehr/epic/status', async (req, res) => {
 app.get('/health', healthCheckHandler);
 app.get('/health/ready', readinessCheck);
 app.get('/health/live', livenessCheck);
+app.get('/health/voice-deps', async (req, res) => {
+  try {
+    const twilioPhone = process.env.TWILIO_PHONE_NUMBER || null;
+    const retellAgentId = process.env.RETELL_AGENT_ID || null;
+    const defaultSubdomain = constants.TENANTS?.DEFAULT_SUBDOMAIN || 'akin-dunbar';
+
+    const clinicPhone = twilioPhone ? db.getClinicPhoneNumber(twilioPhone) : null;
+    const defaultMerchant = db.getMerchantBySubdomain ? db.getMerchantBySubdomain(defaultSubdomain) : null;
+
+    const checks = {
+      retell_api_key_present: !!process.env.RETELL_API_KEY,
+      retell_agent_id_present: !!retellAgentId,
+      twilio_phone_present: !!twilioPhone,
+      twilio_phone_mapped_to_clinic: !!clinicPhone?.clinic_id,
+      default_tenant_exists: !!defaultMerchant?.id
+    };
+
+    const ok = Object.values(checks).every(Boolean);
+    return res.status(ok ? 200 : 503).json({
+      success: ok,
+      checks,
+      details: {
+        twilio_phone_number: twilioPhone,
+        mapped_clinic_id: clinicPhone?.clinic_id || null,
+        mapped_clinic_name: clinicPhone?.clinic_name || null,
+        default_subdomain: defaultSubdomain,
+        default_merchant_id: defaultMerchant?.id || null
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Root endpoint - API information (moved to /api for API status)
 app.get('/api', (req, res) => {
@@ -17489,6 +18479,20 @@ const server = app.listen(PORT, HOST, () => {
     }
   } catch (e) { /* ignore */ }
 
+  // Expired commerce quote sessions (checkout_sessions)
+  try {
+    if (db.purgeExpiredCheckoutSessions) {
+      const purged = db.purgeExpiredCheckoutSessions();
+      if (purged > 0) console.log(`🧹 checkout_sessions purge: removed ${purged} expired row(s)`);
+      setInterval(() => {
+        const n = db.purgeExpiredCheckoutSessions();
+        if (n > 0) console.log(`🧹 checkout_sessions purge: removed ${n} expired row(s)`);
+      }, 6 * 60 * 60 * 1000);
+    }
+  } catch (e) {
+    console.warn('⚠️  checkout_sessions purge disabled:', e.message);
+  }
+
   // Phase 1: Auto-cancel unpaid appointment checkouts (webhook-safe)
   try {
     const BookingService = require('./services/booking-service');
@@ -17614,7 +18618,13 @@ server.on('upgrade', (request, socket, head) => {
 
   console.log('🔌 WS upgrade requested', { url, host, pathname });
 
-  if (pathname === '/webhook/retell/llm') {
+  // Retell may connect using either:
+  // - /webhook/retell/llm
+  // - /webhook/retell/llm/<call_id>
+  const isRetellLlmPath =
+    pathname === '/webhook/retell/llm' || pathname.startsWith('/webhook/retell/llm/');
+
+  if (isRetellLlmPath) {
     wss.handleUpgrade(request, socket, head, (ws) => {
       console.log('✅ WS upgrade accepted for Retell LLM');
       wss.emit('connection', ws, request);

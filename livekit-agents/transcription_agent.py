@@ -56,10 +56,16 @@ async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": room_name}
 
     # STT: Deepgram Nova-3 (medical-capable)
+    # True multilingual mode:
+    # - VIDEO_STT_MODE=auto  -> language detection mode ("multi" by default)
+    # - VIDEO_STT_MODE=fixed -> explicit DEEPGRAM_LANGUAGE (default "en")
+    stt_mode = os.environ.get("VIDEO_STT_MODE", "auto").strip().lower()
+    default_lang = "multi" if stt_mode == "auto" else "en"
+    stt_language = os.environ.get("DEEPGRAM_LANGUAGE", default_lang).strip().lower() or default_lang
     try:
         stt = deepgram.STT(
             model=os.environ.get("DEEPGRAM_MODEL", "nova-3"),
-            language=os.environ.get("DEEPGRAM_LANGUAGE", "en"),
+            language=stt_language,
         )
     except Exception as e:
         ctx.logger.warning(f"Deepgram STT init failed: {e}. Transcription disabled.")

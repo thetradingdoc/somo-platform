@@ -160,12 +160,16 @@ function asyncHandler(fn) {
  */
 function withTimeout(fn, timeoutMs = 30000) {
   return async (...args) => {
-    return Promise.race([
-      fn(...args),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error(`Operation timed out after ${timeoutMs}ms`)), timeoutMs)
-      )
-    ]);
+    let timer;
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Operation timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      );
+    });
+    return Promise.race([fn(...args), timeoutPromise]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
   };
 }
 

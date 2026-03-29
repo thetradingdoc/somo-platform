@@ -4,10 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Invoice Details - Doctor's Portal</title>
+    <title>Invoice — Consult Clinic Dashboard</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <script src="../assets/js/config.js"></script>
+    <script src="../assets/js/navigation.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -37,19 +38,11 @@
         .sidebar-logo {
             font-size: 32px;
             line-height: 1;
-            letter-spacing: -3px;
+            letter-spacing: -2px;
             color: #2d3748;
             margin-bottom: 4px;
-        }
-
-        .sidebar-logo .doc {
-            font-family: 'Times New Roman', Times, serif;
-            font-style: italic;
-        }
-
-        .sidebar-logo .little {
-            font-family: 'Verdana', Geneva, sans-serif;
-            font-weight: 700;
+            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-weight: 300;
         }
 
         .sidebar-subtitle {
@@ -160,6 +153,14 @@
             flex: 1;
             padding: 32px;
             background: var(--gray-50);
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 0;
+                padding: 16px;
+                padding-top: 72px;
+            }
         }
 
         .back-btn {
@@ -407,13 +408,13 @@
 
 <body>
     <div class="layout">
-        <!-- Sidebar -->
-        <aside class="sidebar">
+        <!-- Sidebar (Consult theme — shared nav + SVG icons from navigation.js) -->
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <strong>Billy</strong>
+                    Consʌlt
                 </div>
-                <div class="sidebar-subtitle" id="sidebarSubtitle">Doctor's Portal</div>
+                <div class="sidebar-subtitle" id="sidebarSubtitle">Healthcare at your home</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
@@ -461,50 +462,6 @@
         document.getElementById('userName').textContent = userName;
         document.getElementById('userRole').textContent = userRole;
 
-        // Render sidebar from tenant config (fallback if missing)
-        function renderSidebar() {
-            if (!window.TENANT_CONFIG) {
-                window.TENANT_CONFIG = {
-                    navItems: [
-                        { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
-                        { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
-                        { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
-                    ],
-                    sidebarSubtitle: 'Doctor's Portal'
-                };
-            }
-            const navEl = document.getElementById('sidebarNav');
-            const subtitleEl = document.getElementById('sidebarSubtitle');
-            
-            if (!navEl) {
-                console.warn('⚠️ Sidebar nav element not found');
-                return;
-            }
-
-            // Ensure navItems exists and is an array
-            if (!window.TENANT_CONFIG.navItems || !Array.isArray(window.TENANT_CONFIG.navItems)) {
-                console.warn('⚠️ navItems missing or invalid, using defaults');
-                window.TENANT_CONFIG.navItems = [
-                    { id: 'dashboard', label: 'Dashboard', icon: '📊', href: 'business-dashboard.html' },
-                    { id: 'patients', label: 'Patients', icon: '👥', href: 'patients.html' },
-                    { id: 'billing', label: 'Billing', icon: '💳', href: 'billing.html' }
-                ];
-            }
-            
-            if (navEl && window.TENANT_CONFIG.navItems) {
-                navEl.innerHTML = window.TENANT_CONFIG.navItems.map(item => `
-                    <a href="${item.href}" class="nav-item ${item.id === 'invoices' ? 'active' : ''}">
-                        <span class="nav-icon">${item.icon}</span>
-                        <span>${item.label}</span>
-                    </a>
-                `).join('');
-            }
-            
-            if (subtitleEl && window.TENANT_CONFIG.sidebarSubtitle) {
-                subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
-            }
-        }
-
         // Logout function
         function logout() {
             sessionStorage.removeItem('authenticated');
@@ -513,18 +470,26 @@
             window.location.href = '../login.html';
         }
 
-        // Get invoice ID from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const invoiceId = urlParams.get('id');
+        function startInvoiceDetailPage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const invoiceId = urlParams.get('id');
+            if (invoiceId) loadInvoice(invoiceId);
+            else showError('No invoice ID provided');
+        }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            renderSidebar();
-            if (invoiceId) {
-                loadInvoice(invoiceId);
-            } else {
-                showError('No invoice ID provided');
-            }
-        });
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                startInvoiceDetailPage();
+                setTimeout(() => {
+                    if (typeof renderNavigation === 'function') renderNavigation();
+                }, 600);
+            });
+        } else {
+            startInvoiceDetailPage();
+            setTimeout(() => {
+                if (typeof renderNavigation === 'function') renderNavigation();
+            }, 600);
+        }
 
         async function loadInvoice(invoiceId) {
             try {
@@ -552,9 +517,13 @@
         function displayInvoice(data) {
             const container = document.getElementById('invoiceContainer');
             const invoice = data.invoice;
+            if (!invoice) {
+                showError('Invalid invoice data');
+                return;
+            }
             const items = data.items || [];
             const payments = data.payments || [];
-            const totals = data.totals || {};
+            const totals = data.totals || { paid: 0, balance: Number(invoice.amount) || 0 };
             const patient = data.patient;
 
             // Get patient name
@@ -580,21 +549,22 @@
                 });
             };
 
-            const statusClass = `status-${invoice.status}`;
-            const statusText = invoice.status.toUpperCase();
+            const statusKey = (invoice.status || 'draft').toString();
+            const statusClass = `status-${statusKey}`;
+            const statusText = statusKey.toUpperCase();
 
             // Action buttons based on status
             let actionButtons = '';
-            if (invoice.status === 'draft') {
+            if (statusKey === 'draft') {
                 actionButtons = `
                     <button class="btn-primary" onclick="sendInvoice('${invoice.id}')">📧 Send Invoice</button>
                 `;
-            } else if (invoice.status === 'sent' || invoice.status === 'overdue') {
+            } else if (statusKey === 'sent' || statusKey === 'overdue') {
                 actionButtons = `
                     <button class="btn-success" onclick="recordPayment('${invoice.id}')">💰 Record Payment</button>
                     <button class="btn-secondary" onclick="sendInvoice('${invoice.id}')">📧 Resend</button>
                 `;
-            } else if (invoice.status === 'paid') {
+            } else if (statusKey === 'paid') {
                 actionButtons = `
                     <span style="padding: 10px 20px; background: #dcfce7; color: #166534; border-radius: 8px; font-weight: 600;">
                         ✅ Paid in Full
@@ -647,15 +617,15 @@
                     <div class="summary-grid">
                         <div class="summary-item">
                             <div class="summary-label">Total Amount</div>
-                            <div class="summary-value">$${invoice.amount.toFixed(2)}</div>
+                            <div class="summary-value">$${(Number(invoice.amount) || 0).toFixed(2)}</div>
                         </div>
                         <div class="summary-item">
                             <div class="summary-label">Total Paid</div>
-                            <div class="summary-value paid">$${totals.paid.toFixed(2)}</div>
+                            <div class="summary-value paid">$${(Number(totals.paid) || 0).toFixed(2)}</div>
                         </div>
                         <div class="summary-item">
                             <div class="summary-label">Balance</div>
-                            <div class="summary-value balance">$${totals.balance.toFixed(2)}</div>
+                            <div class="summary-value balance">$${(Number(totals.balance) || 0).toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
@@ -689,7 +659,7 @@
                                 `).join('')}
                                 <tr class="total-row">
                                     <td colspan="6">TOTAL</td>
-                                    <td>$${invoice.amount.toFixed(2)}</td>
+                                    <td>$${(Number(invoice.amount) || 0).toFixed(2)}</td>
                                 </tr>
                             </tbody>
                         </table>

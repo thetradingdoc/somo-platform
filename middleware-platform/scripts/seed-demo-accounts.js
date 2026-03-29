@@ -269,6 +269,69 @@ async function seedBalaVideoAppointment() {
   }
 }
 
+/**
+ * Set appointments.customer_id to the demo SaaS customer when the visit is for
+ * provider@doclittle.com (by practitioner_id, display name, or provider email).
+ * Without this, the calendar can show visits while customer-scoped endpoints
+ * (dashboard stats, etc.) miss them because customer_id was null.
+ */
+function linkDemoProviderTenantAppointments() {
+  try {
+    const sqlite = db.db || db;
+    const providerAcc = DEMO_ACCOUNTS.find((a) => a.role === 'Provider');
+    if (!providerAcc) return;
+
+    const customer = db.getCustomerByEmail(providerAcc.email);
+    if (!customer) {
+      console.warn('   ⚠️  Demo provider customer not found; cannot link appointments.');
+      return;
+    }
+
+    const ProviderService = require('../services/provider-service');
+    const clinicId = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'clinic-default';
+    const profile = ProviderService.ensureProviderProfileForEmail(providerAcc.email, clinicId);
+    if (!profile || !profile.id) {
+      console.warn('   ⚠️  Could not ensure provider_profile for demo provider; skipping appointment tenant link.');
+      return;
+    }
+
+    const practitionerId = profile.id;
+    const displayName = profile.display_name || 'Healthcare Provider';
+
+    const info = sqlite.prepare(`
+      UPDATE appointments
+      SET
+        customer_id = ?,
+        practitioner_id = CASE
+          WHEN practitioner_id IS NULL OR TRIM(practitioner_id) = '' THEN ?
+          ELSE practitioner_id
+        END
+      WHERE clinic_id = ?
+        AND deleted_at IS NULL
+        AND (customer_id IS NULL OR TRIM(IFNULL(customer_id, '')) = '')
+        AND (
+          practitioner_id = ?
+          OR provider = ?
+          OR LOWER(IFNULL(provider, '')) = LOWER(?)
+        )
+    `).run(
+      customer.id,
+      practitionerId,
+      clinicId,
+      practitionerId,
+      displayName,
+      providerAcc.email
+    );
+
+    const n = typeof info.changes === 'number' ? info.changes : 0;
+    if (n > 0) {
+      console.log(`   ✅ Linked ${n} appointment(s) to demo provider tenant (customer_id=${customer.id}).`);
+    }
+  } catch (e) {
+    console.warn('   ⚠️  linkDemoProviderTenantAppointments:', e.message);
+  }
+}
+
 async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(RESET ? 'Reset & seed demo accounts (password: demo123)' : 'Seed demo accounts (password: demo123)');
@@ -358,6 +421,25 @@ async function main() {
       console.log('Created:', acc.email);
     }
   }
+
+  // Enable demo provider for slot availability (provider_profile + is_online)
+  // So provider_availability_blocks for provider@doclittle.com are applied when getting slots
+  const providerAcc = DEMO_ACCOUNTS.find((a) => a.role === 'Provider');
+  if (providerAcc) {
+    const pc = db.getCustomerByEmail(providerAcc.email);
+    if (pc) {
+      try {
+        db.updateCustomer(pc.id, { provider_profile: JSON.stringify({ specialty: 'Primary Care' }) });
+        const ProviderService = require('../services/provider-service');
+        ProviderService.setProviderOnline(providerAcc.email, true);
+        console.log('   ✅ Demo provider enabled for availability:', providerAcc.email);
+      } catch (e) {
+        console.warn('   ⚠️  Could not enable demo provider availability:', e.message);
+      }
+    }
+  }
+
+  linkDemoProviderTenantAppointments();
 
   if (typeof db.acceptTerms === 'function') {
     for (const acc of DEMO_ACCOUNTS) {

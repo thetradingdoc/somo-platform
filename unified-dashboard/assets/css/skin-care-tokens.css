@@ -1,0 +1,19 @@
+/**
+ * Skin & Care — shared design tokens (checkout + landing alignment)
+ *
+ * Import on new static HTML surfaces (after global.css):
+ *   <link rel="stylesheet" href="../assets/css/skin-care-tokens.css" />
+ *
+ * React Native: mirror values in `patient-app/constants/skinCareTokens.ts`.
+ */
+:root {
+  --brand-accent: #ffa51f;
+  --brand-black: #1a1a1a;
+  --brand-gray: #6b6b6b;
+  --brand-border: #eee8df;
+  --brand-cream: #faf9f6;
+  --brand-kelly-bubble: #fff8ef;
+  --brand-header-h: 72px;
+  --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Gloock', Georgia, 'Times New Roman', serif;
+}

@@ -1,0 +1,2742 @@
+<!DOCTYPE html>
+<!--
+  Skin & Care — checkout chat (agentic commerce). Full cross-surface map:
+  docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md
+  Search hints in this file: applyKellyCopy, sendMessage, fetchQuote, checkout-chat/turn,
+  btnPayInThread, openPayConfirmationModal, SSE, stream, emitFunnelEvent.
+-->
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#ffa51f" />
+  <title>Skin &amp; Care — Checkout</title>
+  <link rel="icon" href="../assets/images/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../assets/images/favicon.svg" />
+  <link rel="stylesheet" href="../assets/css/global.css" />
+  <link rel="stylesheet" href="../assets/css/skin-care-tokens.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gloock&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="../assets/js/config.js" defer></script>
+  <script>
+    (function () {
+      const sid = localStorage.getItem('patient_session_id');
+      if (!sid) {
+        const q = window.location.pathname + window.location.search;
+        window.location.replace('patient-login.html?return=' + encodeURIComponent(q));
+      }
+    })();
+  </script>
+  <style>
+    /* Skin & Care tokens: ../assets/css/skin-care-tokens.css */
+    :root {
+      --primary: var(--brand-black);
+      --border: var(--brand-border);
+      --muted: var(--brand-gray);
+    }
+
+    /* Mobile-first: base ~375px; wider viewports = centered column */
+    .cc-body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      background: var(--brand-cream);
+      font-family: var(--font-ui);
+      display: flex;
+      flex-direction: column;
+      color: var(--brand-black);
+    }
+
+    .cc-header {
+      background: #fff;
+      border-bottom: 1px solid var(--brand-border);
+      flex-shrink: 0;
+    }
+
+    .cc-header-bar {
+      min-height: var(--brand-header-h);
+      box-sizing: border-box;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .cc-header-brand-block {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .cc-wordmark {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      font-weight: 400;
+      line-height: 1.2;
+      color: var(--brand-black);
+      letter-spacing: 0.02em;
+    }
+
+    .cc-brand-panda {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .cc-back-shop {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--brand-gray);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .cc-back-shop:hover {
+      color: var(--brand-black);
+      text-decoration: underline;
+    }
+
+    .cc-header-product {
+      padding: 0 16px 14px;
+    }
+
+    .cc-header-product h1 {
+      margin: 0 0 6px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--brand-black);
+    }
+
+    /* P0.5 / P1 — Product strip (88px), 12px horizontal padding */
+    .cc-product-strip {
+      min-height: 88px;
+      box-sizing: border-box;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--brand-border);
+      background: #fff;
+    }
+
+    .cc-product-strip.is-loading .cc-product-strip-img {
+      background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+      background-size: 200% 100%;
+      animation: cc-shimmer 1.1s ease-in-out infinite;
+      border: 1px solid var(--brand-border);
+    }
+
+    .cc-product-strip.is-loading .cc-product-strip-text h1 {
+      color: transparent;
+      background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+      background-size: 200% 100%;
+      animation: cc-shimmer 1.1s ease-in-out infinite;
+      border-radius: 6px;
+      min-height: 1em;
+      max-width: 200px;
+    }
+
+    .cc-product-strip.is-loading .cc-product-strip-price:not(.cc-price--skeleton) {
+      color: transparent;
+      background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+      background-size: 200% 100%;
+      animation: cc-shimmer 1.1s ease-in-out infinite;
+      border-radius: 6px;
+      min-height: 1.1em;
+      max-width: 140px;
+      display: inline-block;
+    }
+
+    .cc-product-strip-img {
+      width: 64px;
+      height: 64px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: var(--brand-cream);
+      border: 1px solid var(--brand-border);
+      flex-shrink: 0;
+    }
+
+    .cc-product-strip-img[hidden] {
+      display: none !important;
+    }
+
+    .cc-product-strip-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cc-product-strip-text h1 {
+      margin: 0 0 4px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      line-height: 1.25;
+      color: var(--brand-black);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .cc-product-strip-price {
+      font-size: 0.88rem !important;
+      font-weight: 700;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .cc-switch-pill {
+      flex-shrink: 0;
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 999px;
+      border: 1px solid var(--brand-border);
+      background: #fff;
+      font-family: var(--font-ui);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--brand-black);
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .cc-switch-pill:hover {
+      border-color: var(--brand-gray);
+    }
+
+    .cc-header-product .cc-price {
+      color: var(--brand-black);
+    }
+
+    .cc-price {
+      font-size: 1.05rem;
+      font-weight: 700;
+      opacity: 0.95;
+      min-height: 1.35em;
+      transition: color 0.2s ease, box-shadow 0.3s ease;
+      border-radius: 8px;
+      padding: 2px 0;
+    }
+
+    .cc-price.cc-price--skeleton {
+      color: transparent;
+      background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+      background-size: 200% 100%;
+      animation: cc-shimmer 1.1s ease-in-out infinite;
+      border-radius: 6px;
+      min-height: 1.25em;
+      max-width: 220px;
+    }
+
+    .cc-price.cc-price--highlight {
+      color: var(--brand-black);
+      background: rgba(255, 165, 31, 0.2);
+      padding: 6px 10px;
+      margin: 4px 0 0;
+      display: inline-block;
+      box-shadow: 0 0 0 2px rgba(255, 165, 31, 0.45);
+    }
+
+    @keyframes cc-shimmer {
+      0% {
+        background-position: 100% 0;
+      }
+
+      100% {
+        background-position: -100% 0;
+      }
+    }
+
+    @keyframes cc-price-pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 165, 31, 0.55);
+      }
+
+      70% {
+        box-shadow: 0 0 0 8px rgba(255, 165, 31, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 165, 31, 0);
+      }
+    }
+
+    .cc-price.cc-price--quoted-pulse {
+      animation: cc-price-pulse 1.2s ease-out 1;
+    }
+
+    .cc-main-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      max-width: 640px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 12px 12px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      min-height: min(60vh, 560px);
+    }
+
+    .cc-chat {
+      background: var(--brand-cream);
+      border: 1px solid var(--brand-border);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      min-height: 55vh;
+    }
+
+    .cc-msg {
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: #374151;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      max-width: 85%;
+    }
+
+    .cc-msg#sysMsg {
+      max-width: 100%;
+    }
+
+    .cc-msg strong {
+      color: var(--brand-black);
+    }
+
+    .cc-msg-user {
+      align-self: flex-end;
+      background: #fff;
+      border: 1px solid var(--brand-border);
+    }
+
+    .cc-msg-assistant {
+      align-self: flex-start;
+      background: var(--brand-kelly-bubble);
+      border: 1px solid var(--brand-border);
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+
+    .cc-msg-assistant.cc-msg-streaming {
+      min-height: 2.75rem;
+    }
+
+    .cc-msg-error-card {
+      align-self: flex-start;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      max-width: 85%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid #fecaca;
+      background: #fff7ed;
+      color: #7c2d12;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .cc-msg-error-card .cc-heroicon {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      color: #c2410c;
+      margin-top: 1px;
+    }
+
+    .cc-msg-error-card p {
+      margin: 0;
+    }
+
+    .cc-chat-log {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-height: min(40vh, 280px);
+      max-height: min(50vh, 420px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scroll-behavior: smooth;
+    }
+
+    .cc-chat-empty {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 12px;
+      padding: 20px 12px;
+      min-height: 120px;
+      border: 1px dashed var(--brand-border);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .cc-chat-empty.is-visible {
+      display: flex;
+    }
+
+    .cc-chat-empty-fig {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .cc-chat-empty-fig img {
+      display: block;
+    }
+
+    .cc-chat-empty-bottle {
+      width: 36px;
+      height: 72px;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #f8f6f0 0%, #e8e4dc 100%);
+      border: 1px solid var(--brand-border);
+    }
+
+    .cc-chat-empty p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--brand-gray);
+      max-width: 260px;
+      line-height: 1.4;
+    }
+
+    .cc-typing-row {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #6b7280;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: #f9fafb;
+      border: 1px dashed #e5e7eb;
+    }
+
+    .cc-typing-dots {
+      display: inline-flex;
+      gap: 4px;
+    }
+
+    .cc-typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--brand-accent);
+      animation: cc-dot 1.2s ease-in-out infinite;
+    }
+
+    .cc-typing-dots span:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    .cc-typing-dots span:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes cc-dot {
+
+      0%,
+      80%,
+      100% {
+        opacity: 0.35;
+        transform: scale(0.9);
+      }
+
+      40% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .cc-composer-wrap {
+      padding: 8px 12px 10px;
+      max-width: 640px;
+      margin: 0 auto;
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 72px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .cc-composer-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .cc-composer-pill {
+      flex: 1;
+      min-width: 0;
+      min-height: 44px;
+      max-height: 120px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--brand-border);
+      font-family: var(--font-ui);
+      font-size: 1rem;
+      resize: none;
+      box-sizing: border-box;
+      background: #fff;
+      line-height: 1.35;
+    }
+
+    .cc-composer-pill:focus {
+      outline: 2px solid rgba(255, 165, 31, 0.45);
+      outline-offset: 1px;
+    }
+
+    .cc-send-fab {
+      width: 44px;
+      height: 44px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: none;
+      background: var(--brand-black);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      touch-action: manipulation;
+    }
+
+    .cc-send-fab:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .cc-send-fab .cc-heroicon {
+      width: 1.35rem;
+      height: 1.35rem;
+    }
+
+    .cc-composer {
+      width: 100%;
+      min-height: 88px;
+      min-height: max(88px, 3.5rem);
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font-size: 1rem;
+      resize: none;
+      box-sizing: border-box;
+    }
+
+    .cc-order-summary {
+      margin-top: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--brand-border);
+      background: #fff;
+    }
+
+    .cc-order-summary .cc-in-thread-pay {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: none;
+    }
+
+    .cc-in-thread-pay {
+      margin-top: 8px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--brand-border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cc-in-thread-pay-note {
+      margin: 0;
+      font-size: 0.8rem;
+      line-height: 1.4;
+      color: var(--brand-gray);
+    }
+
+    .cc-btn-pay-hero {
+      width: 100%;
+      min-height: 44px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: none;
+      font-family: var(--font-ui);
+      font-weight: 800;
+      font-size: 1rem;
+      background: var(--brand-accent);
+      color: var(--brand-black);
+      cursor: pointer;
+      box-sizing: border-box;
+      touch-action: manipulation;
+    }
+
+    .cc-btn-pay-hero:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .cc-bottom-dock {
+      flex-shrink: 0;
+      background: var(--brand-cream);
+      border-top: 1px solid var(--brand-border);
+      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+      padding-bottom: max(0px, env(safe-area-inset-bottom));
+    }
+
+    .cc-footer {
+      background: #fff;
+      padding: 10px 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cc-footer-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .cc-btn {
+      min-height: 48px;
+      min-width: 44px;
+      padding: 0 18px;
+      border-radius: 10px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      touch-action: manipulation;
+    }
+
+    .cc-btn-primary {
+      background: var(--brand-black);
+      color: #fff;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .cc-btn-primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .cc-footer .cc-btn.cc-btn-tertiary {
+      background: transparent;
+      color: var(--brand-gray);
+      font-weight: 600;
+      font-size: 0.88rem;
+      min-height: 44px;
+      border: 1px dashed var(--brand-border);
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .cc-footer .cc-btn.cc-btn-tertiary:hover:not(:disabled) {
+      color: var(--brand-black);
+      border-color: var(--brand-gray);
+    }
+
+    .cc-link {
+      text-align: center;
+      color: var(--brand-gray);
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+
+    .cc-error {
+      color: #b91c1c;
+      font-size: 0.88rem;
+      margin: 0;
+    }
+
+    .cc-load-error {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      margin: 0 0 12px;
+      border-radius: 14px;
+      border: 1px solid var(--brand-border);
+      background: #fff;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    .cc-load-error .cc-heroicon {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      color: #b45309;
+      margin-top: 2px;
+    }
+
+    .cc-load-error-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cc-load-error-body p {
+      margin: 0 0 8px;
+      font-size: 0.9rem;
+      line-height: 1.45;
+      color: var(--brand-black);
+    }
+
+    .cc-load-error-body a {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--brand-black);
+    }
+
+    .cc-sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .cc-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      padding: 16px;
+    }
+
+    .cc-modal-overlay.is-open {
+      display: flex;
+    }
+
+    .cc-modal {
+      background: #fff;
+      border-radius: 16px;
+      max-width: 420px;
+      width: 90%;
+      padding: 20px;
+      box-sizing: border-box;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--brand-border);
+    }
+
+    .cc-modal-trust {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      background: var(--brand-cream);
+      border-radius: 10px;
+      border: 1px solid var(--brand-border);
+    }
+
+    .cc-pay-marks {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .cc-pay-mark {
+      height: 24px;
+      min-width: 38px;
+      padding: 0 8px;
+      border-radius: 4px;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .cc-pay-mark--visa {
+      background: #1a1f71;
+    }
+
+    .cc-pay-mark--mc {
+      background: #000;
+      font-size: 0.5rem;
+    }
+
+    .cc-pay-mark--amex {
+      background: #006fcf;
+      font-size: 0.55rem;
+    }
+
+    .cc-modal-trust-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--brand-gray);
+    }
+
+    .cc-modal-redirect-note {
+      font-size: 0.85rem;
+      color: var(--brand-gray);
+      margin: 0 0 14px;
+      line-height: 1.45;
+    }
+
+    .cc-modal h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .cc-line {
+      font-size: 0.95rem;
+      color: #374151;
+      margin: 8px 0;
+    }
+
+    .cc-total {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 12px 0;
+    }
+
+    .cc-input {
+      width: 100%;
+      min-height: 48px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 1rem;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+    }
+
+    .cc-btn-pay-modal-primary {
+      min-height: 48px !important;
+      background: #ffa51f !important;
+      color: var(--brand-black) !important;
+      font-weight: 800 !important;
+    }
+
+    .cc-btn-pay-modal-primary:disabled {
+      opacity: 0.55;
+    }
+
+    .cc-modal-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cc-btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .cc-sheet-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .cc-sheet-overlay.is-open {
+      display: flex;
+    }
+
+    .cc-sheet-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    .cc-sheet {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 640px;
+      max-height: min(72vh, 560px);
+      background: #fff;
+      border-radius: 16px 16px 0 0;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+      overflow-y: auto;
+    }
+
+    .cc-sheet-handle {
+      width: 40px;
+      height: 4px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      margin: 8px auto 12px;
+    }
+
+    .cc-sheet-title {
+      font-family: var(--font-ui);
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0 16px 8px;
+      color: var(--brand-black);
+    }
+
+    .cc-sheet-list {
+      padding: 0 8px 16px;
+    }
+
+    .cc-sheet-confirm {
+      padding: 8px 16px 20px;
+      border-top: 1px solid var(--brand-border);
+    }
+
+    .cc-sheet-confirm p {
+      margin: 0 0 12px;
+      font-size: 0.92rem;
+      line-height: 1.45;
+      color: var(--brand-black);
+    }
+
+    .cc-sheet-confirm-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .cc-sheet-confirm-actions button {
+      flex: 1;
+      min-height: 44px;
+      border-radius: 10px;
+      font-family: var(--font-ui);
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: 1px solid var(--brand-border);
+      background: #fff;
+      color: var(--brand-black);
+    }
+
+    .cc-sheet-confirm-actions .cc-sheet-confirm-primary {
+      background: var(--brand-accent);
+      border-color: transparent;
+      color: var(--brand-black);
+    }
+
+    .cc-sheet-skip-label {
+      font-size: 0.8rem;
+      color: var(--brand-gray);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    #ccBridgeOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      background: var(--brand-cream);
+      padding: 24px;
+      text-align: center;
+    }
+
+    #ccBridgeOverlay.is-visible {
+      display: flex;
+    }
+
+    #ccBridgeOverlay img {
+      width: 56px;
+      height: 56px;
+    }
+
+    #ccBridgeOverlay p {
+      margin: 0;
+      font-size: 0.95rem;
+      color: var(--brand-gray);
+      max-width: 280px;
+      line-height: 1.45;
+    }
+
+    .cc-chat-status-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 1.25em;
+    }
+
+    .cc-chat-status-row .cc-heroicon {
+      width: 1rem;
+      height: 1rem;
+      color: var(--brand-gray);
+      flex-shrink: 0;
+    }
+
+    .cc-sheet-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 64px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      box-sizing: border-box;
+    }
+
+    .cc-sheet-row:hover {
+      background: var(--brand-cream);
+    }
+
+    .cc-sheet-row.is-active {
+      box-shadow: inset 0 0 0 2px var(--brand-accent);
+      border-radius: 12px;
+    }
+
+    .cc-sheet-thumb {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: var(--brand-cream);
+      border: 1px solid var(--brand-border);
+      flex-shrink: 0;
+    }
+
+    .cc-sheet-row-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cc-sheet-row-name {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--brand-black);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .cc-sheet-row-price {
+      font-size: 0.82rem;
+      color: var(--brand-gray);
+      margin-top: 2px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .cc-picker-wrap {
+      margin-top: 10px;
+    }
+
+    .cc-picker-wrap label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--brand-gray);
+      margin-bottom: 4px;
+    }
+
+    .cc-picker {
+      width: 100%;
+      max-width: 420px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--brand-border);
+      background: #fff;
+      color: var(--brand-black);
+      font-size: 0.9rem;
+    }
+
+    /* Heroicons outline 24px — https://heroicons.com/ */
+    .cc-heroicon {
+      width: 1.5rem;
+      height: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .cc-btn-with-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .cc-picker-label-row {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-bottom: 4px;
+    }
+
+    .cc-modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .cc-modal-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cc-modal-close {
+      background: transparent;
+      border: none;
+      padding: 6px;
+      margin: -6px -6px 0 0;
+      cursor: pointer;
+      color: #6b7280;
+      border-radius: 8px;
+      line-height: 0;
+    }
+
+    .cc-modal-close:hover {
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .cc-link-with-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      min-height: 44px;
+      padding: 8px 4px;
+      box-sizing: border-box;
+    }
+
+    .cc-conversion-chip {
+      align-self: flex-start;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      font-size: 0.82rem;
+      color: #166534;
+    }
+
+    .cc-chip-btn {
+      font: inherit;
+      font-weight: 700;
+      color: var(--brand-black);
+      background: #fff;
+      border: 1px solid var(--brand-border);
+      border-radius: 999px;
+      padding: 8px 14px;
+      min-height: 44px;
+      cursor: pointer;
+    }
+
+    .cc-nudge-strip {
+      margin: 0 14px 8px;
+      max-width: 640px;
+      margin-left: auto;
+      margin-right: auto;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      font-size: 0.85rem;
+      color: #92400e;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      box-sizing: border-box;
+    }
+
+    .cc-nudge-strip.is-visible {
+      display: flex;
+    }
+
+    .cc-nudge-dismiss {
+      font: inherit;
+      font-weight: 700;
+      color: #78716c;
+      background: transparent;
+      border: none;
+      padding: 8px;
+      min-width: 44px;
+      min-height: 44px;
+      cursor: pointer;
+    }
+
+    .cc-why-price {
+      margin: 0 16px 12px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px dashed var(--brand-border);
+      background: #fff;
+      font-size: 0.82rem;
+      color: var(--brand-gray);
+      max-width: 640px;
+      box-sizing: border-box;
+    }
+
+    .cc-why-price-summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--brand-black);
+    }
+
+    .cc-why-price-body {
+      margin: 8px 0 0;
+      line-height: 1.45;
+    }
+
+    .cc-btn:focus-visible,
+    .cc-send-fab:focus-visible,
+    .cc-switch-pill:focus-visible,
+    .cc-chip-btn:focus-visible,
+    .cc-btn-pay-hero:focus-visible,
+    .cc-input:focus-visible,
+    .cc-modal-close:focus-visible,
+    .cc-link:focus-visible,
+    .cc-why-price-summary:focus-visible {
+      outline: 2px solid rgba(255, 165, 31, 0.95);
+      outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cc-price.cc-price--skeleton,
+      .cc-product-strip.is-loading .cc-product-strip-img,
+      .cc-product-strip.is-loading .cc-product-strip-text h1,
+      .cc-product-strip.is-loading .cc-product-strip-price:not(.cc-price--skeleton) {
+        animation: none !important;
+      }
+
+      .cc-typing-dots span {
+        animation: none !important;
+      }
+
+      .cc-price.cc-price--quoted-pulse {
+        animation: none !important;
+      }
+    }
+
+    @media (min-width: 480px) {
+      .cc-main-scroll {
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+    }
+  </style>
+</head>
+
+<body class="cc-body">
+  <header class="cc-header">
+    <div class="cc-header-bar">
+      <div class="cc-header-brand-block">
+        <span class="cc-wordmark">Skin &amp; Care</span>
+        <img class="cc-brand-panda" src="../assets/images/logo-panda.svg" width="32" height="32" alt="" />
+      </div>
+      <a class="cc-back-shop" id="backToShop" href="../littlelab-landing/public/index.html">Back to shop</a>
+    </div>
+    <div class="cc-product-strip" id="productStrip">
+      <img id="productStripImg" class="cc-product-strip-img" src="" alt="" width="64" height="64" hidden />
+      <div class="cc-product-strip-text">
+        <h1 id="productTitle">Loading…</h1>
+        <div id="productPrice" class="cc-price cc-product-strip-price" role="status" aria-live="polite" aria-atomic="true"></div>
+      </div>
+      <button type="button" id="btnProductSwitch" class="cc-switch-pill hidden" aria-haspopup="dialog" aria-expanded="false">
+        Switch
+      </button>
+    </div>
+    <details id="whyPriceDetails" class="cc-why-price" hidden>
+      <summary id="whyPriceSummary" class="cc-why-price-summary">Why this price?</summary>
+      <p id="whyPriceBody" class="cc-why-price-body"></p>
+    </details>
+    <div id="productPickerWrap" class="hidden" aria-hidden="true">
+      <label id="productPickerLabel" class="cc-sr-only" for="productPicker">Switch product</label>
+      <select id="productPicker" class="cc-picker cc-sr-only" aria-hidden="true" tabindex="-1" aria-label="Choose a product"></select>
+    </div>
+    <p id="sessionNote" class="hidden" style="margin:8px 16px 12px;font-size:0.8rem;color:var(--brand-gray);"></p>
+  </header>
+
+  <main class="cc-main-scroll">
+    <div id="loadErr" class="cc-load-error hidden" role="alert">
+      <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+      </svg>
+      <div class="cc-load-error-body">
+        <p id="loadErrText"></p>
+        <a id="loadErrShop" href="../littlelab-landing/public/index.html">Back to shop</a>
+      </div>
+    </div>
+    <section class="cc-chat" aria-label="Chat with Kelly">
+      <div class="cc-msg" id="sysMsg">
+        <strong>Kelly</strong> can help with this product, ingredients, and how it fits your routine. Your total is
+        always <strong>server-locked</strong> when you check out — no surprises. When you're ready, use
+        <em>Pay securely</em> in the chat (hero button), or <em>Pay without chat</em> at the bottom.
+      </div>
+      <div id="chatEmptyState" class="cc-chat-empty is-visible" aria-hidden="false">
+        <div class="cc-chat-empty-fig">
+          <img src="../assets/images/logo-panda.svg" width="40" height="40" alt="" />
+          <div class="cc-chat-empty-bottle" role="img" aria-label="Product"></div>
+          <svg class="cc-heroicon" style="opacity:0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m0 0v-.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125v-3.75zm0 0h7.5m-7.5 0H12" />
+          </svg>
+        </div>
+        <p id="chatEmptyCopy">Ask Kelly anything about this product — or tap Pay when you’re ready.</p>
+      </div>
+      <div id="chatLog" class="cc-chat-log" aria-live="polite" aria-relevant="additions"></div>
+      <div id="orderSummaryCard" class="cc-order-summary hidden">
+        <div id="inThreadPayWrap" class="cc-in-thread-pay hidden" aria-live="polite">
+          <p id="inThreadPayNote" class="cc-in-thread-pay-note"></p>
+          <button type="button" class="cc-btn-pay-hero" id="btnPayInThread" disabled></button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="cc-bottom-dock">
+    <div id="turnNudge" class="cc-nudge-strip" role="region" aria-label="Gentle reminder">
+      <span id="turnNudgeText"></span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button type="button" class="cc-btn cc-btn-primary" id="turnNudgeCta" style="min-height:44px;padding:0 14px;">
+          Continue
+        </button>
+        <button type="button" class="cc-nudge-dismiss" id="turnNudgeDismiss" aria-label="Dismiss">×</button>
+      </div>
+    </div>
+    <div class="cc-composer-wrap">
+      <label for="composer" class="hidden">Message to Kelly</label>
+      <div class="cc-composer-row">
+        <textarea id="composer" class="cc-composer-pill" placeholder="Ask Kelly about this product…" rows="1"></textarea>
+        <button type="button" class="cc-send-fab" id="btnSendChat" aria-label="Send to Kelly">
+          <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+            stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        </button>
+      </div>
+      <div style="margin-top:6px;text-align:center;">
+        <span id="chatStatusWrap" class="cc-chat-status-row" style="font-size:0.85rem;color:var(--brand-gray);justify-content:center;" role="status" aria-live="polite">
+          <svg id="chatStatusIcon" class="cc-heroicon hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          <span id="chatStatus"></span>
+        </span>
+      </div>
+      <span id="btnSendChatLabel" class="hidden">Send to Kelly</span>
+    </div>
+    <footer class="cc-footer">
+    <div class="cc-footer-row">
+      <button type="button" class="cc-btn cc-btn-tertiary cc-btn-with-icon" id="btnCheckout" disabled
+        aria-label="Pay without chat">
+        <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+          stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M16.5 10.5V6.75a4.5 4.5 0 00-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        </svg>
+        <span id="btnCheckoutLabel">Pay without chat</span>
+      </button>
+    </div>
+    <div class="cc-footer-row">
+      <a class="cc-link cc-link-with-icon" id="backProducts" href="/">
+        <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+          stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+        </svg>
+        <span id="backProductsLabel">Back to products</span>
+      </a>
+    </div>
+    </footer>
+  </div>
+
+  <div id="productSwitchSheet" class="cc-sheet-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="cc-sheet-backdrop" id="productSheetBackdrop" tabindex="-1"></div>
+    <div class="cc-sheet">
+      <div class="cc-sheet-handle" aria-hidden="true"></div>
+      <h2 id="sheetTitle" class="cc-sheet-title">Switch product</h2>
+      <div id="productSheetList" class="cc-sheet-list"></div>
+      <div id="productSwitchConfirm" class="cc-sheet-confirm hidden">
+        <p id="productSwitchConfirmText"></p>
+        <div class="cc-sheet-confirm-actions">
+          <button type="button" id="btnSwitchCancel">Cancel</button>
+          <button type="button" class="cc-sheet-confirm-primary" id="btnSwitchConfirm">Switch</button>
+        </div>
+        <label class="cc-sheet-skip-label">
+          <input type="checkbox" id="chkSkipSwitchConfirm" />
+          <span id="chkSkipSwitchConfirmLabel">Don’t ask again this session</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div id="payOverlay" class="cc-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="payTitle">
+    <div class="cc-modal">
+      <div class="cc-modal-head">
+        <h2 id="payTitle" class="cc-modal-title-row">
+          <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+            stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          <span id="payTitleText">Secure checkout</span>
+        </h2>
+        <button type="button" class="cc-modal-close" id="btnPayClose" aria-label="Close">
+          <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+            stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <p class="cc-line" id="payLineItem"></p>
+      <p class="cc-total" id="payTotal"></p>
+      <div class="cc-modal-trust" id="payTrustRow">
+        <div class="cc-pay-marks" aria-hidden="true">
+          <span class="cc-pay-mark cc-pay-mark--visa">VISA</span>
+          <span class="cc-pay-mark cc-pay-mark--mc">MC</span>
+          <span class="cc-pay-mark cc-pay-mark--amex">AMEX</span>
+        </div>
+        <div class="cc-modal-trust-line">
+          <svg class="cc-heroicon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+            stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+          </svg>
+          <span id="payTrustText">Stripe · Encrypted checkout</span>
+        </div>
+      </div>
+      <p id="payRedirectNote" class="cc-modal-redirect-note"></p>
+      <label for="payEmail">Email for receipt</label>
+      <input type="email" id="payEmail" class="cc-input" autocomplete="email" />
+      <p id="payErr" class="cc-error hidden"></p>
+      <div class="cc-modal-actions">
+        <button type="button" class="cc-btn cc-btn-primary cc-btn-pay-modal-primary cc-btn-with-icon" id="btnPayStripe" aria-label="Pay with Stripe">
+          <span id="btnPayStripeLabel">Pay with Stripe</span>
+        </button>
+        <button type="button" class="cc-btn cc-btn-secondary cc-btn-with-icon" id="btnPayCancel">
+          <span id="btnPayCancelLabel">Cancel</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="ccBridgeOverlay" aria-hidden="true">
+    <img src="../assets/images/logo-panda.svg" width="56" height="56" alt="" />
+    <p id="ccBridgeCopy">Taking you to Kelly…</p>
+  </div>
+
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      let currentProductId = params.get('product_id') || '';
+      let currentMerchantId = params.get('provider_id') || '';
+      const productNameHint = params.get('product_name') || '';
+      const checkoutSessionId = params.get('checkout_session_id') || '';
+
+      const API_BASE = window.API_BASE || 'http://localhost:4000';
+      const sid = localStorage.getItem('patient_session_id');
+
+      const elTitle = document.getElementById('productTitle');
+      const elPrice = document.getElementById('productPrice');
+      const elErr = document.getElementById('loadErr');
+      const elErrText = document.getElementById('loadErrText');
+      const elErrShop = document.getElementById('loadErrShop');
+      const elBtn = document.getElementById('btnCheckout');
+      const btnPay = document.getElementById('btnPayStripe');
+      const overlay = document.getElementById('payOverlay');
+      const payEmail = document.getElementById('payEmail');
+      const payErr = document.getElementById('payErr');
+      const payLineItem = document.getElementById('payLineItem');
+      const payTotal = document.getElementById('payTotal');
+      const payCancel = document.getElementById('btnPayCancel');
+      const sessionNote = document.getElementById('sessionNote');
+      const btnSendChat = document.getElementById('btnSendChat');
+      const chatStatus = document.getElementById('chatStatus');
+
+      /** Canonical copy: `../copy/checkout-kelly.json` — keep in sync if keys change. Use ASCII quotes only (no curly apostrophes) inside this script. */
+      const DEFAULT_KELLY_COPY = {
+        voiceNotes:
+          'Warm, confident, non-clinical — skincare specialist, not a doctor. Short by default.',
+        sysFirstTimeHtml:
+          '<strong>Kelly</strong> can help with this product, ingredients, and how it fits your routine. Your total is always <strong>server-locked</strong> when you check out — no surprises. When you\'re ready, use <em>Pay securely</em> in the chat (hero button), or <em>Pay without chat</em> at the bottom.',
+        sysReturningHtml:
+          '<strong>Welcome back.</strong> Ask Kelly anything about this pick, or head straight to checkout — your price is still confirmed on our servers.',
+        placeholderFirstTime: 'Ask Kelly about this product…',
+        placeholderReturning: 'Optional note for Kelly, or tap Continue when you\'re ready…',
+        sessionNoteCheckout: 'Picking up where you left off — prices stay server-locked.',
+        softNudges: [
+          'If you\'re ready, I can get this lined up for you.',
+          'Want me to pull your server-locked total?'
+        ],
+        statusThinking: 'Kelly is preparing…',
+        statusTypeFirst: 'Type a message first.',
+        statusProductLoading: 'Hang on — product is still loading.',
+        statusSignIn: 'Please sign in again.',
+        productSwitchAssistant: 'Switched — ask me anything, or continue when you\'re ready.',
+        fallbackReply: 'I\'m here — what would you like to know?',
+        errorConnectionAssistant:
+          'I couldn\'t reach the server just now. You can still use Pay without chat below — no rush.',
+        checkoutCta: 'Continue to secure checkout',
+        payWithoutChat: 'Pay without chat',
+        modalConfirmTitle: 'Confirm payment',
+        payTrustLine: 'Stripe · Encrypted checkout',
+        payRedirectNote: 'You\'ll complete card entry on our secure page.',
+        payHeroAria: 'Pay securely with Stripe',
+        backToShop: 'Back to shop',
+        chatEmptyHint:
+          'Ask Kelly anything about this product — or tap Pay when you\'re ready.',
+        modalTitle: 'Secure checkout',
+        payWithStripe: 'Pay with Stripe',
+        cancel: 'Cancel',
+        backToProducts: 'Back to products',
+        emailRequired: 'Add your email for the receipt.',
+        sendToKelly: 'Send to Kelly',
+        pickerLabel: 'Switch product',
+        chipReadyCheckout: 'Ready to check out?',
+        nudgeAfterTurns:
+          'Still browsing? Your total stays server-locked — tap Continue when you\'re ready.',
+        priceUpdating: 'Updating price…',
+        typingIndicator: 'Kelly is preparing…',
+        chipCheckoutCta: 'Continue',
+        bridgeMessage: 'Taking you to Kelly…',
+        switchConfirmLead: 'Switch to ',
+        skipSwitchConfirmLabel: 'Don\'t ask again this session',
+        whyPriceSummary: 'Why this price?',
+        whyPriceBody:
+          'Your total is server-locked at checkout — the number Kelly quotes matches what you pay through Stripe.'
+      };
+
+      let KELLY_COPY = DEFAULT_KELLY_COPY;
+
+      (function runBridgeHandoff() {
+        try {
+          if (params.get('bridge') === '1') {
+            const overlay = document.getElementById('ccBridgeOverlay');
+            if (overlay) {
+              overlay.classList.add('is-visible');
+              overlay.setAttribute('aria-hidden', 'false');
+              window.setTimeout(function () {
+                overlay.classList.remove('is-visible');
+                overlay.setAttribute('aria-hidden', 'true');
+                const u = new URL(window.location.href);
+                u.searchParams.delete('bridge');
+                window.history.replaceState({}, '', u.toString());
+              }, 900);
+            }
+          }
+        } catch (_) {}
+      })();
+
+      function kellyCopy(key) {
+        const v = KELLY_COPY && KELLY_COPY[key];
+        return v != null && v !== '' ? v : DEFAULT_KELLY_COPY[key];
+      }
+      /** First paint vs returning — frozen so a later `checkout-kelly.json` fetch does not flip the variant. */
+      let kellyReturningVariant = null;
+
+      function applyKellyCopy(copy) {
+        const sysMsgEl = document.getElementById('sysMsg');
+        const composerEl = document.getElementById('composer');
+        const seenKey = 'doclittle_checkout_chat_seen';
+        let returning;
+        if (kellyReturningVariant !== null) {
+          returning = kellyReturningVariant;
+        } else {
+          returning = localStorage.getItem(seenKey) === '1';
+          kellyReturningVariant = returning;
+          localStorage.setItem(seenKey, '1');
+        }
+        if (sysMsgEl) {
+          sysMsgEl.innerHTML = returning ? copy.sysReturningHtml : copy.sysFirstTimeHtml;
+        }
+        if (composerEl) {
+          composerEl.setAttribute(
+            'placeholder',
+            returning ? copy.placeholderReturning : copy.placeholderFirstTime
+          );
+        }
+        const pl = document.getElementById('productPickerLabel');
+        if (pl && copy.pickerLabel) pl.textContent = copy.pickerLabel;
+        const sendLbl = document.getElementById('btnSendChatLabel');
+        if (sendLbl && copy.sendToKelly) sendLbl.textContent = copy.sendToKelly;
+        const sendFab = document.getElementById('btnSendChat');
+        if (sendFab && copy.sendToKelly) sendFab.setAttribute('aria-label', copy.sendToKelly);
+        const sheetTitleEl = document.getElementById('sheetTitle');
+        if (sheetTitleEl && copy.pickerLabel) sheetTitleEl.textContent = copy.pickerLabel;
+        const chkLbl = document.getElementById('btnCheckoutLabel');
+        if (chkLbl && copy.payWithoutChat) chkLbl.textContent = copy.payWithoutChat;
+        const btnChk = document.getElementById('btnCheckout');
+        if (btnChk && copy.payWithoutChat) btnChk.setAttribute('aria-label', copy.payWithoutChat);
+        const payTitleText = document.getElementById('payTitleText');
+        if (payTitleText && copy.modalConfirmTitle) payTitleText.textContent = copy.modalConfirmTitle;
+        const payTrustEl = document.getElementById('payTrustText');
+        if (payTrustEl && copy.payTrustLine) payTrustEl.textContent = copy.payTrustLine;
+        const payRedirEl = document.getElementById('payRedirectNote');
+        if (payRedirEl && copy.payRedirectNote) payRedirEl.textContent = copy.payRedirectNote;
+        const bts = document.getElementById('backToShop');
+        if (bts && copy.backToShop) bts.textContent = copy.backToShop;
+        if (bts && typeof window.LANDING_BASE === 'string' && window.LANDING_BASE) {
+          bts.href = window.LANDING_BASE;
+        }
+        const chatEmptyEl = document.getElementById('chatEmptyCopy');
+        if (chatEmptyEl && copy.chatEmptyHint) chatEmptyEl.textContent = copy.chatEmptyHint;
+        const payStripeLbl = document.getElementById('btnPayStripeLabel');
+        if (payStripeLbl && copy.payWithStripe) payStripeLbl.textContent = copy.payWithStripe;
+        const payStripeBtn = document.getElementById('btnPayStripe');
+        if (payStripeBtn && copy.payWithStripe) payStripeBtn.setAttribute('aria-label', copy.payWithStripe);
+        const payCancelLbl = document.getElementById('btnPayCancelLabel');
+        if (payCancelLbl && copy.cancel) payCancelLbl.textContent = copy.cancel;
+        const backLbl = document.getElementById('backProductsLabel');
+        if (backLbl && copy.backToProducts) backLbl.textContent = copy.backToProducts;
+        const nudgeTxt = document.getElementById('turnNudgeText');
+        if (nudgeTxt && copy.nudgeAfterTurns) nudgeTxt.textContent = copy.nudgeAfterTurns;
+        const bridgeEl = document.getElementById('ccBridgeCopy');
+        if (bridgeEl && copy.bridgeMessage) bridgeEl.textContent = copy.bridgeMessage;
+        const skipSwitchLbl = document.getElementById('chkSkipSwitchConfirmLabel');
+        if (skipSwitchLbl && copy.skipSwitchConfirmLabel) {
+          skipSwitchLbl.textContent = copy.skipSwitchConfirmLabel;
+        }
+        const errShopA = document.getElementById('loadErrShop');
+        if (errShopA && copy.backToShop) errShopA.textContent = copy.backToShop;
+        if (errShopA && typeof window.LANDING_BASE === 'string' && window.LANDING_BASE) {
+          errShopA.href = window.LANDING_BASE;
+        }
+        const whySum = document.getElementById('whyPriceSummary');
+        const whyBody = document.getElementById('whyPriceBody');
+        if (whySum && copy.whyPriceSummary) whySum.textContent = copy.whyPriceSummary;
+        if (whyBody && copy.whyPriceBody) whyBody.textContent = copy.whyPriceBody;
+        try {
+          updateChatEmptyState();
+        } catch (_) {}
+      }
+
+      (async function refreshKellyCopyFromFile() {
+        try {
+          const url = new URL('../copy/checkout-kelly.json', window.location.href).href;
+          const r = await fetch(url, { cache: 'no-store' });
+          if (r.ok) {
+            const j = await r.json();
+            KELLY_COPY = Object.assign({}, DEFAULT_KELLY_COPY, j);
+            applyKellyCopy(KELLY_COPY);
+          }
+        } catch (_) {}
+      })();
+
+      applyKellyCopy(KELLY_COPY);
+
+      let product = null;
+      let merchantId = currentMerchantId || '';
+      let quoteId = '';
+      let kellySessionId = '';
+      let catalogProducts = [];
+      let userTurnCount = 0;
+      let agenticPrimaryEmitted = false;
+      let checkoutIntent = false;
+      let lastQuotedAmount = null;
+      let lastQuotedCurrency = 'USD';
+
+      function updateInThreadPayUI() {
+        const wrap = document.getElementById('inThreadPayWrap');
+        const btn = document.getElementById('btnPayInThread');
+        const note = document.getElementById('inThreadPayNote');
+        const orderCard = document.getElementById('orderSummaryCard');
+        if (!wrap || !btn) return;
+        if (note) note.textContent = kellyCopy('payRedirectNote');
+        var displayAmt = null;
+        if (lastQuotedAmount != null && Number.isFinite(Number(lastQuotedAmount))) {
+          displayAmt = Number(lastQuotedAmount);
+        } else if (product && Number.isFinite(Number(product.price))) {
+          displayAmt = Number(product.price);
+        }
+        var ready = Boolean(product && quoteId && displayAmt != null);
+        if (ready) {
+          if (orderCard) orderCard.classList.remove('hidden');
+          wrap.classList.remove('hidden');
+          btn.disabled = false;
+          btn.textContent = 'Pay $' + displayAmt.toFixed(2) + ' securely';
+          btn.setAttribute(
+            'aria-label',
+            (kellyCopy('payHeroAria') || 'Pay securely') + ' — $' + displayAmt.toFixed(2)
+          );
+        } else {
+          if (orderCard) orderCard.classList.add('hidden');
+          wrap.classList.add('hidden');
+          btn.disabled = true;
+          btn.textContent = 'Pay securely';
+        }
+      }
+
+      function focusPrimaryCheckoutControl() {
+        var hero = document.getElementById('btnPayInThread');
+        var wrap = document.getElementById('inThreadPayWrap');
+        if (hero && wrap && !wrap.classList.contains('hidden') && !hero.disabled) {
+          try {
+            hero.focus();
+          } catch (_) {}
+          return;
+        }
+        try {
+          elBtn.focus();
+        } catch (_) {}
+      }
+
+      function openPayConfirmationModal() {
+        if (!product) return;
+        checkoutIntent = true;
+        hideTurnNudgeStrip();
+        payLineItem.textContent = (product.name || 'Item') + ' × 1';
+        var displayAmt = null;
+        if (lastQuotedAmount != null && Number.isFinite(Number(lastQuotedAmount))) {
+          displayAmt = Number(lastQuotedAmount);
+        } else if (Number.isFinite(Number(product.price))) {
+          displayAmt = Number(product.price);
+        }
+        payTotal.textContent =
+          displayAmt != null
+            ? 'Total due: $' + displayAmt.toFixed(2) + ' ' + (lastQuotedCurrency || 'USD')
+            : 'Total confirmed at payment';
+        payErr.classList.add('hidden');
+        overlay.classList.add('is-open');
+        setTimeout(function () {
+          try {
+            payEmail.focus();
+          } catch (_) {}
+        }, 0);
+      }
+
+      function nudgeStorageKey() {
+        return 'checkout_nudge_last_' + String(currentProductId || 'unknown');
+      }
+
+      function canShowTurnNudge() {
+        try {
+          const raw = localStorage.getItem(nudgeStorageKey());
+          if (!raw) return true;
+          const last = parseInt(raw, 10);
+          if (!Number.isFinite(last)) return true;
+          return Date.now() - last > 24 * 60 * 60 * 1000;
+        } catch (_) {
+          return true;
+        }
+      }
+
+      function markTurnNudgeShown() {
+        try {
+          localStorage.setItem(nudgeStorageKey(), String(Date.now()));
+        } catch (_) {}
+      }
+
+      function setPriceLoading(loading) {
+        if (!elPrice) return;
+        if (loading) {
+          if (elPrice.dataset.prevBackup == null) {
+            elPrice.dataset.prevBackup = elPrice.textContent || '';
+          }
+          elPrice.textContent = kellyCopy('priceUpdating');
+          elPrice.classList.add('cc-price--skeleton');
+          elPrice.setAttribute('aria-busy', 'true');
+        } else {
+          elPrice.classList.remove('cc-price--skeleton');
+          elPrice.removeAttribute('aria-busy');
+        }
+      }
+
+      function restorePriceFromBackup() {
+        if (elPrice && elPrice.dataset.prevBackup != null) {
+          elPrice.textContent = elPrice.dataset.prevBackup;
+          delete elPrice.dataset.prevBackup;
+        }
+      }
+
+      function clearPriceBackup() {
+        if (elPrice && elPrice.dataset.prevBackup != null) {
+          delete elPrice.dataset.prevBackup;
+        }
+      }
+
+      function pulseQuotedPrice() {
+        if (!elPrice) return;
+        elPrice.classList.add('cc-price--highlight');
+        elPrice.classList.add('cc-price--quoted-pulse');
+        window.setTimeout(function () {
+          if (elPrice) elPrice.classList.remove('cc-price--quoted-pulse');
+        }, 1400);
+      }
+
+      function removeTypingIndicator() {
+        const t = document.getElementById('ccTypingIndicator');
+        if (t) t.remove();
+      }
+
+      function showTypingIndicator() {
+        removeTypingIndicator();
+        const log = document.getElementById('chatLog');
+        if (!log) return;
+        const row = document.createElement('div');
+        row.id = 'ccTypingIndicator';
+        row.className = 'cc-typing-row';
+        row.setAttribute('aria-live', 'polite');
+        const dots = document.createElement('span');
+        dots.className = 'cc-typing-dots';
+        dots.setAttribute('aria-hidden', 'true');
+        for (let i = 0; i < 3; i++) {
+          dots.appendChild(document.createElement('span'));
+        }
+        const lab = document.createElement('span');
+        lab.textContent = kellyCopy('typingIndicator');
+        row.appendChild(dots);
+        row.appendChild(lab);
+        log.appendChild(row);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function queueTypingIndicator() {
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(function () {
+            window.requestAnimationFrame(showTypingIndicator);
+          });
+        } else {
+          window.setTimeout(showTypingIndicator, 0);
+        }
+      }
+
+      function maybeShowConversionChip(assistantText) {
+        if (checkoutIntent) return;
+        const s = String(assistantText || '').trim();
+        if (s.length < 24) return;
+        const log = document.getElementById('chatLog');
+        if (!log) return;
+        const old = document.getElementById('lastConversionChip');
+        if (old) old.remove();
+        const wrap = document.createElement('div');
+        wrap.id = 'lastConversionChip';
+        wrap.className = 'cc-conversion-chip';
+        const line = document.createElement('span');
+        line.textContent = kellyCopy('chipReadyCheckout');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'cc-chip-btn';
+        btn.textContent = kellyCopy('chipCheckoutCta') || 'Continue';
+        btn.addEventListener('click', function () {
+          checkoutIntent = true;
+          var hero = document.getElementById('btnPayInThread');
+          var wrap = document.getElementById('inThreadPayWrap');
+          if (hero && wrap && !wrap.classList.contains('hidden') && !hero.disabled) {
+            try {
+              hero.focus();
+            } catch (_) {}
+            hero.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            return;
+          }
+          try {
+            elBtn.focus();
+          } catch (_) {}
+          elBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+        wrap.appendChild(line);
+        wrap.appendChild(btn);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function maybeShowTurnNudgeStrip() {
+        if (checkoutIntent || userTurnCount < 2) return;
+        if (!canShowTurnNudge()) return;
+        const strip = document.getElementById('turnNudge');
+        if (!strip || strip.classList.contains('is-visible')) return;
+        strip.classList.add('is-visible');
+        markTurnNudgeShown();
+        emitFunnelEvent('checkout_turn_nudge_shown', { product_id: currentProductId });
+      }
+
+      function hideTurnNudgeStrip() {
+        const strip = document.getElementById('turnNudge');
+        if (strip) strip.classList.remove('is-visible');
+      }
+
+      function emitFunnelEvent(name, detail) {
+        try {
+          if (typeof window !== 'undefined' && Array.isArray(window.dataLayer)) {
+            window.dataLayer.push({ event: name, ...(detail || {}) });
+          }
+          window.dispatchEvent(new CustomEvent('checkout-funnel', { detail: { name: name, ...(detail || {}) } }));
+        } catch (_) {}
+      }
+
+      if (currentProductId) {
+        emitFunnelEvent('checkout_chat_open', {
+          product_id: currentProductId,
+          provider_id: currentMerchantId || undefined
+        });
+      }
+
+      function showErr(msg) {
+        if (elErrText) elErrText.textContent = msg;
+        if (elErrShop) {
+          elErrShop.textContent = kellyCopy('backToShop') || 'Back to shop';
+          if (typeof window.LANDING_BASE === 'string' && window.LANDING_BASE) {
+            elErrShop.href = window.LANDING_BASE;
+          } else {
+            elErrShop.href = '../littlelab-landing/public/index.html';
+          }
+        }
+        if (elErr) elErr.classList.remove('hidden');
+      }
+
+      function appendAssistantErrorCard(text) {
+        const log = document.getElementById('chatLog');
+        if (!log) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'cc-msg-error-card';
+        wrap.setAttribute('role', 'alert');
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'cc-heroicon');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke-width', '1.5');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('aria-hidden', 'true');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        path.setAttribute(
+          'd',
+          'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z'
+        );
+        svg.appendChild(path);
+        const p = document.createElement('p');
+        p.textContent = text;
+        wrap.appendChild(svg);
+        wrap.appendChild(p);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+        updateChatEmptyState();
+      }
+
+      function skipProductSwitchConfirm() {
+        try {
+          return sessionStorage.getItem('cc_skip_product_switch_confirm') === '1';
+        } catch (_) {
+          return false;
+        }
+      }
+
+      let pendingSwitchProduct = null;
+
+      function requestSwitchProduct(p) {
+        if (!p) return;
+        if (String(p.id) === String(currentProductId)) {
+          closeProductSheet();
+          return;
+        }
+        if (skipProductSwitchConfirm()) {
+          switchProduct(String(p.id));
+          closeProductSheet();
+          return;
+        }
+        pendingSwitchProduct = p;
+        const confirmText = document.getElementById('productSwitchConfirmText');
+        const nm = p.name || p.title || p.id;
+        if (confirmText) {
+          confirmText.textContent = (kellyCopy('switchConfirmLead') || 'Switch to ') + nm + '?';
+        }
+        const list = document.getElementById('productSheetList');
+        const conf = document.getElementById('productSwitchConfirm');
+        if (list) list.classList.add('hidden');
+        if (conf) conf.classList.remove('hidden');
+      }
+
+      if (checkoutSessionId && sessionNote) {
+        sessionNote.textContent = KELLY_COPY.sessionNoteCheckout;
+        sessionNote.classList.remove('hidden');
+      }
+
+      function sessionChatSessionKey() {
+        return 'checkout_kelly_session_' + (currentProductId || 'unknown');
+      }
+
+      function ensureKellySessionId() {
+        if (kellySessionId) return kellySessionId;
+        try {
+          const k = sessionChatSessionKey();
+          let ls = localStorage.getItem(k);
+          if (!ls) {
+            ls =
+              (typeof crypto !== 'undefined' && crypto.randomUUID && crypto.randomUUID()) ||
+              'cc-' + String(Date.now()) + '-' + Math.random().toString(36).slice(2, 10);
+            localStorage.setItem(k, ls);
+          }
+          kellySessionId = ls;
+        } catch (_) {
+          kellySessionId = 'cc-' + String(Date.now());
+        }
+        return kellySessionId;
+      }
+
+      function updateChatEmptyState() {
+        const log = document.getElementById('chatLog');
+        const empty = document.getElementById('chatEmptyState');
+        const sysMsg = document.getElementById('sysMsg');
+        if (!log || !empty) return;
+        const hasSys =
+          sysMsg &&
+          String(sysMsg.textContent || '')
+            .replace(/\s+/g, ' ')
+            .trim().length > 0;
+        const n = log.querySelectorAll('.cc-msg').length;
+        if (n === 0 && !hasSys) {
+          empty.classList.add('is-visible');
+          empty.setAttribute('aria-hidden', 'false');
+        } else {
+          empty.classList.remove('is-visible');
+          empty.setAttribute('aria-hidden', 'true');
+        }
+      }
+
+      function appendChatBubble(role, text) {
+        const log = document.getElementById('chatLog');
+        if (!log) return;
+        const div = document.createElement('div');
+        div.className =
+          'cc-msg ' + (role === 'user' ? 'cc-msg-user' : 'cc-msg-assistant');
+        div.textContent = text;
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+        updateChatEmptyState();
+      }
+
+      function clearChatLog() {
+        const log = document.getElementById('chatLog');
+        if (log) log.innerHTML = '';
+        updateChatEmptyState();
+      }
+
+      function resetKellySessionForProductSwitch() {
+        try {
+          localStorage.removeItem(sessionChatSessionKey());
+        } catch (_) {}
+        kellySessionId = '';
+      }
+
+      function productImageUrl(p) {
+        if (!p) return '';
+        return p.image_url || p.image_link || p.image || '';
+      }
+
+      function updateProductStripImage(p) {
+        const img = document.getElementById('productStripImg');
+        if (!img) return;
+        const u = productImageUrl(p);
+        if (u) {
+          img.src = u;
+          img.hidden = false;
+          img.alt = (p && (p.name || p.title)) || 'Product';
+        } else {
+          img.removeAttribute('src');
+          img.hidden = true;
+          img.alt = '';
+        }
+      }
+
+      function buildProductSheet(list) {
+        const sheetList = document.getElementById('productSheetList');
+        if (!sheetList) return;
+        sheetList.innerHTML = '';
+        if (!list || !list.length) return;
+        list.forEach(function (p) {
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'cc-sheet-row';
+          if (String(p.id) === String(currentProductId)) row.classList.add('is-active');
+          const iu = productImageUrl(p);
+          var thumb = null;
+          if (iu) {
+            thumb = document.createElement('img');
+            thumb.className = 'cc-sheet-thumb';
+            thumb.src = iu;
+            thumb.alt = '';
+          } else {
+            thumb = document.createElement('div');
+            thumb.className = 'cc-sheet-thumb';
+            thumb.setAttribute('aria-hidden', 'true');
+          }
+          const tx = document.createElement('div');
+          tx.className = 'cc-sheet-row-text';
+          const nm = document.createElement('div');
+          nm.className = 'cc-sheet-row-name';
+          nm.textContent = p.name || p.title || p.id;
+          const prEl = document.createElement('div');
+          prEl.className = 'cc-sheet-row-price';
+          const pr = Number(p.price);
+          prEl.textContent = Number.isFinite(pr) ? '$' + pr.toFixed(2) + ' USD' : '';
+          tx.appendChild(nm);
+          tx.appendChild(prEl);
+          row.appendChild(thumb);
+          row.appendChild(tx);
+          row.addEventListener('click', function () {
+            requestSwitchProduct(p);
+          });
+          sheetList.appendChild(row);
+        });
+      }
+
+      function openProductSheet() {
+        const sheet = document.getElementById('productSwitchSheet');
+        const btn = document.getElementById('btnProductSwitch');
+        const list = document.getElementById('productSheetList');
+        const conf = document.getElementById('productSwitchConfirm');
+        pendingSwitchProduct = null;
+        if (list) list.classList.remove('hidden');
+        if (conf) conf.classList.add('hidden');
+        if (sheet) {
+          sheet.classList.remove('hidden');
+          sheet.classList.add('is-open');
+        }
+        if (btn) btn.setAttribute('aria-expanded', 'true');
+      }
+
+      function closeProductSheet() {
+        const sheet = document.getElementById('productSwitchSheet');
+        const btn = document.getElementById('btnProductSwitch');
+        const list = document.getElementById('productSheetList');
+        const conf = document.getElementById('productSwitchConfirm');
+        pendingSwitchProduct = null;
+        if (list) list.classList.remove('hidden');
+        if (conf) conf.classList.add('hidden');
+        if (sheet) {
+          sheet.classList.add('hidden');
+          sheet.classList.remove('is-open');
+        }
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+
+      function populateProductPicker(list) {
+        if (!list || !list.length) return;
+        catalogProducts = list;
+        const wrap = document.getElementById('productPickerWrap');
+        const sel = document.getElementById('productPicker');
+        const btnSw = document.getElementById('btnProductSwitch');
+        if (!wrap || !sel) return;
+        sel.innerHTML = '';
+        list.forEach(function (p) {
+          const o = document.createElement('option');
+          o.value = String(p.id);
+          const pr = Number(p.price);
+          o.textContent =
+            (p.name || p.id) + (Number.isFinite(pr) ? ' — $' + pr.toFixed(2) : '');
+          if (String(p.id) === String(currentProductId)) o.selected = true;
+          sel.appendChild(o);
+        });
+        if (btnSw) {
+          if (list.length > 1) btnSw.classList.remove('hidden');
+          else btnSw.classList.add('hidden');
+        }
+        buildProductSheet(list);
+      }
+
+      function switchProduct(newId) {
+        const p = catalogProducts.find(function (x) {
+          return String(x.id) === String(newId);
+        });
+        if (!p) return;
+        currentProductId = String(p.id);
+        currentMerchantId = String(p.merchant_id || currentMerchantId || merchantId);
+        merchantId = p.merchant_id || merchantId;
+        product = p;
+        elTitle.textContent = p.name || productNameHint || 'Product';
+        const price = Number(p.price);
+        elPrice.textContent =
+          Number.isFinite(price) ? 'Server price: $' + price.toFixed(2) + ' USD' : 'See checkout for price';
+        updateProductStripImage(p);
+        userTurnCount = 0;
+        checkoutIntent = false;
+        lastQuotedAmount = null;
+        hideTurnNudgeStrip();
+        resetKellySessionForProductSwitch();
+        clearChatLog();
+        appendChatBubble('assistant', kellyCopy('productSwitchAssistant'));
+        emitFunnelEvent('checkout_product_switch', { product_id: currentProductId });
+        fetchQuote();
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.set('product_id', currentProductId);
+          if (merchantId) u.searchParams.set('provider_id', merchantId);
+          window.history.replaceState({}, '', u.toString());
+        } catch (_) {}
+        const selPick = document.getElementById('productPicker');
+        if (selPick) selPick.value = currentProductId;
+        buildProductSheet(catalogProducts);
+      }
+
+      async function loadIntakeEmail() {
+        try {
+          const r = await fetch(API_BASE + '/api/patient/intake', {
+            headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+          });
+          const d = await r.json();
+          const em = d && d.intake && d.intake.email;
+          if (em) payEmail.value = em;
+        } catch (_) {}
+      }
+
+      async function loadProduct() {
+        const productStrip = document.getElementById('productStrip');
+        if (productStrip) productStrip.classList.add('is-loading');
+        if (!currentProductId) {
+          if (productStrip) productStrip.classList.remove('is-loading');
+          showErr('Missing product_id. Open this page from the shop or your link.');
+          return;
+        }
+        try {
+          const q = new URLSearchParams();
+          if (merchantId) q.set('provider_id', merchantId);
+          const url = API_BASE + '/api/public/products?' + q.toString();
+          const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            if (productStrip) productStrip.classList.remove('is-loading');
+            showErr((data && data.error) || 'Could not load catalog');
+            return;
+          }
+          const list = data.products || data.prescriptions || [];
+          populateProductPicker(list);
+          product = list.find(function (p) {
+            return String(p.id) === String(currentProductId);
+          });
+          if (!product) {
+            if (productStrip) productStrip.classList.remove('is-loading');
+            elTitle.textContent = productNameHint || 'Product';
+            elPrice.textContent = 'Price unavailable — try again from the shop.';
+            elBtn.disabled = true;
+            showErr('Product not found for this merchant.');
+            return;
+          }
+          merchantId = product.merchant_id || merchantId;
+          currentMerchantId = merchantId;
+          elTitle.textContent = product.name || productNameHint || 'Product';
+          const price = Number(product.price);
+          elPrice.textContent =
+            Number.isFinite(price) ? 'Server price: $' + price.toFixed(2) + ' USD' : 'See checkout for price';
+          updateProductStripImage(product);
+          elBtn.disabled = false;
+          if (productStrip) productStrip.classList.remove('is-loading');
+          fetchQuote();
+        } catch (e) {
+          if (productStrip) productStrip.classList.remove('is-loading');
+          showErr(e.message || 'Network error');
+        }
+      }
+
+      async function fetchQuote() {
+        if (!currentProductId || !merchantId || !product) return;
+        var whyDetails = document.getElementById('whyPriceDetails');
+        if (whyDetails) whyDetails.hidden = true;
+        setPriceLoading(true);
+        try {
+          const res = await fetch(API_BASE + '/api/public/commerce/quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
+            body: JSON.stringify({
+              product_id: currentProductId,
+              prescription_id: currentProductId,
+              provider_id: merchantId,
+              quantity: 1,
+              kelly_session_id: ensureKellySessionId()
+            })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success || !data.quote_id) {
+            restorePriceFromBackup();
+            setPriceLoading(false);
+            lastQuotedAmount = null;
+            updateInThreadPayUI();
+            if (whyDetails) whyDetails.hidden = true;
+            return;
+          }
+          quoteId = data.quote_id;
+          setPriceLoading(false);
+          if (Number.isFinite(Number(data.amount))) {
+            lastQuotedAmount = Number(data.amount);
+            lastQuotedCurrency = data.currency || 'USD';
+            clearPriceBackup();
+            elPrice.textContent =
+              'Quoted price: $' + Number(data.amount).toFixed(2) + ' ' + (data.currency || 'USD') + ' (server-locked)';
+            pulseQuotedPrice();
+            if (whyDetails) whyDetails.hidden = false;
+          } else {
+            lastQuotedAmount = null;
+            restorePriceFromBackup();
+            if (whyDetails) whyDetails.hidden = true;
+          }
+          updateInThreadPayUI();
+          emitFunnelEvent('quote_shown', { product_id: currentProductId, quote_id: quoteId });
+        } catch (_) {
+          restorePriceFromBackup();
+          setPriceLoading(false);
+          lastQuotedAmount = null;
+          updateInThreadPayUI();
+          if (whyDetails) whyDetails.hidden = true;
+        }
+      }
+
+      if (sid) loadIntakeEmail();
+      loadProduct();
+      updateChatEmptyState();
+
+      function setComposerStatus(text, mode) {
+        const statusEl = document.getElementById('chatStatus');
+        const icon = document.getElementById('chatStatusIcon');
+        const wrap = document.getElementById('chatStatusWrap');
+        if (statusEl) statusEl.textContent = text || '';
+        if (icon) {
+          if (mode === 'tool') {
+            icon.classList.remove('hidden');
+          } else {
+            icon.classList.add('hidden');
+          }
+        }
+        if (wrap) {
+          wrap.style.color = mode === 'error' ? '#b45309' : '';
+        }
+      }
+
+      async function sendKellyMessage() {
+        let assistantEl = null;
+        const composerEl = document.getElementById('composer');
+        const text = (composerEl && composerEl.value) || '';
+        const t = String(text).trim();
+        if (!t) {
+          if (chatStatus) chatStatus.textContent = KELLY_COPY.statusTypeFirst;
+          return;
+        }
+        if (!currentProductId || !merchantId) {
+          if (chatStatus) chatStatus.textContent = KELLY_COPY.statusProductLoading;
+          return;
+        }
+        if (!sid) {
+          if (chatStatus) chatStatus.textContent = KELLY_COPY.statusSignIn;
+          return;
+        }
+        userTurnCount += 1;
+        if (userTurnCount === 1 && !agenticPrimaryEmitted) {
+          agenticPrimaryEmitted = true;
+          emitFunnelEvent('agentic_primary', {
+            product_id: currentProductId,
+            provider_id: merchantId || undefined
+          });
+        }
+        appendChatBubble('user', t);
+        composerEl.value = '';
+        queueTypingIndicator();
+        setComposerStatus('', '');
+        if (btnSendChat) btnSendChat.disabled = true;
+        const ctrl = new AbortController();
+        const to = setTimeout(function () {
+          ctrl.abort();
+        }, 120000);
+        try {
+          assistantEl = null;
+          const res = await fetch(API_BASE + '/api/patient/checkout-chat/turn/stream', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-session-id': sid,
+              'ngrok-skip-browser-warning': 'true',
+              Accept: 'text/event-stream'
+            },
+            body: JSON.stringify({
+              message: t,
+              product_id: currentProductId,
+              provider_id: merchantId,
+              session_id: ensureKellySessionId()
+            }),
+            signal: ctrl.signal
+          });
+          clearTimeout(to);
+          if (!res.ok) {
+            throw new Error('Chat request failed (' + res.status + ')');
+          }
+          const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+          if (!reader) {
+            throw new Error('Streaming not supported in this browser.');
+          }
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let donePayload = null;
+          let doneHandled = false;
+          while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            buffer += decoder.decode(chunk.value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() || '';
+            for (let i = 0; i < parts.length; i++) {
+              const line = parts[i].trim();
+              if (!line.startsWith('data:')) continue;
+              const jsonStr = line.replace(/^data:\s*/, '');
+              let d;
+              try {
+                d = JSON.parse(jsonStr);
+              } catch (_) {
+                continue;
+              }
+              if (d.type === 'tool_status' && d.text) {
+                removeTypingIndicator();
+                setComposerStatus(String(d.text), 'tool');
+              }
+              if (d.type === 'delta' && d.text) {
+                removeTypingIndicator();
+                setComposerStatus('', '');
+                if (!assistantEl) {
+                  assistantEl = document.createElement('div');
+                  assistantEl.className = 'cc-msg cc-msg-assistant cc-msg-streaming';
+                  assistantEl.textContent = '';
+                  const log = document.getElementById('chatLog');
+                  if (log) {
+                    log.appendChild(assistantEl);
+                    log.scrollTop = log.scrollHeight;
+                  }
+                }
+                assistantEl.textContent += d.text;
+                const log2 = document.getElementById('chatLog');
+                if (log2) log2.scrollTop = log2.scrollHeight;
+              }
+              if (d.type === 'done') {
+                if (doneHandled) continue;
+                doneHandled = true;
+                donePayload = d;
+                if (assistantEl && d.reply && !assistantEl.textContent.trim()) {
+                  assistantEl.textContent = String(d.reply).trim();
+                }
+                if (!assistantEl && d.reply) {
+                  appendChatBubble('assistant', String(d.reply).trim());
+                }
+              }
+              if (d.type === 'error') {
+                throw new Error(d.error || 'Stream error');
+              }
+            }
+          }
+          removeTypingIndicator();
+          if (assistantEl) {
+            assistantEl.classList.remove('cc-msg-streaming');
+          }
+          var assistantTextDone = assistantEl ? String(assistantEl.textContent || '').trim() : '';
+          if (donePayload && donePayload.reply && !assistantTextDone) {
+            assistantTextDone = String(donePayload.reply).trim();
+          }
+          if (assistantTextDone) {
+            maybeShowConversionChip(assistantTextDone);
+            maybeShowTurnNudgeStrip();
+          }
+          setComposerStatus('', '');
+          if (donePayload && donePayload.quote_id) {
+            quoteId = String(donePayload.quote_id);
+            emitFunnelEvent('quote_shown', { product_id: currentProductId, quote_id: quoteId });
+            fetchQuote();
+          } else if (donePayload && Array.isArray(donePayload.toolsUsed) && donePayload.toolsUsed.indexOf('get_product_quote') >= 0) {
+            fetchQuote();
+          }
+          if (donePayload && donePayload.redirect_to) {
+            emitFunnelEvent('chat_commerce_redirect', { product_id: currentProductId });
+            window.location.assign(donePayload.redirect_to);
+          }
+        } catch (e) {
+          clearTimeout(to);
+          removeTypingIndicator();
+          setComposerStatus('', '');
+          try {
+            const res2 = await fetch(API_BASE + '/api/patient/checkout-chat/turn', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-session-id': sid,
+                'ngrok-skip-browser-warning': 'true'
+              },
+              body: JSON.stringify({
+                message: t,
+                product_id: currentProductId,
+                provider_id: merchantId,
+                session_id: ensureKellySessionId()
+              })
+            });
+            const data = await res2.json();
+            if (res2.ok && data.success) {
+              const reply = (data.reply != null && String(data.reply).trim())
+                ? String(data.reply).trim()
+                : KELLY_COPY.fallbackReply;
+              if (assistantEl && assistantEl.parentNode) {
+                assistantEl.classList.remove('cc-msg-streaming');
+                var prev = String(assistantEl.textContent || '').trim();
+                if (prev.length > 0 && prev !== reply) {
+                  appendChatBubble('assistant', reply);
+                } else {
+                  assistantEl.textContent = reply;
+                }
+              } else {
+                appendChatBubble('assistant', reply);
+              }
+              maybeShowConversionChip(reply);
+              maybeShowTurnNudgeStrip();
+              setComposerStatus('', '');
+              if (data.quote_id) {
+                quoteId = String(data.quote_id);
+                emitFunnelEvent('quote_shown', { product_id: currentProductId, quote_id: quoteId });
+                fetchQuote();
+              } else if (Array.isArray(data.toolsUsed) && data.toolsUsed.indexOf('get_product_quote') >= 0) {
+                fetchQuote();
+              }
+              if (data.redirect_to) {
+                window.location.assign(data.redirect_to);
+              }
+              return;
+            }
+          } catch (_) {}
+          if (assistantEl && assistantEl.parentNode) {
+            assistantEl.remove();
+            assistantEl = null;
+          }
+          appendAssistantErrorCard(KELLY_COPY.errorConnectionAssistant);
+          setComposerStatus('', '');
+        } finally {
+          removeTypingIndicator();
+          if (btnSendChat) btnSendChat.disabled = false;
+          updateChatEmptyState();
+        }
+      }
+
+      if (btnSendChat) {
+        btnSendChat.addEventListener('click', sendKellyMessage);
+      }
+
+      const turnNudgeCta = document.getElementById('turnNudgeCta');
+      const turnNudgeDismiss = document.getElementById('turnNudgeDismiss');
+      if (turnNudgeCta) {
+        turnNudgeCta.addEventListener('click', function () {
+          checkoutIntent = true;
+          hideTurnNudgeStrip();
+          var hero = document.getElementById('btnPayInThread');
+          var wrap = document.getElementById('inThreadPayWrap');
+          if (hero && wrap && !wrap.classList.contains('hidden') && !hero.disabled) {
+            try {
+              hero.focus();
+            } catch (_) {}
+            hero.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            return;
+          }
+          try {
+            elBtn.focus();
+          } catch (_) {}
+          elBtn.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+      }
+      if (turnNudgeDismiss) {
+        turnNudgeDismiss.addEventListener('click', function () {
+          hideTurnNudgeStrip();
+          markTurnNudgeShown();
+        });
+      }
+
+      const btnProductSwitch = document.getElementById('btnProductSwitch');
+      const productSheetBackdrop = document.getElementById('productSheetBackdrop');
+      if (btnProductSwitch) {
+        btnProductSwitch.addEventListener('click', function () {
+          openProductSheet();
+        });
+      }
+      if (productSheetBackdrop) {
+        productSheetBackdrop.addEventListener('click', function () {
+          closeProductSheet();
+        });
+      }
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeProductSheet();
+      });
+
+      const btnSwitchCancel = document.getElementById('btnSwitchCancel');
+      const btnSwitchConfirm = document.getElementById('btnSwitchConfirm');
+      if (btnSwitchCancel) {
+        btnSwitchCancel.addEventListener('click', function () {
+          const list = document.getElementById('productSheetList');
+          const conf = document.getElementById('productSwitchConfirm');
+          pendingSwitchProduct = null;
+          if (list) list.classList.remove('hidden');
+          if (conf) conf.classList.add('hidden');
+        });
+      }
+      if (btnSwitchConfirm) {
+        btnSwitchConfirm.addEventListener('click', function () {
+          const chk = document.getElementById('chkSkipSwitchConfirm');
+          if (chk && chk.checked) {
+            try {
+              sessionStorage.setItem('cc_skip_product_switch_confirm', '1');
+            } catch (_) {}
+          }
+          const p = pendingSwitchProduct;
+          pendingSwitchProduct = null;
+          const list = document.getElementById('productSheetList');
+          const conf = document.getElementById('productSwitchConfirm');
+          if (list) list.classList.remove('hidden');
+          if (conf) conf.classList.add('hidden');
+          if (p) {
+            switchProduct(String(p.id));
+          }
+          closeProductSheet();
+        });
+      }
+
+      const composerForEnter = document.getElementById('composer');
+      if (composerForEnter) {
+        composerForEnter.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendKellyMessage();
+          }
+        });
+      }
+
+      elBtn.addEventListener('click', function () {
+        if (!product) return;
+        emitFunnelEvent('manual_checkout_click', {
+          product_id: currentProductId,
+          quote_id: quoteId || undefined
+        });
+        openPayConfirmationModal();
+      });
+
+      const btnPayInThread = document.getElementById('btnPayInThread');
+      if (btnPayInThread) {
+        btnPayInThread.addEventListener('click', function () {
+          if (!product || btnPayInThread.disabled) return;
+          emitFunnelEvent('in_chat_pay_tap', {
+            product_id: currentProductId,
+            quote_id: quoteId || undefined
+          });
+          openPayConfirmationModal();
+        });
+      }
+
+      function closePayModal() {
+        overlay.classList.remove('is-open');
+        focusPrimaryCheckoutControl();
+      }
+
+      payCancel.addEventListener('click', closePayModal);
+
+      const btnPayClose = document.getElementById('btnPayClose');
+      if (btnPayClose) btnPayClose.addEventListener('click', closePayModal);
+
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closePayModal();
+      });
+
+      btnPay.addEventListener('click', async function () {
+        payErr.classList.add('hidden');
+        const email = (payEmail.value || '').trim();
+        if (!email) {
+          payErr.textContent = KELLY_COPY.emailRequired;
+          payErr.classList.remove('hidden');
+          return;
+        }
+        if (!product) return;
+        btnPay.disabled = true;
+        try {
+          const body = {
+            provider_id: merchantId || undefined,
+            email: email,
+            name: email.split('@')[0] || 'Patient',
+            prescription_id: product.id,
+            quantity: 1,
+            payment_method: 'direct_stripe',
+            kelly_session_id: ensureKellySessionId()
+          };
+          if (quoteId) {
+            body.quote_id = quoteId;
+            body.checkout_session_id = quoteId;
+          }
+          const idem = quoteId ? quoteId + ':' + email : '';
+          const res = await fetch(API_BASE + '/api/public/checkout/start', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true',
+              ...(idem ? { 'Idempotency-Key': idem } : {})
+            },
+            body: JSON.stringify(body)
+          });
+          const payload = await res.json();
+          if (!res.ok || !payload.success) {
+            throw new Error((payload && payload.error) || 'Checkout failed');
+          }
+          emitFunnelEvent('pay_started', { product_id: product.id, quote_id: quoteId || undefined });
+          const link = payload.checkout && payload.checkout.payment_link;
+          if (link) {
+            window.location.assign(link);
+            return;
+          }
+          alert('Checkout started. Complete payment in your app if a client secret was returned.');
+        } catch (e) {
+          emitFunnelEvent('pay_fail', { product_id: product && product.id, error: (e && e.message) || 'unknown' });
+          payErr.textContent = e.message || 'Payment start failed';
+          payErr.classList.remove('hidden');
+        } finally {
+          btnPay.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+
+</html>

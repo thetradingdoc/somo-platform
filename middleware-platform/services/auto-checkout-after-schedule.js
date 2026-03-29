@@ -56,6 +56,20 @@ async function autoCheckoutAfterSchedule(params) {
 
   if (!appointmentId || !clinic_id) return null;
 
+  // DB guard: if checkout already exists for this appointment, do not create another.
+  try {
+    const existing = db.db?.prepare(
+      'SELECT id, status FROM voice_checkouts WHERE appointment_id = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(appointmentId);
+    if (existing?.id) {
+      return {
+        skipped: true,
+        existing_checkout_id: existing.id,
+        status: existing.status || null
+      };
+    }
+  } catch (_) {}
+
   const dedupeKey = keyFor(appointmentId, clinic_id);
   const cachedResult = getRecentResult(dedupeKey);
   if (cachedResult) return cachedResult;
@@ -67,6 +81,7 @@ async function autoCheckoutAfterSchedule(params) {
   const requestPromise = (async () => {
     const body = {
       appointment_id: appointmentId,
+      triage_session_id: triage_session_id || null,
       // A4/A10: Keep payload contract consistent for both Retell and API callers.
       customer_phone: patient_phone,
       customer_email: patient_email,

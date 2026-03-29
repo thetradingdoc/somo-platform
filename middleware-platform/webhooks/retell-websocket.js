@@ -29,6 +29,7 @@ class RetellWebSocketHandler {
     handleConnection(ws, req) {
         const callId = this.extractCallId(req);
         console.log(`\n📞 NEW RETELL CALL: ${callId}`);
+        console.log(`🔗 WS state on connect for ${callId}: readyState=${ws.readyState}`);
 
         // Load existing state if resuming (conversation resumption)
         let existingState = null;
@@ -64,28 +65,54 @@ class RetellWebSocketHandler {
             customerName: null, // Will be stored when first provided
             initialName: null, // Store the FIRST name provided by the caller (for fraud detection)
             nameProvidedAt: null, // Timestamp when name was first provided
+            sentInitialGreeting: false, // Send one opening line so silent callers hear agent first
             clinic_id: existingState?.clinic_id || null, // Restore from persisted state
             appointment_id: null, // Task 52 (D2): set from room name (appt-{id}) when message.call arrives
             _transcriptSequence: 0, // u-6: barge-in idempotency — increment per transcript; skip stale replies
             _codingState: existingState?.current_stage || 'INTAKE',
             _codingStateData: existingState?.state_data || {},
+            awaitingName: true, // Voice intake: first capture caller name, then proceed to intent.
+            hasReceivedRetellMessage: false, // Track whether Retell sent at least one LLM frame
             session
         };
         this.activeConnections.set(callId, connection);
+        this.sendInitialHandshake(callId, connection);
 
         // Handle messages from Retell
         ws.on('message', async (data) => {
             try {
-                const message = JSON.parse(data);
+                const rawPayload = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+                const message = JSON.parse(rawPayload);
+                connection.hasReceivedRetellMessage = true;
                 await this.handleRetellMessage(callId, message);
             } catch (error) {
-                console.error('Error handling Retell message:', error);
+                const preview = Buffer.isBuffer(data)
+                    ? data.toString('utf8').slice(0, 220)
+                    : String(data).slice(0, 220);
+                console.error(`Error handling Retell message for ${callId}:`, error.message);
+                console.error('Retell raw payload preview:', preview);
             }
         });
 
+        ws.on('ping', () => {
+            console.log(`🏓 WS ping received from Retell for ${callId}`);
+        });
+
+        ws.on('pong', () => {
+            console.log(`🏓 WS pong received from Retell for ${callId}`);
+        });
+
+        ws.on('error', (err) => {
+            console.error(`❌ WS error for ${callId}:`, err.message);
+        });
+
         // Handle connection close
-        ws.on('close', async () => {
-            console.log(`📴 Call ended: ${callId}`);
+        ws.on('close', async (code, reasonBuffer) => {
+            const closeReason = reasonBuffer ? reasonBuffer.toString('utf8') : '';
+            console.log(`📴 Call ended: ${callId} (code=${code}${closeReason ? `, reason=${closeReason}` : ''})`);
+            if (!connection.hasReceivedRetellMessage) {
+                console.warn(`⚠️ No inbound Retell WS frames received before close for ${callId}`);
+            }
 
             // Update lead call if this is a sales call
             try {
@@ -111,15 +138,15 @@ class RetellWebSocketHandler {
             }
 
             // Deduct credits when call ends
-            const connection = this.activeConnections.get(callId);
-            if (connection && connection.clinic_id) {
+            const activeConnection = this.activeConnections.get(callId);
+            if (activeConnection && activeConnection.clinic_id) {
                 try {
-                    const callDuration = Date.now() - connection.startTime;
+                    const callDuration = Date.now() - activeConnection.startTime;
                     const callDurationSeconds = Math.floor(callDuration / 1000);
                     const callDurationMinutes = Math.ceil(callDurationSeconds / 60); // Round up to nearest minute
 
                     // R-1: Map clinic to customer for credits (clinic.merchant_id -> customer)
-                    const customerIdForCredits = this.db.getCustomerIdForClinic?.(connection.clinic_id) || connection.clinic_id;
+                    const customerIdForCredits = this.db.getCustomerIdForClinic?.(activeConnection.clinic_id) || activeConnection.clinic_id;
                     
                     // Get customer credits (using clinic_id as customer_id for now)
                     const credits = this.db.getCustomerCredits(customerIdForCredits);
@@ -157,10 +184,10 @@ class RetellWebSocketHandler {
                             );
                         }
 
-                        console.log(`✅ Deducted ${callDurationMinutes} minutes from clinic ${connection.clinic_id}`);
+                        console.log(`✅ Deducted ${callDurationMinutes} minutes from clinic ${activeConnection.clinic_id}`);
                     } else {
                         // Insufficient credits - log warning
-                        console.warn(`⚠️  Insufficient credits for clinic ${connection.clinic_id} (needed: ${callDurationMinutes}, available: ${credits ? credits.credits_balance_minutes : 0})`);
+                        console.warn(`⚠️  Insufficient credits for clinic ${activeConnection.clinic_id} (needed: ${callDurationMinutes}, available: ${credits ? credits.credits_balance_minutes : 0})`);
 
                         // Still log the call
                         const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
@@ -179,8 +206,8 @@ class RetellWebSocketHandler {
                     // ========== COST TRACKING ==========
                     // Fetch and store costs from Twilio and Retell APIs
                     try {
-                        const twilioCallSid = connection.twilio_call_sid ||
-                            connection.callMetadata?.metadata?.twilio_call_sid ||
+                        const twilioCallSid = activeConnection.twilio_call_sid ||
+                            activeConnection.callMetadata?.metadata?.twilio_call_sid ||
                             null;
 
                         console.log(`💰 Fetching costs for call ${callId}...`);
@@ -274,46 +301,57 @@ class RetellWebSocketHandler {
     async handleRetellMessage(callId, message) {
         const connection = this.activeConnections.get(callId);
         if (!connection) return;
+        const interactionType = message.interaction_type || message.type;
+        // Temporary protocol diagnostics: capture actual inbound payload shape from Retell
+        try {
+            const keys = Object.keys(message || {});
+            console.log(`🧭 Retell payload shape`, {
+                interaction_type: message?.interaction_type,
+                type: message?.type,
+                keys
+            });
+        } catch (_) {}
 
         // Store call metadata from first message
-        if (message.call) {
-            connection.callMetadata = message.call;
+        const callMeta = message.call || (interactionType === 'call_details' ? message : null);
+        if (callMeta) {
+            connection.callMetadata = callMeta;
             // CRITICAL: Normalize phone number to +1 format for US customers
-            connection.customerPhone = message.call.from_number 
-                ? SMSService.formatPhoneNumber(message.call.from_number)
+            connection.customerPhone = callMeta.from_number
+                ? SMSService.formatPhoneNumber(callMeta.from_number)
                 : null;
 
             // Store Twilio CallSid from metadata if available
-            if (message.call.metadata && message.call.metadata.twilio_call_sid) {
-                connection.twilio_call_sid = message.call.metadata.twilio_call_sid;
+            if (callMeta.metadata && callMeta.metadata.twilio_call_sid) {
+                connection.twilio_call_sid = callMeta.metadata.twilio_call_sid;
             }
 
             // Extract clinic_id from various sources
             // Priority: dynamic_variables > metadata > agent_id lookup > phone number lookup
             // NOTE: We use clinic_id as the primary tenant identifier
-            if (message.call.dynamic_variables && message.call.dynamic_variables.clinic_id) {
-                connection.clinic_id = message.call.dynamic_variables.clinic_id;
+            if (callMeta.dynamic_variables && callMeta.dynamic_variables.clinic_id) {
+                connection.clinic_id = callMeta.dynamic_variables.clinic_id;
                 console.log(`✅ Extracted clinic_id from dynamic variables: ${connection.clinic_id}`);
-            } else if (message.call.metadata && message.call.metadata.clinic_id) {
-                connection.clinic_id = message.call.metadata.clinic_id;
+            } else if (callMeta.metadata && callMeta.metadata.clinic_id) {
+                connection.clinic_id = callMeta.metadata.clinic_id;
                 console.log(`✅ Extracted clinic_id from metadata: ${connection.clinic_id}`);
-            } else if (message.call.dynamic_variables && message.call.dynamic_variables.customer_id) {
+            } else if (callMeta.dynamic_variables && callMeta.dynamic_variables.customer_id) {
                 // Legacy: customer_id support (may be clinic_id in disguise)
-                connection.clinic_id = message.call.dynamic_variables.customer_id;
+                connection.clinic_id = callMeta.dynamic_variables.customer_id;
                 console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
-            } else if (message.call.metadata && message.call.metadata.customer_id) {
+            } else if (callMeta.metadata && callMeta.metadata.customer_id) {
                 // Legacy: customer_id support (may be clinic_id in disguise)
-                connection.clinic_id = message.call.metadata.customer_id;
+                connection.clinic_id = callMeta.metadata.customer_id;
                 console.log(`✅ Extracted clinic_id from customer_id (legacy): ${connection.clinic_id}`);
-            } else if (message.call.agent_id) {
+            } else if (callMeta.agent_id) {
                 // Look up clinic by Retell agent_id (check clinics table first, then customers for backward compatibility)
-                const clinic = this.db.db.prepare('SELECT * FROM clinics WHERE retell_agent_id = ?').get(message.call.agent_id);
+                const clinic = this.db.db.prepare('SELECT * FROM clinics WHERE retell_agent_id = ?').get(callMeta.agent_id);
                 if (clinic) {
                     connection.clinic_id = clinic.clinic_id;
                     console.log(`✅ Looked up clinic_id from agent_id: ${connection.clinic_id}`);
                 } else {
                     // Fallback: check customers table (legacy support)
-                const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(message.call.agent_id);
+                const customer = this.db.db.prepare('SELECT * FROM customers WHERE retell_agent_id = ?').get(callMeta.agent_id);
                 if (customer) {
                         // R-1: Use customer's first clinic when agent maps to customer (legacy)
                         const clinicRow = this.db.db.prepare('SELECT clinic_id FROM clinics WHERE merchant_id = ? LIMIT 1').get(customer.merchant_id);
@@ -325,7 +363,7 @@ class RetellWebSocketHandler {
 
             // Fallback: Try to lookup by phone number
             if (!connection.clinic_id) {
-                const toNumber = message.call.to_number;
+                const toNumber = callMeta.to_number;
                 if (toNumber) {
                     const clinicPhone = this.db.getClinicPhoneNumber(toNumber);
                     if (clinicPhone && clinicPhone.clinic_id) {
@@ -342,6 +380,25 @@ class RetellWebSocketHandler {
                     connection.clinic_id = fallback;
                     console.log(`⚠️  Using fallback clinic_id from env: ${connection.clinic_id}`);
                 }
+            }
+
+            // Inbound calls often register patient_name in Retell dynamic variables before the WS connects.
+            // Apply it so we do not loop on "I didn't catch your name" when the caller already exists.
+            const dv =
+                callMeta.dynamic_variables ||
+                callMeta.retell_llm_dynamic_variables ||
+                (callMeta.metadata && callMeta.metadata.dynamic_variables);
+            const knownFromCall = dv && (dv.patient_name || dv.patientName);
+            if (knownFromCall && String(knownFromCall).trim()) {
+                const pn = String(knownFromCall).trim();
+                if (!connection.initialName) {
+                    this.storeCustomerName(callId, pn);
+                } else if (!connection.customerName) {
+                    connection.customerName = pn;
+                }
+                connection.patientId = connection.patientId || dv.patient_id || dv.patientId || null;
+                connection.awaitingName = false;
+                console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
             }
 
             // Task 52 (Decision D2): Derive appointment_id from room name (appt-{id}) for trigger_case_report
@@ -367,14 +424,20 @@ class RetellWebSocketHandler {
                     console.warn('⚠️  Failed to upsert call state:', e.message);
                 }
             }
+
+            // If the call starts and the caller is silent, proactively greet once.
+            // This avoids "connected but agent never speaks first" behavior.
+            if (!connection.sentInitialGreeting) {
+                this.sendInitialGreeting(callId, connection, callMeta, message.response_id);
+            }
         }
 
         // Per-clinic rate limit (Section 17)
-        const tenantKey = connection.clinic_id || message.call?.agent_id || 'unknown';
+        const tenantKey = connection.clinic_id || callMeta?.agent_id || 'unknown';
         const rateLimit = clinicRateLimitCheck(tenantKey);
         if (!rateLimit.allowed) {
             console.warn(`⚠️  Clinic rate limit exceeded for ${tenantKey} (${rateLimit.limit}/min)`);
-            if (message.type === 'function_call') {
+            if (interactionType === 'function_call') {
                 const functionCall = message.function_call || message;
                 this.sendToRetell(connection.ws, {
                     type: 'function_call_response',
@@ -385,14 +448,18 @@ class RetellWebSocketHandler {
             return;
         }
 
-        console.log(`\n📨 Message from ${callId}:`, message.type);
+        console.log(`\n📨 Message from ${callId}:`, interactionType);
 
-        switch (message.type) {
+        switch (interactionType) {
+            case 'call_details':
+                break;
             case 'update':
                 // Retell sends updates about call state
                 if (message.update?.transcript) {
                     await this.handleTranscript(callId, { transcript: message.update.transcript });
                 }
+                break;
+            case 'update_only':
                 break;
 
             case 'function_call':
@@ -403,13 +470,37 @@ class RetellWebSocketHandler {
                 // Retell is responding to user
                 break;
 
+            case 'response_required':
+            case 'reminder_required':
+                // Some Retell versions require an explicit response trigger.
+                // If no opening has been sent yet, send one now.
+                if (!connection.sentInitialGreeting) {
+                    this.sendInitialGreeting(callId, connection, connection.callMetadata || null, message.response_id);
+                    break;
+                }
+                if (Array.isArray(message.transcript)) {
+                    const lastUserTurn = [...message.transcript].reverse().find((t) => t?.role === 'user' && t?.content);
+                    if (lastUserTurn?.content) {
+                        await this.handleTranscript(callId, {
+                            transcript: lastUserTurn.content,
+                            response_id: message.response_id
+                        });
+                    } else if (interactionType === 'reminder_required') {
+                        this.sendRetellResponse(connection.ws, "I'm still here - how can I help you?", message.response_id);
+                    }
+                }
+                break;
+
+            case 'ping_pong':
+                this.sendToRetell(connection.ws, { response_type: 'ping_pong', timestamp: message.timestamp });
+                break;
             case 'ping':
                 // Respond to ping
                 this.sendToRetell(connection.ws, { type: 'pong' });
                 break;
 
             default:
-                console.log('Unknown message type:', message.type);
+                console.log('Unknown message type:', interactionType);
         }
     }
 
@@ -423,10 +514,7 @@ class RetellWebSocketHandler {
             const baseUrl = this.config?.apiBaseUrl || process.env.BASE_URL || 'http://localhost:4000';
             const chatUrl = `${baseUrl}/unified-dashboard/patients/triage.html`;
             const rejectMsg = `Voice is currently unavailable. Please use our web chat at ${chatUrl} to book or get help.`;
-            this.sendToRetell(connection.ws, {
-                type: 'response',
-                response: { content: rejectMsg, end_call: true }
-            });
+            this.sendRetellResponse(connection.ws, rejectMsg, message.response_id);
             console.log(`🚫 Voice channel disabled (VOICE_AGENT_ENABLED=0): redirected caller to web chat`);
             return;
         }
@@ -434,6 +522,33 @@ class RetellWebSocketHandler {
         const userSaid = message.transcript;
 
         console.log(`🗣️  User said: "${userSaid}"`);
+
+        // Deterministic name-first voice flow:
+        // 1) Initial greeting asks for caller name
+        // 2) First user turn is parsed as name, then we ask how we can help
+        if (connection?.awaitingName) {
+            const extractedName = this.extractLikelyName(userSaid);
+            if (extractedName) {
+                this.storeCustomerName(callId, extractedName);
+                connection.awaitingName = false;
+                const askIntent = `Thanks ${extractedName}. How can I help you today?`;
+                this.sendRetellResponse(connection.ws, askIntent, message.response_id);
+                connection.conversationHistory.push({
+                    role: 'assistant',
+                    content: askIntent,
+                    timestamp: Date.now()
+                });
+                return;
+            }
+            const askNameAgain = "I didn't catch your name. Can I get your name first?";
+            this.sendRetellResponse(connection.ws, askNameAgain, message.response_id);
+            connection.conversationHistory.push({
+                role: 'assistant',
+                content: askNameAgain,
+                timestamp: Date.now()
+            });
+            return;
+        }
 
         // u-6: Barge-in idempotency — increment sequence; capture ours before async work
         connection._transcriptSequence = (connection._transcriptSequence || 0) + 1;
@@ -528,10 +643,7 @@ class RetellWebSocketHandler {
                 }
                 if (result?.endCall) {
                     if (agentReply) {
-                        this.sendToRetell(connection.ws, {
-                            type: 'response',
-                            response: { content: agentReply, end_call: true }
-                        });
+                        this.sendRetellResponse(connection.ws, agentReply, message.response_id);
                     }
                     return;
                 }
@@ -624,13 +736,7 @@ class RetellWebSocketHandler {
                 }
             }
 
-            this.sendToRetell(connection.ws, {
-                type: 'response',
-                response: {
-                    content: agentReply,
-                    end_call: false
-                }
-            });
+            this.sendRetellResponse(connection.ws, agentReply, message.response_id);
         }
     }
 
@@ -713,6 +819,22 @@ class RetellWebSocketHandler {
                 case 'verify_checkout_code':
                     result = await this.handleVerifyCheckoutCode(callId, functionArgs);
                     break;
+
+                case 'get_product_quote':
+                case 'prepare_commerce_checkout': {
+                    const KellyToolExecutor = require('../services/kelly-tool-executor');
+                    const patientId = connection.patientId || null;
+                    const callerPhone =
+                        connection.customerPhone || connection.callMetadata?.from_number || null;
+                    result = await KellyToolExecutor.execute(functionName, functionArgs, {
+                        sessionId: callId,
+                        clinicId,
+                        patientId,
+                        callerPhone,
+                        channel: 'voice'
+                    });
+                    break;
+                }
 
                 case 'verify_email_code':
                 case 'verify_email_verification_code':
@@ -1128,13 +1250,7 @@ class RetellWebSocketHandler {
             const products = response.data.products;
 
             if (products.length === 0) {
-                this.sendToRetell(connection.ws, {
-                    type: 'response',
-                    response: {
-                        content: `I couldn't find any products matching "${query}". Would you like to browse our other products?`,
-                        end_call: false
-                    }
-                });
+                this.sendRetellResponse(connection.ws, `I couldn't find any products matching "${query}". Would you like to browse our other products?`);
                 return;
             }
 
@@ -1159,29 +1275,14 @@ class RetellWebSocketHandler {
                 })()
                 : `I found ${products.length} products: ${productList}. Which one interests you?`;
 
-            this.sendToRetell(connection.ws, {
-                type: 'response',
-                response: {
-                    content: response_text,
-                    end_call: false,
-                    metadata: {
-                        products: products
-                    }
-                }
-            });
+            this.sendRetellResponse(connection.ws, response_text);
 
             // Store search results
             connection.lastSearchResults = products;
 
         } catch (error) {
             console.error('❌ Product search error:', error);
-            this.sendToRetell(connection.ws, {
-                type: 'response',
-                response: {
-                    content: "Sorry, I'm having trouble searching products right now. Please try again.",
-                    end_call: false
-                }
-            });
+            this.sendRetellResponse(connection.ws, "Sorry, I'm having trouble searching products right now. Please try again.");
         }
     }
 
@@ -1852,13 +1953,7 @@ class RetellWebSocketHandler {
 
             // Check if email verification is required
             if (!customerEmail) {
-                this.sendToRetell(connection.ws, {
-                    type: 'response',
-                    response: {
-                        content: "I need your email address to complete your purchase. Could you please provide your email address?",
-                        end_call: false
-                    }
-                });
+                this.sendRetellResponse(connection.ws, "I need your email address to complete your purchase. Could you please provide your email address?");
                 return;
             }
 
@@ -1875,13 +1970,7 @@ class RetellWebSocketHandler {
                 });
 
                 if (sendCodeResponse.data.success) {
-                    this.sendToRetell(connection.ws, {
-                        type: 'response',
-                        response: {
-                            content: `I've sent a verification code to ${customerEmail}. Please check your email and provide me with the 6-digit code to verify your account before completing your purchase.`,
-                            end_call: false
-                        }
-                    });
+                    this.sendRetellResponse(connection.ws, `I've sent a verification code to ${customerEmail}. Please check your email and provide me with the 6-digit code to verify your account before completing your purchase.`);
                     // Store that we're waiting for verification
                     connection.pendingVerification = {
                         email: customerEmail,
@@ -1907,25 +1996,13 @@ class RetellWebSocketHandler {
             if (response.data.success) {
                 const checkout = response.data;
 
-                this.sendToRetell(connection.ws, {
-                    type: 'response',
-                    response: {
-                        content: `Perfect! I've sent a payment link to your email at ${customerEmail}. The total is $${checkout.amount}. You can complete your purchase using that link. Is there anything else I can help you with?`,
-                        end_call: false
-                    }
-                });
+                this.sendRetellResponse(connection.ws, `Perfect! I've sent a payment link to your email at ${customerEmail}. The total is $${checkout.amount}. You can complete your purchase using that link. Is there anything else I can help you with?`);
 
                 console.log(`✅ Checkout created: ${checkout.checkout_id}`);
                 console.log(`📧 Payment link sent to: ${customerEmail}`);
             } else if (response.data.requires_verification) {
                 // Should not happen if we checked above, but handle it anyway
-                this.sendToRetell(connection.ws, {
-                    type: 'response',
-                    response: {
-                        content: `I need to verify your email before completing your purchase. I've sent a verification code to ${customerEmail}. Please check your email and provide me with the 6-digit code.`,
-                        end_call: false
-                    }
-                });
+                this.sendRetellResponse(connection.ws, `I need to verify your email before completing your purchase. I've sent a verification code to ${customerEmail}. Please check your email and provide me with the 6-digit code.`);
                 connection.pendingVerification = {
                     email: customerEmail,
                     productInfo: productInfo,
@@ -1938,13 +2015,7 @@ class RetellWebSocketHandler {
         } catch (error) {
             console.error('❌ Purchase error:', error);
             const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
-            this.sendToRetell(connection.ws, {
-                type: 'response',
-                response: {
-                    content: `I'm sorry, I'm having trouble processing that order: ${errorMessage}. Please try again or call us for assistance.`,
-                    end_call: false
-                }
-            });
+            this.sendRetellResponse(connection.ws, `I'm sorry, I'm having trouble processing that order: ${errorMessage}. Please try again or call us for assistance.`);
         }
     }
 
@@ -1993,44 +2064,20 @@ class RetellWebSocketHandler {
                     const customerPhone = this.getCustomerPhone(callId);
                     const customerName = this.getCustomerName(callId) || 'Customer';
 
-                    this.sendToRetell(connection.ws, {
-                        type: 'response',
-                        response: {
-                            content: "Great! Your email is verified. Let me complete your purchase now.",
-                            end_call: false
-                        }
-                    });
+                    this.sendRetellResponse(connection.ws, "Great! Your email is verified. Let me complete your purchase now.");
 
                     // Proceed with checkout
                     await this.handlePurchaseIntent(callId, productInfo);
                     delete connection.pendingVerification;
                 } else {
-                    this.sendToRetell(connection.ws, {
-                        type: 'response',
-                        response: {
-                            content: "Perfect! Your email has been verified. How can I help you today?",
-                            end_call: false
-                        }
-                    });
+                    this.sendRetellResponse(connection.ws, "Perfect! Your email has been verified. How can I help you today?");
                 }
             } else {
-                this.sendToRetell(connection.ws, {
-                    type: 'response',
-                    response: {
-                        content: `I'm sorry, that verification code is incorrect or has expired. ${verifyResponse.data.error || 'Please request a new code.'}`,
-                        end_call: false
-                    }
-                });
+                this.sendRetellResponse(connection.ws, `I'm sorry, that verification code is incorrect or has expired. ${verifyResponse.data.error || 'Please request a new code.'}`);
             }
         } catch (error) {
             console.error('❌ Verification error:', error);
-            this.sendToRetell(connection.ws, {
-                type: 'response',
-                response: {
-                    content: "I'm sorry, I'm having trouble verifying your code. Please try again.",
-                    end_call: false
-                }
-            });
+            this.sendRetellResponse(connection.ws, "I'm sorry, I'm having trouble verifying your code. Please try again.");
         }
     }
 
@@ -2090,6 +2137,112 @@ class RetellWebSocketHandler {
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(data));
         }
+    }
+
+    // Helper: send initial websocket readiness/config to Retell (Custom LLM protocol)
+    sendInitialHandshake(callId, connection) {
+        if (!connection?.ws || connection.ws.readyState !== WebSocket.OPEN) return;
+        const opening = "Hi, my name is Kelly. I'm LittleLabs' voice assistant. Can I start by getting your name?";
+        // Enable optional protocol features up front so Retell can stream richer events.
+        this.sendToRetell(connection.ws, {
+            response_type: 'config',
+            config: {
+                auto_reconnect: true,
+                call_details: true,
+                transcript_with_tool_calls: true
+            }
+        });
+        // Per Retell docs, send an initial response event to establish readiness.
+        // Non-empty content makes agent initiate conversation immediately.
+        this.sendToRetell(connection.ws, {
+            response_type: 'response',
+            response_id: 0,
+            content: opening,
+            content_complete: true
+        });
+        connection.sentInitialGreeting = true;
+        connection.conversationHistory.push({
+            role: 'assistant',
+            content: opening,
+            timestamp: Date.now()
+        });
+        console.log(`🤝 Sent Retell WS handshake/config for ${callId}`);
+        console.log(`👋 Sent initial greeting (handshake) for call ${callId}`);
+    }
+
+    extractLikelyName(transcript) {
+        let t = String(transcript || '').trim();
+        if (!t) return null;
+        t = t.replace(/[\s.?!,;:]+$/u, '').trim();
+        if (!t) return null;
+
+        const fillerWord = /^(the|a|an|uh|um|er|like|so)$/iu;
+        const nameWord = (w) => /^[\p{L}'-]{2,}$/u.test(w);
+
+        const explicitPatterns = [
+            /\bmy\s+name\s+is\s+(.+)$/iu,
+            /\bthis\s+is\s+(.+)$/iu,
+            /\b(i['']m|i\s+am)\s+(.+)$/iu,
+            /\bcall\s+me\s+(.+)$/iu
+        ];
+        for (const re of explicitPatterns) {
+            const m = t.match(re);
+            if (!m) continue;
+            const raw = (m[2] !== undefined ? m[2] : m[1] || '').trim();
+            const namePart = raw.replace(/[\s.?!,;:]+$/u, '').trim();
+            const words = namePart.split(/\s+/).filter(Boolean).slice(0, 4);
+            const good = words.filter((w) => !fillerWord.test(w));
+            if (good.length === 0) continue;
+            if (good.every(nameWord)) return good.join(' ');
+        }
+
+        const compact = t.replace(/[^\p{L}' -]/gu, ' ').trim();
+        if (!compact) return null;
+        const stripped = compact.replace(/^(my\s+name\s+is|this\s+is|i\s+am|i'?m|call\s+me)\s+/iu, '');
+        let words = stripped.split(/\s+/).filter(Boolean);
+        const greetingLead = /^(hi|hello|hey|yes|no|ok|okay|thanks|thank|please|sir|ma'?am)$/iu;
+        if (words.length === 1 && greetingLead.test(words[0])) return null;
+        if (words.length > 1 && greetingLead.test(words[0])) {
+            words = words.slice(1);
+        }
+        words = words.filter((x) => !fillerWord.test(x));
+        if (words.length >= 1 && words.length <= 3 && words.every(nameWord)) {
+            return words.join(' ');
+        }
+        return null;
+    }
+
+    // Helper: send assistant speech in Retell Custom LLM format
+    sendRetellResponse(ws, content, responseId) {
+        if (!content) return;
+        const safeResponseId = (responseId === undefined || responseId === null) ? 0 : responseId;
+        this.sendToRetell(ws, {
+            response_type: 'response',
+            response_id: safeResponseId,
+            content,
+            content_complete: true
+        });
+    }
+
+    // Helper: build and send one-time initial greeting
+    sendInitialGreeting(callId, connection, callMeta, responseId = null) {
+        if (!connection || connection.sentInitialGreeting) return;
+        const isOutboundSales = callMeta?.metadata?.call_type === 'sales_outbound';
+        const patientName = callMeta?.dynamic_variables?.patient_name || connection.customerName || null;
+        const opening = isOutboundSales
+            ? "Hi, this is Alex from DocLittle. Is now still a good time to talk?"
+            : (patientName
+                ? `Hi ${patientName}, this is Kelly from DocLittle. How can I help you today?`
+                : 'Hi, this is Kelly from DocLittle. How can I help you today?');
+
+        this.sendRetellResponse(connection.ws, opening, responseId);
+        connection.sentInitialGreeting = true;
+        connection.conversationHistory.push({
+            role: 'assistant',
+            content: opening,
+            timestamp: Date.now()
+        });
+        console.log(`👋 Sent initial greeting for call ${callId}`);
     }
 
     // Helper: Extract call ID from request

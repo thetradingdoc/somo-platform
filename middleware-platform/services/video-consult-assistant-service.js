@@ -51,8 +51,14 @@ async function getRagCodes(clinicalText, specialtyTag) {
   }
 }
 
-async function summarizeWithGroq(transcriptText, ragCodes, extraContext = {}) {
-  if (!groqClient || !transcriptText.trim()) {
+async function summarizeWithGroq(transcriptText, ragCodes, preVisit = null, extraContext = {}) {
+  const preVisitText =
+    preVisit?.case_summary_brief?.soap_note_short ||
+    preVisit?.case_summary_brief?.chief_complaint ||
+    preVisit?.triage_session?.soap_note ||
+    '';
+
+  if (!groqClient || (!transcriptText.trim() && !preVisitText.trim())) {
     return null;
   }
 
@@ -60,6 +66,8 @@ async function summarizeWithGroq(transcriptText, ragCodes, extraContext = {}) {
 You are a clinical copilot summarizing a telehealth video visit for a clinician.
 
 Input:
+- Pre-visit context (triage + short case summary + document index). This is authoritative baseline.
+- Treat it as the starting clinical picture. Do not contradict it unless the transcript provides clear evidence.
 - Speaker-labelled transcript snippets from the consult.
 - Optional candidate ICD-10/CPT/HCPCS codes from a RAG system.
 
@@ -67,9 +75,12 @@ Output:
 Return STRICT JSON ONLY with this shape:
 {
   "summary": "1-2 sentence high-level summary.",
+  "chief_complaint": "string",
   "key_problems": ["problem 1", "problem 2"],
   "followups": ["short question the clinician should still ask", "..."],
-  "risk_flags": ["any red-flag concerns or empty array"],
+  "safety_flags": ["any safety-related concerns you can justify from pre-visit/triage", "..."],
+  "risk_flags": ["any red-flag concerns from pre-visit and/or transcript, or empty array"],
+  "doc_citations": [{"doc_id": "string", "doc_title": "string", "reason": "string"}],
   "codes": {
     "icd10": [{"code": "R51.9", "description": "..."}],
     "cpt":   [{"code": "99213", "description": "..."}],
@@ -77,11 +88,19 @@ Return STRICT JSON ONLY with this shape:
   }
 }
 
+Doc citations:
+- Only cite documents that exist in PRE_VISIT.document_index.
+- If you cannot ground a statement to a document, return doc_citations as an empty array.
+
 Keep each list to at most 5 items. If unsure, use empty arrays.
 `;
 
   const ragSnippet = JSON.stringify(ragCodes || {}, null, 2);
   const userPrompt = `
+<PRE_VISIT>
+${JSON.stringify(preVisit || {}, null, 2)}
+</PRE_VISIT>
+
 <TRANSCRIPT>
 ${transcriptText}
 </TRANSCRIPT>
@@ -213,13 +232,22 @@ async function getAssistantView(roomId) {
   const transcriptText = buildTranscriptContext(transcript);
   // Prefer merged codes from session (set after end_session) over live RAG-only fetch
   const sessionMeta = state.session?.metadata || {};
+  const preVisit = sessionMeta?.pre_visit || null;
   const storedRag = sessionMeta.rag_context;
   const mergedCodesFromSession =
     storedRag && (storedRag.icd10?.length || storedRag.cpt?.length || storedRag.hcpcs?.length)
       ? { icd10: storedRag.icd10 || [], cpt: storedRag.cpt || [], hcpcs: storedRag.hcpcs || [] }
       : null;
 
-  if (!transcriptText && yoloDetections.length === 0) {
+  const preVisitText =
+    preVisit?.case_summary_brief?.soap_note_short ||
+    preVisit?.case_summary_brief?.chief_complaint ||
+    preVisit?.triage_session?.soap_note ||
+    '';
+
+  const ragInputText = [preVisitText, transcriptText].filter(Boolean).join('\n\n');
+
+  if (!transcriptText && yoloDetections.length === 0 && !preVisitText) {
     return {
       room_id: roomId,
       status,
@@ -236,8 +264,8 @@ async function getAssistantView(roomId) {
   }
 
   const specialtyTag = findings?.specialty_tag || 'general';
-  const codes = mergedCodesFromSession || (await getRagCodes(transcriptText, specialtyTag));
-  const llmView = await summarizeWithGroq(transcriptText, codes, { status, roomId });
+  const codes = mergedCodesFromSession || (await getRagCodes(ragInputText || transcriptText, specialtyTag));
+  const llmView = await summarizeWithGroq(transcriptText, codes, preVisit, { status, roomId });
 
   const lastMessages = transcript.slice(-4).map((t) => ({
     speaker: t.speaker || 'unknown',
@@ -250,9 +278,12 @@ async function getAssistantView(roomId) {
       room_id: roomId,
       status,
       summary: llmView.summary || '',
+      chief_complaint: llmView.chief_complaint || preVisit?.case_summary_brief?.chief_complaint || '',
       key_problems: Array.isArray(llmView.key_problems) ? llmView.key_problems : [],
       followups: Array.isArray(llmView.followups) ? llmView.followups : [],
+      safety_flags: Array.isArray(llmView.safety_flags) ? llmView.safety_flags : [],
       risk_flags: Array.isArray(llmView.risk_flags) ? llmView.risk_flags : [],
+      doc_citations: Array.isArray(llmView.doc_citations) ? llmView.doc_citations : [],
       codes: llmView.codes || codes || { icd10: [], cpt: [], hcpcs: [] },
       findings,
       transcript_preview: lastMessages,
@@ -265,10 +296,23 @@ async function getAssistantView(roomId) {
   return {
     room_id: roomId,
     status,
-    summary: transcriptText.slice(0, 240),
-    key_problems: [],
+    summary: (transcriptText || preVisitText).slice(0, 240),
+    chief_complaint: preVisit?.case_summary_brief?.chief_complaint || '',
+    key_problems: Array.isArray(preVisit?.case_summary_brief?.key_problems)
+      ? preVisit.case_summary_brief.key_problems
+      : [],
+    safety_flags: (() => {
+      const sf = preVisit?.safety_flags;
+      if (!sf) return [];
+      const out = [];
+      if (sf.safety_level) out.push(`safety_level:${sf.safety_level}`);
+      if (sf.urgency) out.push(`urgency:${sf.urgency}`);
+      if (sf.referred_to_911) out.push('referred_to_911');
+      return out;
+    })(),
     followups: [],
     risk_flags: [],
+    doc_citations: [],
     codes: codes || { icd10: [], cpt: [], hcpcs: [] },
     findings,
     transcript_preview: lastMessages,

@@ -35,8 +35,7 @@ doclittle-platform/
 │   │   ├── setup-circle-wallets.js
 │   │   ├── backup-database.js
 │   │   └── ...
-│   ├── tests/                     # Test files
-│   │   └── ...
+│   ├── __tests__/                 # Jest tests (see jest.config.js; may be sparse)
 │   ├── utils/                     # Utility functions
 │   │   ├── api-keys.js
 │   │   ├── postgres.js
@@ -97,20 +96,18 @@ doclittle-platform/
 - Logging for debugging
 - Graceful degradation for optional services
 
+## New code guidelines
+
+- Prefer adding **Express routes** under `middleware-platform/routes/` and **mounting** them from `server.js` instead of growing inline handlers in `server.js` (~18k lines).
+- **Jest** uses `middleware-platform/__tests__/` (see `jest.config.js`). The npm script runs `jest --passWithNoTests` until more tests land.
+- **Integration / manual scripts** may still live as `middleware-platform/test-*.js` or under `scripts/`; migrating those into `__tests__/` is incremental cleanup.
+- **Module boundaries (soft rule):** `routes/` → `services/` → `adapters/` / `database`; avoid `services/` importing Express `req`/`res`. Keeps units testable without booting HTTP.
+
 ## 🔧 Areas for Improvement
 
-### 1. Test File Organization
-**Current**: Some test files in root (`test-*.js`)  
-**Recommendation**: Move all test files to `tests/` directory
-
-**Files to move**:
-- `middleware-platform/test-agent-flow.js` → `tests/test-agent-flow.js`
-- `middleware-platform/test-api.js` → `tests/test-api.js`
-- `middleware-platform/test-drright-integration.js` → `tests/test-drright-integration.js`
-- `middleware-platform/test-jsearch-api.js` → `tests/test-jsearch-api.js`
-- `middleware-platform/test-jsearch-integration.js` → `tests/test-jsearch-integration.js`
-- `middleware-platform/test-stripe-production.js` → `tests/test-stripe-production.js`
-- `middleware-platform/test-today-jobs.js` → `tests/test-today-jobs.js`
+### 1. Test file organization
+**Current:** Jest roots at `__tests__/`; many legacy `test-*.js` files may still exist at the middleware root for manual runs.  
+**Recommendation:** Add real unit/integration tests under `__tests__/` and retire ad-hoc files over time.
 
 ### 2. Script Organization
 **Current**: All scripts in `scripts/` directory  

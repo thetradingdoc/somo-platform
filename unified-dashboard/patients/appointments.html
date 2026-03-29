@@ -81,7 +81,17 @@
         }
 
         .nav-icon {
-            font-size: 20px;
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
         }
 
         .sidebar-footer {
@@ -129,12 +139,29 @@
 
         .logout-btn {
             background: none;
-            border: none;
-            font-size: 20px;
+            border: 1px solid var(--gray-300);
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
-            padding: 4px;
-            border-radius: 4px;
-            transition: background 0.2s;
+            padding: 0;
+            border-radius: 8px;
+            color: var(--gray-600);
+            transition: all 0.2s;
+        }
+
+        .logout-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+        }
+
+        .logout-btn:hover {
+            background: var(--gray-100);
+            color: var(--primary);
+            border-color: var(--primary-light);
         }
 
         .main-content {
@@ -211,6 +238,13 @@
                 padding: 16px;
                 padding-top: 80px;
             }
+            .booking-cta-rail {
+                align-items: stretch;
+            }
+            .book-chat-btn {
+                width: 100%;
+                justify-content: center;
+            }
         }
 
         .btn {
@@ -244,6 +278,88 @@
 
         .container {
             max-width: 900px;
+        }
+
+        .appointment-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .booking-cta-rail {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 12px 14px;
+            border: 1px solid #bfdbfe;
+            background: linear-gradient(180deg, #eff6ff 0%, #ffffff 100%);
+            border-radius: 12px;
+            margin-bottom: 14px;
+        }
+        .booking-cta-copy {
+            font-size: 13px;
+            color: #1e3a8a;
+            font-weight: 600;
+        }
+        .book-chat-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 40px;
+            border-radius: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 1px 2px rgba(30, 64, 175, 0.2);
+        }
+        .book-chat-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .filter-chip {
+            border: 1px solid var(--gray-300);
+            background: white;
+            color: var(--gray-700);
+            border-radius: 999px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .filter-chip.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .today-panel {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 16px;
+        }
+
+        .today-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--gray-500);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .today-empty {
+            color: var(--gray-600);
+            font-size: 14px;
         }
 
         .appointments-list {
@@ -288,6 +404,13 @@
             margin-bottom: 4px;
         }
 
+        .appointment-provider {
+            font-size: 14px;
+            color: var(--gray-700);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
         .appointment-status {
             display: inline-block;
             padding: 4px 12px;
@@ -310,6 +433,10 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .status-canceled {
+            background: #f8d7da;
+            color: #721c24;
+        }
 
         .status-completed {
             background: #d1ecf1;
@@ -319,6 +446,18 @@
         .status-pending-payment {
             background: #fff3cd;
             color: #856404;
+        }
+        .status-missed {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .status-paid {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .status-refunded {
+            background: #ede9fe;
+            color: #5b21b6;
         }
 
         .appointment-actions {
@@ -340,8 +479,20 @@
         }
 
         .empty-state-icon {
-            font-size: 64px;
+            width: 64px;
+            height: 64px;
             margin-bottom: 16px;
+            color: var(--gray-400);
+            margin-left: auto;
+            margin-right: auto;
+            display: grid;
+            place-items: center;
+        }
+
+        .empty-state-icon svg {
+            width: 56px;
+            height: 56px;
+            stroke: currentColor;
         }
 
         .message {
@@ -446,23 +597,19 @@
             </div>
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
-                    <span class="nav-icon">🏠</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span>
                     <span>Dashboard</span>
                 </a>
                 <a href="wallet.html" class="nav-item">
-                    <span class="nav-icon">💳</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span>
                     <span>Wallet</span>
                 </a>
                 <a href="appointments.html" class="nav-item active">
-                    <span class="nav-icon">📅</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
                     <span>Appointments</span>
                 </a>
-                <a href="schedule.html" class="nav-item">
-                    <span class="nav-icon">🗓️</span>
-                    <span>Schedule</span>
-                </a>
                 <a href="my-records.html" class="nav-item">
-                    <span class="nav-icon">📄</span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>
                     <span>My Records</span>
                 </a>
             </nav>
@@ -473,7 +620,13 @@
                         <div class="user-name" id="userName">Patient</div>
                         <div class="user-role">Patient Account</div>
                     </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout">🚪</button>
+                    <button class="logout-btn" onclick="logout()" title="Logout" aria-label="Logout">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10 17l5-5-5-5"></path>
+                            <path d="M15 12H3"></path>
+                            <path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </aside>
@@ -481,16 +634,42 @@
         <main class="main-content">
                 <div class="page-header">
                 <h1 class="page-title">My Appointments</h1>
-                <p class="page-subtitle">View and manage your upcoming visits</p>
-                <div style="margin-top:16px;">
-                    <a href="schedule.html" class="btn btn-primary">Pick from calendar</a>
-                    <a href="book.html" class="btn btn-secondary" style="margin-left:8px;">Guided chat</a>
-                </div>
+                <p class="page-subtitle">Today first, then your visit history</p>
             </div>
+            <div class="appointment-filters" id="appointmentFilters" role="tablist" aria-label="Appointment filters">
+                <button class="filter-chip active" data-filter="upcoming" role="tab" aria-selected="true">Upcoming</button>
+                <button class="filter-chip" data-filter="today" role="tab" aria-selected="false">Today</button>
+                <button class="filter-chip" data-filter="past" role="tab" aria-selected="false">Past</button>
+                <button class="filter-chip" data-filter="payment_due" role="tab" aria-selected="false">Payment due</button>
+                <button class="filter-chip" data-filter="all" role="tab" aria-selected="false">All</button>
+            </div>
+            <section class="booking-cta-rail" aria-label="Book a new appointment">
+                <div class="booking-cta-copy">Need a new visit? Pick a date on the calendar, or start a guided chat to book with our care agent.</div>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                <a href="schedule.html" class="btn btn-secondary book-chat-btn">
+                    <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                    <span>Pick from calendar</span>
+                </a>
+                <a href="book.html" class="btn btn-primary book-chat-btn">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M8 10h8M8 14h5"></path>
+                        <path d="M21 12a8.5 8.5 0 0 1-8.5 8.5H6l-3 3v-6.5A8.5 8.5 0 1 1 21 12Z"></path>
+                    </svg>
+                    <span>Book with chat agent</span>
+                </a>
+                </div>
+            </section>
+            <section class="today-panel" id="todayPanel" aria-live="polite"></section>
             <div id="messageContainer"></div>
             <div id="appointmentsContainer" class="appointments-list">
             <div class="empty-state">
-                <div class="empty-state-icon">⏳</div>
+                <div class="empty-state-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M5 3v4a5 5 0 0 0 10 0V3"></path>
+                        <path d="M15 15a4 4 0 1 0 8 0 4 4 0 0 0-8 0z"></path>
+                        <path d="M15 15H9a5 5 0 0 1-5-5"></path>
+                    </svg>
+                </div>
                 <p>Loading appointments...</p>
             </div>
         </div>
@@ -554,9 +733,12 @@
         import { mountBottomTabs, showToast } from '../assets/js/patient-shell.js';
 
         const API_BASE = window.API_BASE || 'http://localhost:4000';
+        let currentFilter = 'upcoming';
+        let lastAppointments = [];
 
         document.addEventListener('DOMContentLoaded', () => {
             mountBottomTabs();
+            setupFilters();
             loadAppointments();
             startAutoRefresh();
         });
@@ -567,16 +749,50 @@
             return Number.isNaN(t) ? NaN : t;
         }
 
+        /**
+         * Use legacy date + time as local wall-clock for sorting and join window.
+         * FHIR start_time/end_time are often UTC (Z); the UI shows date + time as local — mixing them caused false "Missed" and wrong filters.
+         */
+        function localVisitBoundsMs(appt) {
+            const isoStart = parseMs(appt.start_time);
+            const isoEnd = parseMs(appt.end_time);
+            let durMs = 30 * 60 * 1000;
+            if (!Number.isNaN(isoStart) && !Number.isNaN(isoEnd) && isoEnd > isoStart) {
+                durMs = isoEnd - isoStart;
+            }
+            if (appt.date && appt.time) {
+                const [y, mo, da] = appt.date.split('-').map(Number);
+                const parts = String(appt.time).split(':');
+                const hh = Number(parts[0]);
+                const mm = Number(parts[1] || 0);
+                if (Number.isFinite(y) && Number.isFinite(mo) && Number.isFinite(da) && Number.isFinite(hh)) {
+                    const start = new Date(y, mo - 1, da, hh, mm, 0, 0).getTime();
+                    return { start, end: start + durMs };
+                }
+            }
+            if (!Number.isNaN(isoStart) && !Number.isNaN(isoEnd)) {
+                return { start: isoStart, end: isoEnd };
+            }
+            if (!Number.isNaN(isoStart)) {
+                return { start: isoStart, end: isoStart + durMs };
+            }
+            return { start: NaN, end: NaN };
+        }
+
+        function escHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function joinWindowGate(appt) {
-            const start = parseMs(appt.start_time);
-            const end = parseMs(appt.end_time);
+            const { start, end } = localVisitBoundsMs(appt);
             if (Number.isNaN(start) || Number.isNaN(end)) return { allowed: true, reason: null };
             const now = Date.now();
-            const earlyMin = 10;
             const lateMin = 15;
-            const earliest = start - earlyMin * 60 * 1000;
             const latest = end + lateMin * 60 * 1000;
-            if (now < earliest) return { allowed: false, reason: `Join opens ${earlyMin} min before start.` };
             if (now > latest) return { allowed: false, reason: 'This visit is no longer available to join.' };
             return { allowed: true, reason: null };
         }
@@ -596,6 +812,118 @@
             if (pay === 'unpaid' || pay === 'pending' || pay === '') return { label: 'Payment due', cls: 'status-pending-payment' };
             if (s === 'confirmed') return { label: 'Confirmed', cls: 'status-confirmed' };
             return { label: appt.status || 'Scheduled', cls: `status-${s || 'scheduled'}` };
+        }
+
+        function appointmentTimestamp(appt) {
+            const { start } = localVisitBoundsMs(appt);
+            if (!Number.isNaN(start)) return start;
+            const fallback = `${appt.date || ''} ${appt.time || ''}`;
+            const parsed = new Date(fallback).getTime();
+            return Number.isNaN(parsed) ? Date.now() : parsed;
+        }
+
+        function isPast(appt) {
+            return appointmentTimestamp(appt) < Date.now();
+        }
+
+        function isToday(appt) {
+            const d = new Date(appointmentTimestamp(appt));
+            const now = new Date();
+            return d.getFullYear() === now.getFullYear() &&
+                d.getMonth() === now.getMonth() &&
+                d.getDate() === now.getDate();
+        }
+
+        function isPaymentDue(appt) {
+            const pay = (appt.payment_status || '').toLowerCase();
+            return pay === 'unpaid' || pay === 'pending' || pay === '' || pay === 'payment_due';
+        }
+
+        function applyFilter(appointments) {
+            if (currentFilter === 'all') return appointments;
+            if (currentFilter === 'today') return appointments.filter(isToday);
+            if (currentFilter === 'past') return appointments.filter(isPast);
+            if (currentFilter === 'payment_due') return appointments.filter(isPaymentDue);
+            return appointments.filter((a) => !isPast(a));
+        }
+
+        function setupFilters() {
+            const wrap = document.getElementById('appointmentFilters');
+            if (!wrap) return;
+            wrap.querySelectorAll('.filter-chip').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    currentFilter = btn.dataset.filter || 'upcoming';
+                    wrap.querySelectorAll('.filter-chip').forEach((b) => {
+                        const active = b === btn;
+                        b.classList.toggle('active', active);
+                        b.setAttribute('aria-selected', active ? 'true' : 'false');
+                    });
+                    displayAppointments(lastAppointments);
+                });
+            });
+        }
+
+        function renderTodayPanel(appointments) {
+            const panel = document.getElementById('todayPanel');
+            const todayOrNext = [...appointments]
+                .sort((a, b) => appointmentTimestamp(a) - appointmentTimestamp(b))
+                .find((a) => isToday(a) || !isPast(a));
+            if (!todayOrNext) {
+                panel.innerHTML = `
+                    <div class="today-title">Today</div>
+                    <div class="today-empty">No visit today. Your next appointment will appear here.</div>
+                `;
+                return null;
+            }
+            const badge = statusBadge(todayOrNext);
+            const provLine = todayOrNext.provider
+                ? `<div class="appointment-provider">${escHtml(todayOrNext.provider)}</div>`
+                : '';
+            const payState = (todayOrNext.payment_status || '').toLowerCase();
+            const needsPayment = !!todayOrNext.payment_link && (payState === 'unpaid' || payState === 'pending' || payState === '');
+            const payBtn = needsPayment ? `<a href="${todayOrNext.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
+            const room = todayOrNext.video_room || `appt-${todayOrNext.id}`;
+            const joinUrl = `video-call.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent('Patient')}`;
+            const gate = joinWindowGate(todayOrNext);
+            const joinDisabled = !gate.allowed || ['canceled', 'cancelled', 'completed', 'documented'].includes((todayOrNext.status || '').toLowerCase());
+            const joinBtn = joinDisabled
+                ? `<button class="btn btn-secondary btn-sm" disabled style="opacity:.6;cursor:not-allowed;">Join video</button>`
+                : `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
+            const joinHint = (!gate.allowed && gate.reason)
+                ? `<div style="margin-top:8px;color:var(--gray-500);font-size:12px;">${escHtml(gate.reason)}</div>`
+                : '';
+            const whyPay = needsPayment
+                ? `<div style="margin-top:10px;color:var(--gray-600);font-size:13px;">
+                     <strong>Why am I paying?</strong> This visit has an outstanding balance. Paying generates a receipt and confirms your payment.
+                   </div>`
+                : '';
+            const rescheduleBtn = todayOrNext.can_reschedule
+                ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${todayOrNext.id}', '${todayOrNext.date}', '${todayOrNext.time}')">Reschedule</button>`
+                : '';
+            const cancelBtn = todayOrNext.can_cancel
+                ? `<button class="btn btn-secondary btn-sm" onclick="openCancelModal('${todayOrNext.id}')">Cancel</button>`
+                : '';
+            panel.innerHTML = `
+                <div class="today-title">${isToday(todayOrNext) ? 'Today' : 'Next appointment'}</div>
+                <div class="appointment-header" style="margin-bottom:0;">
+                    <div class="appointment-info">
+                        <div class="appointment-type">${todayOrNext.appointment_type || 'Consultation'}</div>
+                        ${provLine}
+                        <div class="appointment-datetime">${todayOrNext.datetime_display || `${todayOrNext.date || ''} ${todayOrNext.time || ''}`}</div>
+                        <div class="appointment-tz-note" style="font-size:12px;color:var(--gray-500);margin-top:4px;">Times in ${escHtml(todayOrNext.timezone || 'America/New_York')}</div>
+                        <span class="appointment-status ${badge.cls}">${badge.label}</span>
+                        ${joinHint}
+                        ${whyPay}
+                    </div>
+                    <div class="appointment-actions" style="flex-wrap:wrap;justify-content:flex-end;">
+                        ${joinBtn}
+                        ${payBtn}
+                        ${rescheduleBtn}
+                        ${cancelBtn}
+                    </div>
+                </div>
+            `;
+            return todayOrNext.id;
         }
 
         async function loadAppointments() {
@@ -627,11 +955,18 @@
 
         function displayAppointments(appointments) {
             const container = document.getElementById('appointmentsContainer');
+            lastAppointments = Array.isArray(appointments) ? [...appointments] : [];
+            const featuredId = renderTodayPanel(lastAppointments);
 
             if (appointments.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-state-icon">📅</div>
+                        <div class="empty-state-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <rect x="3" y="4" width="18" height="17" rx="2"></rect>
+                            <path d="M8 2v4M16 2v4M3 10h18"></path>
+                          </svg>
+                        </div>
                         <h3>No Appointments</h3>
                         <p>You don't have any appointments yet.</p>
                     </div>
@@ -639,14 +974,29 @@
                 return;
             }
 
-            const sorted = [...appointments].sort((a, b) => {
-                const am = a.start_time ? new Date(a.start_time).getTime() : NaN;
-                const bm = b.start_time ? new Date(b.start_time).getTime() : NaN;
-                if (!Number.isNaN(am) && !Number.isNaN(bm)) return am - bm;
-                const ak = `${a.date || ''} ${a.time || ''}`;
-                const bk = `${b.date || ''} ${b.time || ''}`;
-                return ak.localeCompare(bk);
-            });
+            const filteredForList = [...applyFilter(appointments)]
+                .sort((a, b) => appointmentTimestamp(a) - appointmentTimestamp(b));
+            let sorted = filteredForList;
+            if (featuredId) {
+                sorted = filteredForList.filter((a) => a.id !== featuredId);
+            }
+            const listWasOnlyFeatured = !!(featuredId && filteredForList.length === 1 && filteredForList[0].id === featuredId);
+
+            if (!sorted.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M3 7l9 6 9-6"></path>
+                            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                          </svg>
+                        </div>
+                        <h3>${listWasOnlyFeatured ? 'Shown above' : 'No results for this filter'}</h3>
+                        <p>${listWasOnlyFeatured ? 'Your next visit is highlighted in the section at the top.' : 'Try another filter tab to view more appointments.'}</p>
+                    </div>
+                `;
+                return;
+            }
 
             // Multi-appointment UX (mvp-50): group by date label
             const groups = new Map();
@@ -660,6 +1010,7 @@
                 const header = `<div style="margin:14px 2px 10px;color:var(--gray-600);font-weight:800;">${dateLabel}</div>`;
                 const cards = list.map(apt => {
                 const badge = statusBadge(apt);
+                const provHtml = apt.provider ? `<div class="appointment-provider">${escHtml(apt.provider)}</div>` : '';
                 const payState = (apt.payment_status || '').toLowerCase();
                 const needsPayment = !!apt.payment_link && (payState === 'unpaid' || payState === 'pending' || payState === '');
                 const payBtn = needsPayment ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
@@ -671,7 +1022,7 @@
                     ? `<button class="btn btn-secondary btn-sm" disabled style="opacity:.6;cursor:not-allowed;">Join video</button>`
                     : `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
                 const joinHint = (!gate.allowed && gate.reason)
-                    ? `<div style="margin-top:8px;color:var(--gray-500);font-size:12px;">${gate.reason}</div>`
+                    ? `<div style="margin-top:8px;color:var(--gray-500);font-size:12px;">${escHtml(gate.reason)}</div>`
                     : '';
                 const whyPay = needsPayment
                     ? `<div style="margin-top:10px;color:var(--gray-600);font-size:13px;">
@@ -683,7 +1034,9 @@
                         <div class="appointment-header">
                             <div class="appointment-info">
                                 <div class="appointment-type">${apt.appointment_type || 'Consultation'}</div>
+                                ${provHtml}
                                 <div class="appointment-datetime">${apt.datetime_display || apt.date + ' at ' + apt.time}</div>
+                                <div class="appointment-tz-note" style="font-size:12px;color:var(--gray-500);margin-top:4px;">Times in ${escHtml(apt.timezone || 'America/New_York')}</div>
                                 <span class="appointment-status ${badge.cls}">${badge.label}</span>
                                 ${joinHint}
                                 ${whyPay}

@@ -161,19 +161,19 @@ export function mountBottomTabs() {
   tabs.className = 'patient-bottom-tabs';
   tabs.innerHTML = `
     <a class="tab ${active === 'dashboard' ? 'active' : ''}" href="patient-dashboard.html" aria-label="Dashboard">
-      <span class="icon">🏠</span><span class="label">Home</span>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span class="label">Home</span>
     </a>
     <a class="tab ${active === 'appointments' ? 'active' : ''}" href="appointments.html" aria-label="Appointments">
-      <span class="icon">📅</span><span class="label">Visits</span>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span class="label">Visits</span>
     </a>
     <a class="tab ${active === 'wallet' ? 'active' : ''}" href="wallet.html" aria-label="Wallet">
-      <span class="icon">💳</span><span class="label">Wallet</span>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span><span class="label">Wallet</span>
     </a>
     <a class="tab ${active === 'records' ? 'active' : ''}" href="my-records.html" aria-label="Records">
-      <span class="icon">📄</span><span class="label">Records</span>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span class="label">Records</span>
     </a>
     <a class="tab ${active === 'profile' ? 'active' : ''}" href="profile.html" aria-label="Profile">
-      <span class="icon">👤</span><span class="label">Profile</span>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M20 21a8 8 0 1 0-16 0"/><circle cx="12" cy="7.5" r="3.5"/></svg></span><span class="label">Profile</span>
     </a>
   `;
   document.body.appendChild(tabs);

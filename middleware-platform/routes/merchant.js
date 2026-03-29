@@ -9,6 +9,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const db = require('../database');
 const UniversalAdapter = require('../adapters/universal-adapter');
+const { withProviderAliases, logAliasUsage } = require('../utils/naming-aliases');
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ function safeParse(data) {
  */
 router.get('/me', async (req, res) => {
   try {
+    logAliasUsage('merchant-me', req);
     // Get customer from session
     const cookies = req.headers.cookie || '';
     const sessionMatch = cookies.match(/customer_session=([^;]+)/);
@@ -89,7 +91,7 @@ router.get('/me', async (req, res) => {
       }
     }
     
-    res.json({
+    const payload = {
       success: true,
       merchant: {
         id: merchant.id,
@@ -101,7 +103,8 @@ router.get('/me', async (req, res) => {
         status: merchant.status,
         created_at: merchant.created_at
       }
-    });
+    };
+    return res.json(withProviderAliases({ ...payload, provider: payload.merchant }, merchant.id));
   } catch (error) {
     console.error('❌ Error getting merchant:', error);
     res.status(500).json({
@@ -117,6 +120,7 @@ router.get('/me', async (req, res) => {
  */
 router.patch('/me', async (req, res) => {
   try {
+    logAliasUsage('merchant-patch-me', req);
     const cookies = req.headers.cookie || '';
     const sessionMatch = cookies.match(/customer_session=([^;]+)/);
     if (!sessionMatch) return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -147,7 +151,7 @@ router.patch('/me', async (req, res) => {
     db.db.prepare(`UPDATE merchants SET ${setParts.join(', ')} WHERE id = ?`).run(...values);
 
     const fresh = require('../database').getMerchant(merchant.id);
-    return res.json({
+    const payload = {
       success: true,
       merchant: {
         id: fresh.id,
@@ -158,7 +162,8 @@ router.patch('/me', async (req, res) => {
         enabled_platforms: fresh.enabled_platforms,
         status: fresh.status
       }
-    });
+    };
+    return res.json(withProviderAliases({ ...payload, provider: payload.merchant }, fresh.id));
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -170,6 +175,7 @@ router.patch('/me', async (req, res) => {
  */
 router.post('/me/regenerate-api-key', async (req, res) => {
   try {
+    logAliasUsage('merchant-regenerate-key', req);
     const cookies = req.headers.cookie || '';
     const sessionMatch = cookies.match(/customer_session=([^;]+)/);
     if (!sessionMatch) return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -184,7 +190,7 @@ router.post('/me/regenerate-api-key', async (req, res) => {
     db.db.prepare('UPDATE merchants SET api_key = ? WHERE id = ?').run(newApiKey, merchant.id);
 
     const fresh = require('../database').getMerchant(merchant.id);
-    return res.json({
+    const payload = {
       success: true,
       message: 'API key regenerated. Update your applications with the new key.',
       merchant: {
@@ -196,7 +202,8 @@ router.post('/me/regenerate-api-key', async (req, res) => {
         enabled_platforms: fresh.enabled_platforms,
         status: fresh.status
       }
-    });
+    };
+    return res.json(withProviderAliases({ ...payload, provider: payload.merchant }, fresh.id));
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
@@ -267,6 +274,7 @@ router.post('/me/test-webhook', async (req, res) => {
  */
 router.post('/register', async (req, res) => {
     try {
+        logAliasUsage('merchant-register', req);
         const { name, api_url, webhook_url, enabled_platforms } = req.body;
 
         if (!name || !api_url) {
@@ -299,7 +307,7 @@ router.post('/register', async (req, res) => {
 
         db.createMerchant(merchant);
 
-        res.json({
+        const payload = {
             success: true,
             message: 'Merchant registered successfully',
             merchant: {
@@ -308,7 +316,8 @@ router.post('/register', async (req, res) => {
                 api_key: apiKey,
                 enabled_platforms: merchant.enabled_platforms
             }
-        });
+        };
+        res.json(withProviderAliases({ ...payload, provider: payload.merchant }, merchant.id));
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

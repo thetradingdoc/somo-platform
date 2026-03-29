@@ -113,6 +113,19 @@ class KellyToolExecutor {
     } catch (_) {}
   }
 
+  /** Merchant id for public commerce quote/checkout (Kelly HTTP calls to this server). */
+  static _resolveMerchantIdForCommerce(args, clinicId) {
+    const fromArgs = args && (args.provider_id || args.merchant_id);
+    if (fromArgs) return String(fromArgs).trim();
+    if (!clinicId) return null;
+    try {
+      const c = db.getClinic ? db.getClinic(clinicId) : null;
+      return c?.merchant_id ? String(c.merchant_id).trim() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /**
    * Execute a named tool with args and session context.
    *
@@ -139,7 +152,105 @@ class KellyToolExecutor {
           const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
           const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
 
+          const routineNoSymptoms = (() => {
+            try {
+              const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms') : null;
+              return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+            } catch (_) {
+              return false;
+            }
+          })();
+
           const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
+
+          // Routine/no-symptoms path: bypass full triage stack when session has routine_no_symptoms flag.
+          // Voice HTTP guardrails (allowRoutineBypass) already permit schedule; executor must not block.
+          if (routineNoSymptoms) {
+            const syntheticTriage = {
+              target_specialty: 'Primary Care',
+              urgency: 'routine',
+              primary_icd10: null,
+              soap_note: 'Routine wellness visit — no active symptoms'
+            };
+            const { getCptCodeForVisit } = require('../utils/cpt-helper');
+            const primaryCptRoutine = getCptCodeForVisit({
+              specialty: 'PrimaryCare',
+              isNewPatient: true,
+              urgency: 'routine'
+            });
+            const normalizedArgsRoutine = { ...args };
+            if (normalizedArgsRoutine.date) {
+              normalizedArgsRoutine.date = KellyToolExecutor._normalizeToBusinessDate(normalizedArgsRoutine.date, clinicId);
+            }
+            const rawTime = String(args.time || '').trim();
+            const rawLane = String(args.lane || '').trim();
+            const isAsyncSlot = rawTime.toUpperCase().includes('ASYNC') || rawLane.toLowerCase().includes('async');
+            const normalizedTime = rawTime && !rawTime.toUpperCase().includes('ASYNC') ? rawTime : '11:30 AM';
+            normalizedArgsRoutine.time = normalizedTime;
+            const visitMode = isAsyncSlot ? 'sync_video' : (String(rawLane || '').toLowerCase() === 'async' ? 'async_review' : 'sync_video');
+            const scheduleEndpoint = channel === 'chat' ? '/api/appointments/schedule' : '/voice/appointments/schedule';
+            const scheduleResultRoutine = await this._post(scheduleEndpoint, {
+              ...normalizedArgsRoutine,
+              appointment_type: normalizedArgsRoutine.appointment_type || 'Primary Care',
+              clinic_id: clinicId,
+              visit_mode: visitMode,
+              notes: normalizedArgsRoutine.notes || syntheticTriage.soap_note,
+              primary_icd10: null,
+              primary_cpt: primaryCptRoutine || null,
+              metadata: { session_id: sessionId },
+              session_id: sessionId
+            });
+            if (scheduleResultRoutine?.success && scheduleResultRoutine?.appointment?.id) {
+              try {
+                const { autoCheckoutAfterSchedule } = require('./auto-checkout-after-schedule');
+                const base = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+                const checkoutResult = await autoCheckoutAfterSchedule({
+                  base,
+                  appointmentId: scheduleResultRoutine.appointment.id,
+                  patient_phone: normalizedArgsRoutine.patient_phone || callerPhone,
+                  patient_email: normalizedArgsRoutine.patient_email,
+                  patient_name: normalizedArgsRoutine.patient_name || 'Patient',
+                  clinic_id: clinicId,
+                  appointment_type: 'Primary Care',
+                  triage_session_id: sessionId,
+                  timeoutMs: KellyToolExecutor._httpTimeoutMs()
+                });
+                console.log('[DEBUG-CHECKOUT] autoCheckoutAfterSchedule result (routine):', JSON.stringify({
+                  success: !!checkoutResult,
+                  payment_token: checkoutResult?.payment_token ? checkoutResult.payment_token.slice(0, 12) + '…' : null,
+                  checkout_id: checkoutResult?.checkout_id || null,
+                  requires_verification: checkoutResult?.requires_verification,
+                  error: checkoutResult?.error || null
+                }));
+                if (checkoutResult?.payment_token) {
+                  KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', checkoutResult.payment_token);
+                  KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', checkoutResult.checkout_id || '');
+                }
+                return {
+                  ...scheduleResultRoutine,
+                  checkout: checkoutResult,
+                  payment_token: checkoutResult?.payment_token || null,
+                  checkout_id: checkoutResult?.checkout_id || null,
+                  requires_verification: !!checkoutResult?.requires_verification,
+                  say_to_patient: checkoutResult?.requires_verification
+                    ? `Your appointment is confirmed. A verification code was sent to ${normalizedArgsRoutine.patient_email}. Enter the 6-digit code to complete payment.`
+                    : 'Your appointment is confirmed.'
+                };
+              } catch (checkoutErr) {
+                console.warn('[KellyToolExecutor] Routine schedule checkout failed:', checkoutErr?.message);
+                return scheduleResultRoutine;
+              }
+            }
+            if (scheduleResultRoutine?.requiresPhone) {
+              return {
+                ...scheduleResultRoutine,
+                next_step:
+                  'Ask the patient for their phone number. When they provide it, call schedule_appointment again with the SAME patient_name and patient_email you already have, plus patient_phone. Do NOT ask for name or email again.'
+              };
+            }
+            return scheduleResultRoutine || { success: false, error: 'Schedule failed' };
+          }
+
           if (!sessionRow) {
             bump('voice_agent_misuse_schedule_appointment_no_triage_session_row');
             return {
@@ -318,7 +429,13 @@ class KellyToolExecutor {
                 triage_session_id: sessionId || null,
                 timeoutMs: KellyToolExecutor._httpTimeoutMs()
               });
-
+              console.log('[DEBUG-CHECKOUT] autoCheckoutAfterSchedule result:', JSON.stringify({
+                success: !!checkoutResult,
+                payment_token: checkoutResult?.payment_token ? checkoutResult.payment_token.slice(0, 12) + '…' : null,
+                checkout_id: checkoutResult?.checkout_id || null,
+                requires_verification: checkoutResult?.requires_verification,
+                error: checkoutResult?.error || null
+              }));
               if (checkoutResult?.payment_token) {
                 KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', checkoutResult.payment_token);
                 KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', checkoutResult.checkout_id || '');
@@ -341,6 +458,15 @@ class KellyToolExecutor {
               console.warn('[KellyToolExecutor] auto checkout chain failed (non-fatal):', checkoutErr.message);
               // Fall back to schedule result only; LLM can call create_appointment_checkout itself.
             }
+          }
+
+          // When phone is required, tell the LLM to ask for it then retry with SAME name/email—do NOT re-ask for name
+          if (scheduleResult?.requiresPhone) {
+            return {
+              ...scheduleResult,
+              next_step:
+                'Ask the patient for their phone number. When they provide it, call schedule_appointment again with the SAME patient_name and patient_email you already have, plus patient_phone. Do NOT ask for name or email again.'
+            };
           }
 
           return scheduleResult;
@@ -399,12 +525,32 @@ class KellyToolExecutor {
             if (!paymentToken) {
               paymentToken = KellyToolExecutor._getSessionMeta(sessionId, 'payment_token');
             }
+            // Recovery: attempt DB lookup by triage session when token is still missing.
+            if (!paymentToken) {
+              try {
+                const row = db.db?.prepare(`
+                  SELECT pt.token AS payment_token
+                  FROM voice_checkouts vc
+                  INNER JOIN payment_tokens pt ON pt.checkout_id = vc.id
+                  WHERE vc.triage_session_id = ?
+                    AND (vc.status IS NULL OR vc.status != 'completed')
+                    AND (pt.status IS NULL OR pt.status != 'completed')
+                  ORDER BY vc.created_at DESC, pt.created_at DESC
+                  LIMIT 1
+                `).get(sessionId);
+                if (row?.payment_token) {
+                  paymentToken = row.payment_token;
+                  KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', paymentToken);
+                  console.log('[TOKEN-RECOVERY] Recovered payment_token from DB for session:', String(sessionId || '').slice(0, 8));
+                }
+              } catch (_) {}
+            }
             if (!paymentToken) {
               return {
                 success: false,
                 error: 'MISSING_TOKEN',
                 message:
-                  'Payment token not found. Ask the patient for the 6-digit code again, or re-trigger checkout so we can resend verification.'
+                  "I couldn't find your payment session. Let me resend the verification code - what's your email address?"
               };
             }
             return await this._post('/voice/checkout/verify', {
@@ -437,6 +583,54 @@ class KellyToolExecutor {
 
         case 'end_call':
           return { success: true, end_call: true };
+
+        case 'get_product_quote': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          if (!merchantId) {
+            return {
+              success: false,
+              error: 'merchant_required',
+              message: 'Could not resolve merchant/provider for this clinic. Pass provider_id or configure clinic merchant_id.'
+            };
+          }
+          const productId = args.product_id || args.prescription_id;
+          if (!productId) {
+            return { success: false, error: 'product_id_required' };
+          }
+          return await this._post('/api/public/commerce/quote', {
+            product_id: productId,
+            prescription_id: productId,
+            provider_id: merchantId,
+            quantity: args.quantity
+          });
+        }
+
+        case 'prepare_commerce_checkout': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          if (!merchantId) {
+            return {
+              success: false,
+              error: 'merchant_required',
+              message: 'Could not resolve merchant/provider for this clinic. Pass provider_id or configure clinic merchant_id.'
+            };
+          }
+          const quoteId = args.quote_id || args.checkout_session_id;
+          const email = args.customer_email || args.email;
+          if (!quoteId || !email) {
+            return { success: false, error: 'quote_and_email_required', message: 'quote_id and customer_email are required.' };
+          }
+          return await this._post('/api/public/checkout/start', {
+            quote_id: quoteId,
+            checkout_session_id: quoteId,
+            provider_id: merchantId,
+            email: String(email).trim(),
+            phone: args.customer_phone || args.phone || undefined,
+            name: args.customer_name || args.name || undefined,
+            shipping_address: args.shipping_address || undefined,
+            kelly_session_id: sessionId || undefined,
+            payment_method: args.payment_method || 'direct_stripe'
+          });
+        }
 
         default:
           console.warn(`[KellyToolExecutor] Unknown tool: ${toolName}`);
@@ -504,7 +698,9 @@ class KellyToolExecutor {
       };
     }
     // Block orphan/stale RAG: triage_sessions must point at this exact RAG row (set on run_triage_rag).
-    if (
+    if (routineNoSymptoms) {
+      console.log('[SLOTS] Routine session - skipping stale RAG check');
+    } else if (
       !usingRoutineBypass &&
       sessionRow &&
       sessionRow.rag_result_id != null &&
@@ -1221,9 +1417,25 @@ class KellyToolExecutor {
         clinicId
       });
 
+      const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
+      const isRoutineBypass = /routine wellness visit|no active symptoms/i.test(args.symptom_text || '');
+      const routineNoSymptomsFlag = (() => {
+        try {
+          const v = KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms');
+          return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+        } catch (_) { return false; }
+      })();
+      if (isRoutineBypass || routineNoSymptomsFlag) {
+        result.rag_confidence = Math.max(result.rag_confidence || 0, THRESHOLD);
+        result.triage_complete = true;
+        result.target_specialty = result.target_specialty || 'PrimaryCare';
+        result.urgency = result.urgency || 'routine';
+        result.safety_level = result.safety_level || 'green';
+        console.log('[RAG] Routine bypass: forcing triage_complete=true, confidence=', result.rag_confidence);
+      }
+
       // M-S3.C: triage_complete when OPQRST + (≥1 differential or specialty) + confidence gate.
       // Rich-intake remains a scheduling/slot gate; do not block triage_complete on intake timestamp.
-      const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
       const hasDifferential = (result.differentials || []).length >= 1;
       const hasSpecialty = !!(result.target_specialty);
       const conf = KellyToolExecutor._confidenceFromTriageRow(result);
@@ -1237,7 +1449,7 @@ class KellyToolExecutor {
       result.rag_confidence_ok = confOk;
       const latestSession = db.getTriageSession ? db.getTriageSession(sessionId) : sessionRow;
       const opqrstComplete = latestSession && KellyToolExecutor._isCompleteFlag(latestSession.opqrst_complete);
-      const triageComplete = opqrstComplete && (hasDifferential || hasSpecialty) && confOk;
+      const triageComplete = !!(result.triage_complete || (opqrstComplete && (hasDifferential || hasSpecialty) && confOk));
 
       // Debug telemetry: explain why triage_complete isn't being set.
       if (!triageComplete) {

@@ -1,6 +1,6 @@
 // Minimal service worker for installability and basic offline shell.
 
-const CACHE_NAME = 'doclittle-shell-v2';
+const CACHE_NAME = 'doclittle-shell-v5';
 const SHELL_URLS = [
   '/unified-dashboard/business/business-dashboard.html',
   '/unified-dashboard/patients/patient-dashboard.html',
@@ -8,7 +8,9 @@ const SHELL_URLS = [
   '/unified-dashboard/patients/wallet.html',
   '/unified-dashboard/patients/my-records.html',
   '/unified-dashboard/assets/css/global.css',
-  '/unified-dashboard/assets/js/config.js'
+  '/unified-dashboard/assets/js/config.js',
+  '/unified-dashboard/assets/js/navigation.js',
+  '/unified-dashboard/assets/js/patient-shell.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -37,6 +39,21 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   if (request.url.includes('/api/')) return;
+
+  // For page navigations, prefer network so users always get latest HTML.
+  // Fall back to cache when offline.
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
 
   event.respondWith(
     caches.match(request).then((cached) => {

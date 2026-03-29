@@ -250,9 +250,10 @@ async function completeCheckout(paymentIntentId) {
         }
 
     } catch (error) {
-        console.error('Checkout completion error:', error);
-        // Payment went through but order creation failed
-        // In production, this should trigger an alert to support
+        console.error(
+            '[CRITICAL] Checkout completion failed after Stripe success — payment captured but merchant_orders may be missing:',
+            error
+        );
         showSuccess('PENDING');
     }
 }

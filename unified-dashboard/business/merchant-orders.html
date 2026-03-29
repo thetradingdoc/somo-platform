@@ -42,6 +42,16 @@
             margin-bottom: 4px;
         }
 
+        .sidebar-logo .doc {
+            font-family: 'Times New Roman', Times, serif;
+            font-style: italic;
+        }
+
+        .sidebar-logo .little {
+            font-family: 'Verdana', Geneva, sans-serif;
+            font-weight: 700;
+        }
+
         .sidebar-nav {
             padding: 16px;
         }
@@ -330,7 +340,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <strong>Billy</strong>
+                    <span class="doc">Doc</span><span class="little">Little</span>
                 </div>
             </div>
             <nav class="sidebar-nav">
@@ -522,6 +532,24 @@
                             <span class="detail-label">Quantity</span>
                             <span class="detail-value">${order.quantity || 0}</span>
                         </div>
+                        ${order.product_name ? `
+                        <div class="detail-item">
+                            <span class="detail-label">Product</span>
+                            <span class="detail-value">${order.product_name}</span>
+                        </div>` : ''}
+                        <div class="detail-item">
+                            <span class="detail-label">Source</span>
+                            <span class="detail-value">${order.source === 'voice' ? 'Agent' : (order.source || 'Direct')}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-label">Payment</span>
+                            <span class="detail-value">${(order.payment_status || '—').replace(/_/g, ' ')}</span>
+                        </div>
+                        ${order.commerce_quote_id ? `
+                        <div class="detail-item">
+                            <span class="detail-label">Quote</span>
+                            <span class="detail-value" style="font-size:12px;word-break:break-all;">${String(order.commerce_quote_id).slice(0, 12)}…</span>
+                        </div>` : ''}
                     </div>
                     ${trackingInfo}
                 </div>

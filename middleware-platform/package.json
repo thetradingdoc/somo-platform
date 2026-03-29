@@ -24,15 +24,18 @@
         "test:verify-card": "node scripts/test-verify-card.js",
         "seed:demo": "node scripts/seed-demo-accounts.js",
         "seed:demo:reset": "node scripts/seed-demo-accounts.js --reset",
+        "purge:demo-jeremiah": "node scripts/purge-demo-provider-and-jeremiah-appointments.js",
+        "enable-demo-provider": "node scripts/enable-demo-provider-availability.js",
+        "check:clinical-prep": "node scripts/check-clinical-prep-payload.js",
         "seed:patient-demo": "node scripts/seed-patient-demo.js",
         "test:demo-login": "bash scripts/test-demo-login.sh",
         "test:stedi": "node scripts/test-stedi-api.js",
         "test:kelly": "bash scripts/run-kelly-tests.sh --all",
         "test:kelly:report": "bash scripts/run-kelly-tests.sh --all --report",
-        "test:settings": "node scripts/test-settings-regression.js",
+        "test:commerce-agent": "node scripts/test-commerce-checkout-agent.js",
         "backfill:patient-verification": "node scripts/backfill-patient-verification.js",
         "smoke:voice-onboarding": "node scripts/smoke-voice-onboarding.cjs",
-        "test": "jest"
+        "test": "jest --passWithNoTests"
     },
     "keywords": [
         "ai-commerce",

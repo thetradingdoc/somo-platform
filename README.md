@@ -2,9 +2,13 @@
 
 **Version**: 3.0.0  
 **Status**: Production Ready  
-**Last Updated**: November 2024
+**Last Updated**: March 2026
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
+
+> **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
+
+> **Architecture notes:** [ADRs](docs/architecture/decisions/README.md) · [Agentic checkout file map](docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md) · [`server.js` policy](docs/development/SERVER_JS_REFACTOR_POLICY.md)
 
 ---
 
@@ -56,20 +60,18 @@ DocLittle is a comprehensive AI-powered voice receptionist platform for healthca
 ### Project Structure
 
 ```
-agentic-commerce-platform/
-├── middleware-platform/     # Backend API
-│   ├── server.js            # Main Express server
-│   ├── database.js          # Database schema & migrations
-│   ├── services/            # Business logic
-│   ├── routes/              # API routes
-│   ├── adapters/            # External API adapters
-│   └── scripts/             # Utility scripts
-├── unified-dashboard/       # Frontend dashboard
-│   ├── business/            # Provider dashboard pages
-│   ├── patient/             # Patient portal pages
-│   └── assets/              # CSS, JS, images
+doclittle-platform/
+├── middleware-platform/     # Backend API (Express, Stripe, Retell, Kelly, FHIR, …)
+├── unified-dashboard/       # Provider/patient HTML dashboards + static assets
+│   └── littlelab-landing/   # CRA marketing / Skin & Care landing (build → served as static)
+├── patient-app/             # Expo (React Native) patient app
+├── livekit-agents/          # Python transcription / agent workers
+├── docs/                    # Canonical documentation (start at docs/README.md)
+├── todos/                   # Task lists & rollout notes (not all items are open work)
 └── README.md                # This file
 ```
+
+**Agentic commerce (chat → quote → pay):** see [docs/architecture/PUBLIC_AGENTIC_CHECKOUT.md](docs/architecture/PUBLIC_AGENTIC_CHECKOUT.md) and [todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (status note at top).
 
 ---
 
@@ -77,7 +79,7 @@ agentic-commerce-platform/
 
 ### Prerequisites
 
-- Node.js v20+
+- Node.js **v20+** recommended for local development. GitHub Actions also runs CI on **Node 18.x**; use the same checks before pushing if you develop on 18.
 - npm v8+
 - SQLite (included with better-sqlite3)
 
@@ -635,6 +637,6 @@ For issues and questions:
 
 ---
 
-**Last Updated**: November 2024  
+**Last Updated**: March 2026  
 **Version**: 3.0.0
 

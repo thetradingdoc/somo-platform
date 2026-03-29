@@ -15,6 +15,7 @@
 
 const db = require('../database');
 const crypto = require('crypto');
+const ProviderService = require('./provider-service');
 
 // Cache TTL for resolver results (5 minutes)
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -193,7 +194,14 @@ class SpecialistResolverService {
   // Load Balancing: sort by tier match then least busy
   // ─────────────────────────────────────────────
   static _sortByLoadAndTier(providers, patientTier, lane) {
+    const preferSyncedProviders = String(process.env.PREFER_SYNCED_PROVIDERS || 'true').toLowerCase() !== 'false';
     return [...providers].sort((a, b) => {
+      // 0. Prefer calendar-connected providers for sync lane.
+      if (preferSyncedProviders && lane === 'sync') {
+        const aSync = ProviderService.isProviderCalendarConnected({ provider_id: a.id, email: a.email }) ? 1 : 0;
+        const bSync = ProviderService.isProviderCalendarConnected({ provider_id: b.id, email: b.email }) ? 1 : 0;
+        if (aSync !== bSync) return bSync - aSync;
+      }
       // 1. Tier proximity (closer to patient tier = higher priority)
       if (patientTier !== null) {
         const aDiff = Math.abs(a.price_tier - patientTier);
@@ -218,10 +226,15 @@ class SpecialistResolverService {
   // ─────────────────────────────────────────────
   static _queryProviders(clinicId) {
     try {
-      return db.db.prepare(`
+      const providers = db.db.prepare(`
         SELECT * FROM provider_profiles
         WHERE clinic_id = ? AND is_active = 1
       `).all(clinicId);
+      const online = new Set(
+        ProviderService.getOnlineProvidersForClinic(clinicId).map((p) => p.provider_id)
+      );
+      if (online.size === 0) return [];
+      return providers.filter((p) => online.has(p.id));
     } catch (e) {
       console.warn('[SpecialistResolver] provider_profiles table not found or empty:', e.message);
       return [];
