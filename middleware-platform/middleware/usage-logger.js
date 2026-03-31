@@ -6,6 +6,19 @@
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
 
+/** Map legacy /public/* aliases to /api/public/* so usage analytics dedupe with primary routes. */
+function normalizeUsageEndpoint(path) {
+  if (!path || typeof path !== 'string') return path;
+  if (
+    path.startsWith('/public/products') ||
+    path.startsWith('/public/prescriptions') ||
+    path.startsWith('/public/commerce')
+  ) {
+    return '/api' + path;
+  }
+  return path;
+}
+
 /**
  * Enhanced request logger that writes to database
  */
@@ -49,7 +62,7 @@ function usageLogger(req, res, next) {
           id: requestId,
           customer_id: customerId,
           api_key_id: apiKeyId,
-          endpoint: req.path,
+          endpoint: normalizeUsageEndpoint(req.path),
           method: req.method,
           status_code: res.statusCode,
           response_time_ms: responseTime,

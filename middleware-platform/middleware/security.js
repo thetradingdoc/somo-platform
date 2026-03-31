@@ -18,7 +18,7 @@ const securityHeaders = helmet({
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
       workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // Allow PDF.js worker and blob URLs
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net", "https://cdn.jsdelivr.net", "https://esm.sh", "https://*.livekit.cloud", "wss://*.livekit.cloud"],
+      connectSrc: ["'self'", "https://api.stripe.com", "https://api.retellai.com", "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net", "https://cdn.jsdelivr.net", "https://esm.sh", "https://fonts.googleapis.com", "https://*.livekit.cloud", "wss://*.livekit.cloud"],
       frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"], // Allow Stripe iframes for card input
     },
   },
@@ -88,19 +88,34 @@ function validatePhone(phone) {
 }
 
 /**
+ * Stable path for logs. After nested routers run, `req.path` is often just `/` (mount-relative),
+ * which makes successful `GET /public/products` look like `GET / 404` in the finish line.
+ */
+function requestPathForLog(req) {
+  if (typeof req.originalUrl === 'string' && req.originalUrl.length) {
+    const q = req.originalUrl.indexOf('?');
+    return q === -1 ? req.originalUrl : req.originalUrl.slice(0, q);
+  }
+  const base = req.baseUrl || '';
+  const p = req.path || '';
+  return (base + p) || '/';
+}
+
+/**
  * Request logging middleware (basic console logging)
  * For database logging, use usageLogger from usage-logger.js
  */
 function requestLogger(req, res, next) {
   const start = Date.now();
+  const pathLog = requestPathForLog(req);
 
   // Log request
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - IP: ${req.ip}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${pathLog} - IP: ${req.ip}`);
 
   // Log response when finished
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} ${res.statusCode} - ${duration}ms`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${pathLog} ${res.statusCode} - ${duration}ms`);
   });
 
   next();

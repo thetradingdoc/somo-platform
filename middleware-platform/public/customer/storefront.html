@@ -77,26 +77,55 @@
   </div>
 
   <script>
-    const API_BASE = window.API_BASE || 'http://localhost:4000';
+    const API_BASE = (window.API_BASE || 'http://localhost:4000').replace(/\/$/, '');
 
     function resolveMerchantIdFromUrl() {
       const params = new URLSearchParams(window.location.search);
       if (params.get('provider_id')) return params.get('provider_id');
       if (params.get('merchant_id')) return params.get('merchant_id');
-      return null; // will use subdomain/default on API side
+      return null;
+    }
+
+    function productImageSrc(p) {
+      const raw = p.image_url || p.image_link || p.image || '';
+      if (!raw) return '';
+      const s = String(raw).trim();
+      if (/^https?:\/\//i.test(s)) return s;
+      if (s.startsWith('/')) return API_BASE + s;
+      return s;
+    }
+
+    function fetchWith429Retry(url, init, opts) {
+      init = init || {};
+      opts = opts || {};
+      var max = opts.maxAttempts != null ? opts.maxAttempts : 5;
+      var baseMs = opts.baseMs != null ? opts.baseMs : 350;
+      function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      function attempt(i) {
+        return fetch(url, init).then(function (res) {
+          if (res.status !== 429 || i >= max - 1) return res;
+          var ra = res.headers.get('Retry-After');
+          var delayMs = ra ? parseInt(ra, 10) * 1000 : baseMs * Math.pow(2, i);
+          if (!Number.isFinite(delayMs) || delayMs < 0) delayMs = baseMs * Math.pow(2, i);
+          delayMs += Math.random() * 300;
+          return sleep(delayMs).then(function () { return attempt(i + 1); });
+        });
+      }
+      return attempt(0);
     }
 
     async function loadProducts() {
-      const merchantId = resolveMerchantIdFromUrl();
-      const url = merchantId
-        ? `${API_BASE}/api/public/prescriptions?provider_id=${encodeURIComponent(merchantId)}`
-        : `${API_BASE}/api/public/prescriptions`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to load products (${res.status})`);
+      var merchantId = resolveMerchantIdFromUrl();
+      var q = merchantId ? '?provider_id=' + encodeURIComponent(merchantId) : '';
+      var url = API_BASE + '/api/public/products' + q;
+      var res = await fetchWith429Retry(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+      var data = {};
+      try { data = await res.json(); } catch (_) { data = {}; }
+      if (!res.ok || !data.success) {
+        var msg = res.status === 429 ? 'Catalog rate-limited. Retry in a moment.' : (data.error || 'Failed to load products');
+        throw new Error(msg + ' (' + res.status + ')');
       }
-      return res.json();
+      return data;
     }
 
     function renderProducts(data) {
@@ -106,25 +135,30 @@
         return;
       }
       const products = data.prescriptions || data.products || [];
-      document.getElementById('storeSubtitle').textContent = `Products · ${products.length} items`;
+      document.getElementById('storeSubtitle').textContent = 'Products · ' + products.length + ' items';
       if (products.length === 0) {
         wrap.textContent = 'No products available.';
         return;
       }
       wrap.classList.remove('muted');
       wrap.classList.add('grid');
-      wrap.innerHTML = products.map(p => {
-        const price = parseFloat(p.price || 0).toFixed(2);
-        const inv = p.inventory !== undefined ? p.inventory : '—';
-        return `
-          <div class="card">
-            <div><strong>${p.name || 'Untitled'}</strong></div>
-            <div class="muted">${p.description || ''}</div>
-            <div class="price">$${price}</div>
-            <div class="muted">Stock: ${inv}</div>
-            <button onclick="startCheckout('${p.id}')">Buy</button>
-          </div>
-        `;
+      wrap.innerHTML = products.map(function (p) {
+        var price = parseFloat(p.price || 0).toFixed(2);
+        var inv = p.inventory !== undefined ? p.inventory : '—';
+        var img = productImageSrc(p);
+        var imgHtml = img
+          ? '<img src="' + img.replace(/"/g, '&quot;') + '" alt="" style="width:100%;max-height:140px;object-fit:contain;border-radius:8px;margin-bottom:8px" />'
+          : '';
+        return (
+          '<div class="card">' +
+          imgHtml +
+          '<div><strong>' + (p.name || 'Untitled').replace(/</g, '&lt;') + '</strong></div>' +
+          '<div class="muted">' + String(p.description || '').replace(/</g, '&lt;') + '</div>' +
+          '<div class="price">$' + price + '</div>' +
+          '<div class="muted">Stock: ' + inv + '</div>' +
+          '<button type="button" onclick="startCheckout(\'' + String(p.id).replace(/'/g, "\\'") + '\')">Buy</button>' +
+          '</div>'
+        );
       }).join('');
     }
 
@@ -152,12 +186,16 @@
 
     async function init() {
       const wrap = document.getElementById('productsWrap');
-      wrap.textContent = 'Loading products...';
+      wrap.className = 'muted';
+      wrap.innerHTML = 'Loading products…';
       try {
         const data = await loadProducts();
         renderProducts(data);
       } catch (e) {
-        wrap.textContent = e.message;
+        wrap.className = 'muted';
+        wrap.innerHTML =
+          '<p>' + (e && e.message ? String(e.message) : 'Failed to load') + '</p>' +
+          '<button type="button" onclick="init()">Retry catalog</button>';
         console.error(e);
       }
     }

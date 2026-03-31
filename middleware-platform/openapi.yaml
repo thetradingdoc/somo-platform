@@ -1066,12 +1066,33 @@ paths:
                     type: string
                   amount:
                     type: number
+                    format: float
+                    description: Final total amount charged (may include tax if tax_included is true)
+                  subtotal:
+                    type: number
+                    format: float
+                    description: Pre-tax amount
+                  tax_amount:
+                    type: number
+                    format: float
+                    description: Tax portion of the total (0 if no tax applies)
+                  tax_rate:
+                    type: number
+                    format: float
+                    description: Effective tax rate as a decimal (e.g. 0.08 = 8%)
+                  tax_included:
+                    type: boolean
+                    description: True if amount already includes tax; false if taxes may be added at checkout
+                  price_note:
+                    type: string
+                    description: Human-readable pricing disclosure to relay verbatim for tax status
                   currency:
                     type: string
                   product_id:
                     type: string
                   expires_at:
                     type: string
+                    format: date-time
         '400':
           description: Bad request
           content:

@@ -6775,6 +6775,222 @@ module.exports = {
   },
 
   // ============================================
+  // COMMERCE CHAT CART (session-scoped)
+  // ============================================
+  getCommerceCart: (sessionId, merchantId = null) => {
+    if (!sessionId) return null;
+    const row = db.prepare(`
+      SELECT * FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart'
+    `).get(sessionId);
+    if (!row) return null;
+    if (merchantId && row.merchant_id && row.merchant_id !== merchantId) return null;
+    const parsed = toJsonValue(row.session_data) || {};
+    return {
+      id: row.id,
+      merchant_id: row.merchant_id,
+      status: row.status,
+      expires_at: row.expires_at,
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+      subtotal: Number(parsed.subtotal || 0),
+      item_count: Number(parsed.item_count || 0),
+      updated_at: parsed.updated_at || row.created_at || null,
+      checkout_locked: !!parsed.checkout_locked,
+      voice_checkout_id: parsed.voice_checkout_id || null
+    };
+  },
+
+  setCommerceCartCheckoutLock: (sessionId, merchantId, voiceCheckoutId) => {
+    if (!sessionId || !merchantId || !voiceCheckoutId) return { changes: 0 };
+    const row = db.prepare(`
+      SELECT session_data FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+    `).get(sessionId, merchantId);
+    if (!row) return { changes: 0 };
+    const prev = toJsonValue(row.session_data) || {};
+    const next = {
+      ...prev,
+      checkout_locked: true,
+      voice_checkout_id: String(voiceCheckoutId),
+      checkout_locked_at: new Date().toISOString()
+    };
+    return db.prepare(`
+      UPDATE checkout_sessions SET session_data = ?
+      WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+    `).run(safeStringify(next), sessionId, merchantId);
+  },
+
+  clearCommerceCartCheckoutLock: (sessionId, merchantId) => {
+    if (!sessionId || !merchantId) return { changes: 0 };
+    const row = db.prepare(`
+      SELECT session_data FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+    `).get(sessionId, merchantId);
+    if (!row) return { changes: 0 };
+    const prev = toJsonValue(row.session_data) || {};
+    const next = { ...prev };
+    delete next.checkout_locked;
+    delete next.voice_checkout_id;
+    delete next.checkout_locked_at;
+    return db.prepare(`
+      UPDATE checkout_sessions SET session_data = ?
+      WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+    `).run(safeStringify(next), sessionId, merchantId);
+  },
+
+  isCommerceCartLocked: async (sessionId, merchantId) => {
+    if (!sessionId || !merchantId) return false;
+    const row = db.prepare(`
+      SELECT session_data FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+    `).get(sessionId, merchantId);
+    if (!row) return false;
+    const parsed = toJsonValue(row.session_data) || {};
+    if (!parsed.checkout_locked) return false;
+    const vid = parsed.voice_checkout_id;
+    const getVc = module.exports.getVoiceCheckout;
+    if (vid && typeof getVc === 'function') {
+      try {
+        const vc = await getVc(vid);
+        const st = String(vc?.status || '');
+        if (vc && (st === 'completed' || st === 'cancelled' || st === 'failed')) {
+          module.exports.clearCommerceCartCheckoutLock(sessionId, merchantId);
+          return false;
+        }
+      } catch (_) {}
+    }
+    return true;
+  },
+
+  upsertCommerceCheckoutProgress: ({
+    session_id,
+    merchant_id,
+    stage,
+    quote_id,
+    checkout_id,
+    checkout_intent,
+    product_id,
+    ttl_minutes = 10080
+  }) => {
+    if (!session_id || !merchant_id) throw new Error('session_id and merchant_id required');
+    // checkout_sessions.id is PRIMARY KEY — cart rows already use session_id; progress must use a distinct id.
+    const rowId = `commerce_flow:${session_id}`;
+    const payload = {
+      kind: 'commerce_flow',
+      cart_session_id: session_id,
+      stage: stage || 'cart',
+      quote_id: quote_id || null,
+      checkout_id: checkout_id || null,
+      checkout_intent: !!checkout_intent,
+      product_id: product_id || null,
+      updated_at: new Date().toISOString()
+    };
+    const existing = db.prepare(`
+      SELECT id FROM checkout_sessions WHERE id = ? AND platform = 'commerce_flow' LIMIT 1
+    `).get(rowId);
+    const ttl = `+${Math.max(60, Number(ttl_minutes) || 10080)} minutes`;
+    if (existing) {
+      return db.prepare(`
+        UPDATE checkout_sessions
+        SET merchant_id = ?, session_data = ?, status = 'active', expires_at = datetime('now', ?)
+        WHERE id = ? AND platform = 'commerce_flow'
+      `).run(merchant_id, safeStringify(payload), ttl, rowId);
+    }
+    return db.prepare(`
+      INSERT INTO checkout_sessions (id, merchant_id, platform, session_data, status, expires_at)
+      VALUES (?, ?, 'commerce_flow', ?, 'active', datetime('now', ?))
+    `).run(rowId, merchant_id, safeStringify(payload), ttl);
+  },
+
+  getCommerceCheckoutProgress: (sessionId, merchantId = null) => {
+    if (!sessionId) return null;
+    const rowId = `commerce_flow:${sessionId}`;
+    const row = db.prepare(`
+      SELECT * FROM checkout_sessions WHERE id = ? AND platform = 'commerce_flow'
+    `).get(rowId);
+    if (!row) return null;
+    if (merchantId && row.merchant_id && row.merchant_id !== merchantId) return null;
+    const parsed = toJsonValue(row.session_data) || {};
+    return {
+      session_id: parsed.cart_session_id || sessionId,
+      merchant_id: row.merchant_id,
+      stage: parsed.stage || 'cart',
+      quote_id: parsed.quote_id || null,
+      checkout_id: parsed.checkout_id || null,
+      checkout_intent: !!parsed.checkout_intent,
+      product_id: parsed.product_id || null,
+      updated_at: parsed.updated_at || null
+    };
+  },
+
+  upsertCommerceCart: ({ session_id, merchant_id, items = [], ttl_minutes = 180 }) => {
+    if (!session_id || !merchant_id) throw new Error('session_id and merchant_id required');
+    const safeItems = Array.isArray(items) ? items : [];
+    const subtotal = safeItems.reduce((sum, it) => sum + Number(it.total || 0), 0);
+    const itemCount = safeItems.reduce((sum, it) => sum + Number(it.quantity || 0), 0);
+    const existingRow = db.prepare(`
+      SELECT session_data FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+      LIMIT 1
+    `).get(session_id, merchant_id);
+    const existingParsed = existingRow ? toJsonValue(existingRow.session_data) || {} : {};
+    const payload = {
+      kind: 'commerce_cart',
+      items: safeItems,
+      subtotal: Number(subtotal.toFixed(2)),
+      item_count: itemCount,
+      updated_at: new Date().toISOString()
+    };
+    if (existingParsed.checkout_locked) {
+      payload.checkout_locked = true;
+      if (existingParsed.voice_checkout_id) payload.voice_checkout_id = existingParsed.voice_checkout_id;
+      if (existingParsed.checkout_locked_at) payload.checkout_locked_at = existingParsed.checkout_locked_at;
+    }
+    const existing = db.prepare(`
+      SELECT id FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart'
+      LIMIT 1
+    `).get(session_id);
+    if (existing) {
+      return db.prepare(`
+        UPDATE checkout_sessions
+        SET merchant_id = ?, session_data = ?, status = ?, expires_at = datetime('now', ?)
+        WHERE id = ? AND platform = 'commerce_cart'
+      `).run(
+        merchant_id,
+        safeStringify(payload),
+        safeItems.length ? 'active' : 'empty',
+        `+${Math.max(15, Number(ttl_minutes) || 180)} minutes`,
+        session_id
+      );
+    }
+    return db.prepare(`
+      INSERT INTO checkout_sessions (id, merchant_id, platform, session_data, status, expires_at)
+      VALUES (?, ?, 'commerce_cart', ?, ?, datetime('now', ?))
+    `).run(
+      session_id,
+      merchant_id,
+      safeStringify(payload),
+      safeItems.length ? 'active' : 'empty',
+      `+${Math.max(15, Number(ttl_minutes) || 180)} minutes`
+    );
+  },
+
+  clearCommerceCart: (sessionId, merchantId = null) => {
+    if (!sessionId) return { changes: 0 };
+    if (merchantId) {
+      return db.prepare(`
+        DELETE FROM checkout_sessions
+        WHERE id = ? AND platform = 'commerce_cart' AND merchant_id = ?
+      `).run(sessionId, merchantId);
+    }
+    return db.prepare(`
+      DELETE FROM checkout_sessions
+      WHERE id = ? AND platform = 'commerce_cart'
+    `).run(sessionId);
+  },
+
+  // ============================================
   // AP2 MANDATES
   // ============================================
   storeMandate: (mandate) => {

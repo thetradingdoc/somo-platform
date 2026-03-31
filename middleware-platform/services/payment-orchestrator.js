@@ -254,6 +254,8 @@ class PaymentOrchestrator {
             if (cq) metaExtra.commerce_quote_id = String(cq);
             const ks = paymentRequest.metadata && paymentRequest.metadata.kelly_session_id;
             if (ks) metaExtra.kelly_session_id = String(ks);
+            const csid = paymentRequest.metadata && paymentRequest.metadata.cart_session_id;
+            if (csid) metaExtra.cart_session_id = String(csid);
             const createParams = {
                 amount: amountCents,
                 currency: 'usd',
@@ -277,23 +279,43 @@ class PaymentOrchestrator {
 
             const paymentIntent = await stripe.paymentIntents.create(createParams);
 
-            if (paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_source_action') {
-                console.log('⚠️  Payment requires additional action (3DS)');
+            if (
+                paymentIntent.status === 'requires_payment_method' ||
+                paymentIntent.status === 'requires_action' ||
+                paymentIntent.status === 'requires_source_action'
+            ) {
+                const needsPaymentMethod = paymentIntent.status === 'requires_payment_method';
+                console.log(
+                    needsPaymentMethod
+                        ? 'ℹ️  PaymentIntent created and awaiting payment method'
+                        : '⚠️  Payment requires additional action (3DS)'
+                );
+                await db.updateVoiceCheckout(checkout.id, {
+                    status: 'pending',
+                    payment_intent_id: paymentIntent.id,
+                    payment_method: 'stripe'
+                });
                 return new PaymentResponse({
                     success: true,
                     transaction_id: paymentRequest.transaction_id,
                     checkout_id: checkout.id,
                     payment: {
                         method: 'stripe',
-                        status: 'requires_action',
+                        status: paymentIntent.status,
                         amount: checkout.amount,
-                        currency: 'USD'
+                        currency: 'USD',
+                        payment_intent_id: paymentIntent.id,
+                        client_secret: paymentIntent.client_secret
                     },
                     requires_action: true,
                     client_secret: paymentIntent.client_secret,
                     payment_intent_id: paymentIntent.id,
-                    message: 'Additional authentication required (3D Secure)',
-                    metadata: { action_type: 'authenticate' }
+                    message: needsPaymentMethod
+                        ? 'Payment method required to complete checkout'
+                        : 'Additional authentication required (3D Secure)',
+                    metadata: {
+                        action_type: needsPaymentMethod ? 'collect_payment_method' : 'authenticate'
+                    }
                 });
             }
 
@@ -312,6 +334,12 @@ class PaymentOrchestrator {
                             console.log('[PaymentOrchestrator] skipping ensureMerchantOrderFromVoiceCheckout (COMMERCE_ORDER_FROM_WEBHOOK_ONLY)');
                         } else {
                             await ensureMerchantOrderFromVoiceCheckout(paymentIntent, fresh, { source: 'orchestrator' });
+                        }
+                        try {
+                            const { finalizeCommerceRetailPayment } = require('./commerce-payment-settlement');
+                            await finalizeCommerceRetailPayment(paymentIntent, paymentIntent.amount);
+                        } catch (e) {
+                            console.warn('[PaymentOrchestrator] finalizeCommerceRetailPayment:', e.message);
                         }
                     }
                 } catch (e) {

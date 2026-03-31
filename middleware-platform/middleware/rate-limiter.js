@@ -9,6 +9,28 @@ const INTERNAL_JOB_TOKEN = process.env.INTERNAL_JOB_TOKEN || null;
 const shouldSkipInternalJob = (req) =>
   INTERNAL_JOB_TOKEN && req.headers['x-internal-job-token'] === INTERNAL_JOB_TOKEN;
 
+/** GET catalog list — separate bucket so checkout + landing + retries do not exhaust the global API limiter. */
+function isPublicCatalogRead(req) {
+  if (req.method !== 'GET') return false;
+  const p = req.path || '';
+  return (
+    p === '/api/public/products' ||
+    p.startsWith('/api/public/products/') ||
+    p === '/public/products' ||
+    p.startsWith('/public/products/') ||
+    p === '/api/public/prescriptions' ||
+    p.startsWith('/api/public/prescriptions/') ||
+    p === '/public/prescriptions' ||
+    p.startsWith('/public/prescriptions/')
+  );
+}
+
+/** Public commerce (quote, cart, checkout helpers) — own bucket so quote/cart bursts do not starve catalog reads. */
+function isPublicCommercePath(req) {
+  const p = req.path || '';
+  return p.startsWith('/api/public/commerce') || p.startsWith('/public/commerce');
+}
+
 // Custom key generator that handles IP addresses with ports and trust proxy
 const keyGenerator = (req) => {
   // Extract IP from req.ip, removing port if present
@@ -46,6 +68,43 @@ const apiLimiter = rateLimit({
     trustProxy: false, // Disable trust proxy validation
     ip: false // Disable IP validation to handle IPs with ports
   },
+  skip: (req) =>
+    shouldSkipInternalJob(req) || isPublicCatalogRead(req) || isPublicCommercePath(req)
+});
+
+const publicCatalogReadMax = parseInt(
+  process.env.PUBLIC_CATALOG_RATE_MAX || (isDev ? '8000' : '1200'),
+  10
+);
+const publicCatalogReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number.isFinite(publicCatalogReadMax) && publicCatalogReadMax > 0 ? publicCatalogReadMax : 1200,
+  message: {
+    error: 'Too many catalog requests from this IP, please try again shortly.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: { trustProxy: false, ip: false },
+  skip: shouldSkipInternalJob
+});
+
+const publicCommerceMax = parseInt(
+  process.env.PUBLIC_COMMERCE_RATE_MAX || (isDev ? '4000' : '400'),
+  10
+);
+const publicCommerceLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number.isFinite(publicCommerceMax) && publicCommerceMax > 0 ? publicCommerceMax : 400,
+  message: {
+    error: 'Too many checkout requests from this IP, please try again shortly.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: { trustProxy: false, ip: false },
   skip: shouldSkipInternalJob
 });
 
@@ -194,6 +253,10 @@ const chatLimiter = rateLimit({
 
 module.exports = {
   apiLimiter,
+  publicCatalogReadLimiter,
+  publicCommerceLimiter,
+  isPublicCatalogRead,
+  isPublicCommercePath,
   strictLimiter,
   authLimiter,
   lenientAuthLimiter,

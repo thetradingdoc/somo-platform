@@ -1,35 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
-const constants = require('../utils/constants');
+const { resolveMerchantId } = require('../utils/public-commerce-helpers');
 const {
-  resolveProviderId,
   withProviderAliases,
   mapProductsToPrescriptions,
   logAliasUsage
 } = require('../utils/naming-aliases');
-
-/**
- * Resolve merchant_id from query or subdomain.
- */
-function resolveMerchantId(req) {
-  const providerId = resolveProviderId(req.query || {});
-  if (providerId) return providerId;
-
-  // Try from subdomain
-  const host = req.headers.host || '';
-  const parts = host.split('.');
-  if (parts.length > 2) {
-    const subdomain = parts[0];
-    const m = db.getMerchantBySubdomain(subdomain);
-    if (m) return m.id;
-  }
-
-  // Default tenant fallback
-  const defaultSub = constants.TENANTS?.DEFAULT_SUBDOMAIN || 'akin-dunbar';
-  const def = db.getMerchantBySubdomain(defaultSub);
-  return def ? def.id : null;
-}
 
 /**
  * GET /api/public/products

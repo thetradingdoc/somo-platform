@@ -7,7 +7,8 @@ const knowledgeService = require('../services/knowledge-service');
 const searchLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
-  message: { error: 'Too many requests, please slow down.' }
+  message: { error: 'Too many requests, please slow down.' },
+  validate: { trustProxy: false, ip: false }
 });
 
 router.get('/search', searchLimiter, async (req, res) => {

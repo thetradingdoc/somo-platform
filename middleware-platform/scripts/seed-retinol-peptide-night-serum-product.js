@@ -1,5 +1,5 @@
 /**
- * Seed or update Retinol + Peptide Night Serum as a canonical product.
+ * Seed or update Retinol Brightening Night Serum as a canonical product.
  *
  * Usage:
  *   node scripts/seed-retinol-peptide-night-serum-product.js --merchant-id=<merchant_uuid>
@@ -10,13 +10,13 @@ require('dotenv').config();
 const db = require('../database');
 
 const PRODUCT_ID = 'prod-retinol-peptide-night-serum';
-const PRODUCT_NAME = 'Retinol + Peptide Night Serum';
+const PRODUCT_NAME = 'Retinol Brightening Night Serum';
 const PRODUCT_PRICE = 29.99;
 const PRODUCT_INVENTORY = 200;
 const PRODUCT_CATEGORY = 'Serums';
 const PRODUCT_PROTOCOL_STAGE = 'Rebuild';
 const PRODUCT_TAGS = ['serum', 'retinol', 'peptide', 'night', 'rebuild', 'clinical', 'collagen'];
-const PRODUCT_IMAGE_URL = '/images/products/retinol-peptide-night-serum.png';
+const PRODUCT_IMAGE_URL = '/images/products/retinol-brightening-night-serum.png';
 
 const PRODUCT_DESCRIPTION = `The Retinol + Peptide Resurfacing Complex is a medical-grade formula engineered to fundamentally transform skin health while you sleep. Designed as the "Rebuild" anchor of a professional skin care routine, this high-potency serum combines Retinol—the gold standard in dermatology—with a targeted Hexapeptide-11 chain to physically resurface skin texture and restore structural firmness.
 
@@ -90,7 +90,7 @@ function main() {
   const result = upsertProduct(merchant.id);
   const product = db.getProduct(result.id);
 
-  console.log('✅ Retinol + Peptide Night Serum seed complete');
+  console.log('✅ Retinol Brightening Night Serum seed complete');
   console.log(`   Merchant: ${merchant.name} (${merchant.id})`);
   console.log(`   Action: ${result.action}`);
   console.log(`   Product ID: ${product.id}`);

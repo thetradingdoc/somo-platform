@@ -929,10 +929,33 @@ function buildCommerceCheckoutSystemPrompt(ctx) {
 - provider_id (merchant): ${providerId}
 ${patientEmail ? `- Patient email on file (use for prepare_commerce_checkout if they confirm): ${patientEmail}` : ''}
 
+## Guest checkout (no app login)
+- This flow does **not** require a patient portal login. Do not ask users to sign in before paying.
+- After a successful purchase, you may briefly mention they can optionally create an account or use the app to track orders — never block checkout on account creation.
+
+## Default journey (cart-first — follow this order)
+1. **Discover** — Answer product and ingredient questions; use get_product_quote before any dollar amount.
+2. **Add** — When they want to buy, add_to_cart (and get_cart to confirm). Do not jump straight to payment on the first "buy" unless they already confirmed the cart.
+3. **Upsell** — After each add_to_cart, ask: "Anything else you want to add before checkout?"
+4. **Checkout** — When they confirm they are ready to pay, collect email and full shipping_address, then call prepare_commerce_checkout (cart path: omit quote_id or set use_cart true).
+5. **Confirm** — Summarize what happens next (secure payment / link). Tool results include cart_summary and payment_action for the UI.
+
+## Buy intent (critical)
+- Phrases like "buy", "I'll take it", "charge me", "checkout" mean: ensure the cart matches what they want (add_to_cart / get_cart), ask "anything else?" if they just added items, then collect email + shipping before prepare_commerce_checkout.
+- Do **not** call prepare_commerce_checkout immediately on first buy intent if the cart may still be empty or they have not confirmed they are done adding items.
+- Prefer **multi-item cart checkout**: omit quote_id so the server uses the session cart. Only use quote_id + prepare_commerce_checkout for the legacy single-quote path when you already ran get_product_quote for one line and the user is not using the cart.
+
 ## Rules
 - This session is **retail checkout only**. Do NOT book appointments, run triage, or call scheduling tools.
-- NEVER invent prices. For any price or total, call get_product_quote and only repeat amounts returned by that tool.
-- When they are ready to pay, call prepare_commerce_checkout with quote_id from get_product_quote, customer_email, and shipping_address (full delivery address: street, city, state, ZIP).
+- You MUST call get_product_quote before stating any price.
+- NEVER invent prices or tax details from memory.
+- When you have a quote result, state price using amount + currency from the tool.
+- For tax status, use only the tool's price_note text verbatim.
+- NEVER say "tax included" or "no tax" unless get_product_quote explicitly returns that via tax_included/price_note.
+- NEVER calculate or infer tax_rate yourself.
+- If quote data is unavailable, say: "I'm not able to confirm the exact price right now — please proceed to checkout for the verified total."
+- Cart tools: add_to_cart / update_cart_item / remove_cart_item / get_cart / clear_cart.
+- When they are ready to pay, call prepare_commerce_checkout with customer_email and shipping_address (full delivery address: street, city, state, ZIP). For cart checkout, omit quote_id or pass use_cart: true.
 - You may answer general questions about skincare routine or ingredients from general knowledge; for price or checkout, use tools.
 - Keep replies concise and friendly.
 
@@ -1044,7 +1067,7 @@ const KELLY_TOOLS = [
     function: {
       name: 'get_product_quote',
       description:
-        'Retail product checkout: get a server-locked quote (amount + quote_id). Use before prepare_commerce_checkout. Do not state a dollar amount from user text — only values returned by this tool.',
+        'Retail product checkout: get a server-locked quote (amount, subtotal, tax_amount, tax_rate, tax_included, price_note, quote_id). Use before prepare_commerce_checkout. Do not state a dollar amount from user text — only values returned by this tool.',
       parameters: {
         type: 'object',
         properties: {
@@ -1059,13 +1082,94 @@ const KELLY_TOOLS = [
   {
     type: 'function',
     function: {
-      name: 'prepare_commerce_checkout',
-      description:
-        'Retail product checkout: start payment using quote_id from get_product_quote. Returns payment_link / client_secret from the server — never set charge amount in tool args.',
+      name: 'get_cart',
+      description: 'Retail cart: get current in-chat cart items and subtotal for this session.',
       parameters: {
         type: 'object',
         properties: {
-          quote_id: { type: 'string' },
+          provider_id: { type: 'string', description: 'Optional override; otherwise uses clinic merchant' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_to_cart',
+      description: 'Retail cart: add a product to the in-chat cart. If already present, increments quantity.',
+      parameters: {
+        type: 'object',
+        properties: {
+          product_id: { type: 'string', description: 'Catalog product id' },
+          provider_id: { type: 'string', description: 'Optional override; otherwise uses clinic merchant' },
+          quantity: { type: 'integer' }
+        },
+        required: ['product_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_cart_item',
+      description: 'Retail cart: set quantity for one product in cart (quantity <= 0 removes item).',
+      parameters: {
+        type: 'object',
+        properties: {
+          product_id: { type: 'string', description: 'Catalog product id' },
+          provider_id: { type: 'string', description: 'Optional override; otherwise uses clinic merchant' },
+          quantity: { type: 'integer' }
+        },
+        required: ['product_id', 'quantity']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remove_cart_item',
+      description: 'Retail cart: remove one product from the in-chat cart.',
+      parameters: {
+        type: 'object',
+        properties: {
+          product_id: { type: 'string', description: 'Catalog product id' },
+          provider_id: { type: 'string', description: 'Optional override; otherwise uses clinic merchant' }
+        },
+        required: ['product_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'clear_cart',
+      description: 'Retail cart: clear all items from the in-chat cart for this session.',
+      parameters: {
+        type: 'object',
+        properties: {
+          provider_id: { type: 'string', description: 'Optional override; otherwise uses clinic merchant' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_commerce_checkout',
+      description:
+        'Start secure payment after cart is confirmed. Default: **cart checkout** — omit quote_id (or set use_cart / cart_checkout true) so the server uses the in-session cart. Only pass quote_id for legacy single-item flow after get_product_quote. Returns cart_summary, next_required_fields, and payment_action (Stripe PaymentIntent or payment link). Never set dollar amounts in args.',
+      parameters: {
+        type: 'object',
+        properties: {
+          quote_id: {
+            type: 'string',
+            description: 'Optional — only for single-item quote path. Omit for normal cart checkout.'
+          },
+          use_cart: {
+            type: 'boolean',
+            description: 'Optional — force cart-based checkout (default true when quote_id is omitted).'
+          },
+          cart_checkout: { type: 'boolean', description: 'Alias for use_cart.' },
           customer_email: { type: 'string' },
           customer_phone: { type: 'string' },
           customer_name: { type: 'string' },
@@ -1074,7 +1178,7 @@ const KELLY_TOOLS = [
             description: 'Full shipping address for delivery (street, city, state, ZIP, country if needed)'
           }
         },
-        required: ['quote_id', 'customer_email']
+        required: ['customer_email']
       }
     }
   },
@@ -1272,7 +1376,15 @@ const KELLY_TOOLS = [
 ];
 
 const COMMERCE_CHECKOUT_TOOLS = KELLY_TOOLS.filter(
-  (t) => t?.function?.name === 'get_product_quote' || t?.function?.name === 'prepare_commerce_checkout'
+  (t) => [
+    'get_product_quote',
+    'get_cart',
+    'add_to_cart',
+    'update_cart_item',
+    'remove_cart_item',
+    'clear_cart',
+    'prepare_commerce_checkout'
+  ].includes(t?.function?.name)
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -3048,6 +3160,13 @@ Antworten Sie durchgehend auf Deutsch.`,
     reply = _sanitizeToolNameLeaks(reply);
     this._appendToHistory(sessionId, 'assistant', reply);
     const quoteIdFromMeta = KellyToolExecutor._getSessionMeta(sessionId, 'last_commerce_quote_id');
+    let commerceCheckoutOut = loopResult.commerce_checkout || null;
+    if (!commerceCheckoutOut) {
+      try {
+        const raw = KellyToolExecutor._getSessionMeta(sessionId, 'last_commerce_checkout_chat');
+        if (raw) commerceCheckoutOut = JSON.parse(raw);
+      } catch (_) {}
+    }
     return {
       reply,
       endCall: false,
@@ -3057,7 +3176,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       next_chips: loopResult.next_chips || [],
       chips_display: loopResult.chips_display,
       next_step: loopResult.next_step,
-      quote_id: quoteIdFromMeta || null
+      quote_id: quoteIdFromMeta || null,
+      commerce_checkout: commerceCheckoutOut
     };
   }
 
@@ -3113,6 +3233,7 @@ Antworten Sie durchgehend auf Deutsch.`,
     let nextChips = null;
     let chipsDisplay = null;
     let commercePaymentRedirect = null;
+    let commerceCheckoutPayload = null;
 
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
@@ -3229,7 +3350,8 @@ Antworten Sie durchgehend auf Deutsch.`,
           next_step: nextStep,
           next_chips: nextChips,
           chips_display: chipsDisplay,
-          redirect_to: commercePaymentRedirect || null
+          redirect_to: commercePaymentRedirect || null,
+          commerce_checkout: useCommerceTools ? commerceCheckoutPayload : null
         };
       }
 
@@ -3242,6 +3364,16 @@ Antworten Sie durchgehend auf Deutsch.`,
           const label =
             toolName === 'get_product_quote'
               ? 'Getting your price…'
+              : toolName === 'add_to_cart'
+                ? 'Adding to cart…'
+                : toolName === 'update_cart_item'
+                  ? 'Updating cart…'
+                  : toolName === 'remove_cart_item'
+                    ? 'Removing item…'
+                    : toolName === 'get_cart'
+                      ? 'Checking cart…'
+                      : toolName === 'clear_cart'
+                        ? 'Clearing cart…'
               : toolName === 'prepare_commerce_checkout'
                 ? 'Preparing secure checkout…'
                 : 'Working…';
@@ -3329,10 +3461,26 @@ Antworten Sie durchgehend auf Deutsch.`,
             toolArgs.provider_id = commerceCtx.providerId;
           }
         }
+        if (
+          commerceCtx &&
+          ['get_cart', 'add_to_cart', 'update_cart_item', 'remove_cart_item', 'clear_cart'].includes(toolName)
+        ) {
+          if (!toolArgs.provider_id) toolArgs.provider_id = commerceCtx.providerId;
+          if (
+            !toolArgs.product_id &&
+            !toolArgs.prescription_id &&
+            ['add_to_cart', 'update_cart_item', 'remove_cart_item'].includes(toolName)
+          ) {
+            toolArgs.product_id = commerceCtx.productId;
+          }
+        }
         if (commerceCtx && toolName === 'prepare_commerce_checkout') {
           const pe = commerceCtx.patientEmail || context.patientEmail;
           if (pe && !toolArgs.customer_email) {
             toolArgs.customer_email = pe;
+          }
+          if (!toolArgs.quote_id && toolArgs.use_cart !== false) {
+            toolArgs.use_cart = true;
           }
         }
 
@@ -3407,12 +3555,22 @@ Antworten Sie durchgehend auf Deutsch.`,
           console.log(`[KellyAgent] Tool result for ${toolName}:`, JSON.stringify(toolResult)?.slice(0, 500));
         }
 
-        if (
-          toolName === 'prepare_commerce_checkout' &&
-          toolResult?.success &&
-          toolResult?.checkout?.payment_link
-        ) {
-          commercePaymentRedirect = toolResult.checkout.payment_link;
+        if (toolName === 'prepare_commerce_checkout' && useCommerceTools && toolResult) {
+          if (toolResult?.success && toolResult?.checkout?.payment_link) {
+            commercePaymentRedirect = toolResult.checkout.payment_link;
+          }
+          commerceCheckoutPayload =
+            toolResult.commerce_checkout ||
+            (toolResult.cart_summary || toolResult.payment_action
+              ? {
+                  cart_summary: toolResult.cart_summary,
+                  next_required_fields: toolResult.next_required_fields,
+                  payment_action: toolResult.payment_action,
+                  success: !!toolResult.success,
+                  error: toolResult.success ? null : toolResult.error || null,
+                  message: toolResult.message || null
+                }
+              : null);
         }
 
         messages.push({
@@ -3612,7 +3770,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       next_step: nextStep,
       next_chips: nextChips,
       chips_display: chipsDisplay,
-      redirect_to: commercePaymentRedirect || null
+      redirect_to: commercePaymentRedirect || null,
+      commerce_checkout: useCommerceTools ? commerceCheckoutPayload : null
     };
   }
 

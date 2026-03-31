@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import './skin-care-tokens.css';
 import './styles.css';
 import { useRAGSearch } from './useRAGSearch';
 
@@ -15,14 +16,34 @@ function emitCheckoutFunnelEvent(name, detail) {
 function Root() {
   const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
   const configuredApiBase = process.env.REACT_APP_API_BASE || '';
-  const API_BASE_CANDIDATES = configuredApiBase
-    ? [configuredApiBase]
-    : (isLocalHost ? ['http://localhost:4010', 'http://localhost:4000'] : [window.location.origin]);
+  // Stable reference so catalog-loading effect does not re-fire on every render.
+  const API_BASE_CANDIDATES = useMemo(
+    () =>
+      configuredApiBase
+        ? [configuredApiBase]
+        : (isLocalHost ? ['http://localhost:4000'] : [window.location.origin]),
+    [configuredApiBase, isLocalHost]
+  );
   const MERCHANT_ID = process.env.REACT_APP_MERCHANT_ID || '';
-  /** Patient portal HTML (served by middleware). Handoff: login → dashboard with product context (no price in URL). */
+  /** Non-localhost hosts require a merchant id so checkout links include provider_id (catalog + quote resolve). */
+  const checkoutBlockedNoMerchant = !isLocalHost && !MERCHANT_ID;
+  /** Patient portal HTML (served by middleware). */
   const PATIENT_PORTAL_PREFIX = process.env.REACT_APP_PATIENT_PORTAL_PREFIX || '/unified-dashboard/patients';
-  /** When `false`, hide chat-first “Ask” CTA; buy-now remains (gradual rollout). Default: chat-first on. */
-  const CHAT_FIRST_CHECKOUT = process.env.REACT_APP_CHAT_FIRST_CHECKOUT !== 'false';
+
+  const appendCheckoutQueryHints = (params, product) => {
+    const name = (product.displayName || product.name || '').trim();
+    if (name) params.set('product_name', name.slice(0, 160));
+    const rawImg = product.image || product.image_url || '';
+    if (rawImg && typeof window !== 'undefined') {
+      try {
+        const abs = new URL(rawImg, window.location.origin).href;
+        if (abs.length < 1800) params.set('product_image', abs);
+      } catch (_) {
+        /* ignore bad image URL */
+      }
+    }
+    if (MERCHANT_ID) params.set('provider_id', MERCHANT_ID);
+  };
   const FEATURED_PRODUCT_ORDER = [
     'prod-vitamin-b3-serum-pore-sebum-control',
     'prod-retinol-peptide-night-serum',
@@ -30,13 +51,48 @@ function Root() {
     'prod-vitamin-c-serum-antioxidant-pro-shield'
   ];
 
-  /** Filter tabs: one per serum + all (matches product ids). */
+  const SNAIL_MUCIN_PRODUCT_ID = 'prod-skin-hydration-serum-snail-mucin';
+  const SNAIL_MUCIN_TITLE = 'Dark Spot Repair Serum | Snail mucin';
+  const SNAIL_MUCIN_DESCRIPTION = 'Transform your complexion with our dual-action dark spot repair serum and hydrating essence. Built as a high-performance skin hydration complex, this advanced formula targets hyperpigmentation, dehydration, and environmental fatigue. A clinical-grade snail secretion filtrate base combines with hydrolyzed collagen and hyaluronic acid to lock in moisture while helping fade dark spots. Centella asiatica (cica) and provitamin B5 (panthenol) calm reactive skin, while glycosaminoglycans support a plump, firm, youthful look. This lightweight, fast-absorbing essence penetrates deeply without residue, making it ideal for both morning glow and nighttime repair routines. Intensive barrier repair helps prevent water loss and soothe sensitivity; clinically backed actives support dark spot and acne scar correction for smoother, more even texture; and dermatology-focused ingredients like betaine and allantoin condition, protect, and refine skin feel.';
+  const VITAMIN_C_PRODUCT_ID = 'prod-vitamin-c-serum-antioxidant-pro-shield';
+
+  /** Browse filters: curated groups for mobile-friendly serum discovery. */
   const CATALOG_FILTERS = [
-    { id: 'all', label: 'All serums' },
-    { id: 'prod-vitamin-b3-serum-pore-sebum-control', label: 'Vitamin B3 · Pores & oil' },
-    { id: 'prod-retinol-peptide-night-serum', label: 'Retinol · Night' },
-    { id: 'prod-skin-hydration-serum-snail-mucin', label: 'Snail · Hydration' },
-    { id: 'prod-vitamin-c-serum-antioxidant-pro-shield', label: 'Vitamin C · Protect' }
+    { id: 'all', label: 'All serums', productIds: null },
+    {
+      id: 'brightening',
+      label: 'Brightening',
+      productIds: [
+        'prod-vitamin-c-serum-antioxidant-pro-shield',
+        'prod-vitamin-b3-serum-pore-sebum-control',
+        'prod-skin-hydration-serum-snail-mucin'
+      ]
+    },
+    {
+      id: 'anti-aging',
+      label: 'Anti-Aging',
+      productIds: [
+        'prod-retinol-peptide-night-serum',
+        'prod-vitamin-c-serum-antioxidant-pro-shield'
+      ]
+    },
+    {
+      id: 'repair',
+      label: 'Repair',
+      productIds: [
+        'prod-skin-hydration-serum-snail-mucin',
+        'prod-vitamin-b3-serum-pore-sebum-control'
+      ]
+    },
+    {
+      id: 'hydration',
+      label: 'Hydration',
+      productIds: [
+        'prod-skin-hydration-serum-snail-mucin',
+        'prod-vitamin-b3-serum-pore-sebum-control',
+        'prod-retinol-peptide-night-serum'
+      ]
+    }
   ];
 
   /** Offline / partial-API fallback so the carousel always lists all four serums; API data overrides by id. */
@@ -46,51 +102,52 @@ function Root() {
       name: 'Vitamin B3 Serum | Pore & Sebum Control',
       price: 27.99,
       image_url: '/images/products/vitamin-b3-serum.png',
-      category: 'Serums',
-      protocol_stage: 'Stabilize',
+      category: '10% Niacinamide',
+      protocol_stage: 'Sebum Control',
       tags: ['serum', 'niacinamide', 'b3', 'stabilize', 'pore', 'sebum', 'barrier', 'clinical'],
-      badge_category: 'Serums',
-      badge_protocol: 'Stabilize',
-      badge_highlight: 'Pore & Sebum Control',
+      badge_category: '10% Niacinamide',
+      badge_protocol: 'Sebum Control',
+      badge_highlight: 'Redness Repair',
       short_description: 'High-potency B3 to balance oil, refine pores, and support the barrier.'
     },
     {
       id: 'prod-retinol-peptide-night-serum',
-      name: 'Retinol + Peptide Night Serum',
+      name: 'Retinol Brightening Night Serum',
       price: 29.99,
-      image_url: '/images/products/retinol-peptide-night-serum.png',
-      category: 'Serums',
-      protocol_stage: 'Rebuild',
+      image_url: '/images/products/retinol-brightening-night-serum.png',
+      category: 'Anti-Aging',
+      protocol_stage: 'Night Serum',
       tags: ['serum', 'retinol', 'peptide', 'night', 'rebuild', 'clinical', 'collagen'],
-      badge_category: 'Serums',
-      badge_protocol: 'Rebuild',
-      badge_highlight: 'Peptide night',
+      badge_category: 'Anti-Aging',
+      badge_protocol: 'Night Serum',
+      badge_highlight: 'Collagen Boosting',
       short_description: 'Overnight retinol and peptides for texture, firmness, and renewal.'
     },
     {
-      id: 'prod-skin-hydration-serum-snail-mucin',
-      name: 'Skin Hydration Serum | Snail Mucin',
+      id: SNAIL_MUCIN_PRODUCT_ID,
+      name: SNAIL_MUCIN_TITLE,
       price: 29.99,
-      image_url: '/images/products/snail-mucin-serum.png',
-      category: 'Serums',
-      protocol_stage: 'Stabilize',
+      image_url: '/images/products/dark-spot-repair-snail-mucin-serum.png',
+      category: 'Glass Skin Serum',
+      protocol_stage: 'Skin Repair',
       tags: ['serum', 'snail-mucin', 'hydration', 'barrier', 'collagen', 'centella', 'clinical'],
-      badge_category: 'Serums',
-      badge_protocol: 'Stabilize',
-      badge_highlight: 'Snail mucin',
-      short_description: 'Deep hydration and barrier repair with snail mucin and calming botanicals.'
+      badge_category: 'Glass Skin Serum',
+      badge_protocol: 'Skin Repair',
+      badge_highlight: 'Dark Spot Treatment',
+      short_description: 'Dual-action dark spot repair and deep hydration with clinical-grade snail mucin.',
+      description: SNAIL_MUCIN_DESCRIPTION
     },
     {
-      id: 'prod-vitamin-c-serum-antioxidant-pro-shield',
+      id: VITAMIN_C_PRODUCT_ID,
       name: 'Vitamin C Serum | Antioxidant Pro-Shield',
       price: 21.99,
       image_url: '/images/products/vitamin-c-serum.png',
-      category: 'Serums',
-      protocol_stage: 'Protect',
+      category: 'Brightening',
+      protocol_stage: 'Dark Spot Corrector',
       tags: ['serum', 'vitamin-c', 'antioxidant', 'protect', 'morning', 'ferulic', 'triple-c', 'clinical', 'photo-protection'],
-      badge_category: 'Serums',
-      badge_protocol: 'Protect',
-      badge_highlight: 'Antioxidant Pro-Shield',
+      badge_category: 'Brightening',
+      badge_protocol: 'Dark Spot Corrector',
+      badge_highlight: 'Glass Skin Serum',
       short_description: 'Morning antioxidant shield—brighten and defend against daily exposure.'
     }
   ];
@@ -116,6 +173,37 @@ function Root() {
         if (p && p.id) {
           const prev = byId.get(p.id) || {};
           const merged = { ...prev, ...p };
+          if (p.id === SNAIL_MUCIN_PRODUCT_ID) {
+            merged.name = SNAIL_MUCIN_TITLE;
+            merged.short_description = 'Dual-action dark spot repair and deep hydration with clinical-grade snail mucin.';
+            merged.description = SNAIL_MUCIN_DESCRIPTION;
+            merged.category = 'Glass Skin Serum';
+            merged.protocol_stage = 'Skin Repair';
+            merged.badge_category = 'Glass Skin Serum';
+            merged.badge_protocol = 'Skin Repair';
+            merged.badge_highlight = 'Dark Spot Treatment';
+          }
+          if (p.id === 'prod-retinol-peptide-night-serum') {
+            merged.category = 'Anti-Aging';
+            merged.protocol_stage = 'Night Serum';
+            merged.badge_category = 'Anti-Aging';
+            merged.badge_protocol = 'Night Serum';
+            merged.badge_highlight = 'Collagen Boosting';
+          }
+          if (p.id === 'prod-vitamin-b3-serum-pore-sebum-control') {
+            merged.category = '10% Niacinamide';
+            merged.protocol_stage = 'Sebum Control';
+            merged.badge_category = '10% Niacinamide';
+            merged.badge_protocol = 'Sebum Control';
+            merged.badge_highlight = 'Redness Repair';
+          }
+          if (p.id === VITAMIN_C_PRODUCT_ID) {
+            merged.category = 'Brightening';
+            merged.protocol_stage = 'Dark Spot Corrector';
+            merged.badge_category = 'Brightening';
+            merged.badge_protocol = 'Dark Spot Corrector';
+            merged.badge_highlight = 'Glass Skin Serum';
+          }
           if (!merged.short_description && prev.short_description) merged.short_description = prev.short_description;
           if (merged.badge_category == null && prev.badge_category) merged.badge_category = prev.badge_category;
           if (merged.badge_protocol == null && prev.badge_protocol) merged.badge_protocol = prev.badge_protocol;
@@ -131,6 +219,22 @@ function Root() {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return '$0.00';
     return `$${amount.toFixed(2)}`;
+  };
+
+  const normalizeProductImageUrl = (product) => {
+    if (product && product.id === SNAIL_MUCIN_PRODUCT_ID) {
+      return '/images/products/dark-spot-repair-snail-mucin-serum.png';
+    }
+    const raw = String(
+      (product && (product.image_url || product.image || product.imageUrl)) || ''
+    ).trim();
+    if (!raw) return '/images/products/routine-bottle.png';
+    if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
+    if (raw.startsWith('/images/products/')) return raw;
+    const clean = raw.replace(/^\/+/, '');
+    if (clean.startsWith('images/products/')) return `/${clean}`;
+    if (clean.startsWith('images/')) return `/images/products/${clean.replace(/^images\//, '')}`;
+    return raw.startsWith('/') ? raw : `/${raw}`;
   };
 
   const [showDemoModal, setShowDemoModal] = useState(false);
@@ -149,7 +253,6 @@ function Root() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState('');
   const [checkoutBusyProductId, setCheckoutBusyProductId] = useState(null);
-  const [askBusyProductId, setAskBusyProductId] = useState(null);
   const [catalogFilterId, setCatalogFilterId] = useState('all');
   const solutionsViewportRef = useRef(null);
   const baRef = useRef({ active: false, pointerId: null });
@@ -304,22 +407,16 @@ function Root() {
     };
 
     const tryCatalogEndpoints = async () => {
-      const providerQuery = MERCHANT_ID ? `?provider_id=${encodeURIComponent(MERCHANT_ID)}` : '';
       const merchantQuery = MERCHANT_ID ? `?merchant_id=${encodeURIComponent(MERCHANT_ID)}` : '';
       let lastErr = null;
 
       for (const base of API_BASE_CANDIDATES) {
-        const attempts = [
-          `${base}/api/public/prescriptions${providerQuery}`,
-          `${base}/api/public/products${merchantQuery}`
-        ];
-        for (const url of attempts) {
-          try {
-            const payload = await fetchJson(url);
-            return { payload, base };
-          } catch (error) {
-            lastErr = error;
-          }
+        const url = `${base}/api/public/products${merchantQuery}`;
+        try {
+          const payload = await fetchJson(url);
+          return { payload, base };
+        } catch (error) {
+          lastErr = error;
         }
       }
       throw lastErr || new Error('Failed to load product catalog.');
@@ -378,7 +475,7 @@ function Root() {
       shortDescription,
       size: '30ml',
       rating: '4.9 (Verified)',
-      image: product.image_url || '/images/products/routine-bottle.png',
+      image: normalizeProductImageUrl(product),
       featured: FEATURED_PRODUCT_ORDER.includes(product.id),
       isNew: index === 0,
       price: formatPrice(product.price),
@@ -387,78 +484,47 @@ function Root() {
     };
   });
 
-  const filteredProductCards =
-    catalogFilterId === 'all' ? productCards : productCards.filter((p) => p.id === catalogFilterId);
+  const activeFilter = CATALOG_FILTERS.find((f) => f.id === catalogFilterId) || CATALOG_FILTERS[0];
+  const filteredProductCards = Array.isArray(activeFilter.productIds)
+    ? productCards.filter((p) => activeFilter.productIds.includes(p.id))
+    : productCards;
 
-  const buildAskAboutProductUrl = (product) => {
+  const buildCheckoutInChatUrl = (product) => {
     const params = new URLSearchParams({
       source: 'landing',
       intent: 'checkout_chat',
       product_id: product.id,
-      bridge: '1'
+      bridge: '1',
+      cart_bootstrap: '1'
     });
-    const name = (product.displayName || product.name || '').trim();
-    if (name) params.set('product_name', name.slice(0, 160));
-    if (MERCHANT_ID) params.set('provider_id', MERCHANT_ID);
-    const returnTo = `${PATIENT_PORTAL_PREFIX}/checkout-chat.html?${params.toString()}`;
-    return `${PATIENT_PORTAL_PREFIX}/patient-login.html?return=${encodeURIComponent(returnTo)}`;
+    appendCheckoutQueryHints(params, product);
+    return `${PATIENT_PORTAL_PREFIX}/checkout-chat.html?${params.toString()}`;
   };
 
-  const handleStartProductCheckout = async (product) => {
-    const email = window.prompt('Enter your email for checkout:');
-    if (!email) return;
+  const handleStartProductCheckout = (product) => {
+    emitCheckoutFunnelEvent('landing_cta_checkout_chat', { product_id: product.id, source: 'landing' });
+    setCheckoutBusyProductId(product.id);
+    const dest = buildCheckoutInChatUrl(product);
+    window.requestAnimationFrame(() => {
+      window.location.assign(dest);
+    });
+  };
 
-    try {
-      emitCheckoutFunnelEvent('landing_cta_buy', { product_id: product.id, source: 'landing' });
-      setCheckoutBusyProductId(product.id);
-      const body = {
-        provider_id: MERCHANT_ID || undefined,
-        email,
-        name: email.split('@')[0] || 'Customer',
-        prescription_id: product.prescription_id || product.id,
-        quantity: 1,
-        payment_method: 'direct_stripe'
-      };
-      let data = null;
-      let lastErr = null;
-      for (const base of API_BASE_CANDIDATES) {
-        try {
-          const res = await fetch(`${base}/api/public/checkout/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-          const payload = await res.json();
-          if (!res.ok || !payload?.success) {
-            throw new Error(payload?.error || payload?.message || `Checkout failed (${res.status})`);
-          }
-          data = payload;
-          break;
-        } catch (error) {
-          lastErr = error;
-        }
-      }
-      if (!data) {
-        throw lastErr || new Error('Failed to start checkout.');
-      }
-
-      const checkoutId = data.checkout?.checkout_id;
-      const paymentLink = data.checkout?.payment_link;
-      if (paymentLink) {
-        window.location.assign(paymentLink);
-        return;
-      }
-      const promptLines = [
-        `Checkout started for ${product.name}.`,
-        checkoutId ? `Checkout ID: ${checkoutId}` : null,
-        data.checkout?.client_secret ? 'Complete payment in the flow shown by your app.' : null
-      ].filter(Boolean);
-      window.alert(promptLines.length ? promptLines.join('\n') : 'Checkout started.');
-    } catch (error) {
-      window.alert(`Checkout failed: ${error.message}`);
-    } finally {
-      setCheckoutBusyProductId(null);
-    }
+  /** Secondary: ingredient Q&A in chat — no cart bootstrap (browse-first). */
+  const handleChatAboutIngredients = (product) => {
+    emitCheckoutFunnelEvent('landing_cta_ingredients_chat', { product_id: product.id, source: 'landing' });
+    const params = new URLSearchParams({
+      source: 'landing',
+      intent: 'checkout_chat',
+      product_id: product.id,
+      bridge: '1',
+      chat_focus: 'ingredients'
+    });
+    appendCheckoutQueryHints(params, product);
+    const dest = `${PATIENT_PORTAL_PREFIX}/checkout-chat.html?${params.toString()}`;
+    window.requestAnimationFrame(() => {
+      window.location.assign(dest);
+    });
   };
 
   const defaultInsights = [
@@ -533,6 +599,12 @@ function Root() {
   return (
     <main className="page">
       <a className="skip-link" href="#main-content">Skip to content</a>
+      {checkoutBlockedNoMerchant ? (
+        <div className="ll-merchant-banner" role="alert">
+          Checkout links need <code>REACT_APP_MERCHANT_ID</code> (your merchant UUID) in the landing build. Localhost is
+          exempt. Without it, the cart icon and ingredient chat entry to checkout stay disabled.
+        </div>
+      ) : null}
       <header className="top-nav">
         <a href="/" className="brand-mark">Skin &amp; Care</a>
         <nav aria-label="Main navigation" className="nav-links">
@@ -627,7 +699,7 @@ function Root() {
         <div className="solutions-shell">
           <div className="solutions-controls">
             <p className="solutions-browse-copy">Browse by serum</p>
-            <div className="solutions-controls-right" role="tablist" aria-label="Filter by product">
+            <div className="solutions-controls-right" role="tablist" aria-label="Filter by serum concern">
               {CATALOG_FILTERS.map((f) => (
                 <button
                   key={f.id}
@@ -642,12 +714,6 @@ function Root() {
               ))}
             </div>
           </div>
-
-          {CHAT_FIRST_CHECKOUT ? (
-            <p className="solutions-ask-buy-legend" role="note">
-              <strong>Ask</strong> chat with Kelly first. <strong>Buy</strong> uses the bag icon for secure checkout.
-            </p>
-          ) : null}
 
           <div className="solutions-carousel">
             <button
@@ -682,8 +748,8 @@ function Root() {
                         className="solution-checkout-icon"
                         onClick={() => handleStartProductCheckout(product)}
                         disabled={checkoutBusyProductId === product.id}
-                        aria-label={`Buy now — ${product.displayName}`}
-                        title={checkoutBusyProductId === product.id ? 'Starting checkout…' : 'Buy now (secure checkout)'}
+                        aria-label={`Checkout in chat — ${product.displayName}`}
+                        title={checkoutBusyProductId === product.id ? 'Opening checkout chat…' : 'Checkout in chat'}
                       >
                         {checkoutBusyProductId === product.id ? (
                           <span aria-hidden="true">…</span>
@@ -698,31 +764,6 @@ function Root() {
                       <p className="solution-media-title">{product.displayName}</p>
                     </div>
                     <div className="solution-meta">
-                      <p className="solution-ask-wrap">
-                        {CHAT_FIRST_CHECKOUT ? (
-                          <a
-                            className={`solution-ask-link${askBusyProductId === product.id ? ' is-busy' : ''}`}
-                            href={buildAskAboutProductUrl(product)}
-                            aria-busy={askBusyProductId === product.id}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              if (askBusyProductId) return;
-                              emitCheckoutFunnelEvent('landing_cta_chat', { product_id: product.id, source: 'landing' });
-                              setAskBusyProductId(product.id);
-                              const dest = buildAskAboutProductUrl(product);
-                              window.requestAnimationFrame(() => {
-                                window.location.assign(dest);
-                              });
-                            }}
-                          >
-                            {askBusyProductId === product.id ? 'Opening…' : 'Ask about this product'}
-                          </a>
-                        ) : (
-                          <span className="solution-ask-legacy" style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                            Shop checkout: use the bag icon. Chat-first handoff is disabled for this build.
-                          </span>
-                        )}
-                      </p>
                       <div className="solution-product-badges" aria-label="Product tags">
                         {product.colorBadges.category ? (
                           <span className="solution-cat-pill">{product.colorBadges.category}</span>
@@ -741,12 +782,32 @@ function Root() {
                       {product.shortDescription ? (
                         <p className="solution-blurb">{product.shortDescription}</p>
                       ) : null}
-                      <div className="solution-row">
-                        <p className="solution-price-line">{product.price || '$0.00'}</p>
-                        <p className="solution-stars">★★★★★</p>
-                      </div>
-                      <div className="solution-row solution-row-rating">
-                        <p>{product.rating}</p>
+                      <div className="solution-footer">
+                        <div className="solution-footer-left">
+                          <p className="solution-verified">{product.rating}</p>
+                          <p className="solution-card-secondary">
+                            <button
+                              type="button"
+                              className="solution-ingredients-link"
+                              disabled={checkoutBlockedNoMerchant}
+                              onClick={() => {
+                                if (checkoutBlockedNoMerchant) return;
+                                handleChatAboutIngredients(product);
+                              }}
+                              title={
+                                checkoutBlockedNoMerchant
+                                  ? 'Set REACT_APP_MERCHANT_ID to open checkout chat from this host'
+                                  : undefined
+                              }
+                            >
+                              Learn more
+                            </button>
+                          </p>
+                        </div>
+                        <div className="solution-footer-right">
+                          <p className="solution-price-line">{product.price || '$0.00'}</p>
+                          <p className="solution-stars">★★★★★</p>
+                        </div>
                       </div>
                     </div>
                   </article>

@@ -915,7 +915,15 @@ const RetellWebSocketHandler = require('./webhooks/retell-websocket');
 
 // Import middleware
 const { securityHeaders, sanitizeInput, requestLogger } = require('./middleware/security');
-const { apiLimiter, authLimiter, paymentLimiter, voiceLimiter, scheduleCheckoutLimiter } = require('./middleware/rate-limiter');
+const {
+  apiLimiter,
+  publicCatalogReadLimiter,
+  publicCommerceLimiter,
+  authLimiter,
+  paymentLimiter,
+  voiceLimiter,
+  scheduleCheckoutLimiter
+} = require('./middleware/rate-limiter');
 const { check: clinicRateLimitCheck } = require('./utils/clinic-rate-limiter');
 const { usageLogger, logVoiceCall, logFunctionCall, logError } = require('./middleware/usage-logger');
 let errorHandler, asyncHandler, withTimeout, withRetry, logErrorHandler;
@@ -1079,8 +1087,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Request logging (console)
 app.use(requestLogger);
 
-// Enhanced usage logging (database) - for API endpoints
+// Enhanced usage logging (database) - for API endpoints and /public/* catalog aliases (normalized to /api/public/* in logs)
 app.use('/api/', usageLogger);
+app.use('/public/', usageLogger);
 
 // Input sanitization
 app.use(sanitizeInput);
@@ -1238,9 +1247,17 @@ app.get('/docs/*', (req, res, next) => {
 // Serve frontend for doclittle.site, API for api.doclittle.site
 // ============================================
 
-// Helper function to get hostname
+// Helper function to get hostname (strip port; support [IPv6]:port)
 function getHostname(req) {
-  return req.headers.host?.split(':')[0] || req.headers.host;
+  const host = req.headers.host;
+  if (!host) return '';
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']');
+    if (end !== -1) return host.slice(1, end);
+  }
+  const idx = host.lastIndexOf(':');
+  if (idx > 0 && !host.includes(']')) return host.slice(0, idx);
+  return host;
 }
 
 // Helper function to extract subdomain from hostname
@@ -1314,6 +1331,28 @@ function trySendLittleLabOrPublicLanding(res) {
   return false;
 }
 
+const ROOT_API_RUNNING_STUB_HTML =
+  '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>DocLittle API</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;line-height:1.5;max-width:40rem">' +
+  '<p>Middleware API is running.</p>' +
+  '<p>To serve the Skin &amp; Care landing at <code>/</code>, build the LittleLab app:</p>' +
+  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/littlelab-landing && npm install && npm run build</pre>' +
+  '</body></html>';
+
+function sendLittleLabOrApiRunningStub(res) {
+  if (trySendLittleLabOrPublicLanding(res)) return;
+  res.type('text/html').send(ROOT_API_RUNNING_STUB_HTML);
+}
+
+/** Loopback and, in non-production, RFC1918 LAN hosts (phone-on-WiFi dev). */
+function isLocalDevRootHost(hostname) {
+  if (!hostname) return false;
+  const h = String(hostname).toLowerCase();
+  if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return true;
+  const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  if (isProd) return false;
+  return /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(h);
+}
+
 // Root endpoint - route based on domain
 app.get('/', (req, res) => {
   const hostname = getHostname(req);
@@ -1347,18 +1386,10 @@ app.get('/', (req, res) => {
     // Subdomain not found - fall through to default routing
   }
 
-  // Localhost — same marketing priority as production (LittleLab build, then public/landing.html)
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    if (trySendLittleLabOrPublicLanding(res)) return;
-    return res
-      .type('text/html')
-      .send(
-        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>DocLittle API</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;line-height:1.5;max-width:40rem">' +
-          '<p>Middleware API is running.</p>' +
-          '<p>To serve the Skin &amp; Care landing at <code>/</code>, build the LittleLab app:</p>' +
-          '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/littlelab-landing && npm install && npm run build</pre>' +
-          '</body></html>'
-      );
+  // Local / dev hosts — same marketing priority as production (LittleLab build, then public/landing.html)
+  if (isLocalDevRootHost(hostname)) {
+    sendLittleLabOrApiRunningStub(res);
+    return;
   }
 
   // API subdomain - check if user is already logged in
@@ -1440,6 +1471,9 @@ app.get('/', (req, res) => {
       }
     }
   }
+
+  // Never leave GET / unanswered (avoids hung sockets and accidental catch-all 404 for edge Host values)
+  sendLittleLabOrApiRunningStub(res);
 });
 
 // ============================================
@@ -1449,6 +1483,13 @@ app.get('/', (req, res) => {
 // Serve unified-dashboard root pages under /unified-dashboard/*
 // This is the canonical front-door for Patient Portal vs Provider Portal selection.
 app.use('/unified-dashboard', express.static(getUnifiedDashboardPath(), {
+  index: false,
+  extensions: ['html'],
+  maxAge: '5m'
+}));
+
+// Short path for Skin & Care landing (same tree as unified-dashboard/littlelab-landing — bookmarks use /littlelab-landing/public/index.html)
+app.use('/littlelab-landing', express.static(getUnifiedDashboardPath('littlelab-landing'), {
   index: false,
   extensions: ['html'],
   maxAge: '5m'
@@ -1840,18 +1881,26 @@ app.use('/api/pricing', pricingRoutes);
 const customerWalletRoutes = require('./routes/customer-wallet');
 app.use('/api/customer/wallet', customerWalletRoutes);
 
-// Public products (read-only)
+// Public products (read-only) — dedicated rate bucket + legacy /public/* aliases (same handler, one catalog limiter)
 const publicProductsRoutes = require('./routes/public-products');
-app.use('/api/public/products', publicProductsRoutes);
-app.use('/api/public/prescriptions', publicProductsRoutes);
+app.use('/api/public/products', publicCatalogReadLimiter, publicProductsRoutes);
+app.use('/api/public/prescriptions', publicCatalogReadLimiter, publicProductsRoutes);
+app.use('/public/products', publicCatalogReadLimiter, publicProductsRoutes);
+app.use('/public/prescriptions', publicCatalogReadLimiter, publicProductsRoutes);
 
 // Public checkout (unauthenticated ensure customer)
 const publicCheckoutRoutes = require('./routes/public-checkout');
 app.use('/api/public/checkout', publicCheckoutRoutes);
 
-// Commerce quote (server-trusted amount; pairs with public checkout quote_id)
+// Commerce quote + cart — separate rate bucket from global /api limiter so bursts do not starve catalog reads
 const publicCommerceQuoteRoutes = require('./routes/public-commerce-quote');
+const publicCommerceCartRoutes = require('./routes/public-commerce-cart');
+app.use('/api/public/commerce', publicCommerceLimiter);
 app.use('/api/public/commerce', publicCommerceQuoteRoutes);
+app.use('/api/public/commerce', publicCommerceCartRoutes);
+app.use('/public/commerce', publicCommerceLimiter);
+app.use('/public/commerce', publicCommerceQuoteRoutes);
+app.use('/public/commerce', publicCommerceCartRoutes);
 
 const publicCheckoutChatRoutes = require('./routes/public-checkout-chat');
 app.use('/api/public/checkout-chat', publicCheckoutChatRoutes);
@@ -14724,6 +14773,7 @@ async function handlePatientTriageMessage(req) {
 async function handlePatientCheckoutChatMessage(req) {
   const PatientPortalService = require('./services/patient-portal-service');
   const KellyAgentService = require('./services/kelly-agent-service');
+  const { resolveMerchantIdForCheckoutChat, applyCommerceQuantityIntentIfEligible } = require('./utils/public-commerce-helpers');
   const sid = req.patientSessionId;
   const sessionValidation = PatientPortalService.validateSession(sid);
   const email = sessionValidation?.email || null;
@@ -14750,6 +14800,20 @@ async function handlePatientCheckoutChatMessage(req) {
   const providerId = (req.body?.provider_id || '').toString().trim();
   let session_id = (req.body?.session_id || '').toString().trim() || null;
   if (!session_id) session_id = require('uuid').v4();
+
+  const merchantIdEarly = resolveMerchantIdForCheckoutChat({ providerId, clinicId });
+  if (merchantIdEarly && message) {
+    try {
+      await applyCommerceQuantityIntentIfEligible({
+        message,
+        sessionId: session_id,
+        merchantId: merchantIdEarly,
+        productId: productId || undefined
+      });
+    } catch (e) {
+      console.warn('⚠️  commerce quantity intent:', e.message);
+    }
+  }
 
   const result = await KellyAgentService.processTurn({
     message,
@@ -14803,6 +14867,7 @@ async function handlePatientCheckoutChatMessage(req) {
       chips_display: result.chips_display,
       next_step: result.next_step,
       quote_id: result.quote_id || null,
+      commerce_checkout: result.commerce_checkout || null,
       request_id: req.id
     }
   };
@@ -14812,6 +14877,7 @@ async function handlePatientCheckoutChatMessage(req) {
 async function handlePatientCheckoutChatMessageStream(req, res) {
   const PatientPortalService = require('./services/patient-portal-service');
   const KellyAgentService = require('./services/kelly-agent-service');
+  const { resolveMerchantIdForCheckoutChat, applyCommerceQuantityIntentIfEligible } = require('./utils/public-commerce-helpers');
   const sid = req.patientSessionId;
   const sessionValidation = PatientPortalService.validateSession(sid);
   const email = sessionValidation?.email || null;
@@ -14847,6 +14913,20 @@ async function handlePatientCheckoutChatMessageStream(req, res) {
   };
 
   try {
+    const merchantIdEarly = resolveMerchantIdForCheckoutChat({ providerId, clinicId });
+    if (merchantIdEarly && message) {
+      try {
+        await applyCommerceQuantityIntentIfEligible({
+          message,
+          sessionId: session_id,
+          merchantId: merchantIdEarly,
+          productId: productId || undefined
+        });
+      } catch (e) {
+        console.warn('⚠️  commerce quantity intent (stream):', e.message);
+      }
+    }
+
     const result = await KellyAgentService.processTurn({
       message,
       sessionId: session_id,
@@ -14904,6 +14984,7 @@ async function handlePatientCheckoutChatMessageStream(req, res) {
       chips_display: result.chips_display,
       next_step: result.next_step,
       quote_id: result.quote_id || null,
+      commerce_checkout: result.commerce_checkout || null,
       request_id: req.id
     });
     return res.end();
@@ -14980,6 +15061,41 @@ app.post(
     }
   }
 );
+
+// Public checkout-chat routes (guest chat-first commerce, no patient session required)
+app.post('/api/public/checkout-chat/turn', apiLimiter, validatePatientCheckoutChatBody, express.json(), async (req, res) => {
+  try {
+    if (!req.patientSessionId) {
+      req.patientSessionId = (req.headers['x-session-id'] || '').toString().trim() || null;
+    }
+    const out = await handlePatientCheckoutChatMessage(req);
+    return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.post('/api/public/checkout-chat/turn/stream', apiLimiter, validatePatientCheckoutChatBody, express.json(), async (req, res) => {
+  try {
+    if (!req.patientSessionId) {
+      req.patientSessionId = (req.headers['x-session-id'] || '').toString().trim() || null;
+    }
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+    await handlePatientCheckoutChatMessageStream(req, res);
+  } catch (e) {
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    }
+    try {
+      res.write(`data: ${JSON.stringify({ type: 'error', success: false, error: e.message })}\n\n`);
+    } catch (_) {}
+    return res.end();
+  }
+});
 
 // GET /api/patient/triage/history — Fetch conversation history for resume (orch-5)
 app.get('/api/patient/triage/history', apiLimiter, requirePatientSession, async (req, res) => {
@@ -17657,19 +17773,6 @@ app.get('/api', (req, res) => {
 });
 
 // ============================================
-// ERROR HANDLERS
-// ============================================
-
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    path: req.path,
-    suggestion: 'Try /health for service status, /docs for API documentation, or /api for API endpoints'
-  });
-});
-
-// ============================================
 // STRIPE ISSUING: WEBHOOKS
 // ============================================
 
@@ -18315,6 +18418,18 @@ app.get('/api/test/uhc-fhir/patient/:patientId/all', async (req, res) => {
       error: error.message
     });
   }
+});
+
+// ============================================
+// 404 — unmatched routes (must run after every app.get/app.use route)
+// ============================================
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint not found',
+    path: req.path,
+    suggestion: 'Try /health for service status, /docs for API documentation, or /api for API endpoints'
+  });
 });
 
 // ============================================

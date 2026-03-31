@@ -1,6 +1,6 @@
 // Minimal service worker for installability and basic offline shell.
 
-const CACHE_NAME = 'doclittle-shell-v5';
+const CACHE_NAME = 'doclittle-shell-v6';
 const SHELL_URLS = [
   '/unified-dashboard/business/business-dashboard.html',
   '/unified-dashboard/patients/patient-dashboard.html',
@@ -39,6 +39,32 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   if (request.url.includes('/api/')) return;
+  let reqUrl = null;
+  try {
+    reqUrl = new URL(request.url);
+  } catch (_) {}
+  // Do not proxy cross-origin webfont requests through SW fetch().
+  // This prevents CSP connect-src violations for fonts.gstatic.com and similar CDNs.
+  const isCrossOrigin = !!(reqUrl && reqUrl.origin !== self.location.origin);
+  const fontHosts = new Set([
+    'fonts.gstatic.com',
+    'fonts.googleapis.com',
+    'use.typekit.net',
+    'use.fontawesome.com',
+    'cdn.jsdelivr.net',
+    'unpkg.com'
+  ]);
+  const pathLower = reqUrl ? String(reqUrl.pathname || '').toLowerCase() : '';
+  const looksLikeFontFile =
+    pathLower.endsWith('.woff2') ||
+    pathLower.endsWith('.woff') ||
+    pathLower.endsWith('.ttf') ||
+    pathLower.endsWith('.otf');
+  const isFontRequest =
+    request.destination === 'font' ||
+    !!(reqUrl && fontHosts.has(reqUrl.hostname)) ||
+    (isCrossOrigin && looksLikeFontFile);
+  if (isCrossOrigin && isFontRequest) return;
 
   // For page navigations, prefer network so users always get latest HTML.
   // Fall back to cache when offline.

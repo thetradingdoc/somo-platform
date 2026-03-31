@@ -210,6 +210,14 @@ class EmailVerificationService {
     static getVerificationStatus(email) {
         try {
             const normalizedEmail = email.toLowerCase().trim();
+            const isVerified = this.isEmailVerified(normalizedEmail);
+            if (isVerified) {
+                return {
+                    verified: true,
+                    has_code: true,
+                    message: 'Email verified'
+                };
+            }
             const verification = db.getActiveEmailVerificationCode(normalizedEmail);
 
             if (!verification) {
@@ -223,10 +231,10 @@ class EmailVerificationService {
             const expiresAt = new Date(verification.expires_at);
 
             return {
-                verified: true,
+                verified: false,
                 has_code: true,
                 expires_at: expiresAt,
-                message: 'Email verified'
+                message: 'Verification code sent. Awaiting confirmation.'
             };
 
         } catch (error) {

@@ -10,29 +10,26 @@ require('dotenv').config();
 const db = require('../database');
 
 const PRODUCT_ID = 'prod-skin-hydration-serum-snail-mucin';
-const PRODUCT_NAME = 'Skin Hydration Serum | Snail Mucin';
+const PRODUCT_NAME = 'Dark Spot Repair Serum | Snail mucin';
 const PRODUCT_PRICE = 29.99;
 const PRODUCT_INVENTORY = 200;
 const PRODUCT_CATEGORY = 'Serums';
 const PRODUCT_PROTOCOL_STAGE = 'Stabilize';
 const PRODUCT_TAGS = ['serum', 'snail-mucin', 'hydration', 'barrier', 'collagen', 'centella', 'clinical'];
-const PRODUCT_IMAGE_URL = '/images/products/snail-mucin-serum.png';
+const PRODUCT_IMAGE_URL = '/images/products/dark-spot-repair-snail-mucin-serum.png';
 
-const PRODUCT_DESCRIPTION = `Unlock a higher standard of skin care with the Skin Hydration Serum. Engineered for deep skin transformation, this advanced serum targets the foundational causes of dehydration and environmental fatigue.
+const PRODUCT_DESCRIPTION = `Snail Mucin Dark Spot Repair Serum & Hydrating Essence.
 
-By utilizing a high-concentration Snail Secretion Filtrate base, this formula provides the essential biological building blocks, Hydrolyzed Collagen and Hyaluronic Acid, to physically lock in moisture and resurface uneven skin texture.
+Transform your complexion with our dual-action Dark Spot Repair Serum. Engineered as a high-performance skin hydration complex, this advanced formula targets the root causes of hyperpigmentation, dehydration, and environmental fatigue. Using a clinical-grade Snail Secretion Filtrate base, this serum delivers the biological building blocks, Hydrolyzed Collagen and Hyaluronic Acid, to physically lock in moisture and fade dark spots.
 
-Unlike standard moisturizers, our complex acts as a dermal recovery treatment. The integration of Centella Asiatica and Provitamin B5 (Panthenol) provides immediate calming for reactive skin, while Glycosaminoglycans work at a cellular level to enhance a plump, firm, and youthful appearance.
+Unlike standard moisturizers, our dark spot corrector acts as a total dermal recovery treatment. The integration of Centella Asiatica (Cica) and Provitamin B5 (Panthenol) provides immediate calming for reactive skin, while Glycosaminoglycans work at a cellular level to create a plump, firm, and youthful appearance.
 
-This is high-performance skin care designed for the modern professional. The lightweight, fast-absorbing delivery system ensures deep penetration without residue, making it the perfect clinical foundation for both your morning protection and nightly repair skin routines.
+This is high-performance skin care designed for the modern professional. Our lightweight, fast-absorbing snail mucin essence ensures deep penetration without residue, making it the perfect foundation for both your morning glow and nightly repair skin routines.
 
-The Clinical Difference:
-- Intensive Barrier Support: Repairs the skin moisture barrier to prevent trans-epidermal water loss.
-- Advanced Texture Correction: Smooths fine lines and rough patches for a glass skin finish.
-- Dermatology-Focused Ingredients: Formulated with Betaine and Allantoin to condition and protect sensitive skin.
-
-Suggested Use:
-For a complete skin care transformation, apply 3 to 4 drops to a clean face and neck. For best results, use as the Stabilize step in your routine, following your Vitamin C antioxidant serum and preceding your Retinol nightly treatment.`;
+The Clinical Difference: Why It Works
+- Intensive Barrier Repair: Strengthens the skin's moisture barrier to prevent water loss and soothe sensitivity.
+- Dark Spot & Acne Scar Treatment: Clinically-backed ingredients help even skin tone and smooth rough patches for a "glass skin" finish.
+- Dermatology-Focused Ingredients: Formulated with Betaine and Allantoin to condition, protect, and refine skin texture.`;
 
 function parseArgs(argv) {
   const args = argv.slice(2);

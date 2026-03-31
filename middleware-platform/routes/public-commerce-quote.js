@@ -10,6 +10,20 @@ const {
 } = require('../utils/naming-aliases');
 const { resolveMerchantId, parseCheckoutSessionData, isQuoteExpired } = require('../utils/public-commerce-helpers');
 
+function _buildPriceNote(q) {
+  const tax = Number(q?.tax_amount || 0);
+  if (q?.tax_included === true && tax === 0) {
+    return 'No tax applies to this order.';
+  }
+  if (q?.tax_included === true && tax > 0) {
+    return `Price includes $${tax.toFixed(2)} tax.`;
+  }
+  if (q?.tax_included === false && tax > 0) {
+    return `$${tax.toFixed(2)} tax will be added at checkout.`;
+  }
+  return 'See checkout for any applicable taxes.';
+}
+
 /**
  * Server-trusted commerce quote: stores amount in checkout_sessions (platform commerce_quote).
  * UI/agents use returned quote_id with POST /api/public/checkout/start — never trust client price.
@@ -81,12 +95,21 @@ router.post('/quote', (req, res) => {
             db.updateCheckoutSession(r.id, 'quoted', nextData);
           }
           const row = db.getCheckoutSession(r.id);
+          const subtotal = amount;
+          const taxAmount = 0;
+          const taxRate = 0;
+          const taxIncluded = false;
           const payload = withPrescriptionAliases(
             {
               success: true,
               quote_id: r.id,
               checkout_session_id: r.id,
               amount,
+              subtotal,
+              tax_amount: taxAmount,
+              tax_rate: taxRate,
+              tax_included: taxIncluded,
+              price_note: _buildPriceNote({ tax_amount: taxAmount, tax_included: taxIncluded }),
               currency: 'USD',
               product_id: productId,
               quantity: qty,
@@ -122,12 +145,21 @@ router.post('/quote', (req, res) => {
     });
 
     const row = db.getCheckoutSession(id);
+    const subtotal = amount;
+    const taxAmount = 0;
+    const taxRate = 0;
+    const taxIncluded = false;
     const payload = withPrescriptionAliases(
       {
         success: true,
         quote_id: id,
         checkout_session_id: id,
         amount,
+        subtotal,
+        tax_amount: taxAmount,
+        tax_rate: taxRate,
+        tax_included: taxIncluded,
+        price_note: _buildPriceNote({ tax_amount: taxAmount, tax_included: taxIncluded }),
         currency: 'USD',
         product_id: productId,
         quantity: qty,

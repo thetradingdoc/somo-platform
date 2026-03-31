@@ -35,7 +35,10 @@
         "test:commerce-agent": "node scripts/test-commerce-checkout-agent.js",
         "backfill:patient-verification": "node scripts/backfill-patient-verification.js",
         "smoke:voice-onboarding": "node scripts/smoke-voice-onboarding.cjs",
-        "test": "jest --passWithNoTests"
+        "test": "jest --passWithNoTests",
+        "test:e2e-checkout": "playwright test e2e/checkout-hero.spec.cjs",
+        "test:e2e-kelly-checkout": "playwright test e2e/kelly-conversational-checkout.spec.cjs",
+        "test:e2e-checkout-modes": "playwright test e2e/checkout-chat-modes.spec.cjs"
     },
     "keywords": [
         "ai-commerce",
@@ -88,6 +91,7 @@
         "zod": "^4.3.6"
     },
     "devDependencies": {
+        "@playwright/test": "^1.58.2",
         "axios-cookiejar-support": "^6.0.4",
         "cypress": "^13.13.0",
         "jest": "^29.7.0",

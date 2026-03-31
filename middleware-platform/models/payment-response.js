@@ -15,8 +15,11 @@ class PaymentResponse {
             status: data.payment?.status, // 'pending' | 'processing' | 'completed' | 'failed'
             amount: data.payment?.amount,
             currency: data.payment?.currency || 'USD',
-            payment_intent_id: data.payment?.payment_intent_id || null
+            payment_intent_id: data.payment?.payment_intent_id || data.payment_intent_id || null,
+            client_secret: data.payment?.client_secret || data.client_secret || null
         };
+        this.payment_intent_id = data.payment_intent_id || data.payment?.payment_intent_id || null;
+        this.client_secret = data.client_secret || data.payment?.client_secret || null;
         this.payment_link = data.payment_link || null;
         this.payment_token = data.payment_token || null;
         this.merchant_order_id = data.merchant_order_id || null;

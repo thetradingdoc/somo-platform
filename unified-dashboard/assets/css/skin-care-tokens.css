@@ -1,19 +1,33 @@
 /**
- * Skin & Care — shared design tokens (checkout + landing alignment)
+ * Skin & Care — shared design tokens (landing + checkout + static HTML)
  *
- * Import on new static HTML surfaces (after global.css):
- *   <link rel="stylesheet" href="../assets/css/skin-care-tokens.css" />
- *
- * React Native: mirror values in `patient-app/constants/skinCareTokens.ts`.
+ * Checkout: <link href="../assets/css/skin-care-tokens.css" rel="stylesheet" />
+ * CRA landing: `littlelab-landing/src/skin-care-tokens.css` is a symlink to this file; import it before ./styles.css.
  */
 :root {
   --brand-accent: #ffa51f;
-  --brand-black: #1a1a1a;
-  --brand-gray: #6b6b6b;
+  --brand-accent-hover: #e8951a;
+  --brand-black: #1a1a1d;
+  --brand-gray: #48484a;
+  --brand-white: #ffffff;
   --brand-border: #eee8df;
   --brand-cream: #faf9f6;
   --brand-kelly-bubble: #fff8ef;
   --brand-header-h: 72px;
   --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Gloock', Georgia, 'Times New Roman', serif;
+  --radius-pill: 999px;
+  --radius-card: 20px;
+  --radius-panel: 14px;
+  --shadow-nav: 0 22px 40px rgba(0, 0, 0, 0.08);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.06);
+  /* Progress / badges (aligned with landing solution pills) */
+  --cc-step-idle-bg: #fdfbf8;
+  --cc-step-idle-border: #e9e4db;
+  --cc-step-active-bg: #fff7ed;
+  --cc-step-active-border: #fdba74;
+  --cc-step-active-color: #9a3412;
+  --cc-step-done-bg: #ecfdf3;
+  --cc-step-done-border: #bbf7d0;
+  --cc-step-done-color: #166534;
 }

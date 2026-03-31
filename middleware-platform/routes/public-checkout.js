@@ -52,7 +52,9 @@ async function fallbackCreatePaymentLinkCheckout({
   merchantId,
   product,
   quantity,
-  customer
+  customer,
+  commerceQuoteId,
+  shippingAddress
 }) {
   const checkoutId = uuidv4();
   const checkout = {
@@ -62,9 +64,12 @@ async function fallbackCreatePaymentLinkCheckout({
     product_name: product.name,
     quantity,
     amount: Number(product.price || 0) * quantity,
-    customer_phone: customer.phone_number || '0000000000',
+    // NOT NULL column — use empty string, never null
+    customer_phone: customer.phone_number || '',
     customer_name: customer.name || customer.email || 'Customer',
     customer_email: customer.email || null,
+    commerce_quote_id: commerceQuoteId || null,
+    shipping_address: shippingAddress || null,
     status: 'pending'
   };
   await db.createVoiceCheckout(checkout);
@@ -252,15 +257,26 @@ router.post('/start', async (req, res) => {
       merchant_id: merchantId,
       customer: {
         name: customer.name || name || 'Customer',
-        phone: customer.phone_number || phone || null,
+        // NOT NULL target column
+        phone: customer.phone_number || phone || '',
         email: customer.email || email || null
       },
-      items: [{ product_id: productId, quantity: qty }],
+      // Include full product details so orchestrator enrichment can short-circuit
+      // and avoid external merchant.api_url lookups for local merchants.
+      items: [{
+        product_id: productId,
+        name: product.name,
+        unit_price: Number(product.price),
+        quantity: qty,
+        total: Number(product.price) * qty
+      }],
       payment: {
         method: payment_method || 'direct_stripe',
         currency: 'USD'
       },
       totals: {},
+      commerce_quote_id: quoteId || null,
+      shipping_address: shipping_address || null,
       source: {
         protocol: 'public',
         platform: 'landing',
@@ -285,7 +301,9 @@ router.post('/start', async (req, res) => {
           merchantId,
           product,
           quantity: qty,
-          customer
+          customer,
+          commerceQuoteId: quoteId,
+          shippingAddress: shipping_address || null
         });
         if (quoteId) markQuotePaymentPending(quoteId, fallbackCheckout);
         return finishSuccess({
@@ -309,7 +327,9 @@ router.post('/start', async (req, res) => {
         merchantId,
         product,
         quantity: qty,
-        customer
+        customer,
+        commerceQuoteId: quoteId,
+        shippingAddress: shipping_address || null
       });
       if (quoteId) markQuotePaymentPending(quoteId, fallbackCheckout);
       return finishSuccess({
@@ -324,8 +344,8 @@ router.post('/start', async (req, res) => {
         checkout_id: checkoutResult.checkout_id,
         payment_link: checkoutResult.payment_link || null,
         payment_token: checkoutResult.payment_token || null,
-        payment_intent_id: checkoutResult.payment_intent_id || null,
-        client_secret: checkoutResult.client_secret || null,
+        payment_intent_id: checkoutResult.payment?.payment_intent_id || checkoutResult.payment_intent_id || null,
+        client_secret: checkoutResult.payment?.client_secret || checkoutResult.client_secret || null,
         requires_action: !!checkoutResult.requires_action,
         payment: checkoutResult.payment || null,
         message: checkoutResult.message || 'Checkout created'

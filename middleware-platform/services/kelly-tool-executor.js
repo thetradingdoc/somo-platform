@@ -12,6 +12,7 @@
 
 const axios = require('axios');
 const db = require('../database');
+const PaymentOrchestrator = require('./payment-orchestrator');
 const TriageRAGService = require('./triage-rag-service');
 const TriageRAGServiceV2 = require('./triage-rag-service-v2');
 const SpecialistResolverService = require('./specialist-resolver-service');
@@ -63,6 +64,81 @@ class KellyToolExecutor {
     } catch (_) {
       return null;
     }
+  }
+
+  /**
+   * Stable chat contract for prepare_commerce_checkout: cart summary, missing fields, payment action.
+   * Called for both cart-based orchestrator path and HTTP /api/public/checkout/start path.
+   */
+  static _normalizePrepareCommerceCheckoutForChat(toolResult) {
+    const base = toolResult && typeof toolResult === 'object' ? { ...toolResult } : { success: false };
+    const checkout = base.checkout || {};
+    const cart = base.cart || null;
+    const items = Array.isArray(cart?.items) ? cart.items : [];
+    const cart_summary = {
+      items: items.map((it) => ({
+        product_id: it.product_id,
+        name: it.name,
+        quantity: it.quantity != null ? Number(it.quantity) : null,
+        line_total: it.total != null ? Number(it.total) : null
+      })),
+      subtotal: cart != null && cart.subtotal != null ? Number(cart.subtotal) : null,
+      item_count:
+        cart != null && cart.item_count != null
+          ? Number(cart.item_count)
+          : items.length
+    };
+    if (!items.length && base.success && checkout.payment) {
+      const pay = checkout.payment || {};
+      const amt = pay.amount != null ? Number(pay.amount) : null;
+      if (amt != null && Number.isFinite(amt)) {
+        cart_summary.subtotal = amt;
+        cart_summary.item_count = 1;
+        cart_summary.source = 'single_checkout';
+      }
+    }
+    const next_required_fields = [];
+    if (base.success === false) {
+      const err = String(base.error || '');
+      if (err === 'email_required') next_required_fields.push('customer_email');
+      if (err === 'cart_empty') next_required_fields.push('cart_items');
+      if (err === 'merchant_required') next_required_fields.push('provider_id');
+    }
+    let payment_action = null;
+    if (base.success) {
+      const cs = checkout.client_secret || base.client_secret;
+      const pi = checkout.payment_intent_id || base.payment_intent_id;
+      const link = checkout.payment_link || base.payment_link;
+      if (cs && pi) {
+        payment_action = {
+          type: 'stripe_payment_intent',
+          client_secret: cs,
+          payment_intent_id: pi,
+          requires_action: !!checkout.requires_action
+        };
+      } else if (link) {
+        payment_action = { type: 'payment_link', url: link };
+      } else {
+        payment_action = {
+          type: 'pending',
+          message: checkout.message || base.message || null
+        };
+      }
+    }
+    return {
+      ...base,
+      cart_summary,
+      next_required_fields,
+      payment_action,
+      commerce_checkout: {
+        cart_summary,
+        next_required_fields,
+        payment_action,
+        success: !!base.success,
+        error: base.success ? null : base.error || null,
+        message: base.message || null
+      }
+    };
   }
 
   // ── Date helpers ───────────────────────────────────────────────────────
@@ -597,29 +673,232 @@ class KellyToolExecutor {
           if (!productId) {
             return { success: false, error: 'product_id_required' };
           }
-          return await this._post('/api/public/commerce/quote', {
+          const quoteResult = await this._post('/api/public/commerce/quote', {
             product_id: productId,
             prescription_id: productId,
             provider_id: merchantId,
             quantity: args.quantity
           });
+          if (!quoteResult || quoteResult.success === false) return quoteResult;
+          const amount = Number.isFinite(Number(quoteResult.amount)) ? Number(quoteResult.amount) : null;
+          const subtotal =
+            Number.isFinite(Number(quoteResult.subtotal)) ? Number(quoteResult.subtotal) : amount;
+          const taxAmount =
+            Number.isFinite(Number(quoteResult.tax_amount)) ? Number(quoteResult.tax_amount) : 0;
+          const taxRate =
+            Number.isFinite(Number(quoteResult.tax_rate)) ? Number(quoteResult.tax_rate) : 0;
+          const taxIncluded = quoteResult.tax_included === true;
+          const quoteId = quoteResult.quote_id || quoteResult.checkout_session_id || null;
+          return {
+            ...quoteResult,
+            quote_id: quoteId,
+            checkout_session_id: quoteId,
+            amount,
+            subtotal,
+            tax_amount: taxAmount,
+            tax_rate: taxRate,
+            tax_included: taxIncluded,
+            price_note: quoteResult.price_note || 'See checkout for any applicable taxes.',
+            currency: quoteResult.currency || 'USD',
+            expires_at: quoteResult.expires_at || null
+          };
+        }
+
+        case 'get_cart': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          if (!merchantId) return { success: false, error: 'merchant_required' };
+          const cart = db.getCommerceCart(sessionId, merchantId) || {
+            id: sessionId,
+            merchant_id: merchantId,
+            items: [],
+            subtotal: 0,
+            item_count: 0
+          };
+          return { success: true, cart };
+        }
+
+        case 'add_to_cart': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          const productId = args.product_id || args.prescription_id;
+          const quantity = Math.max(1, Number(args.quantity) || 1);
+          if (!merchantId) return { success: false, error: 'merchant_required' };
+          if (!productId) return { success: false, error: 'product_id_required' };
+          if (await db.isCommerceCartLocked(sessionId, merchantId)) {
+            return {
+              success: false,
+              error: 'cart_locked',
+              message: 'Cart is locked while checkout is in progress.'
+            };
+          }
+          const product = db.getProduct(productId);
+          if (!product) return { success: false, error: 'product_not_found' };
+          if (product.merchant_id && product.merchant_id !== merchantId) {
+            return { success: false, error: 'product_merchant_mismatch' };
+          }
+          const existing = db.getCommerceCart(sessionId, merchantId);
+          const items = Array.isArray(existing?.items) ? [...existing.items] : [];
+          const idx = items.findIndex((it) => it.product_id === productId);
+          const nextQty = (idx >= 0 ? Number(items[idx].quantity || 0) : 0) + quantity;
+          const unit = Number(product.price || 0);
+          const item = {
+            product_id: product.id,
+            name: product.name,
+            unit_price: unit,
+            quantity: nextQty,
+            total: Number((unit * nextQty).toFixed(2))
+          };
+          if (idx >= 0) items[idx] = item;
+          else items.push(item);
+          db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items });
+          return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Added to cart.' };
+        }
+
+        case 'update_cart_item': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          const productId = args.product_id || args.prescription_id;
+          const quantity = Number(args.quantity);
+          if (!merchantId) return { success: false, error: 'merchant_required' };
+          if (!productId) return { success: false, error: 'product_id_required' };
+          if (!Number.isFinite(quantity)) return { success: false, error: 'quantity_required' };
+          const existing = db.getCommerceCart(sessionId, merchantId);
+          const items = Array.isArray(existing?.items) ? [...existing.items] : [];
+          const idx = items.findIndex((it) => it.product_id === productId);
+          if (quantity <= 0) {
+            const filtered = items.filter((it) => it.product_id !== productId);
+            db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items: filtered });
+            return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Item removed.' };
+          }
+          const product = db.getProduct(productId);
+          if (!product) return { success: false, error: 'product_not_found' };
+          const unit = Number(product.price || 0);
+          const updated = {
+            product_id: product.id,
+            name: product.name,
+            unit_price: unit,
+            quantity: Math.max(1, quantity),
+            total: Number((unit * Math.max(1, quantity)).toFixed(2))
+          };
+          if (idx >= 0) items[idx] = updated;
+          else items.push(updated);
+          db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items });
+          return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Cart updated.' };
+        }
+
+        case 'remove_cart_item': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          const productId = args.product_id || args.prescription_id;
+          if (!merchantId) return { success: false, error: 'merchant_required' };
+          if (!productId) return { success: false, error: 'product_id_required' };
+          if (await db.isCommerceCartLocked(sessionId, merchantId)) {
+            return {
+              success: false,
+              error: 'cart_locked',
+              message: 'Cart is locked while checkout is in progress.'
+            };
+          }
+          const existing = db.getCommerceCart(sessionId, merchantId);
+          const items = (existing?.items || []).filter((it) => it.product_id !== productId);
+          db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items });
+          return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Item removed.' };
+        }
+
+        case 'clear_cart': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          if (!merchantId) return { success: false, error: 'merchant_required' };
+          db.clearCommerceCart(sessionId, merchantId);
+          return { success: true, cart: { id: sessionId, merchant_id: merchantId, items: [], subtotal: 0, item_count: 0 } };
         }
 
         case 'prepare_commerce_checkout': {
           const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
           if (!merchantId) {
-            return {
+            return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
               success: false,
               error: 'merchant_required',
               message: 'Could not resolve merchant/provider for this clinic. Pass provider_id or configure clinic merchant_id.'
-            };
+            });
           }
           const quoteId = args.quote_id || args.checkout_session_id;
           const email = args.customer_email || args.email;
-          if (!quoteId || !email) {
-            return { success: false, error: 'quote_and_email_required', message: 'quote_id and customer_email are required.' };
+          if (!email) {
+            return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+              success: false,
+              error: 'email_required',
+              message: 'customer_email is required.'
+            });
           }
-          return await this._post('/api/public/checkout/start', {
+          const useCartPath = !quoteId || args.use_cart === true || args.cart_checkout === true;
+          if (useCartPath) {
+            if (await db.isCommerceCartLocked(sessionId, merchantId)) {
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                success: false,
+                error: 'checkout_already_in_progress',
+                message: 'Checkout is already in progress for this session.'
+              });
+            }
+            const cart = db.getCommerceCart(sessionId, merchantId);
+            if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                success: false,
+                error: 'cart_empty',
+                message: 'Your cart is empty. Add items first.'
+              });
+            }
+            const checkoutResult = await PaymentOrchestrator.createCheckout({
+              merchant_id: merchantId,
+              customer: {
+                name: args.customer_name || args.name || String(email).split('@')[0] || 'Customer',
+                phone: args.customer_phone || args.phone || '',
+                email: String(email).trim()
+              },
+              items: cart.items.map((it) => ({
+                product_id: it.product_id,
+                name: it.name,
+                unit_price: Number(it.unit_price),
+                quantity: Number(it.quantity),
+                total: Number(it.total)
+              })),
+              payment: { method: args.payment_method || 'direct_stripe', currency: 'USD' },
+              shipping_address: args.shipping_address || undefined,
+              metadata: { kelly_session_id: sessionId || undefined, cart_session_id: sessionId }
+            });
+            if (!checkoutResult || checkoutResult.success === false) {
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(
+                checkoutResult && typeof checkoutResult === 'object'
+                  ? checkoutResult
+                  : { success: false, error: 'checkout_failed', message: 'Checkout could not be created.' }
+              );
+            }
+            try {
+              if (checkoutResult.checkout_id) {
+                db.setCommerceCartCheckoutLock(sessionId, merchantId, checkoutResult.checkout_id);
+              }
+            } catch (_) {}
+            const merged = {
+              success: true,
+              checkout: {
+                checkout_id: checkoutResult.checkout_id,
+                payment_link: checkoutResult.payment_link || null,
+                payment_token: checkoutResult.payment_token || null,
+                payment_intent_id: checkoutResult.payment?.payment_intent_id || checkoutResult.payment_intent_id || null,
+                client_secret: checkoutResult.payment?.client_secret || checkoutResult.client_secret || null,
+                requires_action: !!checkoutResult.requires_action,
+                payment: checkoutResult.payment || null,
+                message: checkoutResult.message || 'Checkout prepared from cart'
+              },
+              cart
+            };
+            const norm = KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(merged);
+            try {
+              KellyToolExecutor._setSessionMeta(
+                sessionId,
+                'last_commerce_checkout_chat',
+                JSON.stringify(norm.commerce_checkout || {})
+              );
+            } catch (_) {}
+            return norm;
+          }
+          const raw = await this._post('/api/public/checkout/start', {
             quote_id: quoteId,
             checkout_session_id: quoteId,
             provider_id: merchantId,
@@ -630,6 +909,15 @@ class KellyToolExecutor {
             kelly_session_id: sessionId || undefined,
             payment_method: args.payment_method || 'direct_stripe'
           });
+          const normHttp = KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(raw);
+          try {
+            KellyToolExecutor._setSessionMeta(
+              sessionId,
+              'last_commerce_checkout_chat',
+              JSON.stringify(normHttp.commerce_checkout || {})
+            );
+          } catch (_) {}
+          return normHttp;
         }
 
         default:
@@ -922,8 +1210,16 @@ class KellyToolExecutor {
   // ─────────────────────────────────────────────────────────────
   // HTTP helper
   // ─────────────────────────────────────────────────────────────
+  static _internalJobHeaders() {
+    const tok = process.env.INTERNAL_JOB_TOKEN;
+    return tok ? { 'x-internal-job-token': tok } : {};
+  }
+
   static async _post(path, body) {
-    const response = await axios.post(`${BASE_URL}${path}`, body, { timeout: KellyToolExecutor._httpTimeoutMs() });
+    const response = await axios.post(`${BASE_URL}${path}`, body, {
+      timeout: KellyToolExecutor._httpTimeoutMs(),
+      headers: KellyToolExecutor._internalJobHeaders()
+    });
     return response.data;
   }
 

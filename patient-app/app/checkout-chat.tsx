@@ -32,6 +32,10 @@ import {
   getApiReachabilityIssue,
 } from '@/config';
 import { emitCheckoutAnalytics } from '@/lib/checkoutAnalytics';
+import {
+  fetchWith429Retry,
+  resolveProductImageForCheckout,
+} from '@/lib/checkoutCatalogHelpers';
 
 const API_BASE = API_BASE_URL;
 const SESSION_KEY = 'patient_session_id';
@@ -61,10 +65,21 @@ function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function productImageUrl(p?: CatalogProduct | null) {
+function productImageUrl(p?: CatalogProduct | null, apiBase = API_BASE) {
   if (!p) return null;
   const u = p.image_url || p.image_link || p.image;
-  return u && String(u).trim() ? String(u) : null;
+  if (!u || !String(u).trim()) return null;
+  const s = String(u).trim();
+  if (/^https?:\/\//i.test(s) || s.startsWith('data:')) return s;
+  if (s.startsWith('/')) {
+    try {
+      const base = apiBase.replace(/\/$/, '');
+      return new URL(s, `${base}/`).href;
+    } catch {
+      return s;
+    }
+  }
+  return s;
 }
 
 /**
@@ -77,7 +92,12 @@ function productImageUrl(p?: CatalogProduct | null) {
  */
 export default function CheckoutChatScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ product_id?: string; provider_id?: string }>();
+  const params = useLocalSearchParams<{
+    product_id?: string;
+    provider_id?: string;
+    product_name?: string;
+    product_image?: string;
+  }>();
   const apiIssue = getApiReachabilityIssue();
 
   const initialProvider = useMemo(
@@ -87,6 +107,14 @@ export default function CheckoutChatScreen() {
   const initialProduct = useMemo(
     () => (params.product_id || DEMO_CHECKOUT_PRODUCT_ID || '').trim(),
     [params.product_id]
+  );
+  const productNameHint = useMemo(
+    () => (params.product_name ? String(params.product_name).trim() : ''),
+    [params.product_name]
+  );
+  const productImageHint = useMemo(
+    () => (params.product_image ? String(params.product_image).trim() : ''),
+    [params.product_image]
   );
 
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -110,6 +138,7 @@ export default function CheckoutChatScreen() {
   const [payBusy, setPayBusy] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [isSwitchingProduct, setIsSwitchingProduct] = useState(false);
+  const [catalogDegraded, setCatalogDegraded] = useState(false);
   const listRef = useRef<FlatList<ChatMsg>>(null);
   const doneHandledRef = useRef(false);
   const streamAccumRef = useRef('');
@@ -165,24 +194,36 @@ export default function CheckoutChatScreen() {
   }, [sessionId, loadIntakeEmail]);
 
   const loadCatalog = useCallback(async () => {
-    if (!providerId) {
-      setError('Set EXPO_PUBLIC_MERCHANT_ID or pass provider_id in the link.');
-      return;
-    }
     setCatalogLoading(true);
+    setCatalogDegraded(false);
     setError(null);
     try {
       const q = new URLSearchParams();
-      q.set('provider_id', providerId);
-      const res = await fetch(`${API_BASE}/api/public/products?${q.toString()}`, {
+      if (providerId) q.set('provider_id', providerId);
+      const qs = q.toString();
+      const url = `${API_BASE}/api/public/products${qs ? `?${qs}` : ''}`;
+      const res = await fetchWith429Retry(url, {
         headers: { 'ngrok-skip-browser-warning': 'true' },
       });
-      const data = await res.json();
+      let data: Record<string, unknown> = {};
+      try {
+        data = (await res.json()) as Record<string, unknown>;
+      } catch {
+        data = {};
+      }
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Could not load catalog');
+        const err =
+          res.status === 429
+            ? 'Catalog rate-limited. Wait a moment and tap Retry catalog.'
+            : String(data.error || 'Could not load catalog');
+        throw new Error(err);
       }
       const list = (data.products || data.prescriptions || []) as CatalogProduct[];
       setCatalog(list);
+      if (list.length && !providerId) {
+        const m = list[0].merchant_id;
+        if (m) setProviderId(String(m));
+      }
       const found = list.find((p) => String(p.id) === String(productId));
       if (!found && list.length) {
         const first = list[0];
@@ -190,6 +231,8 @@ export default function CheckoutChatScreen() {
         setProviderId(String(first.merchant_id || providerId));
       }
     } catch (e) {
+      setCatalog([]);
+      setCatalogDegraded(true);
       setError(e instanceof Error ? e.message : 'Catalog error');
     } finally {
       setCatalogLoading(false);
@@ -197,8 +240,8 @@ export default function CheckoutChatScreen() {
   }, [providerId, productId]);
 
   useEffect(() => {
-    if (sessionId && providerId) loadCatalog();
-  }, [sessionId, providerId, loadCatalog]);
+    if (sessionId) loadCatalog();
+  }, [sessionId, loadCatalog]);
 
   const fetchQuote = useCallback(async () => {
     if (!sessionId || !productId || !providerId) return;
@@ -248,10 +291,28 @@ export default function CheckoutChatScreen() {
     }
   }, [sessionId, productId, providerId, catalog.length, fetchQuote]);
 
-  const selectedProduct = useMemo(
-    () => catalog.find((p) => String(p.id) === String(productId)),
-    [catalog, productId]
-  );
+  const selectedProduct = useMemo((): CatalogProduct | undefined => {
+    const fromCatalog = catalog.find((p) => String(p.id) === String(productId));
+    if (fromCatalog) return fromCatalog;
+    if (catalogDegraded && productId) {
+      const img =
+        resolveProductImageForCheckout(productId, productImageHint, API_BASE) || undefined;
+      return {
+        id: productId,
+        name: productNameHint || 'Product',
+        image_url: img,
+        merchant_id: providerId || DEMO_PROVIDER_ID || undefined,
+      };
+    }
+    return undefined;
+  }, [
+    catalog,
+    productId,
+    catalogDegraded,
+    productNameHint,
+    productImageHint,
+    providerId,
+  ]);
 
   const displayPayAmount = useMemo(() => {
     if (lastQuotedAmount != null && Number.isFinite(lastQuotedAmount)) return lastQuotedAmount;
@@ -518,7 +579,7 @@ export default function CheckoutChatScreen() {
     }
   };
 
-  const imgUrl = productImageUrl(selectedProduct);
+  const imgUrl = productImageUrl(selectedProduct, API_BASE);
 
   if (sessionLoading) {
     return (
@@ -572,7 +633,7 @@ export default function CheckoutChatScreen() {
           )}
           <View style={styles.headerTextCol}>
             <Text style={styles.productName} numberOfLines={2}>
-              {selectedProduct?.name || 'Product'}
+              {selectedProduct?.name || productNameHint || 'Product'}
             </Text>
             {quoteLoading ? (
               <Text style={styles.priceMuted}>Updating price…</Text>
@@ -588,6 +649,8 @@ export default function CheckoutChatScreen() {
               <Text style={styles.price}>
                 ${Number(selectedProduct.price).toFixed(2)} USD
               </Text>
+            ) : catalogDegraded ? (
+              <Text style={styles.priceMuted}>Price loads when catalog is available — tap Retry.</Text>
             ) : (
               <Text style={styles.priceMuted}>See checkout for price</Text>
             )}
@@ -635,6 +698,18 @@ export default function CheckoutChatScreen() {
               <Text style={styles.payHeroText}>
                 Pay ${displayPayAmount!.toFixed(2)} securely
               </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {catalogDegraded && !catalogLoading ? (
+          <View style={styles.retryRow}>
+            <Pressable
+              style={styles.retryBtn}
+              onPress={() => loadCatalog()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry catalog">
+              <Text style={styles.retryBtnText}>Retry catalog</Text>
             </Pressable>
           </View>
         ) : null}
@@ -694,7 +769,7 @@ export default function CheckoutChatScreen() {
               keyExtractor={(p) => String(p.id)}
               style={{ maxHeight: 360 }}
               renderItem={({ item }) => {
-                const iu = productImageUrl(item);
+                const iu = productImageUrl(item, API_BASE);
                 return (
                   <Pressable
                     style={styles.modalRow}
@@ -775,6 +850,20 @@ const styles = StyleSheet.create({
   body: { fontSize: 15, lineHeight: 22, color: SkinCare.black },
   muted: { fontSize: 14, color: SkinCare.gray, paddingHorizontal: 16 },
   err: { color: SkinCare.danger, paddingHorizontal: 4, fontSize: 13, flex: 1 },
+  retryRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  retryBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: SkinCare.border,
+    backgroundColor: SkinCare.cream,
+  },
+  retryBtnText: { fontWeight: '700', fontSize: 14, color: SkinCare.black },
   errRow: {
     flexDirection: 'row',
     alignItems: 'center',

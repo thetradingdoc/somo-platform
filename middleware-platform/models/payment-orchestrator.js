@@ -66,7 +66,7 @@ class PaymentOrchestrator {
 
             console.log('✅ Merchant:', merchant.name);
 
-            // If items don't have full details, fetch them
+            // If items don't have full details, fetch/fallback safely.
             const enrichedItems = await this._enrichItems(paymentRequest.items, merchant);
 
             // CRITICAL: Validate that we have at least one item
@@ -89,6 +89,16 @@ class PaymentOrchestrator {
 
             // Create checkout record
             const checkoutId = uuidv4();
+            const commerceQuoteId =
+                requestData.commerce_quote_id ||
+                requestData.metadata?.commerce_quote_id ||
+                null;
+            const shippingAddress =
+                requestData.shipping_address ||
+                requestData.metadata?.shipping_address ||
+                requestData.customer?.shipping_address ||
+                null;
+
             const checkout = {
                 id: checkoutId,
                 merchant_id: paymentRequest.merchant_id,
@@ -96,9 +106,11 @@ class PaymentOrchestrator {
                 product_name: primaryItem.name,
                 quantity: primaryItem.quantity || 1,
                 amount: totals.total,
-                customer_phone: paymentRequest.customer?.phone || null,
+                customer_phone: paymentRequest.customer?.phone || '',
                 customer_name: paymentRequest.customer?.name || null,
                 customer_email: paymentRequest.customer?.email || null,
+                commerce_quote_id: commerceQuoteId,
+                shipping_address: shippingAddress,
                 status: 'pending'
             };
 
@@ -143,23 +155,44 @@ class PaymentOrchestrator {
                     continue;
                 }
 
-                // Otherwise, fetch from merchant
-                const response = await axios.get(
-                    `${merchant.api_url}/api/products/${item.product_id}`
-                );
-                const product = response.data.product;
+                // Try external merchant API only when configured.
+                if (merchant.api_url) {
+                    try {
+                        const response = await axios.get(
+                            `${merchant.api_url}/api/products/${item.product_id}`,
+                            { timeout: 8000 }
+                        );
+                        const product = response.data.product;
+                        enriched.push({
+                            product_id: item.product_id,
+                            name: product.name,
+                            quantity: item.quantity || 1,
+                            unit_price: product.price,
+                            total: (item.quantity || 1) * product.price
+                        });
+                        continue;
+                    } catch (apiError) {
+                        console.warn(`External product fetch failed for ${item.product_id}:`, apiError.message, '— falling back to local DB');
+                    }
+                }
 
-                enriched.push({
-                    product_id: item.product_id,
-                    name: product.name,
-                    quantity: item.quantity || 1,
-                    unit_price: product.price,
-                    total: (item.quantity || 1) * product.price
-                });
+                // Local DB fallback for local merchants and API failures.
+                const localProduct = db.getProduct ? db.getProduct(item.product_id) : null;
+                if (localProduct) {
+                    enriched.push({
+                        product_id: item.product_id,
+                        name: localProduct.name,
+                        quantity: item.quantity || 1,
+                        unit_price: Number(localProduct.price),
+                        total: (item.quantity || 1) * Number(localProduct.price)
+                    });
+                    continue;
+                }
 
+                throw new Error(`Product ${item.product_id} not found in external API or local DB`);
             } catch (error) {
-                console.error(`Failed to fetch product ${item.product_id}:`, error.message);
-                throw new Error(`Product ${item.product_id} not found`);
+                console.error(`Failed to enrich product ${item.product_id}:`, error.message);
+                throw error;
             }
         }
 
@@ -193,6 +226,7 @@ class PaymentOrchestrator {
                 return await this._handleLinkPayment(checkout, merchant, paymentRequest);
 
             case 'stripe':
+            case 'direct_stripe':
                 return await this._handleStripePayment(checkout, merchant, paymentRequest);
 
             case 'mastercard':
@@ -284,6 +318,17 @@ class PaymentOrchestrator {
                 return await this._handleLinkPayment(checkout, merchant, paymentRequest);
             }
 
+            const piMetadata = {
+                checkout_id: checkout.id,
+                merchant_id: merchant.id,
+                transaction_id: paymentRequest.transaction_id,
+                customer_email: checkout.customer_email || '',
+                customer_phone: checkout.customer_phone || ''
+            };
+            if (checkout.commerce_quote_id) {
+                piMetadata.commerce_quote_id = checkout.commerce_quote_id;
+            }
+
             // Create payment intent
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: Math.round(checkout.amount * 100), // Convert to cents
@@ -291,13 +336,8 @@ class PaymentOrchestrator {
                 automatic_payment_methods: {
                     enabled: true
                 },
-                metadata: {
-                    checkout_id: checkout.id,
-                    merchant_id: merchant.id,
-                    transaction_id: paymentRequest.transaction_id,
-                    customer_email: checkout.customer_email || '',
-                    customer_phone: checkout.customer_phone || ''
-                },
+                return_url: `${process.env.BASE_URL || 'http://localhost:4000'}/api/payment/success`,
+                metadata: piMetadata,
                 description: `Payment for ${checkout.product_name || 'service'}`,
                 receipt_email: checkout.customer_email || undefined
             });

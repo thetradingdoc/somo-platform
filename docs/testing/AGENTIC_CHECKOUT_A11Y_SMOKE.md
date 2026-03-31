@@ -6,9 +6,12 @@ Use **Chrome DevTools** → device toolbar for width; **Reduce motion**: macOS S
 
 | Check | 375px | 320px |
 |-------|-------|-------|
+| **Skip link** “Skip to chat” appears on focus; focus moves to `#cc-main` | ☐ | ☐ |
 | No horizontal scroll on main column | ☐ | ☐ |
 | Composer + primary actions reachable without overlap | ☐ | ☐ |
 | Focus visible on Send, Switch, Pay, footer links | ☐ | ☐ |
+| Payment bubble verification controls are keyboard reachable in order: Send code → code input → Verify | ☐ | ☐ |
+| **Pay securely** remains disabled until verification succeeds | ☐ | ☐ |
 | Price updates announced (`aria-live` on `#productPrice`) | ☐ | ☐ |
 | New chat messages announced (`aria-live` on `#chatLog`) | ☐ | ☐ |
 | With **Reduce motion**: shimmer / typing dots / quote pulse disabled | ☐ | ☐ |

@@ -322,22 +322,27 @@
   }
 })();
 
-/** Landing / shop base URL for “Back to shop” from patient checkout (override in env if needed). */
+/**
+ * Landing / shop base URL for “Back to shop” and resolving relative product images (/images/...) on checkout.
+ * Production: set window.LANDING_BASE before config.js if the shop lives on another origin.
+ */
 (function () {
   if (typeof window.LANDING_BASE === 'string' && window.LANDING_BASE.length) {
     return;
   }
+  /** Root-relative shop entry — same on disk as unified-dashboard/littlelab-landing/public/index.html */
+  var SHOP_INDEX = '/unified-dashboard/littlelab-landing/public/index.html';
   try {
     var base = new URL(window.location.href);
     var path = base.pathname || '';
-    if (path.indexOf('/patients/') !== -1) {
-      window.LANDING_BASE = new URL('../../littlelab-landing/public/index.html', base.href).href;
-    } else if (path.indexOf('unified-dashboard') !== -1) {
-      window.LANDING_BASE = new URL('littlelab-landing/public/index.html', base.href).href;
+    if (path.indexOf('/unified-dashboard/') !== -1 || path.indexOf('/patients/') !== -1) {
+      window.LANDING_BASE = base.origin + SHOP_INDEX;
+    } else if (path.indexOf('/littlelab-landing/') !== -1) {
+      window.LANDING_BASE = base.origin + '/littlelab-landing/public/index.html';
     } else {
       window.LANDING_BASE = base.origin + '/';
     }
   } catch (_) {
-    window.LANDING_BASE = '../littlelab-landing/public/index.html';
+    window.LANDING_BASE = SHOP_INDEX;
   }
 })();
