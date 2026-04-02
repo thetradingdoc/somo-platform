@@ -7,6 +7,7 @@
 const twilio = require('twilio');
 const UsageMonitor = require('./usage-monitor');
 const db = require('../database');
+const { normalizeToE164 } = require('../utils/phone-e164');
 
 class SMSService {
     static _testNumbers() {
@@ -336,34 +337,11 @@ class SMSService {
     }
 
     /**
-     * Format phone number to E.164 standard
+     * Format phone number to E.164 standard (stored and compared with leading +, digits only).
      */
     static formatPhoneNumber(phoneNumber) {
-        // Remove all non-digit characters
-        let cleaned = phoneNumber.replace(/\D/g, '');
-
-        // If it starts with 1 and has 11 digits (US number)
-        if (cleaned.length === 11 && cleaned[0] === '1') {
-            return `+${cleaned}`;
-        }
-
-        // If it has 10 digits (US number without country code)
-        if (cleaned.length === 10) {
-            return `+1${cleaned}`;
-        }
-
-        // Already has country code
-        if (cleaned.length > 10) {
-            return `+${cleaned}`;
-        }
-
-        // If starts with +, return as-is
-        if (phoneNumber.startsWith('+')) {
-            return phoneNumber;
-        }
-
-        // Default: assume US number
-        return `+1${cleaned}`;
+        if (phoneNumber == null || String(phoneNumber).trim() === '') return '';
+        return normalizeToE164(phoneNumber);
     }
 
     /**

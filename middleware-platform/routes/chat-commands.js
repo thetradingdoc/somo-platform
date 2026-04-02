@@ -12,6 +12,7 @@ const { chatLimiter } = require('../middleware/rate-limiter');
 const ChatLLMService = require('../services/chat-llm-service');
 const CommandHandler = require('../services/command-handler');
 const promotionCommands = require('../services/commands/promotion-commands');
+const { normalizeToE164 } = require('../utils/phone-e164');
 
 // Register promotion commands
 CommandHandler.register('promotion', promotionCommands);
@@ -144,22 +145,10 @@ async function handleEmailCommand(target, merchantId, customerId) {
 /**
  * Handle call command
  */
-/**
- * Normalize phone number (same logic as database.js)
- */
 function normalizePhoneNumber(phone) {
   if (!phone) return phone;
-  const digitsOnly = phone.replace(/\D/g, '');
-  if (digitsOnly.length === 10) {
-    return '+1' + digitsOnly;
-  }
-  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
-    return '+' + digitsOnly;
-  }
-  if (phone.startsWith('+')) {
-    return phone;
-  }
-  return '+1' + digitsOnly;
+  const e164 = normalizeToE164(phone);
+  return e164 || phone;
 }
 
 async function handleCallCommand(target, merchantId, customerId) {

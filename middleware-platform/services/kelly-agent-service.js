@@ -27,6 +27,7 @@ const Groq = require('groq-sdk');
 const LLMRouter = require('./llm-router');
 const { resolvePrimaryProvider, callStreamWithDeltas } = LLMRouter;
 const db = require('../database');
+const { normalizeToE164 } = require('../utils/phone-e164');
 
 // Startup config log — confirm intended Kelly LLM path (fix-startup)
 (function _logKellyConfig() {
@@ -44,6 +45,7 @@ const db = require('../database');
 })();
 const { detectRedFlags } = require('./triage-service');
 const KellyToolExecutor = require('./kelly-tool-executor');
+const { redactObject } = require('./redaction-service');
 const TriageRAGService = require('./triage-rag-service');
 
 // ─────────────────────────────────────────────────────────────
@@ -284,12 +286,33 @@ function _replyForTriageIncomplete(errorCode, channel, preferredLanguage, sessio
 
 function _sanitizeToolNameLeaks(text) {
   if (!text) return text;
-  return String(text)
+  let s = String(text)
     .replace(/\brun_triage_rag\b/gi, 'triage')
     .replace(/\bget_available_slots\b/gi, 'available times')
     .replace(/\bschedule_appointment\b/gi, 'booking')
     .replace(/\bcollect_insurance\b/gi, 'insurance')
-    .replace(/\bcreate_appointment_checkout\b/gi, 'checkout');
+    .replace(/\bcreate_appointment_checkout\b/gi, 'checkout')
+    .replace(
+      /a secure payment form will appear above where you can enter your card details to complete the purchase\.?/gi,
+      'I sent a 6-digit verification code to your email. Please enter it to continue to secure payment.'
+    )
+    .replace(
+      /a secure payment form will appear above[^.]*\./gi,
+      'I sent a 6-digit verification code to your email. Please enter it to continue to secure payment.'
+    )
+    .replace(
+      /your secure payment form should appear now\.?/gi,
+      'I sent a 6-digit verification code to your email. Please enter it to continue to secure payment.'
+    );
+  const looksLikeCheckoutHandoff =
+    /(order summary|order is ready|secure payment page|taken to .*secure payment|complete your purchase|enter your card details)/i.test(
+      s
+    );
+  const mentionsVerification = /(verification code|6-?digit code|verify your email)/i.test(s);
+  if (looksLikeCheckoutHandoff && !mentionsVerification) {
+    s += ' Before payment, please enter the 6-digit verification code we emailed you.';
+  }
+  return s;
 }
 
 function _sanitizeSuggestedNextStep(text) {
@@ -369,15 +392,6 @@ function _extractEmail(text) {
 function _extractPhone(text) {
   const t = String(text || '');
   return t.match(/\+?\d[\d\s().-]{7,}\d/)?.[0] || null;
-}
-
-function _normalizePhoneE164(phone) {
-  if (!phone) return null;
-  const digits = String(phone).replace(/\D/g, '');
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits[0] === '1') return `+${digits}`;
-  if (digits.length > 8) return `+${digits}`;
-  return null;
 }
 
 function _maskPhoneTail(phone) {
@@ -933,12 +947,21 @@ ${patientEmail ? `- Patient email on file (use for prepare_commerce_checkout if 
 - This flow does **not** require a patient portal login. Do not ask users to sign in before paying.
 - After a successful purchase, you may briefly mention they can optionally create an account or use the app to track orders — never block checkout on account creation.
 
-## Default journey (cart-first — follow this order)
-1. **Discover** — Answer product and ingredient questions; use get_product_quote before any dollar amount.
-2. **Add** — When they want to buy, add_to_cart (and get_cart to confirm). Do not jump straight to payment on the first "buy" unless they already confirmed the cart.
-3. **Upsell** — After each add_to_cart, ask: "Anything else you want to add before checkout?"
-4. **Checkout** — When they confirm they are ready to pay, collect email and full shipping_address, then call prepare_commerce_checkout (cart path: omit quote_id or set use_cart true).
-5. **Confirm** — Summarize what happens next (secure payment / link). Tool results include cart_summary and payment_action for the UI.
+## Default journey (STRICT ORDER — do not skip or reorder steps)
+1. **Discover** — Answer product and ingredient questions; call get_product_quote before stating any price.
+2. **Cart** — When customer wants to buy: call add_to_cart, then get_cart to confirm. Ask "Anything else before checkout?"
+3. **Collect email** — Ask for email. As soon as it is provided, call send_commerce_verification_code(email).
+4. **Verify email** — Tell customer "I sent a 6-digit code to [email]. Please share it when you receive it."
+   - When they provide the code, call verify_commerce_code(email, code).
+   - If verification fails, offer to resend.
+5. **Collect + save shipping** — After email is verified, ask for full delivery address.
+   - As soon as address is provided, call save_shipping_address() with structured fields.
+   - If the customer gives a full address string, extract: line1, city, state, postal_code.
+   - NEVER skip this step. NEVER pass address as a string arg to prepare_commerce_checkout.
+   - If save_shipping_address returns incomplete_address, ask for missing fields only.
+6. **Prepare checkout** — Only after BOTH verify_commerce_code AND save_shipping_address return success:
+   - Call prepare_commerce_checkout(customer_email, use_cart: true).
+7. **Confirm** — Summarize next steps only (secure payment UI/link). Do not claim payment is complete in chat.
 
 ## Buy intent (critical)
 - Phrases like "buy", "I'll take it", "charge me", "checkout" mean: ensure the cart matches what they want (add_to_cart / get_cart), ask "anything else?" if they just added items, then collect email + shipping before prepare_commerce_checkout.
@@ -947,6 +970,7 @@ ${patientEmail ? `- Patient email on file (use for prepare_commerce_checkout if 
 
 ## Rules
 - This session is **retail checkout only**. Do NOT book appointments, run triage, or call scheduling tools.
+- You are assisting with a secure transaction. If asked something you cannot resolve with the allowed commerce tools, say: "I'll need to check on that after we finish this payment," then keep the user on checkout.
 - You MUST call get_product_quote before stating any price.
 - NEVER invent prices or tax details from memory.
 - When you have a quote result, state price using amount + currency from the tool.
@@ -955,9 +979,17 @@ ${patientEmail ? `- Patient email on file (use for prepare_commerce_checkout if 
 - NEVER calculate or infer tax_rate yourself.
 - If quote data is unavailable, say: "I'm not able to confirm the exact price right now — please proceed to checkout for the verified total."
 - Cart tools: add_to_cart / update_cart_item / remove_cart_item / get_cart / clear_cart.
-- When they are ready to pay, call prepare_commerce_checkout with customer_email and shipping_address (full delivery address: street, city, state, ZIP). For cart checkout, omit quote_id or pass use_cart: true.
+- Verification tools: send_commerce_verification_code / verify_commerce_code.
+- Shipping tool: save_shipping_address.
+- When they are ready to pay, call prepare_commerce_checkout with customer_email and use_cart true. Shipping is already persisted by save_shipping_address.
 - You may answer general questions about skincare routine or ingredients from general knowledge; for price or checkout, use tools.
 - Keep replies concise and friendly.
+
+## HARD RULES
+- NEVER call prepare_commerce_checkout before verify_commerce_code has returned { success: true }.
+- NEVER call prepare_commerce_checkout before save_shipping_address has returned { success: true }.
+- NEVER tell the customer their payment is complete — only the secure payment form + settlement path can complete payment.
+- If send_commerce_verification_code was already called this session, do not call it again unless customer asks to resend or verification expired.
 
 ${lang}`;
 }
@@ -1155,6 +1187,59 @@ const KELLY_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'save_shipping_address',
+      description:
+        'Save the customer shipping address for commerce checkout. Must be called before prepare_commerce_checkout.',
+      parameters: {
+        type: 'object',
+        properties: {
+          line1: { type: 'string', description: 'Street address line 1' },
+          line2: { type: 'string', description: 'Apartment/suite (optional)' },
+          city: { type: 'string', description: 'City' },
+          state: { type: 'string', description: '2-letter US state code' },
+          postal_code: { type: 'string', description: '5-digit US ZIP code' },
+          country: { type: 'string', description: 'Country code (default US)' },
+          address_string: {
+            type: 'string',
+            description: 'Full address string (fallback when structured fields are unavailable)'
+          },
+          provider_id: { type: 'string', description: 'Optional merchant override' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'send_commerce_verification_code',
+      description: 'Send a 6-digit verification code to the customer email. REQUIRED before prepare_commerce_checkout. Call after collecting email.',
+      parameters: {
+        type: 'object',
+        properties: {
+          email: { type: 'string', description: 'Customer email address' }
+        },
+        required: ['email']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'verify_commerce_code',
+      description: 'Verify the 6-digit code from email. REQUIRED after send_commerce_verification_code. Only call prepare_commerce_checkout after success.',
+      parameters: {
+        type: 'object',
+        properties: {
+          email: { type: 'string', description: 'Customer email address' },
+          code: { type: 'string', description: '6-digit verification code' }
+        },
+        required: ['email', 'code']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'prepare_commerce_checkout',
       description:
         'Start secure payment after cart is confirmed. Default: **cart checkout** — omit quote_id (or set use_cart / cart_checkout true) so the server uses the in-session cart. Only pass quote_id for legacy single-item flow after get_product_quote. Returns cart_summary, next_required_fields, and payment_action (Stripe PaymentIntent or payment link). Never set dollar amounts in args.',
@@ -1179,6 +1264,19 @@ const KELLY_TOOLS = [
           }
         },
         required: ['customer_email']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_checkout_payment_status',
+      description: 'Read-only: check current payment status for prepared checkout by PaymentIntent id (or session cached id).',
+      parameters: {
+        type: 'object',
+        properties: {
+          payment_intent_id: { type: 'string', description: 'Optional Stripe PaymentIntent id; uses session cached id if omitted.' }
+        }
       }
     }
   },
@@ -1383,9 +1481,53 @@ const COMMERCE_CHECKOUT_TOOLS = KELLY_TOOLS.filter(
     'update_cart_item',
     'remove_cart_item',
     'clear_cart',
-    'prepare_commerce_checkout'
+    'save_shipping_address',
+    'send_commerce_verification_code',
+    'verify_commerce_code',
+    'prepare_commerce_checkout',
+    'get_checkout_payment_status'
   ].includes(t?.function?.name)
 );
+
+function _checkoutReply(reply, toolsUsed, language, checkout_stage, policy_flags, allowed_next_actions, commerce_checkout, quote_id, redirect_to, next_chips, chips_display, llm_usage) {
+  return {
+    reply,
+    endCall: false,
+    toolsUsed: toolsUsed || [],
+    language,
+    checkout_stage: checkout_stage || null,
+    policy_flags: policy_flags || {},
+    allowed_next_actions: allowed_next_actions || [],
+    commerce_checkout: commerce_checkout || null,
+    quote_id: quote_id || null,
+    redirect_to: redirect_to || null,
+    next_chips: next_chips || [],
+    chips_display: chips_display || null,
+    llm_usage: llm_usage || null
+  };
+}
+
+function _stageToPolicyFlags(stage) {
+  return {
+    collecting_details: {},
+    code_sent: {},
+    code_verified: {},
+    checkout_prepared: { can_show_payment_form: true },
+    payment_confirmed: { payment_confirmed: true, can_show_payment_form: false },
+    failed: { payment_failed: true }
+  }[stage] || {};
+}
+
+function _stageToActions(stage) {
+  return {
+    collecting_details: ['collect_email'],
+    code_sent: ['enter_code'],
+    code_verified: ['continue_secure_checkout'],
+    checkout_prepared: ['complete_payment_form'],
+    payment_confirmed: ['view_receipt', 'track_delivery'],
+    failed: ['retry_checkout']
+  }[stage] || [];
+}
 
 // ─────────────────────────────────────────────────────────────
 // Main entry point
@@ -1449,6 +1591,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       patientEmail = null,
       portalSessionId = null,
       commerceCheckout = null,
+      checkoutPolicy = null,
       onStreamDelta = null,
       onToolStatus = null
     } = params;
@@ -1492,6 +1635,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         patientId,
         patientEmail,
         commerceCheckout,
+        checkoutPolicy,
         onStreamDelta,
         onToolStatus
       });
@@ -1531,7 +1675,7 @@ Antworten Sie durchgehend auf Deutsch.`,
               const phone = data?.telecom?.find((t) => t.system === 'phone')?.value;
               const name = [data?.name?.[0]?.given?.[0], data?.name?.[0]?.family].filter(Boolean).join(' ');
               if (email) KellyToolExecutor._setSessionMeta(sessionId, 'collected_email', email);
-              if (phone) KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', _normalizePhoneE164(phone) || phone);
+              if (phone) KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', normalizeToE164(phone) || phone);
               if (name) KellyToolExecutor._setSessionMeta(sessionId, 'collected_name', name);
             }
           } catch (_) {}
@@ -1564,7 +1708,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         };
       }
       const confirmedPhoneRaw = _extractPhone(message);
-      const confirmedPhone = _normalizePhoneE164(confirmedPhoneRaw) || confirmedPhoneRaw;
+      const confirmedPhone = normalizeToE164(confirmedPhoneRaw) || confirmedPhoneRaw;
       if (!confirmedPhone) {
         const invalidPhoneReply = 'That number did not look valid. Please provide your phone in +1XXXXXXXXXX format so I can verify your identity.';
         this._appendToHistory(sessionId, 'user', message);
@@ -1719,7 +1863,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       }
       const phoneFound = _extractPhone(msgStr);
       if (phoneFound && KellyToolExecutor._setSessionMeta) {
-        const normalizedPhone = _normalizePhoneE164(phoneFound);
+        const normalizedPhone = normalizeToE164(phoneFound);
         if (normalizedPhone) {
           KellyToolExecutor._setSessionMeta(sessionId, 'collected_phone', normalizedPhone);
           if (_kellyDebugVerbose()) console.log('[CONTACT] Stored phone:', normalizedPhone.slice(0, 6) + '…');
@@ -3084,7 +3228,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       next_step: nextStep,
       next_chips: nextChips,
       chips_display: chipsDisplay,
-      redirect_to: redirectTo
+      redirect_to: redirectTo,
+      llm_usage: loopResult?.llm_usage || null
     };
   }
 
@@ -3099,9 +3244,261 @@ Antworten Sie durchgehend auf Deutsch.`,
     patientId,
     patientEmail,
     commerceCheckout,
+    checkoutPolicy,
     onStreamDelta,
     onToolStatus
   }) {
+    const msgText = String(message || '').trim();
+    const lang = (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en';
+    const emailMatch = msgText.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+    const currentStage = KellyToolExecutor._getCheckoutStage(sessionId);
+    if (currentStage === 'payment_confirmed') {
+      const reply = 'Your payment is confirmed. Check your email for a receipt.';
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return _checkoutReply(reply, [], lang, currentStage, { payment_confirmed: true, can_show_payment_form: false }, []);
+    }
+    if (currentStage === 'failed') {
+      const reply = 'Previous payment did not complete. Say "**continue secure checkout**" to retry secure payment.';
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return _checkoutReply(reply, [], lang, currentStage, _stageToPolicyFlags(currentStage), _stageToActions(currentStage));
+    }
+    if (currentStage === 'checkout_prepared') {
+      const isReset = /\b(reset|start over|new order|cancel checkout)\b/i.test(msgText);
+      if (!isReset) {
+        const reply = 'Secure checkout is ready. Please complete payment in the form above.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, [], lang, currentStage, { can_show_payment_form: true }, ['complete_payment_form']);
+      }
+      KellyToolExecutor.hardResetCheckoutContext?.(sessionId, 'explicit_checkout_reset_message');
+    }
+    const stageAfterReset = KellyToolExecutor._getCheckoutStage(sessionId);
+    const proceedIntent = /\b(continue|proceed|secure checkout|checkout|pay|ready|go ahead|let'?s go|yes|ok)\b/i.test(msgText);
+    const yesIntent = /^(yes|yep|yeah|correct|confirm|looks good|ok|okay)\b/i.test(msgText);
+    const noIntent = /^(no|nope|wrong|change|edit)\b/i.test(msgText);
+    const pendingCandidate = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_candidate_pending') || '') === '1';
+    const pendingCandidateRaw = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_candidate_json') || '').trim();
+    let pendingCandidateObj = null;
+    if (pendingCandidate && pendingCandidateRaw) {
+      try { pendingCandidateObj = JSON.parse(pendingCandidateRaw); } catch (_) { pendingCandidateObj = null; }
+    }
+
+    if (pendingCandidateObj) {
+      if (yesIntent) {
+        const saveConfirmed = await KellyToolExecutor.execute(
+          'save_shipping_address',
+          {
+            line1: pendingCandidateObj.line1,
+            line2: pendingCandidateObj.line2,
+            city: pendingCandidateObj.city,
+            state: pendingCandidateObj.state,
+            postal_code: pendingCandidateObj.postal_code,
+            country: pendingCandidateObj.country || 'US',
+            provider_id: commerceCheckout?.providerId || undefined,
+            confirm_candidate: true
+          },
+          { sessionId, clinicId, patientId, callerPhone: null, channel }
+        );
+        if (saveConfirmed?.success) {
+          const reply = stageAfterReset === 'code_verified'
+            ? 'Shipping address confirmed. Say "**continue secure checkout**" when you are ready.'
+            : 'Shipping address confirmed. Please continue checkout.';
+          this._appendToHistory(sessionId, 'user', message);
+          this._appendToHistory(sessionId, 'assistant', reply);
+          return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), _stageToActions(stageAfterReset));
+        }
+      } else if (noIntent) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_candidate_pending', '0');
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_candidate_json', '');
+        const reply = 'Please share your corrected full shipping address (street, city, state, ZIP).';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, [], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), ['save_shipping_address']);
+      } else {
+        const zipOnly = msgText.match(/\b\d{5}(?:-\d{4})?\b/);
+        if (zipOnly) {
+          const saveCorrected = await KellyToolExecutor.execute(
+            'save_shipping_address',
+            {
+              line1: pendingCandidateObj.line1,
+              line2: pendingCandidateObj.line2,
+              city: pendingCandidateObj.city,
+              state: pendingCandidateObj.state,
+              postal_code: zipOnly[0],
+              country: pendingCandidateObj.country || 'US',
+              provider_id: commerceCheckout?.providerId || undefined,
+              confirm_candidate: true
+            },
+            { sessionId, clinicId, patientId, callerPhone: null, channel }
+          );
+          if (saveCorrected?.success) {
+            const reply = stageAfterReset === 'code_verified'
+              ? 'ZIP updated and shipping address saved. Say "**continue secure checkout**" when ready.'
+              : 'ZIP updated and shipping address saved.';
+            this._appendToHistory(sessionId, 'user', message);
+            this._appendToHistory(sessionId, 'assistant', reply);
+            return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), _stageToActions(stageAfterReset));
+          }
+        }
+      }
+    }
+    const looksLikeAddressInput =
+      /\b[0-9!IlOo]{5}(?:-[0-9!IlOo]{4})?\b/.test(msgText) &&
+      /\b(st|street|rd|road|ave|avenue|blvd|boulevard|dr|drive|ln|lane|way|court|ct|place|pl|hill)\b/i.test(msgText);
+
+    if (looksLikeAddressInput && !emailMatch && !/\b\d{6}\b/.test(msgText)) {
+      const shippingSave = await KellyToolExecutor.execute(
+        'save_shipping_address',
+        { address_string: msgText, provider_id: commerceCheckout?.providerId || undefined },
+        { sessionId, clinicId, patientId, callerPhone: null, channel }
+      );
+      if (shippingSave?.success) {
+        let reply = 'Shipping address saved.';
+        if (stageAfterReset === 'code_sent') {
+          reply = 'Shipping address saved. Please enter the 6-digit code we emailed you to continue.';
+        } else if (stageAfterReset === 'code_verified') {
+          reply = 'Shipping address saved. Say "**continue secure checkout**" when you are ready.';
+        } else if (stageAfterReset === 'collecting_details') {
+          reply = 'Shipping address saved. Please share your email so I can send your 6-digit verification code.';
+        }
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), _stageToActions(stageAfterReset));
+      } else if (shippingSave?.error === 'address_needs_confirmation') {
+        const reply = String(
+          shippingSave?.message ||
+          'I interpreted part of your address. Reply "yes" to confirm, or send the corrected ZIP.'
+        );
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), ['confirm_shipping_address']);
+      }
+    }
+    const blockEmailIntercept = ['code_verified', 'checkout_prepared', 'payment_confirmed'].includes(stageAfterReset);
+    if (emailMatch && !blockEmailIntercept) {
+      const email = String(emailMatch[0]).toLowerCase();
+      const sendResult = await KellyToolExecutor.execute(
+        'send_commerce_verification_code',
+        { email },
+        { sessionId, clinicId, patientId, callerPhone: null, channel }
+      );
+      let reply;
+      if (sendResult && sendResult.success) {
+        reply = `Code sent to ${email}. Please share the 6-digit code, and include your full shipping address to continue.`;
+      } else if (sendResult && sendResult.error === 'checkout_already_in_progress') {
+        reply = 'Secure checkout is already prepared for this session. Please complete payment in the form above, or say "reset checkout" to start over.';
+      } else {
+        reply = 'Unable to send the verification code right now. Please try again in a moment.';
+      }
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return _checkoutReply(
+        reply,
+        sendResult && sendResult.success ? ['send_commerce_verification_code'] : [],
+        lang,
+        KellyToolExecutor._getCheckoutStage(sessionId),
+        _stageToPolicyFlags(KellyToolExecutor._getCheckoutStage(sessionId)),
+        _stageToActions(KellyToolExecutor._getCheckoutStage(sessionId))
+      );
+    }
+    const codeMatch = msgText.match(/\b(\d{6})\b/);
+    const pendingEmail = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_pending');
+    const effectivePendingEmail =
+      pendingEmail ||
+      KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_verified') ||
+      '';
+    if (codeMatch && effectivePendingEmail) {
+      const verifyResult = await KellyToolExecutor.execute(
+        'verify_commerce_code',
+        { email: String(effectivePendingEmail), code: codeMatch[1] },
+        { sessionId, clinicId, patientId, callerPhone: null, channel }
+      );
+      const verified = !!verifyResult?.success;
+      const directReply = verified
+        ? 'Email verified. Please share your full shipping address (street, city, state, ZIP) so I can prepare secure checkout.'
+        : 'That code did not verify. Please check and try again, or ask me to resend.';
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', directReply);
+      return _checkoutReply(
+        directReply,
+        ['verify_commerce_code'],
+        lang,
+        KellyToolExecutor._getCheckoutStage(sessionId),
+        _stageToPolicyFlags(KellyToolExecutor._getCheckoutStage(sessionId)),
+        verified ? ['save_shipping_address'] : ['enter_code']
+      );
+    }
+    if (stageAfterReset === 'code_verified' && proceedIntent) {
+      const verifiedEmail = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_verified') || effectivePendingEmail || patientEmail || '';
+      const shippingAddress = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_address') || '';
+      const shippingLine1 = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_line1') || '';
+      const shippingComplete = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_complete') === '1';
+      if (!verifiedEmail) {
+        const reply = 'Please share your email so I can continue secure checkout.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, [], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), _stageToActions(stageAfterReset));
+      }
+      if (!shippingComplete || !shippingLine1) {
+        const storedCity = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_city') || '';
+        const storedState = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_state') || '';
+        const storedZip = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_postal_code') || '';
+        const missing = [];
+        if (!shippingLine1) missing.push('street address');
+        if (!storedCity) missing.push('city');
+        if (!storedState) missing.push('state');
+        if (!storedZip) missing.push('ZIP code');
+        const reply = missing.length
+          ? `I still need your ${missing.join(', ')} to continue. Please share your full delivery address.`
+          : 'Please share your full shipping address (street, city, state, ZIP) to continue.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, [], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), _stageToActions(stageAfterReset));
+      }
+      const prep = await KellyToolExecutor.execute(
+        'prepare_commerce_checkout',
+        { customer_email: String(verifiedEmail), shipping_address: String(shippingAddress), use_cart: true },
+        { sessionId, clinicId, patientId, callerPhone: null, channel }
+      );
+      const prepStage = KellyToolExecutor._getCheckoutStage(sessionId);
+      const reply = prep?.success
+        ? 'Secure checkout is prepared. Please complete payment in the secure form above.'
+        : String(prep?.message || 'Could not prepare checkout. Please try again.');
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return _checkoutReply(
+        reply,
+        ['prepare_commerce_checkout'],
+        lang,
+        prepStage,
+        prep?.success ? { can_show_payment_form: true } : _stageToPolicyFlags(prepStage),
+        prep?.success ? ['complete_payment_form'] : _stageToActions(prepStage),
+        prep?.success ? prep : null
+      );
+    }
+    if (stageAfterReset === 'code_verified' && !proceedIntent && msgText.length >= 8) {
+      const shippingSave = await KellyToolExecutor.execute(
+        'save_shipping_address',
+        { address_string: msgText, provider_id: commerceCheckout?.providerId || undefined },
+        { sessionId, clinicId, patientId, callerPhone: null, channel }
+      );
+      if (shippingSave?.success) {
+        const reply = 'Shipping address saved. Say "**continue secure checkout**" when you are ready.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), ['continue_secure_checkout']);
+      } else if (shippingSave?.error === 'address_needs_confirmation') {
+        const reply = String(
+          shippingSave?.message ||
+          'I interpreted part of your address. Reply "yes" to confirm, or send the corrected ZIP.'
+        );
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), ['confirm_shipping_address']);
+      }
+    }
     const history = this._loadHistory(sessionId);
     const preferredLanguage =
       (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) ||
@@ -3124,7 +3521,8 @@ Antworten Sie durchgehend auf Deutsch.`,
         productId: String(commerceCheckout.productId),
         providerId: String(commerceCheckout.providerId),
         patientEmail: patientEmail || null,
-        preferredLanguage
+        preferredLanguage,
+        checkoutPolicy: checkoutPolicy || null
       }
     };
     let loopResult;
@@ -3139,22 +3537,16 @@ Antworten Sie durchgehend auf Deutsch.`,
           callerPhone: null,
           sessionId,
           channel,
+          checkoutPolicy: checkoutPolicy || null,
           onStreamDelta,
           onToolStatus
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
       ]);
     } catch (err) {
-      console.error('[KellyAgent] Commerce checkout LLM loop failed:', err.message);
-      const reply =
-        "I'm having trouble connecting right now. You can still use Continue to secure checkout below — your total is always confirmed on our servers.";
+      const reply = "I'm having trouble connecting. Use the Continue button below to proceed, or try again in a moment.";
       this._appendToHistory(sessionId, 'assistant', reply);
-      return {
-        reply,
-        endCall: false,
-        toolsUsed: [],
-        language: preferredLanguage || 'en'
-      };
+      return _checkoutReply(reply, [], lang, KellyToolExecutor._getCheckoutStage(sessionId), _stageToPolicyFlags(KellyToolExecutor._getCheckoutStage(sessionId)), _stageToActions(KellyToolExecutor._getCheckoutStage(sessionId)));
     }
     let reply = loopResult.reply || '';
     reply = _sanitizeToolNameLeaks(reply);
@@ -3167,18 +3559,21 @@ Antworten Sie durchgehend auf Deutsch.`,
         if (raw) commerceCheckoutOut = JSON.parse(raw);
       } catch (_) {}
     }
-    return {
+    const finalStage = KellyToolExecutor._getCheckoutStage(sessionId);
+    return _checkoutReply(
       reply,
-      endCall: false,
-      toolsUsed: Array.isArray(loopResult.toolsUsed) ? loopResult.toolsUsed : [],
-      language: preferredLanguage,
-      redirect_to: loopResult.redirect_to || null,
-      next_chips: loopResult.next_chips || [],
-      chips_display: loopResult.chips_display,
-      next_step: loopResult.next_step,
-      quote_id: quoteIdFromMeta || null,
-      commerce_checkout: commerceCheckoutOut
-    };
+      Array.isArray(loopResult.toolsUsed) ? loopResult.toolsUsed : [],
+      lang,
+      finalStage,
+      _stageToPolicyFlags(finalStage),
+      _stageToActions(finalStage),
+      commerceCheckoutOut,
+      quoteIdFromMeta || null,
+      loopResult.redirect_to || null,
+      loopResult.next_chips || [],
+      loopResult.chips_display,
+      loopResult.llm_usage || null
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -3193,6 +3588,7 @@ Antworten Sie durchgehend auf Deutsch.`,
     sessionId,
     channel,
     forceProvider,
+    checkoutPolicy,
     onStreamDelta,
     onToolStatus
   }) {
@@ -3206,7 +3602,11 @@ Antworten Sie durchgehend auf Deutsch.`,
 
     const commerceCtx = context.commerceContext;
     const useCommerceTools = !!(commerceCtx && commerceCtx.productId && commerceCtx.providerId);
-    const toolsForRequest = useCommerceTools ? COMMERCE_CHECKOUT_TOOLS : KELLY_TOOLS;
+    let toolsForRequest = useCommerceTools ? COMMERCE_CHECKOUT_TOOLS : KELLY_TOOLS;
+    const allowedTools = Array.isArray(checkoutPolicy?.allowedTools) ? checkoutPolicy.allowedTools : null;
+    if (useCommerceTools && allowedTools && allowedTools.length) {
+      toolsForRequest = toolsForRequest.filter((t) => allowedTools.includes(t?.function?.name));
+    }
     const streamCommerce = typeof onStreamDelta === 'function' && useCommerceTools;
 
     let systemContent = useCommerceTools
@@ -3215,6 +3615,9 @@ Antworten Sie durchgehend auf Deutsch.`,
           preferredLanguage: context.preferredLanguage
         })
       : buildSystemPrompt(context);
+    if (useCommerceTools && checkoutPolicy?.goal) {
+      systemContent += `\n\n## Checkout sub-node goal\n${String(checkoutPolicy.goal)}\nDo not leave this goal in this turn.`;
+    }
     const collected = useCommerceTools ? null : _extractCollectedBookingInfo(history);
     if (collected) {
       systemContent += `\n\n## BOOKING STATE (from conversation)\nYou have collected: name="${collected.name}", email="${collected.email}", phone="${collected.phone}". Call schedule_appointment NOW with these values. Do NOT ask for name, email, or phone again.\n`;
@@ -3234,6 +3637,7 @@ Antworten Sie durchgehend auf Deutsch.`,
     let chipsDisplay = null;
     let commercePaymentRedirect = null;
     let commerceCheckoutPayload = null;
+    const totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
     while (iterations < MAX_TOOL_ITERATIONS) {
       iterations++;
@@ -3266,6 +3670,11 @@ Antworten Sie durchgehend auf Deutsch.`,
           });
         } else {
           response = await LLMRouter.call(routerCall);
+        }
+        if (response?._usage) {
+          totalUsage.prompt_tokens += Number(response._usage.prompt_tokens || 0);
+          totalUsage.completion_tokens += Number(response._usage.completion_tokens || 0);
+          totalUsage.total_tokens += Number(response._usage.total_tokens || 0);
         }
       } catch (err) {
         const messageLower = err?.message ? String(err.message).toLowerCase() : '';
@@ -3325,6 +3734,17 @@ Antworten Sie durchgehend auf Deutsch.`,
                 max_tokens: channel === 'voice' ? KELLY_VOICE_MAX_TOKENS : KELLY_CHAT_MAX_TOKENS
               });
             }
+            if (response?._usage) {
+              totalUsage.prompt_tokens += Number(response._usage.prompt_tokens || 0);
+              totalUsage.completion_tokens += Number(response._usage.completion_tokens || 0);
+              totalUsage.total_tokens += Number(response._usage.total_tokens || 0);
+            } else if (response?.usage) {
+              const p = Number(response.usage.prompt_tokens || response.usage.input_tokens || 0);
+              const c = Number(response.usage.completion_tokens || response.usage.output_tokens || 0);
+              totalUsage.prompt_tokens += p;
+              totalUsage.completion_tokens += c;
+              totalUsage.total_tokens += p + c;
+            }
           } catch (err2) {
             console.error('[KellyAgent] Fallback model also failed:', err2.message);
             throw err2;
@@ -3351,7 +3771,8 @@ Antworten Sie durchgehend auf Deutsch.`,
           next_chips: nextChips,
           chips_display: chipsDisplay,
           redirect_to: commercePaymentRedirect || null,
-          commerce_checkout: useCommerceTools ? commerceCheckoutPayload : null
+          commerce_checkout: useCommerceTools ? commerceCheckoutPayload : null,
+          llm_usage: totalUsage
         };
       }
 
@@ -3444,7 +3865,7 @@ Antworten Sie durchgehend auf Deutsch.`,
             if (_kellyDebugVerbose()) console.log('[INJECT] patient_email from session meta');
           }
           if (!toolArgs.patient_phone && storedPhone) {
-            toolArgs.patient_phone = _normalizePhoneE164(storedPhone) || storedPhone;
+            toolArgs.patient_phone = normalizeToE164(storedPhone) || storedPhone;
             if (_kellyDebugVerbose()) console.log('[INJECT] patient_phone from session meta');
           }
           if (!toolArgs.patient_name && storedName) {
@@ -3552,7 +3973,8 @@ Antworten Sie durchgehend auf Deutsch.`,
         }
 
         if (_kellyDebugVerbose()) {
-          console.log(`[KellyAgent] Tool result for ${toolName}:`, JSON.stringify(toolResult)?.slice(0, 500));
+          const safeToolResult = redactObject(toolResult);
+          console.log(`[KellyAgent] Tool result for ${toolName}:`, JSON.stringify(safeToolResult)?.slice(0, 500));
         }
 
         if (toolName === 'prepare_commerce_checkout' && useCommerceTools && toolResult) {
@@ -3723,7 +4145,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         if (toolName === 'run_triage_rag' && toolResult?.safety_level === 'red') {
           const emergencyReply = toolResult.patient_friendly_summary ||
             'Your symptoms require emergency care. Please call 911 or go to the nearest emergency room immediately.';
-          return { reply: emergencyReply, toolsUsed, endCall: false, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay };
+          return { reply: emergencyReply, toolsUsed, endCall: false, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay, llm_usage: totalUsage };
         }
       }
 
@@ -3738,7 +4160,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         } catch (closeErr) {
           console.warn('[KellyAgent] Closing message LLM failed, using default:', closeErr?.message || closeErr);
         }
-        return { reply: closeReply, toolsUsed, endCall: true, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay };
+        return { reply: closeReply, toolsUsed, endCall: true, next_step: nextStep, next_chips: nextChips, chips_display: chipsDisplay, llm_usage: totalUsage };
       }
     }
 
@@ -3771,7 +4193,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       next_chips: nextChips,
       chips_display: chipsDisplay,
       redirect_to: commercePaymentRedirect || null,
-      commerce_checkout: useCommerceTools ? commerceCheckoutPayload : null
+      commerce_checkout: useCommerceTools ? commerceCheckoutPayload : null,
+      llm_usage: totalUsage
     };
   }
 
@@ -3868,7 +4291,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         {
           patient_name: confirmedName,
           patient_email: confirmedEmail,
-          patient_phone: _normalizePhoneE164(confirmedPhone) || confirmedPhone,
+          patient_phone: normalizeToE164(confirmedPhone) || confirmedPhone,
           appointment_type: 'Primary Care',
           date,
           time,

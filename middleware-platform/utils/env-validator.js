@@ -7,6 +7,8 @@
 // Detect Azure App Service environment
 const isAzure = process.env.WEBSITE_SITE_NAME || process.env.AZURE_WEBSITE_INSTANCE_ID || process.env.WEBSITE_INSTANCE_ID;
 const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod' || isAzure;
+const strictSecurityStartup =
+  String(process.env.STRICT_SECURITY_STARTUP || (isProduction ? 'true' : 'false')).toLowerCase() === 'true';
 
 /**
  * Required environment variables by category
@@ -16,7 +18,8 @@ const REQUIRED_VARS = {
   critical: [
     'ADMIN_PORTAL_SECRET',
     'API_KEY_ENCRYPTION_KEY',
-    'RETELL_WEBHOOK_SECRET'
+    'RETELL_WEBHOOK_SECRET',
+    'LANGSMITH_API_KEY'
   ],
   
   // Payment processing (required if payment features are used)
@@ -149,7 +152,7 @@ function validateAndExitIfInvalid() {
     // Azure sets NODE_ENV=production, but env vars might not be loaded yet
     const isAzure = process.env.WEBSITE_SITE_NAME || process.env.AZURE_WEBSITE_INSTANCE_ID;
     
-    if (isProduction && criticalErrors.length > 0 && !isAzure) {
+    if (strictSecurityStartup && criticalErrors.length > 0 && !isAzure) {
       console.error('\n❌ Server cannot start with missing critical security variables in production.');
       console.error('   Please set all required variables and restart the server.\n');
       process.exit(1);

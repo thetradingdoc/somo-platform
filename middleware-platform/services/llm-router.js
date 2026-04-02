@@ -208,7 +208,7 @@ function _fromAnthropicResponse(response) {
 
   const finishReason = response.stop_reason === 'tool_use' ? 'tool_calls' : 'stop';
 
-  return {
+  const out = {
     choices: [
       {
         finish_reason: finishReason,
@@ -220,6 +220,16 @@ function _fromAnthropicResponse(response) {
       }
     ]
   };
+  if (response?.usage) {
+    const prompt = Number(response.usage.input_tokens || response.usage.prompt_tokens || 0);
+    const completion = Number(response.usage.output_tokens || response.usage.completion_tokens || 0);
+    out._usage = {
+      prompt_tokens: prompt,
+      completion_tokens: completion,
+      total_tokens: prompt + completion
+    };
+  }
+  return out;
 }
 
 /**
@@ -242,7 +252,13 @@ function resolvePrimaryProvider() {
  */
 async function call({ messages, tools, maxTokens, channel, forceProvider = null }) {
   if (forceProvider === 'groq') {
-    return await _callGroq({ messages, tools, maxTokens, channel });
+    const out = await _callGroq({ messages, tools, maxTokens, channel });
+    if (out?.usage && !out?._usage) {
+      const p = Number(out.usage.prompt_tokens || out.usage.input_tokens || 0);
+      const c = Number(out.usage.completion_tokens || out.usage.output_tokens || 0);
+      out._usage = { prompt_tokens: p, completion_tokens: c, total_tokens: p + c };
+    }
+    return out;
   }
   if (forceProvider === 'anthropic') {
     return await _callAnthropic({ messages, tools, maxTokens });
@@ -267,7 +283,13 @@ async function call({ messages, tools, maxTokens, channel, forceProvider = null 
       if (p === 'anthropic') {
         return await _callAnthropic({ messages, tools, maxTokens });
       }
-      return await _callGroq({ messages, tools, maxTokens, channel });
+      const out = await _callGroq({ messages, tools, maxTokens, channel });
+      if (out?.usage && !out?._usage) {
+        const pTok = Number(out.usage.prompt_tokens || out.usage.input_tokens || 0);
+        const cTok = Number(out.usage.completion_tokens || out.usage.output_tokens || 0);
+        out._usage = { prompt_tokens: pTok, completion_tokens: cTok, total_tokens: pTok + cTok };
+      }
+      return out;
     } catch (err) {
       lastErr = err;
       const hasNext = i < order.length - 1;

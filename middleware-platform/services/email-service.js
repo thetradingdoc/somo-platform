@@ -655,47 +655,193 @@ class EmailService {
    * @param {Object} appointment - Optional { date, time, appointment_type }
    */
   static async sendPaymentReceipt(checkout, amount, paymentRef, appointment) {
-    const name = checkout.customer_name || 'Patient';
-    const product = checkout.product_name || 'Appointment';
+    const escapeHtml = (value) =>
+      String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const name = escapeHtml(checkout.customer_name || 'Patient');
+    const product = escapeHtml(checkout.product_name || 'Appointment');
+    const amountPaid = Number(amount || 0).toFixed(2);
+    const orderId = escapeHtml(checkout.id || 'N/A');
+    const txRef = escapeHtml(paymentRef || 'N/A');
+    const email = escapeHtml(checkout.customer_email || '');
+    const baseUrl = String(process.env.BASE_URL || 'http://localhost:4000').replace(/\/$/, '');
+
+    let productImageUrl = '';
+    try {
+      const db = require('../database');
+      const productRow = checkout.product_id && db.getProduct
+        ? db.getProduct(checkout.product_id)
+        : null;
+      const rawImage = String(productRow?.image_url || '').trim();
+      if (rawImage) {
+        productImageUrl = /^https?:\/\//i.test(rawImage)
+          ? rawImage
+          : `${baseUrl}${rawImage.startsWith('/') ? '' : '/'}${rawImage}`;
+      }
+    } catch (_) {}
+
     const aptLine = (appointment?.date || appointment?.appointment_type)
-      ? `<div class="detail-row"><span class="label">Appointment:</span> ${appointment.appointment_type || product}${appointment.date ? ` - ${appointment.date}${appointment.time ? ' at ' + appointment.time : ''}` : ''}</div>`
+      ? `
+        <tr>
+          <td style="padding: 6px 0; color: #6b7280;">Appointment</td>
+          <td style="padding: 6px 0; color: #111827; font-weight: 600; text-align: right;">
+            ${escapeHtml(appointment.appointment_type || checkout.product_name || 'Visit')}
+            ${appointment.date ? ` - ${escapeHtml(appointment.date)}${appointment.time ? ` at ${escapeHtml(appointment.time)}` : ''}` : ''}
+          </td>
+        </tr>`
       : '';
+
+    const productImageBlock = productImageUrl
+      ? `
+        <tr>
+          <td colspan="2" style="padding: 0 0 12px 0;">
+            <img
+              src="${escapeHtml(productImageUrl)}"
+              alt="${product}"
+              style="display:block;width:100%;max-width:220px;height:auto;border-radius:14px;border:1px solid #ece8df;"
+            />
+          </td>
+        </tr>`
+      : '';
+
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background: #16a34a; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
-          .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
-          .receipt { background: white; padding: 16px; border-radius: 8px; border-left: 4px solid #16a34a; margin: 16px 0; }
-          .detail-row { margin: 8px 0; }
-          .label { font-weight: bold; color: #666; }
-          .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+          body {
+            margin: 0;
+            padding: 0;
+            background: #f7f6f3;
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #1f2937;
+          }
+          .wrapper { width: 100%; padding: 28px 12px; box-sizing: border-box; }
+          .container {
+            max-width: 640px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #e9e4db;
+            border-radius: 18px;
+            overflow: hidden;
+          }
+          .header {
+            background: linear-gradient(180deg, #ffffff 0%, #fcfaf6 100%);
+            border-bottom: 1px solid #efe9dc;
+            padding: 22px 24px 18px;
+          }
+          .brand {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            color: #111827;
+            font-weight: 700;
+          }
+          .header-subtitle {
+            margin: 8px 0 0;
+            color: #6b7280;
+            font-size: 14px;
+          }
+          .content { padding: 24px; }
+          .lead {
+            margin: 0 0 16px;
+            color: #374151;
+            font-size: 16px;
+            line-height: 1.55;
+          }
+          .receipt-card {
+            background: #ffffff;
+            border: 1px solid #ece8df;
+            border-radius: 14px;
+            padding: 16px;
+          }
+          .chip {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #065f46;
+            background: #ecfdf5;
+            border: 1px solid #bbf7d0;
+            border-radius: 999px;
+            padding: 5px 10px;
+            margin-bottom: 12px;
+          }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+          }
+          .total-row td {
+            border-top: 1px dashed #e5e7eb;
+            padding-top: 10px !important;
+            font-size: 16px;
+            font-weight: 700;
+            color: #111827 !important;
+          }
+          .footer {
+            padding: 18px 24px 24px;
+            color: #6b7280;
+            font-size: 12px;
+            border-top: 1px solid #f0ece2;
+            background: #fffdfa;
+          }
         </style>
       </head>
       <body>
+        <div class="wrapper">
         <div class="container">
           <div class="header">
-            <h1>✅ Payment Receipt</h1>
+            <h1 class="brand">DocLittle</h1>
+            <p class="header-subtitle">Payment receipt</p>
           </div>
           <div class="content">
-            <p>Dear ${name},</p>
-            <p>Thank you for your payment. Here is your receipt:</p>
-            <div class="receipt">
-              <div class="detail-row"><span class="label">Product:</span> ${product}</div>
-              ${aptLine}
-              <div class="detail-row"><span class="label">Amount paid:</span> $${Number(amount || 0).toFixed(2)}</div>
-              <div class="detail-row"><span class="label">Order ID:</span> ${checkout.id || 'N/A'}</div>
-              <div class="detail-row"><span class="label">Transaction:</span> ${paymentRef || 'N/A'}</div>
+            <p class="lead">Hi ${name}, thanks for your order. Your payment was successful and your receipt is below.</p>
+            <div class="receipt-card">
+              <span class="chip">Paid</span>
+              <table class="summary-table" role="presentation">
+                ${productImageBlock}
+                <tr>
+                  <td style="padding: 6px 0; color: #6b7280;">Product</td>
+                  <td style="padding: 6px 0; color: #111827; font-weight: 600; text-align: right;">${product}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #6b7280;">Quantity</td>
+                  <td style="padding: 6px 0; color: #111827; font-weight: 600; text-align: right;">${Number(checkout.quantity || 1)}</td>
+                </tr>
+                ${aptLine}
+                <tr>
+                  <td style="padding: 6px 0; color: #6b7280;">Order ID</td>
+                  <td style="padding: 6px 0; color: #111827; font-weight: 600; text-align: right;">${orderId}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 6px 0; color: #6b7280;">Transaction</td>
+                  <td style="padding: 6px 0; color: #111827; font-weight: 600; text-align: right; word-break: break-all;">${txRef}</td>
+                </tr>
+                <tr class="total-row">
+                  <td style="padding: 6px 0;">Amount paid</td>
+                  <td style="padding: 6px 0; text-align: right;">$${amountPaid}</td>
+                </tr>
+              </table>
             </div>
-            <p>If you have any questions, please contact support.</p>
-            <p>Best regards,<br>DocLittle Team</p>
+            <p class="lead" style="margin-top: 16px; font-size: 14px;">
+              Receipt sent to: <strong>${email || 'your email'}</strong><br/>
+              Need help? Reply to this email and our team will assist.
+            </p>
           </div>
           <div class="footer">
             <p>This is your payment receipt. Please keep for your records.</p>
           </div>
+        </div>
         </div>
       </body>
       </html>

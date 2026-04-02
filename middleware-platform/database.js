@@ -22,24 +22,27 @@ async function ensureVoiceCheckoutsTriageColumnPg() {
 let sqliteDb = null;
 let activeAdapter = null;
 
+const { normalizeToE164 } = require('./utils/phone-e164');
+
 function normalizePhoneNumber(phone) {
   if (!phone) return phone;
+  const e164 = normalizeToE164(phone);
+  return e164 || phone;
+}
 
-  const digitsOnly = phone.replace(/\D/g, '');
-
-  if (digitsOnly.length === 10) {
-    return '+1' + digitsOnly;
-  }
-
-  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
-    return '+' + digitsOnly;
-  }
-
-  if (phone.startsWith('+')) {
-    return phone;
-  }
-
-  return '+1' + digitsOnly;
+/** Multiple E.164 / legacy forms for lookup until DB is fully backfilled. */
+function phoneLookupCandidates(raw) {
+  if (raw == null || String(raw).trim() === '') return [];
+  const out = [];
+  const e164 = normalizeToE164(raw);
+  if (e164) out.push(e164);
+  const legacy = normalizePhoneNumber(raw);
+  if (legacy && legacy !== e164) out.push(legacy);
+  const digits = String(raw).replace(/\D/g, '');
+  if (digits.length === 10) out.push('+1' + digits);
+  if (digits.length >= 11 && digits[0] === '1') out.push('+' + digits);
+  if (digits.length >= 8 && digits.length <= 15 && !out.includes('+' + digits)) out.push('+' + digits);
+  return [...new Set(out.filter(Boolean))];
 }
 
 // Use Azure's writable directory (/home) if available, otherwise use current directory
@@ -12726,14 +12729,22 @@ module.exports = {
 
   getCustomerByPhone(phoneNumber) {
     if (!phoneNumber) return null;
-    const normalized = normalizePhoneNumber(phoneNumber);
-    return db.prepare('SELECT * FROM customers WHERE phone_number = ?').get(normalized);
+    const candidates = phoneLookupCandidates(phoneNumber);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const row = db.prepare('SELECT * FROM customers WHERE phone_number = ?').get(candidates[i]);
+      if (row) return row;
+    }
+    return null;
   },
 
   getCustomerByTwilioNumber(phoneNumber) {
     if (!phoneNumber) return null;
-    const normalized = normalizePhoneNumber(phoneNumber);
-    return db.prepare('SELECT * FROM customers WHERE twilio_phone_number = ?').get(normalized);
+    const candidates = phoneLookupCandidates(phoneNumber);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const row = db.prepare('SELECT * FROM customers WHERE twilio_phone_number = ?').get(candidates[i]);
+      if (row) return row;
+    }
+    return null;
   },
 
   updateCustomer(id, updates) {

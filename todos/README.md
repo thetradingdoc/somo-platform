@@ -13,6 +13,7 @@ This folder holds task lists, checklists, and todo documents for the DocLittle p
 | [TELEMEDICINE_ARCHITECTURE_REVIEW.md](TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: flow, gaps, recommendations for video consult → case report path |
 | [TRIAGE_CONSOLIDATED_PHASED_TODOS.md](TRIAGE_CONSOLIDATED_PHASED_TODOS.md) | Consolidated triage phases / roadmap |
 | [AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout (chat-first + pay), landing handoff, P0 pricing/visit_mode/calendar/payment-status fixes, testing matrix |
+| [Orchestration-todos.md](Orchestration-todos.md) | Hybrid orchestration (LangGraph + Kelly), checkout graph status, canonical tool-event pipeline, review backlog |
 
 ## Related in docs/
 

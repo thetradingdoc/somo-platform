@@ -1,6 +1,6 @@
 // Minimal service worker for installability and basic offline shell.
 
-const CACHE_NAME = 'doclittle-shell-v6';
+const CACHE_NAME = 'doclittle-shell-v7';
 const SHELL_URLS = [
   '/unified-dashboard/business/business-dashboard.html',
   '/unified-dashboard/patients/patient-dashboard.html',
@@ -43,6 +43,10 @@ self.addEventListener('fetch', (event) => {
   try {
     reqUrl = new URL(request.url);
   } catch (_) {}
+  // Never proxy Stripe through SW; let browser fetch directly.
+  if (reqUrl && (reqUrl.hostname === 'js.stripe.com' || reqUrl.hostname === 'api.stripe.com' || reqUrl.hostname === 'hooks.stripe.com')) {
+    return;
+  }
   // Do not proxy cross-origin webfont requests through SW fetch().
   // This prevents CSP connect-src violations for fonts.gstatic.com and similar CDNs.
   const isCrossOrigin = !!(reqUrl && reqUrl.origin !== self.location.origin);
@@ -84,7 +88,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
-      return fetch(request);
+      return fetch(request).catch(() => {
+        // Avoid unhandled promise rejections in SW console for transient
+        // network failures on non-document requests.
+        return new Response('', { status: 504, statusText: 'offline' });
+      });
     })
   );
 });

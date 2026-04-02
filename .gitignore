@@ -51,6 +51,15 @@ venv/
 env/
 ENV/
 
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Playwright & test artifacts (repo root and packages)
+/test-results/
+playwright-report/
+
 # Build outputs
 dist/
 build/
@@ -60,6 +69,7 @@ build/
 tmp/
 temp/
 *.tmp
+*.html.bak
 
 # Middleware artifacts (local runs)
 middleware-platform/test-results/

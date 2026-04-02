@@ -1,0 +1,1055 @@
+#!/usr/bin/env python3
+"""
+STEP 7A — CLINICAL QUERY ENGINE v1
+====================================
+This file is the standalone ClinicalQueryEngine imported by the Patient RAG
+Pipeline (step7a_patient_pipeline_v3.2.py). Place it at /content/ and the
+pipeline bootstrap will import it automatically.
+
+ARCHITECTURE:
+  Layer 0 — Intent classifier    : catches vague/OOS queries before Pinecone
+  Layer 1 — Synonym expansion    : normalises lay terms to clinical equivalents
+  Layer 2 — Specialty router     : attaches derm-only filter to query
+  Layer 3 — HyDE generation      : generates hypothetical answer to improve recall
+  Layer 4 — Pinecone retrieval   : dual-vector (raw + HyDE blend) with filter
+  Layer 5 — Context recall check : re-queries without filter if <2 results
+  Layer 6 — Cross-encoder rerank : pure rerank-score sort (no cosine blend)
+  Layer 7 — Graph expansion      : fetches sibling/parent chunks for context
+
+FIXES vs inline engine in pipeline v3.2:
+  FIX 1 — Synonym expansion before embed
+    Raw queries like "sebderm", "skin purging", "bacne", "fine lines",
+    "mask" were hitting Pinecone as-is and scoring below threshold.
+    Now expanded to full clinical equivalents before embedding.
+
+  FIX 2 — Vague query guard
+    Queries like "Please help me" / "help" no longer hit Pinecone.
+    Returns a structured clarification prompt instead.
+
+  FIX 3 — Specialty router
+    Derm queries get a Pinecone metadata filter {specialty: dermatology}
+    applied automatically. Non-derm queries get appropriate specialty scoping.
+    Prevents hepatology/pathology docs polluting derm answers.
+
+  FIX 4 — Recall fallback
+    If specialty-filtered retrieval returns <2 results, automatically
+    re-queries without the filter using a relaxed threshold.
+
+  FIX 5 — Pure rerank sort
+    Previous cosine blend (0.45 cosine + 0.55 rerank) actively harmed
+    chunks with negative rerank scores. Now sorts purely by rerank score.
+    Cosine is only used as a tiebreaker when rerank is unavailable.
+
+  FIX 6 — Concept-filtered retrieval
+    If the query maps to a known FEA concept, performs a concept-anchored
+    retrieval pass using concept_ids metadata filter, merged with semantic
+    retrieval for maximum recall.
+
+RESULT TYPE:
+  RetrievalResult dataclass — compatible with the pipeline's
+  _engine_query_to_chunks() normaliser which handles both this and the
+  inline dict format.
+"""
+
+import os
+import re
+import time
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
+# ── Auto-install ──────────────────────────────────────────────────────────────
+try:
+    from openai import OpenAI
+except ImportError:
+    import subprocess
+    subprocess.check_call(['pip', 'install', 'openai', '-q'])
+    from openai import OpenAI
+
+try:
+    from pinecone import Pinecone
+except ImportError:
+    import subprocess
+    subprocess.check_call(['pip', 'install', 'pinecone', '-q'])
+    from pinecone import Pinecone
+
+try:
+    from sentence_transformers import CrossEncoder
+    _HAS_RERANKER = True
+except ImportError:
+    _HAS_RERANKER = False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RESULT DATACLASS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class RetrievalChunk:
+    chunk_id:     str
+    score:        float
+    rerank_score: Optional[float]
+    text:         str
+    source_file:  str
+    section_path: str
+    specialty:    List[str]
+    concept_ids:  List[str]
+    semantic_type: str
+    quality_tier: str
+    entities:     Dict
+    hyde_used:    bool = False
+    reranker_used: bool = False
+
+
+@dataclass
+class RetrievalScores:
+    top1_cosine:   float
+    top1_rerank:   Optional[float]
+    hyde_used:     bool
+    reranker_used: bool
+    n_final:       int
+    recall_fallback_used: bool = False
+    concept_filter_used:  bool = False
+    synonym_expanded:     bool = False
+    vague_query:          bool = False
+
+
+@dataclass
+class RetrievalResult:
+    query:          str
+    expanded_query: str
+    chunks:         List[RetrievalChunk]
+    context_chunks: List[RetrievalChunk]
+    scores:         RetrievalScores
+    pipeline_trace: List[str]
+    elapsed_ms:     float
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SYNONYM MAP — FIX 1
+# Maps informal/lay/abbreviated terms to full clinical equivalents.
+# Applied BEFORE embedding so the query vector lands in the right space.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SYNONYM_MAP: Dict[str, str] = {
+    # Abbreviations
+    'seb derm':            'seborrhoeic dermatitis seb derm malassezia',
+    'sebderm':             'seborrhoeic dermatitis seb derm malassezia',
+    'sd':                  'seborrhoeic dermatitis scalp face',
+    'pih':                 'post-inflammatory hyperpigmentation PIH dark marks acne',
+    'kp':                  'keratosis pilaris chicken skin bumpy arms',
+    'kp bumps':            'keratosis pilaris rough texture follicular hyperkeratosis',
+    'pcos acne':           'hormonal acne PCOS androgenic acne spironolactone',
+    'pod':                 'perioral dermatitis periorificial topical steroid',
+
+    # Lay skin terms
+    'fine lines':          'fine lines photoageing wrinkles retinoid tretinoin',
+    'fine line':           'fine lines photoageing wrinkles',
+    'deep wrinkles':       'deep wrinkles photoageing rhytides collagen loss',
+    'blackheads':          'open comedones blackheads sebum plugs comedonal acne',
+    'blackhead':           'open comedones blackheads sebum plug',
+    'whiteheads':          'closed comedones whiteheads milia comedonal acne',
+    'whitehead':           'closed comedones whiteheads flesh coloured bumps',
+    'skin barrier':        'skin barrier function impaired barrier TEWL ceramides stratum corneum',
+    'skin barrier damage': 'impaired skin barrier barrier disruption TEWL repair ceramides',
+    'red bumps':           'papules inflammatory acne folliculitis keratosis pilaris',
+    'red bump':            'papule inflammatory acne folliculitis',
+    'pink bump':           'papule acne rosacea folliculitis inflammatory',
+    'flesh colored bump':  'closed comedone milia sebaceous hyperplasia epidermoid cyst',
+    'flesh coloured bump': 'closed comedone milia sebaceous hyperplasia',
+    'mask':                'face mask skincare sheet mask clay mask moisturising',
+    'bacne':               'back acne body acne truncal acne',
+    'body acne':           'truncal acne back chest acne malassezia folliculitis',
+    'dark circles':        'periorbital hyperpigmentation dark circles under eyes vascular',
+    'glass skin':          'glass skin dewy hydrated skin routine hyaluronic acid',
+    'dewy skin':           'dewy skin hydration hyaluronic acid moisture barrier',
+    'hormonal acne':       'hormonal acne androgens jawline acne spironolactone OCP',
+    'hormonal breakout':   'hormonal acne premenstrual breakout androgens cycle',
+    'skin purging':        'retinoid purge initial breakout tretinoin adapalene comedones',
+    'purging':             'retinoid purge initial breakout skin purging comedones',
+    'retinol burn':        'retinoid irritation over-exfoliation barrier damage retinol',
+    'retinol irritation':  'retinoid dermatitis skin barrier damage topical retinoid side effects',
+    'fungal acne':         'malassezia folliculitis pityrosporum folliculitis antifungal',
+    'perioral derm':       'perioral dermatitis papulopustular steroid withdrawal tetracycline',
+    'sandpaper':           'keratosis pilaris rough texture exfoliation urea',
+    'sandpaper texture':   'rough skin texture keratosis pilaris exfoliation AHA lactic acid',
+    'sandpaper skin':      'rough skin texture keratosis pilaris exfoliation',
+    'sandpaper feeling':   'rough skin texture keratosis pilaris follicular',
+    'orange peel':         'orange peel texture enlarged pores skin texture niacinamide',
+    'orange peel texture': 'orange peel skin texture enlarged pores sebaceous',
+    'sun spots':           'solar lentigines age spots hyperpigmentation sunscreen SPF',
+    'sun spot':            'solar lentigo age spot hyperpigmentation UV',
+    'age spots':           'solar lentigines age spots lentigo hyperpigmentation',
+    'eczema flare':        'atopic dermatitis flare eczema exacerbation emollients barrier',
+    'turkey neck':         'neck wrinkles laxity photoageing retinoids collagen',
+    'crepey skin':         'crepey skin photoageing collagen loss retinoids elastin',
+    'skin cycling':        'skin cycling retinoid exfoliant routine barrier recovery nights',
+    'ingredient interactions': 'skincare ingredient interactions layering retinoid vitamin C AHA',
+    'mixing skincare':     'skincare ingredient interactions layering actives',
+    'can i use':           'skincare ingredient interactions layering compatibility',
+    'hormonal breakouts':  'hormonal acne premenstrual PCOS spironolactone androgens',
+    'cystic acne':         'cystic nodular acne inflammatory severe isotretinoin',
+    'nodular acne':        'cystic nodular acne nodulocystic severe inflammation',
+    'acne scars':          'acne scarring atrophic scars ice pick boxcar rolling',
+    'dark spots':          'hyperpigmentation PIH solar lentigines melasma dark spots',
+    'dark spot':           'hyperpigmentation PIH solar lentigo melasma',
+    'pimples':             'acne vulgaris inflammatory comedones papules pustules',
+    'zits':                'acne vulgaris inflammatory papules pustules comedones',
+    'spots':               'acne vulgaris inflammatory lesions comedones',
+    'redness':             'erythema rosacea inflammation reactive skin',
+    'flushing':            'erythema rosacea flushing telangiectasia erythematotelangiectatic',
+    'dry skin':            'xerosis dry skin barrier emollients moisturiser ceramides',
+    'oily skin':           'seborrhoea sebum production oily skin pores comedones',
+    'large pores':         'enlarged pores sebaceous glands skin texture niacinamide',
+    'closed pores':        'closed comedones clogged pores retinoid BHA salicylic acid',
+    'hyperpigmentation':   'hyperpigmentation PIH melasma solar lentigines dark spots treatment',
+    'uneven skin tone':    'hyperpigmentation uneven skin tone niacinamide vitamin C azelaic acid',
+    'skin discolouration': 'hyperpigmentation discolouration PIH melasma',
+    'spiro':               'spironolactone anti-androgen hormonal acne',
+    'accutane':            'isotretinoin severe acne treatment monitoring side effects',
+    'roaccutane':          'isotretinoin severe acne treatment monitoring',
+    'tret':                'tretinoin topical retinoid acne photoageing',
+    'differin':            'adapalene topical retinoid acne comedones',
+    'niacinamide':         'niacinamide vitamin B3 pores hyperpigmentation barrier',
+    'vitamin c serum':     'ascorbic acid topical vitamin C hyperpigmentation photoageing',
+    'aha':                 'alpha hydroxy acid glycolic lactic acid exfoliation',
+    'bha':                 'beta hydroxy acid salicylic acid comedones acne exfoliation',
+    'spf':                 'sun protection factor sunscreen photoprotection SPF UVA UVB',
+    'retinol':             'retinol retinoid topical vitamin A acne photoageing',
+    'hyaluronic acid':     'hyaluronic acid humectant hydration moisture barrier',
+    'ceramides':           'ceramides lipid barrier repair skin barrier stratum corneum',
+
+    # Clinical abbreviations
+    'ast alt':             'AST ALT liver enzymes hepatic transaminase ratio',
+    'ast:alt':             'AST ALT ratio hepatic liver disease alcoholic NASH',
+    'child pugh':          'Child-Pugh score liver cirrhosis hepatic impairment',
+    'meld':                'MELD score liver failure cirrhosis prognosis',
+    'aki':                 'acute kidney injury renal failure creatinine',
+    'ckd':                 'chronic kidney disease renal impairment egfr',
+    'hba1c':               'glycated haemoglobin HbA1c diabetes glucose control',
+    'afib':                'atrial fibrillation arrhythmia anticoagulation',
+    'stemi':               'ST elevation myocardial infarction PCI thrombolysis',
+    'nstemi':              'non-ST elevation myocardial infarction ACS troponin',
+    'copd':                'chronic obstructive pulmonary disease COPD exacerbation inhaler',
+    'dvt':                 'deep vein thrombosis anticoagulation warfarin',
+    'pe':                  'pulmonary embolism anticoagulation CT pulmonary angiography',
+    'uti':                 'urinary tract infection antibiotics trimethoprim nitrofurantoin',
+    'sle':                 'systemic lupus erythematosus autoimmune hydroxychloroquine',
+    'ra':                  'rheumatoid arthritis DMARDs methotrexate anti-CCP',
+    'ibd':                 'inflammatory bowel disease Crohn ulcerative colitis',
+    'ms':                  'multiple sclerosis demyelination immunotherapy',
+    'nash':                'non-alcoholic steatohepatitis fatty liver NAFLD fibrosis',
+    'nafld':               'non-alcoholic fatty liver disease steatosis metabolic',
+    'hcc':                 'hepatocellular carcinoma liver cancer cirrhosis AFP',
+    'pcos':                'polycystic ovarian syndrome insulin resistance androgen',
+    'osa':                 'obstructive sleep apnoea CPAP hypoxia',
+    'tb':                  'tuberculosis Mycobacterium rifampicin isoniazid',
+    'hiv':                 'HIV antiretroviral immunodeficiency CD4',
+    'sepsis':              'sepsis SIRS bacteraemia antibiotics blood cultures qSOFA',
+    'dm':                  'diabetes mellitus insulin glucose HbA1c',
+    't2dm':                'type 2 diabetes mellitus metformin insulin HbA1c',
+    't1dm':                'type 1 diabetes mellitus insulin autoimmune',
+}
+
+
+def expand_synonyms(query: str) -> tuple:
+    """
+    Expand informal/abbreviated terms to clinical equivalents.
+    Returns (expanded_query, was_expanded).
+    """
+    q_lower = query.lower().strip()
+
+    # Exact match
+    if q_lower in SYNONYM_MAP:
+        expanded = f"{query} {SYNONYM_MAP[q_lower]}"
+        return expanded, True
+
+    # Partial match — find all synonym keys present in the query
+    added_terms = []
+    for key, expansion in SYNONYM_MAP.items():
+        if key in q_lower and len(key) >= 3:
+            added_terms.append(expansion)
+
+    if added_terms:
+        expanded = query + ' ' + ' '.join(added_terms)
+        return expanded, True
+
+    return query, False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VAGUE QUERY GUARD — FIX 2
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_VAGUE_PATTERNS = [
+    r'^please\s+help\s+me\.?$',
+    r'^help$',
+    r'^help\s+me$',
+    r'^what\s+is\s+this\??$',
+    r'^is\s+this\s+normal\??$',
+    r'^anyone\s+know\??$',
+    r'^any\s+advice\??$',
+    r'^what\s+do\s+i\s+do\??$',
+    r'^i\s+don.t\s+know\s+what\s+(this|to\s+do)\s+is\??$',
+    r'^can\s+anyone\s+help\??$',
+    r'^please\s+help$',
+    r'^\?\s*$',
+]
+_VAGUE_RE = [re.compile(p, re.IGNORECASE) for p in _VAGUE_PATTERNS]
+
+
+def is_vague_query(query: str) -> bool:
+    q = query.strip()
+    if len(q.split()) < 2:
+        return True
+    return any(r.match(q) for r in _VAGUE_RE)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SPECIALTY ROUTER — FIX 3
+# Detects the likely specialty from the query and returns appropriate
+# Pinecone metadata filter. Derm queries get the derm-only filter.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_DERM_SIGNALS = {
+    'acne', 'pimple', 'spot', 'rosacea', 'eczema', 'dermatitis', 'psoriasis',
+    'skin', 'derm', 'sebaceous', 'rash', 'lesion', 'erythema', 'urticaria',
+    'hives', 'itchy', 'itch', 'pruritus', 'alopecia', 'hair loss', 'vitiligo',
+    'melanoma', 'mole', 'wart', 'cyst', 'blackhead', 'whitehead', 'comedone',
+    'retinol', 'tretinoin', 'adapalene', 'isotretinoin', 'accutane', 'spironolactone',
+    'niacinamide', 'sunscreen', 'spf', 'moisturiser', 'moisturizer', 'serum',
+    'mask', 'toner', 'exfoliant', 'aha', 'bha', 'glycolic', 'salicylic',
+    'malassezia', 'fungal acne', 'sebderm', 'seb derm', 'perioral',
+    'melasma', 'pih', 'hyperpigmentation', 'dark spots', 'sun spots',
+    'keratosis pilaris', 'kp', 'tinea', 'impetigo', 'folliculitis',
+    'milia', 'closed comedone', 'open comedone', 'purging', 'retinoid',
+    'skin barrier', 'ceramide', 'hyaluronic', 'vitamin c serum',
+    'fine lines', 'wrinkles', 'photoage', 'anti-ageing', 'anti-aging',
+    'bacne', 'body acne', 'chest acne', 'hormonal acne', 'cystic acne',
+    'acne scar', 'dark circle', 'under eye', 'pore', 'oily skin', 'dry skin',
+}
+
+_HEPATOLOGY_SIGNALS = {
+    'liver', 'hepatic', 'hepatitis', 'cirrhosis', 'ascites', 'jaundice',
+    'bilirubin', 'ast', 'alt', 'alp', 'ggt', 'albumin', 'portal', 'varices',
+    'nash', 'nafld', 'child-pugh', 'meld', 'hepatocellular', 'hcc',
+    'ursodeoxycholic', 'lactulose', 'rifaximin', 'terlipressin',
+}
+
+_CARDIOLOGY_SIGNALS = {
+    'heart', 'cardiac', 'myocardial', 'infarction', 'stemi', 'nstemi',
+    'atrial fibrillation', 'afib', 'ejection fraction', 'troponin',
+    'bnp', 'coronary', 'stent', 'angioplasty', 'hypertension', 'bp',
+}
+
+_NEPHROLOGY_SIGNALS = {
+    'kidney', 'renal', 'creatinine', 'egfr', 'aki', 'ckd', 'dialysis',
+    'nephropathy', 'proteinuria', 'nephrotic', 'glomerular',
+}
+
+_NEUROLOGY_SIGNALS = {
+    'stroke', 'seizure', 'epilepsy', 'parkinson', 'alzheimer', 'dementia',
+    'neuropathy', 'migraine', 'headache', 'brain', 'cerebral', 'meningitis',
+}
+
+_ENDOCRINE_SIGNALS = {
+    'diabetes', 'thyroid', 'insulin', 'hba1c', 'glucose', 'hypoglycaemia',
+    'hyperglycaemia', 'cortisol', 'adrenal', 'pituitary', 'testosterone',
+    'prolactin', 'tsh', 'hypothyroid', 'hyperthyroid',
+}
+
+_INFECTIOUS_SIGNALS = {
+    'infection', 'sepsis', 'antibiotic', 'bacteria', 'viral', 'fungal',
+    'hiv', 'tuberculosis', 'tb', 'malaria', 'mrsa', 'fever', 'pneumonia',
+}
+
+
+def detect_specialty(query: str) -> Optional[str]:
+    """
+    Returns the most likely specialty for this query, or None for general.
+    Used to build Pinecone metadata filter.
+    """
+    q = query.lower()
+    words = set(re.findall(r'\b\w+\b', q))
+
+    scores = {
+        'dermatology':      sum(1 for s in _DERM_SIGNALS        if s in q),
+        'hepatology':       sum(1 for s in _HEPATOLOGY_SIGNALS  if s in q),
+        'cardiology':       sum(1 for s in _CARDIOLOGY_SIGNALS  if s in q),
+        'nephrology':       sum(1 for s in _NEPHROLOGY_SIGNALS  if s in q),
+        'neurology':        sum(1 for s in _NEUROLOGY_SIGNALS   if s in q),
+        'endocrinology':    sum(1 for s in _ENDOCRINE_SIGNALS   if s in q),
+        'infectious_disease': sum(1 for s in _INFECTIOUS_SIGNALS if s in q),
+    }
+
+    best_sp = max(scores, key=scores.get)
+    best_sc = scores[best_sp]
+
+    if best_sc == 0:
+        return None  # no specialty signals — use no filter
+
+    # Only apply filter if signal is clear (avoid false positives)
+    if best_sc >= 1:
+        return best_sp
+
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONCEPT MAP — FIX 6
+# Maps query terms to FEA concept IDs for concept-filtered retrieval.
+# Populated from the same concept map used in Step 5.5.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+QUERY_CONCEPT_MAP: Dict[str, List[str]] = {
+    'perioral dermatitis':       ['C_DERM_PERIORAL_DERMATITIS'],
+    'perioral derm':             ['C_DERM_PERIORAL_DERMATITIS'],
+    'seborrhoeic dermatitis':    ['C_DERM_SEBORRHOEIC_DERMATITIS'],
+    'seborrheic dermatitis':     ['C_DERM_SEBORRHOEIC_DERMATITIS'],
+    'seb derm':                  ['C_DERM_SEBORRHOEIC_DERMATITIS'],
+    'sebderm':                   ['C_DERM_SEBORRHOEIC_DERMATITIS'],
+    'malassezia folliculitis':   ['C_DERM_MALASSEZIA_FOLLICULITIS'],
+    'fungal acne':               ['C_DERM_MALASSEZIA_FOLLICULITIS'],
+    'pityrosporum folliculitis': ['C_DERM_MALASSEZIA_FOLLICULITIS'],
+    'pih':                       ['C_DERM_PIH', 'C_DERM_HYPERPIGMENTATION'],
+    'post inflammatory hyperpigmentation': ['C_DERM_PIH'],
+    'melasma':                   ['C_DERM_MELASMA', 'C_DERM_HYPERPIGMENTATION'],
+    'chloasma':                  ['C_DERM_MELASMA'],
+    'contact dermatitis':        ['C_DERM_CONTACT_DERMATITIS'],
+    'keratosis pilaris':         ['C_DERM_KERATOSIS_PILARIS'],
+    'chicken skin':              ['C_DERM_KERATOSIS_PILARIS'],
+    'hormonal acne':             ['C_DERM_HORMONAL_ACNE'],
+    'jawline acne':              ['C_DERM_HORMONAL_ACNE'],
+    'cystic acne':               ['C_DERM_CYSTIC_NODULAR_ACNE'],
+    'nodular acne':              ['C_DERM_CYSTIC_NODULAR_ACNE'],
+    'acne scars':                ['C_DERM_ACNE_SCARS'],
+    'acne scarring':             ['C_DERM_ACNE_SCARS'],
+    'retinoid purge':            ['C_DERM_RETINOID_PURGE'],
+    'skin purging':              ['C_DERM_RETINOID_PURGE'],
+    'purging':                   ['C_DERM_RETINOID_PURGE'],
+    'closed comedones':          ['C_DERM_CLOSED_COMEDONES'],
+    'whiteheads':                ['C_DERM_CLOSED_COMEDONES'],
+    'rosacea':                   ['C_DERM_ROSACEA', 'C_DERM_ROSACEA_SUBTYPES'],
+    'milia':                     ['C_DERM_MILIA'],
+    'skin barrier':              ['C_DERM_SKIN_BARRIER_DAMAGE'],
+    'barrier damage':            ['C_DERM_SKIN_BARRIER_DAMAGE'],
+    'isotretinoin':              ['C_DERM_ISOTRETINOIN'],
+    'accutane':                  ['C_DERM_ISOTRETINOIN'],
+    'spironolactone':            ['C_DERM_SPIRONOLACTONE'],
+    'photoageing':               ['C_DERM_PHOTOAGEING'],
+    'photoaging':                ['C_DERM_PHOTOAGEING'],
+    'fine lines':                ['C_DERM_PHOTOAGEING'],
+    'wrinkles':                  ['C_DERM_PHOTOAGEING'],
+    'tinea versicolor':          ['C_DERM_TINEA_VERSICOLOR'],
+    'pityriasis versicolor':     ['C_DERM_TINEA_VERSICOLOR'],
+    'folliculitis':              ['C_DERM_FOLLICULITIS'],
+    'urticaria':                 ['C_DERM_URTICARIA'],
+    'hives':                     ['C_DERM_URTICARIA'],
+    'skin texture':              ['C_DERM_SKIN_TEXTURE'],
+    'rough skin':                ['C_DERM_SKIN_TEXTURE'],
+    'skin cycling':              ['C_DERM_SKIN_CYCLING'],
+    'ingredient interactions':   ['C_DERM_INGREDIENT_INTERACTIONS'],
+    'solar lentigines':          ['C_DERM_SOLAR_LENTIGINES'],
+    'age spots':                 ['C_DERM_SOLAR_LENTIGINES'],
+    'sun spots':                 ['C_DERM_SOLAR_LENTIGINES'],
+    'dark circles':              ['C_DERM_PERIORBITAL_HYPERPIG'],
+    'hyperpigmentation':         ['C_DERM_HYPERPIGMENTATION', 'C_DERM_PIH'],
+    'molluscum':                 ['C_DERM_MOLLUSCUM'],
+    'impetigo':                  ['C_DERM_IMPETIGO'],
+    'sebaceous hyperplasia':     ['C_DERM_SEBACEOUS_HYPERPLASIA'],
+    'cherry angioma':            ['C_DERM_CHERRY_ANGIOMA'],
+    'epidermoid cyst':           ['C_DERM_EPIDERMOID_CYST'],
+    'dermatofibroma':            ['C_DERM_DERMATOFIBROMA'],
+    # Hepatology
+    'sepsis':                    ['C_ID_SEPSIS'],
+    'liver cirrhosis':           ['C_HEP_CIRRHOSIS'],
+    'cirrhosis':                 ['C_HEP_CIRRHOSIS'],
+    'hepatitis':                 ['C_HEP_VIRAL_HEPATITIS'],
+    'nash':                      ['C_HEP_NASH'],
+    'nafld':                     ['C_HEP_NAFLD'],
+    # Scores
+    'child-pugh':                ['C_SCORE_CHILD_PUGH'],
+    'meld score':                ['C_SCORE_MELD'],
+    'sofa score':                ['C_SCORE_SOFA'],
+    'pasi score':                ['C_SCORE_PASI'],
+    'wells score':               ['C_SCORE_WELLS'],
+    'curb-65':                   ['C_SCORE_CURB65'],
+}
+
+
+def detect_concepts(query: str) -> List[str]:
+    """Returns FEA concept IDs matched in this query."""
+    q = query.lower()
+    found = set()
+    for phrase, concept_ids in QUERY_CONCEPT_MAP.items():
+        if phrase in q:
+            found.update(concept_ids)
+    return list(found)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HYDE SYSTEM PROMPT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_HYDE_SYSTEM = (
+    "You are a senior physician writing a passage from a medical textbook. "
+    "Given a clinical question, write a concise paragraph (4-6 sentences) "
+    "that would directly answer it using precise medical terminology. "
+    "Include specific values, mechanisms, criteria, or treatments. "
+    "Be factual and terse. Do not hedge or add disclaimers."
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLINICAL QUERY ENGINE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ClinicalQueryEngine:
+    """
+    Full RAG query engine for clinical questions.
+    Implements 7-layer pipeline: intent check → synonym expand → specialty route
+    → HyDE → Pinecone retrieve → recall fallback → rerank → graph expand.
+
+    Upload this file to /content/ and the Patient RAG Pipeline will import it
+    automatically via the bootstrap in step7a_patient_pipeline_v3.2.py.
+    """
+
+    CHUNK_PREFIX = 'v4_chunk_'
+
+    def __init__(
+        self,
+        openai_api_key:   str = None,
+        pinecone_api_key: str = None,
+        pinecone_index:   str = 'doctorlittle',
+        embed_model:      str = 'text-embedding-3-small',
+        top_k:            int = 10,
+        score_threshold:  float = 0.50,
+        use_hyde:         bool = True,
+        use_reranker:     bool = True,
+        use_diversity:    bool = True,
+        use_graph:        bool = True,
+        verbose:          bool = False,
+    ):
+        openai_key   = openai_api_key   or os.getenv('OPENAI_API_KEY')
+        pinecone_key = pinecone_api_key or os.getenv('PINECONE_API_KEY')
+
+        if not openai_key:
+            raise ValueError("Set OPENAI_API_KEY env var")
+        if not pinecone_key:
+            raise ValueError("Set PINECONE_API_KEY env var")
+
+        self._openai       = OpenAI(api_key=openai_key)
+        pc                 = Pinecone(api_key=pinecone_key)
+        self._index        = pc.Index(pinecone_index)
+        self._embed_model  = embed_model
+        self._top_k        = top_k
+        self._threshold    = score_threshold
+        self._use_hyde     = use_hyde
+        self._use_reranker = use_reranker and _HAS_RERANKER
+        self._use_diversity= use_diversity
+        self._use_graph    = use_graph
+        self._verbose      = verbose
+        self._reranker     = None
+
+        if self._use_reranker:
+            try:
+                self._reranker = CrossEncoder(
+                    'cross-encoder/ms-marco-MiniLM-L-6-v2', max_length=512
+                )
+                if verbose:
+                    print("✅  Cross-encoder loaded")
+            except Exception as e:
+                print(f"⚠  Cross-encoder failed to load: {e}")
+                self._use_reranker = False
+
+        stats = self._index.describe_index_stats()
+        if verbose:
+            print(f"✅  ClinicalQueryEngine ready | {stats.total_vector_count:,} vectors")
+
+    # ── INTERNAL HELPERS ──────────────────────────────────────────────────────
+
+    def _embed(self, text: str) -> List[float]:
+        r = self._openai.embeddings.create(
+            model=self._embed_model, input=text[:6000]
+        )
+        return r.data[0].embedding
+
+    def _blend(self, v1: List[float], v2: List[float],
+               w1: float = 0.45, w2: float = 0.55) -> List[float]:
+        b = [w1 * a + w2 * b for a, b in zip(v1, v2)]
+        n = sum(x * x for x in b) ** 0.5
+        return [x / n for x in b] if n > 1e-9 else b
+
+    def _hyde(self, question: str) -> Optional[str]:
+        if not self._use_hyde:
+            return None
+        try:
+            r = self._openai.chat.completions.create(
+                model='gpt-4o-mini',
+                messages=[
+                    {'role': 'system', 'content': _HYDE_SYSTEM},
+                    {'role': 'user',   'content': question},
+                ],
+                max_tokens=220, temperature=0.2,
+            )
+            return r.choices[0].message.content.strip()
+        except Exception:
+            return None
+
+    def _pc_query(
+        self,
+        vector:      List[float],
+        top_k:       int = 40,
+        filter_dict: Optional[Dict] = None,
+    ) -> List[Dict]:
+        kw = {'vector': vector, 'top_k': top_k, 'include_metadata': True}
+        if filter_dict:
+            kw['filter'] = filter_dict
+        try:
+            matches = self._index.query(**kw).matches
+        except Exception as e:
+            if self._verbose:
+                print(f"  Pinecone error: {e}")
+            return []
+        return [
+            {
+                'id':       m.id,
+                'score':    float(m.score),
+                'metadata': m.metadata or {},
+                'rerank_score': None,
+            }
+            for m in matches
+            if m.id.startswith(self.CHUNK_PREFIX)
+        ]
+
+    def _rerank(self, question: str, candidates: List[Dict]) -> List[Dict]:
+        """Pure rerank sort — no cosine blend. FIX 5."""
+        if not self._use_reranker or not self._reranker or not candidates:
+            return candidates
+
+        pairs = [
+            (question, c['metadata'].get('text', '')[:400])
+            for c in candidates[:50]
+        ]
+        try:
+            scores = self._reranker.predict(pairs, show_progress_bar=False)
+            min_sc = float(min(scores)) if len(scores) > 0 else -999.0
+            for i, c in enumerate(candidates):
+                if i < len(scores):
+                    c['rerank_score'] = float(scores[i])
+                else:
+                    c['rerank_score'] = min_sc - 1.0
+            # Pure sort by rerank score — no cosine blend
+            candidates.sort(
+                key=lambda x: x['rerank_score'] if x['rerank_score'] is not None
+                              else x['score'],
+                reverse=True,
+            )
+        except Exception as e:
+            if self._verbose:
+                print(f"  Reranker error: {e}")
+        return candidates
+
+    def _fetch_context_chunks(self, chunks: List[Dict]) -> List[Dict]:
+        """Fetch parent + sibling chunks for graph expansion. FIX uses graph_node_id."""
+        if not self._use_graph or not chunks:
+            return []
+        related_ids = set()
+        for c in chunks[:5]:
+            m = c['metadata']
+            parent = m.get('parent_node_id', '')
+            if parent and parent.startswith(self.CHUNK_PREFIX):
+                related_ids.add(parent)
+            for sib in (m.get('sibling_node_ids') or [])[:2]:
+                if sib and sib.startswith(self.CHUNK_PREFIX):
+                    related_ids.add(sib)
+        # Remove IDs already in top results
+        top_ids = {c['id'] for c in chunks}
+        fetch_ids = list(related_ids - top_ids)[:8]
+        if not fetch_ids:
+            return []
+        try:
+            result = self._index.fetch(ids=fetch_ids)
+            return [
+                {
+                    'id':       vid,
+                    'score':    0.0,
+                    'metadata': v.metadata or {},
+                    'rerank_score': None,
+                }
+                for vid, v in result.vectors.items()
+            ]
+        except Exception:
+            return []
+
+    def _to_chunk(self, c: Dict, hyde_used: bool, reranker_used: bool) -> RetrievalChunk:
+        m  = c['metadata']
+        sp = m.get('specialty', [])
+        if not isinstance(sp, list):
+            sp = [sp] if sp else []
+        cids = m.get('concept_ids', [])
+        if not isinstance(cids, list):
+            cids = []
+        return RetrievalChunk(
+            chunk_id      = c['id'],
+            score         = c.get('score', 0.0),
+            rerank_score  = c.get('rerank_score'),
+            text          = m.get('text', '')[:800],
+            source_file   = m.get('source_file', ''),
+            section_path  = m.get('section_path', ''),
+            specialty     = sp,
+            concept_ids   = cids,
+            semantic_type = m.get('semantic_type', ''),
+            quality_tier  = m.get('quality_tier', ''),
+            entities      = {
+                'conditions':      m.get('entities_conditions',         []),
+                'drugs':           m.get('entities_drugs',              []),
+                'lab_values':      m.get('entities_lab_values',         []),
+                'procedures':      m.get('entities_procedures',         []),
+                'clinical_scores': m.get('entities_clinical_scores_l3', []),
+            },
+            hyde_used     = hyde_used,
+            reranker_used = reranker_used,
+        )
+
+    # ── MAIN QUERY METHOD ─────────────────────────────────────────────────────
+
+    def query(
+        self,
+        question:         str,
+        specialty_filter: Optional[str] = None,
+        concept_filter:   Optional[List[str]] = None,
+        semtype_filter:   Optional[str] = None,
+    ) -> RetrievalResult:
+        """
+        Execute the 7-layer clinical query pipeline.
+
+        Args:
+            question:         Raw user query (any format, any language)
+            specialty_filter: Override detected specialty (e.g. 'dermatology')
+            concept_filter:   Override concept IDs for FEA filtered retrieval
+            semtype_filter:   Restrict to a semantic type (e.g. 'dosing')
+
+        Returns:
+            RetrievalResult dataclass (compatible with _engine_query_to_chunks)
+        """
+        t0    = time.time()
+        trace = []
+
+        # ── LAYER 0: Vague query guard ─────────────────────────────────────
+        if is_vague_query(question):
+            trace.append(f"VAGUE: '{question}' — returning empty result")
+            return RetrievalResult(
+                query          = question,
+                expanded_query = question,
+                chunks         = [],
+                context_chunks = [],
+                scores         = RetrievalScores(
+                    top1_cosine=0.0, top1_rerank=None,
+                    hyde_used=False, reranker_used=False,
+                    n_final=0, vague_query=True,
+                ),
+                pipeline_trace = trace,
+                elapsed_ms     = (time.time() - t0) * 1000,
+            )
+
+        # ── LAYER 1: Synonym expansion ─────────────────────────────────────
+        expanded_query, was_expanded = expand_synonyms(question)
+        if was_expanded:
+            trace.append(f"SYNONYM: '{question}' → expanded ({len(expanded_query)} chars)")
+        else:
+            trace.append(f"QUERY: '{question}' (no expansion)")
+
+        # ── LAYER 2: Specialty routing ─────────────────────────────────────
+        auto_specialty = specialty_filter or detect_specialty(expanded_query)
+        base_filter: Dict = {'quality_tier': {'$in': ['high', 'medium']}}
+        if auto_specialty:
+            base_filter['specialty'] = {'$in': [auto_specialty]}
+            trace.append(f"SPECIALTY: {auto_specialty}")
+        else:
+            trace.append("SPECIALTY: none (general)")
+
+        if semtype_filter:
+            base_filter['semantic_type'] = {'$eq': semtype_filter}
+
+        # ── LAYER 3: HyDE generation ───────────────────────────────────────
+        raw_vec   = self._embed(expanded_query)
+        hyde_text = self._hyde(question)
+        hyde_vec  = None
+        if hyde_text:
+            hyde_vec = self._embed(hyde_text)
+            trace.append(f"HYDE: generated ({len(hyde_text)} chars)")
+        else:
+            trace.append("HYDE: skipped")
+
+        # ── LAYER 4: Pinecone retrieval ────────────────────────────────────
+        # Pass A: raw query vector
+        cands_raw = self._pc_query(raw_vec, top_k=40, filter_dict=base_filter)
+        trace.append(f"RAW: {len(cands_raw)} candidates")
+
+        # Pass B: HyDE blended vector
+        cands_hyde = []
+        if hyde_vec is not None:
+            blended    = self._blend(raw_vec, hyde_vec)
+            cands_hyde = self._pc_query(blended, top_k=40, filter_dict=base_filter)
+            trace.append(f"HYDE_RETRIEVE: {len(cands_hyde)} candidates")
+
+        # Pass C: Concept-filtered retrieval (FIX 6)
+        cands_concept = []
+        concept_used  = False
+        auto_concepts = concept_filter or detect_concepts(expanded_query)
+        if auto_concepts:
+            concept_filter_dict = dict(base_filter)
+            concept_filter_dict['concept_ids'] = {'$in': auto_concepts}
+            cands_concept = self._pc_query(raw_vec, top_k=20,
+                                           filter_dict=concept_filter_dict)
+            trace.append(f"CONCEPT ({auto_concepts[:2]}): {len(cands_concept)} candidates")
+            concept_used = bool(cands_concept)
+
+        # Merge all passes — keep max score per chunk ID
+        seen: Dict[str, Dict] = {}
+        for lst in [cands_raw, cands_hyde, cands_concept]:
+            for c in lst:
+                cid = c['id']
+                if cid not in seen or c['score'] > seen[cid]['score']:
+                    seen[cid] = c
+        merged = sorted(seen.values(), key=lambda x: x['score'], reverse=True)
+
+        # ── LAYER 5: Recall fallback (FIX 4) ──────────────────────────────
+        recall_fallback = False
+        above_thresh    = [c for c in merged if c['score'] >= self._threshold]
+        if len(above_thresh) < 2 and auto_specialty:
+            trace.append(f"FALLBACK: only {len(above_thresh)} above threshold — "
+                         f"retrying without specialty filter")
+            broad_filter  = {'quality_tier': {'$in': ['high', 'medium']}}
+            cands_broad   = self._pc_query(raw_vec, top_k=40,
+                                           filter_dict=broad_filter)
+            for c in cands_broad:
+                cid = c['id']
+                if cid not in seen or c['score'] > seen[cid]['score']:
+                    seen[cid] = c
+            merged          = sorted(seen.values(), key=lambda x: x['score'], reverse=True)
+            recall_fallback = True
+            trace.append(f"FALLBACK: now {len(merged)} candidates")
+
+        # ── LAYER 6: Rerank (FIX 5 — pure sort) ───────────────────────────
+        merged = self._rerank(question, merged)
+        final  = merged[:self._top_k]
+        trace.append(f"FINAL: {len(final)} chunks after rerank")
+
+        # ── LAYER 7: Graph expansion ───────────────────────────────────────
+        context_raw    = self._fetch_context_chunks(final) if self._use_graph else []
+        context_chunks = [
+            self._to_chunk(c, hyde_used=False, reranker_used=False)
+            for c in context_raw
+        ]
+
+        # ── Build result ───────────────────────────────────────────────────
+        hyde_used_flag    = hyde_vec is not None
+        reranker_used_flag= self._use_reranker and self._reranker is not None
+
+        chunks = [
+            self._to_chunk(c, hyde_used=hyde_used_flag,
+                           reranker_used=reranker_used_flag)
+            for c in final
+        ]
+
+        top1 = final[0] if final else {}
+        scores = RetrievalScores(
+            top1_cosine          = top1.get('score', 0.0),
+            top1_rerank          = top1.get('rerank_score'),
+            hyde_used            = hyde_used_flag,
+            reranker_used        = reranker_used_flag,
+            n_final              = len(chunks),
+            recall_fallback_used = recall_fallback,
+            concept_filter_used  = concept_used,
+            synonym_expanded     = was_expanded,
+            vague_query          = False,
+        )
+
+        elapsed = (time.time() - t0) * 1000
+
+        if self._verbose:
+            print(f"  [{elapsed:.0f}ms] {len(chunks)} chunks | "
+                  f"cosine={scores.top1_cosine:.3f} | "
+                  f"rerank={(f'{scores.top1_rerank:.3f}' if scores.top1_rerank is not None else 'N/A')} | "
+                  f"HyDE={'✅' if hyde_used_flag else '—'} | "
+                  f"specialty={auto_specialty or 'none'}")
+
+        return RetrievalResult(
+            query          = question,
+            expanded_query = expanded_query,
+            chunks         = chunks,
+            context_chunks = context_chunks,
+            scores         = scores,
+            pipeline_trace = trace,
+            elapsed_ms     = elapsed,
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SELF-TEST HELPERS — deep analysis (full trace, score stats, top-k table)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _preview_one_line(text: str, max_len: int = 140) -> str:
+    t = (text or '').replace('\n', ' ').strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 1] + '…'
+
+
+def print_deep_retrieval_analysis(result: RetrievalResult, label: str, *, max_expanded_chars: int = 480) -> None:
+    """
+    Print retrieval diagnostics beyond the one-line summary:
+    expanded query, full pipeline trace, cosine/rerank distribution, top-k table,
+    source diversity, optional graph context count.
+    """
+    s = result.scores
+    print('  ── Deep analysis ─────────────────────────────────────────────')
+    print(f"  Expectation (label): {label}")
+    print(f"  Wall time: {result.elapsed_ms:.0f} ms")
+
+    if s.vague_query:
+        print('  Vague-query guard: no embedding / no Pinecone (by design).')
+        print('  Full trace:')
+        for i, step in enumerate(result.pipeline_trace, 1):
+            print(f"    {i:2d}. {step}")
+        print('  → VAGUE QUERY CAUGHT ✅')
+        return
+
+    eq = result.expanded_query
+    shown = eq if len(eq) <= max_expanded_chars else (eq[: max_expanded_chars - 1] + '…')
+    print(f"  Expanded query ({len(result.expanded_query)} chars):")
+    print(f"    {shown}")
+
+    print('  Flags: '
+          f"HyDE={'✅' if s.hyde_used else '—'} | "
+          f"expanded={'✅' if s.synonym_expanded else '—'} | "
+          f"concept={'✅' if s.concept_filter_used else '—'} | "
+          f"fallback={'✅' if s.recall_fallback_used else '—'} | "
+          f"reranker={'✅' if s.reranker_used else '—'}")
+
+    print('  Pipeline trace:')
+    for i, step in enumerate(result.pipeline_trace, 1):
+        print(f"    {i:2d}. {step}")
+
+    chunks = result.chunks
+    if not chunks:
+        print('  (No chunks returned.)')
+        return
+
+    cos_vals = [c.score for c in chunks]
+    rr_vals = [c.rerank_score for c in chunks if c.rerank_score is not None]
+
+    print(f"  Distribution (n={len(chunks)}): "
+          f"cosine min/mean/max = {min(cos_vals):.4f} / "
+          f"{sum(cos_vals)/len(cos_vals):.4f} / {max(cos_vals):.4f}")
+    if rr_vals:
+        print(f"                      rerank min/mean/max = {min(rr_vals):.4f} / "
+              f"{sum(rr_vals)/len(rr_vals):.4f} / {max(rr_vals):.4f}")
+        if len(rr_vals) >= 2:
+            k = min(5, len(rr_vals))
+            spread = rr_vals[0] - rr_vals[k - 1]
+            print(f"                      rerank top1 − top{k} = {spread:.4f} "
+                  '(larger ⇒ steeper ranking)')
+
+    top5_names = [c.source_file for c in chunks[:5]]
+    print(f"  Source diversity (top-5): {len(set(top5_names))} unique file(s)")
+
+    if result.context_chunks:
+        print(f"  Graph expansion: +{len(result.context_chunks)} context chunk(s) "
+              '(siblings/parents)')
+
+    top = chunks[0]
+    ent = top.entities or {}
+    ent_bits = []
+    for key in ('conditions', 'drugs', 'clinical_scores'):
+        v = ent.get(key) or []
+        if v:
+            ent_bits.append(f"{key}={len(v)}")
+    if ent_bits:
+        print(f"  Top-1 extracted entities: {', '.join(ent_bits)}")
+
+    print(f"  Top-1 preview: {_preview_one_line(top.text, 220)}")
+    print()
+    print(f"  {'#':>2}  {'cosine':>8}  {'rerank':>10}  {'specialty':<22}  source")
+    print('  ' + '─' * 72)
+    for i, c in enumerate(chunks, 1):
+        rr = f"{c.rerank_score:10.4f}" if c.rerank_score is not None else '—'.rjust(10)
+        sp = ', '.join((c.specialty or [])[:2])[:20] or '—'
+        src = (c.source_file or '?')[:28]
+        print(f"  {i:2d}  {c.score:8.4f}  {rr}  {sp:<22}  {src}")
+
+    print('  ────────────────────────────────────────────────────────────────')
+
+
+def print_compact_retrieval_line(result: RetrievalResult) -> None:
+    """Original one-line + top-1 snippet (used when STEP7_DEEP_SELF_TEST=0)."""
+    s = result.scores
+    top = result.chunks[0] if result.chunks else None
+    print(f"  Chunks: {s.n_final} | cosine={s.top1_cosine:.3f} | "
+          f"rerank={(f'{s.top1_rerank:.3f}' if s.top1_rerank is not None else 'N/A')} | "
+          f"HyDE={'✅' if s.hyde_used else '—'} | "
+          f"expanded={'✅' if s.synonym_expanded else '—'} | "
+          f"concept={'✅' if s.concept_filter_used else '—'} | "
+          f"fallback={'✅' if s.recall_fallback_used else '—'}")
+    if s.vague_query:
+        print('  → VAGUE QUERY CAUGHT ✅')
+    elif top:
+        print(f"  Top-1: {top.source_file[:50]}")
+        print(f"         {top.text[:100]}…")
+    print(f"  Trace : {' → '.join(result.pipeline_trace[:4])}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QUICK TEST  (run directly or from Colab cell)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Deep table + stats: default ON. Quick one-liner mode:
+#   STEP7_DEEP_SELF_TEST=0 python step7.py
+
+if __name__ == '__main__':
+    _deep = os.environ.get('STEP7_DEEP_SELF_TEST', '1').strip().lower() not in ('0', 'false', 'no')
+
+    print('=' * 70)
+    print('  STEP 7A v1 — ClinicalQueryEngine self-test')
+    if _deep:
+        print('  (deep analysis — set STEP7_DEEP_SELF_TEST=0 for compact output)')
+    print('=' * 70)
+
+    engine = ClinicalQueryEngine(verbose=not _deep)
+
+    test_queries = [
+        ("sebderm on my scalp",               "derm — synonym expansion"),
+        ("please help me",                     "vague — should return 0 chunks"),
+        ("purging on month 3 of tretinoin",    "derm — retinoid purge concept"),
+        ("skin barrier damage over exfoliation","derm — barrier concept"),
+        ("spironolactone 150mg side effects",  "derm + pharmacology"),
+        ("mask recommendations for dry skin",  "derm — synonym: mask"),
+        ("perioral derm treatment",            "derm — concept filter"),
+        ("child-pugh score cirrhosis",         "hepatology — concept filter"),
+        ("sepsis SOFA score management",       "infectious — concept filter"),
+        ("type 2 diabetes HbA1c target",       "endocrinology — no filter"),
+    ]
+
+    latencies: List[float] = []
+
+    for query, label in test_queries:
+        print(f"\n{'─' * 60}")
+        print(f"  Query : {query}")
+        print(f"  Label : {label}")
+        result = engine.query(query)
+        latencies.append(result.elapsed_ms)
+
+        if _deep:
+            print_deep_retrieval_analysis(result, label)
+        else:
+            print_compact_retrieval_line(result)
+
+    print(f"\n{'=' * 70}")
+    print('  Self-test complete.')
+    if _deep and latencies:
+        print(
+            f"  Latency summary: min={min(latencies):.0f} ms | "
+            f"max={max(latencies):.0f} ms | mean={sum(latencies)/len(latencies):.0f} ms"
+        )
+    print('  Upload this file to /content/ to activate FULL MODE in the pipeline.')
+    print('=' * 70)

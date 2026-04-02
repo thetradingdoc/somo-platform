@@ -16,13 +16,16 @@ const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
 
 try {
   const html = read('unified-dashboard/patients/checkout-chat.html');
+  const checkoutJs = read('unified-dashboard/patients/checkout-chat.js');
   const tsx = read('patient-app/app/checkout-chat.tsx');
   const analytics = read('patient-app/lib/checkoutAnalytics.ts');
 
-  if (!html.includes("emitFunnelEvent('agentic_primary'")) fail('HTML missing agentic_primary analytics');
-  if (!html.includes("emitFunnelEvent('in_chat_pay_tap'")) fail('HTML missing in_chat_pay_tap');
-  if (!html.includes("emitFunnelEvent('manual_checkout_click'")) fail('HTML missing manual_checkout_click');
-  if (!html.includes("id=\"whyPriceDetails\"")) fail('HTML missing why price disclosure');
+  if (!checkoutJs.includes("emitFunnelEvent('agentic_primary'")) fail('checkout-chat.js missing agentic_primary analytics');
+  if (!checkoutJs.includes("emitFunnelEvent('in_chat_pay_tap'")) fail('checkout-chat.js missing in_chat_pay_tap');
+  if (!checkoutJs.includes("emitFunnelEvent('manual_checkout_click'")) fail('checkout-chat.js missing manual_checkout_click');
+  if (!html.includes("id=\"whyPriceDetails\"")) fail('checkout-chat.html missing why price disclosure');
+  if (!html.includes('checkout-chat.js')) fail('checkout-chat.html must link checkout-chat.js');
+  if (!html.includes('checkout-phone-e164.js')) fail('checkout-chat.html must link checkout-phone-e164.js');
   if (!tsx.includes('doclittle_kelly_commerce_quote_v1')) fail('RN missing KELLY_QUOTE_KEY');
   if (!tsx.includes('emitCheckoutAnalytics')) fail('RN missing checkout analytics import/usage');
   if (!analytics.includes('DeviceEventEmitter.emit')) fail('checkoutAnalytics must emit DeviceEventEmitter');

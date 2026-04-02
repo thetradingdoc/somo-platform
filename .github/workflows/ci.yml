@@ -67,6 +67,10 @@ jobs:
         working-directory: ./middleware-platform
         run: npm test
 
+      - name: Security gate (redaction + forbidden data scan)
+        working-directory: ./middleware-platform
+        run: npm run release:security-gate
+
       - name: Clinical prep payload gate
         working-directory: ./middleware-platform
         env:

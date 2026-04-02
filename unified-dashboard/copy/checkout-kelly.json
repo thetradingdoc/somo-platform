@@ -7,6 +7,9 @@
   "placeholderFirstTime": "Ask about this product or your routine…",
   "placeholderReturning": "Ask about this product or your routine…",
   "sessionNoteCheckout": "Picking up where you left off — prices stay server-locked.",
+  "resumeBanner": "Resuming your previous checkout.",
+  "resumeStartOverCta": "Start over",
+  "resumePromptBody": "We found a previous checkout. Continue it, or start over for a fresh checkout.",
   "softNudges": [
     "If you are ready, I can line this up for you.",
     "Want your server-locked total in one step?"
@@ -15,7 +18,7 @@
   "statusTypeFirst": "Type a message first.",
   "statusProductLoading": "Hang on — product details are still loading.",
   "statusSignIn": "Please sign in again.",
-  "productSwitchAssistant": "Switched — ask anything about this pick, or continue when you're ready.",
+  "productSwitchAssistant": "Switched products. Checkout context is reset for safety. Ask anything about this pick, or continue when you're ready.",
   "fallbackReply": "I'm here — what would you like to know?",
   "errorConnectionAssistant": "We could not reach the server just now. Try again shortly, or use the pay shortcut below when it is available.",
   "checkoutCta": "Continue to secure checkout",

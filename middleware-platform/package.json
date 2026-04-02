@@ -34,11 +34,18 @@
         "test:kelly:report": "bash scripts/run-kelly-tests.sh --all --report",
         "test:commerce-agent": "node scripts/test-commerce-checkout-agent.js",
         "backfill:patient-verification": "node scripts/backfill-patient-verification.js",
+        "backfill:phone-e164": "node scripts/backfill-customer-phone-e164.cjs",
         "smoke:voice-onboarding": "node scripts/smoke-voice-onboarding.cjs",
         "test": "jest --passWithNoTests",
         "test:e2e-checkout": "playwright test e2e/checkout-hero.spec.cjs",
         "test:e2e-kelly-checkout": "playwright test e2e/kelly-conversational-checkout.spec.cjs",
-        "test:e2e-checkout-modes": "playwright test e2e/checkout-chat-modes.spec.cjs"
+        "test:e2e-checkout-modes": "playwright test e2e/checkout-chat-modes.spec.cjs",
+        "test:payment-rail-ui": "playwright test e2e/ui-agent-payment-rail.spec.cjs",
+        "test:e2e-landing-cta": "playwright test e2e/landing-cta-entry-flows.spec.cjs",
+        "test:e2e-checkout-postpay-lock": "playwright test e2e/checkout-post-payment-lock.spec.cjs",
+        "test:security:redaction": "jest __tests__/security.redaction.test.js --runInBand",
+        "test:security:scan": "node scripts/security-scan-forbidden-data.cjs",
+        "release:security-gate": "npm run test:security:redaction && npm run test:security:scan"
     },
     "keywords": [
         "ai-commerce",

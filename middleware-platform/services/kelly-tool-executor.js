@@ -11,8 +11,11 @@
  */
 
 const axios = require('axios');
+const { randomUUID } = require('crypto');
 const db = require('../database');
 const PaymentOrchestrator = require('./payment-orchestrator');
+const CheckoutPaymentStatusService = require('./checkout-payment-status-service');
+const CheckoutWorkflowService = require('./checkout-workflow-service');
 const TriageRAGService = require('./triage-rag-service');
 const TriageRAGServiceV2 = require('./triage-rag-service-v2');
 const SpecialistResolverService = require('./specialist-resolver-service');
@@ -20,6 +23,29 @@ const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./speciali
 const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, normalizeDateStr } = require('../config/clinic-business-hours');
 
 const BASE_URL = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:4000';
+const REQUIRE_COMMERCE_EMAIL_VERIFICATION =
+  String(process.env.REQUIRE_COMMERCE_EMAIL_VERIFICATION || 'true').toLowerCase() !== 'false';
+const STRICT_CHECKOUT_STAGE_GATE =
+  String(process.env.STRICT_CHECKOUT_STAGE_GATE || 'true').toLowerCase() !== 'false';
+const CHECKOUT_RAIL_GUARDS_ENABLED =
+  String(process.env.CHECKOUT_RAIL_GUARDS_ENABLED || 'true').toLowerCase() !== 'false';
+const COMMERCE_EMAIL_VERIFY_TTL_MS = Math.max(
+  60000,
+  parseInt(process.env.COMMERCE_EMAIL_VERIFY_TTL_MS || '900000', 10) || 900000
+);
+const COMMERCE_SHIPPING_TTL_MS = Math.max(
+  60000,
+  parseInt(process.env.COMMERCE_SHIPPING_TTL_MS || '1800000', 10) || 1800000
+);
+
+const CHECKOUT_STAGES = Object.freeze({
+  COLLECTING_DETAILS: 'collecting_details',
+  CODE_SENT: 'code_sent',
+  CODE_VERIFIED: 'code_verified',
+  CHECKOUT_PREPARED: 'checkout_prepared',
+  PAYMENT_CONFIRMED: 'payment_confirmed',
+  FAILED: 'failed'
+});
 
 class KellyToolExecutor {
   // ── kelly_session_meta (payment_token persistence) ──────────────────────
@@ -63,6 +89,190 @@ class KellyToolExecutor {
       return row?.value ?? null;
     } catch (_) {
       return null;
+    }
+  }
+
+  static _normalizeEmail(v) {
+    return String(v || '').trim().toLowerCase();
+  }
+
+  static _normalizeE164Phone(v) {
+    const raw = String(v || '').trim();
+    if (!raw) return '';
+    const hasPlus = raw.startsWith('+');
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return '';
+    let normalized = '';
+    if (hasPlus) normalized = '+' + digits;
+    else if (digits.length === 10) normalized = '+1' + digits;
+    else if (digits.length === 11 && digits.startsWith('1')) normalized = '+' + digits;
+    else normalized = '+' + digits;
+    return /^\+\d{8,15}$/.test(normalized) ? normalized : '';
+  }
+
+  static _setCheckoutStage(sessionId, stage, extra = null) {
+    if (!sessionId || !stage) return;
+    const prevStage = KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage') || CHECKOUT_STAGES.COLLECTING_DETAILS;
+    const transitionMeta = extra && typeof extra === 'object' ? { ...extra } : {};
+    if (!Object.prototype.hasOwnProperty.call(transitionMeta, 'source')) transitionMeta.source = 'kelly_tool_executor';
+    const applied = CheckoutWorkflowService.transitionStage(sessionId, String(stage), transitionMeta);
+    if (!applied) {
+      try {
+        console.warn('[checkout-stage] transition_blocked', {
+          session_id: String(sessionId),
+          from: String(prevStage || ''),
+          to: String(stage || ''),
+          meta: transitionMeta
+        });
+      } catch (_) {}
+      return;
+    }
+    try {
+      console.info('[checkout-stage] transition', {
+        session_id: String(sessionId),
+        from: String(prevStage || CHECKOUT_STAGES.COLLECTING_DETAILS),
+        to: String(stage),
+        meta: transitionMeta
+      });
+      db.incrementOpsCounter && db.incrementOpsCounter(`checkout_stage_transition_${String(stage)}`);
+    } catch (_) {}
+  }
+
+  static _getCheckoutStage(sessionId) {
+    const raw = KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage');
+    return String(raw || CHECKOUT_STAGES.COLLECTING_DETAILS);
+  }
+
+  static _getCheckoutContextVersion(sessionId) {
+    const raw = parseInt(String(KellyToolExecutor._getSessionMeta(sessionId, 'checkout_context_version') || '1'), 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 1;
+  }
+
+  static _bumpCheckoutContextVersion(sessionId, reason = 'context_bump') {
+    if (!sessionId) return 1;
+    const next = KellyToolExecutor._getCheckoutContextVersion(sessionId) + 1;
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_context_version', String(next));
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_context_version_updated_at_ms', String(Date.now()));
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_context_version_reason', String(reason || 'context_bump'));
+    return next;
+  }
+
+  static _invalidateCheckoutReadiness(sessionId, reason = 'checkout_invalidation') {
+    if (!sessionId) return;
+    const now = Date.now();
+    const currentStage = KellyToolExecutor._getCheckoutStage(sessionId);
+    const preserveEmailVerification = new Set([
+      CHECKOUT_STAGES.CODE_VERIFIED,
+      CHECKOUT_STAGES.CHECKOUT_PREPARED,
+      CHECKOUT_STAGES.PAYMENT_CONFIRMED
+    ]).has(currentStage);
+    const preserveShipping = new Set([
+      CHECKOUT_STAGES.CHECKOUT_PREPARED,
+      CHECKOUT_STAGES.PAYMENT_CONFIRMED
+    ]).has(currentStage);
+
+    if (!preserveEmailVerification) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_pending', '');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_pending_nonce', '');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified', '');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_nonce', '');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_at_ms', '0');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_context_version', '0');
+    }
+    KellyToolExecutor._setSessionMeta(sessionId, 'commerce_verified_cart_fingerprint', '');
+    if (!preserveShipping) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_complete', '0');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_context_version', '0');
+      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_cart_fingerprint', '');
+    }
+    KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_id', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_ts', '0');
+    KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
+    KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_consumed', '0');
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_payment_intent_id', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_checkout_id', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_confirm_attempted', '0');
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_outcome_status', '');
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_status_source', String(reason || 'checkout_invalidation'));
+    KellyToolExecutor._setSessionMeta(sessionId, 'payment_status_last_checked_at', String(now));
+    if (!preserveEmailVerification) {
+      KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.COLLECTING_DETAILS, {
+        reason: String(reason || 'checkout_invalidation'),
+        source: 'checkout_state_reset'
+      });
+    } else if (currentStage === CHECKOUT_STAGES.CODE_VERIFIED && !preserveShipping) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'cart_mutated_after_verify', '1');
+    }
+  }
+
+  static hardResetCheckoutContext(sessionId, reason = 'explicit_checkout_reset') {
+    if (!sessionId) return { success: false, error: 'session_id_required' };
+    const version = KellyToolExecutor._bumpCheckoutContextVersion(sessionId, reason);
+    KellyToolExecutor._invalidateCheckoutReadiness(sessionId, reason);
+    KellyToolExecutor._setSessionMeta(sessionId, 'checkout_context_reset_at_ms', String(Date.now()));
+    return { success: true, checkout_context_version: version };
+  }
+
+  static _isCommerceEmailVerificationValid(sessionId, email) {
+    const normalizedEmail = KellyToolExecutor._normalizeEmail(email);
+    if (!normalizedEmail) return false;
+    const verifiedEmail = KellyToolExecutor._normalizeEmail(
+      KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_verified')
+    );
+    if (!verifiedEmail || verifiedEmail !== normalizedEmail) return false;
+    const verifiedAtRaw = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_verified_at_ms');
+    const verifiedAt = parseInt(String(verifiedAtRaw || '0'), 10);
+    if (!Number.isFinite(verifiedAt) || verifiedAt <= 0) return false;
+    if (Date.now() - verifiedAt > COMMERCE_EMAIL_VERIFY_TTL_MS) return false;
+    const pendingNonce = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_pending_nonce') || '';
+    const verifiedNonce = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_verified_nonce') || '';
+    if (!pendingNonce || !verifiedNonce || pendingNonce !== verifiedNonce) return false;
+    const currentVersion = KellyToolExecutor._getCheckoutContextVersion(sessionId);
+    const verifiedVersion = parseInt(
+      String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_verified_context_version') || '0'),
+      10
+    );
+    if (!Number.isFinite(verifiedVersion) || verifiedVersion !== currentVersion) return false;
+    return true;
+  }
+
+  static _isShippingReadyForCurrentContext(sessionId) {
+    const complete = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_complete') || '') === '1';
+    if (!complete) return false;
+    const line1 = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_line1') || '').trim();
+    const city = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_city') || '').trim();
+    const state = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_state') || '').trim();
+    const postal = String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_postal_code') || '').trim();
+    if (!line1 || !city || !state || !postal) return false;
+    const updatedAtRaw = KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_updated_at_ms');
+    const updatedAt = parseInt(String(updatedAtRaw || '0'), 10);
+    if (!Number.isFinite(updatedAt) || updatedAt <= 0) return false;
+    if (Date.now() - updatedAt > COMMERCE_SHIPPING_TTL_MS) return false;
+    const currentVersion = KellyToolExecutor._getCheckoutContextVersion(sessionId);
+    const shippingVersion = parseInt(
+      String(KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_context_version') || '0'),
+      10
+    );
+    if (!Number.isFinite(shippingVersion) || shippingVersion !== currentVersion) return false;
+    return true;
+  }
+
+  static _computeCartFingerprint(sessionId, merchantId) {
+    try {
+      if (!sessionId || !merchantId) return '';
+      const cart = db.getCommerceCart(sessionId, merchantId);
+      const items = Array.isArray(cart?.items) ? [...cart.items] : [];
+      items.sort((a, b) => String(a.product_id || '').localeCompare(String(b.product_id || '')));
+      const normalized = items.map((it) => ({
+        product_id: String(it.product_id || ''),
+        quantity: Number(it.quantity || 0),
+        unit_price: Number(it.unit_price || 0)
+      }));
+      return JSON.stringify(normalized);
+    } catch (_) {
+      return '';
     }
   }
 
@@ -750,6 +960,9 @@ class KellyToolExecutor {
           if (idx >= 0) items[idx] = item;
           else items.push(item);
           db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items });
+          KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_merchant_id', String(merchantId));
+          KellyToolExecutor._bumpCheckoutContextVersion(sessionId, 'cart_add');
+          KellyToolExecutor._invalidateCheckoutReadiness(sessionId, 'cart_mutation');
           return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Added to cart.' };
         }
 
@@ -766,6 +979,9 @@ class KellyToolExecutor {
           if (quantity <= 0) {
             const filtered = items.filter((it) => it.product_id !== productId);
             db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items: filtered });
+            KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_merchant_id', String(merchantId));
+            KellyToolExecutor._bumpCheckoutContextVersion(sessionId, 'cart_update_remove');
+            KellyToolExecutor._invalidateCheckoutReadiness(sessionId, 'cart_mutation');
             return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Item removed.' };
           }
           const product = db.getProduct(productId);
@@ -781,6 +997,9 @@ class KellyToolExecutor {
           if (idx >= 0) items[idx] = updated;
           else items.push(updated);
           db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items });
+          KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_merchant_id', String(merchantId));
+          KellyToolExecutor._bumpCheckoutContextVersion(sessionId, 'cart_update');
+          KellyToolExecutor._invalidateCheckoutReadiness(sessionId, 'cart_mutation');
           return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Cart updated.' };
         }
 
@@ -799,6 +1018,9 @@ class KellyToolExecutor {
           const existing = db.getCommerceCart(sessionId, merchantId);
           const items = (existing?.items || []).filter((it) => it.product_id !== productId);
           db.upsertCommerceCart({ session_id: sessionId, merchant_id: merchantId, items });
+          KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_merchant_id', String(merchantId));
+          KellyToolExecutor._bumpCheckoutContextVersion(sessionId, 'cart_remove');
+          KellyToolExecutor._invalidateCheckoutReadiness(sessionId, 'cart_mutation');
           return { success: true, cart: db.getCommerceCart(sessionId, merchantId), message: 'Item removed.' };
         }
 
@@ -806,7 +1028,291 @@ class KellyToolExecutor {
           const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
           if (!merchantId) return { success: false, error: 'merchant_required' };
           db.clearCommerceCart(sessionId, merchantId);
+          KellyToolExecutor._setSessionMeta(sessionId, 'checkout_stage_meta_merchant_id', String(merchantId));
+          KellyToolExecutor._bumpCheckoutContextVersion(sessionId, 'cart_clear');
+          KellyToolExecutor._invalidateCheckoutReadiness(sessionId, 'cart_mutation');
           return { success: true, cart: { id: sessionId, merchant_id: merchantId, items: [], subtotal: 0, item_count: 0 } };
+        }
+
+        case 'save_shipping_address': {
+          const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+          const confirmCandidate = args && args.confirm_candidate === true;
+          let line1 = String(args.line1 || args.street || '').trim();
+          let city = String(args.city || '').trim();
+          let state = String(args.state || '').trim().toUpperCase();
+          let postal = String(args.postal_code || args.zip || '').trim();
+          let parsedZipCorrected = false;
+          const line2 = String(args.line2 || args.apt || '').trim();
+          const country = String(args.country || 'US').trim().toUpperCase();
+          const stateMap = {
+            'new york': 'NY',
+            'california': 'CA',
+            'texas': 'TX',
+            'florida': 'FL',
+            'new jersey': 'NJ',
+            'pennsylvania': 'PA',
+            'massachusetts': 'MA',
+            'maryland': 'MD',
+            'virginia': 'VA',
+            'washington': 'WA'
+          };
+          const validStateCodes = new Set([
+            'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
+            'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+            'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'
+          ]);
+          const normalizeState = (raw) => {
+            const inRaw = String(raw || '').trim();
+            if (!inRaw) return '';
+            const mapped = stateMap[inRaw.toLowerCase()] || inRaw;
+            return String(mapped).replace(/\./g, '').trim().toUpperCase();
+          };
+          const normalizeNoisyZip = (rawZip) => {
+            const raw = String(rawZip || '').trim();
+            if (!raw) return { value: '', corrected: false };
+            const replaced = raw
+              .replace(/[!|Il]/g, '1')
+              .replace(/[Oo]/g, '0')
+              .replace(/[^0-9-]/g, '');
+            return { value: replaced, corrected: replaced !== raw };
+          };
+          const parseAddressString = (rawInput) => {
+            const raw = String(rawInput || '').trim();
+            if (!raw) return null;
+            const sanitized = raw
+              .replace(/\s+/g, ' ')
+              .replace(/\s*,\s*/g, ', ')
+              .replace(/\s+[–—-]\s+/g, ', ')
+              .replace(/[|]/g, ', ')
+              .replace(/[.]+$/g, '')
+              .trim();
+            const trimUnit = sanitized.replace(/\b(?:apt|apartment|unit|suite|ste)\b[\s#\-.:]*[A-Za-z0-9-]*\s*$/i, '').trim();
+            const zipMatch = trimUnit.match(/(?:^|[\s,])#?([0-9!IlOo]{5}(?:-[0-9!IlOo]{4})?)\s*$/);
+            const normZip = normalizeNoisyZip(zipMatch ? zipMatch[1] : '');
+            const preZip = zipMatch ? trimUnit.slice(0, zipMatch.index).replace(/[, ]+$/, '') : trimUnit;
+            if (!preZip) return null;
+            const stateNameAlt = Object.keys(stateMap)
+              .sort((a, b) => b.length - a.length)
+              .map((k) => k.replace(/\s+/g, '\\s+'))
+              .join('|');
+            const stateMatch = preZip.match(new RegExp(`(?:,\\s*|\\s+)(${stateNameAlt}|[A-Za-z]{2})$`, 'i'));
+            if (!stateMatch) return null;
+            const rightState = normalizeState(stateMatch[1]);
+            const beforeState = preZip.slice(0, stateMatch.index).replace(/[, ]+$/, '').trim();
+            if (!beforeState || !validStateCodes.has(rightState)) return null;
+
+            let cityOut = '';
+            let line1Out = '';
+            const commaParts = beforeState.split(',').map((p) => p.trim()).filter(Boolean);
+            if (commaParts.length >= 2) {
+              cityOut = commaParts[commaParts.length - 1];
+              line1Out = commaParts.slice(0, -1).join(', ');
+            } else {
+              // Avoid guessing city from street suffixes (e.g., "Road" => city).
+              return null;
+            }
+            if (!/^\d/.test(line1Out)) return null;
+            return {
+              line1: line1Out,
+              city: cityOut,
+              state: rightState,
+              postal: normZip.value,
+              zip_corrected: normZip.corrected
+            };
+          };
+
+          if (!line1 && args.address_string) {
+            const raw = String(args.address_string || '').trim();
+            const parsed = parseAddressString(raw);
+            if (parsed) {
+              line1 = parsed.line1;
+              city = parsed.city;
+              state = parsed.state;
+              postal = parsed.postal;
+              parsedZipCorrected = !!parsed.zip_corrected;
+            } else {
+              KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_address', raw);
+              return {
+                success: false,
+                error: 'address_parse_failed',
+                message: 'Could not parse that address. Please provide street, city, state, and ZIP.'
+              };
+            }
+          }
+          state = normalizeState(state);
+          const normalizedZip = normalizeNoisyZip(postal);
+          postal = normalizedZip.value;
+          const zipCorrected = parsedZipCorrected || normalizedZip.corrected;
+
+          if (!line1 || !city || !state || !postal) {
+            return {
+              success: false,
+              error: 'incomplete_address',
+              message: 'Please provide full address: street, city, state, and ZIP code.',
+              missing_fields: [
+                !line1 && 'street_address',
+                !city && 'city',
+                !state && 'state',
+                !postal && 'postal_code'
+              ].filter(Boolean)
+            };
+          }
+          if (!/^\d{5}(?:-\d{4})?$/.test(postal)) {
+            return {
+              success: false,
+              error: 'invalid_postal_code',
+              message: `"${postal}" is not a valid US ZIP code. Please provide a 5-digit ZIP.`
+            };
+          }
+
+          if (zipCorrected && !confirmCandidate) {
+            const candidate = {
+              line1,
+              line2: line2 || '',
+              city,
+              state,
+              postal_code: postal,
+              country
+            };
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_candidate_json', JSON.stringify(candidate));
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_candidate_pending', '1');
+            return {
+              success: false,
+              error: 'address_needs_confirmation',
+              needs_confirmation: true,
+              candidate_address: candidate,
+              message: `I interpreted your ZIP as ${postal}. Reply "yes" to confirm this address, or send the corrected ZIP.`
+            };
+          }
+
+          const full = [line1, line2, city, `${state} ${postal}`, country].filter(Boolean).join(', ');
+          const now = Date.now();
+          const version = KellyToolExecutor._getCheckoutContextVersion(sessionId);
+
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_address', full);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_line1', line1);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_line2', line2);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_city', city);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_state', state);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_postal_code', postal);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_country', country);
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_complete', '1');
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_candidate_json', '');
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_candidate_pending', '0');
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(now));
+          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_context_version', String(version));
+          if (merchantId) {
+            const fp = KellyToolExecutor._computeCartFingerprint(sessionId, merchantId);
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_cart_fingerprint', fp);
+          }
+
+          return {
+            success: true,
+            needs_confirmation: false,
+            shipping_address: {
+              line1,
+              line2: line2 || undefined,
+              city,
+              state,
+              postal_code: postal,
+              country,
+              full_address: full
+            },
+            message: zipCorrected
+              ? `I interpreted your ZIP as ${postal}. Shipping address saved: ${full}`
+              : `Shipping address saved: ${full}`
+          };
+        }
+
+        case 'send_commerce_verification_code': {
+          const contextVersion = KellyToolExecutor._getCheckoutContextVersion(sessionId);
+          KellyToolExecutor._setSessionMeta(sessionId, 'checkout_context_version', String(contextVersion));
+          const stage = KellyToolExecutor._getCheckoutStage(sessionId);
+          if (stage === CHECKOUT_STAGES.CHECKOUT_PREPARED || stage === CHECKOUT_STAGES.PAYMENT_CONFIRMED) {
+            return {
+              success: false,
+              error: 'checkout_already_in_progress',
+              message:
+                stage === CHECKOUT_STAGES.PAYMENT_CONFIRMED
+                  ? 'Payment is already confirmed for this session.'
+                  : 'Secure checkout is already in progress for this session.'
+            };
+          }
+          const email = KellyToolExecutor._normalizeEmail(args.email);
+          if (!email) {
+            return { success: false, error: 'email_required', message: 'Email is required to send verification code.' };
+          }
+          // Idempotency guard: if this exact email is already verified for the
+          // current checkout context, do not resend/restart verification.
+          if (KellyToolExecutor._isCommerceEmailVerificationValid(sessionId, email)) {
+            return {
+              success: true,
+              already_verified: true,
+              email_sent: false,
+              message: 'Email already verified for this checkout session.'
+            };
+          }
+          const result = await this._post('/api/public/commerce/email/send-code', { email });
+          if (result?.success) {
+            const nonce = `${email}:${Date.now()}`;
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_pending', email);
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_pending_nonce', nonce);
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified', '');
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_nonce', '');
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_at_ms', '0');
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_context_version', '0');
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', '0');
+            KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.CODE_SENT, {
+              email,
+              pending_nonce: nonce
+            });
+          }
+          return result;
+        }
+
+        case 'verify_commerce_code': {
+          const explicitEmail = KellyToolExecutor._normalizeEmail(args.email);
+          const pendingEmail = KellyToolExecutor._normalizeEmail(
+            KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_pending')
+          );
+          const email = explicitEmail || pendingEmail;
+          const code = String(args.code || '').trim();
+          if (!email) return { success: false, error: 'email_required' };
+          if (!code) return { success: false, error: 'code_required' };
+          const result = await this._post('/api/public/commerce/email/verify-code', { email, code });
+          if (result?.success) {
+            const transitionId = randomUUID();
+            KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_id', transitionId);
+            KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_ts', String(Date.now()));
+            KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
+            KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_consumed', '0');
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified', email);
+            KellyToolExecutor._setSessionMeta(
+              sessionId,
+              'commerce_email_verified_nonce',
+              KellyToolExecutor._getSessionMeta(sessionId, 'commerce_email_pending_nonce') || `${email}:${Date.now()}`
+            );
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_at_ms', String(Date.now()));
+            KellyToolExecutor._setSessionMeta(
+              sessionId,
+              'commerce_email_verified_context_version',
+              String(KellyToolExecutor._getCheckoutContextVersion(sessionId))
+            );
+            const merchantForFingerprint = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
+            if (merchantForFingerprint) {
+              const fp = KellyToolExecutor._computeCartFingerprint(sessionId, merchantForFingerprint);
+              KellyToolExecutor._setSessionMeta(sessionId, 'commerce_verified_cart_fingerprint', fp);
+            }
+            KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.CODE_VERIFIED, {
+              email,
+              verified_transition_id: transitionId
+            });
+          } else {
+            KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.FAILED, {
+              reason: String(result?.error || 'verify_code_failed')
+            });
+          }
+          return result;
         }
 
         case 'prepare_commerce_checkout': {
@@ -819,7 +1325,9 @@ class KellyToolExecutor {
             });
           }
           const quoteId = args.quote_id || args.checkout_session_id;
-          const email = args.customer_email || args.email;
+          const email = KellyToolExecutor._normalizeEmail(args.customer_email || args.email);
+          const rawPhone = String(args.customer_phone || args.phone || '').trim();
+          const normalizedPhone = KellyToolExecutor._normalizeE164Phone(rawPhone);
           if (!email) {
             return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
               success: false,
@@ -827,28 +1335,154 @@ class KellyToolExecutor {
               message: 'customer_email is required.'
             });
           }
+          if (rawPhone && !normalizedPhone) {
+            return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+              success: false,
+              error: 'invalid_phone',
+              message: 'Please provide phone in E.164 format (for example +12125550123).'
+            });
+          }
+          if (CHECKOUT_RAIL_GUARDS_ENABLED && STRICT_CHECKOUT_STAGE_GATE) {
+            const stage = KellyToolExecutor._getCheckoutStage(sessionId);
+            if (stage !== CHECKOUT_STAGES.CODE_VERIFIED) {
+              try {
+                console.warn('[checkout-stage] gate_blocked prepare_commerce_checkout', {
+                  session_id: String(sessionId || ''),
+                  stage: String(stage || ''),
+                  required: CHECKOUT_STAGES.CODE_VERIFIED
+                });
+              } catch (_) {}
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                success: false,
+                error: 'verification_required',
+                message: 'Please verify your 6-digit email code before secure checkout.'
+              });
+            }
+            const transitionId = String(KellyToolExecutor._getSessionMeta(sessionId, 'verified_transition_id') || '').trim();
+            const transitionConsumed = String(
+              KellyToolExecutor._getSessionMeta(sessionId, 'verified_transition_consumed') || '0'
+            ).trim();
+            const transitionInflight = String(
+              KellyToolExecutor._getSessionMeta(sessionId, 'verified_transition_inflight') || '0'
+            ).trim();
+            if (!transitionId) {
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                success: false,
+                error: 'verification_required',
+                message: 'Email verification must complete before secure checkout.'
+              });
+            }
+            if (transitionConsumed === '1') {
+              const existingCheckoutId = String(
+                KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage_meta_checkout_id') || ''
+              ).trim();
+              const existingPaymentIntentId = String(
+                KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage_meta_payment_intent_id') || ''
+              ).trim();
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                success: true,
+                message: 'Checkout is already prepared. Complete payment in the secure checkout form.',
+                checkout: {
+                  checkout_id: existingCheckoutId || null,
+                  payment_intent_id: existingPaymentIntentId || null,
+                  message: 'Already prepared'
+                }
+              });
+            }
+            if (transitionInflight === '1') {
+              const hasPreparedCheckout = String(
+                KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage_meta_checkout_id') || ''
+              ).trim();
+              const cartLocked = await db.isCommerceCartLocked(sessionId, merchantId).catch(() => false);
+              if (!hasPreparedCheckout && !cartLocked) {
+                // Self-heal stale in-flight state left behind by an interrupted/failed prepare attempt.
+                KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
+              } else {
+                return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                  success: false,
+                  error: 'checkout_prepare_inflight',
+                  message: 'Secure checkout is preparing. Please try again in a moment.'
+                });
+              }
+            }
+          }
+          if (REQUIRE_COMMERCE_EMAIL_VERIFICATION) {
+            if (!KellyToolExecutor._isCommerceEmailVerificationValid(sessionId, email)) {
+              try {
+                console.warn('[checkout-stage] gate_blocked prepare_commerce_checkout_email_verification', {
+                  session_id: String(sessionId || ''),
+                  email: String(email || '')
+                });
+              } catch (_) {}
+              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+                success: false,
+                error: 'email_not_verified',
+                message: 'Verified email is missing or stale for this checkout. Please request and verify a new 6-digit code.'
+              });
+            }
+          }
+          if (!KellyToolExecutor._isShippingReadyForCurrentContext(sessionId)) {
+            return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+              success: false,
+              error: 'shipping_required',
+              message: 'Please provide your full shipping address (street, city, state, ZIP) for this checkout session.'
+            });
+          }
+          const expectedVerifiedCartFp = String(
+            KellyToolExecutor._getSessionMeta(sessionId, 'commerce_verified_cart_fingerprint') || ''
+          );
+          const expectedShippingCartFp = String(
+            KellyToolExecutor._getSessionMeta(sessionId, 'commerce_shipping_cart_fingerprint') || ''
+          );
+          const currentCartFp = KellyToolExecutor._computeCartFingerprint(sessionId, merchantId);
+          if (
+            (expectedVerifiedCartFp && expectedVerifiedCartFp !== currentCartFp) ||
+            (expectedShippingCartFp && expectedShippingCartFp !== currentCartFp)
+          ) {
+            return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+              success: false,
+              error: 'cart_changed',
+              message: 'Your cart changed after verification. Please verify and confirm shipping again before checkout.'
+            });
+          }
+          // Mark prepare as in-flight only after all hard preconditions pass.
+          // Then ensure any return path clears it unless a successful transition
+          // explicitly consumes the verification transition.
+          let inflightMarked = false;
+          const guardedReturn = (payload, opts = {}) => {
+            const consumeTransition = !!opts.consumeTransition;
+            if (CHECKOUT_RAIL_GUARDS_ENABLED && STRICT_CHECKOUT_STAGE_GATE && inflightMarked) {
+              KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
+              if (consumeTransition) KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_consumed', '1');
+            }
+            return payload;
+          };
+          if (CHECKOUT_RAIL_GUARDS_ENABLED && STRICT_CHECKOUT_STAGE_GATE) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '1');
+            inflightMarked = true;
+          }
           const useCartPath = !quoteId || args.use_cart === true || args.cart_checkout === true;
           if (useCartPath) {
             if (await db.isCommerceCartLocked(sessionId, merchantId)) {
-              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+              return guardedReturn(KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
                 success: false,
                 error: 'checkout_already_in_progress',
                 message: 'Checkout is already in progress for this session.'
-              });
+              }));
             }
             const cart = db.getCommerceCart(sessionId, merchantId);
             if (!cart || !Array.isArray(cart.items) || cart.items.length === 0) {
-              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
+              return guardedReturn(KellyToolExecutor._normalizePrepareCommerceCheckoutForChat({
                 success: false,
                 error: 'cart_empty',
                 message: 'Your cart is empty. Add items first.'
-              });
+              }));
             }
             const checkoutResult = await PaymentOrchestrator.createCheckout({
               merchant_id: merchantId,
               customer: {
                 name: args.customer_name || args.name || String(email).split('@')[0] || 'Customer',
-                phone: args.customer_phone || args.phone || '',
+                phone: normalizedPhone || rawPhone || '',
                 email: String(email).trim()
               },
               items: cart.items.map((it) => ({
@@ -863,17 +1497,22 @@ class KellyToolExecutor {
               metadata: { kelly_session_id: sessionId || undefined, cart_session_id: sessionId }
             });
             if (!checkoutResult || checkoutResult.success === false) {
-              return KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(
+              return guardedReturn(KellyToolExecutor._normalizePrepareCommerceCheckoutForChat(
                 checkoutResult && typeof checkoutResult === 'object'
                   ? checkoutResult
                   : { success: false, error: 'checkout_failed', message: 'Checkout could not be created.' }
-              );
+              ));
             }
             try {
               if (checkoutResult.checkout_id) {
                 db.setCommerceCartCheckoutLock(sessionId, merchantId, checkoutResult.checkout_id);
               }
             } catch (_) {}
+            KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.CHECKOUT_PREPARED, {
+              checkout_id: checkoutResult.checkout_id || '',
+              payment_intent_id: checkoutResult.payment?.payment_intent_id || checkoutResult.payment_intent_id || '',
+              merchant_id: merchantId
+            });
             const merged = {
               success: true,
               checkout: {
@@ -896,14 +1535,14 @@ class KellyToolExecutor {
                 JSON.stringify(norm.commerce_checkout || {})
               );
             } catch (_) {}
-            return norm;
+            return guardedReturn(norm, { consumeTransition: true });
           }
           const raw = await this._post('/api/public/checkout/start', {
             quote_id: quoteId,
             checkout_session_id: quoteId,
             provider_id: merchantId,
             email: String(email).trim(),
-            phone: args.customer_phone || args.phone || undefined,
+            phone: normalizedPhone || rawPhone || undefined,
             name: args.customer_name || args.name || undefined,
             shipping_address: args.shipping_address || undefined,
             kelly_session_id: sessionId || undefined,
@@ -914,10 +1553,36 @@ class KellyToolExecutor {
             KellyToolExecutor._setSessionMeta(
               sessionId,
               'last_commerce_checkout_chat',
-              JSON.stringify(normHttp.commerce_checkout || {})
+              JSON.stringify(normHttp?.commerce_checkout || {})
             );
           } catch (_) {}
-          return normHttp;
+          if (!normHttp?.success) {
+            return guardedReturn(normHttp);
+          } else {
+            KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.CHECKOUT_PREPARED, {
+              checkout_id: normHttp?.commerce_checkout?.checkout_id || normHttp?.checkout?.checkout_id || '',
+              payment_intent_id:
+                normHttp?.commerce_checkout?.payment_action?.payment_intent_id ||
+                normHttp?.checkout?.payment_intent_id ||
+                '',
+              merchant_id: merchantId
+            });
+            return guardedReturn(normHttp, { consumeTransition: true });
+          }
+        }
+
+        case 'get_checkout_payment_status': {
+          const paymentIntentId =
+            String(args.payment_intent_id || '').trim() ||
+            String(KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage_meta_payment_intent_id') || '').trim();
+          const result = await CheckoutPaymentStatusService.getCheckoutPaymentStatus({
+            payment_intent_id: paymentIntentId
+          });
+          if (result?.success) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'payment_status_last_checked_at', String(Date.now()));
+            KellyToolExecutor._setSessionMeta(sessionId, 'payment_status_source', String(result.source || 'tool'));
+          }
+          return result;
         }
 
         default:
@@ -925,6 +1590,11 @@ class KellyToolExecutor {
           return { success: false, error: `Unknown tool: ${toolName}` };
       }
     } catch (err) {
+      if (toolName === 'prepare_commerce_checkout') {
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'verified_transition_inflight', '0');
+        } catch (_) {}
+      }
       console.error(`[KellyToolExecutor] ${toolName} error:`, err.message);
       return { success: false, error: err.message };
     }
