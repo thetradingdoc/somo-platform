@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.*
+*.db
+backups
+coverage
+cypress
+e2e
+__tests__
+test-results
+*.md
+!README.md
