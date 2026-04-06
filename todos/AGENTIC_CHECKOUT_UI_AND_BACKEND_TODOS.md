@@ -6,7 +6,7 @@
 > that prevent commerce payment links from being completable at all — fix these before any
 > other work matters. The remaining items are re-verified against the live code.
 
-> **Frontend / Skin & Care UI only:** See **[`AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md`](./AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md)** (tokens, logo, chat-first layout, landing parity, patient app).
+> **Frontend / Skin & Care UI only (archived, all done):** [`archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md`](./archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
 
 ---
 

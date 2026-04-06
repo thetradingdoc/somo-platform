@@ -2,7 +2,8 @@
 
 **Last Updated**: March 2026
 
-> **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.
+> **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.  
+> **Overlapping topics (Kelly vs voice vs checkout):** start with **[CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
 
 ### For new developers
 
@@ -25,7 +26,7 @@
 
 - **Total .md files:** 142 (down from 167; Phases 1–5 consolidation applied)
 - **Consolidation plan:** [DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
-- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; use [triage todos](../todos/TRIAGE_CONSOLIDATED_PHASED_TODOS.md) and [GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
+- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and [archived](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md); active gap work: [GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
 
 ---
 
@@ -90,8 +91,8 @@
 #### Patient booking, triage & agentic commerce
 - **[Richer Triage & Records](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** — Schema, records Q&A
 - **[Public agentic checkout](./architecture/PUBLIC_AGENTIC_CHECKOUT.md)** — Landing → quote → pay, Kelly tools, APIs
-- **[Triage phased todos](../todos/TRIAGE_CONSOLIDATED_PHASED_TODOS.md)** — Consolidated triage backlog
-- **[Agentic checkout backlog / status](../todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md)** — Checkout UI/backend items (partially implemented; read the status note at top)
+- **[Triage phased todos (archived, all complete)](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md)** — Historical phased roadmap
+- **[Agentic checkout backlog / status](../todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md)** — Backend audit + open items (read status at top). Frontend UI spec (complete): [archive](../todos/archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
 
 #### Voice Agent, Video Consult & Medical Coding
 - **[Hybrid Architecture Overview](./architecture/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries

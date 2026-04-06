@@ -1,28 +1,29 @@
 # Todos
 
-This folder holds task lists, checklists, and todo documents for the DocLittle platform.
+This folder holds **active** task lists and checklists. **Fully completed** lists are in [`archive/`](./archive/README.md).
 
-**Convention:** Put all such documents here (e.g. production readiness, rollout checklists, sprint task lists) so they stay in one place and are easy to find.
+**Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/CANONICAL_DOC_MAP.md`](../docs/CANONICAL_DOC_MAP.md).
 
-## Contents
+## Active
 
 | Document | Purpose |
 |----------|---------|
-| [PRODUCTION_READINESS_TASKS.md](PRODUCTION_READINESS_TASKS.md) | Production readiness checklist, Azure setup, security, telemedicine, payments, monitoring |
-| [TELEMEDICINE_TODOS.md](TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2): appointment completion, JWT, case report, etc. |
-| [TELEMEDICINE_ARCHITECTURE_REVIEW.md](TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: flow, gaps, recommendations for video consult → case report path |
-| [TRIAGE_CONSOLIDATED_PHASED_TODOS.md](TRIAGE_CONSOLIDATED_PHASED_TODOS.md) | Consolidated triage phases / roadmap |
-| [AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout (chat-first + pay), landing handoff, P0 pricing/visit_mode/calendar/payment-status fixes, testing matrix |
-| [Orchestration-todos.md](Orchestration-todos.md) | Hybrid orchestration (LangGraph + Kelly), checkout graph status, canonical tool-event pipeline, review backlog |
-| [Step10-LangChain-LangGraph-LangSmith-todos.md](Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10 pipeline: LangChain guardrails/tools, LangGraph orchestration, LangSmith tracing, provider-reco feasibility & UI notes |
-| [DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm patient Q&A: Reddit-informed eval data, triage-first routing, passage retrieval, grounded answers, Step10/API integration, metrics |
+| [PRODUCTION_READINESS_TASKS.md](PRODUCTION_READINESS_TASKS.md) | Production readiness, Azure, security, telemedicine, payments, monitoring |
+| [TELEMEDICINE_TODOS.md](TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2) |
+| [TELEMEDICINE_ARCHITECTURE_REVIEW.md](TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: video consult → case report |
+| [AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout backend audit; open items mixed with implemented fixes |
+| [Orchestration-todos.md](Orchestration-todos.md) | Hybrid orchestration context + **pending** QA/parity/debt items |
+| [Step10-LangChain-LangGraph-LangSmith-todos.md](Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10: LangChain/LangGraph/LangSmith, provider cards |
+| [DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm patient Q&A pipeline: UI, eval, corpus ops (many items still open) |
 
-## Related in docs/
+## Archived (completed history)
 
-Task/gap content also lives in these docs (linked from here for context):
+See [`archive/README.md`](./archive/README.md) — includes triage phased roadmap (all complete), agentic checkout **frontend** spec (all complete), and orchestration completed checklist extract.
 
-- [PATIENT_ARCHITECTURE.md](../docs/architecture/patients/PATIENT_ARCHITECTURE.md) (older `PATIENT_PORTAL_AND_TELEHEALTH_TODO.md` was removed in doc cleanup)
+## Related in `docs/`
+
+- [PATIENT_ARCHITECTURE.md](../docs/architecture/patients/PATIENT_ARCHITECTURE.md)
 - [VOICE_AGENT_TODO_AND_STATUS.md](../docs/architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)
 - [MASTER_TODO_FULL.md](../docs/development/MASTER_TODO_FULL.md)
 
-Add new todo/task documents to this folder and list them in this README.
+Add new todo documents to this folder and update the **Active** table above.
