@@ -170,8 +170,11 @@ docs/
 ├── azure/                            # Azure-Specific
 │   └── AZURE_AUTOMATION.md
 │
-├── middleware-platform/              # Platform Config
-│   └── RETELL_CONFIG_QUICK_REFERENCE.md
+├── middleware-platform/              # Backend service: Kelly, Skin & Care, checkout runbooks, Retell, security checklists (see README in that folder)
+│   ├── README.md                    # Index of all middleware-specific docs
+│   ├── kelly-phase-prompt-architecture.md
+│   ├── architecture-kelly-payment.md
+│   └── … (runbooks, Retell, Step10, standards — not all listed here)
 │
 └── archive/                          # Archived Files
     └── azure-debug-scripts/          # Old debug scripts

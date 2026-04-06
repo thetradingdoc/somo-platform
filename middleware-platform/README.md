@@ -3,8 +3,7 @@
 **Version**: 3.0.0  
 **Status**: Production Ready
 
-> **Full docs**: [docs/](../docs/README.md) is the source of truth. See [docs/middleware-platform/](../docs/middleware-platform/README.md) for platform-specific docs.
-> **Kelly + Payment runbooks**: see [`middleware-platform/docs/`](./docs/README.md) for implementation standards and operational runbooks.
+> **Documentation:** [docs/](../docs/README.md) is the repo-wide hub. **Middleware-specific** runbooks and Kelly/checkout specs live in **[docs/middleware-platform/](../docs/middleware-platform/README.md)** (not under `middleware-platform/docs/` except a short redirect [README](./docs/README.md)).
 
 ## Overview
 
@@ -50,7 +49,7 @@ The middleware platform is the core backend API for DocLittle, handling all busi
 3. `run_triage_rag` produces specialty + confidence and updates triage state.
 4. Booking sequence: slots -> schedule -> checkout creation -> code verify -> payment process.
 
-See detailed flow in `middleware-platform/docs/architecture-kelly-payment.md`.
+See detailed flow in [`docs/middleware-platform/architecture-kelly-payment.md`](../docs/middleware-platform/architecture-kelly-payment.md).
 
 ## Payment Lifecycle
 

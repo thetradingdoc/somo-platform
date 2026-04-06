@@ -31,7 +31,7 @@ if (isProd) {
     process.env.REQUIRE_TRIAGE_FOR_VOICE === '1' || process.env.REQUIRE_TRIAGE_FOR_VOICE === 'true';
   if (!rtfv) {
     console.warn(
-      '⚠️  PRODUCTION: REQUIRE_TRIAGE_FOR_VOICE is not enabled. Voice /voice/... routes may skip DB triage when session_id/call_id is omitted. Set REQUIRE_TRIAGE_FOR_VOICE=1 (see middleware-platform/docs/VOICE_TRIAGE_PARITY.md).'
+      '⚠️  PRODUCTION: REQUIRE_TRIAGE_FOR_VOICE is not enabled. Voice /voice/... routes may skip DB triage when session_id/call_id is omitted. Set REQUIRE_TRIAGE_FOR_VOICE=1 (see docs/middleware-platform/VOICE_TRIAGE_PARITY.md).'
     );
   }
 }
@@ -543,7 +543,7 @@ function legacyAppointmentsApiDisabled(res) {
       reschedule: 'PUT /api/patient/appointments/:id/reschedule (patient session) or POST /voice/appointments/reschedule'
     },
     documentation: 'docs/architecture/BOOKING_CHECKOUT_ARCHITECTURE_ANALYSIS.md §6.5',
-    runbook: 'middleware-platform/docs/VOICE_TRIAGE_PARITY.md',
+    runbook: 'docs/middleware-platform/VOICE_TRIAGE_PARITY.md',
     hint: 'Set LEGACY_APPOINTMENTS_API_DISABLED=0 only for a short migration window.'
   });
   return true;

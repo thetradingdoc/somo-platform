@@ -390,7 +390,7 @@ All endpoints return errors in this format:
 ## Webhooks
 
 ### Stripe Webhook
-Canonical endpoint: `POST /webhooks/stripe` (legacy `POST /webhook/stripe` is disabled by default; see `middleware-platform/docs/STRIPE_WEBHOOK_PATHS.md`).
+Canonical endpoint: `POST /webhooks/stripe` (legacy `POST /webhook/stripe` is disabled by default; see `docs/middleware-platform/STRIPE_WEBHOOK_PATHS.md`).
 ```http
 POST /webhooks/stripe
 X-Stripe-Signature: signature

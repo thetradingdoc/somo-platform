@@ -5,7 +5,7 @@
  * Extracted from server.js (impl-1) — edit here only to avoid drift.
  *
  * @see docs/architecture/BOOKING_CHECKOUT_ARCHITECTURE_ANALYSIS.md §6
- * @see middleware-platform/docs/VOICE_TRIAGE_PARITY.md
+ * @see docs/middleware-platform/VOICE_TRIAGE_PARITY.md (repo root)
  */
 
 const KellyToolExecutor = require('./kelly-tool-executor');

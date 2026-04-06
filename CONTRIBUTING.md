@@ -18,7 +18,7 @@
 
 ## Architecture overview
 
-- **High-level map:** `middleware-platform/docs/ARCHITECTURE.md` (middleware vs `unified-dashboard`, checkout flow, CI pointers).
+- **High-level map:** [`docs/middleware-platform/ARCHITECTURE.md`](docs/middleware-platform/ARCHITECTURE.md) (middleware vs `unified-dashboard`, checkout flow, CI pointers).
 
 ## Commands to run before opening a PR
 

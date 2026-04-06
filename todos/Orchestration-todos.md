@@ -134,7 +134,7 @@ Why this matters for checkout:
 
 ### Architecture & onboarding
 
-- [x] **`docs/ARCHITECTURE.md`** — repo layout, static hosting, checkout path, Kelly ↔ cart session, links to runbooks (`middleware-platform/docs/ARCHITECTURE.md`).
+- [x] **`docs/ARCHITECTURE.md`** — repo layout, static hosting, checkout path, Kelly ↔ cart session, links to runbooks ([`docs/middleware-platform/ARCHITECTURE.md`](../docs/middleware-platform/ARCHITECTURE.md)).
 - [x] **`CONTRIBUTING.md`** — env basics, `npm test` vs Playwright, `CHECKOUT_E2E_BASE_URL` / `window.API_BASE`, Playwright install note.
 
 ### Patient checkout UI
