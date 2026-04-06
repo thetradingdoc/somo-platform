@@ -32,7 +32,7 @@ Moved to `docs/archive/`:
 
 | Location | Contents |
 |----------|----------|
-| **todos/** | Operational checklists: `PRODUCTION_READINESS_TASKS`, `TELEMEDICINE_TODOS`, `TELEMEDICINE_ARCHITECTURE_REVIEW` |
+| **todos/** | Active operational checklists; **completed** lists under `todos/archive/` (e.g. triage phased roadmap, agentic checkout UI spec) |
 | **docs/development/** | `MASTER_TODO_FULL.md` (platform roadmap) |
 | **docs/architecture/** | Domain-specific TODOs: `VOICE_AGENT_TODO_AND_STATUS`, `TIBA_AND_BILLING_TODO`, `PATIENT_PORTAL_AND_TELEHEALTH_TODO` |
 | **docs/** | Gap/analysis: `GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS`, `PATIENT_BOOKING_AND_TRIAGE_GAPS` |

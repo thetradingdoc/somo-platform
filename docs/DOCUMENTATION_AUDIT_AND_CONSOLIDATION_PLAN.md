@@ -2,6 +2,8 @@
 
 **Last Updated:** March 2026
 
+**See also:** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) — **where to read first** when Kelly, checkout, and voice docs overlap (living index; update when you add a new “source of truth” doc).
+
 **Status:** Phases 1–5 **APPLIED** (March 2026).
 - Phase 1–2: Patient/triage merged; placeholder folders removed.
 - Phase 3: Financial (Tiba + billing) → TIBA_AND_BILLING_TODO.md; Stripe Issuing → STRIPE_ISSUING.md.
@@ -29,7 +31,7 @@
 | **development/** | 10 | TODOs, guides, code reviews |
 | **runbooks/** | 9 | Incident runbooks |
 | **compliance/** | 8 | HIPAA, BAA, PHI, retention |
-| **middleware-platform/** | 7 | Retell, SIP, LangGraph |
+| **middleware-platform/** | 25+ | Kelly, checkout runbooks, Retell, LangGraph, security (see [`middleware-platform/README.md`](./middleware-platform/README.md)) |
 | **integrations/** | 7 | Stedi, Stripe, UHC |
 | **voice-agent/** | 6 | Kelly prompts, README |
 | **setup/** | 6 | Stripe, Google, getting-started |
