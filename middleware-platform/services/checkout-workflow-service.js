@@ -63,6 +63,9 @@ function getCheckoutStage(sessionId) {
 function transitionStage(sessionId, stage, extra = null) {
   if (!sessionId || !stage) return false;
   const prevStage = getCheckoutStage(sessionId);
+  const rawExtra = extra && typeof extra === 'object' ? { ...extra } : {};
+  const forceHardReset = !!rawExtra.force_hard_reset;
+  delete rawExtra.force_hard_reset;
   const noRewindGuard = String(process.env.CHECKOUT_ALLOW_STAGE_REWIND || 'false').toLowerCase() === 'true';
   const protectedStages = new Set([
     CHECKOUT_STAGES.CHECKOUT_PREPARED,
@@ -74,13 +77,13 @@ function transitionStage(sessionId, stage, extra = null) {
     CHECKOUT_STAGES.CODE_SENT,
     CHECKOUT_STAGES.CODE_VERIFIED
   ]);
-  if (!noRewindGuard && protectedStages.has(String(prevStage || '')) && rewindTargets.has(String(stage || ''))) {
+  if (!forceHardReset && !noRewindGuard && protectedStages.has(String(prevStage || '')) && rewindTargets.has(String(stage || ''))) {
     return false;
   }
 
   const guardsEnabled = String(process.env.CHECKOUT_RAIL_GUARDS_ENABLED || 'true').toLowerCase() !== 'false';
   if (guardsEnabled && String(stage) === CHECKOUT_STAGES.CHECKOUT_PREPARED) {
-    const bypass = !!(extra && typeof extra === 'object' && extra.allow_skip_guard);
+    const bypass = !!(rawExtra && typeof rawExtra === 'object' && rawExtra.allow_skip_guard);
     if (!bypass) {
       const currentVersion = getCheckoutContextVersion(sessionId);
       const verifiedVersion = parseInt(String(getSessionMeta(sessionId, 'commerce_email_verified_context_version') || '0'), 10);
@@ -94,7 +97,7 @@ function transitionStage(sessionId, stage, extra = null) {
 
   setSessionMeta(sessionId, 'checkout_stage', String(stage));
   setSessionMeta(sessionId, 'checkout_stage_updated_at_ms', String(Date.now()));
-  const transitionMeta = extra && typeof extra === 'object' ? { ...extra } : {};
+  const transitionMeta = rawExtra && typeof rawExtra === 'object' ? { ...rawExtra } : {};
   if (!Object.prototype.hasOwnProperty.call(transitionMeta, 'source')) transitionMeta.source = 'checkout_workflow_service';
   if (!Object.prototype.hasOwnProperty.call(transitionMeta, 'timestamp_ms')) transitionMeta.timestamp_ms = Date.now();
   if (!Object.prototype.hasOwnProperty.call(transitionMeta, 'actor')) transitionMeta.actor = 'system';

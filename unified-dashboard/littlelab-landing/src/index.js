@@ -1,8 +1,39 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import AssistantExperience from './AssistantExperience';
 import './skin-care-tokens.css';
 import './styles.css';
-import { useRAGSearch } from './useRAGSearch';
+
+/**
+ * Illustrative “pipeline” signals for the face-scan section (Step 10–shaped narrative: perception → differentials → plan).
+ * Shown on the marketing landing only — not a diagnosis; real analysis runs in the patient flow.
+ */
+const SKIN_PIPELINE_DEMO_INSIGHTS = [
+  {
+    id: 'demo-texture-tone',
+    label: 'Texture & tone pattern',
+    confidence: 0.82,
+    summary:
+      'Uneven texture and micro-contrast in the central face—consistent with common photoaging and mild congestion patterns. A single image cannot confirm cause.',
+    nextStep: 'In-app analysis pairs this with your history to suggest SPF, barrier care, and actives.'
+  },
+  {
+    id: 'demo-pigment',
+    label: 'Pigmentation signals',
+    confidence: 0.76,
+    summary:
+      'Focal darker areas may reflect sun exposure or post-inflammatory change. Lighting, angle, and skin type change how this reads on camera.',
+    nextStep: 'Persistent or spreading pigment warrants clinician review to distinguish benign overlap from conditions like melasma.'
+  },
+  {
+    id: 'demo-barrier',
+    label: 'Barrier & redness',
+    confidence: 0.71,
+    summary:
+      'Diffuse redness can mean barrier stress, irritation, or flushing—context (new products, heat, duration) matters more than one frame.',
+    nextStep: 'Burning, rapid spread, or eye involvement: seek urgent in-person care.'
+  }
+];
 
 function emitCheckoutFunnelEvent(name, detail) {
   try {
@@ -12,6 +43,10 @@ function emitCheckoutFunnelEvent(name, detail) {
     window.dispatchEvent(new CustomEvent('checkout-funnel', { detail: { name, ...(detail || {}) } }));
   } catch (_) {}
 }
+
+/** Agent / care line — hero + footer call CTAs */
+const SKIN_CARE_PHONE_TEL = 'tel:+13639990205';
+const SKIN_CARE_PHONE_DISPLAY = '+1 (363) 999-0205';
 
 function Root() {
   const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -237,12 +272,10 @@ function Root() {
     return raw.startsWith('/') ? raw : `/${raw}`;
   };
 
-  const [showDemoModal, setShowDemoModal] = useState(false);
-  const [showPortalModal, setShowPortalModal] = useState(false);
+  const [showAssistant, setShowAssistant] = useState(false);
   const [bottleOffset, setBottleOffset] = useState({ x: 0, y: 0 });
   const [isDraggingBottle, setIsDraggingBottle] = useState(false);
   const [solutionsNav, setSolutionsNav] = useState({ atStart: true, atEnd: false });
-  const [scanQuery, setScanQuery] = useState('collagen levels sun damage dark spots acne routine');
   const [activeInsightId, setActiveInsightId] = useState(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [beforeAfterPct, setBeforeAfterPct] = useState(50);
@@ -268,12 +301,6 @@ function Root() {
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
-  const { query: ragQuery, setQuery: setRagQuery, cards: ragCards, loading: ragLoading, error: ragError, empty: ragEmpty } = useRAGSearch();
-
-  useEffect(() => {
-    setRagQuery(scanQuery);
-  }, [scanQuery, setRagQuery]);
-
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const previous = document.body.style.overflow;
@@ -282,6 +309,15 @@ function Root() {
       document.body.style.overflow = previous;
     };
   }, [showMobileMenu]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const previous = document.body.style.overflow;
+    if (showAssistant) document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [showAssistant]);
 
   const handleBottlePointerDown = (event) => {
     if (window.matchMedia('(max-width: 640px)').matches) return;
@@ -316,14 +352,10 @@ function Root() {
     setIsDraggingBottle(false);
   };
 
-  const handleWatchDemo = (event) => {
-    event.preventDefault();
-    setShowDemoModal(true);
-  };
-
   const handleStartAnalysis = (event) => {
     event.preventDefault();
-    setShowPortalModal(true);
+    emitCheckoutFunnelEvent('landing_open_assistant', { source: 'cta' });
+    setShowAssistant(true);
   };
 
   const updateBeforeAfterFromEvent = (event) => {
@@ -527,40 +559,14 @@ function Root() {
     });
   };
 
-  const defaultInsights = [
-    {
-      id: 'collagen',
-      label: 'Collagen Levels',
-      summary: "Collagen supports structure and elasticity. Lifestyle, sun exposure, and hydration can affect the way skin looks over time."
-    },
-    {
-      id: 'sun',
-      label: 'Sun Damage',
-      summary: "UV exposure can contribute to uneven tone and visible texture. Daily SPF and gentle actives can improve long‑term outcomes."
-    },
-    {
-      id: 'concentration',
-      label: 'Concentration',
-      summary: "Consistency matters. A simple routine applied regularly is often more effective than stacking too many products at once."
-    }
-  ];
+  const insights = SKIN_PIPELINE_DEMO_INSIGHTS;
 
-  const insights = (() => {
-    if (ragLoading) return [];
-    if (ragError || ragEmpty || !ragCards?.length) return defaultInsights;
-    return ragCards.slice(0, 3).map((c, idx) => ({
-      id: c.id || `${c.type}-${idx}`,
-      label: c.label,
-      summary: c.summary,
-      nextStep: c.nextStep
-    }));
-  })();
+  const scanSpotlightProduct =
+    productCards.find((p) => p.id === VITAMIN_C_PRODUCT_ID) || productCards[0] || null;
 
   useEffect(() => {
     if (!activeInsightId && insights.length) setActiveInsightId(insights[0].id);
   }, [activeInsightId, insights]);
-
-  const activeInsight = insights.find((i) => i.id === activeInsightId) || insights[0] || null;
 
   const updateSolutionsNav = () => {
     const el = solutionsViewportRef.current;
@@ -598,6 +604,9 @@ function Root() {
 
   return (
     <main className="page">
+      {showAssistant ? (
+        <AssistantExperience onClose={() => setShowAssistant(false)} />
+      ) : null}
       <a className="skip-link" href="#main-content">Skip to content</a>
       {checkoutBlockedNoMerchant ? (
         <div className="ll-merchant-banner" role="alert">
@@ -655,8 +664,12 @@ function Root() {
           <a className="btn-primary" href="/unified-dashboard/patients/patient-login.html" onClick={handleStartAnalysis}>
             Start Analysis
           </a>
-          <a className="btn-ghost" href="#demo" onClick={handleWatchDemo}>
-            Watch Demo
+          <a
+            className="btn-ghost"
+            href={SKIN_CARE_PHONE_TEL}
+            aria-label={`Call Skin and Care at ${SKIN_CARE_PHONE_DISPLAY}`}
+          >
+            {SKIN_CARE_PHONE_DISPLAY}
           </a>
         </div>
 
@@ -840,19 +853,20 @@ function Root() {
             <span>AI SCAN</span>
           </p>
           <h2 className="scan-results-title">Scan Your Face &amp; Get Result</h2>
-          <p className="scan-results-sub">Live analysis, product guidance, and next steps — in one flow.</p>
+          <p className="scan-results-sub">
+            Live analysis, product guidance, and next steps — in one flow. Example cards below illustrate the kind of
+            signals a full scan surfaces; they are not a diagnosis.
+          </p>
         </div>
 
         <div className="scan-results-grid">
           <aside className="scan-results-left" aria-label="Skin insights">
-            {ragLoading ? (
-              <div className="scan-skeleton-stack" aria-hidden="true">
-                <div className="scan-skel" />
-                <div className="scan-skel" />
-                <div className="scan-skel" />
-              </div>
-            ) : (
-              insights.map((item) => (
+            {insights.map((item) => {
+              const pct =
+                typeof item.confidence === 'number' && Number.isFinite(item.confidence)
+                  ? Math.round(Math.max(0, Math.min(1, item.confidence)) * 100)
+                  : null;
+              return (
                 <button
                   key={item.id}
                   type="button"
@@ -862,28 +876,43 @@ function Root() {
                   <div className="scan-insight-pill">
                     <span className="scan-insight-dot" aria-hidden="true" />
                     <span className="scan-insight-label">{item.label}</span>
+                    {pct != null ? (
+                      <span className="scan-insight-confidence" aria-label={`Model confidence ${pct} percent`}>
+                        {pct}%
+                      </span>
+                    ) : null}
                   </div>
                   <p className="scan-insight-text">{item.summary}</p>
+                  {item.nextStep ? <p className="scan-insight-next">{item.nextStep}</p> : null}
                 </button>
-              ))
-            )}
+              );
+            })}
 
             <div className="scan-card scan-assistant-card" aria-label="Assistant recommendation">
               <div className="scan-card-badge" aria-hidden="true">AI</div>
               <p className="scan-card-title">Thank you for the photo!</p>
               <p className="scan-card-subtitle">
-                While I analyze your skin, here’s a product that pairs well with your routine right now.
+                While we analyze your skin in the patient flow, here is a serum that often complements brightening and
+                daily protection goals.
               </p>
               <div className="scan-assistant-product">
-                <img src="/images/products/routine-bottle.png" alt="Vitamin C serum recommendation" />
+                <img
+                  src={scanSpotlightProduct?.image || '/images/products/routine-bottle.png'}
+                  alt={scanSpotlightProduct?.displayName || 'Recommended serum'}
+                />
                 <div>
-                  <p className="scan-assistant-name">Vitamin C Serum</p>
+                  <p className="scan-assistant-name">
+                    {scanSpotlightProduct?.displayName || 'Vitamin C Serum'}
+                  </p>
                   <p className="scan-assistant-note">
-                    Brightens uneven tone and supports a more even-looking glow.
+                    {scanSpotlightProduct?.shortDescription ||
+                      'Brightens uneven tone and supports a more even-looking glow.'}
                   </p>
                 </div>
               </div>
-              {ragError ? <div className="scan-query-note">{ragError}</div> : null}
+              <p className="scan-assistant-disclaimer">
+                Commerce suggestions are separate from medical advice; your clinician may recommend different actives.
+              </p>
             </div>
           </aside>
 
@@ -1207,8 +1236,12 @@ function Root() {
                     >
                       Start Analysis
                     </a>
-                    <a className="btn-ghost" href="#products">
-                      Browse products
+                    <a
+                      className="btn-ghost"
+                      href={SKIN_CARE_PHONE_TEL}
+                      aria-label={`Call Skin and Care at ${SKIN_CARE_PHONE_DISPLAY}`}
+                    >
+                      {SKIN_CARE_PHONE_DISPLAY}
                     </a>
                   </div>
                 </div>
@@ -1234,38 +1267,6 @@ function Root() {
         </div>
       </footer>
 
-      {showDemoModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Demo video">
-          <div className="modal-panel">
-            <button className="modal-close" onClick={() => setShowDemoModal(false)} aria-label="Close demo">
-              ×
-            </button>
-            <h3>Skin &amp; Care Demo</h3>
-            <video className="modal-video" poster="/images/hero/form-10-hero.png" controls autoPlay playsInline>
-              <source src="/videos/skin-care-demo.mp4" type="video/mp4" />
-            </video>
-            <p className="modal-note">
-              Place your production video at <code>/public/videos/skin-care-demo.mp4</code> to replace this placeholder.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {showPortalModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Choose portal">
-          <div className="modal-panel">
-            <button className="modal-close" onClick={() => setShowPortalModal(false)} aria-label="Close portal selector">
-              ×
-            </button>
-            <h3>Continue to analysis</h3>
-            <p className="modal-note">Choose where you want to continue.</p>
-            <div className="portal-actions">
-              <a className="btn-primary" href="/unified-dashboard/patients/patient-login.html">Patient Portal</a>
-              <a className="btn-ghost" href="/unified-dashboard/login.html">Provider Portal</a>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

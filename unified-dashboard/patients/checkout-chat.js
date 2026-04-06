@@ -2530,6 +2530,105 @@
         syncStarterPrompts();
       }
 
+      function appendStructuredUiFromPayload(payload) {
+        if (!payload) return;
+        if (Array.isArray(payload.provider_cards) && payload.provider_cards.length) {
+          appendProviderCardsBlock(payload.provider_cards);
+        }
+        if (Array.isArray(payload.literature_snippets) && payload.literature_snippets.length) {
+          appendLiteratureBlock(payload.literature_snippets);
+        }
+      }
+
+      function appendProviderCardsBlock(cards) {
+        const log = document.getElementById('chatLog');
+        if (!log || !cards.length) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'cc-msg cc-msg-assistant cc-provider-cards';
+        const title = document.createElement('div');
+        title.className = 'cc-provider-cards-title';
+        title.textContent = 'Clinic directory';
+        wrap.appendChild(title);
+        const grid = document.createElement('div');
+        grid.className = 'cc-provider-card-grid';
+        cards.forEach(function (c) {
+          const card = document.createElement('div');
+          card.className = 'cc-provider-card';
+          const name = document.createElement('div');
+          name.className = 'cc-provider-card-name';
+          name.textContent = String(c.display_name || 'Clinician');
+          card.appendChild(name);
+          const spec = document.createElement('div');
+          spec.className = 'cc-provider-card-spec';
+          spec.textContent = String(c.specialty || '');
+          card.appendChild(spec);
+          const actions = document.createElement('div');
+          actions.className = 'cc-provider-card-actions';
+          if (c.booking_url) {
+            const a = document.createElement('a');
+            a.className = 'cc-btn cc-btn-secondary';
+            a.href = String(c.booking_url);
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = 'Book';
+            actions.appendChild(a);
+          }
+          if (c.phone_trust === 'verified_directory' && c.phone) {
+            const tel = document.createElement('a');
+            tel.className = 'cc-btn cc-btn-secondary';
+            tel.href = 'tel:' + String(c.phone).replace(/\s/g, '');
+            tel.textContent = 'Call';
+            actions.appendChild(tel);
+          } else {
+            const hint = document.createElement('span');
+            hint.className = 'cc-provider-card-hint';
+            hint.textContent = 'Contact the clinic for phone support.';
+            actions.appendChild(hint);
+          }
+          card.appendChild(actions);
+          grid.appendChild(card);
+        });
+        wrap.appendChild(grid);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function appendLiteratureBlock(rows) {
+        const log = document.getElementById('chatLog');
+        if (!log || !rows.length) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'cc-msg cc-msg-assistant cc-literature-snips';
+        const title = document.createElement('div');
+        title.className = 'cc-literature-title';
+        title.textContent = 'Related citations (PubMed)';
+        wrap.appendChild(title);
+        const ul = document.createElement('ul');
+        ul.className = 'cc-literature-list';
+        rows.slice(0, 8).forEach(function (r) {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = r.url || ('https://pubmed.ncbi.nlm.nih.gov/' + encodeURIComponent(String(r.pmid || '')) + '/');
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.textContent = String(r.title || r.pmid || 'Article');
+          li.appendChild(a);
+          if (r.journal) {
+            const meta = document.createElement('span');
+            meta.className = 'cc-literature-meta';
+            meta.textContent = ' — ' + String(r.journal) + (r.year ? ' (' + r.year + ')' : '');
+            li.appendChild(meta);
+          }
+          ul.appendChild(li);
+        });
+        wrap.appendChild(ul);
+        const disc = document.createElement('p');
+        disc.className = 'cc-literature-disclaimer';
+        disc.textContent = 'For information only — not medical advice.';
+        wrap.appendChild(disc);
+        log.appendChild(wrap);
+        log.scrollTop = log.scrollHeight;
+      }
+
       function renderResumeBanner(resumedAtMs) {
         const log = document.getElementById('chatLog');
         if (!log) return;
@@ -3282,6 +3381,7 @@
           setComposerStatus('', '');
           if (donePayload) {
             applyStageContract(donePayload);
+            appendStructuredUiFromPayload(donePayload);
           }
           if (donePayload && donePayload.quote_id) {
             quoteId = String(donePayload.quote_id);
@@ -3345,6 +3445,7 @@
               maybeShowTurnNudgeStrip();
               setComposerStatus('', '');
               applyStageContract(data);
+              appendStructuredUiFromPayload(data);
               if (data.quote_id) {
                 quoteId = String(data.quote_id);
                 emitFunnelEvent('quote_shown', { product_id: currentProductId, quote_id: quoteId });

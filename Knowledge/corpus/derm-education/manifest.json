@@ -1,0 +1,18 @@
+{
+  "corpus_id": "derm-patient-education",
+  "version": "1.0.0",
+  "updated": "2026-04-03",
+  "owner": "clinical-content@doclittle (process owner); engineering: middleware-platform RAG client",
+  "description": "Derm-first patient education chunks (guidelines excerpts, approved briefs). Index build is out-of-band in Colab or a dedicated indexer.",
+  "chunking": {
+    "target_tokens": 350,
+    "overlap_tokens": 60,
+    "respect_section_boundaries": true
+  },
+  "sources_policy": {
+    "primary": ["peer-reviewed guidelines", "AAD/ACMS-aligned summaries where licensed"],
+    "internal": ["clinician-reviewed briefs only when tagged reviewed=true"],
+    "excluded": ["user-generated forums", "unsourced social"]
+  },
+  "index_contract": "POST /retrieve_passages — see docs/architecture/derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md"
+}

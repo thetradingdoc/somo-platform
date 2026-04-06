@@ -12,6 +12,9 @@ const path = require('path');
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
 const AGENT_ID = process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a';
+// Retell TTS voice (openai-*, 11labs-*). Same env as RetellService.createAgent — set RETELL_VOICE_ID in .env to unify quality across agents.
+const RETELL_VOICE_ID =
+    (process.env.RETELL_VOICE_ID && String(process.env.RETELL_VOICE_ID).trim()) || 'retell-Cimo';
 
 // Determine API base URL
 // Priority: API_BASE_URL > BASE_URL > Railway URL > localhost
@@ -98,6 +101,11 @@ function loadRetellFunctions() {
 }
 
 async function configureRetellAgent() {
+    if (!RETELL_API_KEY) {
+        console.error('\n❌ RETELL_API_KEY is missing. Add it to middleware-platform/.env');
+        throw new Error('RETELL_API_KEY required');
+    }
+
     console.log('\n🔧 CONFIGURING RETELL AGENT');
     console.log('━'.repeat(60));
     console.log('Agent ID:', AGENT_ID);
@@ -109,16 +117,15 @@ async function configureRetellAgent() {
     try {
         // Get current agent config
         console.log('📥 Fetching current agent...');
-        const getResponse = await axios.get(
-            `https://api.retellai.com/v2/agent/${AGENT_ID}`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${RETELL_API_KEY}`
-                }
+        // Retell API uses /get-agent/{id} and /update-agent/{id} (not /v2/agent/...).
+        const retellApiBase = process.env.RETELL_API_BASE_URL || 'https://api.retellai.com';
+        const getResponse = await axios.get(`${retellApiBase.replace(/\/$/, '')}/get-agent/${AGENT_ID}`, {
+            headers: {
+                Authorization: `Bearer ${RETELL_API_KEY}`
             }
-        );
+        });
 
-        console.log('✅ Current agent:', getResponse.data.agent_name);
+        console.log('✅ Current agent:', getResponse.data?.agent_name || getResponse.data?.agent_id || AGENT_ID);
 
         // Load healthcare prompt and functions
         console.log('\n📚 Loading healthcare prompt and functions...');
@@ -159,17 +166,18 @@ Start by asking for the patient's full name, then greet them personally.
 Keep responses short and natural for voice conversation.`;
         }
 
+        // Retell API: custom LLM is response_engine.type "custom-llm" + llm_websocket_url inside it (not top-level).
         const updateData = {
-            llm_websocket_url: `${WEBSOCKET_URL}/webhook/retell/llm`,
             agent_name: 'Kelly - DocLittle Medical Voice Assistant',
-            voice_id: 'openai-Alloy',
+            voice_id: RETELL_VOICE_ID,
             language: 'en-US',
             response_engine: {
-                // Use custom LLM mode so Retell connects to our WebSocket
-                type: 'custom_llm'
+                type: 'custom-llm',
+                llm_websocket_url: `${WEBSOCKET_URL}/webhook/retell/llm`
             },
             enable_backchannel: true,
-            ambient_sound: 'office',
+            // Valid values include call-center, coffee-shop, etc.; "office" is not in the current API enum.
+            ambient_sound: null,
             general_prompt: generalPrompt,
             // Only include built-in Retell functions in general_tools
             // Custom functions (collect_insurance, schedule_appointment, etc.) are described in the prompt
@@ -184,11 +192,11 @@ Keep responses short and natural for voice conversation.`;
         };
 
         const updateResponse = await axios.patch(
-            `https://api.retellai.com/v2/agent/${AGENT_ID}`,
+            `${retellApiBase.replace(/\/$/, '')}/update-agent/${AGENT_ID}`,
             updateData,
             {
                 headers: {
-                    'Authorization': `Bearer ${RETELL_API_KEY}`,
+                    Authorization: `Bearer ${RETELL_API_KEY}`,
                     'Content-Type': 'application/json'
                 }
             }
@@ -198,10 +206,13 @@ Keep responses short and natural for voice conversation.`;
         console.log('📋 Configuration:');
         console.log('   Agent ID:', AGENT_ID);
         console.log('   Phone:', '+15856202445');
-        console.log('   LLM Webhook:', updateData.llm_websocket_url);
-        console.log('   Voice:', updateData.voice_id);
+        console.log(
+            '   LLM Webhook:',
+            updateData.response_engine?.llm_websocket_url || '(missing — check response_engine)'
+        );
+        console.log('   Voice (RETELL_VOICE_ID):', updateData.voice_id);
 
-        console.log('\n━'.repeat(60));
+        console.log('\n' + '━'.repeat(60));
         console.log('✅ CONFIGURATION COMPLETE!');
         console.log('━'.repeat(60) + '\n');
 

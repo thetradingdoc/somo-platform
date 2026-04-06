@@ -1,0 +1,30 @@
+[
+  {
+    "question": "YesStyle sent me someone else’s order and still hasn’t resolved it after a month. what would you do?",
+    "ground_truth": "I appreciate you reaching out, but this question falls outside my scope as a dermatologist. This is a **consumer/retail dispute issue**, not a medical or dermatological concern.\n\nFor this situation, I'd recommend consulting:\n- **Your bank or credit card company** regarding a chargeback\n- **Consumer protection resources**\n- **YesStyle's escalation channels**\n\nIf you have any **skin, hair, or nail concerns** I can help with, please don't hesitate to ask! 😊",
+    "raw_community_answer": "Do a chargeback. I’ll never order from yesstyle again due to a similar issue that went on for months which yesstyle refused to resolve. Mine was immediately approved and that was that. ",
+    "source": "reddit_gold",
+    "subreddit": "AsianBeauty",
+    "post_id": "1rocm9k",
+    "verified_roles": [],
+    "skin_concerns": [],
+    "ingredients": [],
+    "age_gender": {
+      "age": null,
+      "gender": null,
+      "age_range": null
+    },
+    "has_side_effects": false,
+    "duration_data": [
+      {
+        "raw_phrase": "for 2 years",
+        "quantity": 2,
+        "unit": "year",
+        "approx_days": 730
+      }
+    ],
+    "contexts": [],
+    "rag_answer": "",
+    "drop_reason": "non_derm_noise_substring"
+  }
+]

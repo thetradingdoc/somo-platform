@@ -44,9 +44,15 @@ const { normalizeToE164 } = require('../utils/phone-e164');
   );
 })();
 const { detectRedFlags } = require('./triage-service');
+/** Phase 5: optional Kelly tool `run_derm_patient_qa` when DERM_EDUCATION_PIPELINE_ENABLED=true */
+const DERM_EDUCATION_PIPELINE_ENABLED =
+  String(process.env.DERM_EDUCATION_PIPELINE_ENABLED || 'false').toLowerCase() === 'true';
 const KellyToolExecutor = require('./kelly-tool-executor');
 const { redactObject } = require('./redaction-service');
 const TriageRAGService = require('./triage-rag-service');
+const KellyOrchestratorPhase = require('./kelly-orchestrator-phase');
+const KellyPromptBuilder = require('./kelly-prompt-builder');
+const { formatRoutineIntakeSummaryFromTriageRow } = KellyPromptBuilder;
 
 // ─────────────────────────────────────────────────────────────
 // Groq client (lazy init so missing key doesn't crash on import)
@@ -122,9 +128,13 @@ function _kellyDebugVerbose() {
  * Keep this intentionally short; it is used only for fallback retries.
  */
 function _buildCompactSystemPrompt(context) {
-  const { channel, preferredLanguage } = context || {};
+  const { channel, preferredLanguage, orchestration } = context || {};
   const isVoice = channel === 'voice';
-  return `You are Kelly (DocLittle).
+  const orchHint =
+    KellyOrchestratorPhase.orchestratorEnabled() && orchestration
+      ? ` Phase: ${orchestration.phase}.`
+      : '';
+  return `You are Kelly (DocLittle).${orchHint}
 
 GOAL: triage OPQRST and route to the right specialist, then book (cash-only; no insurance step).
 
@@ -331,6 +341,9 @@ function _sanitizeToolMessageForPatient(text) {
   // Normalize common orchestration patterns to human language.
   if (/triage is not complete|triage is incomplete|until triage/i.test(s)) {
     return 'I just need one bit more to finish triage, then I can check times.';
+  }
+  if (/triage_reopen|new or changed symptoms|new symptoms were flagged/i.test(s)) {
+    return 'Let me ask a few quick questions about what you are feeling now, then I can continue with booking.';
   }
   if (/rag confidence is low|low confidence/i.test(s)) {
     return 'I just need one more detail to route you safely.';
@@ -607,10 +620,10 @@ function _isNoSymptomsReply(text) {
 
 function _isRoutineLockedForSession(sessionId, history = []) {
   try {
-    const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms') : null;
-    if (String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true') return true;
+    if (KellyToolExecutor._routineNoSymptomsEffective?.(sessionId)) return true;
   } catch (_) {}
   try {
+    if (KellyToolExecutor._triageRowHasConcernOrOnsetStored?.(sessionId)) return false;
     const corpus = (Array.isArray(history) ? history : [])
       .filter((m) => m?.role === 'user')
       .map((m) => String(m?.content || '').toLowerCase())
@@ -699,8 +712,8 @@ const KELLY_TOOL_RESULT_MAX_CHARS_VOICE = parseInt(process.env.KELLY_TOOL_RESULT
 const KELLY_TOOL_RESULT_MAX_CHARS_CHAT = parseInt(process.env.KELLY_TOOL_RESULT_MAX_CHARS_CHAT || '1200', 10);
 
 // Max tool call iterations per turn (prevents infinite loops)
-// Default lowered to reduce Groq token-rate-limit pressure during multi-step booking.
-const MAX_TOOL_ITERATIONS = parseInt(process.env.KELLY_MAX_TOOL_ITERATIONS || '8', 10);
+// Default 6 to reduce Groq TPM / 429 pressure (each iteration can add LLM + tools). Override: KELLY_MAX_TOOL_ITERATIONS.
+const MAX_TOOL_ITERATIONS = parseInt(process.env.KELLY_MAX_TOOL_ITERATIONS || '6', 10);
 
 // Token budget: lower defaults reduce Groq TPM errors while still allowing tool calling.
 const KELLY_VOICE_MAX_TOKENS = parseInt(process.env.KELLY_VOICE_MAX_TOKENS || '200', 10);
@@ -708,15 +721,22 @@ const KELLY_CHAT_MAX_TOKENS = parseInt(process.env.KELLY_CHAT_MAX_TOKENS || '300
 
 // ─────────────────────────────────────────────────────────────
 // Kelly system prompt (the full medical-assistant persona)
+// Rebuilt each turn on purpose: context.kellyScriptHint and date strings change; caching would be unsafe.
+// When KELLY_PHASE_PROMPTS=1, ROUTINE_INTAKE / ROUTINE_FOLLOWUP use kelly-prompt-builder; other phases still use this.
 // ─────────────────────────────────────────────────────────────
-function buildSystemPrompt(context) {
-  const { channel, clinicId, patientName, preferredLanguage, kellyScriptHint } = context;
+function _buildSystemPromptLegacy(context) {
+  const { channel, clinicId, patientName, preferredLanguage, kellyScriptHint, orchestration } = context;
   const isVoice = channel === 'voice';
   const todayIso = new Date().toISOString().slice(0, 10);
   const currentYear = new Date().getUTCFullYear();
 
-  return `You are Kelly, a warm and empathetic medical voice assistant for DocLittle.
+  const orchestrationBlock =
+    KellyOrchestratorPhase.orchestratorEnabled() && orchestration
+      ? `\n${KellyOrchestratorPhase.buildOrchestrationPromptSection(orchestration)}\n`
+      : '';
 
+  return `You are Kelly, a warm and empathetic medical voice assistant for DocLittle.
+${orchestrationBlock}
 ## Your Role
 You help patients:
 - Check insurance coverage and benefits
@@ -757,15 +777,15 @@ Treat any of these as symptom/medical-concern triggers (not “routine booking�
 You MUST follow these states for every conversation:
 
 ### State A: Pre-triage
-- Allowed tools: get_triage_session, store_triage_opqrst, store_triage_rich_intake, request_document_upload, query_patient_records (records Q&A only), run_triage_rag.
+- Allowed tools: get_triage_session, store_triage_opqrst, store_triage_rich_intake, request_document_upload, query_patient_records (records Q&A only), run_triage_rag, search_medical_literature (evidence only), find_clinic_specialists (verified directory; phone rules in tool result).
 - Forbidden tools: get_available_slots, schedule_appointment, create_appointment_checkout, verify_checkout_code.
 
 ### State B: Triage-in-progress
-- Allowed tools: store_triage_opqrst, store_triage_rich_intake, get_triage_session, run_triage_rag, request_document_upload.
+- Allowed tools: store_triage_opqrst, store_triage_rich_intake, get_triage_session, run_triage_rag, request_document_upload, search_medical_literature, find_clinic_specialists.
 - Forbidden tools: get_available_slots, schedule_appointment, create_appointment_checkout, verify_checkout_code.
 
 ### State C: Triage-complete
-- Allowed tools: get_available_slots → schedule_appointment → create_appointment_checkout → verify_checkout_code.
+- Allowed tools: get_available_slots → schedule_appointment → create_appointment_checkout → verify_checkout_code; also search_medical_literature, find_clinic_specialists when helpful.
 - Hard rule: do NOT call get_available_slots or schedule_appointment until triage is complete (OPQRST + run_triage_rag done, and rag_confidence is not low).
 
 ### Safety override
@@ -984,6 +1004,10 @@ ${patientEmail ? `- Patient email on file (use for prepare_commerce_checkout if 
 - When they are ready to pay, call prepare_commerce_checkout with customer_email and use_cart true. Shipping is already persisted by save_shipping_address.
 - You may answer general questions about skincare routine or ingredients from general knowledge; for price or checkout, use tools.
 - Keep replies concise and friendly.
+
+## Directory and literature (optional)
+- If the shopper asks which clinician or specialty at this clinic fits their concern, call find_clinic_specialists with a clear specialty string. Do not read phone numbers in chat unless the tool marks phone_trust as verified_directory; otherwise suggest booking or contacting the clinic through official channels.
+- For general evidence or "what does research say" questions (not product price), you may call search_medical_literature; cite titles/PMIDs only, not medical advice.
 
 ## HARD RULES
 - NEVER call prepare_commerce_checkout before verify_commerce_code has returned { success: true }.
@@ -1350,7 +1374,37 @@ const KELLY_TOOLS = [
           gad2_q2: { type: 'string', description: 'GAD-2 Q2 answer (unable to stop worrying)' },
           safety_screen_q1: { type: 'string', description: 'Columbia: wished you were dead?' },
           safety_screen_q2: { type: 'string', description: 'Columbia: thoughts of killing yourself?' },
-          substance_use: { type: 'string' }
+          substance_use: { type: 'string' },
+          skin_type: { type: 'string', description: 'Skin type (oily/dry/combination/normal/unsure/etc. per clinic spec).' },
+          skin_concerns_json: {
+            oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }],
+            description: 'Skin concerns as string array or JSON array string.'
+          },
+          pregnancy_status: {
+            type: 'string',
+            description: 'Safety: not_pregnant_not_bf / pregnant / breastfeeding / trying / prefer_not_say / unknown.'
+          },
+          prior_dermatologist_json: {
+            type: 'object',
+            description: 'Whether they saw a dermatologist for this issue.',
+            properties: {
+              seen: { type: 'boolean', description: 'true/false once answered' },
+              note: { type: 'string', description: 'Optional short detail' }
+            }
+          },
+          functional_impact: {
+            type: 'integer',
+            description: '1-5: how much the concern affects daily life (5 = severe impact).'
+          },
+          ingredient_reactions: { type: 'string', description: 'Ingredients or products that caused reactions.' },
+          what_has_worked: { type: 'string', description: 'What has helped before.' },
+          hormonal_context: { type: 'string', description: 'Life-stage hormonal context (no LMP).' },
+          lifestyle_notes: { type: 'string', description: 'Sleep, stress, diet, exercise, hydration notes.' },
+          environment_notes: { type: 'string', description: 'Climate, sun, water, pollution, etc.' },
+          triggers_json: {
+            oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }],
+            description: 'Flare triggers as string array or JSON array string.'
+          }
         }
       }
     }
@@ -1396,8 +1450,67 @@ const KELLY_TOOLS = [
           smoking_status: { type: 'string', description: 'Smoking status' },
           substance_use: { type: 'string', description: 'Other substance use' },
           occupation: { type: 'string', description: 'Occupation (incl. exposures if relevant)' },
-          critical_unknowns: { type: 'array', items: { type: 'string' }, description: 'Missing critical history items from triage' }
+          critical_unknowns: { type: 'array', items: { type: 'string' }, description: 'Missing critical history items from triage' },
+          skin_type: { type: 'string' },
+          skin_concerns_json: {
+            oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }]
+          },
+          pregnancy_status: { type: 'string' },
+          prior_dermatologist_json: {
+            type: 'object',
+            properties: {
+              seen: { type: 'boolean' },
+              note: { type: 'string' }
+            }
+          },
+          functional_impact: { type: 'integer' },
+          ingredient_reactions: { type: 'string' },
+          what_has_worked: { type: 'string' },
+          hormonal_context: { type: 'string' },
+          lifestyle_notes: { type: 'string' },
+          environment_notes: { type: 'string' },
+          triggers_json: {
+            oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }]
+          }
         }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_medical_literature',
+      description:
+        'Search PubMed for evidence summaries (titles + links). Use for guideline-style questions; cite PMIDs/URLs. Do not use this for finding doctor phone numbers.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Clinical question or keywords for PubMed' },
+          max_results: { type: 'integer', description: '1–10, default 5' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'find_clinic_specialists',
+      description:
+        'List in-network specialists for this clinic from the verified directory (not web search). Returns provider_cards with phone_trust; only show phone numbers when phone_trust is verified_directory — otherwise offer booking / contact clinic.',
+      parameters: {
+        type: 'object',
+        properties: {
+          specialty: { type: 'string', description: 'e.g. Cardiology, Dermatology, Primary Care' },
+          language: { type: 'string', description: 'ISO code, default en' },
+          state: { type: 'string', description: 'US state code for license filter, optional' },
+          lane: { type: 'string', enum: ['sync', 'async'], description: 'sync = live, async = review' },
+          urgency: { type: 'string', enum: ['routine', 'urgent', 'emergent'] },
+          patient_tier: { type: 'integer', description: '1–4, default 2' },
+          date: { type: 'string', description: 'YYYY-MM-DD for async quota' },
+          limit: { type: 'integer', description: 'Max cards 1–10, default 3' }
+        },
+        required: ['specialty']
       }
     }
   },
@@ -1470,7 +1583,42 @@ const KELLY_TOOLS = [
         }
       }
     }
-  }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'return_to_triage',
+      description:
+        'Call when the patient reports NEW or changed symptoms during booking/checkout or when the conversation must return to clinical triage before scheduling. Re-opens triage tools; do not call scheduling slots until run_triage_rag completes again.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string', description: 'Short reason (e.g. "new chest pain during slot selection")' }
+        }
+      }
+    }
+  },
+  ...(DERM_EDUCATION_PIPELINE_ENABLED
+    ? [
+        {
+          type: 'function',
+          function: {
+            name: 'run_derm_patient_qa',
+            description:
+              'Dermatology/skin education Q&A (information only, not a diagnosis). Use for general skin questions, routine product questions, or benign skin topics when the patient is not describing a new acute emergency. Do NOT use for chest pain, stroke symptoms, or other systemic emergencies — use OPQRST + run_triage_rag for new concerning symptoms. Returns answer_text and citation metadata.',
+            parameters: {
+              type: 'object',
+              properties: {
+                message: { type: 'string', description: 'Patient question in their words' },
+                image_caption: { type: 'string', description: 'Optional short description if they shared a skin photo' },
+                image_present: { type: 'boolean', description: 'True if a photo was provided' }
+              },
+              required: ['message']
+            }
+          }
+        }
+      ]
+    : [])
 ];
 
 const COMMERCE_CHECKOUT_TOOLS = KELLY_TOOLS.filter(
@@ -1485,12 +1633,82 @@ const COMMERCE_CHECKOUT_TOOLS = KELLY_TOOLS.filter(
     'send_commerce_verification_code',
     'verify_commerce_code',
     'prepare_commerce_checkout',
-    'get_checkout_payment_status'
+    'get_checkout_payment_status',
+    'find_clinic_specialists',
+    'search_medical_literature'
   ].includes(t?.function?.name)
 );
 
-function _checkoutReply(reply, toolsUsed, language, checkout_stage, policy_flags, allowed_next_actions, commerce_checkout, quote_id, redirect_to, next_chips, chips_display, llm_usage) {
+function _mergeUiSnapIntoReturn(uiSnap, obj) {
+  const o = { ...obj };
+  if (uiSnap?.provider_cards?.length) o.provider_cards = uiSnap.provider_cards;
+  if (uiSnap?.literature_snippets?.length) o.literature_snippets = uiSnap.literature_snippets;
+  return o;
+}
+
+function _sessionMetaBool(sessionId, key) {
+  try {
+    const v = String(KellyToolExecutor._getSessionMeta(sessionId, key) || '').toLowerCase();
+    return v === '1' || v === 'true';
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Phase 4b: structured fields for landing/UI when Skin & Care assessment is active or complete.
+ * @param {string} sessionId
+ * @param {{ phase?: string }|null} orchestration
+ */
+function _skincareAssessmentClientPayload(sessionId, orchestration) {
+  const routine = _sessionMetaBool(sessionId, 'routine_intake_active');
+  const intakeDone = _sessionMetaBool(sessionId, 'intake_complete');
+  const skinPost = _sessionMetaBool(sessionId, 'skincare_post_intake');
+  if (!routine && !intakeDone) return null;
+  let gaps = [];
+  let hardMissing = [];
+  try {
+    gaps = JSON.parse(KellyToolExecutor._getSessionMeta(sessionId, 'skincare_intake_gaps_json') || '[]');
+  } catch (_) {}
+  try {
+    hardMissing = JSON.parse(
+      KellyToolExecutor._getSessionMeta(sessionId, 'skincare_intake_hard_missing_json') || '[]'
+    );
+  } catch (_) {}
+  const complete = !!(intakeDone && skinPost);
   return {
+    intake_complete: intakeDone,
+    skincare_assessment_complete: complete,
+    report_ready: complete,
+    next_ui_step: complete ? 'skincare_report' : 'skincare_intake',
+    orchestrator_phase: orchestration?.phase ?? null,
+    skincare_intake_gaps: Array.isArray(gaps) ? gaps : [],
+    skincare_intake_hard_missing: Array.isArray(hardMissing) ? hardMissing : []
+  };
+}
+
+function _appendSkincareAssessmentToReturn(sessionId, orchestration, obj) {
+  const p = _skincareAssessmentClientPayload(sessionId, orchestration);
+  if (p) Object.assign(obj, p);
+  return obj;
+}
+
+function _checkoutReply(
+  reply,
+  toolsUsed,
+  language,
+  checkout_stage,
+  policy_flags,
+  allowed_next_actions,
+  commerce_checkout,
+  quote_id,
+  redirect_to,
+  next_chips,
+  chips_display,
+  llm_usage,
+  ui = {}
+) {
+  const base = {
     reply,
     endCall: false,
     toolsUsed: toolsUsed || [],
@@ -1505,6 +1723,9 @@ function _checkoutReply(reply, toolsUsed, language, checkout_stage, policy_flags
     chips_display: chips_display || null,
     llm_usage: llm_usage || null
   };
+  if (ui?.provider_cards?.length) base.provider_cards = ui.provider_cards;
+  if (ui?.literature_snippets?.length) base.literature_snippets = ui.literature_snippets;
+  return base;
 }
 
 function _stageToPolicyFlags(stage) {
@@ -1580,8 +1801,8 @@ Antworten Sie durchgehend auf Deutsch.`,
    * }>}
    */
   static async processTurn(params) {
+    let message = String(params.message || '');
     const {
-      message,
       sessionId,
       channel = 'chat',
       clinicId = null,
@@ -1590,6 +1811,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       patientName = null,
       patientEmail = null,
       portalSessionId = null,
+      /** When set (e.g. public landing), overrides persisted session language for this turn. */
+      preferredLanguage: preferredLanguageParam = null,
       commerceCheckout = null,
       checkoutPolicy = null,
       onStreamDelta = null,
@@ -1639,6 +1862,16 @@ Antworten Sie durchgehend auf Deutsch.`,
         onStreamDelta,
         onToolStatus
       });
+    }
+
+    const _dedup = KellyOrchestratorPhase.dedupeConsecutiveUserFragments(message);
+    if (_dedup.collapsed) {
+      _kellyDebugTurn('message_deduped', {
+        sessionId,
+        beforeLength: _dedup.beforeLength,
+        afterLength: _dedup.afterLength
+      });
+      message = _dedup.text;
     }
 
     // Load a short history snapshot before fast-intent routing so routine sessions
@@ -1763,7 +1996,11 @@ Antworten Sie durchgehend auf Deutsch.`,
       /routine.*no symptoms|no.*symptoms.*routine|skip.*triage|no active symptoms|routine.*general visit|routine wellness/i.test(lastAssistantText);
     const askedSymptomsConfirmation =
       /current symptoms or concerns today|any current symptoms|симптом|sintoma|symptome|dalili/i.test(lastAssistantText);
-    if (askedSymptomsConfirmation && (_isNoSymptomsReply(message) || llmAlreadyAcceptedNoSymptoms)) {
+    if (
+      askedSymptomsConfirmation &&
+      (_isNoSymptomsReply(message) || llmAlreadyAcceptedNoSymptoms) &&
+      !KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId)
+    ) {
       try {
         if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
       } catch (_) {}
@@ -1819,6 +2056,13 @@ Antworten Sie durchgehend auf Deutsch.`,
     // gap18 + M-S1.E: never stay stuck on persisted English after "can we speak Russian?" etc.
     const priorStored = db.getKellySessionLanguage ? db.getKellySessionLanguage(sessionId) : null;
     let preferredLanguage = priorStored;
+    // Public landing / explicit locale: keep English when client asks (avoids stale fr/es from old sessions)
+    if (preferredLanguageParam === 'en') {
+      preferredLanguage = 'en';
+      try {
+        if (db.upsertKellySessionLanguage) db.upsertKellySessionLanguage(sessionId, 'en');
+      } catch (_) {}
+    }
 
     let languageExplicit = false;
     try {
@@ -1907,19 +2151,25 @@ Antworten Sie durchgehend auf Deutsch.`,
     const routineLockedByHistory = Array.isArray(history) && history.some((m) => m?.role === 'user' && _hasNoSymptomsRoutineSignal(m?.content));
     const routineLockedByMeta = (() => {
       try {
-        const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms') : null;
-        return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+        return !!KellyToolExecutor._routineNoSymptomsEffective?.(sessionId);
       } catch (_) {
         return false;
       }
     })();
-    let routineLocked = routineLockedByHistory || routineLockedByMeta;
+    const routineLockedByHistoryEffective =
+      routineLockedByHistory && !KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId);
+    let routineLocked = routineLockedByHistoryEffective || routineLockedByMeta;
     const msgLcForRoutine = String(message || '').toLowerCase();
     const hasSymptomNow = SYMPTOM_KEYWORDS.some((k) => msgLcForRoutine.includes(k)) && !_hasNoSymptomsRoutineSignal(msgLcForRoutine);
 
     // Recovery: if LLM already told the patient this is a routine visit with no symptoms
     // but the flag wasn't set (e.g. due to a typo), set it now before proceeding
-    if (!routineLocked && llmAlreadyAcceptedNoSymptoms && !hasSymptomNow) {
+    if (
+      !routineLocked &&
+      llmAlreadyAcceptedNoSymptoms &&
+      !hasSymptomNow &&
+      !KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId)
+    ) {
       try {
         if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '1');
         if (db.upsertTriageSession) {
@@ -2162,7 +2412,67 @@ Antworten Sie durchgehend auf Deutsch.`,
 
     // ── 3. Build context ──────────────────────────────────────
     const kellyScriptHint = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_script_hint') || null;
-    const context = { channel, clinicId, patientId, patientName, callerPhone, preferredLanguage, sessionId, message, kellyScriptHint };
+    const intentForOrchestrator = _classifyIntent(message);
+    const orchestration = KellyOrchestratorPhase.resolveOrchestrationPhase({
+      sessionId,
+      message,
+      intentBucket: intentForOrchestrator,
+      db,
+      KellyToolExecutor,
+      getLatestRag: (sid) => TriageRAGService.getLatestForSession(sid),
+      routineLocked
+    });
+    if (KellyOrchestratorPhase.orchestratorEnabled()) {
+      _kellyDebugTurn('orchestrator_phase', {
+        sessionId,
+        phase: orchestration.phase,
+        intentBucket: orchestration.intentBucket,
+        stickyApplied: orchestration.stickyApplied,
+        escapeTriggered: orchestration.escapeTriggered
+      });
+    }
+    let routineIntakeSummaryMarkdown = '';
+    try {
+      if (
+        (orchestration.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+          orchestration.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP) &&
+        db.getTriageSession
+      ) {
+        let softGaps = [];
+        let hardMissing = [];
+        try {
+          softGaps = JSON.parse(
+            KellyToolExecutor._getSessionMeta(sessionId, 'skincare_intake_gaps_json') || '[]'
+          );
+        } catch (_) {}
+        try {
+          hardMissing = JSON.parse(
+            KellyToolExecutor._getSessionMeta(sessionId, 'skincare_intake_hard_missing_json') || '[]'
+          );
+        } catch (_) {}
+        routineIntakeSummaryMarkdown = formatRoutineIntakeSummaryFromTriageRow(
+          db.getTriageSession(sessionId),
+          {
+            softGaps: Array.isArray(softGaps) ? softGaps : [],
+            hardMissing: Array.isArray(hardMissing) ? hardMissing : []
+          }
+        );
+      }
+    } catch (_) {}
+
+    const context = {
+      channel,
+      clinicId,
+      patientId,
+      patientName,
+      callerPhone,
+      preferredLanguage,
+      sessionId,
+      message,
+      kellyScriptHint,
+      orchestration,
+      routineIntakeSummaryMarkdown
+    };
 
     // ── 4. Append user message ────────────────────────────────
     this._appendToHistory(sessionId, 'user', message);
@@ -2170,9 +2480,10 @@ Antworten Sie durchgehend auf Deutsch.`,
 
     // ── 5. Call LLM with tool loop ────────────────────────────
     let reply, toolsUsed = [], endCall = false, nextStep, nextChips, chipsDisplay;
+    let loopResult = null;
     try {
       const turnTimeoutMs = parseInt(process.env.KELLY_TURN_TIMEOUT_MS || '25000', 10);
-      const loopResult = await Promise.race([
+      loopResult = await Promise.race([
         this._runLLMLoop({
         history,
         context,
@@ -2357,6 +2668,8 @@ Antworten Sie durchgehend auf Deutsch.`,
     } catch (err) {
       console.error('[KellyAgent] LLM loop failed:', err.message);
       const messageLower = err?.message ? String(err.message).toLowerCase() : '';
+      const _errUiReturn = (obj) =>
+        _mergeUiSnapIntoReturn(KellyToolExecutor.consumeUiAttachments(sessionId), obj);
       const provider = resolvePrimaryProvider();
 
       // fix-groq-outer: when primary is anthropic, retry with Groq before falling to orchestrator
@@ -2382,16 +2695,18 @@ Antworten Sie durchgehend auf Deutsch.`,
           chipsDisplay = groqResult.chips_display;
           reply = _sanitizeToolNameLeaks(reply);
           try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
-          return {
-            reply,
-            endCall,
-            toolsUsed,
-            language: preferredLanguage,
-            next_step: nextStep,
-            next_chips: nextChips,
-            chips_display: chipsDisplay,
-            usedFallback: true
-          };
+          return _errUiReturn(
+            _appendSkincareAssessmentToReturn(sessionId, orchestration, {
+              reply,
+              endCall,
+              toolsUsed,
+              language: preferredLanguage,
+              next_step: nextStep,
+              next_chips: nextChips,
+              chips_display: chipsDisplay,
+              usedFallback: true
+            })
+          );
         } catch (groqErr) {
           console.error('[KellyAgent] Groq fallback also failed:', groqErr?.message || groqErr);
           // Fall through to existing error handling (orchestrator, etc.)
@@ -2806,7 +3121,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           }
 
           try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
-          return {
+          return _errUiReturn({
             reply,
             endCall: false,
             toolsUsed: fallbackToolsUsed,
@@ -2814,7 +3129,7 @@ Antworten Sie durchgehend auf Deutsch.`,
             next_chips: nextChips,
             chips_display: chipsDisplay,
             usedFallback: true
-          };
+          });
         }
 
       const isTooLarge = err?.status === 413 || err?.statusCode === 413 ||
@@ -2838,7 +3153,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           reply = this.fallbackReply(channel);
         }
         try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
-        return { reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true };
+        return _errUiReturn({ reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true });
       }
 
       const isToolValidationFailure =
@@ -2851,7 +3166,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         reply = _replyForTriageIncomplete('TRIAGE_REQUIRED', channel, preferredLanguage, sessionRow, message);
         reply = _sanitizeToolNameLeaks(reply);
         try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
-        return { reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true };
+        return _errUiReturn({ reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true });
       }
 
       // Deterministic booking progression when Groq is rate-limited:
@@ -3061,7 +3376,7 @@ Antworten Sie durchgehend auf Deutsch.`,
                       sessionId,
                       toolsUsed: tuCheckout
                     });
-                    return {
+                    return _errUiReturn({
                       reply,
                       endCall: false,
                       toolsUsed: tuCheckout,
@@ -3070,7 +3385,7 @@ Antworten Sie durchgehend auf Deutsch.`,
                       next_chips: [],
                       chips_display: null,
                       usedFallback: true
-                    };
+                    });
                   }
                 }
               }
@@ -3081,7 +3396,7 @@ Antworten Sie durchgehend auf Deutsch.`,
               try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
               const tuSlots = _toolsUsedEnsureRagBeforeSlots(sessionId, ['get_available_slots']);
               _kellyDebugTurn('rate_limit_fallback_slots', { sessionId, toolsUsed: tuSlots });
-              return {
+              return _errUiReturn({
                 reply,
                 endCall: false,
                 toolsUsed: tuSlots,
@@ -3090,7 +3405,7 @@ Antworten Sie durchgehend auf Deutsch.`,
                 next_chips: chips.length ? chips : [],
                 chips_display: chips.length ? 'list' : null,
                 usedFallback: true
-              };
+              });
             }
           }
         } catch (_) {
@@ -3108,7 +3423,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           "I'm temporarily busy — please send your message again in about 30 seconds and I'll continue.";
         _kellyDebugTurn('degraded_rate_limit_chat', { sessionId, errSnippet: String(err?.message || '').slice(0, 120) });
         try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
-        return {
+        return _errUiReturn({
           reply,
           endCall: false,
           toolsUsed: [],
@@ -3116,14 +3431,14 @@ Antworten Sie durchgehend auf Deutsch.`,
           usedFallback: true,
           next_step: 'rate_limited_retry_30s',
           next_chips: []
-        };
+        });
       } else if (isRateLimit && channel === 'voice') {
         reply =
           process.env.KELLY_RATE_LIMIT_REPLY_VOICE ||
           "I'm temporarily busy — please hold a moment and I'll be right with you.";
         _kellyDebugTurn('degraded_rate_limit_voice', { sessionId, errSnippet: String(err?.message || '').slice(0, 120) });
         try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
-        return {
+        return _errUiReturn({
           reply,
           endCall: false,
           toolsUsed: [],
@@ -3131,7 +3446,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           usedFallback: true,
           next_step: 'rate_limited_hold_and_retry',
           next_chips: []
-        };
+        });
       } else {
         const PatientOrchestratorService = require('./patient-orchestrator-service');
         try {
@@ -3147,7 +3462,7 @@ Antworten Sie durchgehend auf Deutsch.`,
           // CRITICAL: Pass through state + next_chips so the handler can persist them.
           // Without this, the orchestrator's flow_state (e.g. insurance_started, step) is never saved,
           // and we loop forever asking "Please enter your insurance member ID".
-          return {
+          return _errUiReturn({
             reply: _sanitizeToolNameLeaks(reply),
             endCall: false,
             toolsUsed: [],
@@ -3157,7 +3472,7 @@ Antworten Sie durchgehend auf Deutsch.`,
             next_chips: fb?.next_chips,
             next_step: fb?.next_step,
             redirect_to: fb?.redirect_to
-          };
+          });
         } catch (_) {
           reply = this.fallbackReply(channel);
         }
@@ -3172,7 +3487,7 @@ Antworten Sie durchgehend auf Deutsch.`,
         isTooLarge: !!isTooLarge,
         replySnippet: String(reply || '').slice(0, 80)
       });
-      return { reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true };
+      return _errUiReturn({ reply, endCall: false, toolsUsed: [], language: preferredLanguage, usedFallback: true });
     }
 
     // ── 6. Persist assistant reply ────────────────────────────
@@ -3220,17 +3535,20 @@ Antworten Sie durchgehend auf Deutsch.`,
       } catch (_) {}
     }
 
-    return {
-      reply,
-      endCall,
-      toolsUsed: orderedTools,
-      language: preferredLanguage,
-      next_step: nextStep,
-      next_chips: nextChips,
-      chips_display: chipsDisplay,
-      redirect_to: redirectTo,
-      llm_usage: loopResult?.llm_usage || null
-    };
+    return _mergeUiSnapIntoReturn(
+      KellyToolExecutor.consumeUiAttachments(sessionId),
+      _appendSkincareAssessmentToReturn(sessionId, orchestration, {
+        reply,
+        endCall,
+        toolsUsed: orderedTools,
+        language: preferredLanguage,
+        next_step: nextStep,
+        next_chips: nextChips,
+        chips_display: chipsDisplay,
+        redirect_to: redirectTo,
+        llm_usage: loopResult?.llm_usage || null
+      })
+    );
   }
 
   /**
@@ -3560,6 +3878,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       } catch (_) {}
     }
     const finalStage = KellyToolExecutor._getCheckoutStage(sessionId);
+    const uiAttach = KellyToolExecutor.consumeUiAttachments(sessionId);
     return _checkoutReply(
       reply,
       Array.isArray(loopResult.toolsUsed) ? loopResult.toolsUsed : [],
@@ -3572,7 +3891,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       loopResult.redirect_to || null,
       loopResult.next_chips || [],
       loopResult.chips_display,
-      loopResult.llm_usage || null
+      loopResult.llm_usage || null,
+      uiAttach
     );
   }
 
@@ -3607,6 +3927,18 @@ Antworten Sie durchgehend auf Deutsch.`,
     if (useCommerceTools && allowedTools && allowedTools.length) {
       toolsForRequest = toolsForRequest.filter((t) => allowedTools.includes(t?.function?.name));
     }
+    if (!useCommerceTools && KellyOrchestratorPhase.orchestratorEnabled() && context.orchestration) {
+      const pruned = KellyOrchestratorPhase.filterKellyToolsByPhase(KELLY_TOOLS, context.orchestration.phase, {
+        includeDermEducation: DERM_EDUCATION_PIPELINE_ENABLED
+      });
+      if (pruned.length > 0) toolsForRequest = pruned;
+      if (
+        context.orchestration.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+        context.orchestration.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP
+      ) {
+        toolsForRequest = KellyOrchestratorPhase.mapToolDescriptionsForRoutineIntake(toolsForRequest);
+      }
+    }
     const streamCommerce = typeof onStreamDelta === 'function' && useCommerceTools;
 
     let systemContent = useCommerceTools
@@ -3614,7 +3946,18 @@ Antworten Sie durchgehend auf Deutsch.`,
           ...commerceCtx,
           preferredLanguage: context.preferredLanguage
         })
-      : buildSystemPrompt(context);
+      : KellyPromptBuilder.buildKellySystemPrompt(context, {
+          buildLegacy: _buildSystemPromptLegacy,
+          languageDirective: (pl) => KellyAgentService._languageDirective(pl)
+        });
+    if (
+      !useCommerceTools &&
+      (context.orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+        context.orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP) &&
+      context.routineIntakeSummaryMarkdown
+    ) {
+      systemContent += `\n\n${context.routineIntakeSummaryMarkdown}\n`;
+    }
     if (useCommerceTools && checkoutPolicy?.goal) {
       systemContent += `\n\n## Checkout sub-node goal\n${String(checkoutPolicy.goal)}\nDo not leave this goal in this turn.`;
     }
@@ -3762,7 +4105,20 @@ Antworten Sie durchgehend auf Deutsch.`,
 
       // ── Text reply: done ──────────────────────────────────
       if (finish_reason === 'stop' || !assistantMsg.tool_calls?.length) {
-        const reply = assistantMsg.content || "I'm sorry, I didn't catch that. Could you say that again?";
+        let reply = assistantMsg.content || "I'm sorry, I didn't catch that. Could you say that again?";
+        if (!useCommerceTools) {
+          try {
+            const ClinicalRecommendationPolicy = require('./clinical-recommendation-policy');
+            const v = ClinicalRecommendationPolicy.validateAssistantText(reply);
+            if (!v.ok) {
+              const ph = context.orchestration?.phase;
+              const routineSkincare =
+                ph === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+                ph === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP;
+              reply = ClinicalRecommendationPolicy.fallbackReply(v, { routineSkincare });
+            }
+          } catch (_) {}
+        }
         return {
           reply,
           toolsUsed,
@@ -3795,9 +4151,13 @@ Antworten Sie durchgehend auf Deutsch.`,
                       ? 'Checking cart…'
                       : toolName === 'clear_cart'
                         ? 'Clearing cart…'
-              : toolName === 'prepare_commerce_checkout'
-                ? 'Preparing secure checkout…'
-                : 'Working…';
+                        : toolName === 'prepare_commerce_checkout'
+                          ? 'Preparing secure checkout…'
+                          : toolName === 'find_clinic_specialists'
+                            ? 'Looking up specialists…'
+                            : toolName === 'search_medical_literature'
+                              ? 'Searching medical literature…'
+                              : 'Working…';
           try {
             onToolStatus(toolName, label);
           } catch (_) {}
@@ -4094,14 +4454,7 @@ Antworten Sie durchgehend auf Deutsch.`,
             const toolMsgRaw = typeof toolResult.message === 'string' && toolResult.message.trim()
               ? toolResult.message.trim()
               : '';
-            const routineMode = (() => {
-              try {
-                const v = KellyToolExecutor._getSessionMeta?.(sessionId, 'routine_no_symptoms');
-                return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
-              } catch (_) {
-                return false;
-              }
-            })();
+            const routineMode = !!KellyToolExecutor._routineNoSymptomsEffective?.(sessionId);
             const toolMsg = (!routineMode && toolMsgRaw) ? _sanitizeToolMessageForPatient(toolMsgRaw) : '';
             return {
               reply: _replyForTriageIncomplete(code, channel, context?.preferredLanguage, sessionRow, context?.message) +
@@ -4201,6 +4554,10 @@ Antworten Sie durchgehend auf Deutsch.`,
   /**
    * Fire schedule_appointment server-side when contact is complete.
    * Used by email confirmation and phone-complete intercepts to bypass LLM.
+   *
+   * Lock note: `server_schedule_lock` is session-meta best-effort (SQLite). Concurrent HTTP
+   * requests for the same sessionId can race before either sets the lock; strict mutual
+   * exclusion would need a DB transaction or row-level lock.
    */
   static async _serverSideSchedule({
     sessionId, clinicId, patientId, callerPhone, channel,
@@ -4489,6 +4846,11 @@ Antworten Sie durchgehend auf Deutsch.`,
           language: preferredLanguage || 'en',
           usedFallback: false
         };
+      }
+
+      // E1: do not fast-path "no symptoms" routine booking when intake already stored a concern/onset (e.g. acne).
+      if (KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId)) {
+        return null;
       }
 
       const routineReplyByLang = {

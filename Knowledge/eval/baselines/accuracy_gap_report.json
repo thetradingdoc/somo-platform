@@ -1,0 +1,2923 @@
+{
+  "specialty_mismatches": [
+    {
+      "query": "How do I convince my dad (67M Asian) to get himself checked at the dermatologist? Details in caption.",
+      "variant": "raw",
+      "post_id": "1avehpi",
+      "tier": "gold",
+      "top_score": 0.5408,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5408,
+        0.4871,
+        0.4792,
+        0.4679,
+        0.4666
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How do I convince my dad (67M Asian) to get himself checked at the dermatologist? Details in caption.",
+      "variant": "clinical",
+      "post_id": "1avehpi",
+      "tier": "gold",
+      "top_score": 0.5408,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5408,
+        0.4871,
+        0.4792,
+        0.4679,
+        0.4666
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How do I convince my dad (67M Asian) to get himself checked at the dermatologist? Details in caption.",
+      "variant": "expanded",
+      "post_id": "1avehpi",
+      "tier": "gold",
+      "top_score": 0.5408,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5408,
+        0.4871,
+        0.4792,
+        0.4679,
+        0.4666
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this concerning?",
+      "variant": "raw",
+      "post_id": "1gyfrp6",
+      "tier": "gold",
+      "top_score": 0.4618,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine",
+        "endocrinology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4618,
+        0.4526,
+        0.4521,
+        0.4512,
+        0.4478
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this concerning?",
+      "variant": "clinical",
+      "post_id": "1gyfrp6",
+      "tier": "gold",
+      "top_score": 0.4618,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine",
+        "endocrinology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4618,
+        0.4526,
+        0.4521,
+        0.4512,
+        0.4478
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this concerning?",
+      "variant": "expanded",
+      "post_id": "1gyfrp6",
+      "tier": "gold",
+      "top_score": 0.4618,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine",
+        "endocrinology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4618,
+        0.4526,
+        0.4521,
+        0.4512,
+        0.4478
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Worried about family member",
+      "variant": "raw",
+      "post_id": "192v9mm",
+      "tier": "gold",
+      "top_score": 0.4973,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4973,
+        0.493,
+        0.4774,
+        0.4743,
+        0.4606
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Worried about family member",
+      "variant": "clinical",
+      "post_id": "192v9mm",
+      "tier": "gold",
+      "top_score": 0.4973,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4973,
+        0.493,
+        0.4774,
+        0.4743,
+        0.4606
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Worried about family member",
+      "variant": "expanded",
+      "post_id": "192v9mm",
+      "tier": "gold",
+      "top_score": 0.4973,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4973,
+        0.493,
+        0.4774,
+        0.4743,
+        0.4606
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I am helping my grandfather seek advice on a spot on his back. He will be seeing a dermatologist, but in the meantime I am looking for opinions.",
+      "variant": "raw",
+      "post_id": "1q56u7g",
+      "tier": "gold",
+      "top_score": 0.4969,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4969,
+        0.4894,
+        0.479,
+        0.4717,
+        0.4688
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I am helping my grandfather seek advice on a spot on his back. He will be seeing a dermatologist, but in the meantime I am looking for opinions.",
+      "variant": "clinical",
+      "post_id": "1q56u7g",
+      "tier": "gold",
+      "top_score": 0.4969,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4969,
+        0.4894,
+        0.479,
+        0.4717,
+        0.4688
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I am helping my grandfather seek advice on a spot on his back. He will be seeing a dermatologist, but in the meantime I am looking for opinions.",
+      "variant": "expanded",
+      "post_id": "1q56u7g",
+      "tier": "gold",
+      "top_score": 0.4969,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4969,
+        0.4894,
+        0.479,
+        0.4717,
+        0.4688
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Should i be concerned? This has been going on for quite a while and i wanted some input",
+      "variant": "raw",
+      "post_id": "1rkodum",
+      "tier": "bronze",
+      "top_score": 0.429,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "pediatrics",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.429,
+        0.4148,
+        0.4147,
+        0.4095,
+        0.4056
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Should i be concerned? This has been going on for quite a while and i wanted some input",
+      "variant": "clinical",
+      "post_id": "1rkodum",
+      "tier": "bronze",
+      "top_score": 0.429,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "pediatrics",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.429,
+        0.4148,
+        0.4147,
+        0.4095,
+        0.4056
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Should i be concerned? This has been going on for quite a while and i wanted some input",
+      "variant": "expanded",
+      "post_id": "1rkodum",
+      "tier": "bronze",
+      "top_score": 0.429,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "pediatrics",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.429,
+        0.4148,
+        0.4147,
+        0.4095,
+        0.4056
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I have a mole on my shoulder, and it changed colour",
+      "variant": "raw",
+      "post_id": "1rkmxo7",
+      "tier": "bronze",
+      "top_score": 0.5327,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5327,
+        0.5076,
+        0.4972,
+        0.4957,
+        0.4952
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I have a mole on my shoulder, and it changed colour",
+      "variant": "clinical",
+      "post_id": "1rkmxo7",
+      "tier": "bronze",
+      "top_score": 0.5327,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5327,
+        0.5076,
+        0.4972,
+        0.4957,
+        0.4952
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I have a mole on my shoulder, and it changed colour",
+      "variant": "expanded",
+      "post_id": "1rkmxo7",
+      "tier": "bronze",
+      "top_score": 0.5327,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5327,
+        0.5076,
+        0.4972,
+        0.4957,
+        0.4952
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "(Inside of my ear) - Does this look infected? It feels fine now, but it felt warm for a little while",
+      "variant": "raw",
+      "post_id": "1rkk0ko",
+      "tier": "bronze",
+      "top_score": 0.5161,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "pediatrics",
+        "cardiology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5161,
+        0.4992,
+        0.4893,
+        0.4878,
+        0.4812
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "(Inside of my ear) - Does this look infected? It feels fine now, but it felt warm for a little while",
+      "variant": "clinical",
+      "post_id": "1rkk0ko",
+      "tier": "bronze",
+      "top_score": 0.5161,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "pediatrics",
+        "cardiology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5161,
+        0.4992,
+        0.4893,
+        0.4878,
+        0.4812
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "(Inside of my ear) - Does this look infected? It feels fine now, but it felt warm for a little while",
+      "variant": "expanded",
+      "post_id": "1rkk0ko",
+      "tier": "bronze",
+      "top_score": 0.5161,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "pediatrics",
+        "cardiology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5161,
+        0.4992,
+        0.4893,
+        0.4878,
+        0.4812
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I’m worried I have herpes. Maybe it’s just acne does anyone know",
+      "variant": "raw",
+      "post_id": "1rjx5qw",
+      "tier": "bronze",
+      "top_score": 0.5254,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "infectious_disease"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5254,
+        0.4871,
+        0.4852,
+        0.4848,
+        0.4772
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I’m worried I have herpes. Maybe it’s just acne does anyone know",
+      "variant": "clinical",
+      "post_id": "1rjx5qw",
+      "tier": "bronze",
+      "top_score": 0.5254,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "infectious_disease"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5254,
+        0.4871,
+        0.4852,
+        0.4848,
+        0.4772
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I’m worried I have herpes. Maybe it’s just acne does anyone know",
+      "variant": "expanded",
+      "post_id": "1rjx5qw",
+      "tier": "bronze",
+      "top_score": 0.5254,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "infectious_disease"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5254,
+        0.4871,
+        0.4852,
+        0.4848,
+        0.4772
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this mole concerning? Appeared on lower leg in last year M33",
+      "variant": "raw",
+      "post_id": "1rkhdgi",
+      "tier": "bronze",
+      "top_score": 0.5682,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5682,
+        0.5663,
+        0.5548,
+        0.5499,
+        0.5495
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this mole concerning? Appeared on lower leg in last year M33",
+      "variant": "clinical",
+      "post_id": "1rkhdgi",
+      "tier": "bronze",
+      "top_score": 0.5681,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5681,
+        0.5663,
+        0.5547,
+        0.5497,
+        0.5494
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this mole concerning? Appeared on lower leg in last year M33",
+      "variant": "expanded",
+      "post_id": "1rkhdgi",
+      "tier": "bronze",
+      "top_score": 0.5681,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5681,
+        0.5663,
+        0.5547,
+        0.5497,
+        0.5494
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Small bump on upper eyelid since one month? 5 year old daughter",
+      "variant": "raw",
+      "post_id": "1rka7ak",
+      "tier": "bronze",
+      "top_score": 0.4964,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "pediatrics",
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4964,
+        0.4944,
+        0.4821,
+        0.4727,
+        0.471
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Small bump on upper eyelid since one month? 5 year old daughter",
+      "variant": "clinical",
+      "post_id": "1rka7ak",
+      "tier": "bronze",
+      "top_score": 0.4964,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "pediatrics",
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4964,
+        0.4944,
+        0.4821,
+        0.4727,
+        0.471
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Small bump on upper eyelid since one month? 5 year old daughter",
+      "variant": "expanded",
+      "post_id": "1rka7ak",
+      "tier": "bronze",
+      "top_score": 0.4967,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "pediatrics",
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4967,
+        0.4947,
+        0.4824,
+        0.4729,
+        0.4712
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "What are these tiny skin colored bumps I get every now and then?",
+      "variant": "raw",
+      "post_id": "1rkbpxc",
+      "tier": "bronze",
+      "top_score": 0.5083,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5083,
+        0.4966,
+        0.4698,
+        0.4643,
+        0.4612
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "What are these tiny skin colored bumps I get every now and then?",
+      "variant": "clinical",
+      "post_id": "1rkbpxc",
+      "tier": "bronze",
+      "top_score": 0.5083,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5083,
+        0.4966,
+        0.4698,
+        0.4643,
+        0.4612
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "What are these tiny skin colored bumps I get every now and then?",
+      "variant": "expanded",
+      "post_id": "1rkbpxc",
+      "tier": "bronze",
+      "top_score": 0.5083,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5083,
+        0.4966,
+        0.4698,
+        0.4643,
+        0.4612
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Over the past year, I’ve started developing acne on my chest",
+      "variant": "raw",
+      "post_id": "1rk11y9",
+      "tier": "bronze",
+      "top_score": 0.5118,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5118,
+        0.5066,
+        0.4831,
+        0.468,
+        0.466
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Over the past year, I’ve started developing acne on my chest",
+      "variant": "clinical",
+      "post_id": "1rk11y9",
+      "tier": "bronze",
+      "top_score": 0.5119,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5119,
+        0.5068,
+        0.4832,
+        0.468,
+        0.4662
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Over the past year, I’ve started developing acne on my chest",
+      "variant": "expanded",
+      "post_id": "1rk11y9",
+      "tier": "bronze",
+      "top_score": 0.5119,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5119,
+        0.5068,
+        0.4832,
+        0.468,
+        0.4662
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Long wait for dermatology appointment, but have this weird mold",
+      "variant": "raw",
+      "post_id": "1rk3916",
+      "tier": "bronze",
+      "top_score": 0.5124,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology",
+        "pathology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5124,
+        0.476,
+        0.4647,
+        0.4582,
+        0.4572
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Long wait for dermatology appointment, but have this weird mold",
+      "variant": "clinical",
+      "post_id": "1rk3916",
+      "tier": "bronze",
+      "top_score": 0.5124,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology",
+        "pathology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5124,
+        0.476,
+        0.4647,
+        0.4582,
+        0.4572
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Long wait for dermatology appointment, but have this weird mold",
+      "variant": "expanded",
+      "post_id": "1rk3916",
+      "tier": "bronze",
+      "top_score": 0.5124,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology",
+        "pathology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5124,
+        0.476,
+        0.4647,
+        0.4582,
+        0.4572
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How do I get rid of these dark after burn marks?..",
+      "variant": "raw",
+      "post_id": "1rk354r",
+      "tier": "bronze",
+      "top_score": 0.4866,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4866,
+        0.468,
+        0.4656,
+        0.4648,
+        0.4635
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How do I get rid of these dark after burn marks?..",
+      "variant": "clinical",
+      "post_id": "1rk354r",
+      "tier": "bronze",
+      "top_score": 0.4866,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4866,
+        0.468,
+        0.4656,
+        0.4648,
+        0.4635
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How do I get rid of these dark after burn marks?..",
+      "variant": "expanded",
+      "post_id": "1rk354r",
+      "tier": "bronze",
+      "top_score": 0.4866,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4866,
+        0.468,
+        0.4656,
+        0.4648,
+        0.4635
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How could I make my scars less visible? Lip scars from an abusive relationship",
+      "variant": "raw",
+      "post_id": "1rk1dbx",
+      "tier": "bronze",
+      "top_score": 0.5203,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5203,
+        0.4774,
+        0.4548,
+        0.4515,
+        0.4329
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How could I make my scars less visible? Lip scars from an abusive relationship",
+      "variant": "clinical",
+      "post_id": "1rk1dbx",
+      "tier": "bronze",
+      "top_score": 0.5203,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5203,
+        0.4774,
+        0.4548,
+        0.4515,
+        0.4329
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "How could I make my scars less visible? Lip scars from an abusive relationship",
+      "variant": "expanded",
+      "post_id": "1rk1dbx",
+      "tier": "bronze",
+      "top_score": 0.5203,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5203,
+        0.4774,
+        0.4548,
+        0.4515,
+        0.4329
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this normal? I’ve had this mole all my life and today I notice a darker circle in the middle of it? Please help",
+      "variant": "raw",
+      "post_id": "1rjxvp1",
+      "tier": "bronze",
+      "top_score": 0.5218,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5218,
+        0.505,
+        0.5004,
+        0.4966,
+        0.4952
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this normal? I’ve had this mole all my life and today I notice a darker circle in the middle of it? Please help",
+      "variant": "clinical",
+      "post_id": "1rjxvp1",
+      "tier": "bronze",
+      "top_score": 0.5218,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5218,
+        0.505,
+        0.5004,
+        0.4966,
+        0.4952
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Is this normal? I’ve had this mole all my life and today I notice a darker circle in the middle of it? Please help",
+      "variant": "expanded",
+      "post_id": "1rjxvp1",
+      "tier": "bronze",
+      "top_score": 0.5218,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_MELANOMA"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5218,
+        0.505,
+        0.5004,
+        0.4966,
+        0.4952
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone know what this is? What should I take?",
+      "variant": "raw",
+      "post_id": "1rjtso6",
+      "tier": "bronze",
+      "top_score": 0.4409,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4409,
+        0.4358,
+        0.4333,
+        0.4302,
+        0.4271
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone know what this is? What should I take?",
+      "variant": "clinical",
+      "post_id": "1rjtso6",
+      "tier": "bronze",
+      "top_score": 0.4409,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4409,
+        0.4358,
+        0.4333,
+        0.4302,
+        0.4271
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone know what this is? What should I take?",
+      "variant": "expanded",
+      "post_id": "1rjtso6",
+      "tier": "bronze",
+      "top_score": 0.4409,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4409,
+        0.4358,
+        0.4333,
+        0.4302,
+        0.4271
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone know what these spots on the chest are? What should I take?",
+      "variant": "raw",
+      "post_id": "1rjto87",
+      "tier": "bronze",
+      "top_score": 0.536,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "infectious_disease"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.536,
+        0.527,
+        0.4893,
+        0.4669,
+        0.4661
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone know what these spots on the chest are? What should I take?",
+      "variant": "clinical",
+      "post_id": "1rjto87",
+      "tier": "bronze",
+      "top_score": 0.536,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "infectious_disease"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.536,
+        0.527,
+        0.4893,
+        0.4669,
+        0.4661
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone know what these spots on the chest are? What should I take?",
+      "variant": "expanded",
+      "post_id": "1rjto87",
+      "tier": "bronze",
+      "top_score": 0.536,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "infectious_disease"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.536,
+        0.527,
+        0.4893,
+        0.4669,
+        0.4661
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone have advice on what this could be? Anything helps",
+      "variant": "raw",
+      "post_id": "1rjgcvi",
+      "tier": "bronze",
+      "top_score": 0.5086,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5086,
+        0.4734,
+        0.4161,
+        0.4004,
+        0.3966
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone have advice on what this could be? Anything helps",
+      "variant": "clinical",
+      "post_id": "1rjgcvi",
+      "tier": "bronze",
+      "top_score": 0.5086,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5086,
+        0.4734,
+        0.4161,
+        0.4004,
+        0.3966
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Does anyone have advice on what this could be? Anything helps",
+      "variant": "expanded",
+      "post_id": "1rjgcvi",
+      "tier": "bronze",
+      "top_score": 0.5086,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5086,
+        0.4734,
+        0.4161,
+        0.4004,
+        0.3966
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Looking for options on darkening a scar to match my complexion. I do not want tattooing.",
+      "variant": "raw",
+      "post_id": "1rj6rak",
+      "tier": "bronze",
+      "top_score": 0.5634,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5634,
+        0.5487,
+        0.4967,
+        0.494,
+        0.4921
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Looking for options on darkening a scar to match my complexion. I do not want tattooing.",
+      "variant": "clinical",
+      "post_id": "1rj6rak",
+      "tier": "bronze",
+      "top_score": 0.5634,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5634,
+        0.5487,
+        0.4967,
+        0.494,
+        0.4921
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Looking for options on darkening a scar to match my complexion. I do not want tattooing.",
+      "variant": "expanded",
+      "post_id": "1rj6rak",
+      "tier": "bronze",
+      "top_score": 0.5634,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5634,
+        0.5487,
+        0.4967,
+        0.494,
+        0.4921
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Small bump under toe, sometimes itchy and has been bugging me for a few months.",
+      "variant": "raw",
+      "post_id": "1rjc8vc",
+      "tier": "bronze",
+      "top_score": 0.4831,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "pathology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4831,
+        0.4738,
+        0.4717,
+        0.4675,
+        0.467
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Small bump under toe, sometimes itchy and has been bugging me for a few months.",
+      "variant": "clinical",
+      "post_id": "1rjc8vc",
+      "tier": "bronze",
+      "top_score": 0.4831,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "pathology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4831,
+        0.4738,
+        0.4717,
+        0.4675,
+        0.467
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Small bump under toe, sometimes itchy and has been bugging me for a few months.",
+      "variant": "expanded",
+      "post_id": "1rjc8vc",
+      "tier": "bronze",
+      "top_score": 0.4831,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology",
+        "pathology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4831,
+        0.4738,
+        0.4717,
+        0.4675,
+        0.467
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Can you please guide me what this looks like? Herpes, HPV, Molluscum, Cancer? Please help, im concerned.",
+      "variant": "raw",
+      "post_id": "1rp1bj9",
+      "tier": "bronze",
+      "top_score": 0.6063,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.6063,
+        0.585,
+        0.5723,
+        0.5601,
+        0.5588
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Can you please guide me what this looks like? Herpes, HPV, Molluscum, Cancer? Please help, im concerned.",
+      "variant": "clinical",
+      "post_id": "1rp1bj9",
+      "tier": "bronze",
+      "top_score": 0.6063,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.6063,
+        0.585,
+        0.5723,
+        0.5601,
+        0.5588
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Can you please guide me what this looks like? Herpes, HPV, Molluscum, Cancer? Please help, im concerned.",
+      "variant": "expanded",
+      "post_id": "1rp1bj9",
+      "tier": "bronze",
+      "top_score": 0.6063,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.6063,
+        0.585,
+        0.5723,
+        0.5601,
+        0.5588
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Anyone know what this could be? Appeared overnight after scratching my hand.",
+      "variant": "raw",
+      "post_id": "1ln9ozo",
+      "tier": "bronze",
+      "top_score": 0.4721,
+      "top_source": "",
+      "top_specialty": [
+        "pharmacology",
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4721,
+        0.4569,
+        0.4568,
+        0.4532,
+        0.451
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Anyone know what this could be? Appeared overnight after scratching my hand.",
+      "variant": "clinical",
+      "post_id": "1ln9ozo",
+      "tier": "bronze",
+      "top_score": 0.4721,
+      "top_source": "",
+      "top_specialty": [
+        "pharmacology",
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4721,
+        0.4569,
+        0.4568,
+        0.4532,
+        0.451
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Anyone know what this could be? Appeared overnight after scratching my hand.",
+      "variant": "expanded",
+      "post_id": "1ln9ozo",
+      "tier": "bronze",
+      "top_score": 0.4721,
+      "top_source": "",
+      "top_specialty": [
+        "pharmacology",
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4721,
+        0.4569,
+        0.4568,
+        0.4532,
+        0.451
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Just came back from ER because of this, they told me to see my pcp. What is this?",
+      "variant": "raw",
+      "post_id": "1oye3c7",
+      "tier": "bronze",
+      "top_score": 0.4496,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "emergency_medicine",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4496,
+        0.4482,
+        0.4345,
+        0.4252,
+        0.4218
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Just came back from ER because of this, they told me to see my pcp. What is this?",
+      "variant": "clinical",
+      "post_id": "1oye3c7",
+      "tier": "bronze",
+      "top_score": 0.4496,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "emergency_medicine",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4496,
+        0.4482,
+        0.4345,
+        0.4252,
+        0.4218
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Just came back from ER because of this, they told me to see my pcp. What is this?",
+      "variant": "expanded",
+      "post_id": "1oye3c7",
+      "tier": "bronze",
+      "top_score": 0.4496,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "emergency_medicine",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4496,
+        0.4482,
+        0.4345,
+        0.4252,
+        0.4218
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "This is underneath my sister’s breast. What is this? She is in pain  and I see why!",
+      "variant": "raw",
+      "post_id": "1jdnfsr",
+      "tier": "bronze",
+      "top_score": 0.4896,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4896,
+        0.4509,
+        0.4502,
+        0.4415,
+        0.4348
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "This is underneath my sister’s breast. What is this? She is in pain  and I see why!",
+      "variant": "clinical",
+      "post_id": "1jdnfsr",
+      "tier": "bronze",
+      "top_score": 0.4896,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4896,
+        0.4509,
+        0.4502,
+        0.4415,
+        0.4348
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "This is underneath my sister’s breast. What is this? She is in pain  and I see why!",
+      "variant": "expanded",
+      "post_id": "1jdnfsr",
+      "tier": "bronze",
+      "top_score": 0.4896,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4896,
+        0.4509,
+        0.4502,
+        0.4415,
+        0.4348
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "At a loss. This is my 14 yr old son, and this is some of the worst acne I have seen. We're currently seeing a dermatologist and he says its nothing to worry about. He has him on Bactrim, minicycline, and rifampin, but I havent noticed any improvement. His face is almost as bad. Any advice?",
+      "variant": "raw",
+      "post_id": "k0irgx",
+      "tier": "bronze",
+      "top_score": 0.5752,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5752,
+        0.5512,
+        0.547,
+        0.5435,
+        0.5374
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "At a loss. This is my 14 yr old son, and this is some of the worst acne I have seen. We're currently seeing a dermatologist and he says its nothing to worry about. He has him on Bactrim, minicycline, and rifampin, but I havent noticed any improvement. His face is almost as bad. Any advice?",
+      "variant": "clinical",
+      "post_id": "k0irgx",
+      "tier": "bronze",
+      "top_score": 0.5752,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5752,
+        0.5512,
+        0.547,
+        0.5435,
+        0.5374
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "At a loss. This is my 14 yr old son, and this is some of the worst acne I have seen. We're currently seeing a dermatologist and he says its nothing to worry about. He has him on Bactrim, minicycline, and rifampin, but I havent noticed any improvement. His face is almost as bad. Any advice?",
+      "variant": "expanded",
+      "post_id": "k0irgx",
+      "tier": "bronze",
+      "top_score": 0.5752,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [
+        "C_DERM_ACNE_VULGARIS"
+      ],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5752,
+        0.5512,
+        0.547,
+        0.5435,
+        0.5374
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "What is this on my wife?",
+      "variant": "raw",
+      "post_id": "1d52hzc",
+      "tier": "bronze",
+      "top_score": 0.401,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.401,
+        0.3919,
+        0.3793,
+        0.3736,
+        0.3726
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "What is this on my wife?",
+      "variant": "clinical",
+      "post_id": "1d52hzc",
+      "tier": "bronze",
+      "top_score": 0.401,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.401,
+        0.3919,
+        0.3793,
+        0.3736,
+        0.3726
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "What is this on my wife?",
+      "variant": "expanded",
+      "post_id": "1d52hzc",
+      "tier": "bronze",
+      "top_score": 0.401,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.401,
+        0.3919,
+        0.3793,
+        0.3736,
+        0.3726
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Bump on top of my boyfriends foot. Im worried it could be cancer?!",
+      "variant": "raw",
+      "post_id": "1ppfj0i",
+      "tier": "bronze",
+      "top_score": 0.4607,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "hematology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4607,
+        0.4519,
+        0.4233,
+        0.4226,
+        0.4196
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Bump on top of my boyfriends foot. Im worried it could be cancer?!",
+      "variant": "clinical",
+      "post_id": "1ppfj0i",
+      "tier": "bronze",
+      "top_score": 0.4607,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "hematology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4607,
+        0.4519,
+        0.4233,
+        0.4226,
+        0.4196
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Bump on top of my boyfriends foot. Im worried it could be cancer?!",
+      "variant": "expanded",
+      "post_id": "1ppfj0i",
+      "tier": "bronze",
+      "top_score": 0.4607,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "hematology",
+        "dermatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4607,
+        0.4519,
+        0.4233,
+        0.4226,
+        0.4196
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "an update on my brothers leg.",
+      "variant": "raw",
+      "post_id": "1fg5931",
+      "tier": "bronze",
+      "top_score": 0.4509,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4509,
+        0.4312,
+        0.4267,
+        0.4195,
+        0.4175
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "an update on my brothers leg.",
+      "variant": "clinical",
+      "post_id": "1fg5931",
+      "tier": "bronze",
+      "top_score": 0.4509,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4509,
+        0.4312,
+        0.4267,
+        0.4195,
+        0.4175
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "an update on my brothers leg.",
+      "variant": "expanded",
+      "post_id": "1fg5931",
+      "tier": "bronze",
+      "top_score": 0.4509,
+      "top_source": "",
+      "top_specialty": [
+        "general_medicine"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4509,
+        0.4312,
+        0.4267,
+        0.4195,
+        0.4175
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Am I cooked? Please help me.",
+      "variant": "raw",
+      "post_id": "1j0eemw",
+      "tier": "bronze",
+      "top_score": 0.3822,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.3822,
+        0.3806,
+        0.3719,
+        0.3638,
+        0.3482
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Am I cooked? Please help me.",
+      "variant": "clinical",
+      "post_id": "1j0eemw",
+      "tier": "bronze",
+      "top_score": 0.3822,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.3822,
+        0.3806,
+        0.3719,
+        0.3638,
+        0.3482
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Am I cooked? Please help me.",
+      "variant": "expanded",
+      "post_id": "1j0eemw",
+      "tier": "bronze",
+      "top_score": 0.3822,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.3822,
+        0.3806,
+        0.3719,
+        0.3638,
+        0.3482
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Neglect led to this. What do I do?",
+      "variant": "raw",
+      "post_id": "1cjzpx4",
+      "tier": "bronze",
+      "top_score": 0.5967,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "pediatrics",
+        "obstetrics"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5967,
+        0.4947,
+        0.4799,
+        0.4716,
+        0.4563
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Neglect led to this. What do I do?",
+      "variant": "clinical",
+      "post_id": "1cjzpx4",
+      "tier": "bronze",
+      "top_score": 0.5967,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "pediatrics",
+        "obstetrics"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5967,
+        0.4947,
+        0.4799,
+        0.4716,
+        0.4563
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Neglect led to this. What do I do?",
+      "variant": "expanded",
+      "post_id": "1cjzpx4",
+      "tier": "bronze",
+      "top_score": 0.5967,
+      "top_source": "",
+      "top_specialty": [
+        "hepatology",
+        "pediatrics",
+        "obstetrics"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5967,
+        0.4947,
+        0.4799,
+        0.4716,
+        0.4563
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Have had this in my ear for over a year- what is it?",
+      "variant": "raw",
+      "post_id": "1mwfvqs",
+      "tier": "bronze",
+      "top_score": 0.4884,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "orthopedics",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4884,
+        0.4793,
+        0.4716,
+        0.4631,
+        0.4575
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Have had this in my ear for over a year- what is it?",
+      "variant": "clinical",
+      "post_id": "1mwfvqs",
+      "tier": "bronze",
+      "top_score": 0.4884,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "orthopedics",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4884,
+        0.4793,
+        0.4716,
+        0.4631,
+        0.4575
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Have had this in my ear for over a year- what is it?",
+      "variant": "expanded",
+      "post_id": "1mwfvqs",
+      "tier": "bronze",
+      "top_score": 0.4884,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "orthopedics",
+        "critical_care"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4884,
+        0.4793,
+        0.4716,
+        0.4631,
+        0.4575
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Four Month Old Has Purple Spots ever since she got sick",
+      "variant": "raw",
+      "post_id": "1ouqy08",
+      "tier": "bronze",
+      "top_score": 0.5366,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology",
+        "pediatrics"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5366,
+        0.5091,
+        0.5091,
+        0.4953,
+        0.4855
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Four Month Old Has Purple Spots ever since she got sick",
+      "variant": "clinical",
+      "post_id": "1ouqy08",
+      "tier": "bronze",
+      "top_score": 0.5366,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology",
+        "pediatrics"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5366,
+        0.5091,
+        0.5091,
+        0.4953,
+        0.4855
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "Four Month Old Has Purple Spots ever since she got sick",
+      "variant": "expanded",
+      "post_id": "1ouqy08",
+      "tier": "bronze",
+      "top_score": 0.5366,
+      "top_source": "",
+      "top_specialty": [
+        "infectious_disease",
+        "dermatology",
+        "pediatrics"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5366,
+        0.5091,
+        0.5091,
+        0.4953,
+        0.4855
+      ],
+      "result_class": "HIT"
+    },
+    {
+      "query": "I've had this spot on my br**st for a few months. Today is was bleeding and a bit sore. Any ideas what it could be?",
+      "variant": "raw",
+      "post_id": "1me5znw",
+      "tier": "bronze",
+      "top_score": 0.4581,
+      "top_source": "",
+      "top_specialty": [
+        "oncology",
+        "infectious_disease",
+        "endocrinology"
+      ],
+      "top_text": "",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4581,
+        0.4406,
+        0.44,
+        0.4337,
+        0.4323
+      ],
+      "result_class": "HIT"
+    }
+  ],
+  "llm_irrelevant": [
+    {
+      "query": "Prescription Azaleic and upping my tret changed my skin",
+      "variant": "raw",
+      "post_id": "1s60u4f",
+      "tier": "gold",
+      "top_score": 0.554,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays a product box for Tretinoin Gel, USP 0.05%. No skin condition is directly visible in the image, as it only shows the packaging. Tretinoin, a derivative of vitamin A, is commonly used for treating acne, photoaging, and certain other dermatological conditions. It works by promoting skin cell turnover and is often prescribed for its anti-inflammatory properties.\n\nRelevant skincare",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.554,
+        0.5479,
+        0.4999,
+        0.4659,
+        0.4565
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.554,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Prescription Azaleic and upping my tret changed my skin acne breakout rosacea wrinkle barrier niacinamide azelaic acid skin concern 30s female",
+      "variant": "expanded",
+      "post_id": "1s60u4f",
+      "tier": "gold",
+      "top_score": 0.5335,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays a product box for Tretinoin Gel, USP 0.05%. No skin condition is directly visible in the image, as it only shows the packaging. Tretinoin, a derivative of vitamin A, is commonly used for treating acne, photoaging, and certain other dermatological conditions. It works by promoting skin cell turnover and is often prescribed for its anti-inflammatory properties.\n\nRelevant skincare",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5335,
+        0.5326,
+        0.5074,
+        0.5011,
+        0.5
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5335,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Should I give up on trying to use prescription retinoids? How else can I even my skin tone?",
+      "variant": "raw",
+      "post_id": "1s5fp9i",
+      "tier": "gold",
+      "top_score": 0.5137,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image shows a tube of Tretinoin Gel, which is a topical retinoid commonly used for acne treatment and photoaging. The product label indicates a concentration of 0.025%. Tretinoin is known for its ability to promote cellular turnover, reduce fine lines, improve skin texture, and treat inflammatory acne by preventing the formation of new comedones.\n\n**Relevant Skincare Concerns:**\n1. **Acne Trea",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5137,
+        0.5077,
+        0.4752,
+        0.4266,
+        0.4259
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5137,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Should I give up on trying to use prescription retinoids? How else can I even my skin tone? breakout rosacea aging anti-aging tretinoin retinoid vitamin c adapalene irritation",
+      "variant": "clinical",
+      "post_id": "1s5fp9i",
+      "tier": "gold",
+      "top_score": 0.5697,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image shows a tube of Tretinoin Gel, which is a topical retinoid commonly used for acne treatment and photoaging. The product label indicates a concentration of 0.025%. Tretinoin is known for its ability to promote cellular turnover, reduce fine lines, improve skin texture, and treat inflammatory acne by preventing the formation of new comedones.\n\n**Relevant Skincare Concerns:**\n1. **Acne Trea",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5697,
+        0.5561,
+        0.5251,
+        0.4642,
+        0.4523
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5697,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Should I give up on trying to use prescription retinoids? How else can I even my skin tone? breakout rosacea aging anti-aging tretinoin retinoid vitamin c adapalene irritation impaired skin barrier",
+      "variant": "expanded",
+      "post_id": "1s5fp9i",
+      "tier": "gold",
+      "top_score": 0.5779,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image shows a tube of Tretinoin Gel, which is a topical retinoid commonly used for acne treatment and photoaging. The product label indicates a concentration of 0.025%. Tretinoin is known for its ability to promote cellular turnover, reduce fine lines, improve skin texture, and treat inflammatory acne by preventing the formation of new comedones.\n\n**Relevant Skincare Concerns:**\n1. **Acne Trea",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5779,
+        0.5614,
+        0.5309,
+        0.4718,
+        0.4641
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5779,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Skincare Routine That Finally Cleared My Acne",
+      "variant": "raw",
+      "post_id": "1s2q53a",
+      "tier": "gold",
+      "top_score": 0.4578,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The images depict the left cheek area over three different time points. Visible skin conditions include acne vulgaris, characterized by inflammatory papules and pustules. \n\n**Initial Image (Sep 5, 2025):**\n- Morphology: Multiple papules and pustules.\n- Color: Predominantly erythematous with some areas of hyperpigmentation.\n- Distribution: Cheek region, clustered and sparse.\n\n**Second Image (Dec 15",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4578,
+        0.4448,
+        0.4355,
+        0.4162,
+        0.4152
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4578,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Skincare Routine That Finally Cleared My Acne breakout sensitive redness aha azelaic acid ceramide cica irritation",
+      "variant": "clinical",
+      "post_id": "1s2q53a",
+      "tier": "gold",
+      "top_score": 0.4938,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The images display the facial area, focusing on the cheeks, nose, and chin. The skin exhibits a combination of erythema and scattered papules, typical of mild to moderate acne. \n\n1. **Condition**: Acne Vulgaris\n2. **Body Area**: Face\n3. **Lesion Morphology**: Predominantly papules, with occasional pustules\n4. **Color**: Red (erythematous) base with some areas exhibiting post-inflammatory hyperpigm",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4938,
+        0.4867,
+        0.483,
+        0.4826,
+        0.4727
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4938,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Skincare Routine That Finally Cleared My Acne breakout sensitive redness aha azelaic acid ceramide cica irritation",
+      "variant": "expanded",
+      "post_id": "1s2q53a",
+      "tier": "gold",
+      "top_score": 0.4938,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The images display the facial area, focusing on the cheeks, nose, and chin. The skin exhibits a combination of erythema and scattered papules, typical of mild to moderate acne. \n\n1. **Condition**: Acne Vulgaris\n2. **Body Area**: Face\n3. **Lesion Morphology**: Predominantly papules, with occasional pustules\n4. **Color**: Red (erythematous) base with some areas exhibiting post-inflammatory hyperpigm",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4938,
+        0.4867,
+        0.483,
+        0.4826,
+        0.4727
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4938,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Stubborn hyperpigmentation after irritation won’t fade… looking for successful experiences 👀",
+      "variant": "raw",
+      "post_id": "1rwq1pd",
+      "tier": "gold",
+      "top_score": 0.5131,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The images depict the left cheek area over three different time points. Visible skin conditions include acne vulgaris, characterized by inflammatory papules and pustules. \n\n**Initial Image (Sep 5, 2025):**\n- Morphology: Multiple papules and pustules.\n- Color: Predominantly erythematous with some areas of hyperpigmentation.\n- Distribution: Cheek region, clustered and sparse.\n\n**Second Image (Dec 15",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5131,
+        0.4894,
+        0.4721,
+        0.4504,
+        0.4346
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5131,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Stubborn hyperpigmentation after irritation won’t fade… looking for successful experiences 👀 acne aging cyst retinol retinoid azelaic acid pih allergic_reaction irritation",
+      "variant": "clinical",
+      "post_id": "1rwq1pd",
+      "tier": "gold",
+      "top_score": 0.5619,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The images depict the left cheek area over three different time points. Visible skin conditions include acne vulgaris, characterized by inflammatory papules and pustules. \n\n**Initial Image (Sep 5, 2025):**\n- Morphology: Multiple papules and pustules.\n- Color: Predominantly erythematous with some areas of hyperpigmentation.\n- Distribution: Cheek region, clustered and sparse.\n\n**Second Image (Dec 15",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5619,
+        0.5068,
+        0.5068,
+        0.4861,
+        0.4843
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5619,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Stubborn hyperpigmentation after irritation won’t fade… looking for successful experiences 👀 acne aging cyst retinol retinoid azelaic acid pih allergic_reaction irritation maskne / acne mechanica",
+      "variant": "expanded",
+      "post_id": "1rwq1pd",
+      "tier": "gold",
+      "top_score": 0.5747,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The images depict the left cheek area over three different time points. Visible skin conditions include acne vulgaris, characterized by inflammatory papules and pustules. \n\n**Initial Image (Sep 5, 2025):**\n- Morphology: Multiple papules and pustules.\n- Color: Predominantly erythematous with some areas of hyperpigmentation.\n- Distribution: Cheek region, clustered and sparse.\n\n**Second Image (Dec 15",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.5747,
+        0.5142,
+        0.5038,
+        0.5031,
+        0.4932
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.5747,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "I've gone in for a consult not knowing prices and felt pressured to just go with it. Can we help each other out? tretinoin aha",
+      "variant": "clinical",
+      "post_id": "1rmgkor",
+      "tier": "gold",
+      "top_score": 0.4816,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays a product box for Tretinoin Gel, USP 0.05%. No skin condition is directly visible in the image, as it only shows the packaging. Tretinoin, a derivative of vitamin A, is commonly used for treating acne, photoaging, and certain other dermatological conditions. It works by promoting skin cell turnover and is often prescribed for its anti-inflammatory properties.\n\nRelevant skincare",
+      "top_concept_ids": [],
+      "hits_above_thresh": 3,
+      "all_scores": [
+        0.4816,
+        0.4719,
+        0.4155,
+        0.3745,
+        0.3357
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4816,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "I've gone in for a consult not knowing prices and felt pressured to just go with it. Can we help each other out? tretinoin aha",
+      "variant": "expanded",
+      "post_id": "1rmgkor",
+      "tier": "gold",
+      "top_score": 0.4816,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays a product box for Tretinoin Gel, USP 0.05%. No skin condition is directly visible in the image, as it only shows the packaging. Tretinoin, a derivative of vitamin A, is commonly used for treating acne, photoaging, and certain other dermatological conditions. It works by promoting skin cell turnover and is often prescribed for its anti-inflammatory properties.\n\nRelevant skincare",
+      "top_concept_ids": [],
+      "hits_above_thresh": 3,
+      "all_scores": [
+        0.4816,
+        0.4719,
+        0.4155,
+        0.3745,
+        0.3357
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4816,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "My skin is dry in the winter and gets oily really fast when the temperature is warm enough. What's my skin type? oily barrier retinol niacinamide hyaluronic acid spf sunscreen",
+      "variant": "clinical",
+      "post_id": "1rpv3cm",
+      "tier": "gold",
+      "top_score": 0.4565,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image depicts a skincare product, Aestura Atobarrier365 Cream Moisturizer, which contains ceramides and niacinamide, ingredients known for skin moisture barrier repair. There is no visible human skin or condition presented in this image, so no specific dermatological assessment can be made regarding conditions like erythema, lesions, or distribution patterns on the skin. \n\nThe mentioned ingred",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4565,
+        0.4098,
+        0.4066,
+        0.4005,
+        0.3956
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4565,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "My skin is dry in the winter and gets oily really fast when the temperature is warm enough. What's my skin type? oily barrier retinol niacinamide hyaluronic acid spf sunscreen",
+      "variant": "expanded",
+      "post_id": "1rpv3cm",
+      "tier": "gold",
+      "top_score": 0.4565,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image depicts a skincare product, Aestura Atobarrier365 Cream Moisturizer, which contains ceramides and niacinamide, ingredients known for skin moisture barrier repair. There is no visible human skin or condition presented in this image, so no specific dermatological assessment can be made regarding conditions like erythema, lesions, or distribution patterns on the skin. \n\nThe mentioned ingred",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4565,
+        0.4098,
+        0.4066,
+        0.4005,
+        0.3956
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4565,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "How do you evaluate a good skin/women’s clinic in Korea for AB-related treatments?",
+      "variant": "raw",
+      "post_id": "1s7sgv8",
+      "tier": "gold",
+      "top_score": 0.3968,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image shows various skincare products laid out on a carpeted floor. There are no visible skin images or conditions to describe. The products displayed appear to be for skincare use, presumably including creams, cleansers, or sunscreen, based on typical packaging shapes and sizes. Specific details about the products, such as ingredients or intended use (e.g., moisturizing, anti-acne), cannot be",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.3968,
+        0.3942,
+        0.3799,
+        0.3721,
+        0.3691
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.3968,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "How do you evaluate a good skin/women’s clinic in Korea for AB-related treatments?",
+      "variant": "clinical",
+      "post_id": "1s7sgv8",
+      "tier": "gold",
+      "top_score": 0.3968,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image shows various skincare products laid out on a carpeted floor. There are no visible skin images or conditions to describe. The products displayed appear to be for skincare use, presumably including creams, cleansers, or sunscreen, based on typical packaging shapes and sizes. Specific details about the products, such as ingredients or intended use (e.g., moisturizing, anti-acne), cannot be",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.3968,
+        0.3942,
+        0.3799,
+        0.3721,
+        0.3691
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.3968,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "How do you evaluate a good skin/women’s clinic in Korea for AB-related treatments? milia keratin cysts subepidermal keratin retention",
+      "variant": "expanded",
+      "post_id": "1s7sgv8",
+      "tier": "gold",
+      "top_score": 0.4387,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "The image displays a selection of skincare products, rather than a skin condition, focusing on serums and creams aimed at targeting various dermatological concerns. The affected body area for these products is primarily the facial region, as serums and creams are generally intended for facial application. \n\nVisible products include:\n\n1. **Retinal Serums** - Noted for anti-aging benefits, targeting",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4387,
+        0.4236,
+        0.421,
+        0.4205,
+        0.4187
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4387,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Favorite Liquid Foundations (Non-Cushion)",
+      "variant": "raw",
+      "post_id": "1ryv5ox",
+      "tier": "gold",
+      "top_score": 0.4053,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays several cosmetic products and does not depict any skin condition or affected body area. The products include:\n\n1. **Nooni Appleblacktea Lip Oil**: A lip oil likely intended for hydration and a slight tint. Key ingredients may include nourishing oils or fruit extracts, with a focus on moisture retention for dry lips.\n\n2. **Canmake Tokyo Highlighter**: A powder highlighter likely",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.4053,
+        0.3868,
+        0.352,
+        0.3441,
+        0.3374
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4053,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Favorite Liquid Foundations (Non-Cushion)",
+      "variant": "clinical",
+      "post_id": "1ryv5ox",
+      "tier": "gold",
+      "top_score": 0.4053,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays several cosmetic products and does not depict any skin condition or affected body area. The products include:\n\n1. **Nooni Appleblacktea Lip Oil**: A lip oil likely intended for hydration and a slight tint. Key ingredients may include nourishing oils or fruit extracts, with a focus on moisture retention for dry lips.\n\n2. **Canmake Tokyo Highlighter**: A powder highlighter likely",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.4053,
+        0.3868,
+        0.352,
+        0.3441,
+        0.3374
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4053,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "Favorite Liquid Foundations (Non-Cushion)",
+      "variant": "expanded",
+      "post_id": "1ryv5ox",
+      "tier": "gold",
+      "top_score": 0.4053,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image displays several cosmetic products and does not depict any skin condition or affected body area. The products include:\n\n1. **Nooni Appleblacktea Lip Oil**: A lip oil likely intended for hydration and a slight tint. Key ingredients may include nourishing oils or fruit extracts, with a focus on moisture retention for dry lips.\n\n2. **Canmake Tokyo Highlighter**: A powder highlighter likely",
+      "top_concept_ids": [],
+      "hits_above_thresh": 2,
+      "all_scores": [
+        0.4053,
+        0.3868,
+        0.352,
+        0.3441,
+        0.3374
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4053,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    },
+    {
+      "query": "daily sheet masks vs layering toners - which wins for morning hydration",
+      "variant": "raw",
+      "post_id": "1rvzy9u",
+      "tier": "gold",
+      "top_score": 0.4302,
+      "top_source": "reddit_image",
+      "top_specialty": "",
+      "top_text": "This image shows a boxed set of skincare products, labeled with the brand \"AYURA,\" and includes four items:\n\n1. **Increase Booster (Step 1)**: A skincare booster, though specific active ingredients are not visible. Boosters are typically used to enhance the efficacy of subsequent products and may focus on hydration, brightening, or anti-aging.\n\n2. **Increase Moist Lotion R (Step 2)**: A moisturizi",
+      "top_concept_ids": [],
+      "hits_above_thresh": 5,
+      "all_scores": [
+        0.4302,
+        0.4294,
+        0.4136,
+        0.4054,
+        0.3897
+      ],
+      "used_derm_filter": false,
+      "filter_improved": false,
+      "filtered_top_score": 0.0,
+      "unfiltered_top_score": 0.4302,
+      "result_class": "HIT",
+      "llm_verdict": "IRRELEVANT"
+    }
+  ]
+}

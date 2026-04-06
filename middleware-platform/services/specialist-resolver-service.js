@@ -173,6 +173,7 @@ class SpecialistResolverService {
         id: p.id,
         display_name: p.display_name,
         email: p.email || null,
+        phone: p.phone || null,
         specialty: p.specialty,
         languages: p.languages,
         license_states: p.license_states,

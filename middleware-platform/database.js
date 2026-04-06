@@ -15975,16 +15975,62 @@ module.exports.upsertTriageSession = function upsertTriageSession(session) {
     `).run(session.intake_complete_at || null, id);
   }
 
+  // Skin & Care assessment columns (021 / product spec). PATCH only keys present on `session`.
+  const skincareCols = [
+    'skin_type',
+    'skin_concerns_json',
+    'pregnancy_status',
+    'prior_dermatologist_json',
+    'functional_impact',
+    'ingredient_reactions',
+    'what_has_worked',
+    'hormonal_context',
+    'lifestyle_notes',
+    'environment_notes',
+    'triggers_json'
+  ];
+  const skinPatch = skincareCols.filter((c) => Object.prototype.hasOwnProperty.call(session, c));
+  if (skinPatch.length) {
+    const setClauses = skinPatch.map((c) => `${c} = COALESCE(?, ${c})`).join(', ');
+    const values = skinPatch.map((c) => {
+      const v = session[c];
+      if (v === undefined) return null;
+      if (c === 'functional_impact') {
+        if (v === null || v === '') return null;
+        const n = parseInt(String(v), 10);
+        return Number.isFinite(n) ? n : null;
+      }
+      if (typeof v === 'string') return v;
+      if (v == null) return null;
+      return safeStringify(v);
+    });
+    try {
+      db.prepare(`UPDATE triage_sessions SET ${setClauses}, updated_at = datetime('now') WHERE id = ?`).run(
+        ...values,
+        id
+      );
+    } catch (e) {
+      console.warn('[upsertTriageSession] skincare column patch failed:', e.message);
+    }
+  }
+
   return id;
 };
 
 module.exports.getTriageSession = function getTriageSession(sessionId) {
   const row = db.prepare(`SELECT * FROM triage_sessions WHERE session_id = ? ORDER BY created_at DESC LIMIT 1`).get(sessionId);
   if (!row) return null;
+  const concernsParsed = _safeParseJson(row.skin_concerns_json, null);
+  const triggersParsed = _safeParseJson(row.triggers_json, null);
+  const priorParsed = _safeParseJson(row.prior_dermatologist_json, null);
   return {
     ...row,
     media_ids: _safeParseJson(row.media_ids, []),
-    critical_unknowns: _safeParseJson(row.critical_unknowns, [])
+    critical_unknowns: _safeParseJson(row.critical_unknowns, []),
+    skin_concerns_json: Array.isArray(concernsParsed) ? concernsParsed : null,
+    triggers_json: Array.isArray(triggersParsed) ? triggersParsed : null,
+    prior_dermatologist_json:
+      priorParsed && typeof priorParsed === 'object' && !Array.isArray(priorParsed) ? priorParsed : null
   };
 };
 

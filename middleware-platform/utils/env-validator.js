@@ -51,6 +51,9 @@ const REQUIRED_VARS = {
     'GOOGLE_CLIENT_ID', // If using Google Calendar
     'GOOGLE_CLIENT_SECRET', // If using Google Calendar
     'GROQ_API_KEY', // If using medical coding
+    'NCBI_CONTACT_EMAIL', // PubMed E-utilities (recommended identity)
+    'STEP10_GRAPH_ENABLED', // Step 10 LangGraph pipeline
+    'MEDICAL_LITERATURE_SEARCH_ENABLED', // Kelly search_medical_literature tool
     'AZURE_COMMUNICATION_CONNECTION_STRING', // If using Azure email
     'SMTP_HOST', // If using SMTP email
   ]

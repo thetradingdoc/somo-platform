@@ -102,8 +102,9 @@ Return a JSON object (e.g., `{"status":"ok"}`) for health checks.
 
 | File | Role |
 |------|------|
-| `middleware-platform/routes/rag-proxy.js` | Proxies `/api/rag/retrieve` and `/api/rag/health` to `COLAB_RAG_URL` |
+| `middleware-platform/routes/rag-proxy.js` | Proxies `/api/rag/retrieve`, `/api/rag/retrieve_passages`, and `/api/rag/health` to `COLAB_RAG_URL` |
 | `middleware-platform/services/layer2-rag/remote-rag-client.js` | Calls Colab RAG via `retrieveFromColabRAG()` |
+| `middleware-platform/services/layer2-rag/patient-education-client.js` | Patient education passages via `retrievePatientEducationPassages()` / `retrievePatientEducationForDermQA()` |
 | `middleware-platform/services/knowledge-service.js` | Uses Colab RAG in `getCandidatesForCoding()` and `getCodeCandidatesDualSource()` |
 
 ### 1.5 Verification
@@ -117,6 +118,38 @@ curl -X POST http://localhost:4000/api/rag/retrieve \
   -H "Content-Type: application/json" \
   -d '{"query":"chest pain","specialty":"general","top_k":10}'
 ```
+
+### 1.6 Patient education passages (derm Q&A) — `RAG_EDUCATION_URL` vs `RAG_API_URL`
+
+The **code RAG** path (`POST /retrieve`) returns ICD/CPT/HCPCS candidates. **Patient education** uses a **parallel** index and contract: **`POST /retrieve_passages`**.
+
+| Variable | Purpose |
+|----------|---------|
+| **`RAG_API_URL`** | Base URL used by `remote-rag-client.js` for **`/retrieve`** (codes). Default when using the middleware proxy: `http://localhost:4000/api/rag`. |
+| **`RAG_EDUCATION_URL`** | Optional **separate** base URL for **`/retrieve_passages`** (text chunks). If **unset**, `patient-education-client.js` falls back to the same base as `RAG_API_URL` and calls **`/retrieve_passages`** on that host (e.g. `http://localhost:4000/api/rag/retrieve_passages` via the proxy). |
+
+Use a **dedicated** `RAG_EDUCATION_URL` when the education index is deployed separately from the code index (different Colab, Render service, or Pinecone namespace).
+
+```env
+# Same tunnel: proxy forwards both /retrieve and /retrieve_passages to Colab
+RAG_API_URL=http://localhost:4000/api/rag
+# RAG_EDUCATION_URL unset → client uses RAG_API_URL + /retrieve_passages
+
+# Split backends
+RAG_API_URL=http://localhost:4000/api/rag
+RAG_EDUCATION_URL=https://your-education-rag.example.com
+```
+
+Full contract, corpus versioning, and middleware behavior: [`derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md`](derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md).
+
+Implementation:
+
+| File | Role |
+|------|------|
+| `middleware-platform/services/layer2-rag/patient-education-client.js` | Calls **`/retrieve_passages`**, respects Phase 2 triage `retrieval_policy` |
+| `middleware-platform/services/layer2-rag/patient-education-query.js` | Lay ↔ clinical expansion + optional HyDE |
+| `middleware-platform/services/layer2-rag/patient-education-passage-rerank.js` | Lexical rerank on passages |
+| `middleware-platform/routes/rag-proxy.js` | Proxies **`/api/rag/retrieve_passages`** to Colab |
 
 ---
 

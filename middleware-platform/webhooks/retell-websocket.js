@@ -17,6 +17,8 @@ const { detectRedFlags, checkBeforeScheduling } = require('../services/triage-se
 const CallSessionService = require('../services/call-session-service');
 const PatientOrchestratorService = require('../services/patient-orchestrator-service');
 const KellyAgentService = require('../services/kelly-agent-service');
+const KellyToolExecutor = require('../services/kelly-tool-executor');
+const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -399,6 +401,17 @@ class RetellWebSocketHandler {
                 connection.patientId = connection.patientId || dv.patient_id || dv.patientId || null;
                 connection.awaitingName = false;
                 console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
+            }
+
+            // Skincare / routine intake: Retell dynamic_variables.kelly_flow (or routine_intake_active)
+            try {
+                const kf = KellyOrchestratorPhase.extractKellyFlowFromRetellCall(callMeta);
+                if (KellyOrchestratorPhase.kellyFlowActivatesRoutineIntake(kf)) {
+                    KellyToolExecutor._setSessionMeta(callId, 'routine_intake_active', '1');
+                    console.log(`✅ routine_intake_active=1 from kelly_flow / call metadata (${kf || 'flag'})`);
+                }
+            } catch (e) {
+                console.warn('⚠️  routine_intake_active bind failed:', e.message);
             }
 
             // Task 52 (Decision D2): Derive appointment_id from room name (appt-{id}) for trigger_case_report

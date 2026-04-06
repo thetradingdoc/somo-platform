@@ -1823,3 +1823,95 @@
       text-decoration: none;
       font-weight: 600;
     }
+
+    /* Provider cards + literature (Kelly tools on checkout-chat) */
+    .cc-provider-cards,
+    .cc-literature-snips {
+      margin-top: 6px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid #efe8de;
+      background: #faf7f2;
+      max-width: 100%;
+    }
+
+    .cc-provider-cards-title,
+    .cc-literature-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #73665d;
+      margin-bottom: 10px;
+    }
+
+    .cc-provider-card-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .cc-provider-card {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid #eadfce;
+      background: #fff;
+    }
+
+    .cc-provider-card-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--brand-black);
+    }
+
+    .cc-provider-card-spec {
+      font-size: 0.82rem;
+      color: #5c534d;
+      margin-top: 2px;
+    }
+
+    .cc-provider-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    .cc-provider-card-actions .cc-btn {
+      font-size: 0.82rem;
+      padding: 6px 12px;
+      min-height: 36px;
+      text-decoration: none;
+    }
+
+    .cc-provider-card-hint {
+      font-size: 0.78rem;
+      color: #7b7068;
+      line-height: 1.35;
+    }
+
+    .cc-literature-list {
+      margin: 0;
+      padding-left: 1.1rem;
+      font-size: 0.86rem;
+      line-height: 1.45;
+      color: var(--brand-black);
+    }
+
+    .cc-literature-list a {
+      color: #4e2b1e;
+      font-weight: 600;
+    }
+
+    .cc-literature-meta {
+      color: #73665d;
+      font-weight: 400;
+    }
+
+    .cc-literature-disclaimer {
+      margin: 10px 0 0;
+      font-size: 0.75rem;
+      color: #7b7068;
+      line-height: 1.4;
+    }

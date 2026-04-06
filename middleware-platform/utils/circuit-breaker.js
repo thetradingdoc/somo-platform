@@ -80,10 +80,18 @@ function getMetrics() {
   };
 }
 
+/** Test-only: clear breaker state so isolation tests can open a circuit deterministically. */
+function resetCircuitBreakersForTests() {
+  breakers.clear();
+  metrics.trips = 0;
+  metrics.fallbackInvocations = 0;
+}
+
 module.exports = {
   CircuitBreaker,
   getOrCreate,
   getMetrics,
+  resetCircuitBreakersForTests,
   STEDI: 'stedi',
   ONE_UP_HEALTH: '1uphealth',
   GROQ: 'groq',

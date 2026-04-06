@@ -1027,8 +1027,12 @@ const allowedOrigins = [
   'https://doclittle.site',
   'https://www.doclittle.site',
   'https://api.doclittle.site',
+  'https://myskinandcare.com',
+  'https://www.myskinandcare.com',
+  'https://api.myskinandcare.com',
   'http://localhost:4000',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:3001'
 ];
 
 const corsOptions = {
@@ -5969,7 +5973,7 @@ app.post('/api/admin/clients', async (req, res) => {
 // Update client/clinic
 app.put('/api/admin/clients/:clinicId', async (req, res) => {
   try {
-    const { name, phone_number, retell_agent_id, retell_agent_status, email } = req.body;
+    const { name, phone_number, retell_agent_id, retell_agent_status, email, is_active } = req.body;
     const clinicId = req.params.clinicId;
 
     const existingClinic = db.prepare('SELECT * FROM clinics WHERE clinic_id = ?').get(clinicId);
@@ -5987,6 +5991,9 @@ app.put('/api/admin/clients/:clinicId', async (req, res) => {
     if (retell_agent_id !== undefined) updates.retell_agent_id = retell_agent_id;
     if (retell_agent_status !== undefined) updates.retell_agent_status = retell_agent_status;
     if (email !== undefined) updates.email = email;
+    if (is_active !== undefined) {
+      updates.is_active = is_active === true || is_active === 1 || is_active === '1' ? 1 : 0;
+    }
 
     // Build update query
     const fields = [];
@@ -5999,6 +6006,23 @@ app.put('/api/admin/clients/:clinicId', async (req, res) => {
     values.push(clinicId);
 
     db.prepare(`UPDATE clinics SET ${fields.join(', ')} WHERE clinic_id = ?`).run(...values);
+
+    // Suspend or reactivate tenant: merchant, SaaS customers, users, and sessions (provider cannot log in until reactivated)
+    if (is_active !== undefined && existingClinic.merchant_id) {
+      const merchantId = existingClinic.merchant_id;
+      const on = updates.is_active === 1;
+      try {
+        db.prepare('UPDATE merchants SET status = ? WHERE id = ?').run(on ? 'active' : 'suspended', merchantId);
+        db.prepare('UPDATE customers SET status = ? WHERE merchant_id = ?').run(on ? 'active' : 'suspended', merchantId);
+        db.prepare('UPDATE users SET is_active = ? WHERE merchant_id = ?').run(on ? 1 : 0, merchantId);
+        const custRows = db.prepare('SELECT id FROM customers WHERE merchant_id = ?').all(merchantId) || [];
+        for (const row of custRows) {
+          if (row.id && db.deleteCustomerSessions) db.deleteCustomerSessions(row.id);
+        }
+      } catch (tenantErr) {
+        console.warn('⚠️ Admin tenant suspend/reactivate side effects:', tenantErr.message);
+      }
+    }
 
     // Update phone number link if changed
     if (phone_number && phone_number !== existingClinic.phone_number) {
@@ -14739,14 +14763,9 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
   }
 });
 
-// Shared handler for chat triage (orch-6: consolidated orchestrate + triage/message)
-async function handlePatientTriageMessage(req) {
-  const PatientPortalService = require('./services/patient-portal-service');
+// Shared Kelly triage turn + orchestrate persistence (patient portal and public landing).
+async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId }) {
   const KellyAgentService = require('./services/kelly-agent-service');
-  const sid = req.patientSessionId;
-  const sessionValidation = PatientPortalService.validateSession(sid);
-  const email = sessionValidation?.email || null;
-  const mappedPatientId = sessionValidation?.patient_id || null;
   // S-1: No last-resort fallback clinic (multi-tenant leak). Use env, request, or patient's clinic only.
   let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
   if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
@@ -14810,6 +14829,29 @@ async function handlePatientTriageMessage(req) {
     }
   }
 
+  // Skincare / routine intake: same meta key as voice (Retell kelly_flow)
+  try {
+    const KellyToolExecutor = require('./services/kelly-tool-executor');
+    const KellyOrchestratorPhase = require('./services/kelly-orchestrator-phase');
+    const rawFlow = (req.body?.kelly_flow || meta?.kelly_flow || '').toString().trim();
+    const bodyRia = req.body?.routine_intake_active ?? meta?.routine_intake_active;
+    const flowFromFlag =
+      bodyRia != null && (String(bodyRia).toLowerCase() === '1' || String(bodyRia).toLowerCase() === 'true')
+        ? 'routine_intake'
+        : '';
+    const flow = rawFlow || flowFromFlag;
+    if (KellyOrchestratorPhase.kellyFlowActivatesRoutineIntake(flow)) {
+      KellyToolExecutor._setSessionMeta(session_id, 'routine_intake_active', '1');
+    }
+  } catch (e) {
+    console.warn('⚠️  chat kelly_flow → routine_intake_active:', e.message);
+  }
+
+  const preferredLanguageFromBody = (req.body?.preferred_language || meta?.preferred_language || '')
+    .toString()
+    .trim()
+    .toLowerCase();
+
   const result = await KellyAgentService.processTurn({
     message: trimmedMessage,
     sessionId: session_id,
@@ -14818,7 +14860,8 @@ async function handlePatientTriageMessage(req) {
     patientId: mappedPatientId,
     patientName: null,
     patientEmail: email,
-    portalSessionId: sid
+    portalSessionId,
+    preferredLanguage: preferredLanguageFromBody === 'en' ? 'en' : null
   });
 
   // Always persist chat conversation history so the next turn has the right
@@ -14832,13 +14875,16 @@ async function handlePatientTriageMessage(req) {
     const baseTurnCount = (explicitSessionReset || staleSessionReset) ? 0 : (row?.turn_count || 0);
     const newTurnCount = baseTurnCount + 1;
     let preferredLanguage = row?.preferred_language || 'en';
+    if (preferredLanguageFromBody === 'en') {
+      preferredLanguage = 'en';
+    }
     // orch-4: Persist preferred_language from first 1–2 turns or explicit language request
     try {
       const { detectLanguageFromText, detectLanguagePreferenceRequest } = require('./services/patient-orchestrator-service');
       const langReq = detectLanguagePreferenceRequest(trimmedMessage);
       if (langReq?.isLanguageRequest && langReq?.code) {
         preferredLanguage = langReq.code;
-      } else if (newTurnCount <= 2) {
+      } else if (preferredLanguageFromBody !== 'en' && newTurnCount <= 2) {
         preferredLanguage = detectLanguageFromText(trimmedMessage).code || preferredLanguage;
       }
     } catch (_) {}
@@ -14847,7 +14893,7 @@ async function handlePatientTriageMessage(req) {
         session_id,
         channel: 'chat',
         patient_id: mappedPatientId,
-        portal_session_id: sid,
+        portal_session_id: portalSessionId,
         clinic_id: clinicId,
         conversation_history: updatedHistory,
         flow_state: result.state || existingFlowState || state,
@@ -14874,9 +14920,25 @@ async function handlePatientTriageMessage(req) {
       chips_display: result.chips_display,
       redirect_to: result.redirect_to,
       next_step: result.next_step,
+      provider_cards: Array.isArray(result.provider_cards) ? result.provider_cards : undefined,
+      literature_snippets: Array.isArray(result.literature_snippets) ? result.literature_snippets : undefined,
       request_id: req.id
     }
   };
+}
+
+async function handlePatientTriageMessage(req) {
+  const PatientPortalService = require('./services/patient-portal-service');
+  const sid = req.patientSessionId;
+  const sessionValidation = PatientPortalService.validateSession(sid);
+  const email = sessionValidation?.email || null;
+  const mappedPatientId = sessionValidation?.patient_id || null;
+  return runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId: sid });
+}
+
+/** Anonymous Skin & Care landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
+async function handlePublicLandingAssistantMessage(req) {
+  return runKellyTriageTurnForHttpRequest(req, { mappedPatientId: null, email: null, portalSessionId: null });
 }
 
 // POST /api/patient/checkout-chat/turn — Kelly agent for retail checkout (commerce tools only)
@@ -15305,6 +15367,28 @@ function _mapAlreadyInProgressCopyByStage(sessionId) {
   return _canonicalRailCopy('provide_email');
 }
 
+/**
+ * If shipping meta is complete and version-aligned but only the TTL expired, refresh the
+ * timestamp so prepare_commerce_checkout can proceed (matches tool path behavior).
+ */
+function _refreshStaleShippingTtlIfEligible(sessionId) {
+  try {
+    const KellyToolExecutor = require('./services/kelly-tool-executor');
+    if (KellyToolExecutor._isShippingReadyForCurrentContext?.(sessionId)) return;
+    const complete = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_complete') || '') === '1';
+    if (!complete) return;
+    const line1 = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_line1') || '').trim();
+    const city = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_city') || '').trim();
+    const state = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_state') || '').trim();
+    const postal = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_postal_code') || '').trim();
+    if (!line1 || !city || !state || !postal) return;
+    const cv = KellyToolExecutor._getCheckoutContextVersion?.(sessionId) ?? 1;
+    const sv = parseInt(String(KellyToolExecutor._getSessionMeta?.(sessionId, 'commerce_shipping_context_version') || '0'), 10);
+    if (!Number.isFinite(sv) || sv !== cv) return;
+    KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(Date.now()));
+  } catch (_) {}
+}
+
 function _extractShippingAddressParts(input) {
   const raw = String(input || '').trim();
   if (!raw) return null;
@@ -15377,34 +15461,47 @@ async function _maybeHandleDeterministicCommerceVerificationTurn({
     }
 
     if (shipping && shipping.complete) {
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_address', shipping.raw);
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_line1', shipping.line1);
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_city', shipping.city);
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_state', shipping.state);
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_postal_code', shipping.postal_code);
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_complete', '1');
-      KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(Date.now()));
-      KellyToolExecutor._setSessionMeta(
-        sessionId,
-        'commerce_shipping_context_version',
-        String(KellyToolExecutor._getSessionMeta?.(sessionId, 'checkout_context_version') || '1')
+      const saveViaTool = await KellyToolExecutor.execute(
+        'save_shipping_address',
+        {
+          line1: shipping.line1,
+          city: shipping.city,
+          state: shipping.state,
+          postal_code: shipping.postal_code,
+          country: 'US'
+        },
+        { sessionId, clinicId, patientId, callerPhone: null, channel }
       );
-      try {
-        const merchantIdForFp = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'checkout_stage_meta_merchant_id') || '').trim();
-        if (merchantIdForFp) {
-          const cartForFp = db.getCommerceCart(sessionId, merchantIdForFp);
-          const fpItems = Array.isArray(cartForFp?.items) ? [...cartForFp.items] : [];
-          fpItems.sort((a, b) => String(a.product_id || '').localeCompare(String(b.product_id || '')));
-          const fp = JSON.stringify(
-            fpItems.map((it) => ({
-              product_id: String(it.product_id || ''),
-              quantity: Number(it.quantity || 0),
-              unit_price: Number(it.unit_price || 0)
-            }))
-          );
-          KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_cart_fingerprint', fp);
-        }
-      } catch (_) {}
+      if (!saveViaTool?.success) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_address', shipping.raw);
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_line1', shipping.line1);
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_city', shipping.city);
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_state', shipping.state);
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_postal_code', shipping.postal_code);
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_complete', '1');
+        KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', String(Date.now()));
+        KellyToolExecutor._setSessionMeta(
+          sessionId,
+          'commerce_shipping_context_version',
+          String(KellyToolExecutor._getCheckoutContextVersion?.(sessionId) || '1')
+        );
+        try {
+          const merchantIdForFp = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'checkout_stage_meta_merchant_id') || '').trim();
+          if (merchantIdForFp) {
+            const cartForFp = db.getCommerceCart(sessionId, merchantIdForFp);
+            const fpItems = Array.isArray(cartForFp?.items) ? [...cartForFp.items] : [];
+            fpItems.sort((a, b) => String(a.product_id || '').localeCompare(String(b.product_id || '')));
+            const fp = JSON.stringify(
+              fpItems.map((it) => ({
+                product_id: String(it.product_id || ''),
+                quantity: Number(it.quantity || 0),
+                unit_price: Number(it.unit_price || 0)
+              }))
+            );
+            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_cart_fingerprint', fp);
+          }
+        } catch (_) {}
+      }
       shippingCaptured = true;
       if (stage !== 'code_verified') {
         if (emailMatch && !codeMatch) {
@@ -15573,6 +15670,7 @@ async function _maybeHandleDeterministicCommerceVerificationTurn({
           }
         };
       }
+      _refreshStaleShippingTtlIfEligible(sessionId);
       const prep = await KellyToolExecutor.execute(
         'prepare_commerce_checkout',
         { customer_email: verifiedEmail, shipping_address: shippingRaw, use_cart: true },
@@ -15768,6 +15866,8 @@ async function handlePatientCheckoutChatMessage(req) {
       quote_id: result.quote_id || null,
       commerce_checkout: result.commerce_checkout || null,
       llm_usage: result.llm_usage || null,
+      provider_cards: Array.isArray(result.provider_cards) ? result.provider_cards : undefined,
+      literature_snippets: Array.isArray(result.literature_snippets) ? result.literature_snippets : undefined,
       safe_degraded: !!result.safe_degraded,
       human_handoff_recommended: !!result.human_handoff_recommended,
       request_id: req.id
@@ -16071,6 +16171,9 @@ async function handlePatientCheckoutChatMessageStream(req, res) {
       next_step: result.next_step,
       quote_id: result.quote_id || null,
       commerce_checkout: result.commerce_checkout || null,
+      llm_usage: result.llm_usage || null,
+      provider_cards: Array.isArray(result.provider_cards) ? result.provider_cards : undefined,
+      literature_snippets: Array.isArray(result.literature_snippets) ? result.literature_snippets : undefined,
       safe_degraded: !!result.safe_degraded,
       human_handoff_recommended: !!result.human_handoff_recommended,
       request_id: req.id
@@ -16082,6 +16185,173 @@ async function handlePatientCheckoutChatMessageStream(req, res) {
     return res.end();
   }
 }
+
+// POST /api/patient/reasoning/step10/run — Step 10 LangGraph stub/pipeline (auth + metrics; not a clinical endpoint)
+app.post(
+  '/api/patient/reasoning/step10/run',
+  apiLimiter,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  express.json(),
+  async (req, res) => {
+    try {
+      await rotatePatientSessionIfNeeded(req, res);
+      const { invokeStep10 } = require('./services/step10-graph');
+      try {
+        db.incrementOpsCounter && db.incrementOpsCounter('step10_api_invoke');
+      } catch (_) {}
+      const sid = req.patientSessionId;
+      const threadId =
+        String(req.body?.thread_id || req.body?.session_id || '').trim() || String(sid || '').trim() || null;
+      const out = await invokeStep10({
+        patient_id: req.body?.patient_id || null,
+        thread_id: threadId || undefined,
+        inputs: req.body?.inputs && typeof req.body.inputs === 'object' ? req.body.inputs : {}
+      });
+      const st = out.state || {};
+      if (!out.success) {
+        try {
+          db.incrementOpsCounter && db.incrementOpsCounter('step10_api_error');
+        } catch (_) {}
+      }
+      return res.json({
+        success: !!out.success,
+        stub: !!out.stub,
+        error: out.error || null,
+        message: out.message || null,
+        summary: st.summary != null ? st.summary : out.summary,
+        layer_trace: Array.isArray(st.layer_trace) ? st.layer_trace : out.layer_trace || [],
+        disclaimers: [
+          'Information only — not medical advice, diagnosis, or treatment. Contact a licensed clinician for care decisions.'
+        ],
+        request_id: req.id
+      });
+    } catch (e) {
+      try {
+        db.incrementOpsCounter && db.incrementOpsCounter('step10_api_error');
+      } catch (_) {}
+      return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    }
+  }
+);
+
+// POST /api/patient/derm-qa/triage — Derm patient Q&A Phase 2: intent + retrieval policy (before heavy RAG)
+app.post(
+  '/api/patient/derm-qa/triage',
+  apiLimiter,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  express.json(),
+  async (req, res) => {
+    try {
+      await rotatePatientSessionIfNeeded(req, res);
+      const { classifyDermPatientQA } = require('./services/derm-patient-qa-triage');
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const out = classifyDermPatientQA({
+        message: body.message,
+        imageCaption: body.imageCaption,
+        structuredIntake: body.structuredIntake,
+        recentTurns: body.recentTurns
+      });
+      return res.json({
+        ...out,
+        disclaimers: [
+          'Triage for routing only — not a diagnosis. If you have severe or worsening symptoms, seek emergency care.'
+        ],
+        request_id: req.id
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    }
+  }
+);
+
+// POST /api/patient/derm-qa/compose — Phase 4: triage + retrieval + grounded prompt templates (no LLM call)
+app.post(
+  '/api/patient/derm-qa/compose',
+  apiLimiter,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  express.json(),
+  async (req, res) => {
+    try {
+      await rotatePatientSessionIfNeeded(req, res);
+      const { composeDermPatientQAAnswer } = require('./services/derm-patient-qa-answer');
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const out = await composeDermPatientQAAnswer({
+        message: body.message,
+        imageCaption: body.imageCaption,
+        imagePresent: !!body.imagePresent,
+        structuredIntake: body.structuredIntake,
+        recentTurns: body.recentTurns,
+        triage: body.triage,
+        retrieval: body.retrieval,
+        skip_retrieve: body.skip_retrieve === true,
+        filters: body.filters,
+        exclusion_terms: body.exclusion_terms,
+        debug: body.debug === true
+      });
+      return res.json({
+        ...out,
+        disclaimers: [
+          'Compose output is for routing and review — not a completed medical answer until reviewed policy and LLM settings allow.',
+          'Images cannot be diagnosed from text or casual photos alone.'
+        ],
+        request_id: req.id
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    }
+  }
+);
+
+// POST /api/patient/derm-qa — Phase 5: full derm Q&A pipeline (compose + optional LLM); requires DERM_EDUCATION_PIPELINE_ENABLED
+app.post(
+  '/api/patient/derm-qa',
+  apiLimiter,
+  requirePatientSession,
+  requireCsrfForCookieAuth,
+  express.json(),
+  async (req, res) => {
+    try {
+      await rotatePatientSessionIfNeeded(req, res);
+      const { isDermEducationPipelineEnabled, runDermPatientQAPipeline } = require('./services/derm-patient-qa-pipeline');
+      if (!isDermEducationPipelineEnabled()) {
+        return res.status(200).json({
+          success: false,
+          error: 'derm_education_pipeline_disabled',
+          message: 'Derm education Q&A is not enabled. Set DERM_EDUCATION_PIPELINE_ENABLED=true.',
+          request_id: req.id
+        });
+      }
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const out = await runDermPatientQAPipeline({
+        message: body.message,
+        imageCaption: body.imageCaption,
+        imagePresent: !!body.imagePresent,
+        structuredIntake: body.structuredIntake,
+        recentTurns: body.recentTurns,
+        triage: body.triage,
+        retrieval: body.retrieval,
+        skip_retrieve: body.skip_retrieve === true,
+        filters: body.filters,
+        exclusion_terms: body.exclusion_terms,
+        skip_llm: body.skip_llm === true,
+        debug: body.debug === true
+      });
+      return res.json({
+        ...out,
+        disclaimers: [
+          'Information only — not medical advice, diagnosis, or treatment. Seek licensed care for decisions.',
+          'Images cannot be diagnosed from chat; in-person exam may be needed.'
+        ],
+        request_id: req.id
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    }
+  }
+);
 
 // POST /api/patient/orchestrate — Alias for triage/message (deprecated: use triage/message) (P-1: CSRF)
 app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
@@ -16098,6 +16368,16 @@ app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, requi
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const out = await handlePatientTriageMessage(req);
+    return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+// Public anonymous assistant (littlelab landing) — full Kelly triage; requires DEFAULT_CLINIC_ID or clinic_id in body
+app.post('/api/public/landing-assistant/turn', apiLimiter, validatePatientTriageBody, express.json(), async (req, res) => {
+  try {
+    const out = await handlePublicLandingAssistantMessage(req);
     return res.status(out.status).json(out.json);
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
@@ -16385,6 +16665,7 @@ app.post('/api/public/checkout-chat/reset', apiLimiter, express.json(), async (r
     const contract = buildStageContract(session_id);
     return res.json({
       success: !!reset?.success,
+      error: reset?.success ? null : reset?.error || 'checkout_reset_failed',
       session_id,
       checkout_context_version: reset?.checkout_context_version || null,
       checkout_stage: contract.checkout_stage,

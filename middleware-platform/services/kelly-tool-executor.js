@@ -19,6 +19,8 @@ const CheckoutWorkflowService = require('./checkout-workflow-service');
 const TriageRAGService = require('./triage-rag-service');
 const TriageRAGServiceV2 = require('./triage-rag-service-v2');
 const SpecialistResolverService = require('./specialist-resolver-service');
+const MedicalLiteratureSearchService = require('./medical-literature-search-service');
+const { resolverMapToProviderCards } = require('./provider-card-normalizer');
 const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./specialist-slot-service');
 const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, normalizeDateStr } = require('../config/clinic-business-hours');
 
@@ -46,6 +48,21 @@ const CHECKOUT_STAGES = Object.freeze({
   PAYMENT_CONFIRMED: 'payment_confirmed',
   FAILED: 'failed'
 });
+
+/** DB + tool keys for Skin & Care assessment (migration 021). */
+const SKINCARE_ASSESSMENT_DB_KEYS = [
+  'skin_type',
+  'skin_concerns_json',
+  'pregnancy_status',
+  'prior_dermatologist_json',
+  'functional_impact',
+  'ingredient_reactions',
+  'what_has_worked',
+  'hormonal_context',
+  'lifestyle_notes',
+  'environment_notes',
+  'triggers_json'
+];
 
 class KellyToolExecutor {
   // ── kelly_session_meta (payment_token persistence) ──────────────────────
@@ -92,6 +109,30 @@ class KellyToolExecutor {
     }
   }
 
+  /**
+   * Read and clear last-turn UI attachments (provider cards, literature) for HTTP responses.
+   * @returns {{ provider_cards: object[], literature_snippets: object[] }}
+   */
+  static consumeUiAttachments(sessionId) {
+    const out = { provider_cards: [], literature_snippets: [] };
+    if (!sessionId) return out;
+    try {
+      const pcRaw = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_last_provider_cards_json');
+      if (pcRaw) {
+        const parsed = JSON.parse(pcRaw);
+        if (Array.isArray(parsed)) out.provider_cards = parsed;
+        KellyToolExecutor._setSessionMeta(sessionId, 'kelly_last_provider_cards_json', '');
+      }
+      const litRaw = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_last_literature_snippets_json');
+      if (litRaw) {
+        const parsed = JSON.parse(litRaw);
+        if (Array.isArray(parsed)) out.literature_snippets = parsed;
+        KellyToolExecutor._setSessionMeta(sessionId, 'kelly_last_literature_snippets_json', '');
+      }
+    } catch (_) {}
+    return out;
+  }
+
   static _normalizeEmail(v) {
     return String(v || '').trim().toLowerCase();
   }
@@ -111,7 +152,7 @@ class KellyToolExecutor {
   }
 
   static _setCheckoutStage(sessionId, stage, extra = null) {
-    if (!sessionId || !stage) return;
+    if (!sessionId || !stage) return false;
     const prevStage = KellyToolExecutor._getSessionMeta(sessionId, 'checkout_stage') || CHECKOUT_STAGES.COLLECTING_DETAILS;
     const transitionMeta = extra && typeof extra === 'object' ? { ...extra } : {};
     if (!Object.prototype.hasOwnProperty.call(transitionMeta, 'source')) transitionMeta.source = 'kelly_tool_executor';
@@ -125,7 +166,7 @@ class KellyToolExecutor {
           meta: transitionMeta
         });
       } catch (_) {}
-      return;
+      return false;
     }
     try {
       console.info('[checkout-stage] transition', {
@@ -136,6 +177,7 @@ class KellyToolExecutor {
       });
       db.incrementOpsCounter && db.incrementOpsCounter(`checkout_stage_transition_${String(stage)}`);
     } catch (_) {}
+    return true;
   }
 
   static _getCheckoutStage(sessionId) {
@@ -158,7 +200,7 @@ class KellyToolExecutor {
   }
 
   static _invalidateCheckoutReadiness(sessionId, reason = 'checkout_invalidation') {
-    if (!sessionId) return;
+    if (!sessionId) return true;
     const now = Date.now();
     const currentStage = KellyToolExecutor._getCheckoutStage(sessionId);
     const preserveEmailVerification = new Set([
@@ -197,22 +239,30 @@ class KellyToolExecutor {
     KellyToolExecutor._setSessionMeta(sessionId, 'payment_outcome_status', '');
     KellyToolExecutor._setSessionMeta(sessionId, 'payment_status_source', String(reason || 'checkout_invalidation'));
     KellyToolExecutor._setSessionMeta(sessionId, 'payment_status_last_checked_at', String(now));
+    let stageResetOk = true;
     if (!preserveEmailVerification) {
-      KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.COLLECTING_DETAILS, {
+      const applied = KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.COLLECTING_DETAILS, {
         reason: String(reason || 'checkout_invalidation'),
-        source: 'checkout_state_reset'
+        source: 'checkout_state_reset',
+        force_hard_reset: String(reason || '').includes('explicit_checkout_reset')
       });
+      stageResetOk = applied !== false;
     } else if (currentStage === CHECKOUT_STAGES.CODE_VERIFIED && !preserveShipping) {
       KellyToolExecutor._setSessionMeta(sessionId, 'cart_mutated_after_verify', '1');
     }
+    return stageResetOk;
   }
 
   static hardResetCheckoutContext(sessionId, reason = 'explicit_checkout_reset') {
     if (!sessionId) return { success: false, error: 'session_id_required' };
     const version = KellyToolExecutor._bumpCheckoutContextVersion(sessionId, reason);
-    KellyToolExecutor._invalidateCheckoutReadiness(sessionId, reason);
+    const resetOk = KellyToolExecutor._invalidateCheckoutReadiness(sessionId, reason);
     KellyToolExecutor._setSessionMeta(sessionId, 'checkout_context_reset_at_ms', String(Date.now()));
-    return { success: true, checkout_context_version: version };
+    return {
+      success: resetOk,
+      checkout_context_version: version,
+      error: resetOk ? undefined : 'checkout_stage_transition_blocked'
+    };
   }
 
   static _isCommerceEmailVerificationValid(sessionId, email) {
@@ -379,6 +429,35 @@ class KellyToolExecutor {
     return !!String(value || '').trim();
   }
 
+  /**
+   * E1: Stored chief concern (quality) or onset on triage_sessions contradicts "no symptoms" routine bypass.
+   */
+  static _triageRowHasConcernOrOnsetStored(sessionId) {
+    try {
+      if (!sessionId || !db.getTriageSession) return false;
+      const row = db.getTriageSession(sessionId);
+      if (!row) return false;
+      return KellyToolExecutor._hasText(row.quality) || KellyToolExecutor._hasText(row.onset);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * E1: Session meta routine_no_symptoms only counts if triage row does not already record a concern/onset.
+   */
+  static _routineNoSymptomsEffective(sessionId) {
+    try {
+      const v = KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms');
+      const meta = String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+      if (!meta) return false;
+      if (KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId)) return false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static _ragConfidenceThreshold() {
     const v = process.env.RAG_CONFIDENCE_THRESHOLD ?? '0.7';
     const n = parseFloat(v);
@@ -438,9 +517,10 @@ class KellyToolExecutor {
           const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
           const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
 
-          const routineNoSymptoms = (() => {
+          const routineNoSymptoms = KellyToolExecutor._routineNoSymptomsEffective(sessionId);
+          const triageReopenSchedule = (() => {
             try {
-              const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms') : null;
+              const v = KellyToolExecutor._getSessionMeta ? KellyToolExecutor._getSessionMeta(sessionId, 'kelly_triage_reopen') : null;
               return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
             } catch (_) {
               return false;
@@ -451,7 +531,7 @@ class KellyToolExecutor {
 
           // Routine/no-symptoms path: bypass full triage stack when session has routine_no_symptoms flag.
           // Voice HTTP guardrails (allowRoutineBypass) already permit schedule; executor must not block.
-          if (routineNoSymptoms) {
+          if (routineNoSymptoms && !triageReopenSchedule) {
             const syntheticTriage = {
               target_specialty: 'Primary Care',
               urgency: 'routine',
@@ -559,6 +639,17 @@ class KellyToolExecutor {
               error: 'SAFETY_BLOCKED',
               error_code: 'SAFETY_BLOCKED',
               message: 'Scheduling is blocked because this session was flagged as emergency/red safety.'
+            };
+          }
+
+          if (triageReopenSchedule) {
+            bump('voice_agent_misuse_schedule_appointment_triage_reopen');
+            return {
+              success: false,
+              error: 'TRIAGE_REOPEN',
+              error_code: 'TRIAGE_REOPEN',
+              message:
+                'New or changed symptoms were flagged. Complete OPQRST and run_triage_rag again before scheduling.'
             };
           }
 
@@ -867,8 +958,24 @@ class KellyToolExecutor {
         case 'query_patient_records':
           return await this._queryPatientRecords(args, patientId);
 
+        case 'run_derm_patient_qa':
+          return await KellyToolExecutor._runDermPatientQA(args, patientId);
+
         case 'end_call':
           return { success: true, end_call: true };
+
+        case 'return_to_triage': {
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, 'kelly_triage_reopen', '1');
+            KellyToolExecutor._setSessionMeta(sessionId, 'skincare_post_intake', '0');
+          } catch (_) {}
+          return {
+            success: true,
+            phase_escalation: true,
+            message:
+              'Triage is re-opened. Collect OPQRST and call run_triage_rag before get_available_slots or schedule_appointment.'
+          };
+        }
 
         case 'get_product_quote': {
           const merchantId = KellyToolExecutor._resolveMerchantIdForCommerce(args, clinicId);
@@ -1061,6 +1168,7 @@ class KellyToolExecutor {
             'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
             'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'
           ]);
+          /** Full state names map to 2-letter codes; otherwise expect a 2-letter code (any case) → uppercase + validStateCodes. */
           const normalizeState = (raw) => {
             const inRaw = String(raw || '').trim();
             if (!inRaw) return '';
@@ -1261,7 +1369,9 @@ class KellyToolExecutor {
             KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_nonce', '');
             KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_at_ms', '0');
             KellyToolExecutor._setSessionMeta(sessionId, 'commerce_email_verified_context_version', '0');
-            KellyToolExecutor._setSessionMeta(sessionId, 'commerce_shipping_updated_at_ms', '0');
+            // Do not clear commerce_shipping_updated_at_ms here: wiping the shipping clock makes
+            // _isShippingReadyForCurrentContext fail after code_sent and causes prepare loops when
+            // the user already captured shipping (e.g. address before email in one flow).
             KellyToolExecutor._setCheckoutStage(sessionId, CHECKOUT_STAGES.CODE_SENT, {
               email,
               pending_nonce: nonce
@@ -1585,6 +1695,85 @@ class KellyToolExecutor {
           return result;
         }
 
+        case 'search_medical_literature': {
+          const q = String(args.query || args.topic || '').trim();
+          const max_results = args.max_results != null ? Number(args.max_results) : undefined;
+          const r = await MedicalLiteratureSearchService.searchPubMed(q, { max_results, sessionId });
+          if (r?.success && Array.isArray(r.articles) && r.articles.length) {
+            try {
+              const prevRaw = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_last_literature_snippets_json');
+              let prev = [];
+              if (prevRaw) {
+                try {
+                  prev = JSON.parse(prevRaw);
+                } catch (_) {
+                  prev = [];
+                }
+              }
+              const slice = r.articles.map((a) => ({
+                pmid: a.pmid,
+                title: a.title,
+                url: a.url,
+                journal: a.journal,
+                year: a.year
+              }));
+              const merged = [...(Array.isArray(prev) ? prev : []), ...slice];
+              const cap = Math.min(24, Math.max(4, parseInt(process.env.KELLY_LITERATURE_UI_CAP || '12', 10) || 12));
+              KellyToolExecutor._setSessionMeta(
+                sessionId,
+                'kelly_last_literature_snippets_json',
+                JSON.stringify(merged.slice(-cap))
+              );
+            } catch (_) {}
+          }
+          return r;
+        }
+
+        case 'find_clinic_specialists': {
+          if (!clinicId) {
+            return { success: false, error: 'clinic_id_required', provider_cards: [], message: 'clinic_id is required.' };
+          }
+          const specialty = String(args.specialty || '').trim();
+          if (!specialty) {
+            return { success: false, error: 'specialty_required', provider_cards: [], message: 'specialty is required.' };
+          }
+          const language = String(args.language || 'en').trim();
+          const state = args.state ? String(args.state).trim().toUpperCase() : null;
+          const lane = String(args.lane || 'sync').trim();
+          const urgency = String(args.urgency || 'routine').trim();
+          const patientTier = parseInt(String(args.patient_tier || '2'), 10) || 2;
+          const date = String(args.date || new Date().toISOString().slice(0, 10)).trim();
+          const resolverResult = await SpecialistResolverService.resolve({
+            clinicId,
+            specialty,
+            language,
+            state,
+            lane,
+            urgency,
+            patientTier,
+            date
+          });
+          const limit = Math.min(10, Math.max(1, parseInt(String(args.limit || '3'), 10) || 3));
+          const cards = resolverMapToProviderCards(resolverResult.providers, { limit });
+          for (const c of cards) {
+            c.match_mode = resolverResult.matchMode;
+          }
+          if (cards.length) {
+            try {
+              KellyToolExecutor._setSessionMeta(sessionId, 'kelly_last_provider_cards_json', JSON.stringify(cards));
+            } catch (_) {}
+          }
+          return {
+            success: true,
+            match_mode: resolverResult.matchMode,
+            kelly_script: resolverResult.kellyScript || null,
+            provider_cards: cards,
+            count: cards.length,
+            ui_hint:
+              'If phone_trust is not verified_directory, do not read out a phone number; offer booking or "contact the clinic". Only verified_directory phones may be spoken or shown.'
+          };
+        }
+
         default:
           console.warn(`[KellyToolExecutor] Unknown tool: ${toolName}`);
           return { success: false, error: `Unknown tool: ${toolName}` };
@@ -1606,14 +1795,7 @@ class KellyToolExecutor {
   static async _getAvailableSlots(args, { sessionId, clinicId, patientId, channel }) {
     const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
     const bump = (n) => KellyToolExecutor._bumpOpsCounter(n);
-    const routineNoSymptoms = (() => {
-      try {
-        const v = KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms');
-        return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
-      } catch (_) {
-        return false;
-      }
-    })();
+    const routineNoSymptoms = KellyToolExecutor._routineNoSymptomsEffective(sessionId);
 
     // gap1: block slots until run_triage_rag has completed
     const sessionRow = db.getTriageSession ? db.getTriageSession(sessionId) : null;
@@ -1633,10 +1815,31 @@ class KellyToolExecutor {
       };
     }
 
+    const triageReopenSlots = (() => {
+      try {
+        const v = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_triage_reopen');
+        return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
+      } catch (_) {
+        return false;
+      }
+    })();
+    if (triageReopenSlots) {
+      bump('voice_agent_misuse_get_available_slots_triage_reopen');
+      return {
+        success: false,
+        error: 'TRIAGE_REOPEN',
+        error_code: 'TRIAGE_REOPEN',
+        message:
+          'New or changed symptoms were flagged. Complete OPQRST and run_triage_rag again before looking up slots.'
+      };
+    }
+
     let triageResult = TriageRAGService.getLatestForSession(sessionId);
     let usingRoutineBypass = false;
     if (!triageResult && routineNoSymptoms) {
       usingRoutineBypass = true;
+      // Synthetic row: confidence is current threshold so gating passes; not persisted as a real RAG row.
+      // If RAG_CONFIDENCE_THRESHOLD changes mid-session, stored triage rows keep their original scores.
       triageResult = {
         id: `routine-${sessionId}`,
         target_specialty: args.appointment_type || 'PrimaryCare',
@@ -2015,6 +2218,247 @@ class KellyToolExecutor {
     return null;
   }
 
+  static _skinConcernsListFromRow(row) {
+    const raw = row?.skin_concerns_json;
+    if (Array.isArray(raw)) return raw.map((s) => String(s).trim()).filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const p = JSON.parse(raw);
+        if (Array.isArray(p)) return p.map((s) => String(s).trim()).filter(Boolean);
+      } catch (_) {}
+    }
+    if (KellyToolExecutor._hasText(row?.quality)) return [String(row.quality).trim()];
+    return [];
+  }
+
+  static _skinTriggersListFromRow(row) {
+    const raw = row?.triggers_json;
+    if (Array.isArray(raw)) return raw.map((s) => String(s).trim()).filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) {
+      try {
+        const p = JSON.parse(raw);
+        if (Array.isArray(p)) return p.map((s) => String(s).trim()).filter(Boolean);
+      } catch (_) {}
+    }
+    return [];
+  }
+
+  static _priorDermatologistSeenAnswered(row) {
+    const raw = row?.prior_dermatologist_json;
+    let o = raw;
+    if (typeof raw === 'string') {
+      try {
+        o = JSON.parse(raw);
+      } catch (_) {
+        return false;
+      }
+    }
+    if (!o || typeof o !== 'object') return false;
+    return o.seen === true || o.seen === false;
+  }
+
+  static _skincareHardGateMissingList(row) {
+    const missing = [];
+    if (!KellyToolExecutor._hasText(row?.skin_type)) missing.push('skin_type');
+    if (!KellyToolExecutor._skinConcernsListFromRow(row).length) missing.push('skin_concerns_or_quality');
+    if (!KellyToolExecutor._hasText(row?.pregnancy_status)) missing.push('pregnancy_status');
+    if (!KellyToolExecutor._priorDermatologistSeenAnswered(row)) missing.push('prior_dermatologist');
+    const fi = row?.functional_impact;
+    const n = fi == null || fi === '' ? NaN : parseInt(String(fi), 10);
+    if (!Number.isFinite(n) || n < 1 || n > 5) missing.push('functional_impact');
+    return missing;
+  }
+
+  static _computeSkincareSoftGaps(row) {
+    const gaps = [];
+    const hasRoutine =
+      KellyToolExecutor._hasText(row?.associated_sx) || KellyToolExecutor._hasText(row?.medications);
+    if (!hasRoutine) gaps.push('routine_or_products');
+    if (!KellyToolExecutor._skinTriggersListFromRow(row).length && !KellyToolExecutor._hasText(row?.provocation)) {
+      gaps.push('triggers');
+    }
+    if (!KellyToolExecutor._hasText(row?.lifestyle_notes)) gaps.push('lifestyle_notes');
+    if (!KellyToolExecutor._hasText(row?.environment_notes)) gaps.push('environment_notes');
+    if (!KellyToolExecutor._hasText(row?.ingredient_reactions)) gaps.push('ingredient_reactions');
+    if (!KellyToolExecutor._hasText(row?.what_has_worked)) gaps.push('what_has_worked');
+    if (!KellyToolExecutor._hasText(row?.hormonal_context)) gaps.push('hormonal_context');
+    return gaps;
+  }
+
+  static _normalizeSkinConcernsForDb(v) {
+    if (v == null) return null;
+    if (Array.isArray(v)) {
+      const arr = v.map((x) => String(x).trim()).filter(Boolean);
+      return arr.length ? JSON.stringify(arr) : null;
+    }
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (!t) return null;
+      if (t.startsWith('[')) {
+        try {
+          const p = JSON.parse(t);
+          if (Array.isArray(p)) {
+            return JSON.stringify(p.map((x) => String(x).trim()).filter(Boolean));
+          }
+        } catch (_) {}
+      }
+      return JSON.stringify([t]);
+    }
+    return null;
+  }
+
+  static _normalizeTriggersForDb(v) {
+    if (v == null) return null;
+    if (Array.isArray(v)) {
+      const arr = v.map((x) => String(x).trim()).filter(Boolean);
+      return arr.length ? JSON.stringify(arr) : null;
+    }
+    if (typeof v === 'string') {
+      const t = v.trim();
+      if (!t) return null;
+      if (t.startsWith('[')) return t;
+      return JSON.stringify([t]);
+    }
+    return null;
+  }
+
+  static _normalizePriorDermForDb(arg, stored) {
+    let seen = null;
+    let note = '';
+    const prevRaw = stored?.prior_dermatologist_json;
+    let prev = prevRaw;
+    if (typeof prevRaw === 'string') {
+      try {
+        prev = JSON.parse(prevRaw);
+      } catch (_) {
+        prev = null;
+      }
+    }
+    if (prev && typeof prev === 'object' && !Array.isArray(prev)) {
+      if (prev.seen === true || prev.seen === false) seen = prev.seen;
+      if (prev.note != null) note = String(prev.note).slice(0, 2000);
+    }
+    if (arg !== undefined) {
+      if (arg === null) return JSON.stringify({ seen: null, note: '' });
+      if (typeof arg === 'object' && arg && !Array.isArray(arg)) {
+        if (arg.seen === true || arg.seen === false) seen = arg.seen;
+        else if (arg.seen === null) seen = null;
+        if (arg.note != null) note = String(arg.note).slice(0, 2000);
+      } else if (typeof arg === 'string') {
+        const lc = arg.toLowerCase().trim();
+        if (/^(yes|yeah|yep|seen|visited|i have)\b/.test(lc)) seen = true;
+        else if (/^(no|nope|never|not yet|haven'?t)\b/.test(lc)) seen = false;
+        else note = String(arg).slice(0, 2000);
+      }
+    }
+    return JSON.stringify({ seen, note });
+  }
+
+  static _mergeSkincareAssessmentForUpsert(args, stored) {
+    const out = {};
+    out.skin_type =
+      args.skin_type !== undefined
+        ? args.skin_type == null || args.skin_type === ''
+          ? null
+          : String(args.skin_type).trim()
+        : stored?.skin_type != null && String(stored.skin_type).trim() !== ''
+          ? String(stored.skin_type).trim()
+          : null;
+
+    if (args.skin_concerns_json !== undefined) {
+      out.skin_concerns_json = KellyToolExecutor._normalizeSkinConcernsForDb(args.skin_concerns_json);
+    } else {
+      const s = stored?.skin_concerns_json;
+      if (Array.isArray(s)) out.skin_concerns_json = s.length ? JSON.stringify(s) : null;
+      else if (typeof s === 'string' && s.trim()) out.skin_concerns_json = s.trim();
+      else out.skin_concerns_json = null;
+    }
+
+    out.pregnancy_status =
+      args.pregnancy_status !== undefined
+        ? args.pregnancy_status == null || args.pregnancy_status === ''
+          ? null
+          : String(args.pregnancy_status).trim()
+        : stored?.pregnancy_status != null && String(stored.pregnancy_status).trim() !== ''
+          ? String(stored.pregnancy_status).trim()
+          : null;
+
+    if (args.prior_dermatologist_json !== undefined) {
+      out.prior_dermatologist_json = KellyToolExecutor._normalizePriorDermForDb(
+        args.prior_dermatologist_json,
+        stored
+      );
+    } else {
+      const s = stored?.prior_dermatologist_json;
+      if (s == null) out.prior_dermatologist_json = null;
+      else if (typeof s === 'object') out.prior_dermatologist_json = JSON.stringify(s);
+      else out.prior_dermatologist_json = String(s);
+    }
+
+    if (args.functional_impact !== undefined) {
+      const v = args.functional_impact;
+      if (v == null || v === '') out.functional_impact = null;
+      else {
+        const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+        out.functional_impact = Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+      }
+    } else {
+      const s = stored?.functional_impact;
+      const n = s == null || s === '' ? NaN : parseInt(String(s), 10);
+      out.functional_impact = Number.isFinite(n) && n >= 1 && n <= 5 ? n : null;
+    }
+
+    const textMerge = (key) => {
+      if (args[key] !== undefined) {
+        out[key] = args[key] == null || args[key] === '' ? null : String(args[key]).trim();
+      } else {
+        out[key] = KellyToolExecutor._hasText(stored?.[key]) ? String(stored[key]).trim() : null;
+      }
+    };
+    textMerge('ingredient_reactions');
+    textMerge('what_has_worked');
+    textMerge('hormonal_context');
+    textMerge('lifestyle_notes');
+    textMerge('environment_notes');
+
+    if (args.triggers_json !== undefined) {
+      out.triggers_json = KellyToolExecutor._normalizeTriggersForDb(args.triggers_json);
+    } else {
+      const s = stored?.triggers_json;
+      if (Array.isArray(s)) out.triggers_json = s.length ? JSON.stringify(s) : null;
+      else if (typeof s === 'string' && s.trim()) out.triggers_json = s.trim();
+      else out.triggers_json = null;
+    }
+
+    return out;
+  }
+
+  static _syncRoutineSkincareIntakeMeta(sessionId, row) {
+    try {
+      const active = String(KellyToolExecutor._getSessionMeta(sessionId, 'routine_intake_active') || '')
+        .toLowerCase();
+      if (active !== '1' && active !== 'true') return;
+      const missing = KellyToolExecutor._skincareHardGateMissingList(row);
+      const gaps = KellyToolExecutor._computeSkincareSoftGaps(row);
+      KellyToolExecutor._setSessionMeta(sessionId, 'skincare_intake_hard_missing_json', JSON.stringify(missing));
+      KellyToolExecutor._setSessionMeta(sessionId, 'skincare_intake_gaps_json', JSON.stringify(gaps));
+      KellyToolExecutor._setSessionMeta(sessionId, 'skincare_intake_hard_complete', missing.length ? '0' : '1');
+
+      const done = String(KellyToolExecutor._getSessionMeta(sessionId, 'intake_complete') || '').toLowerCase();
+      if (done === '1' || done === 'true') return;
+      if (missing.length) return;
+
+      KellyToolExecutor._setSessionMeta(sessionId, 'intake_complete', '1');
+      KellyToolExecutor._setSessionMeta(sessionId, 'skincare_post_intake', '1');
+      if (db.upsertTriageSession) {
+        db.upsertTriageSession({
+          session_id: sessionId,
+          intake_complete_at: new Date().toISOString()
+        });
+      }
+    } catch (_) {}
+  }
+
   static _storeTriageOpqrst(args, sessionId, patientId) {
     try {
       if (!db.upsertTriageSession) return { success: true };
@@ -2114,7 +2558,19 @@ class KellyToolExecutor {
         substance_use: merged.substance_use
       };
       if (detectedLang != null) opqrstPayload.detected_language = detectedLang;
+      const routineSkin = String(KellyToolExecutor._getSessionMeta(sessionId, 'routine_intake_active') || '')
+        .toLowerCase();
+      if (routineSkin === '1' || routineSkin === 'true') {
+        Object.assign(
+          opqrstPayload,
+          KellyToolExecutor._mergeSkincareAssessmentForUpsert(args, stored)
+        );
+      }
       db.upsertTriageSession(opqrstPayload);
+      const freshRow = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
+      if (routineSkin === '1' || routineSkin === 'true') {
+        KellyToolExecutor._syncRoutineSkincareIntakeMeta(sessionId, freshRow);
+      }
       return {
         success: true,
         stored: {
@@ -2167,7 +2623,21 @@ class KellyToolExecutor {
         intake_complete_at: intakeCompleteAt
       };
 
+      const skinPick = {};
+      for (const k of SKINCARE_ASSESSMENT_DB_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(args, k)) skinPick[k] = args[k];
+      }
+      if (Object.keys(skinPick).length) {
+        Object.assign(payload, KellyToolExecutor._mergeSkincareAssessmentForUpsert(skinPick, stored));
+      }
+
       db.upsertTriageSession(payload);
+      const ri = String(KellyToolExecutor._getSessionMeta(sessionId, 'routine_intake_active') || '')
+        .toLowerCase();
+      if (ri === '1' || ri === 'true') {
+        const fresh = db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {};
+        KellyToolExecutor._syncRoutineSkincareIntakeMeta(sessionId, fresh);
+      }
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
@@ -2384,13 +2854,10 @@ class KellyToolExecutor {
       });
 
       const THRESHOLD = KellyToolExecutor._ragConfidenceThreshold();
-      const isRoutineBypass = /routine wellness visit|no active symptoms/i.test(args.symptom_text || '');
-      const routineNoSymptomsFlag = (() => {
-        try {
-          const v = KellyToolExecutor._getSessionMeta(sessionId, 'routine_no_symptoms');
-          return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
-        } catch (_) { return false; }
-      })();
+      const isRoutineBypass =
+        /routine wellness visit|no active symptoms/i.test(args.symptom_text || '') &&
+        !KellyToolExecutor._triageRowHasConcernOrOnsetStored(sessionId);
+      const routineNoSymptomsFlag = KellyToolExecutor._routineNoSymptomsEffective(sessionId);
       if (isRoutineBypass || routineNoSymptomsFlag) {
         result.rag_confidence = Math.max(result.rag_confidence || 0, THRESHOLD);
         result.triage_complete = true;
@@ -2457,6 +2924,11 @@ class KellyToolExecutor {
         // W4-S6.3: Persist SOAP to triage_sessions when triage_complete
         if (triageComplete && result.soap_note) sessionPayload.soap_note = result.soap_note;
         db.upsertTriageSession(sessionPayload);
+        if (triageComplete) {
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, 'kelly_triage_reopen', '0');
+          } catch (_) {}
+        }
       }
       return result;
     } catch (err) {
@@ -2559,6 +3031,62 @@ class KellyToolExecutor {
       return { success: true, answer, sources };
     } catch (e) {
       return { success: false, answer: "I couldn't look up your records right now. Please try again.", sources: 0 };
+    }
+  }
+
+  /** Phase 5 — same pipeline as POST /api/patient/derm-qa (feature-flagged). */
+  static async _runDermPatientQA(args, patientId) {
+    const enabled = String(process.env.DERM_EDUCATION_PIPELINE_ENABLED || 'false').toLowerCase() === 'true';
+    if (!enabled) {
+      return {
+        success: false,
+        error: 'derm_education_pipeline_disabled',
+        message: 'Derm Q&A pipeline is not enabled in this environment.'
+      };
+    }
+    const message = (args.message || '').toString().trim();
+    if (!message) {
+      return { success: false, error: 'message_required' };
+    }
+    try {
+      const { runDermPatientQAPipeline } = require('./derm-patient-qa-pipeline');
+      const out = await runDermPatientQAPipeline({
+        message,
+        imageCaption: (args.image_caption || args.imageCaption || '').toString().trim(),
+        imagePresent: args.image_present === true || args.imagePresent === true,
+        patient_id: patientId || null
+      });
+      const e2eLog =
+        String(process.env.DERM_QA_E2E_LOG || '').toLowerCase() === 'true' ||
+        process.env.DERM_QA_E2E_LOG === '1' ||
+        String(process.env.DERM_QA_TOOL_LOG || '').toLowerCase() === 'true';
+      if (e2eLog) {
+        const payload = {
+          tool: 'run_derm_patient_qa',
+          at: new Date().toISOString(),
+          success: !!out.success,
+          llm_used: !!out.llm_used,
+          compose_mode: out.compose && out.compose.mode,
+          abstain_reason: out.compose && out.compose.abstain_reason,
+          answer_chars: out.answer_text ? String(out.answer_text).length : 0,
+          patient_id: patientId || null
+        };
+        console.log('[DERM_QA_E2E]', JSON.stringify(payload));
+      }
+      return {
+        ...out,
+        answer: out.answer_text,
+        patient_id: patientId || null,
+        tool: 'run_derm_patient_qa'
+      };
+    } catch (e) {
+      if (
+        String(process.env.DERM_QA_E2E_LOG || '').toLowerCase() === 'true' ||
+        process.env.DERM_QA_E2E_LOG === '1'
+      ) {
+        console.error('[DERM_QA_E2E]', JSON.stringify({ tool: 'run_derm_patient_qa', error: e.message }));
+      }
+      return { success: false, error: 'run_failed', message: e.message };
     }
   }
 }

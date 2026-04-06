@@ -8,6 +8,17 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Retell `voice_id` (e.g. retell-Cimo, openai-Alloy, 11labs-Adrian). Retell still handles the call;
+ * this only selects which TTS voice Retell uses. Override per clinic via clinicData.voice_id.
+ */
+function resolveRetellVoiceId(clinicOverride) {
+  if (clinicOverride && String(clinicOverride).trim()) return String(clinicOverride).trim();
+  const envId = process.env.RETELL_VOICE_ID;
+  if (envId && String(envId).trim()) return String(envId).trim();
+  return 'retell-Cimo';
+}
+
 class RetellService {
   constructor() {
     this.apiKey = process.env.RETELL_API_KEY;
@@ -377,7 +388,7 @@ Always be polite, patient, and professional. If you don't know something, ask fo
       const agentPayload = {
         agent_name: `${clinicData.name} Voice Assistant`,
         llm_websocket_url: this.llmWebsocketUrl,
-        voice_id: clinicData.voice_id || '11labs-Adrian',
+        voice_id: resolveRetellVoiceId(clinicData.voice_id),
         language: 'en-US',
         enable_transcription: true,
         enable_recording: true,

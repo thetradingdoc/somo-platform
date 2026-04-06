@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-04-03T16:38:54.023Z",
+  "source_file": "golden_dataset.json",
+  "total_input": 183,
+  "total_cleaned": 182,
+  "total_dropped": 1,
+  "query_style_counts": {
+    "natural_language": 155,
+    "keyword_synthetic": 27
+  },
+  "language_counts": {
+    "en": 182
+  },
+  "stratify_bucket_counts": {
+    "high_risk": 33,
+    "vague_or_worried": 2,
+    "benign_education": 42,
+    "routine_product": 98,
+    "keyword_synthetic": 7
+  },
+  "non_derm_substrings": [
+    "yesstyle",
+    "preparing to ship",
+    "anything goes saturday",
+    "anything goes friday",
+    "anything goes sunday",
+    "price increase in u.s",
+    "price increase in u.s."
+  ],
+  "stratified_slice_size": 120,
+  "stratified_slice_buckets": {
+    "high_risk": 33,
+    "vague_or_worried": 2,
+    "routine_product": 47,
+    "keyword_synthetic": 7,
+    "benign_education": 31
+  }
+}

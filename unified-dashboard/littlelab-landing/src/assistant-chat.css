@@ -1,0 +1,258 @@
+/**
+ * Page 2 — Chat. Same design system as landing + voice: white/cream, brand borders, amber CTA.
+ */
+.axc-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--brand-white);
+  color: var(--brand-black);
+}
+
+.axc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+  border-bottom: 1px solid var(--brand-border);
+  flex-shrink: 0;
+  gap: 10px;
+  background: var(--brand-white);
+}
+
+.axc-icon-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-pill);
+  border: 1px solid #e9e4db;
+  background: var(--brand-white);
+  color: var(--brand-black);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+.axc-icon-btn:hover {
+  background: #fdfbf8;
+}
+
+.axc-icon-btn:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+.axc-title-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brand-border);
+  background: var(--brand-cream);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--brand-black);
+  max-width: min(70vw, 280px);
+}
+
+.axc-title-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axc-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 14px;
+  min-height: 0;
+  background: var(--brand-cream);
+  -webkit-overflow-scrolling: touch;
+}
+
+.axc-bubble {
+  max-width: min(92%, 34rem);
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  box-shadow: var(--shadow-soft);
+}
+
+.axc-bubble--user {
+  align-self: flex-end;
+  background: #fff7ed;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  margin-left: auto;
+  color: var(--brand-black);
+}
+
+.axc-bubble--assistant {
+  align-self: flex-start;
+  background: var(--brand-white);
+  border: 1px solid var(--brand-border);
+  color: var(--brand-black);
+}
+
+.axc-bubble p {
+  margin: 0;
+}
+
+.axc-sparkle {
+  display: inline-flex;
+  margin-right: 6px;
+  vertical-align: middle;
+  color: var(--brand-accent);
+}
+
+.axc-composer {
+  flex-shrink: 0;
+  padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--brand-border);
+  background: var(--brand-white);
+}
+
+.axc-tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.axc-tool-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-panel);
+  border: 1px solid var(--brand-border);
+  background: var(--brand-white);
+  color: var(--brand-black);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+.axc-tool-btn:hover {
+  background: #fdfbf8;
+}
+
+.axc-tool-btn:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+.axc-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.axc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-cream);
+  border: 1px solid var(--brand-border);
+  font-size: 0.75rem;
+  color: var(--brand-gray);
+}
+
+.axc-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--brand-gray);
+  cursor: pointer;
+  padding: 2px;
+  display: inline-flex;
+}
+
+.axc-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.axc-input {
+  flex: 1;
+  min-width: 0;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--brand-border);
+  background: var(--brand-white);
+  color: var(--brand-black);
+  padding: 12px 18px;
+  font-size: 1rem;
+  outline: none;
+  font-family: var(--font-ui);
+}
+
+.axc-input::placeholder {
+  color: #78716c;
+}
+
+.axc-input:focus {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px rgba(255, 165, 31, 0.22);
+}
+
+.axc-input:focus-visible {
+  outline: none;
+}
+
+.axc-send {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--brand-accent);
+  background: var(--brand-accent);
+  color: var(--brand-black);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.axc-send:hover:not(:disabled) {
+  background: var(--brand-accent-hover);
+  border-color: var(--brand-accent-hover);
+}
+
+.axc-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.axc-send:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+.axc-footer-note {
+  margin: 10px 0 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--brand-gray);
+  text-align: center;
+}
+
+.axc-footer-note a {
+  color: #8a5a11;
+  font-weight: 600;
+}

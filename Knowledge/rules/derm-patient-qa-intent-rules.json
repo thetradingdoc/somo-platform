@@ -1,0 +1,96 @@
+{
+  "description": "Derm patient Q&A intent router — supplements global triage-rules.json (systemic emergent/urgent). Used by middleware-platform/services/derm-patient-qa-triage.js",
+  "derm_urgent_skin": [
+    {
+      "id": "changing_mole_or_lesion",
+      "patterns": [
+        "changing mole",
+        "mole changed",
+        "melanoma",
+        "irregular border",
+        "abcde",
+        "asymmetrical mole",
+        "mole growing",
+        "new black spot",
+        "suspicious mole",
+        "high likelihood this is melanoma",
+        "extremely concerning"
+      ],
+      "match_mode": "any_1",
+      "rationale": "Possible skin malignancy — prompt in-person dermatology or urgent care evaluation; not for routine self-care chat."
+    },
+    {
+      "id": "spreading_skin_infection",
+      "patterns": [
+        "spreading redness",
+        "red streak",
+        "rapidly spreading",
+        "febrile and rash",
+        "cellulitis",
+        "facial swelling after",
+        "angioedema",
+        "sjs",
+        "dress syndrome"
+      ],
+      "match_mode": "any_1",
+      "rationale": "Possible severe soft-tissue or systemic reaction — seek urgent in-person care."
+    },
+    {
+      "id": "non_healing_ulcer",
+      "patterns": [
+        "non-healing sore",
+        "ulcer won\\'t heal",
+        "bleeding lesion won't stop",
+        "hole in the skin",
+        "rolled border basal"
+      ],
+      "match_mode": "any_1",
+      "rationale": "Non-healing or ulcerated lesion — needs timely in-person evaluation."
+    }
+  ],
+  "vague_clarify": [
+    {
+      "id": "please_help",
+      "patterns": ["please help me", "please help", "help me", "someone help"],
+      "match_mode": "any_1",
+      "min_message_length": 80,
+      "rationale": "Ultra-short or generic plea — ask one clarifying question before education retrieval."
+    },
+    {
+      "id": "is_this_concerning_short",
+      "patterns": ["is this concerning", "should i be worried", "worried about family", "worried about family member"],
+      "match_mode": "any_1",
+      "max_message_length": 120,
+      "rationale": "High anxiety, low detail — may still need derm escalation if red flags appear in same message; else clarify."
+    }
+  ],
+  "routine_product": [
+    {
+      "id": "retinoid_routine",
+      "patterns": [
+        "tretinoin",
+        "retinoid",
+        "retin-a",
+        "adapalene",
+        "tazarotene",
+        "purging",
+        "spironolactone",
+        "niacinamide routine",
+        "am routine",
+        "pm routine",
+        "moisturizer",
+        "cleanser recommendation"
+      ],
+      "match_mode": "any_1",
+      "rationale": "Product/routine education lane — passage retrieval OK; lower emergency framing."
+    }
+  ],
+  "off_topic": [
+    {
+      "id": "shipping_commerce",
+      "patterns": ["preparing to ship", "yesstyle", "price increase", "anything goes saturday"],
+      "match_mode": "any_1",
+      "rationale": "Non-clinical — refuse or redirect."
+    }
+  ]
+}

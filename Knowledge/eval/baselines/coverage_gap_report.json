@@ -1,0 +1,126 @@
+[
+  {
+    "rank": 1,
+    "cluster": "uncategorised",
+    "miss_count": 1371,
+    "avg_score": 0.2344,
+    "gold_misses": 25,
+    "all_variants_miss": true,
+    "example_queries": [
+      "Please help me",
+      "Please help me",
+      "Please help me"
+    ],
+    "priority": "CRITICAL"
+  },
+  {
+    "rank": 2,
+    "cluster": "side_effects_timeline",
+    "miss_count": 7,
+    "avg_score": 0.2115,
+    "gold_misses": 0,
+    "all_variants_miss": true,
+    "example_queries": [
+      "how long does \"preparing to ship\" on yesstyle take?",
+      "how long does \"preparing to ship\" on yesstyle take?",
+      "how long does \"preparing to ship\" on yesstyle take?"
+    ],
+    "priority": "HIGH"
+  },
+  {
+    "rank": 3,
+    "cluster": "perioral_dermatitis",
+    "miss_count": 6,
+    "avg_score": 0.2627,
+    "gold_misses": 0,
+    "all_variants_miss": true,
+    "example_queries": [
+      "Boa oque pode see isso regi\u00e3o pubiana,apareceu tem um m\u00eas caro\u00e7o duro me ajudem por favor",
+      "Boa oque pode see isso regi\u00e3o pubiana,apareceu tem um m\u00eas caro\u00e7o duro me ajudem por favor",
+      "Boa oque pode see isso regi\u00e3o pubiana,apareceu tem um m\u00eas caro\u00e7o duro me ajudem por favor"
+    ],
+    "priority": "HIGH"
+  },
+  {
+    "rank": 4,
+    "cluster": "skin_texture",
+    "miss_count": 5,
+    "avg_score": 0.2806,
+    "gold_misses": 0,
+    "all_variants_miss": false,
+    "example_queries": [
+      "Fino Premium Touch Hair Oil is tremendously slept on by most people texture",
+      "Men\u2019s shampoo/conditioner recommendations texture",
+      "Men\u2019s shampoo/conditioner recommendations texture"
+    ],
+    "priority": "MEDIUM"
+  },
+  {
+    "rank": 5,
+    "cluster": "retinoid_purge",
+    "miss_count": 4,
+    "avg_score": 0.2381,
+    "gold_misses": 0,
+    "all_variants_miss": false,
+    "example_queries": [
+      "Purging advice",
+      "purging",
+      "purging on month 3 and starting to think this isn't purging anymore"
+    ],
+    "priority": "MEDIUM"
+  },
+  {
+    "rank": 6,
+    "cluster": "spironolactone",
+    "miss_count": 3,
+    "avg_score": 0.2297,
+    "gold_misses": 0,
+    "all_variants_miss": true,
+    "example_queries": [
+      "Being on 150mg of Spironolactone has been a BIG mistake",
+      "Being on 150mg of Spironolactone has been a BIG mistake cyst dehydration irritation barrier_disruption",
+      "Being on 150mg of Spironolactone has been a BIG mistake cyst dehydration irritation barrier_disruption"
+    ],
+    "priority": "MEDIUM"
+  },
+  {
+    "rank": 7,
+    "cluster": "keratosis_pilaris",
+    "miss_count": 3,
+    "avg_score": 0.2961,
+    "gold_misses": 0,
+    "all_variants_miss": true,
+    "example_queries": [
+      "Are these genital warts on my groin and testicle? They are painless and feel same as chicken skin on butt",
+      "Are these genital warts on my groin and testicle? They are painless and feel same as chicken skin on butt irritation",
+      "Are these genital warts on my groin and testicle? They are painless and feel same as chicken skin on butt irritation"
+    ],
+    "priority": "MEDIUM"
+  },
+  {
+    "rank": 8,
+    "cluster": "ingredient_interactions",
+    "miss_count": 3,
+    "avg_score": 0.2374,
+    "gold_misses": 0,
+    "all_variants_miss": true,
+    "example_queries": [
+      "Can I use your drunk elephant? Me- no",
+      "Can I use your drunk elephant? Me- no",
+      "Can I use your drunk elephant? Me- no"
+    ],
+    "priority": "MEDIUM"
+  },
+  {
+    "rank": 9,
+    "cluster": "skin_barrier_damage",
+    "miss_count": 1,
+    "avg_score": 0.2961,
+    "gold_misses": 0,
+    "all_variants_miss": false,
+    "example_queries": [
+      "Delayed barrier damage?"
+    ],
+    "priority": "MEDIUM"
+  }
+]

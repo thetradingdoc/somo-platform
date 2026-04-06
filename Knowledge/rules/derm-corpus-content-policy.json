@@ -1,0 +1,22 @@
+{
+  "comment": "P4.5 — filter low-quality or SEO-style chunks; boost guideline-tagged metadata in rerank (see patient-education-passage-rerank.js).",
+  "seo_spam_substrings": [
+    "click here",
+    "buy now",
+    "limited time offer",
+    "#1 dermatologist",
+    "miracle cure",
+    "guaranteed results overnight",
+    "seo services",
+    "cheap botox"
+  ],
+  "seo_spam_regex": [
+    "\\b(?:best|top)\\s+\\d+\\s+dermatologists?\\s+in\\b",
+    "(?:!!!\\s*){3,}"
+  ],
+  "guideline_metadata_keys": {
+    "boolean": ["guideline", "is_guideline"],
+    "equals": [{ "key": "source_type", "value": "guideline" }],
+    "tags_include": ["guideline", "aad", "approved_brief"]
+  }
+}

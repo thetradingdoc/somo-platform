@@ -99,16 +99,9 @@ function evaluateTriageGuardrailsForSession(sessionIdForGuard, args, bumpOp = 's
   }
 
   const THRESHOLD = threshold();
-  const routineNoSymptoms = (() => {
-    try {
-      const v = KellyToolExecutor._getSessionMeta
-        ? KellyToolExecutor._getSessionMeta(sessionIdForGuard, 'routine_no_symptoms')
-        : null;
-      return String(v || '').toLowerCase() === '1' || String(v || '').toLowerCase() === 'true';
-    } catch (_) {
-      return false;
-    }
-  })();
+  const routineNoSymptoms = KellyToolExecutor._routineNoSymptomsEffective
+    ? KellyToolExecutor._routineNoSymptomsEffective(sessionIdForGuard)
+    : false;
   const allowRoutineBypass = routineNoSymptoms && (bumpOp === 'slots' || bumpOp === 'schedule');
   const sessionRow = db.getTriageSession(sessionIdForGuard);
 

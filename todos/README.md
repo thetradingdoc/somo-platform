@@ -14,6 +14,8 @@ This folder holds task lists, checklists, and todo documents for the DocLittle p
 | [TRIAGE_CONSOLIDATED_PHASED_TODOS.md](TRIAGE_CONSOLIDATED_PHASED_TODOS.md) | Consolidated triage phases / roadmap |
 | [AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout (chat-first + pay), landing handoff, P0 pricing/visit_mode/calendar/payment-status fixes, testing matrix |
 | [Orchestration-todos.md](Orchestration-todos.md) | Hybrid orchestration (LangGraph + Kelly), checkout graph status, canonical tool-event pipeline, review backlog |
+| [Step10-LangChain-LangGraph-LangSmith-todos.md](Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10 pipeline: LangChain guardrails/tools, LangGraph orchestration, LangSmith tracing, provider-reco feasibility & UI notes |
+| [DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm patient Q&A: Reddit-informed eval data, triage-first routing, passage retrieval, grounded answers, Step10/API integration, metrics |
 
 ## Related in docs/
 

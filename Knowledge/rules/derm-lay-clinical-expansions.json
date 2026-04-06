@@ -1,0 +1,15 @@
+{
+  "comment": "Lay ↔ clinical expansion hints for derm patient-education retrieval (see synonym_gap_report for eval motivation).",
+  "pairs": [
+    { "lay": ["zits", "pimples", "breakouts"], "clinical": ["acne vulgaris", "inflammatory papules"] },
+    { "lay": ["tret", "retin a", "retin-a"], "clinical": ["tretinoin", "topical retinoid"] },
+    { "lay": ["dry skin", "flaking"], "clinical": ["xerosis", "desquamation"] },
+    { "lay": ["mole", "beauty mark"], "clinical": ["melanocytic nevus", "pigmented lesion"] },
+    { "lay": ["rash", "spots"], "clinical": ["dermatitis", "morbilliform eruption"] },
+    { "lay": ["eczema"], "clinical": ["atopic dermatitis", "eczematous dermatitis"] },
+    { "lay": ["hives"], "clinical": ["urticaria"] },
+    { "lay": ["cold sore"], "clinical": ["herpes labialis", "oral herpes simplex"] },
+    { "lay": ["sun spots", "liver spots"], "clinical": ["solar lentigines", "seborrheic keratosis context"] },
+    { "lay": ["purging"], "clinical": ["retinoid dermatitis", "initial worsening acne"] }
+  ]
+}

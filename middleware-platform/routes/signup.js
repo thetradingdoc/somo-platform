@@ -902,6 +902,17 @@ router.post('/customers/login', lenientAuthLimiter || rateLimiter, async (req, r
       });
     }
 
+    // Platform admin may suspend a tenant (customer.status !== 'active')
+    const st = (customer.status || 'active').toLowerCase();
+    if (st !== 'active') {
+      console.log('[CUSTOMERS LOGIN] ❌ Customer not active:', customer.id, st);
+      return res.status(403).json({
+        success: false,
+        error: 'Account suspended',
+        message: 'This account is not active. Contact support if you believe this is an error.'
+      });
+    }
+
     // NOTE: Terms acceptance check removed - customers can login without accepting terms
     // Auto-accept terms for tenant customers (they're already using the platform)
     let termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');

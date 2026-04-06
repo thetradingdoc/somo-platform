@@ -19,6 +19,45 @@ if (process.env.NODE_ENV !== 'production') {
 
 const RAG_PROXY_TIMEOUT_MS = parseInt(process.env.RAG_PROXY_TIMEOUT_MS || '15000', 10); // 15s for Render cold start
 
+/**
+ * Patient education passages (parallel index). Tries /api/retrieve_passages then /retrieve_passages.
+ */
+router.post('/retrieve_passages', async (req, res) => {
+  try {
+    let response = await fetch(`${COLAB_RAG_URL}/api/retrieve_passages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(RAG_PROXY_TIMEOUT_MS)
+    });
+
+    if (response.status === 404) {
+      response = await fetch(`${COLAB_RAG_URL}/retrieve_passages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body || {}),
+        signal: AbortSignal.timeout(RAG_PROXY_TIMEOUT_MS)
+      });
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`RAG education API returned ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('RAG retrieve_passages proxy error:', error.message);
+    res.status(503).json({
+      error: 'RAG education API unavailable',
+      details: error.message,
+      passages: [],
+      metadata: { source: 'error_fallback' }
+    });
+  }
+});
+
 router.post('/retrieve', async (req, res) => {
   try {
     // Try /api/retrieve first, fallback to /retrieve if 404
