@@ -630,6 +630,24 @@
                 <div style="color:#94a3b8;">No visual detections yet...</div>
               </div>
             </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Vision Capture Handoff</div>
+              <div id="assistantVisionHandoff" style="font-size:10px; line-height:1.45; max-height:80px; overflow-y:auto; color:#cbd5e1;">
+                <div style="color:#94a3b8;">No capture checklist yet...</div>
+              </div>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Vision Checklist (Provider)</div>
+              <div id="assistantVisionChecklist" style="font-size:10px; line-height:1.5; max-height:90px; overflow-y:auto; color:#e2e8f0;">
+                <div style="color:#94a3b8;">No region checklist rows yet...</div>
+              </div>
+            </div>
+            <div class="assistant-section">
+              <div class="assistant-section-title">Accepted Frames</div>
+              <div id="assistantVisionFrames" style="font-size:10px; line-height:1.5; max-height:90px; overflow-y:auto; color:#e2e8f0;">
+                <div style="color:#94a3b8;">No accepted frames yet...</div>
+              </div>
+            </div>
             <div class="assistant-footer">
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <span id="assistantStatusPill" class="status-pill" data-status="idle">Idle</span>
@@ -641,6 +659,8 @@
           </div>
         </div>
         <div class="controls">
+          <button id="attachThreadBtn" class="btn btn-primary" type="button">Attach File</button>
+          <input id="threadFileInput" type="file" style="display:none;" accept="image/*,.pdf,.txt,.doc,.docx">
           <button id="toggleVideoBtn" class="btn btn-primary">Stop Video</button>
           <button id="toggleMicBtn" class="btn btn-primary">Mute</button>
           <button id="leaveBtn" class="btn btn-danger">Leave Call</button>
@@ -701,6 +721,7 @@
   </div>
 
   <script type="module">
+    import { createWebVoiceTurnController } from '../shared/webVoiceTurnController.js';
     const API_BASE = window.API_BASE || 'http://localhost:4000';
 
     // Auth check
@@ -754,6 +775,8 @@
     let localVideoEnabled = true;
     let localMicEnabled = true;
     let currentRoomName = '';
+    let browserTranscriptController = null;
+    let browserTranscriptEnabled = true;
     let assistantInterval = null;
     let sseAbortController = null;
     let sseReconnectTimeout = null;
@@ -1089,6 +1112,62 @@
       el.style.display = 'block';
     }
 
+    async function sendClientTranscript(text) {
+      if (!currentRoomName || !text) return;
+      try {
+        await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/client-transcript`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            speaker: 'provider',
+            participant_identity: 'web-provider',
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (_) {}
+    }
+
+    async function sendThreadEvent(event) {
+      if (!currentRoomName || !event?.text) return;
+      try {
+        await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/thread-event`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(event)
+        });
+      } catch (_) {}
+    }
+
+    function stopBrowserAutoTranscription() {
+      if (!browserTranscriptController) return;
+      browserTranscriptController.stop();
+      browserTranscriptController = null;
+    }
+
+    function startBrowserAutoTranscription() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR || !browserTranscriptEnabled || !currentRoomName || !localMicEnabled) return;
+      if (!browserTranscriptController) {
+        browserTranscriptController = createWebVoiceTurnController({
+          lang: 'en-US',
+          onFinal: async (text) => {
+            appendTranscriptLine({
+              id: 'local-' + Date.now(),
+              ts: new Date().toISOString(),
+              speaker: 'provider',
+              text
+            });
+            await sendClientTranscript(text);
+          },
+          onFatalError: () => {}
+        });
+      }
+      browserTranscriptController?.start();
+    }
+
     function hideStatus() {
       document.getElementById('status').style.display = 'none';
     }
@@ -1289,6 +1368,9 @@
           const followupsEl = document.getElementById('assistantFollowups');
           const codesEl = document.getElementById('assistantCodes');
           const yoloEl = document.getElementById('assistantYolo');
+          const visionHandoffEl = document.getElementById('assistantVisionHandoff');
+          const visionChecklistEl = document.getElementById('assistantVisionChecklist');
+          const visionFramesEl = document.getElementById('assistantVisionFrames');
           const updatedEl = document.getElementById('assistantUpdatedAt');
           if (summaryEl) {
             const cc = view.chief_complaint ? `Chief complaint: ${view.chief_complaint}` : '';
@@ -1331,6 +1413,64 @@
             if (dets.length > 0) yoloEl.innerHTML = dets.map(d => `<div style="margin-bottom:2px;display:flex;align-items:center;gap:4px;"><span style="color:#22c55e;font-weight:600;">${(d.finding || d.class || 'unknown').replace(/</g, '&lt;')}</span> <span style="color:#94a3b8;font-size:9px;">(${Math.round((d.confidence||0)*100)}%)</span><button type="button" class="confirm-btn" style="font-size:9px;" title="Confirm">✓</button><button type="button" class="dismiss-btn" style="font-size:9px;" title="Dismiss">✕</button></div>`).join('');
             else if (view.yolo_frame_count > 0) yoloEl.innerHTML = '<div style="color:#94a3b8;">Processing frames…</div>';
             else yoloEl.innerHTML = '<div style="color:#94a3b8;">No visual detections yet…</div>';
+          }
+          if (visionHandoffEl) {
+            const vh = view.vision_handoff || {};
+            const coverage = vh.region_coverage_map || {};
+            const quality = Array.isArray(vh.quality_notes) ? vh.quality_notes : [];
+            const reviewFlags = Array.isArray(vh.review_required_flags) ? vh.review_required_flags : [];
+            const checklistRows = Array.isArray(vh.checklist_rows) ? vh.checklist_rows : [];
+            const acceptedFrames = Array.isArray(vh.accepted_frames) ? vh.accepted_frames : [];
+            const entries = Object.entries(coverage);
+            if (!entries.length) {
+              visionHandoffEl.innerHTML = '<div style="color:#94a3b8;">No capture checklist yet...</div>';
+            } else {
+              const coverageHtml = entries
+                .slice(0, 8)
+                .map(([k, v]) => `<div><span style="color:#e2e8f0;">${String(k).replace(/_/g, ' ')}</span>: <span style="color:#93c5fd;">${String(v)}</span></div>`)
+                .join('');
+              const qualityHtml = quality
+                .slice(0, 4)
+                .map((q) => `<div><span style="color:#e2e8f0;">${String(q.region || '').replace(/_/g, ' ')}</span> <span style="color:#94a3b8;">(${q.quality_band || 'n/a'} ${q.quality_score ?? ''})</span></div>`)
+                .join('');
+              const reviewHtml = reviewFlags.length
+                ? `<div style="color:#fbbf24;">Review required: ${reviewFlags.map((r) => String(r).replace(/_/g, ' ')).join(', ')}</div>`
+                : '';
+              visionHandoffEl.innerHTML = `${coverageHtml}${qualityHtml}${reviewHtml}`;
+            }
+            if (visionChecklistEl) {
+              if (!checklistRows.length) {
+                visionChecklistEl.innerHTML = '<div style="color:#94a3b8;">No region checklist rows yet...</div>';
+              } else {
+                visionChecklistEl.innerHTML = checklistRows
+                  .slice(0, 10)
+                  .map((row) => {
+                    const region = String(row.requested_region || 'other').replace(/_/g, ' ');
+                    const status = String(row.status || 'pending');
+                    const attempts = Number(row.attempts || 0);
+                    const review = row.provider_review_required ? ' | review' : '';
+                    return `<div>${region}: <span style="color:#93c5fd;">${status}</span> | tries=${attempts}${review}</div>`;
+                  })
+                  .join('');
+              }
+            }
+            if (visionFramesEl) {
+              if (!acceptedFrames.length) {
+                visionFramesEl.innerHTML = '<div style="color:#94a3b8;">No accepted frames yet...</div>';
+              } else {
+                visionFramesEl.innerHTML = acceptedFrames
+                  .slice(0, 8)
+                  .map((f) => {
+                    const region = String(f.requested_region || 'other').replace(/_/g, ' ');
+                    const band = f.quality_band || 'n/a';
+                    const score = f.quality_score == null ? '-' : Number(f.quality_score).toFixed(2);
+                    const url = String(f.frame_url || '');
+                    const safeUrl = url.replace(/"/g, '&quot;');
+                    return `<div>${region}: ${band} (${score}) ${url ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#86efac;">open</a>` : ''}</div>`;
+                  })
+                  .join('');
+              }
+            }
           }
           if (updatedEl) updatedEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         } catch (e) { console.warn('[assistantOverlay] fetch error', e); }
@@ -1463,6 +1603,7 @@
           enableCameraAndMic();
           attachExistingRemoteVideos(room);
           startSseAndAssistant();
+          startBrowserAutoTranscription();
           loadCaseReport(roomName);
           setClinicalPanelOpen(false);
           setTranscriptOpen(false);
@@ -1476,6 +1617,7 @@
           document.getElementById('videoSection').style.display = 'none';
           document.getElementById('joinBtn').disabled = false;
           stopAssistantPolling();
+          stopBrowserAutoTranscription();
           setClinicalPanelOpen(false);
           setTranscriptOpen(false);
         });
@@ -1564,6 +1706,8 @@
       localMicEnabled = !localMicEnabled;
       room.localParticipant.setMicrophoneEnabled(localMicEnabled);
       document.getElementById('toggleMicBtn').textContent = localMicEnabled ? 'Mute' : 'Unmute';
+      if (localMicEnabled) startBrowserAutoTranscription();
+      else stopBrowserAutoTranscription();
     }
 
     function leaveCall() {
@@ -1571,6 +1715,7 @@
         room.disconnect();
         room = null;
       }
+      stopBrowserAutoTranscription();
     }
 
     function updateConnectionStatus(remoteCount) {
@@ -1618,6 +1763,30 @@
     }
 
     document.getElementById('joinBtn').addEventListener('click', joinRoom);
+    document.getElementById('attachThreadBtn')?.addEventListener('click', () => {
+      document.getElementById('threadFileInput')?.click();
+    });
+    document.getElementById('threadFileInput')?.addEventListener('change', async (e) => {
+      const files = Array.from(e.target?.files || []);
+      if (!files.length || !currentRoomName) return;
+      for (const f of files.slice(0, 6)) {
+        const msg = `[Attachment] ${f.name} (${f.type || 'application/octet-stream'}, ${Math.max(1, Math.round(f.size / 1024))}KB)`;
+        appendTranscriptLine({
+          id: 'att-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          ts: new Date().toISOString(),
+          speaker: 'system',
+          text: msg
+        });
+        await sendThreadEvent({
+          type: 'attachment',
+          text: msg,
+          file_name: f.name,
+          mime_type: f.type || null,
+          actor: 'provider'
+        });
+      }
+      e.target.value = '';
+    });
     document.getElementById('toggleVideoBtn').addEventListener('click', toggleVideo);
     document.getElementById('toggleMicBtn').addEventListener('click', toggleMic);
     document.getElementById('leaveBtn').addEventListener('click', leaveCall);

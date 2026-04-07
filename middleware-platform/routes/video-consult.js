@@ -20,6 +20,36 @@ const { buildTranscriptDeltaItem, buildAssistantUpdatePayload } = require('../se
 const knowledgeService = require('../services/knowledge-service');
 const tokenBudget = require('../utils/token-budget');
 const { adaptIncomingEvent } = require('../services/channel-adapter');
+const {
+  ensureVisionCaptureTables,
+  insertVisionCaptureEvent,
+  upsertChecklistRow,
+  getChecklistRow,
+  listChecklistBySession,
+  getLatestVisionGuidance,
+  insertVisionArtifact,
+  listVisionArtifactsBySession,
+  listVisionEvents
+} = require('../services/vision-capture-store');
+const {
+  VISION_CAPTURE_EVENTS,
+  buildVisionCaptureRequested,
+  buildVisionCaptureResult
+} = require('../services/vision-capture-contract');
+const { evaluateVisionResultOutcome } = require('../services/vision-capture-policy');
+const { buildVisionAssistantGuidance } = require('../services/vision-dialogue-policy');
+const {
+  hasValidConsent,
+  isSecureFrameUrl,
+  extractSignedUrlExpiry,
+  defaultSignedUrlExpiry,
+  isSignedUrlActive,
+  canReadVisionArtifacts,
+  retentionExpiresAt
+} = require('../services/vision-storage-policy');
+const Metrics = require('../services/metrics');
+const { visionFlags } = require('../services/vision-feature-flags');
+const { startVisionCaptureWorker } = require('../services/vision-capture-worker');
 
 const RATE_LIMIT_PER_ROOM = 1000;
 const rateLimitMap = new Map();
@@ -28,6 +58,16 @@ const rateLimitMap = new Map();
 const REALTIME_CODES_DEBOUNCE_MS = 12000;
 const REALTIME_CODES_MIN_TRANSCRIPTS = 3;
 const realtimeCodeTimers = new Map();
+
+function safeIsoMs(value) {
+  const ms = Date.parse(String(value || ''));
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function isArtifactUrlActive(artifact) {
+  if (!artifact) return false;
+  return isSignedUrlActive(artifact.signed_url_expires_at);
+}
 
 function isUnifiedChannelAdapterEnabled() {
   const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_ENABLED || '').toLowerCase().trim();
@@ -97,6 +137,8 @@ function validateLiveKitEnv() {
   return true;
 }
 validateLiveKitEnv();
+ensureVisionCaptureTables();
+startVisionCaptureWorker();
 
 function verifyAgentAuth(req) {
   if (!AGENT_SECRET || !AGENT_SECRET.trim()) return true; // Dev: skip if not set
@@ -667,6 +709,313 @@ router.post('/agent-events', async (req, res) => {
 });
 
 /**
+ * POST /api/video-consult/vision/capture-events
+ * Generic event ingress for vision capture trigger/result (assistant/manual/worker).
+ * Body: { event_type, payload, idempotency_key?, actor? }
+ */
+router.post('/vision/capture-events', express.json(), (req, res) => {
+  const routeStartedAt = Date.now();
+  try {
+    const flags = visionFlags();
+    if (!flags.triggering) {
+      return res.status(503).json({ success: false, error: 'Vision triggering is disabled by feature flag' });
+    }
+    const eventType = String(req.body?.event_type || '').trim();
+    const actor = String(req.body?.actor || 'assistant').trim() || 'assistant';
+    const idempotencyKey = String(req.body?.idempotency_key || '').trim() || null;
+    const payload = req.body?.payload || {};
+
+    let canonical;
+    if (eventType === VISION_CAPTURE_EVENTS.REQUESTED) {
+      canonical = buildVisionCaptureRequested(payload);
+    } else if (eventType === VISION_CAPTURE_EVENTS.RESULT) {
+      canonical = buildVisionCaptureResult(payload);
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid event_type' });
+    }
+
+    if (!canonical.session_id) {
+      return res.status(400).json({ success: false, error: 'payload.session_id required' });
+    }
+
+    const inserted = insertVisionCaptureEvent({
+      event_type: canonical.event_type,
+      session_id: canonical.session_id,
+      trace_id: canonical.trace_id,
+      actor,
+      payload: canonical,
+      idempotency_key: idempotencyKey
+    });
+    if (!inserted.success) {
+      return res.status(500).json({ success: false, error: inserted.error || 'insert failed' });
+    }
+    if (!inserted.duplicate) Metrics.increment(`vision.capture.event.${canonical.event_type}`, 1);
+
+    if (canonical.event_type === VISION_CAPTURE_EVENTS.REQUESTED) {
+      Metrics.increment('vision.capture.trigger_count', 1);
+      if (payload?.camera_enabled === false) {
+        Metrics.increment('vision.capture.camera_off_incidents', 1);
+      }
+      const existing = getChecklistRow(canonical.session_id, canonical.requested_region);
+      upsertChecklistRow({
+        session_id: canonical.session_id,
+        requested_region: canonical.requested_region,
+        status: 'capturing',
+        attempts: existing?.attempts || 0
+      });
+    } else if (canonical.event_type === VISION_CAPTURE_EVENTS.RESULT) {
+      const latestRequested = listVisionEvents(canonical.session_id, VISION_CAPTURE_EVENTS.REQUESTED)
+        .map((e) => {
+          let parsed = null;
+          try { parsed = e.payload_json ? JSON.parse(e.payload_json) : null; } catch (_) {}
+          return { ...e, payload: parsed };
+        })
+        .filter((e) => (e.payload?.requested_region || 'other') === canonical.requested_region)
+        .slice(-1)[0];
+      const existing = getChecklistRow(canonical.session_id, canonical.requested_region);
+      const policy = evaluateVisionResultOutcome(canonical, existing, {
+        maxRetries: process.env.VISION_CAPTURE_MAX_RETRIES
+      });
+      const bestFrame = canonical.best_frame_url || existing?.best_frame_url || null;
+      const bestScore =
+        canonical.quality_score == null
+          ? existing?.quality_score ?? null
+          : Math.max(Number(existing?.quality_score || 0), Number(canonical.quality_score || 0));
+      upsertChecklistRow({
+        session_id: canonical.session_id,
+        requested_region: canonical.requested_region,
+        status: policy.status,
+        attempts: policy.attempts,
+        best_frame_url: bestFrame,
+        quality_score: bestScore,
+        provider_review_required: !!policy.provider_review_required
+      });
+
+      const guidance = buildVisionAssistantGuidance({
+        requestedRegion: canonical.requested_region,
+        status: policy.status,
+        qualityIssues: canonical.quality_issues || [],
+        providerReviewRequired: !!(flags.providerReview && policy.provider_review_required)
+      });
+      insertVisionCaptureEvent({
+        event_type: 'vision_capture_guidance',
+        session_id: canonical.session_id,
+        trace_id: canonical.trace_id,
+        actor: 'policy',
+        payload: {
+          ...guidance,
+          requested_region: canonical.requested_region,
+          status: policy.status
+        }
+      });
+      const guidancePublishedAt = Date.now();
+
+      if (policy.user_give_up) {
+        insertVisionCaptureEvent({
+          event_type: 'vision_capture_escalation',
+          session_id: canonical.session_id,
+          trace_id: canonical.trace_id,
+          actor: 'policy',
+          payload: {
+            session_id: canonical.session_id,
+            requested_region: canonical.requested_region,
+            reason: 'max_retries_exceeded',
+            status: 'failed_max_retries',
+            best_frame_url: bestFrame,
+            provider_review_required: true
+          }
+        });
+      }
+
+      // Persist accepted/good-enough evidence with retention + storage policy metadata.
+      const shouldPersistArtifact = policy.status === 'passed' || policy.status === 'failed_max_retries';
+      if (shouldPersistArtifact && bestFrame) {
+        const consentOk = hasValidConsent(payload);
+        const secureUrl = isSecureFrameUrl(bestFrame);
+        if (consentOk && secureUrl) {
+          const signedUrlExpiresAt = extractSignedUrlExpiry(bestFrame) || defaultSignedUrlExpiry();
+          insertVisionArtifact({
+            session_id: canonical.session_id,
+            requested_region: canonical.requested_region,
+            frame_url: bestFrame,
+            quality_score: bestScore,
+            quality_band: canonical.quality_band || null,
+            provider_review_required: !!policy.provider_review_required,
+            consent_acknowledged: true,
+            storage_encrypted: true,
+            signed_url_expires_at: signedUrlExpiresAt,
+            retention_expires_at: retentionExpiresAt(),
+            access_policy: 'provider_review_only'
+          });
+        } else {
+          insertVisionCaptureEvent({
+            event_type: 'vision_capture_storage_rejected',
+            session_id: canonical.session_id,
+            trace_id: canonical.trace_id,
+            actor: 'policy',
+            payload: {
+              session_id: canonical.session_id,
+              requested_region: canonical.requested_region,
+              consent_ok: consentOk,
+              secure_url: secureUrl,
+              reason: !consentOk ? 'consent_required' : 'insecure_frame_url'
+            }
+          });
+        }
+      }
+
+      Metrics.increment(`vision.capture.status.${policy.status}`, 1);
+      Metrics.increment('vision.capture.attempts.total', Number(policy.attempts || 0));
+      Metrics.increment('vision.capture.attempts.sample_count', 1);
+      if (policy.status === 'retry_needed') Metrics.increment('vision.capture.retry', 1);
+      if (policy.status === 'passed') Metrics.increment('vision.capture.pass', 1);
+      if (policy.status === 'failed_max_retries') {
+        Metrics.increment('vision.capture.unresolved_region_count', 1);
+      }
+      const candidateCount = Array.isArray(canonical.candidate_frame_urls) ? canonical.candidate_frame_urls.length : 0;
+      const estimatedCostCents = Math.round(candidateCount * 0.2 * 100) / 100;
+      Metrics.increment('vision.capture.cost_usd_cents_total', estimatedCostCents);
+      Metrics.increment(`vision.capture.cost_usd_cents.session.${canonical.session_id}`, estimatedCostCents);
+
+      const resultEmittedAtMs = Date.parse(canonical.emitted_at || '');
+      if (latestRequested?.payload?.emitted_at) {
+        const requestedMs = Date.parse(latestRequested.payload.emitted_at);
+        if (Number.isFinite(requestedMs) && Number.isFinite(resultEmittedAtMs) && resultEmittedAtMs >= requestedMs) {
+          Metrics.increment('vision.capture.latency.trigger_to_capture_ms_total', resultEmittedAtMs - requestedMs);
+          Metrics.increment('vision.capture.latency.trigger_to_capture_ms_count', 1);
+        }
+      }
+      if (Number.isFinite(resultEmittedAtMs)) {
+        const captureToResult = Date.now() - resultEmittedAtMs;
+        if (captureToResult >= 0) {
+          Metrics.increment('vision.capture.latency.capture_to_result_ms_total', captureToResult);
+          Metrics.increment('vision.capture.latency.capture_to_result_ms_count', 1);
+        }
+      }
+      const resultToAgentResponse = guidancePublishedAt - routeStartedAt;
+      if (resultToAgentResponse >= 0) {
+        Metrics.increment('vision.capture.latency.result_to_agent_response_ms_total', resultToAgentResponse);
+        Metrics.increment('vision.capture.latency.result_to_agent_response_ms_count', 1);
+      }
+      if (canonical.trace_id) {
+        const elapsed = Date.now() - routeStartedAt;
+        Metrics.increment('vision.capture.latency.trigger_to_result_ms_total', elapsed);
+      }
+    }
+
+    return res.json({
+      success: true,
+      duplicate: !!inserted.duplicate,
+      id: inserted.id || null,
+      event_type: canonical.event_type,
+      session_id: canonical.session_id,
+      vision_state:
+        canonical.event_type === VISION_CAPTURE_EVENTS.RESULT
+          ? {
+              checklist: listChecklistBySession(canonical.session_id),
+              guidance: getLatestVisionGuidance(canonical.session_id)?.payload || null,
+              artifacts: listVisionArtifactsBySession(canonical.session_id)
+            }
+          : undefined
+    });
+  } catch (err) {
+    console.error('[video-consult] vision capture event error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/vision/metrics/inc', express.json(), (req, res) => {
+  try {
+    const sessionId = String(req.body?.session_id || '').trim();
+    const metricName = String(req.body?.metric_name || '').trim();
+    const allowed = new Set([
+      'vision.capture.camera_off_incidents',
+      'vision.capture.guardrail_prompted'
+    ]);
+    if (!sessionId || !metricName || !allowed.has(metricName)) {
+      return res.status(400).json({ success: false, error: 'Invalid session_id or metric_name' });
+    }
+    Metrics.increment(metricName, 1);
+    Metrics.increment(`${metricName}.session.${sessionId}`, 1);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/vision/metrics/:sessionId', (req, res) => {
+  try {
+    const sessionId = String(req.params?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId required' });
+    const all = Metrics.getAll();
+    const triggerCount = Number(all['vision.capture.trigger_count'] || 0);
+    const passCount = Number(all['vision.capture.pass'] || 0);
+    const retryCount = Number(all['vision.capture.retry'] || 0);
+    const unresolvedCount = Number(all['vision.capture.unresolved_region_count'] || 0);
+    const attemptsTotal = Number(all['vision.capture.attempts.total'] || 0);
+    const attemptsSampleCount = Number(all['vision.capture.attempts.sample_count'] || 0);
+    const costSession = Number(all[`vision.capture.cost_usd_cents.session.${sessionId}`] || 0);
+    const cameraOffSession = Number(all[`vision.capture.camera_off_incidents.session.${sessionId}`] || 0);
+    const safeRate = (num, den) => (den > 0 ? num / den : 0);
+
+    return res.json({
+      success: true,
+      session_id: sessionId,
+      metrics: {
+        trigger_count: triggerCount,
+        pass_count: passCount,
+        retry_count: retryCount,
+        unresolved_region_count: unresolvedCount,
+        camera_off_incidents: cameraOffSession,
+        avg_attempts_per_region: safeRate(attemptsTotal, attemptsSampleCount),
+        pass_rate: safeRate(passCount, triggerCount),
+        retry_rate: safeRate(retryCount, triggerCount),
+        unresolved_region_rate: safeRate(unresolvedCount, triggerCount),
+        cost_usd_cents_session: costSession
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/video-consult/vision/session/:sessionId
+ * Returns checklist + latest dialogue guidance for patient/assistant UI.
+ */
+router.get('/vision/session/:sessionId', (req, res) => {
+  try {
+    const sessionId = String(req.params?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId required' });
+    const role =
+      req.user?.role ||
+      req.headers['x-user-role'] ||
+      req.query?.role ||
+      'assistant';
+    if (!canReadVisionArtifacts(role)) {
+      return res.status(403).json({ success: false, error: 'Forbidden: role cannot read vision artifacts' });
+    }
+    const checklist = listChecklistBySession(sessionId);
+    const guidance = getLatestVisionGuidance(sessionId)?.payload || null;
+    const artifacts = listVisionArtifactsBySession(sessionId).filter(isArtifactUrlActive);
+    try {
+      db.logHipaaAccess && db.logHipaaAccess({
+        user_id: req.user?.id || 'vision_session_reader',
+        resource_type: 'vision_capture_artifact',
+        resource_id: sessionId,
+        patient_id: req.query?.patient_id || null,
+        action: 'read',
+        ip_address: req.ip || null
+      });
+    } catch (_) {}
+    return res.json({ success: true, session_id: sessionId, checklist, guidance, artifacts });
+  } catch (err) {
+    console.error('[video-consult] vision session state error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/video-consult/sse/:roomId
  * Server-Sent Events stream for real-time HUD updates.
  * Credentials sent via cookie for same-origin; validate room access.
@@ -887,6 +1236,72 @@ router.post('/rooms/:roomId/summary', express.json(), async (req, res) => {
   } catch (err) {
     console.error('[video-consult] summary error:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/video-consult/rooms/:roomId/client-transcript
+ * Browser-side fallback transcript ingress for provider/patient web clients.
+ */
+router.post('/rooms/:roomId/client-transcript', express.json(), async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const text = String(req.body?.text || '').trim();
+    if (!text) return res.status(400).json({ success: false, error: 'text required' });
+    const payload = {
+      text,
+      speaker: String(req.body?.speaker || 'unknown').trim() || 'unknown',
+      source: 'browser_stt',
+      participant_identity: req.body?.participant_identity || 'web-client',
+      timestamp: req.body?.timestamp || new Date().toISOString()
+    };
+    const transcriptArr = videoConsultService.appendLiveTranscript(roomId, payload);
+    const deltaItem = buildTranscriptDeltaItem({
+      ts: payload.timestamp,
+      speaker: payload.speaker,
+      text: payload.text,
+      text_translated: null
+    });
+    videoConsultSse.broadcastTranscriptDelta(roomId, [deltaItem]);
+    videoConsultSse.broadcastAssistantUpdate(roomId, buildAssistantUpdatePayload({ transcript_delta: [deltaItem], status: 'listening' }));
+    scheduleRealtimeCodeFetch(roomId, transcriptArr?.length || 0);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[video-consult] client-transcript error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/video-consult/rooms/:roomId/thread-event
+ * Persist lightweight attachment/note events in short-term session thread memory.
+ */
+router.post('/rooms/:roomId/thread-event', express.json(), (req, res) => {
+  try {
+    const { roomId } = req.params;
+    if (!roomId) return res.status(400).json({ success: false, error: 'roomId required' });
+    const text = String(req.body?.text || '').trim();
+    const type = String(req.body?.type || 'note').trim() || 'note';
+    if (!text) return res.status(400).json({ success: false, error: 'text required' });
+    videoConsultService.appendShortTermThreadEvent(roomId, {
+      type,
+      text,
+      file_name: req.body?.file_name || null,
+      mime_type: req.body?.mime_type || null,
+      actor: req.body?.actor || 'user'
+    });
+    // Also append as transcript context event so it stays in active assistant thread.
+    videoConsultService.appendLiveTranscript(roomId, {
+      text,
+      speaker: 'system',
+      source: 'thread_event',
+      timestamp: new Date().toISOString()
+    });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[video-consult] thread-event error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

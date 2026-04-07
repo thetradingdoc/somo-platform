@@ -38,3 +38,70 @@ export function landingLiveKitIdentity(sessionId) {
   const slug = String(sessionId || 'user').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 28);
   return `landing-${slug || 'user'}`;
 }
+
+/**
+ * Publish canonical vision capture events to middleware.
+ */
+export async function publishVisionCaptureEvent({ apiBase, eventType, payload, idempotencyKey, actor = 'assistant', signal }) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base) return { success: false, skipped: true, reason: 'missing_api_base' };
+  const res = await fetch(`${base}/api/video-consult/vision/capture-events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      event_type: eventType,
+      payload: payload || {},
+      actor,
+      idempotency_key: idempotencyKey || null
+    }),
+    credentials: 'omit',
+    signal
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    const err = new Error(data.error || `Vision capture event failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export async function fetchVisionSessionState({ apiBase, sessionId, signal }) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base || !sessionId) return { success: false, skipped: true };
+  const res = await fetch(`${base}/api/video-consult/vision/session/${encodeURIComponent(sessionId)}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    signal
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    const err = new Error(data.error || `Vision session state failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export async function incrementVisionMetric({ apiBase, sessionId, metricName, signal }) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base || !sessionId || !metricName) return { success: false, skipped: true };
+  const res = await fetch(`${base}/api/video-consult/vision/metrics/inc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      metric_name: metricName
+    }),
+    credentials: 'omit',
+    signal
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    const err = new Error(data.error || `Vision metric increment failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}

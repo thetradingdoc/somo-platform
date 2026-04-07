@@ -12,6 +12,14 @@ const Groq = require('groq-sdk');
 const videoConsultService = require('./video-consult-service');
 const knowledgeService = require('./knowledge-service');
 const db = require('../database');
+const {
+  listChecklistBySession,
+  listVisionArtifactsBySession
+} = require('./vision-capture-store');
+const {
+  translateVisionSignals,
+  gateIcdSuggestionsByVisionConfidence
+} = require('./vision-symptom-mapper');
 
 const groqApiKey = process.env.GROQ_API_KEY;
 const groqClient = groqApiKey ? new Groq({ apiKey: groqApiKey }) : null;
@@ -32,18 +40,20 @@ function buildTranscriptContext(transcript, maxChars = 2500) {
   return joined.slice(0, maxChars);
 }
 
-async function getRagCodes(clinicalText, specialtyTag) {
+async function getRagCodes(clinicalText, specialtyTag, visionMap = null) {
   try {
-    const dual = await knowledgeService.getCodeCandidatesDualSource(clinicalText, {
+    const retrievalInput = [clinicalText, visionMap?.retrieval_text].filter(Boolean).join('\n');
+    const dual = await knowledgeService.getCodeCandidatesDualSource(retrievalInput || clinicalText, {
       specialty: specialtyTag || 'general',
       maxIcd10: 15,
       maxCpt: 10,
       maxHcpcs: 8
     });
     return {
-      icd10: dual.icd10 || [],
+      icd10: gateIcdSuggestionsByVisionConfidence(dual.icd10 || [], visionMap),
       cpt: dual.cpt || [],
-      hcpcs: dual.hcpcs || []
+      hcpcs: dual.hcpcs || [],
+      vision_symptoms: visionMap?.symptom_terms || []
     };
   } catch (e) {
     console.warn('[video-consult-assistant] RAG failed:', e.message);
@@ -246,6 +256,7 @@ async function getAssistantView(roomId) {
   // Prefer merged codes from session (set after end_session) over live RAG-only fetch
   const sessionMeta = state.session?.metadata || {};
   const preVisit = sessionMeta?.pre_visit || null;
+  const shortTermThread = Array.isArray(sessionMeta?.short_term_thread) ? sessionMeta.short_term_thread : [];
   const storedRag = sessionMeta.rag_context;
   const mergedCodesFromSession =
     storedRag && (storedRag.icd10?.length || storedRag.cpt?.length || storedRag.hcpcs?.length)
@@ -260,6 +271,53 @@ async function getAssistantView(roomId) {
 
   const ragInputText = [preVisitText, transcriptText].filter(Boolean).join('\n\n');
 
+  const visionSessionId = roomId;
+  const checklist = listChecklistBySession(visionSessionId);
+  const artifacts = listVisionArtifactsBySession(visionSessionId);
+  const regionCoverageMap = {};
+  (checklist || []).forEach((r) => {
+    regionCoverageMap[r.requested_region] = r.status;
+  });
+  const bestFramesByRegion = {};
+  (artifacts || []).forEach((a) => {
+    if (!bestFramesByRegion[a.requested_region]) {
+      bestFramesByRegion[a.requested_region] = a.frame_url;
+    }
+  });
+  const qualityNotes = (artifacts || []).map((a) => ({
+    region: a.requested_region,
+    quality_score: a.quality_score,
+    quality_band: a.quality_band
+  }));
+  const reviewRequiredFlags = (artifacts || [])
+    .filter((a) => Number(a.provider_review_required) === 1)
+    .map((a) => a.requested_region);
+
+  const visionHandoff = {
+    region_coverage_map: regionCoverageMap,
+    best_frames_by_region: bestFramesByRegion,
+    quality_notes: qualityNotes,
+    review_required_flags: [...new Set(reviewRequiredFlags)],
+    checklist_rows: (checklist || []).map((r) => ({
+      requested_region: r.requested_region,
+      status: r.status,
+      attempts: Number(r.attempts || 0),
+      quality_score: r.quality_score == null ? null : Number(r.quality_score),
+      provider_review_required: Number(r.provider_review_required) === 1
+    })),
+    accepted_frames: (artifacts || []).map((a) => ({
+      requested_region: a.requested_region,
+      frame_url: a.frame_url,
+      quality_band: a.quality_band || null,
+      quality_score: a.quality_score == null ? null : Number(a.quality_score),
+      provider_review_required: Number(a.provider_review_required) === 1
+    }))
+  };
+  const visionSymptomMap = translateVisionSignals({
+    detections: yoloDetections,
+    checklistRows: visionHandoff.checklist_rows
+  });
+
   if (!transcriptText && yoloDetections.length === 0 && !preVisitText) {
     return {
       room_id: roomId,
@@ -273,11 +331,13 @@ async function getAssistantView(roomId) {
       transcript_preview: [],
       yolo_tracking: yoloDetections,
       yolo_frame_count: yoloFrames.length,
+      vision_handoff: visionHandoff,
+      short_term_thread: shortTermThread.slice(-20)
     };
   }
 
   const specialtyTag = findings?.specialty_tag || 'general';
-  const codes = mergedCodesFromSession || (await getRagCodes(ragInputText || transcriptText, specialtyTag));
+  const codes = mergedCodesFromSession || (await getRagCodes(ragInputText || transcriptText, specialtyTag, visionSymptomMap));
   const llmView = await summarizeWithGroq(transcriptText, codes, preVisit, { status, roomId });
 
   const lastMessages = transcript.slice(-4).map((t) => ({
@@ -301,7 +361,10 @@ async function getAssistantView(roomId) {
       findings,
       transcript_preview: lastMessages,
       yolo_tracking: yoloDetections,
+      vision_symptom_map: visionSymptomMap,
       yolo_frame_count: yoloFrames.length,
+      vision_handoff: visionHandoff,
+      short_term_thread: shortTermThread.slice(-20)
     };
   }
 
@@ -330,7 +393,10 @@ async function getAssistantView(roomId) {
     findings,
     transcript_preview: lastMessages,
     yolo_tracking: yoloDetections,
+    vision_symptom_map: visionSymptomMap,
     yolo_frame_count: yoloFrames.length,
+    vision_handoff: visionHandoff,
+    short_term_thread: shortTermThread.slice(-20)
   };
 }
 

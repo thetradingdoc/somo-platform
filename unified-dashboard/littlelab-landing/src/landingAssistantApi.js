@@ -7,8 +7,9 @@ export async function sendLandingAssistantTurn({
   apiBase,
   message,
   sessionId,
+  turnSeq = null,
   clinicId,
-  preferredLanguage = 'en',
+  preferredLanguage = '',
   kellyFlow = 'skincare',
   signal
 }) {
@@ -21,6 +22,7 @@ export async function sendLandingAssistantTurn({
     message: String(message || '').trim(),
     session_id: sessionId
   };
+  if (turnSeq != null && Number.isFinite(Number(turnSeq))) body.turn_seq = Number(turnSeq);
   if (clinicId) body.clinic_id = clinicId;
   if (preferredLanguage) body.preferred_language = String(preferredLanguage).trim().toLowerCase();
   if (kellyFlow != null && String(kellyFlow).trim() !== '') {
@@ -38,6 +40,65 @@ export async function sendLandingAssistantTurn({
     const err = new Error(data.error || `Request failed (${r.status})`);
     err.status = r.status;
     err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+export async function publishLandingThreadEvent({
+  apiBase,
+  sessionId,
+  eventType = 'attachment',
+  text,
+  fileName = null,
+  mimeType = null,
+  signal
+}) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base) throw new Error('API base URL is not configured');
+  const url = `${base}/api/public/landing-assistant/thread-event`;
+  const body = {
+    session_id: String(sessionId || '').trim(),
+    type: String(eventType || 'note').trim(),
+    text: String(text || '').trim(),
+    file_name: fileName ? String(fileName).trim() : null,
+    mime_type: mimeType ? String(mimeType).trim() : null
+  };
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    body: JSON.stringify(body),
+    signal
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.success) {
+    const err = new Error(data.error || `Request failed (${r.status})`);
+    err.status = r.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+export async function incrementLandingVoiceMetric({ apiBase, sessionId, metricName, value = 1, signal }) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base || !sessionId || !metricName) return { success: false, skipped: true };
+  const r = await fetch(`${base}/api/public/landing-assistant/voice-metrics/inc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    body: JSON.stringify({
+      session_id: String(sessionId).trim(),
+      metric_name: String(metricName).trim(),
+      value: Number(value) || 1
+    }),
+    signal
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.success) {
+    const err = new Error(data.error || `Request failed (${r.status})`);
+    err.status = r.status;
     throw err;
   }
   return data;

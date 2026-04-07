@@ -59,6 +59,14 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 ---
 
+## 5.1 Clinical safety language (must keep)
+
+- Vision output in this flow is **assistive capture guidance**, not diagnosis.
+- Region/quality checks (e.g., "show neck", "too blurry") are for **data quality and provider handoff**, not definitive clinical conclusions.
+- When capture quality is only fair, mark for **provider review required** and continue with clinician judgment.
+
+---
+
 ## 6. Related docs
 
 - [VIDEO_CONSULT.md](./VIDEO_CONSULT.md) — Provider video consult, agents, env, runbook  

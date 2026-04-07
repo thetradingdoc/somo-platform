@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
-import { fetchLiveKitToken, landingLiveKitIdentity, landingTryRoomName } from './landingLiveKitApi';
+import { fetchLiveKitToken, landingLiveKitIdentity, landingTryRoomName, publishVisionCaptureEvent } from './landingLiveKitApi';
 
 function safeDomId(s) {
   return String(s || 'p').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -21,6 +21,8 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
   const previewStreamRef = useRef(null);
   const intentionalLeaveRef = useRef(false);
   const connectAbortRef = useRef(null);
+  const recoveringCameraRef = useRef(false);
+  const desiredCameraOnRef = useRef(true);
 
   const attachLocalVideo = useCallback(
     (room) => {
@@ -77,6 +79,40 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       if (el) el.remove();
     },
     [remoteVideoContainerRef]
+  );
+
+  const hasActiveLocalCameraTrack = useCallback((room) => {
+    const pub = room?.localParticipant?.getTrackPublication(Track.Source.Camera);
+    const mediaTrack = pub?.track?.mediaStreamTrack;
+    return !!(pub?.track && !pub.isMuted && mediaTrack && mediaTrack.readyState === 'live');
+  }, []);
+
+  const ensureLocalCameraAttached = useCallback(
+    async (room, reason = 'sync') => {
+      if (!room) return;
+      if (!desiredCameraOnRef.current) return;
+      if (hasActiveLocalCameraTrack(room)) {
+        attachLocalVideo(room);
+        setCameraEnabled(true);
+        return;
+      }
+      if (recoveringCameraRef.current) return;
+      recoveringCameraRef.current = true;
+      try {
+        await room.localParticipant.setCameraEnabled(true);
+        attachLocalVideo(room);
+        setCameraEnabled(true);
+      } catch (e) {
+        if (/Permission|denied|NotAllowed|NotReadable|in use|busy/i.test(String(e?.message || ''))) {
+          setPermissionHint('Camera feed dropped. Re-enable camera permissions, then tap Start camera.');
+        } else if (reason === 'watchdog') {
+          setPermissionHint('Camera feed dropped. Tap Start camera to resume.');
+        }
+      } finally {
+        recoveringCameraRef.current = false;
+      }
+    },
+    [attachLocalVideo, hasActiveLocalCameraTrack]
   );
 
   const leaveRoom = useCallback(() => {
@@ -172,10 +208,29 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
         room.on(RoomEvent.LocalTrackPublished, (pub) => {
           if (pub.track?.kind !== Track.Kind.Video) return;
           attachLocalVideo(room);
+          desiredCameraOnRef.current = true;
+          setCameraEnabled(true);
+          setPermissionHint('');
           const prev = previewStreamRef.current;
           if (prev) {
             prev.getTracks().forEach((t) => t.stop());
             previewStreamRef.current = null;
+          }
+        });
+        room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
+          if (pub?.kind === Track.Kind.Video) {
+            setCameraEnabled(false);
+          }
+        });
+        room.on(RoomEvent.TrackMuted, (_pub, participant) => {
+          if (participant?.isLocal) setCameraEnabled(false);
+        });
+        room.on(RoomEvent.TrackUnmuted, (pub, participant) => {
+          if (!participant?.isLocal) return;
+          if (pub?.source === Track.Source.Camera || pub?.kind === Track.Kind.Video) {
+            desiredCameraOnRef.current = true;
+            setCameraEnabled(true);
+            attachLocalVideo(room);
           }
         });
 
@@ -204,6 +259,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
 
         try {
           await room.localParticipant.enableCameraAndMicrophone();
+          desiredCameraOnRef.current = true;
           setCameraEnabled(true);
         } catch (e) {
           const msg = e?.message || String(e);
@@ -230,6 +286,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
             if (pub.track && pub.kind === Track.Kind.Video) attachRemoteTrack(pub.track, p);
           });
         });
+        await ensureLocalCameraAttached(room, 'post-connect');
 
         return;
       } catch (e) {
@@ -240,9 +297,10 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
 
     setPhase('failed');
     setErrorMessage(lastErr?.message || 'Could not connect to live video.');
-  }, [apiBase, getSessionId, attachLocalVideo, attachRemoteTrack, clearRemoteVideos, removeRemoteParticipantVideo, localVideoRef]);
+  }, [apiBase, getSessionId, attachLocalVideo, attachRemoteTrack, clearRemoteVideos, removeRemoteParticipantVideo, localVideoRef, ensureLocalCameraAttached]);
 
   const setCameraOn = useCallback(async (on) => {
+    desiredCameraOnRef.current = !!on;
     const room = roomRef.current;
     if (room) {
       try {
@@ -271,6 +329,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
   }, [attachLocalVideo]);
 
   const beginTryNow = useCallback(async () => {
+    desiredCameraOnRef.current = true;
     setPermissionHint('');
     setErrorMessage('');
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -317,6 +376,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
 
   useEffect(() => {
     return () => {
+      desiredCameraOnRef.current = false;
       intentionalLeaveRef.current = true;
       const r = roomRef.current;
       roomRef.current = null;
@@ -330,6 +390,22 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'connected') return;
+    const room = roomRef.current;
+    if (!room) return;
+    const id = setInterval(() => {
+      if (phase !== 'connected') return;
+      const r = roomRef.current;
+      if (!r) return;
+      if (!desiredCameraOnRef.current) return;
+      if (!hasActiveLocalCameraTrack(r)) {
+        void ensureLocalCameraAttached(r, 'watchdog');
+      }
+    }, 1800);
+    return () => clearInterval(id);
+  }, [phase, hasActiveLocalCameraTrack, ensureLocalCameraAttached]);
 
   useEffect(() => {
     const el = localVideoRef?.current;
@@ -349,6 +425,25 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     void connect();
   }, [connect]);
 
+  const requestCaptureNow = useCallback(async (requestedRegion = 'other') => {
+    const sid = getSessionId() || '';
+    if (!sid || !apiBase) return;
+    try {
+      await publishVisionCaptureEvent({
+        apiBase,
+        eventType: 'vision_capture_requested',
+        actor: 'manual',
+        idempotencyKey: `manual:${sid}:${requestedRegion}:${Date.now()}`,
+        payload: {
+          session_id: sid,
+          requested_region: requestedRegion,
+          reason: 'manual_capture',
+          attempt_index: 1
+        }
+      });
+    } catch (_) {}
+  }, [apiBase, getSessionId]);
+
   return {
     phase,
     entryStep,
@@ -361,6 +456,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     leaveRoom,
     retryConnect,
     setCameraOn,
+    requestCaptureNow,
     syncMicWithVoice,
     isConnected: phase === 'connected',
     inSession: entryStep === 'session'

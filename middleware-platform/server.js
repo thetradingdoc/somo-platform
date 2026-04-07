@@ -14777,6 +14777,51 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
 // Shared Kelly triage turn + orchestrate persistence (patient portal and public landing).
 async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId }) {
   const KellyAgentService = require('./services/kelly-agent-service');
+  const KellyToolExecutor = require('./services/kelly-tool-executor');
+  const extractEmailFromText = (text) => {
+    const m = String(text || '').match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+    return m ? String(m[0]).toLowerCase() : null;
+  };
+  const hasUploadSignal = (text) => /\b(upload|image|photo|file|attachment|document|pdf|jpg|png)\b/i.test(String(text || ''));
+  const summarizeReplyForReport = (text) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  const tokenize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+  const jaccard = (a, b) => {
+    const sa = new Set(tokenize(a));
+    const sb = new Set(tokenize(b));
+    if (!sa.size || !sb.size) return 0;
+    let inter = 0;
+    sa.forEach((t) => { if (sb.has(t)) inter++; });
+    return inter / (sa.size + sb.size - inter);
+  };
+  const looksEnglishReply = (text) => {
+    const s = String(text || '').trim();
+    if (!s) return false;
+    if (/[\u0400-\u04FF]/.test(s)) return false;
+    if (/[àâçéèêëîïôûùüÿœ]/i.test(s)) return false;
+    return /\b(what|how|today|your|you|main|symptom|concern|help|please)\b/i.test(s);
+  };
+  const translateReplyIfNeeded = async (reply, targetLang) => {
+    const target = String(targetLang || '').trim().toLowerCase();
+    if (!reply || !target || target === 'en') return reply;
+    if (!looksEnglishReply(reply)) return reply;
+    if (!process.env.OPENAI_API_KEY) return reply;
+    try {
+      const OpenAI = require('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const out = await openai.chat.completions.create({
+        model: process.env.VIDEO_TRANSLATION_MODEL || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: `Translate the assistant reply into ${target} while preserving meaning and concise style.` },
+          { role: 'user', content: String(reply) }
+        ],
+        temperature: 0.1,
+        max_tokens: 220
+      });
+      return String(out.choices?.[0]?.message?.content || reply).trim() || reply;
+    } catch (_) {
+      return reply;
+    }
+  };
   // S-1: No last-resort fallback clinic (multi-tenant leak). Use env, request, or patient's clinic only.
   let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
   if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
@@ -14807,6 +14852,24 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const meta = req.body?.meta || {};
   let session_id = (req.body?.session_id || state.session_id || '').toString().trim() || null;
   if (!session_id) session_id = require('uuid').v4();
+  const incomingTurnSeq = Number(req.body?.turn_seq || 0);
+  if (Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0) {
+    const latestSeq = Number(KellyToolExecutor._getSessionMeta(session_id, 'web_voice_latest_turn_seq') || 0);
+    if (incomingTurnSeq < latestSeq) {
+      return {
+        status: 200,
+        json: {
+          success: true,
+          session_id,
+          skipped: true,
+          reason: 'stale_turn',
+          reply_seq: incomingTurnSeq,
+          request_id: req.id
+        }
+      };
+    }
+    KellyToolExecutor._setSessionMeta(session_id, 'web_voice_latest_turn_seq', String(incomingTurnSeq));
+  }
 
   if (isUnifiedChannelAdapterEnabled() || isUnifiedChannelAdapterShadowEnabled()) {
     try {
@@ -14894,6 +14957,17 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     .toString()
     .trim()
     .toLowerCase();
+  const detectPreferredLanguage = () => {
+    if (preferredLanguageFromBody) return preferredLanguageFromBody;
+    try {
+      const { detectLanguageFromText } = require('./services/patient-orchestrator-service');
+      const detected = detectLanguageFromText(trimmedMessage)?.code || '';
+      return String(detected || '').trim().toLowerCase() || '';
+    } catch (_) {
+      return '';
+    }
+  };
+  const effectivePreferredLanguage = detectPreferredLanguage();
 
   const result = await KellyAgentService.processTurn({
     message: trimmedMessage,
@@ -14904,8 +14978,84 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     patientName: null,
     patientEmail: email,
     portalSessionId,
-    preferredLanguage: preferredLanguageFromBody === 'en' ? 'en' : null
+    preferredLanguage: effectivePreferredLanguage || null
   });
+  if (req.path === '/api/public/landing-assistant/turn') {
+    result.reply = await translateReplyIfNeeded(result.reply, effectivePreferredLanguage);
+  }
+  const metricsSessionKey = `voice.metrics.session.${session_id}.`;
+  const isLandingRoute = req.path === '/api/public/landing-assistant/turn';
+  const isLikelyVoiceStyle = isLandingRoute;
+  const flowStateOut = (result.state && typeof result.state === 'object') ? { ...result.state } : {};
+  const shortThread = Array.isArray(flowStateOut.short_term_thread) ? [...flowStateOut.short_term_thread] : [];
+  const nowIso = new Date().toISOString();
+  const extractedEmail = extractEmailFromText(trimmedMessage) || extractEmailFromText(email);
+  if (extractedEmail) {
+    KellyToolExecutor._setSessionMeta(session_id, 'skincare_contact_email', extractedEmail);
+    shortThread.push({ type: 'contact_email_captured', at: nowIso, value: extractedEmail });
+  }
+  if (hasUploadSignal(trimmedMessage)) {
+    shortThread.push({ type: 'upload_context', at: nowIso, text: trimmedMessage.slice(0, 240) });
+  }
+  const isGuidanceComplete = result?.skincare_assessment_complete === true || result?.report_ready === true;
+  let reportPayload = null;
+  if (isGuidanceComplete) {
+    const reportId = `skin-report-${session_id}`;
+    const reportEmail = KellyToolExecutor._getSessionMeta(session_id, 'skincare_contact_email') || extractedEmail || null;
+    reportPayload = {
+      report_id: reportId,
+      session_id: session_id,
+      generated_at: nowIso,
+      delivery_email: reportEmail,
+      summary: summarizeReplyForReport(result.reply),
+      source: 'post_guidance_autogen'
+    };
+    KellyToolExecutor._setSessionMeta(session_id, 'skincare_report_json', JSON.stringify(reportPayload));
+    KellyToolExecutor._setSessionMeta(session_id, 'skincare_report_generated_at', nowIso);
+    shortThread.push({ type: 'report_generated', at: nowIso, report_id: reportId });
+    if (!reportEmail) {
+      result.reply = `${String(result.reply || '').trim()} To send your care summary, what email should I use?`.trim();
+      result.next_step = result.next_step || 'collect_email_for_report';
+    }
+  }
+  flowStateOut.short_term_thread = shortThread.slice(-20);
+  if (isLikelyVoiceStyle) {
+    const replyText = String(result.reply || '');
+    const questionCount = (replyText.match(/\?/g) || []).length;
+    const assistantWords = tokenize(replyText).length;
+    const prevAssistants = conversationHistory
+      .filter((m) => m && m.role === 'assistant' && m.content)
+      .slice(-2)
+      .map((m) => String(m.content));
+    const looksRephrase = prevAssistants.some((p) => jaccard(p, replyText) >= 0.72);
+    Metrics.increment('voice.metrics.assistant_turns', 1);
+    Metrics.increment(`${metricsSessionKey}assistant_turns`, 1);
+    Metrics.increment('voice.metrics.assistant_words_total', assistantWords);
+    Metrics.increment(`${metricsSessionKey}assistant_words_total`, assistantWords);
+    if (questionCount > 1) {
+      Metrics.increment('voice.metrics.multi_question_turns', 1);
+      Metrics.increment(`${metricsSessionKey}multi_question_turns`, 1);
+    }
+    if (looksRephrase) {
+      Metrics.increment('voice.metrics.rephrase_within_2_turns', 1);
+      Metrics.increment(`${metricsSessionKey}rephrase_within_2_turns`, 1);
+    }
+    const firstUserAtRaw = KellyToolExecutor._getSessionMeta(session_id, 'voice_first_user_turn_at_ms');
+    if (!firstUserAtRaw) {
+      KellyToolExecutor._setSessionMeta(session_id, 'voice_first_user_turn_at_ms', String(Date.now()));
+    }
+    const firstHelpfulRaw = KellyToolExecutor._getSessionMeta(session_id, 'voice_first_helpful_response_at_ms');
+    const helpful = assistantWords >= 8 && !/\bi'?m here\b/i.test(replyText);
+    if (!firstHelpfulRaw && helpful) {
+      const nowMs = Date.now();
+      KellyToolExecutor._setSessionMeta(session_id, 'voice_first_helpful_response_at_ms', String(nowMs));
+      const firstUserAt = Number(KellyToolExecutor._getSessionMeta(session_id, 'voice_first_user_turn_at_ms') || nowMs);
+      const delta = Math.max(0, nowMs - firstUserAt);
+      Metrics.increment('voice.metrics.time_to_first_helpful_response_ms_total', delta);
+      Metrics.increment('voice.metrics.time_to_first_helpful_response_ms_count', 1);
+      Metrics.increment(`${metricsSessionKey}time_to_first_helpful_response_ms`, delta);
+    }
+  }
 
   // Always persist chat conversation history so the next turn has the right
   // triage/OPQRST state even when the LLM/tool loop had to fall back.
@@ -14939,7 +15089,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
         portal_session_id: portalSessionId,
         clinic_id: clinicId,
         conversation_history: updatedHistory,
-        flow_state: result.state || existingFlowState || state,
+        flow_state: flowStateOut || existingFlowState || state,
         turn_count: newTurnCount,
         preferred_language: preferredLanguage
       });
@@ -14948,14 +15098,18 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     }
   }
 
-  const reply = (result.reply && String(result.reply).trim()) || "I'm here. How can I help you today?";
+  const reply = (result.reply && String(result.reply).trim()) || "I am here with you. Tell me what is bothering your skin most right now.";
+  const responseLanguage =
+    String(result.language || effectivePreferredLanguage || preferredLanguageFromBody || 'en')
+      .trim()
+      .toLowerCase() || 'en';
   return {
     status: 200,
     json: {
       success: true,
       reply,
       session_id: session_id,
-      state: result.state || state,
+      state: flowStateOut || state,
       // Expose tool usage for E2E metrics harness (used by scripts/run-kelly-tests.sh)
       toolsUsed: Array.isArray(result.toolsUsed) ? result.toolsUsed : [],
       next_chips: result.next_chips || [],
@@ -14965,6 +15119,11 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
       next_step: result.next_step,
       provider_cards: Array.isArray(result.provider_cards) ? result.provider_cards : undefined,
       literature_snippets: Array.isArray(result.literature_snippets) ? result.literature_snippets : undefined,
+      language: responseLanguage,
+      preferred_language: responseLanguage,
+      report: reportPayload || undefined,
+      reply_seq: Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0 ? incomingTurnSeq : undefined,
+      short_term_thread: flowStateOut.short_term_thread || [],
       request_id: req.id
     }
   };
@@ -16422,6 +16581,170 @@ app.post('/api/public/landing-assistant/turn', apiLimiter, validatePatientTriage
   try {
     const out = await handlePublicLandingAssistantMessage(req);
     return res.status(out.status).json(out.json);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim();
+    const lang = String(req.body?.lang || 'en-US').trim();
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'text required', request_id: req.id });
+    }
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ success: false, error: 'OPENAI_API_KEY not configured', request_id: req.id });
+    }
+    const OpenAI = require('openai');
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const langCode = String(lang || 'en')
+      .toLowerCase()
+      .split(/[-_]/)[0]
+      .trim();
+    const voiceByLang = {
+      en: process.env.WEB_VOICE_TTS_VOICE_EN || process.env.WEB_VOICE_TTS_VOICE || 'alloy',
+      fr: process.env.WEB_VOICE_TTS_VOICE_FR || process.env.WEB_VOICE_TTS_VOICE || 'alloy',
+      ru: process.env.WEB_VOICE_TTS_VOICE_RU || process.env.WEB_VOICE_TTS_VOICE || 'alloy',
+      sw: process.env.WEB_VOICE_TTS_VOICE_SW || process.env.WEB_VOICE_TTS_VOICE || 'alloy'
+    };
+    const voice = voiceByLang[langCode] || process.env.WEB_VOICE_TTS_VOICE || 'alloy';
+    const model = process.env.WEB_VOICE_TTS_MODEL || 'gpt-4o-mini-tts';
+    const tts = await openai.audio.speech.create({
+      model,
+      voice,
+      input: text.slice(0, 1500)
+    });
+    const buf = Buffer.from(await tts.arrayBuffer());
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(buf);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const sessionId = String(req.body?.session_id || '').trim();
+    const text = String(req.body?.text || '').trim();
+    const type = String(req.body?.type || 'note').trim();
+    if (!sessionId || !text) {
+      return res.status(400).json({ success: false, error: 'session_id and text required', request_id: req.id });
+    }
+    const row = db?.getOrchestrateSessionBySessionId?.(sessionId) || null;
+    const currentFlow = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
+    const thread = Array.isArray(currentFlow.short_term_thread) ? currentFlow.short_term_thread : [];
+    const nextThread = [
+      ...thread,
+      {
+        type,
+        text,
+        file_name: req.body?.file_name || null,
+        mime_type: req.body?.mime_type || null,
+        actor: 'user',
+        created_at: new Date().toISOString()
+      }
+    ].slice(-60);
+    if (db?.upsertOrchestrateSession) {
+      db.upsertOrchestrateSession({
+        session_id: sessionId,
+        channel: row?.channel || 'chat',
+        patient_id: row?.patient_id || null,
+        portal_session_id: row?.portal_session_id || null,
+        clinic_id: row?.clinic_id || null,
+        conversation_history: Array.isArray(row?.conversation_history) ? row.conversation_history : [],
+        flow_state: { ...currentFlow, short_term_thread: nextThread },
+        turn_count: Number(row?.turn_count || 0),
+        preferred_language: row?.preferred_language || 'en'
+      });
+    }
+    return res.json({ success: true, session_id: sessionId, short_term_thread_count: nextThread.length });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.post('/api/public/landing-assistant/voice-metrics/inc', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const sessionId = String(req.body?.session_id || '').trim();
+    const metricName = String(req.body?.metric_name || '').trim();
+    const value = Math.max(1, Number(req.body?.value || 1));
+    const allowed = new Set(['voice.interruption', 'voice.stt_fatal']);
+    if (!sessionId || !metricName || !allowed.has(metricName)) {
+      return res.status(400).json({ success: false, error: 'Invalid session_id or metric_name', request_id: req.id });
+    }
+    Metrics.increment(`voice.metrics.${metricName}.count`, value);
+    Metrics.increment(`voice.metrics.session.${sessionId}.${metricName}.count`, value);
+    return res.json({ success: true, request_id: req.id });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.get('/api/public/landing-assistant/voice-metrics/:sessionId', apiLimiter, async (req, res) => {
+  try {
+    const sessionId = String(req.params?.sessionId || '').trim();
+    if (!sessionId) return res.status(400).json({ success: false, error: 'sessionId required', request_id: req.id });
+    const all = Metrics.getAll();
+    const base = `voice.metrics.session.${sessionId}.`;
+    const assistantTurns = Number(all[`${base}assistant_turns`] || 0);
+    const assistantWordsTotal = Number(all[`${base}assistant_words_total`] || 0);
+    const multiQuestionTurns = Number(all[`${base}multi_question_turns`] || 0);
+    const rephrase2Turns = Number(all[`${base}rephrase_within_2_turns`] || 0);
+    const interruptions = Number(all[`${base}voice.interruption.count`] || 0);
+    const ttfhrMs = Number(all[`${base}time_to_first_helpful_response_ms`] || 0);
+    const safeRate = (n, d) => (d > 0 ? n / d : 0);
+    const metrics = {
+      interruption_rate: safeRate(interruptions, assistantTurns),
+      multi_question_turn_rate: safeRate(multiQuestionTurns, assistantTurns),
+      rephrase_within_2_turns_rate: safeRate(rephrase2Turns, assistantTurns),
+      time_to_first_helpful_response_ms: ttfhrMs || null,
+      avg_assistant_words_per_voice_turn: safeRate(assistantWordsTotal, assistantTurns),
+      assistant_turns: assistantTurns
+    };
+    const thresholds = {
+      max_interruption_rate: Number(process.env.VOICE_SLO_MAX_INTERRUPTION_RATE || 0.45),
+      max_multi_question_turn_rate: Number(process.env.VOICE_SLO_MAX_MULTI_QUESTION_RATE || 0.2),
+      max_rephrase_within_2_turns_rate: Number(process.env.VOICE_SLO_MAX_REPHRASE_RATE || 0.25),
+      max_time_to_first_helpful_response_ms: Number(process.env.VOICE_SLO_MAX_TTFHR_MS || 12000),
+      max_avg_assistant_words_per_voice_turn: Number(process.env.VOICE_SLO_MAX_AVG_WORDS || 32)
+    };
+    const rollout = {
+      interruption_rate_ok: metrics.interruption_rate <= thresholds.max_interruption_rate,
+      multi_question_rate_ok: metrics.multi_question_turn_rate <= thresholds.max_multi_question_turn_rate,
+      rephrase_rate_ok: metrics.rephrase_within_2_turns_rate <= thresholds.max_rephrase_within_2_turns_rate,
+      ttfhr_ok: metrics.time_to_first_helpful_response_ms == null || metrics.time_to_first_helpful_response_ms <= thresholds.max_time_to_first_helpful_response_ms,
+      avg_words_ok: metrics.avg_assistant_words_per_voice_turn <= thresholds.max_avg_assistant_words_per_voice_turn
+    };
+    rollout.accept_for_rollout = Object.values(rollout).every(Boolean);
+    return res.json({ success: true, session_id: sessionId, metrics, thresholds, rollout, request_id: req.id });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.get('/api/public/landing-assistant/voice-metrics/dashboard', apiLimiter, async (req, res) => {
+  try {
+    const all = Metrics.getAll();
+    const totals = {
+      assistant_turns: Number(all['voice.metrics.assistant_turns'] || 0),
+      assistant_words_total: Number(all['voice.metrics.assistant_words_total'] || 0),
+      multi_question_turns: Number(all['voice.metrics.multi_question_turns'] || 0),
+      rephrase_within_2_turns: Number(all['voice.metrics.rephrase_within_2_turns'] || 0),
+      interruption_count: Number(all['voice.metrics.voice.interruption.count'] || 0),
+      ttfhr_ms_total: Number(all['voice.metrics.time_to_first_helpful_response_ms_total'] || 0),
+      ttfhr_ms_count: Number(all['voice.metrics.time_to_first_helpful_response_ms_count'] || 0)
+    };
+    const safeRate = (n, d) => (d > 0 ? n / d : 0);
+    const kpis = {
+      interruption_rate: safeRate(totals.interruption_count, totals.assistant_turns),
+      multi_question_turn_rate: safeRate(totals.multi_question_turns, totals.assistant_turns),
+      rephrase_within_2_turns_rate: safeRate(totals.rephrase_within_2_turns, totals.assistant_turns),
+      time_to_first_helpful_response_ms: safeRate(totals.ttfhr_ms_total, totals.ttfhr_ms_count),
+      avg_assistant_words_per_voice_turn: safeRate(totals.assistant_words_total, totals.assistant_turns)
+    };
+    return res.json({ success: true, totals, kpis, request_id: req.id });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }

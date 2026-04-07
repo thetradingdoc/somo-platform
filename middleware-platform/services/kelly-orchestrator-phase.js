@@ -494,6 +494,7 @@ function buildOrchestrationPromptSection(orch) {
   const p = orch.phase;
   const lines = ['## Orchestrator state (follow strictly)'];
   lines.push(`- **Current phase**: ${p}.`);
+  lines.push('- Keep internal orchestration/tool decisions hidden from the patient; speak in plain natural language.');
   if (p === KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE) {
     lines.push('- **Skincare / routine intake**: collect routine goals, skin context, and current products only for this phase.');
     lines.push(
@@ -501,6 +502,8 @@ function buildOrchestrationPromptSection(orch) {
     );
     lines.push('- **Do not** run **run_triage_rag**, book appointments, or use scheduling/checkout/commerce tools until intake is complete and the phase advances.');
     lines.push('- **Do not recommend** a full product routine until **intake_complete** is set server-side.');
+    lines.push('- Keep conversation natural: ask one focused question at a time and carry forward prior answers instead of repeating checklist prompts.');
+    lines.push('- Use a reflect-then-ask pattern: brief acknowledgment first, then one focused question.');
     lines.push(
       '- If the patient reports **concerning medical symptoms** (pain, chest symptoms, severe bleeding, etc.), call **return_to_triage** so clinical triage can take over.'
     );
@@ -512,6 +515,8 @@ function buildOrchestrationPromptSection(orch) {
     lines.push(
       '- **Do not** run **run_triage_rag**, pick a specialty, or use scheduling/checkout/commerce tools unless the patient clearly asks to book or you use **return_to_triage** for a new medical concern.'
     );
+    lines.push('- Keep tone conversational and supportive; avoid form-style follow-up loops unless the patient asks for structured review.');
+    lines.push('- Use one question per turn by default; only expand when the patient asks for detail.');
     lines.push(
       '- If the patient reports **new concerning medical symptoms**, call **return_to_triage** so clinical triage can take over.'
     );

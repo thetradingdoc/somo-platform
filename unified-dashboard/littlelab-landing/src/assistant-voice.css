@@ -442,3 +442,21 @@
 .axv-live-caption--scan {
   font-size: clamp(0.88rem, 3vw, 1rem);
 }
+
+.axv-vision-chips {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.axv-vision-chip {
+  font-size: 0.72rem;
+  color: #2d2518;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(138, 90, 17, 0.25);
+  border-radius: 999px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}

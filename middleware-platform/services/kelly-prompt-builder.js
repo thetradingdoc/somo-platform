@@ -44,8 +44,11 @@ function buildSharedSafetyBlock(context) {
     'If the patient discloses suicidal thoughts with intent: urge 988 (US) or local crisis services and ER; do not continue routine booking in that turn.',
     '### Response format',
     isVoice
-      ? '- **Voice**: max 1–2 short sentences per turn. No bullet lists. Natural speech.'
+      ? '- **Voice**: max 1–2 short sentences per turn, with at most one direct question unless the patient asks for a full checklist. No bullet lists. Natural speech.'
       : '- **Chat**: concise; bullets OK when listing options.',
+    '- **Reflect then ask**: first mirror the user intent in one short clause, then ask one focused next question.',
+    '- Avoid operational/tooling language in user-facing turns (do not mention tool names, phases, orchestrator, or internal flags).',
+    '- Start with a brief acknowledgment of what the patient just said before asking the next question.',
     '- Match the patient’s language after the first 1–2 messages; do not switch back to English unless they do.'
   ];
   if (patientName) {
@@ -201,6 +204,9 @@ function buildRoutineIntakePhasePrompt(context) {
     '- Use **get_triage_session** and **store_triage_opqrst** to read and save intake using the field mapping in each tool description.',
     '- If **INTAKE / TRIAGE SO FAR** appears in the system message, treat it as ground truth — ask only for missing or clarifying details.',
     '- If lines **Still needed (server)** or **Nice to clarify** appear under that header, prioritise what is still missing.',
+    '- If several required fields are missing, ask for only one highest-value field this turn in voice mode, then continue naturally next turn.',
+    '- Prefer contextual bridge questions (based on what the patient just said) over abrupt form-style jumps.',
+    '- Spoken-style parity for web-video and calls: use short natural phrasing, one question max, and avoid checklist wording.',
     '### What not to do in this phase',
     '- Do **not** run OPQRST/clinical history loops for a straightforward skincare concern.',
     '- Do **not** pivot to “annual visit,” “annual checkup,” or “routine visit with no symptoms” when the user already described a skin concern.',
@@ -212,7 +218,7 @@ function buildRoutineIntakePhasePrompt(context) {
     '- Medical red flags: follow **Safety & channel** above; use **return_to_triage** only as described in **Orchestrator state** (not repeated here).'
   ];
   if (isVoice) {
-    lines.push('- **Voice**: one question or point per turn when possible.');
+    lines.push('- **Voice**: one focused question per turn; avoid stacked multi-part questions.');
   }
   if (kellyScriptHint) {
     lines.push(
@@ -231,6 +237,8 @@ function buildRoutineFollowupPhasePrompt(context) {
     '### Optional follow-up questions',
     '- If **INTAKE / TRIAGE SO FAR** lists **Nice to clarify**, you may gently offer to capture those when the patient is receptive — never as a rigid clinic questionnaire.',
     '- Do not imply they “failed” intake; soft fields improve the personalised report.',
+    '- Keep follow-ups conversational: acknowledge, summarize, then ask one focused follow-up only if needed.',
+    '- Spoken-style parity for web-video and calls: keep turns short and natural, with one question max unless the user asks for detail.',
     '### Persistence',
     '- Use **get_triage_session** / **store_triage_opqrst** only to **clarify or add** details the patient volunteers; **INTAKE / TRIAGE SO FAR** is already populated.',
     '### What not to do',
@@ -242,7 +250,7 @@ function buildRoutineFollowupPhasePrompt(context) {
     '- Medical red flags: follow **Safety & channel**; use **return_to_triage** when appropriate (orchestrator state).'
   ];
   if (isVoice) {
-    lines.push('- **Voice**: one question or short point per turn when possible.');
+    lines.push('- **Voice**: one short follow-up question max per turn; avoid interrogative tone.');
   }
   if (kellyScriptHint) {
     lines.push(

@@ -5,6 +5,7 @@ import { useAssistantSession } from './useAssistantSession';
 import { useConversationSphereLevel } from './useConversationSphereLevel';
 import { useLandingLiveKit } from './useLandingLiveKit';
 import { getOrCreateLandingSessionId } from './landingAssistantApi';
+import { fetchVisionSessionState, incrementVisionMetric } from './landingLiveKitApi';
 import './skin-care-tokens.css';
 import './assistant-shared.css';
 
@@ -65,12 +66,24 @@ export default function AssistantExperience({ onClose }) {
     addFiles,
     interimCaption,
     voiceActive,
-    sessionIdRef
+    sessionIdRef,
+    pushAssistant,
+    leadText
   } = session;
 
   const [page, setPage] = useState(() =>
     typeof window !== 'undefined' && window.location.hash === HASH_CHAT ? 'chat' : 'voice'
   );
+  const [visionState, setVisionState] = useState({
+    checklist: [],
+    guidance: null,
+    sessionMetadata: {
+      requested_regions: [],
+      confirmed_regions: [],
+      pending_regions: [],
+      failed_regions: []
+    }
+  });
 
   const cameraRef = useRef(null);
   const imageRef = useRef(null);
@@ -96,6 +109,85 @@ export default function AssistantExperience({ onClose }) {
       liveKit.syncMicWithVoice(voiceActive);
     }
   }, [voiceActive, liveKit.isConnected, liveKit.syncMicWithVoice]);
+
+  useEffect(() => {
+    if (!liveKit?.inSession || !apiBase) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const sid = getSessionId();
+        const data = await fetchVisionSessionState({ apiBase, sessionId: sid });
+        if (cancelled) return;
+        const checklist = Array.isArray(data.checklist) ? data.checklist : [];
+        const requested = [...new Set(checklist.map((r) => String(r.requested_region || '').trim()).filter(Boolean))];
+        const confirmed = [...new Set(checklist.filter((r) => r.status === 'passed').map((r) => String(r.requested_region || '').trim()).filter(Boolean))];
+        const pending = [...new Set(checklist.filter((r) => r.status === 'pending' || r.status === 'capturing' || r.status === 'retry_needed').map((r) => String(r.requested_region || '').trim()).filter(Boolean))];
+        const failed = [...new Set(checklist.filter((r) => r.status === 'failed_max_retries').map((r) => String(r.requested_region || '').trim()).filter(Boolean))];
+        setVisionState({
+          checklist,
+          guidance: data.guidance || null,
+          sessionMetadata: {
+            requested_regions: requested,
+            confirmed_regions: confirmed,
+            pending_regions: pending,
+            failed_regions: failed
+          }
+        });
+      } catch (_) {}
+    };
+    void poll();
+    const id = setInterval(poll, 1800);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [liveKit?.inSession, apiBase, getSessionId]);
+
+  const cameraOffPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!liveKit?.inSession || !liveKit?.isConnected) {
+      cameraOffPromptedRef.current = false;
+      return;
+    }
+    if (!liveKit.cameraEnabled && !cameraOffPromptedRef.current) {
+      cameraOffPromptedRef.current = true;
+      pushAssistant(
+        'I need your camera on to analyze your face accurately. Please tap Start camera so I can continue your skin assessment.',
+        { speak: true }
+      );
+      return;
+    }
+    if (liveKit.cameraEnabled) {
+      cameraOffPromptedRef.current = false;
+    }
+  }, [liveKit?.inSession, liveKit?.isConnected, liveKit?.cameraEnabled, pushAssistant]);
+
+  const captureGuardPromptedRef = useRef(false);
+  useEffect(() => {
+    const activeCapture =
+      (visionState?.sessionMetadata?.pending_regions || []).length > 0 ||
+      (visionState?.checklist || []).some((r) => ['pending', 'capturing', 'retry_needed'].includes(r.status));
+    if (!liveKit?.inSession || !activeCapture) {
+      captureGuardPromptedRef.current = false;
+      return;
+    }
+    if (!liveKit?.cameraEnabled && !captureGuardPromptedRef.current) {
+      captureGuardPromptedRef.current = true;
+      pushAssistant(
+        'Camera is required to continue this capture checklist. Please tap Start camera so I can verify the requested region.',
+        { speak: true }
+      );
+      void incrementVisionMetric({
+        apiBase,
+        sessionId: getSessionId(),
+        metricName: 'vision.capture.camera_off_incidents'
+      }).catch(() => {});
+      return;
+    }
+    if (liveKit?.cameraEnabled) {
+      captureGuardPromptedRef.current = false;
+    }
+  }, [liveKit?.inSession, liveKit?.cameraEnabled, visionState, pushAssistant]);
 
   const prefersReducedMotion = useMemo(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return false;
@@ -198,6 +290,8 @@ export default function AssistantExperience({ onClose }) {
           liveKit={liveKit}
           localVideoRef={localVideoRef}
           remoteVideoContainerRef={remoteVideoRef}
+          visionState={visionState}
+          leadText={leadText}
         />
       ) : (
         <AssistantChatPage

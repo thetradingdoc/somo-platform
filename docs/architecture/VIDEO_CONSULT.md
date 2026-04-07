@@ -1,6 +1,6 @@
 # Video Consult — Architecture, Env & Runbook
 
-**Last Updated:** April 7, 2026
+**Last Updated:** April 8, 2026
 
 Single reference for LiveKit video consult: flow, environment variables, and ops runbook.
 
@@ -29,6 +29,30 @@ LiveKit room → Python agents (transcript, vision_frame, end_session)
 | store_fhir | After human_review | FHIR Communication, audit |
 
 **Events:** `transcript` / `vision_frame` → append only. `end_session` → full pipeline, then session ended (idempotent if already ended).
+
+---
+
+## 2.1 Vision capture state machine (event-driven)
+
+Vision capture is task-driven (not continuous full-stream CV). Canonical events:
+- `vision_capture_requested`
+- `vision_capture_result`
+
+State transitions per requested region:
+
+```text
+pending -> capturing -> passed
+                   \-> retry_needed -> capturing
+                   \-> failed_max_retries
+```
+
+Key policy behaviors:
+- **Good enough**: if quality is fair but still clinically useful, mark `passed` with `provider_review_required=true`.
+- **Give up/escalate**: after max retries, mark `failed_max_retries` and persist best evidence for manual clinician review.
+
+Trigger contract (minimal):
+- `vision_capture_requested`: `schema_version`, `session_id`, `requested_region`, `reason`, `attempt_index`, `trace_id`
+- `vision_capture_result`: `schema_version`, `session_id`, `requested_region`, `detected_region`, `quality_issues[]`, `quality_band`, `provider_review_required`, `best_frame_url`, `candidate_frame_urls[]`, `region_confidence`, `quality_score`, `trace_id`
 
 ---
 
@@ -63,6 +87,14 @@ LiveKit room → Python agents (transcript, vision_frame, end_session)
 | RAG_FALLBACK_EMPTY / RAG_ERROR_FALLBACK | Check `RAG_API_URL` reachable; `GET {RAG_API_URL}/health`; circuit breaker may be open (log: "RAG circuit open") |
 | FHIR_ERROR | DB writable; verify patient_id/encounter_id (e.g. room `appt-{id}` → getAppointment) |
 | BUDGET_EXCEEDED | Increase `VIDEO_CONSULT_MAX_COST_PER_SESSION` or disable vision |
+| Capture stuck in `retry_needed` | Check worker health + frame ingress; verify `vision_capture_requested` and `vision_capture_result` event counts |
+| `vision_capture_storage_rejected` | Confirm consent payload (`consent_acknowledged`) and secure signed HTTPS frame URLs |
+| No checklist update in UI | Verify `GET /api/video-consult/vision/session/:sessionId` includes checklist and guidance payload |
+
+Operational checks:
+- Worker loop active (`vision-capture-worker`) and not erroring repeatedly.
+- Feature flags enabled as intended: `VISION_FLAG_TRIGGERING`, `VISION_FLAG_ROI`, `VISION_FLAG_QUALITY`, `VISION_FLAG_PROVIDER_REVIEW`.
+- Metrics trend: retries, worker errors, trigger->result latency, sampled frame count/cost.
 
 **Cost:** Vision ~$0.01/frame; end_session ~$0.05. **Scaling:** Postgres checkpointer (`LANGGRAPH_USE_POSTGRES=true`) for multi-instance. **Cleanup:** `node scripts/cleanup-video-consult-data.js` or include in retention job.
 
@@ -82,3 +114,4 @@ The **marketing landing** (`littlelab-landing`) can open a **public** LiveKit ro
 - [HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md) — Voice vs Video vs PDF, shared RAG/codes
 - [MEDIA_LAYER_ARCHITECTURE.md](./media/MEDIA_LAYER_ARCHITECTURE.md) — Media layer
 - [docs/middleware-platform/LANGGRAPH_LANGSMITH.md](../middleware-platform/LANGGRAPH_LANGSMITH.md) — Tracing (video consult runs, retrieve_context metadata)
+- [VISION_UV_R_AND_D.md](./VISION_UV_R_AND_D.md) — UV imaging track (separate hardware/validation program)

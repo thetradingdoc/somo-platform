@@ -38,7 +38,9 @@ export default function AssistantVoicePage({
   spherePaused,
   liveKit,
   localVideoRef,
-  remoteVideoContainerRef
+  remoteVideoContainerRef,
+  visionState,
+  leadText
 }) {
   const lastAssistantText = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -61,6 +63,14 @@ export default function AssistantVoicePage({
 
   const showLead = !interimCaption && !voiceActive && !lastAssistantText;
   const inSession = liveKit?.inSession;
+  const checklistRows = Array.isArray(visionState?.checklist) ? visionState.checklist : [];
+  const statusFor = (s) => {
+    if (s === 'passed') return '✅';
+    if (s === 'failed_max_retries') return '⚠️';
+    if (s === 'capturing' || s === 'retry_needed' || s === 'pending') return '⏳';
+    return '•';
+  };
+  const prettyRegion = (r) => String(r || 'area').replace(/_/g, ' ');
 
   return (
     <div className={`axv-root ${inSession ? 'axv-root--session' : ''}`}>
@@ -109,7 +119,7 @@ export default function AssistantVoicePage({
         {!inSession ? (
           <div className="axv-transcript axv-transcript--invite">
             {showLead ? (
-              <p className="axv-transcript-lead">Hi — I&apos;m your Skin &amp; Care assistant.</p>
+              <p className="axv-transcript-lead">{leadText || "Hi, I'm Kelly. I'll be your Skin & Care assistant today. How can I help?"}</p>
             ) : null}
             <CaptionLine segments={captionSegments} />
             {sending && <p className="axv-caption-status">Thinking…</p>}
@@ -122,6 +132,15 @@ export default function AssistantVoicePage({
                 {sending && <p className="axv-caption-status">Thinking…</p>}
               </>
             )}
+            {inSession && checklistRows.length ? (
+              <div className="axv-vision-chips" aria-label="Capture checklist status">
+                {checklistRows.slice(0, 6).map((row) => (
+                  <span key={`${row.requested_region}-${row.id || row.updated_at || Math.random()}`} className="axv-vision-chip">
+                    {prettyRegion(row.requested_region)} {statusFor(row.status)}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 

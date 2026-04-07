@@ -225,6 +225,23 @@ function markRiskSeen(roomId, ruleIds) {
   (ruleIds || []).forEach((id) => set.add(id));
 }
 
+function appendShortTermThreadEvent(roomId, event = {}) {
+  if (!roomId || !event) return null;
+  const session = db.getVideoConsultSession(roomId);
+  const meta = session?.metadata || {};
+  const current = Array.isArray(meta.short_term_thread) ? meta.short_term_thread : [];
+  const normalized = {
+    type: String(event.type || 'note').trim() || 'note',
+    text: String(event.text || '').trim(),
+    file_name: event.file_name ? String(event.file_name).trim() : null,
+    mime_type: event.mime_type ? String(event.mime_type).trim() : null,
+    created_at: event.created_at || new Date().toISOString(),
+    actor: String(event.actor || 'user').trim() || 'user'
+  };
+  const next = [...current, normalized].slice(-60);
+  return mergeSessionMetadata(roomId, { short_term_thread: next });
+}
+
 /**
  * Resolve room_id (e.g. appt-xyz) to encounter, patient, provider
  * @param {string} roomId - LiveKit room name
@@ -352,6 +369,7 @@ module.exports = {
   logAiDecision,
   getRiskSeenRules,
   markRiskSeen,
+  appendShortTermThreadEvent,
   ENABLE_VISION,
   MAX_FRAMES
 };

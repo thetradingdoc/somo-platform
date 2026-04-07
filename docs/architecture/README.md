@@ -19,6 +19,7 @@ System architecture, design decisions, and technical documentation.
 - **[HYBRID_ARCHITECTURE_IMPROVEMENTS.md](./HYBRID_ARCHITECTURE_IMPROVEMENTS.md)** — Implemented improvements summary
 - **[VIDEO_CONSULT.md](./VIDEO_CONSULT.md)** — Video consult: flow, env vars, runbook (single doc)
 - **[LANDING_TRY_NOW_LIVEKIT.md](./LANDING_TRY_NOW_LIVEKIT.md)** — Skin & Care landing Try now: camera + orb PiP, LiveKit token, not video-consult agents
+- **[VISION_UV_R_AND_D.md](./VISION_UV_R_AND_D.md)** — UV imaging as separate hardware/calibration validation track
 
 ### Layer-Specific
 - **[intelligence-layer/README.md](./intelligence-layer/README.md)** — Multimodal medical AI (Layers 1–4), perception, RAG, coding agents
@@ -64,4 +65,4 @@ System architecture, design decisions, and technical documentation.
 
 ---
 
-**Last Updated:** April 6, 2026
+**Last Updated:** April 8, 2026

@@ -21,6 +21,7 @@ export default function LiveKitPanel({
     leaveRoom,
     retryConnect,
     setCameraOn,
+    requestCaptureNow,
     clearPermissionHint
   } = liveKit;
 
@@ -80,6 +81,9 @@ export default function LiveKitPanel({
             <button type="button" className="ax-lk-btn" onClick={() => setCameraOn(!cameraEnabled)}>
               {cameraEnabled ? 'Stop camera' : 'Start camera'}
             </button>
+            <button type="button" className="ax-lk-btn" onClick={() => requestCaptureNow?.('other')}>
+              Capture now
+            </button>
             <button type="button" className="ax-lk-btn ax-lk-btn--danger" onClick={leaveRoom}>
               End session
             </button>
@@ -99,6 +103,9 @@ export default function LiveKitPanel({
           <>
             <button type="button" className="ax-lk-btn" onClick={() => setCameraOn(!cameraEnabled)}>
               {cameraEnabled ? 'Stop camera' : 'Start camera'}
+            </button>
+            <button type="button" className="ax-lk-btn" onClick={() => requestCaptureNow?.('other')}>
+              Capture now
             </button>
             <button type="button" className="ax-lk-btn ax-lk-btn--danger" onClick={leaveRoom}>
               End session
