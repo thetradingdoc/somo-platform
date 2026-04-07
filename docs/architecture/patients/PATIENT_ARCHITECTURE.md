@@ -1,6 +1,6 @@
 # Patient Architecture — Voice, Chat, UI & Session
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Merged from: PATIENT_VOICE_BOOKING_ARCHITECTURE, TRIAGE_SESSION_SCOPE, PATIENT_UI_SOURCE_OF_TRUTH.
 

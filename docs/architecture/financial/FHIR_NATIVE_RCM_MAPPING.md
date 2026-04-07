@@ -1,6 +1,6 @@
 # FHIR‑Native RCM Mapping (2026) — EMPI + EDI → FHIR
 
-**Last Updated:** February 2026
+**Last Updated:** April 6, 2026
 
 Goal: make the Financial Intelligence Layer **FHIR‑first**. EDI (837/835) is an **ingest format**, not the internal data model. Normalize claims and remits into FHIR resources so agents operate on interoperable, longitudinal data.
 

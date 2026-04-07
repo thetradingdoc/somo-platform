@@ -124,6 +124,7 @@ const EhrSyncJobWorker = require('./services/ehr-sync-job-worker');
 const InsuranceService = require('./services/insurance-service');
 const PayerCacheService = require('./services/payer-cache-service');
 const Metrics = require('./services/metrics');
+const { adaptIncomingEvent } = require('./services/channel-adapter');
 const ProviderService = require('./services/provider-service');
 const PatientPortalService = require('./services/patient-portal-service');
 const PatientIntakeService = require('./services/patient-intake-service');
@@ -135,6 +136,16 @@ const livekitTokenRoutes = require('./routes/livekit');
 const authTokenRoutes = require('./routes/auth-tokens');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('./middleware/jwt-fhir-auth');
+
+function isUnifiedChannelAdapterEnabled() {
+  const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function isUnifiedChannelAdapterShadowEnabled() {
+  const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
 
 // Import Stripe Issuing Service (optional)
 let StripeIssuingService;
@@ -14796,6 +14807,38 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const meta = req.body?.meta || {};
   let session_id = (req.body?.session_id || state.session_id || '').toString().trim() || null;
   if (!session_id) session_id = require('uuid').v4();
+
+  if (isUnifiedChannelAdapterEnabled() || isUnifiedChannelAdapterShadowEnabled()) {
+    try {
+      const adapted = adaptIncomingEvent({
+        source: req.path === '/api/public/landing-assistant/turn' ? 'landing_chat' : 'patient_chat',
+        eventType: 'chat_turn',
+        payload: {
+          message: trimmedMessage,
+          state,
+          meta,
+          clinic_id: req.body?.clinic_id || null,
+          kelly_flow: req.body?.kelly_flow || meta?.kelly_flow || null
+        },
+        sessionId: session_id,
+        requestId: req.id,
+        metadata: {
+          path: req.path,
+          method: req.method
+        }
+      });
+      req.channelAdapterEvent = adapted;
+      req.channelTraceId = adapted?.envelope?.trace_id || req.id;
+      if (process.env.NODE_ENV !== 'production') {
+        const mode = isUnifiedChannelAdapterEnabled() ? 'primary' : 'shadow';
+        console.log(
+          `[channel-adapter:${mode}] trace=${req.channelTraceId} path=${req.path} event=${adapted?.envelope?.event_type || 'unknown'}`
+        );
+      }
+    } catch (e) {
+      console.warn('⚠️  channel-adapter chat adapt failed:', e.message);
+    }
+  }
 
   const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
   let conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];

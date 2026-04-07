@@ -80,4 +80,4 @@ From the repository root (no extra install; uses Node only):
 npm run ci:local
 ```
 
-Runs performance budgets, auth UI guardrails, and agentic checkout verify. For parity with CI, also run retention dry-run: `RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs` (Unix). On Windows, set the env var in your shell before invoking the script.
+Runs performance budgets, auth UI guardrails, retention cleanup **dry-run**, agentic checkout verify, then **`middleware-platform` Jest** and **`release:security-gate`**. Install middleware deps first: `cd middleware-platform && npm ci` (or `npm install`).

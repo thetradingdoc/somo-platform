@@ -10,13 +10,16 @@ const db = require('../database');
 const videoConsultService = require('../services/video-consult-service');
 const videoConsultGraph = require('../services/video-consult-graph');
 const videoConsultAssistant = require('../services/video-consult-assistant-service');
-const { mapYoloToClinical } = videoConsultAssistant;
+const { mapYoloToClinical, mapVisionDetectionsToTags } = videoConsultAssistant;
 const videoConsultSse = require('../services/video-consult-sse');
 const BookingService = require('../services/booking-service');
 const symptomTriage = require('../services/symptom-triage-service');
+const SafetyPreScreen = require('../services/safety-prescreen');
+const QueryPlanner = require('../services/query-planner');
 const { buildTranscriptDeltaItem, buildAssistantUpdatePayload } = require('../services/video-consult-sse-schema');
 const knowledgeService = require('../services/knowledge-service');
 const tokenBudget = require('../utils/token-budget');
+const { adaptIncomingEvent } = require('../services/channel-adapter');
 
 const RATE_LIMIT_PER_ROOM = 1000;
 const rateLimitMap = new Map();
@@ -25,6 +28,16 @@ const rateLimitMap = new Map();
 const REALTIME_CODES_DEBOUNCE_MS = 12000;
 const REALTIME_CODES_MIN_TRANSCRIPTS = 3;
 const realtimeCodeTimers = new Map();
+
+function isUnifiedChannelAdapterEnabled() {
+  const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function isUnifiedChannelAdapterShadowEnabled() {
+  const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
 
 async function fetchAndBroadcastRealtimeCodes(roomId) {
   realtimeCodeTimers.delete(roomId);
@@ -262,6 +275,32 @@ router.post('/agent-events', async (req, res) => {
       return res.status(429).json({ success: false, error: 'Rate limit exceeded' });
     }
 
+    if (isUnifiedChannelAdapterEnabled() || isUnifiedChannelAdapterShadowEnabled()) {
+      try {
+        const adapted = adaptIncomingEvent({
+          source: 'video_consult_agent',
+          eventType: event,
+          payload: payload || {},
+          roomId: room,
+          requestId: req.id,
+          metadata: {
+            path: req.path,
+            method: req.method
+          }
+        });
+        req.channelAdapterEvent = adapted;
+        req.channelTraceId = adapted?.envelope?.trace_id || req.id;
+        if (process.env.NODE_ENV !== 'production') {
+          const mode = isUnifiedChannelAdapterEnabled() ? 'primary' : 'shadow';
+          console.log(
+            `[channel-adapter:${mode}] trace=${req.channelTraceId} room=${room} event=${adapted?.envelope?.event_type || event}`
+          );
+        }
+      } catch (e) {
+        console.warn('[video-consult] channel-adapter adapt failed:', e.message);
+      }
+    }
+
     let options = {
       encounter_id: req.body.encounter_id,
       clinic_id: req.body.clinic_id,
@@ -269,6 +308,16 @@ router.post('/agent-events', async (req, res) => {
       provider_id: req.body.provider_id,
       patientName: req.body.patient_name
     };
+    const plannerServiceOption = QueryPlanner.resolveServiceOption({
+      plan: QueryPlanner.buildTypedQueryPlan({
+        message: String(payload?.text || payload?.content || ''),
+        state: {},
+        pathway: 'video'
+      }),
+      safetyStatus: 'green',
+      preferred: 'doctor_needed'
+    });
+    options.service_option = plannerServiceOption;
 
     const resolved = await videoConsultService.resolveRoomToEncounter(room);
     if (resolved) {
@@ -339,15 +388,21 @@ router.post('/agent-events', async (req, res) => {
         scheduleRealtimeCodeFetch(room, transcriptArr?.length || 0);
         const seenRules = videoConsultService.getRiskSeenRules(room);
         const riskResult = symptomTriage.detectRisk(text, room, seenRules);
-        if (riskResult) {
-          videoConsultService.markRiskSeen(room, riskResult.rule_ids);
-          videoConsultSse.broadcastRiskAlert(room, riskResult);
-          videoConsultSse.broadcastAssistantUpdate(room, buildAssistantUpdatePayload({ risk: riskResult, status: 'listening' }));
+        const unifiedSafety = SafetyPreScreen.evaluateSafety({ text, eventType: 'transcript', payload: transcriptPayload, roomId: room, seenRules });
+        const riskPayload = riskResult || (unifiedSafety?.status !== 'green' ? {
+          level: unifiedSafety.status,
+          flags: unifiedSafety.flags || [],
+          rule_ids: (unifiedSafety.flags || []).map((f) => f.rule_id).filter(Boolean)
+        } : null);
+        if (riskPayload) {
+          videoConsultService.markRiskSeen(room, riskPayload.rule_ids || []);
+          videoConsultSse.broadcastRiskAlert(room, riskPayload);
+          videoConsultSse.broadcastAssistantUpdate(room, buildAssistantUpdatePayload({ risk: riskPayload, status: 'listening' }));
           try {
             const db = require('../database');
             let appointmentId = options.appointment_id || null;
             if (!appointmentId && room.startsWith('appt-')) appointmentId = room.replace(/^appt-/, '');
-            (riskResult.flags || []).forEach((f) => {
+            (riskPayload.flags || []).forEach((f) => {
               db.insertVideoConsultRiskEvent(room, {
                 appointment_id: appointmentId,
                 patient_id: options.patient_id,
@@ -395,15 +450,27 @@ router.post('/agent-events', async (req, res) => {
             timestamp: payload?.timestamp || new Date().toISOString()
           });
           const yoloRaw = payload?.detections || payload?.yolo_detections || [];
-          const yoloFindings = Array.isArray(yoloRaw)
-            ? yoloRaw.map((d) => {
-                const cls = d.class || d.name || 'unknown';
-                const conf = d.confidence || d.conf || 0;
-                const mapped = mapYoloToClinical(cls, conf);
-                return { finding: mapped.finding, confidence: conf, raw_class: cls };
-              })
-            : [];
+          const yoloFindings = mapVisionDetectionsToTags(yoloRaw);
+          options.session_metadata = {
+            ...(options.session_metadata || {}),
+            vision_tags: yoloFindings
+          };
           videoConsultSse.broadcastAssistantUpdate(room, buildAssistantUpdatePayload({ yolo_findings: yoloFindings.slice(0, 5), status: 'processing' }));
+          const unifiedVisionSafety = SafetyPreScreen.evaluateSafety({
+            eventType: 'vision_frame',
+            payload,
+            roomId: room
+          });
+          if (unifiedVisionSafety?.status !== 'green') {
+            const riskPayload = {
+              level: unifiedVisionSafety.status,
+              flags: unifiedVisionSafety.flags || [],
+              rule_ids: (unifiedVisionSafety.flags || []).map((f) => f.rule_id).filter(Boolean)
+            };
+            videoConsultService.markRiskSeen(room, riskPayload.rule_ids || []);
+            videoConsultSse.broadcastRiskAlert(room, riskPayload);
+            videoConsultSse.broadcastAssistantUpdate(room, buildAssistantUpdatePayload({ risk: riskPayload, status: 'processing' }));
+          }
         } catch (e) {
           console.warn('⚠️  Failed to persist frame incrementally:', e.message);
         }
@@ -587,6 +654,7 @@ router.post('/agent-events', async (req, res) => {
       success: result.success !== false,
       stage: result.stage,
       requires_review: result.requires_review,
+      service_option: plannerServiceOption,
       skipped: result.skipped,
       reason: result.reason,
       ...(suggested_codes && { suggested_codes }),

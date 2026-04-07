@@ -1,6 +1,6 @@
 # IONOS DNS Setup — doclittle.site
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Merged from: IONOS_A_RECORD_SETUP, IONOS_DNS_CONFIGURATION.
 

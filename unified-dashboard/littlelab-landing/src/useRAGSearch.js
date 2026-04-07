@@ -113,11 +113,13 @@ export function useRAGSearch() {
         failureCountRef.current = 0;
       } catch (e) {
         failureCountRef.current += 1;
-        console.error('[RAG_SEARCH_ERROR]', {
-          message: e.message,
-          query: q,
-          failures: failureCountRef.current
-        });
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[RAG_SEARCH_ERROR]', {
+            message: e.message,
+            query: q,
+            failures: failureCountRef.current
+          });
+        }
         setError(
           failureCountRef.current >= 3
             ? 'Search is temporarily unavailable. Showing default cards.'

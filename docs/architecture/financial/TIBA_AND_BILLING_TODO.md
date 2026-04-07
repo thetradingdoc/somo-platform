@@ -1,6 +1,6 @@
 # Tiba & Billing — Consolidated Todo
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Merged from: Tiba Gap Analysis, Gap Remediation Todo, Tiba Detailed Todo, Backend Billing Review.
 

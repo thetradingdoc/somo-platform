@@ -18,6 +18,7 @@ System architecture, design decisions, and technical documentation.
 - **[HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md)** — One-page: entry points, how codes are obtained, shared RAG/FHIR, boundaries
 - **[HYBRID_ARCHITECTURE_IMPROVEMENTS.md](./HYBRID_ARCHITECTURE_IMPROVEMENTS.md)** — Implemented improvements summary
 - **[VIDEO_CONSULT.md](./VIDEO_CONSULT.md)** — Video consult: flow, env vars, runbook (single doc)
+- **[LANDING_TRY_NOW_LIVEKIT.md](./LANDING_TRY_NOW_LIVEKIT.md)** — Skin & Care landing Try now: camera + orb PiP, LiveKit token, not video-consult agents
 
 ### Layer-Specific
 - **[intelligence-layer/README.md](./intelligence-layer/README.md)** — Multimodal medical AI (Layers 1–4), perception, RAG, coding agents
@@ -63,4 +64,4 @@ System architecture, design decisions, and technical documentation.
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** April 6, 2026

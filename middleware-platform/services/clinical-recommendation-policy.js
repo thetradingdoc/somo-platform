@@ -33,9 +33,26 @@ function fallbackReply(validation, opts = {}) {
   return validation?.fallback || FALLBACK_REPLY;
 }
 
+function applyOutputGuardrails(text, opts = {}) {
+  let out = String(text || '').trim();
+  const safetyStatus = String(opts.safetyStatus || 'green').toLowerCase();
+  const routineSkincare = !!opts.routineSkincare;
+  if (!out) return out;
+  if (safetyStatus !== 'green') {
+    const hasCommercialTone = /\b(add to cart|checkout|buy|purchase|product line|shop now)\b/i.test(out);
+    if (hasCommercialTone) {
+      out = 'Given your symptoms, I want to prioritize clinical safety first. I recommend medical assessment before any product guidance.';
+    }
+  }
+  const v = validateAssistantText(out);
+  if (!v.ok) return fallbackReply(v, { routineSkincare });
+  return out;
+}
+
 module.exports = {
   validateAssistantText,
   fallbackReply,
+  applyOutputGuardrails,
   FORBIDDEN_REGEX,
   FALLBACK_REPLY,
   FALLBACK_REPLY_ROUTINE_SKINCARE

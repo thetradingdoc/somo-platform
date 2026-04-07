@@ -1,6 +1,6 @@
 # Stripe Issuing — Setup, Status & Implementation
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Consolidated from: STRIPE_ISSUING_COMPLETE_GUIDE, STRIPE_ISSUING_STATUS, STRIPE_ISSUING_ON_DEMAND, STRIPE_ISSUING_IMPLEMENTATION, STRIPE_ISSUING_INTEGRATION.
 

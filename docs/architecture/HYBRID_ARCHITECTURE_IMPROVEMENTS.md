@@ -1,6 +1,6 @@
 # Hybrid Architecture — Improvements (Implemented)
 
-**Last Updated:** February 2026
+**Last Updated:** April 6, 2026
 
 This doc listed planned improvements for the hybrid Voice + Video + PDF + RAG setup. **All items below are implemented.** For current architecture and boundaries, see **[HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md)**.
 

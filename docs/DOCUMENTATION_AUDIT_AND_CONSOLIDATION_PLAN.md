@@ -1,10 +1,10 @@
 # Documentation Audit & Consolidation Plan
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 **See also:** [CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md) — **where to read first** when Kelly, checkout, and voice docs overlap (living index; update when you add a new “source of truth” doc).
 
-**Status:** Phases 1–5 **APPLIED** (March 2026).
+**Status:** Phases 1–5 **APPLIED** (verified April 6, 2026).
 - Phase 1–2: Patient/triage merged; placeholder folders removed.
 - Phase 3: Financial (Tiba + billing) → TIBA_AND_BILLING_TODO.md; Stripe Issuing → STRIPE_ISSUING.md.
 - Phase 4: Voice agent TODOs → VOICE_AGENT_TODO_AND_STATUS.md; Patient architecture → PATIENT_ARCHITECTURE.md, PATIENT_PORTAL_AND_TELEHEALTH_TODO.md, LOCAL_TEST_RUNBOOK.md.

@@ -38,13 +38,7 @@ jobs:
       
       - name: Run linter (if configured)
         working-directory: ./middleware-platform
-        run: |
-          if [ -f ".eslintrc" ] || [ -f ".eslintrc.js" ] || [ -f ".eslintrc.json" ]; then
-            npm run lint || true
-          else
-            echo "No linter configured, skipping..."
-          fi
-        continue-on-error: true
+        run: npm run lint --if-present
       
       - name: Check for syntax errors
         working-directory: ./middleware-platform

@@ -2,21 +2,53 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AssistantChatPage from './AssistantChatPage';
 import AssistantVoicePage from './AssistantVoicePage';
 import { useAssistantSession } from './useAssistantSession';
+import { useConversationSphereLevel } from './useConversationSphereLevel';
+import { useLandingLiveKit } from './useLandingLiveKit';
+import { getOrCreateLandingSessionId } from './landingAssistantApi';
 import './skin-care-tokens.css';
 import './assistant-shared.css';
 
 const HASH_VOICE = '#assistant/voice';
 const HASH_CHAT = '#assistant/chat';
 
+function useDocumentHiddenPause() {
+  const [hidden, setHidden] = useState(() =>
+    typeof document !== 'undefined' ? document.hidden : false
+  );
+  useEffect(() => {
+    const fn = () => setHidden(document.hidden);
+    document.addEventListener('visibilitychange', fn);
+    return () => document.removeEventListener('visibilitychange', fn);
+  }, []);
+  return hidden;
+}
+
+function useVisualViewportKeyboardClass() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const shell = () => document.querySelector('.ax-shell');
+    const upd = () => {
+      const el = shell();
+      if (!el) return;
+      const gap = window.innerHeight - vv.height - (vv.offsetTop || 0);
+      el.classList.toggle('ax-shell--kb', gap > 72);
+    };
+    vv.addEventListener('resize', upd);
+    vv.addEventListener('scroll', upd);
+    upd();
+    return () => {
+      vv.removeEventListener('resize', upd);
+      vv.removeEventListener('scroll', upd);
+      const el = shell();
+      if (el) el.classList.remove('ax-shell--kb');
+    };
+  }, []);
+}
+
 /**
- * Skin & Care assistant — two surfaces (same theme as marketing landing via `skin-care-tokens.css`):
- * - Page 1 (voice): white shell, sphere (transparent WebGL), transcript, amber mic — `AssistantVoicePage`
- * - Page 2 (chat): cream message area, white composer, amber send — `AssistantChatPage`
- *
- * Hash routing: `#assistant/voice` | `#assistant/chat` (replaceState, no full navigation).
- * Session + messages live in `useAssistantSession` (shared across pages).
- *
- * API: `POST /api/public/landing-assistant/turn` when `resolveMiddlewareApiBase()` is set.
+ * Skin & Care assistant — voice + chat share session, 3D sphere, optional LiveKit (Try now room).
  */
 export default function AssistantExperience({ onClose }) {
   const session = useAssistantSession();
@@ -32,7 +64,8 @@ export default function AssistantExperience({ onClose }) {
     toggleVoice,
     addFiles,
     interimCaption,
-    voiceActive
+    voiceActive,
+    sessionIdRef
   } = session;
 
   const [page, setPage] = useState(() =>
@@ -42,11 +75,42 @@ export default function AssistantExperience({ onClose }) {
   const cameraRef = useRef(null);
   const imageRef = useRef(null);
   const fileRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+
+  const getSessionId = useCallback(
+    () => sessionIdRef.current || getOrCreateLandingSessionId(),
+    [sessionIdRef]
+  );
+
+  const liveKit = useLandingLiveKit({
+    apiBase,
+    getSessionId,
+    localVideoRef,
+    remoteVideoContainerRef: remoteVideoRef,
+    assistantPage: page
+  });
+
+  useEffect(() => {
+    if (liveKit.isConnected) {
+      liveKit.syncMicWithVoice(voiceActive);
+    }
+  }, [voiceActive, liveKit.isConnected, liveKit.syncMicWithVoice]);
 
   const prefersReducedMotion = useMemo(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return false;
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
+
+  const docHidden = useDocumentHiddenPause();
+  useVisualViewportKeyboardClass();
+
+  const speechLevelRef = useConversationSphereLevel({
+    voiceActive,
+    interimCaption,
+    sending,
+    liveKitConnected: liveKit.isConnected
+  });
 
   const setHashForPage = useCallback((next) => {
     const h = next === 'chat' ? HASH_CHAT : HASH_VOICE;
@@ -69,11 +133,12 @@ export default function AssistantExperience({ onClose }) {
   }, [page, setHashForPage]);
 
   const handleClose = useCallback(() => {
+    liveKit.leaveRoom();
     if (typeof window !== 'undefined') {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     }
     onClose();
-  }, [onClose]);
+  }, [liveKit, onClose]);
 
   const openChat = useCallback(() => setPage('chat'), []);
   const backToVoice = useCallback(() => setPage('voice'), []);
@@ -128,6 +193,11 @@ export default function AssistantExperience({ onClose }) {
           toggleVoice={toggleVoice}
           prefersReducedMotion={prefersReducedMotion}
           cameraRef={cameraRef}
+          speechLevelRef={speechLevelRef}
+          spherePaused={docHidden}
+          liveKit={liveKit}
+          localVideoRef={localVideoRef}
+          remoteVideoContainerRef={remoteVideoRef}
         />
       ) : (
         <AssistantChatPage
@@ -143,6 +213,12 @@ export default function AssistantExperience({ onClose }) {
           cameraRef={cameraRef}
           imageRef={imageRef}
           fileRef={fileRef}
+          speechLevelRef={speechLevelRef}
+          prefersReducedMotion={prefersReducedMotion}
+          spherePaused={docHidden}
+          liveKit={liveKit}
+          localVideoRef={localVideoRef}
+          remoteVideoContainerRef={remoteVideoRef}
         />
       )}
     </div>

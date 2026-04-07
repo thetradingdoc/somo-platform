@@ -1,6 +1,6 @@
 # Tenant Subdomain & DNS Setup
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Merged from: TENANT_SUBDOMAIN_SETUP, SUBDOMAIN_SSL_FIX, WILDCARD_DNS_EXPLANATION.
 

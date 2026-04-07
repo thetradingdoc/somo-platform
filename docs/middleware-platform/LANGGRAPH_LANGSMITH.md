@@ -1,6 +1,6 @@
 # LangGraph & LangSmith — Developer Guide
 
-**Last Updated:** February 2026
+**Last Updated:** April 6, 2026
 
 Single reference: config, what’s traced, how to see progress, scripts, and troubleshooting.
 

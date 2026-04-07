@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-### Current State (February 2026)
+### Current State (April 6, 2026)
 - **Location**: `/Knowledge/` directory
 - **ICD-10**: `icd10_reference.json` (271 codes fallback), `icd10_codes` DB table (~72K from icd10cm_codes_2020.txt)
 - **CPT**: `cpt_codes` DB table (1,299 codes from 2025 DHS Code List Addendum; run `node scripts/import-cpt-codes.js`)
@@ -19,7 +19,7 @@ Voice Agent → Function Call → retell-websocket.js → Service → knowledge-
 
 ---
 
-## Implementation Status (February 2026)
+## Implementation Status (April 6, 2026)
 
 ### PHASE 1: Knowledge Base Files ✅
 

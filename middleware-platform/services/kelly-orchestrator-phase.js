@@ -76,6 +76,8 @@ const TRIAGE_TRIAGE_TOOL_NAMES = new Set([
   'store_triage_rich_intake',
   'run_triage_rag',
   'request_document_upload',
+  'resolve_product_ingredients',
+  'lookup_ingredient_functions',
   'query_patient_records',
   'search_medical_literature',
   'find_clinic_specialists',

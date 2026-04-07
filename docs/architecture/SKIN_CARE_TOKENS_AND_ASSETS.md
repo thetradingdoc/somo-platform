@@ -39,3 +39,7 @@ See `patient-app/.env.example` and `patient-app/config.ts`.
 
 - Panda / favicon: `unified-dashboard/assets/images/` (e.g. `logo-panda.svg`, `favicon.svg`)
 - Landing media: `unified-dashboard/littlelab-landing/public/images/`
+
+## Related
+
+- **[Landing Try now & LiveKit](./LANDING_TRY_NOW_LIVEKIT.md)** — camera-first voice page, orb PiP, `REACT_APP_API_BASE`, LiveKit token flow

@@ -188,7 +188,7 @@ void main() {
 }
 `;
 
-function MagicPlasmaGroup({ speechLevelRef }) {
+function MagicPlasmaGroup({ speechLevelRef, paused }) {
   const groupRef = useRef(null);
   const plasmaMeshRef = useRef(null);
   const smoothLevelRef = useRef(0);
@@ -288,6 +288,7 @@ function MagicPlasmaGroup({ speechLevelRef }) {
   }, []);
 
   useFrame((state, delta) => {
+    if (paused) return;
     const t = state.clock.elapsedTime;
     const raw = speechLevelRef && typeof speechLevelRef.current === 'number' ? speechLevelRef.current : 0;
     const k = 1 - Math.exp(-delta * 14);
@@ -337,11 +338,11 @@ function ToneMappingSetup() {
  * Full R3F scene: magic plasma driven by optional `speechLevelRef` (0–1), e.g. from `useConversationSphereLevel`.
  * No orbit/drag — motion follows speech level instead.
  */
-export function MagicPlasmaScene({ speechLevelRef }) {
+export function MagicPlasmaScene({ speechLevelRef, paused = false }) {
   return (
     <>
       <ToneMappingSetup />
-      <MagicPlasmaGroup speechLevelRef={speechLevelRef} />
+      <MagicPlasmaGroup speechLevelRef={speechLevelRef} paused={paused} />
     </>
   );
 }

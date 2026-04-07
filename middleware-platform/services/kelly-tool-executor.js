@@ -20,6 +20,8 @@ const TriageRAGService = require('./triage-rag-service');
 const TriageRAGServiceV2 = require('./triage-rag-service-v2');
 const SpecialistResolverService = require('./specialist-resolver-service');
 const MedicalLiteratureSearchService = require('./medical-literature-search-service');
+const QueryPlanner = require('./query-planner');
+const ProductIngredientResolver = require('./product-ingredient-resolver');
 const { resolverMapToProviderCards } = require('./provider-card-normalizer');
 const { getAvailableSlotsWithSpecialist, isSpecialtyType } = require('./specialist-slot-service');
 const { getClinicBusinessHours, isBusinessDay, getNextBusinessDay, normalizeDateStr } = require('../config/clinic-business-hours');
@@ -39,6 +41,11 @@ const COMMERCE_SHIPPING_TTL_MS = Math.max(
   60000,
   parseInt(process.env.COMMERCE_SHIPPING_TTL_MS || '1800000', 10) || 1800000
 );
+
+/** Verbose tool/checkout/SLOTS traces — same flag as kelly-agent-service (`KELLY_DEBUG=1`). */
+function _kellyToolDebug() {
+  return process.env.KELLY_DEBUG === '1' || process.env.KELLY_DEBUG === 'true';
+}
 
 const CHECKOUT_STAGES = Object.freeze({
   COLLECTING_DETAILS: 'collecting_details',
@@ -408,7 +415,7 @@ class KellyToolExecutor {
     const clinicHours = getClinicBusinessHours(clinicId);
     if (isBusinessDay(normalized, clinicHours)) return normalized;
     const next = getNextBusinessDay(normalized, clinicHours) || normalized;
-    if (next !== normalized) {
+    if (next !== normalized && _kellyToolDebug()) {
       console.log(`[KellyToolExecutor] Non-business date ${normalized} → ${next}`);
     }
     return next;
@@ -502,7 +509,9 @@ class KellyToolExecutor {
   static async execute(toolName, args, context) {
     const { sessionId, clinicId, patientId, callerPhone, channel } = context;
 
-    console.log(`[KellyToolExecutor] ${toolName}`, { sessionId, clinicId });
+    if (_kellyToolDebug()) {
+      console.log(`[KellyToolExecutor] ${toolName}`, { sessionId, clinicId });
+    }
 
     try {
       switch (toolName) {
@@ -581,13 +590,15 @@ class KellyToolExecutor {
                   triage_session_id: sessionId,
                   timeoutMs: KellyToolExecutor._httpTimeoutMs()
                 });
-                console.log('[DEBUG-CHECKOUT] autoCheckoutAfterSchedule result (routine):', JSON.stringify({
-                  success: !!checkoutResult,
-                  payment_token: checkoutResult?.payment_token ? checkoutResult.payment_token.slice(0, 12) + '…' : null,
-                  checkout_id: checkoutResult?.checkout_id || null,
-                  requires_verification: checkoutResult?.requires_verification,
-                  error: checkoutResult?.error || null
-                }));
+                if (_kellyToolDebug()) {
+                  console.log('[DEBUG-CHECKOUT] autoCheckoutAfterSchedule result (routine):', JSON.stringify({
+                    success: !!checkoutResult,
+                    payment_token: checkoutResult?.payment_token ? checkoutResult.payment_token.slice(0, 12) + '…' : null,
+                    checkout_id: checkoutResult?.checkout_id || null,
+                    requires_verification: checkoutResult?.requires_verification,
+                    error: checkoutResult?.error || null
+                  }));
+                }
                 if (checkoutResult?.payment_token) {
                   KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', checkoutResult.payment_token);
                   KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', checkoutResult.checkout_id || '');
@@ -806,13 +817,15 @@ class KellyToolExecutor {
                 triage_session_id: sessionId || null,
                 timeoutMs: KellyToolExecutor._httpTimeoutMs()
               });
-              console.log('[DEBUG-CHECKOUT] autoCheckoutAfterSchedule result:', JSON.stringify({
-                success: !!checkoutResult,
-                payment_token: checkoutResult?.payment_token ? checkoutResult.payment_token.slice(0, 12) + '…' : null,
-                checkout_id: checkoutResult?.checkout_id || null,
-                requires_verification: checkoutResult?.requires_verification,
-                error: checkoutResult?.error || null
-              }));
+              if (_kellyToolDebug()) {
+                console.log('[DEBUG-CHECKOUT] autoCheckoutAfterSchedule result:', JSON.stringify({
+                  success: !!checkoutResult,
+                  payment_token: checkoutResult?.payment_token ? checkoutResult.payment_token.slice(0, 12) + '…' : null,
+                  checkout_id: checkoutResult?.checkout_id || null,
+                  requires_verification: checkoutResult?.requires_verification,
+                  error: checkoutResult?.error || null
+                }));
+              }
               if (checkoutResult?.payment_token) {
                 KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', checkoutResult.payment_token);
                 KellyToolExecutor._setSessionMeta(sessionId, 'checkout_id', checkoutResult.checkout_id || '');
@@ -918,7 +931,9 @@ class KellyToolExecutor {
                 if (row?.payment_token) {
                   paymentToken = row.payment_token;
                   KellyToolExecutor._setSessionMeta(sessionId, 'payment_token', paymentToken);
-                  console.log('[TOKEN-RECOVERY] Recovered payment_token from DB for session:', String(sessionId || '').slice(0, 8));
+                  if (_kellyToolDebug()) {
+                    console.log('[TOKEN-RECOVERY] Recovered payment_token from DB for session:', String(sessionId || '').slice(0, 8));
+                  }
                 }
               } catch (_) {}
             }
@@ -957,6 +972,12 @@ class KellyToolExecutor {
 
         case 'query_patient_records':
           return await this._queryPatientRecords(args, patientId);
+
+        case 'resolve_product_ingredients':
+          return await this._resolveProductIngredients(args);
+
+        case 'lookup_ingredient_functions':
+          return await this._lookupIngredientFunctions(args);
 
         case 'run_derm_patient_qa':
           return await KellyToolExecutor._runDermPatientQA(args, patientId);
@@ -1698,7 +1719,7 @@ class KellyToolExecutor {
         case 'search_medical_literature': {
           const q = String(args.query || args.topic || '').trim();
           const max_results = args.max_results != null ? Number(args.max_results) : undefined;
-          const r = await MedicalLiteratureSearchService.searchPubMed(q, { max_results, sessionId });
+          const r = await QueryPlanner.runLiteratureRetrieval({ query: q, max_results, sessionId });
           if (r?.success && Array.isArray(r.articles) && r.articles.length) {
             try {
               const prevRaw = KellyToolExecutor._getSessionMeta(sessionId, 'kelly_last_literature_snippets_json');
@@ -2864,7 +2885,9 @@ class KellyToolExecutor {
         result.target_specialty = result.target_specialty || 'PrimaryCare';
         result.urgency = result.urgency || 'routine';
         result.safety_level = result.safety_level || 'green';
-        console.log('[RAG] Routine bypass: forcing triage_complete=true, confidence=', result.rag_confidence);
+        if (_kellyToolDebug()) {
+          console.log('[RAG] Routine bypass: forcing triage_complete=true, confidence=', result.rag_confidence);
+        }
       }
 
       // M-S3.C: triage_complete when OPQRST + (≥1 differential or specialty) + confidence gate.
@@ -3026,12 +3049,27 @@ class KellyToolExecutor {
       return { success: false, answer: "What would you like to know about your records?", sources: 0 };
     }
     try {
-      const PatientRecordsQueryService = require('./patient-records-query-service');
-      const { answer, sources } = await PatientRecordsQueryService.queryPatientRecords(patientId, query);
+      const { answer, sources } = await QueryPlanner.runRecordsRetrieval({ patientId, query });
       return { success: true, answer, sources };
     } catch (e) {
       return { success: false, answer: "I couldn't look up your records right now. Please try again.", sources: 0 };
     }
+  }
+
+  static async _resolveProductIngredients(args) {
+    const productName = String(args?.product_name || args?.name || '').trim();
+    const brand = String(args?.brand || '').trim();
+    if (!productName) return { success: false, error: 'product_name_required' };
+    return ProductIngredientResolver.resolveProductByName({ productName, brand });
+  }
+
+  static async _lookupIngredientFunctions(args) {
+    const raw = args?.inci_list;
+    let inciList = [];
+    if (Array.isArray(raw)) inciList = raw.map((v) => String(v || '').trim()).filter(Boolean);
+    else if (raw != null) inciList = String(raw).split(',').map((v) => v.trim()).filter(Boolean);
+    if (!inciList.length) return { success: false, error: 'inci_list_required' };
+    return ProductIngredientResolver.lookupIngredientFunctions(inciList);
   }
 
   /** Phase 5 — same pipeline as POST /api/patient/derm-qa (feature-flagged). */

@@ -707,7 +707,7 @@ function Root() {
           <img className="pill-panda" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
           <span>MOST POPULAR PRODUCT</span>
         </p>
-        <h2>Our Skincare Solutions</h2>
+        <h2>Our Skincare Prescriptions</h2>
 
         <div className="solutions-shell">
           <div className="solutions-controls">

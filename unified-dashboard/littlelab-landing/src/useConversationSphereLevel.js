@@ -6,15 +6,17 @@ import { assistantSpeakingRef } from './sphereConversationBridge';
  * Single 0–1 level for the plasma sphere: mic (your voice), interim transcript,
  * “thinking” while the API runs, and TTS while Kelly speaks.
  */
-export function useConversationSphereLevel({ voiceActive, interimCaption, sending }) {
+export function useConversationSphereLevel({ voiceActive, interimCaption, sending, liveKitConnected }) {
   const micRef = useMicSpeechLevel(voiceActive);
   const levelRef = useRef(0);
   const voiceActiveRef = useRef(voiceActive);
   const interimRef = useRef(interimCaption);
   const sendingRef = useRef(sending);
+  const lkRef = useRef(!!liveKitConnected);
   voiceActiveRef.current = voiceActive;
   interimRef.current = interimCaption;
   sendingRef.current = sending;
+  lkRef.current = !!liveKitConnected;
 
   useEffect(() => {
     let raf = 0;
@@ -36,6 +38,11 @@ export function useConversationSphereLevel({ voiceActive, interimCaption, sendin
       if (assistantSpeakingRef.current) {
         const pulse = 0.45 + 0.12 * Math.sin(performance.now() / 340);
         target = Math.max(target, pulse);
+      }
+
+      if (lkRef.current) {
+        const lk = 0.1 + 0.06 * Math.sin(performance.now() / 880);
+        target = Math.max(target, lk);
       }
 
       if (

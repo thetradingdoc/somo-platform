@@ -161,6 +161,19 @@ function mapYoloToClinical(className, confidence) {
   };
 }
 
+function mapVisionDetectionsToTags(detections) {
+  const list = Array.isArray(detections) ? detections : [];
+  return list
+    .map((d) => mapYoloToClinical(d?.class || d?.name || 'unknown', d?.confidence || d?.conf || 0))
+    .filter((d) => d && d.is_clinical)
+    .map((d) => ({
+      finding: d.finding,
+      confidence: d.confidence,
+      raw_class: d.raw_class,
+      is_clinical: d.is_clinical
+    }));
+}
+
 /**
  * Extract unique YOLO detections from recent frames, mapped to clinical findings.
  */
@@ -324,5 +337,6 @@ async function getAssistantView(roomId) {
 module.exports = {
   getAssistantView,
   mapYoloToClinical,
+  mapVisionDetectionsToTags,
 };
 

@@ -4482,6 +4482,235 @@ function migrateLeadLabels() {
   }
 }
 
+// Migration: unified intake event stream (Phase 1 channel adapter persistence)
+function migrateIntakeEventStream() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS intake_event_stream (
+        event_id TEXT PRIMARY KEY,
+        trace_id TEXT,
+        request_id TEXT,
+        source TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        session_id TEXT,
+        room_id TEXT,
+        raw_envelope_json TEXT NOT NULL,
+        normalized_event_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_intake_event_stream_trace ON intake_event_stream(trace_id);
+      CREATE INDEX IF NOT EXISTS idx_intake_event_stream_session ON intake_event_stream(session_id);
+      CREATE INDEX IF NOT EXISTS idx_intake_event_stream_room ON intake_event_stream(room_id);
+      CREATE INDEX IF NOT EXISTS idx_intake_event_stream_type ON intake_event_stream(event_type);
+      CREATE INDEX IF NOT EXISTS idx_intake_event_stream_created ON intake_event_stream(created_at);
+    `);
+    console.log('✅ Migration complete: intake_event_stream table ensured');
+  } catch (e) {
+    console.warn('⚠️  intake_event_stream migration failed:', e.message);
+  }
+}
+
+// Migration: deterministic canonical session/room state projection
+function migrateSessionStateProjection() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS session_state_projection (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        room_id TEXT,
+        trace_id TEXT,
+        source_last TEXT,
+        event_type_last TEXT,
+        last_event_id TEXT,
+        chief_complaint TEXT,
+        body_sites_json TEXT,
+        severity REAL,
+        timeline_text TEXT,
+        risk_flags_json TEXT,
+        raw_last_text TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_session_state_projection_session ON session_state_projection(session_id);
+      CREATE INDEX IF NOT EXISTS idx_session_state_projection_room ON session_state_projection(room_id);
+      CREATE INDEX IF NOT EXISTS idx_session_state_projection_trace ON session_state_projection(trace_id);
+      CREATE INDEX IF NOT EXISTS idx_session_state_projection_updated ON session_state_projection(updated_at);
+    `);
+    console.log('✅ Migration complete: session_state_projection table ensured');
+  } catch (e) {
+    console.warn('⚠️  session_state_projection migration failed:', e.message);
+  }
+}
+
+// Migration: backfill canonical state from historical triage_sessions.
+function migrateBackfillSessionStateFromTriage() {
+  try {
+    const triageTable = db.prepare(`
+      SELECT name FROM sqlite_master WHERE type='table' AND name='triage_sessions'
+    `).get();
+    if (!triageTable) return;
+
+    const rows = db.prepare(`
+      SELECT session_id, associated_sx, quality, severity, onset, timing, safety_screen, referred_to_911, updated_at
+      FROM triage_sessions
+      WHERE session_id IS NOT NULL AND TRIM(session_id) <> ''
+      ORDER BY datetime(updated_at) DESC
+      LIMIT 5000
+    `).all();
+    if (!rows.length) return;
+
+    const upsert = db.prepare(`
+      INSERT INTO session_state_projection (
+        id, session_id, chief_complaint, severity, timeline_text, risk_flags_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        chief_complaint = COALESCE(excluded.chief_complaint, session_state_projection.chief_complaint),
+        severity = COALESCE(excluded.severity, session_state_projection.severity),
+        timeline_text = COALESCE(excluded.timeline_text, session_state_projection.timeline_text),
+        risk_flags_json = CASE
+          WHEN excluded.risk_flags_json IS NOT NULL AND excluded.risk_flags_json <> '[]' THEN excluded.risk_flags_json
+          ELSE session_state_projection.risk_flags_json
+        END,
+        updated_at = datetime('now')
+    `);
+
+    for (const r of rows) {
+      const sid = String(r.session_id || '').trim();
+      if (!sid) continue;
+      const id = `session:${sid}`;
+      const complaint = r.associated_sx || r.quality || null;
+      const timeline = r.onset || r.timing || null;
+      const riskFlags = [];
+      if (String(r.safety_screen || '').toLowerCase().includes('positive')) riskFlags.push('safety_screen_positive');
+      if (Number(r.referred_to_911 || 0) === 1) riskFlags.push('referred_to_911');
+      upsert.run(id, sid, complaint, r.severity ?? null, timeline, JSON.stringify(riskFlags));
+    }
+    console.log('✅ Migration complete: session_state_projection backfill from triage_sessions');
+  } catch (e) {
+    console.warn('⚠️  session_state_projection backfill failed:', e.message);
+  }
+}
+
+// Migration: cosmetic knowledge stack tables (OBF/CosIng + restrictions)
+function migrateCosmeticKnowledgeTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS products_catalog (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL DEFAULT 'obf',
+        source_product_id TEXT,
+        brand TEXT,
+        product_name TEXT NOT NULL,
+        normalized_name TEXT,
+        inci_text TEXT,
+        metadata_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_products_catalog_source ON products_catalog(source);
+      CREATE INDEX IF NOT EXISTS idx_products_catalog_source_id ON products_catalog(source_product_id);
+      CREATE INDEX IF NOT EXISTS idx_products_catalog_name ON products_catalog(normalized_name);
+
+      CREATE TABLE IF NOT EXISTS product_ingredients (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        inci_name TEXT NOT NULL,
+        ingredient_order INTEGER,
+        raw_ingredient TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(product_id, inci_name, ingredient_order)
+      );
+      CREATE INDEX IF NOT EXISTS idx_product_ingredients_product ON product_ingredients(product_id);
+      CREATE INDEX IF NOT EXISTS idx_product_ingredients_inci ON product_ingredients(inci_name);
+
+      CREATE TABLE IF NOT EXISTS cosing_ingredients (
+        inci_name TEXT PRIMARY KEY,
+        cas_number TEXT,
+        ec_number TEXT,
+        functions_json TEXT,
+        restrictions_json TEXT,
+        metadata_json TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_cosing_inci_name ON cosing_ingredients(inci_name);
+
+      CREATE TABLE IF NOT EXISTS cosmetic_restrictions (
+        id TEXT PRIMARY KEY,
+        inci_name TEXT NOT NULL,
+        annex TEXT,
+        restriction_type TEXT,
+        limit_text TEXT,
+        conditions_text TEXT,
+        reference_text TEXT,
+        source TEXT DEFAULT 'eu_1223',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_cosmetic_restrictions_inci ON cosmetic_restrictions(inci_name);
+      CREATE INDEX IF NOT EXISTS idx_cosmetic_restrictions_annex ON cosmetic_restrictions(annex);
+    `);
+    console.log('✅ Migration complete: cosmetic knowledge tables ensured');
+  } catch (e) {
+    console.warn('⚠️  cosmetic knowledge migration failed:', e.message);
+  }
+}
+
+// Migration: de-identified case patterns store
+function migrateCasePatternsStore() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS case_patterns (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        source_ref TEXT,
+        chief_complaint TEXT,
+        specialty TEXT,
+        urgency TEXT,
+        safety_level TEXT,
+        body_sites_json TEXT,
+        risk_flags_json TEXT,
+        summary_text TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_case_patterns_source ON case_patterns(source);
+      CREATE INDEX IF NOT EXISTS idx_case_patterns_complaint ON case_patterns(chief_complaint);
+      CREATE INDEX IF NOT EXISTS idx_case_patterns_specialty ON case_patterns(specialty);
+      CREATE INDEX IF NOT EXISTS idx_case_patterns_urgency ON case_patterns(urgency);
+      CREATE INDEX IF NOT EXISTS idx_case_patterns_safety ON case_patterns(safety_level);
+      CREATE INDEX IF NOT EXISTS idx_case_patterns_created ON case_patterns(created_at);
+    `);
+    console.log('✅ Migration complete: case_patterns table ensured');
+  } catch (e) {
+    console.warn('⚠️  case_patterns migration failed:', e.message);
+  }
+}
+
+// Migration: final assessment artifacts for case summary/billing/decision logs.
+function migrateFinalAssessmentArtifacts() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS final_assessment_artifacts (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        session_id TEXT,
+        room_id TEXT,
+        trace_id TEXT,
+        artifact_type TEXT NOT NULL,
+        retrieval_key TEXT,
+        payload_json TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_final_artifacts_source ON final_assessment_artifacts(source);
+      CREATE INDEX IF NOT EXISTS idx_final_artifacts_session ON final_assessment_artifacts(session_id);
+      CREATE INDEX IF NOT EXISTS idx_final_artifacts_room ON final_assessment_artifacts(room_id);
+      CREATE INDEX IF NOT EXISTS idx_final_artifacts_type ON final_assessment_artifacts(artifact_type);
+      CREATE INDEX IF NOT EXISTS idx_final_artifacts_retrieval ON final_assessment_artifacts(retrieval_key);
+      CREATE INDEX IF NOT EXISTS idx_final_artifacts_created ON final_assessment_artifacts(created_at);
+    `);
+    console.log('✅ Migration complete: final_assessment_artifacts table ensured');
+  } catch (e) {
+    console.warn('⚠️  final_assessment_artifacts migration failed:', e.message);
+  }
+}
+
 // Run migrations on startup
 migrateInsuranceClaimsTable();
 migrateFHIRPatientsWalletAddress();
@@ -4531,6 +4760,12 @@ migrateRcmPremiumTables(); // Premium billed/paid (Safe Harbor 2026)
 migrateRcmAiDecisions(); // Financial agent audit (FHIR-native RCM layer)
 migrateVideoConsultSessions(); // Video consult multimodal AI sessions
 migrateEncounterVitals(); // vc-4: Provider-entered vitals during video consult
+migrateIntakeEventStream(); // Unified ingress adapter raw + normalized event persistence
+migrateSessionStateProjection(); // Deterministic canonical state projection table
+migrateBackfillSessionStateFromTriage(); // Initialize canonical state from triage history
+migrateCosmeticKnowledgeTables(); // OBF/CosIng + cosmetic restrictions
+migrateCasePatternsStore(); // De-identified case pattern retrieval store
+migrateFinalAssessmentArtifacts(); // Case summary + billing packs + decision logs
 
 /**
  * Migration: Enterprise Master Patient Index (EMPI)
@@ -16079,4 +16314,395 @@ module.exports.createSlotAssignment = function createSlotAssignment(appointmentI
 
 module.exports.getSlotAssignment = function getSlotAssignment(appointmentId) {
   return db.prepare(`SELECT * FROM appointment_slot_assignments WHERE appointment_id = ?`).get(appointmentId);
+};
+
+module.exports.insertIntakeStreamEvent = function insertIntakeStreamEvent(event) {
+  if (!event || !event.event_id) return { success: false, error: 'event_id required' };
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO intake_event_stream (
+        event_id, trace_id, request_id, source, event_type, session_id, room_id,
+        raw_envelope_json, normalized_event_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      event.event_id,
+      event.trace_id || null,
+      event.request_id || null,
+      event.source || 'unknown',
+      event.event_type || 'unknown',
+      event.session_id || null,
+      event.room_id || null,
+      JSON.stringify(event.raw_envelope || {}),
+      JSON.stringify(event.normalized_event || {})
+    );
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.getIntakeStreamEvents = function getIntakeStreamEvents({ session_id, room_id, trace_id, limit = 100 } = {}) {
+  try {
+    const n = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(500, Number(limit))) : 100;
+    if (trace_id) {
+      return db.prepare(`
+        SELECT * FROM intake_event_stream
+        WHERE trace_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(trace_id, n);
+    }
+    if (session_id) {
+      return db.prepare(`
+        SELECT * FROM intake_event_stream
+        WHERE session_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(session_id, n);
+    }
+    if (room_id) {
+      return db.prepare(`
+        SELECT * FROM intake_event_stream
+        WHERE room_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `).all(room_id, n);
+    }
+    return db.prepare(`
+      SELECT * FROM intake_event_stream
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(n);
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.upsertSessionStateProjection = function upsertSessionStateProjection(state) {
+  if (!state?.id) return { success: false, error: 'id required' };
+  try {
+    db.prepare(`
+      INSERT INTO session_state_projection (
+        id, session_id, room_id, trace_id, source_last, event_type_last, last_event_id,
+        chief_complaint, body_sites_json, severity, timeline_text, risk_flags_json, raw_last_text, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        session_id = COALESCE(excluded.session_id, session_state_projection.session_id),
+        room_id = COALESCE(excluded.room_id, session_state_projection.room_id),
+        trace_id = COALESCE(excluded.trace_id, session_state_projection.trace_id),
+        source_last = COALESCE(excluded.source_last, session_state_projection.source_last),
+        event_type_last = COALESCE(excluded.event_type_last, session_state_projection.event_type_last),
+        last_event_id = COALESCE(excluded.last_event_id, session_state_projection.last_event_id),
+        chief_complaint = COALESCE(excluded.chief_complaint, session_state_projection.chief_complaint),
+        body_sites_json = COALESCE(excluded.body_sites_json, session_state_projection.body_sites_json),
+        severity = COALESCE(excluded.severity, session_state_projection.severity),
+        timeline_text = COALESCE(excluded.timeline_text, session_state_projection.timeline_text),
+        risk_flags_json = COALESCE(excluded.risk_flags_json, session_state_projection.risk_flags_json),
+        raw_last_text = COALESCE(excluded.raw_last_text, session_state_projection.raw_last_text),
+        updated_at = datetime('now')
+    `).run(
+      state.id,
+      state.session_id || null,
+      state.room_id || null,
+      state.trace_id || null,
+      state.source_last || null,
+      state.event_type_last || null,
+      state.last_event_id || null,
+      state.chief_complaint || null,
+      JSON.stringify(state.body_sites || []),
+      state.severity ?? null,
+      state.timeline || null,
+      JSON.stringify(state.risk_flags || []),
+      state.raw_last_text || null
+    );
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.getSessionStateProjection = function getSessionStateProjection({ session_id = null, room_id = null } = {}) {
+  try {
+    let row = null;
+    if (session_id) {
+      row = db.prepare(`
+        SELECT * FROM session_state_projection
+        WHERE session_id = ?
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+      `).get(session_id);
+    } else if (room_id) {
+      row = db.prepare(`
+        SELECT * FROM session_state_projection
+        WHERE room_id = ?
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+      `).get(room_id);
+    } else {
+      return null;
+    }
+    if (!row) return null;
+    return {
+      ...row,
+      body_sites: (() => { try { return JSON.parse(row.body_sites_json || '[]'); } catch (_) { return []; } })(),
+      risk_flags: (() => { try { return JSON.parse(row.risk_flags_json || '[]'); } catch (_) { return []; } })(),
+      timeline: row.timeline_text || null
+    };
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.upsertProductCatalog = function upsertProductCatalog(product) {
+  const id = product?.id || `${product?.source || 'obf'}:${product?.source_product_id || require('crypto').randomUUID()}`;
+  try {
+    db.prepare(`
+      INSERT INTO products_catalog (
+        id, source, source_product_id, brand, product_name, normalized_name, inci_text, metadata_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(id) DO UPDATE SET
+        source = COALESCE(excluded.source, products_catalog.source),
+        source_product_id = COALESCE(excluded.source_product_id, products_catalog.source_product_id),
+        brand = COALESCE(excluded.brand, products_catalog.brand),
+        product_name = COALESCE(excluded.product_name, products_catalog.product_name),
+        normalized_name = COALESCE(excluded.normalized_name, products_catalog.normalized_name),
+        inci_text = COALESCE(excluded.inci_text, products_catalog.inci_text),
+        metadata_json = COALESCE(excluded.metadata_json, products_catalog.metadata_json),
+        updated_at = datetime('now')
+    `).run(
+      id,
+      product?.source || 'obf',
+      product?.source_product_id || null,
+      product?.brand || null,
+      product?.product_name || null,
+      product?.normalized_name || null,
+      product?.inci_text || null,
+      JSON.stringify(product?.metadata || {})
+    );
+    return { success: true, id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.replaceProductIngredients = function replaceProductIngredients(productId, ingredients) {
+  try {
+    const del = db.prepare(`DELETE FROM product_ingredients WHERE product_id = ?`);
+    const ins = db.prepare(`
+      INSERT INTO product_ingredients (id, product_id, inci_name, ingredient_order, raw_ingredient, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `);
+    const tx = db.transaction((rows) => {
+      del.run(productId);
+      rows.forEach((ing, idx) => {
+        const inci = String(ing?.inci_name || '').trim();
+        if (!inci) return;
+        ins.run(
+          `${productId}:${idx}:${inci.toLowerCase()}`,
+          productId,
+          inci.toLowerCase(),
+          Number.isFinite(Number(ing?.ingredient_order)) ? Number(ing.ingredient_order) : idx,
+          ing?.raw_ingredient || null
+        );
+      });
+    });
+    tx(Array.isArray(ingredients) ? ingredients : []);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.upsertCosingIngredient = function upsertCosingIngredient(row) {
+  const inci = String(row?.inci_name || '').trim().toLowerCase();
+  if (!inci) return { success: false, error: 'inci_name_required' };
+  try {
+    db.prepare(`
+      INSERT INTO cosing_ingredients (inci_name, cas_number, ec_number, functions_json, restrictions_json, metadata_json, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(inci_name) DO UPDATE SET
+        cas_number = COALESCE(excluded.cas_number, cosing_ingredients.cas_number),
+        ec_number = COALESCE(excluded.ec_number, cosing_ingredients.ec_number),
+        functions_json = COALESCE(excluded.functions_json, cosing_ingredients.functions_json),
+        restrictions_json = COALESCE(excluded.restrictions_json, cosing_ingredients.restrictions_json),
+        metadata_json = COALESCE(excluded.metadata_json, cosing_ingredients.metadata_json),
+        updated_at = datetime('now')
+    `).run(
+      inci,
+      row?.cas_number || null,
+      row?.ec_number || null,
+      JSON.stringify(row?.functions || []),
+      JSON.stringify(row?.restrictions || []),
+      JSON.stringify(row?.metadata || {})
+    );
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.findProductCatalogByName = function findProductCatalogByName(productName, brand = null, limit = 10) {
+  try {
+    const n = String(productName || '').trim().toLowerCase();
+    if (!n) return [];
+    const lim = Math.max(1, Math.min(50, Number(limit) || 10));
+    if (brand) {
+      return db.prepare(`
+        SELECT * FROM products_catalog
+        WHERE normalized_name LIKE ? AND lower(COALESCE(brand,'')) LIKE ?
+        ORDER BY updated_at DESC
+        LIMIT ?
+      `).all(`%${n}%`, `%${String(brand).toLowerCase()}%`, lim);
+    }
+    return db.prepare(`
+      SELECT * FROM products_catalog
+      WHERE normalized_name LIKE ?
+      ORDER BY updated_at DESC
+      LIMIT ?
+    `).all(`%${n}%`, lim);
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.getProductIngredients = function getProductIngredients(productId) {
+  try {
+    return db.prepare(`
+      SELECT inci_name, ingredient_order, raw_ingredient
+      FROM product_ingredients
+      WHERE product_id = ?
+      ORDER BY ingredient_order ASC
+    `).all(productId);
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.getCosingIngredientByInci = function getCosingIngredientByInci(inciName) {
+  try {
+    const row = db.prepare(`SELECT * FROM cosing_ingredients WHERE inci_name = ?`).get(String(inciName || '').trim().toLowerCase());
+    if (!row) return null;
+    return {
+      ...row,
+      functions: (() => { try { return JSON.parse(row.functions_json || '[]'); } catch (_) { return []; } })(),
+      restrictions: (() => { try { return JSON.parse(row.restrictions_json || '[]'); } catch (_) { return []; } })(),
+      metadata: (() => { try { return JSON.parse(row.metadata_json || '{}'); } catch (_) { return {}; } })()
+    };
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.getCosmeticRestrictionsByInci = function getCosmeticRestrictionsByInci(inciName) {
+  try {
+    return db.prepare(`
+      SELECT * FROM cosmetic_restrictions
+      WHERE inci_name = ?
+      ORDER BY annex, created_at DESC
+    `).all(String(inciName || '').trim().toLowerCase());
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.insertCasePattern = function insertCasePattern(row = {}) {
+  try {
+    const id = row.id || `casepat:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO case_patterns (
+        id, source, source_ref, chief_complaint, specialty, urgency, safety_level,
+        body_sites_json, risk_flags_json, summary_text, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      id,
+      row.source || 'unknown',
+      row.source_ref || null,
+      row.chief_complaint || null,
+      row.specialty || null,
+      row.urgency || null,
+      row.safety_level || null,
+      JSON.stringify(Array.isArray(row.body_sites) ? row.body_sites : []),
+      JSON.stringify(Array.isArray(row.risk_flags) ? row.risk_flags : []),
+      row.summary_text || null
+    );
+    return { success: true, id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.searchCasePatterns = function searchCasePatterns(filters = {}) {
+  try {
+    const limit = Math.max(1, Math.min(50, Number(filters.limit) || 10));
+    const where = [];
+    const args = [];
+    if (filters.complaint) { where.push('lower(COALESCE(chief_complaint, \'\')) LIKE ?'); args.push(`%${String(filters.complaint).toLowerCase()}%`); }
+    if (filters.specialty) { where.push('lower(COALESCE(specialty, \'\')) = ?'); args.push(String(filters.specialty).toLowerCase()); }
+    if (filters.urgency) { where.push('lower(COALESCE(urgency, \'\')) = ?'); args.push(String(filters.urgency).toLowerCase()); }
+    if (filters.safety_level) { where.push('lower(COALESCE(safety_level, \'\')) = ?'); args.push(String(filters.safety_level).toLowerCase()); }
+    if (filters.body_site) { where.push('lower(COALESCE(body_sites_json, \'[]\')) LIKE ?'); args.push(`%${String(filters.body_site).toLowerCase()}%`); }
+    const sql = `
+      SELECT * FROM case_patterns
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY datetime(created_at) DESC
+      LIMIT ?
+    `;
+    const rows = db.prepare(sql).all(...args, limit);
+    return rows.map((r) => ({
+      ...r,
+      body_sites: (() => { try { return JSON.parse(r.body_sites_json || '[]'); } catch (_) { return []; } })(),
+      risk_flags: (() => { try { return JSON.parse(r.risk_flags_json || '[]'); } catch (_) { return []; } })()
+    }));
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.insertFinalAssessmentArtifact = function insertFinalAssessmentArtifact(row = {}) {
+  try {
+    const id = row.id || `artifact:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO final_assessment_artifacts (
+        id, source, session_id, room_id, trace_id, artifact_type, retrieval_key, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      id,
+      row.source || 'unknown',
+      row.session_id || null,
+      row.room_id || null,
+      row.trace_id || null,
+      row.artifact_type || 'unknown',
+      row.retrieval_key || null,
+      JSON.stringify(row.payload || {})
+    );
+    return { success: true, id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.getFinalAssessmentArtifacts = function getFinalAssessmentArtifacts({ source = null, session_id = null, room_id = null, artifact_type = null, retrieval_key = null, limit = 50 } = {}) {
+  try {
+    const where = [];
+    const args = [];
+    if (source) { where.push('source = ?'); args.push(source); }
+    if (session_id) { where.push('session_id = ?'); args.push(session_id); }
+    if (room_id) { where.push('room_id = ?'); args.push(room_id); }
+    if (artifact_type) { where.push('artifact_type = ?'); args.push(artifact_type); }
+    if (retrieval_key) { where.push('retrieval_key = ?'); args.push(retrieval_key); }
+    const lim = Math.max(1, Math.min(200, Number(limit) || 50));
+    const sql = `
+      SELECT * FROM final_assessment_artifacts
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY datetime(created_at) DESC
+      LIMIT ?
+    `;
+    const rows = db.prepare(sql).all(...args, lim);
+    return rows.map((r) => ({
+      ...r,
+      payload: (() => { try { return JSON.parse(r.payload_json || '{}'); } catch (_) { return {}; } })()
+    }));
+  } catch (_) {
+    return [];
+  }
 };

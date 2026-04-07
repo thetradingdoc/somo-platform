@@ -60,6 +60,21 @@ function blendQuery(rawText, hypotheticalText) {
 
 class TriageRAGServiceV2 {
   /**
+   * Phase 5 adapter: same structured contract used by query planner.
+   */
+  static async enrichFromStructuredInput(input = {}) {
+    const out = await this.enrichFromSymptoms({
+      sessionId: input.sessionId,
+      symptomText: input.symptomText || '',
+      opqrst: input.opqrst || {},
+      richIntake: input.richIntake || {},
+      patientId: input.patientId || null,
+      clinicId: input.clinicId || null
+    });
+    return { ...out, confidence: out?.rag_confidence ?? null };
+  }
+
+  /**
    * Same interface as TriageRAGService.enrichFromSymptoms.
    * Uses dual-source RAG + HyDE when available.
    */

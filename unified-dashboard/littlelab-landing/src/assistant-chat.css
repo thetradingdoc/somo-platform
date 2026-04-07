@@ -81,6 +81,11 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.axc-thread-col .axc-messages {
+  flex: 1;
+  min-height: 0;
+}
+
 .axc-bubble {
   max-width: min(92%, 34rem);
   padding: 12px 14px;

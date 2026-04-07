@@ -177,7 +177,8 @@ export function useAssistantSession() {
           } catch (_) {}
         }
         const reply = (data.reply && String(data.reply).trim()) || 'I’m here. How can I help?';
-        pushAssistant(reply);
+        // Keep chat-only turns silent; only speak while an active voice session is on.
+        pushAssistant(reply, { speak: voiceSessionActiveRef.current });
       } catch (e) {
         if (e.name === 'AbortError') return;
         const msg =

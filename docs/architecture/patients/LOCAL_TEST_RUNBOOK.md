@@ -1,6 +1,6 @@
 # Local Test Runbook — Patient Journey & Landing
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Merged from: LOCAL_E2E_RUNBOOK, LOCAL_LANDING_TEST_FLOW.
 

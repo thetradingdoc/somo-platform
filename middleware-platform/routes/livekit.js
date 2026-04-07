@@ -17,6 +17,11 @@ const router = express.Router();
 const db = require('../database');
 const PatientPortalService = require('../services/patient-portal-service');
 
+/** Verbose token-route logs: dev by default; set DEBUG_LIVEKIT=1 to enable in production. */
+function livekitTokenDebugEnabled() {
+  return process.env.NODE_ENV !== 'production' || process.env.DEBUG_LIVEKIT === '1';
+}
+
 /**
  * YYYY-MM-DD + HH:mm interpreted in IANA tz → UTC epoch ms (aligns with patient/calendar wall-clock).
  */
@@ -97,7 +102,9 @@ try {
  * Handle CORS preflight
  */
 router.options('/token', (req, res) => {
-  console.log('🔍 OPTIONS /api/livekit/token - CORS preflight from:', req.headers.origin);
+  if (livekitTokenDebugEnabled()) {
+    console.log('OPTIONS /api/livekit/token CORS preflight from:', req.headers.origin);
+  }
   res.status(204).end();
 });
 
@@ -117,7 +124,9 @@ router.options('/token', (req, res) => {
  *   name          - Display name (default: "Participant")
  */
 router.post('/token', async (req, res) => {
-  console.log('🔍 POST /api/livekit/token - Request from:', req.headers.origin || 'no origin', 'IP:', req.ip);
+  if (livekitTokenDebugEnabled()) {
+    console.log('POST /api/livekit/token from:', req.headers.origin || 'no origin', 'IP:', req.ip);
+  }
   if (!AccessToken) {
     return res.status(503).json({
       success: false,
@@ -336,12 +345,14 @@ router.get('/patient/video/token', async (req, res) => {
 
     const token = await at.toJwt();
     const url = livekitUrl.startsWith('http') ? livekitUrl.replace(/^https?/, 'wss') : livekitUrl;
-    console.log('[LiveKit] 🎥 patient/video/token issued', {
-      room: resolvedRoom,
-      appointment_id: appointmentId,
-      patient_id: sessionValidation.patient_id || null,
-      journey_id: journeyId
-    });
+    if (livekitTokenDebugEnabled()) {
+      console.log('[LiveKit] patient/video/token issued', {
+        room: resolvedRoom,
+        appointment_id: appointmentId,
+        patient_id: sessionValidation.patient_id || null,
+        journey_id: journeyId
+      });
+    }
     return res.json({ success: true, token, url, room: resolvedRoom });
   } catch (err) {
     console.error('[LiveKit] patient/video/token error:', err);

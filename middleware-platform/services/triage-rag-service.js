@@ -159,6 +159,21 @@ const YELLOW_FLAG_PATTERNS = [
 
 class TriageRAGService {
   /**
+   * Phase 5 adapter: structured pathology retrieval contract for query planner.
+   */
+  static async enrichFromStructuredInput(input = {}) {
+    const out = await this.enrichFromSymptoms({
+      sessionId: input.sessionId,
+      symptomText: input.symptomText || '',
+      opqrst: input.opqrst || {},
+      richIntake: input.richIntake || {},
+      patientId: input.patientId || null,
+      clinicId: input.clinicId || null
+    });
+    return { ...out, confidence: out?.rag_confidence ?? null };
+  }
+
+  /**
    * Main enrichment method.
    *
    * @param {Object} params

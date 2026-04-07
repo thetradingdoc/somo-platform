@@ -1,15 +1,15 @@
 import React, { useMemo } from 'react';
-import { useConversationSphereLevel } from './useConversationSphereLevel';
-import { Canvas } from '@react-three/fiber';
 import { CameraIcon, ChatBubbleLeftRightIcon, ChevronLeftIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
-import { MagicPlasmaScene } from './MagicPlasmaSphere';
+import AgentSphereCanvas from './AgentSphereCanvas';
+import LiveKitPanel from './LiveKitPanel';
 import { segmentCaptionWithKeywordEmphasis } from './captionEmphasis';
 import './assistant-shared.css';
 import './assistant-voice.css';
+import './assistant-livekit.css';
 
 function CaptionLine({ segments }) {
   return (
-    <p className="axv-live-caption" aria-live="polite">
+    <p className="axv-live-caption axv-live-caption--scan" aria-live="polite">
       {segments.map((seg, i) =>
         seg.type === 'bold' ? (
           <strong key={i} className="axv-caption-strong">
@@ -33,7 +33,12 @@ export default function AssistantVoicePage({
   sending,
   toggleVoice,
   prefersReducedMotion,
-  cameraRef
+  cameraRef,
+  speechLevelRef,
+  spherePaused,
+  liveKit,
+  localVideoRef,
+  remoteVideoContainerRef
 }) {
   const lastAssistantText = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -54,18 +59,12 @@ export default function AssistantVoicePage({
     return segmentCaptionWithKeywordEmphasis('Tap the mic to speak — or open chat to type.');
   }, [interimCaption, voiceActive, lastAssistantText]);
 
-  const showLead =
-    !interimCaption && !voiceActive && !lastAssistantText;
-
-  const speechLevelRef = useConversationSphereLevel({
-    voiceActive,
-    interimCaption,
-    sending
-  });
+  const showLead = !interimCaption && !voiceActive && !lastAssistantText;
+  const inSession = liveKit?.inSession;
 
   return (
-    <div className="axv-root">
-      <header className="axv-header">
+    <div className={`axv-root ${inSession ? 'axv-root--session' : ''}`}>
+      <header className={`axv-header ${inSession ? 'axv-header--floating' : ''}`}>
         <button type="button" className="axv-icon-btn" onClick={onClose} aria-label="Back to landing">
           <ChevronLeftIcon className="ax-heroicon" aria-hidden />
         </button>
@@ -82,39 +81,64 @@ export default function AssistantVoicePage({
         <span className="axv-header-spacer" aria-hidden />
       </header>
 
-      <div className="axv-body">
-        <div className="axv-sphere-wrap" aria-hidden="true">
-          {!prefersReducedMotion ? (
-            <Canvas
-              className="axv-canvas"
-              camera={{ position: [0, 0, 1.52], fov: 75, near: 0.1, far: 100 }}
-              gl={{ alpha: true, antialias: true, premultipliedAlpha: false }}
-              dpr={[1, 2]}
-              onCreated={({ gl }) => {
-                gl.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2));
-                gl.setClearColor(0x000000, 0);
-              }}
-            >
-              <MagicPlasmaScene speechLevelRef={speechLevelRef} />
-            </Canvas>
-          ) : (
-            <div className="axv-sphere-fallback" />
-          )}
-        </div>
+      <div className={`axv-scan-wrap ${inSession ? 'axv-scan-wrap--live' : ''}`}>
+        <video
+          ref={localVideoRef}
+          className={inSession ? 'axv-scan-hero' : 'axv-scan-video-hidden'}
+          playsInline
+          autoPlay
+          muted
+          aria-label="Your camera"
+        />
+        {inSession ? (
+          <>
+            <div ref={remoteVideoContainerRef} className="axv-scan-remotes" aria-label="Other participants" />
+            <div className="axv-provider-pip" aria-hidden="true">
+              <AgentSphereCanvas
+                className="axv-sphere-pip-inner"
+                speechLevelRef={speechLevelRef}
+                prefersReducedMotion={prefersReducedMotion}
+                paused={spherePaused}
+              />
+            </div>
+          </>
+        ) : null}
+      </div>
 
-        <div className="axv-transcript">
-          {showLead ? (
-            <p className="axv-transcript-lead">Hi — I&apos;m your Skin &amp; Care assistant.</p>
-          ) : null}
-          <CaptionLine segments={captionSegments} />
-          {sending && <p className="axv-caption-status">Thinking…</p>}
-        </div>
+      <div className={`axv-body ${inSession ? 'axv-body--session-bar' : ''}`}>
+        {!inSession ? (
+          <div className="axv-transcript axv-transcript--invite">
+            {showLead ? (
+              <p className="axv-transcript-lead">Hi — I&apos;m your Skin &amp; Care assistant.</p>
+            ) : null}
+            <CaptionLine segments={captionSegments} />
+            {sending && <p className="axv-caption-status">Thinking…</p>}
+          </div>
+        ) : (
+          <div className="axv-transcript axv-transcript--on-video">
+            {showLead ? null : (
+              <>
+                <CaptionLine segments={captionSegments} />
+                {sending && <p className="axv-caption-status">Thinking…</p>}
+              </>
+            )}
+          </div>
+        )}
+
+        <LiveKitPanel
+          liveKit={liveKit}
+          variant="voice"
+          localVideoRef={localVideoRef}
+          remoteVideoContainerRef={remoteVideoContainerRef}
+          embedLocalVideo={false}
+        />
 
         <div className="axv-dock">
           <button
             type="button"
             className="axv-dock-side"
-            aria-label="Camera or photo library"
+            aria-label="Attach a photo from camera or library (not live video)"
+            title="Photo attach — not live video"
             onClick={() => {
               cameraRef.current?.click();
             }}
@@ -134,7 +158,15 @@ export default function AssistantVoicePage({
               }
               aria-pressed={voiceActive}
               disabled={sending}
-              aria-label={voiceActive ? 'Stop listening' : 'Speak'}
+              aria-label={
+                liveKit?.isConnected
+                  ? voiceActive
+                    ? 'Stop listening (and mute live room mic)'
+                    : 'Speak (and unmute live room mic when connected)'
+                  : voiceActive
+                    ? 'Stop listening'
+                    : 'Speak'
+              }
             >
               <MicrophoneIcon className="axv-mic-icon" aria-hidden />
             </button>
@@ -147,11 +179,12 @@ export default function AssistantVoicePage({
         <p className="axv-disclaimer">
           Ask about your skin, routine, or ingredients. We analyze your questions and summarize guidance here—this
           isn&apos;t a medical diagnosis. For emergencies, contact your local emergency services.
-          {apiBase ? (
-            <span className="axv-api-hint"> Connected to API.</span>
-          ) : (
-            <span className="axv-api-hint"> Demo mode — set REACT_APP_API_BASE for live replies.</span>
-          )}
+          <span className="axv-api-hint">
+            {apiBase ? ' Connected to API.' : ' Demo mode — set REACT_APP_API_BASE for live replies.'}{' '}
+            {inSession
+              ? 'Your face fills the screen; the orb is your guide. LiveKit connects when the API is available.'
+              : null}
+          </span>
         </p>
       </div>
     </div>

@@ -65,6 +65,11 @@ dist/
 build/
 *.zip
 
+# ML / ONNX weights (local dev; use Git LFS + force-add if you must commit)
+*.pt
+*.pth
+*.onnx
+
 # Temporary files
 tmp/
 temp/

@@ -1,6 +1,6 @@
 # DocLittle Platform – Full Backlog
 
-**Last Generated:** March 2026  
+**Last Generated:** April 6, 2026  
 This document consolidates:
 
 - The core platform roadmap from `MASTER_TODO.md`  
@@ -38,7 +38,7 @@ Make and document a product/legal decision on when the main visit charge occurs 
 ```1:336:docs/MASTER_TODO.md
 # Master TODO — Cash-Only Research-Backed Telehealth Platform
 
-**Last Updated:** March 2026
+**Last Updated:** April 6, 2026
 
 Consolidated task list for completing the platform. Built on current architecture: multi-tenant, Retell voice, LiveKit video, LangGraph, FHIR, `appointments`, `video_consult_sessions`, `voice_checkouts`, `clinics`, `fhir_patients`.
 

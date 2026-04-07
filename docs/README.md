@@ -1,6 +1,6 @@
 # DocLittle Platform Documentation
 
-**Last Updated**: March 2026
+**Last Updated**: April 7, 2026
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.  
 > **Overlapping topics (Kelly vs voice vs checkout):** start with **[CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
@@ -22,7 +22,7 @@
 
 ---
 
-## 📊 Documentation Audit (March 2026)
+## 📊 Documentation Audit (April 2026)
 
 - **Total .md files:** 142 (down from 167; Phases 1–5 consolidation applied)
 - **Consolidation plan:** [DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
@@ -97,6 +97,7 @@
 #### Voice Agent, Video Consult & Medical Coding
 - **[Hybrid Architecture Overview](./architecture/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
 - **[Video Consult](./architecture/VIDEO_CONSULT.md)** - LiveKit video: flow, env, runbook
+- **[Landing Try now & LiveKit](./architecture/LANDING_TRY_NOW_LIVEKIT.md)** - Skin & Care landing camera-first UI, `try-landing-*` rooms, Kelly vs LiveKit
 - **[Voice Agent Config](./voice-agent/README.md)** - Voice agent setup
 - **[Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)** - Imports, evaluation, tools, configure-retell
 - **[Tool Schemas](./architecture/voice-agent/TOOL_SCHEMAS.md)** - Retell functions (suggest_codes_from_symptoms, extract_medical_text, etc.)
@@ -240,6 +241,8 @@ docs/
 
 ### Voice Agent & Medical Coding
 - [Voice Agent Config](./voice-agent/README.md)
+- [Video Consult](./architecture/VIDEO_CONSULT.md)
+- [Landing Try now & LiveKit](./architecture/LANDING_TRY_NOW_LIVEKIT.md)
 - [Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)
 - [Retell Configuration](./middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md)
 - [Voice Agent Todo & Status](./architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)

@@ -32,6 +32,9 @@ const { normalizeToE164 } = require('../utils/phone-e164');
 // Startup config log — confirm intended Kelly LLM path (fix-startup)
 (function _logKellyConfig() {
   if (process.env.KELLY_QUIET === '1' || process.env.KELLY_QUIET === 'true') return;
+  if (process.env.NODE_ENV === 'production' && process.env.KELLY_LOG_STARTUP !== '1' && process.env.KELLY_LOG_STARTUP !== 'true') {
+    return;
+  }
   const provider = resolvePrimaryProvider();
   const anthKey = process.env.ANTHROPIC_API_KEY || '';
   const model = process.env.KELLY_ANTHROPIC_MODEL || 'claude-sonnet-4-5';
@@ -52,6 +55,17 @@ const { redactObject } = require('./redaction-service');
 const TriageRAGService = require('./triage-rag-service');
 const KellyOrchestratorPhase = require('./kelly-orchestrator-phase');
 const KellyPromptBuilder = require('./kelly-prompt-builder');
+const SessionStateStore = require('./session-state-store');
+const IntakeRequiredFields = require('./intake-required-fields');
+const AskNextQuestionService = require('./ask-next-question-service');
+const SafetyPreScreen = require('./safety-prescreen');
+const QueryPlanner = require('./query-planner');
+const CarePathCatalog = require('./care-path-catalog');
+const EvidenceFusion = require('./evidence-fusion');
+const CaseSummaryComposer = require('./case-summary-composer');
+const CasePatternsService = require('./case-patterns-service');
+const BillingReadinessPack = require('./billing-readiness-pack');
+const ClinicalRecommendationPolicy = require('./clinical-recommendation-policy');
 const { formatRoutineIntakeSummaryFromTriageRow } = KellyPromptBuilder;
 
 // ─────────────────────────────────────────────────────────────
@@ -636,7 +650,8 @@ function _isRoutineLockedForSession(sessionId, history = []) {
 
 function _extractUrgencyFromText(text) {
   const t = String(text || '').toLowerCase();
-  if (/\b(immediately|urgent|asap|right away|now|today|emergency)\b/i.test(t)) return 'sync';
+  // Avoid classifying duration phrases like "for months now" as urgent.
+  if (/\b(immediately|urgent|asap|right away|right now|today|emergency)\b/i.test(t)) return 'sync';
   if (/\b(schedule for later|schedule later|later|not urgent|tomorrow|next week|whenever|no rush)\b/i.test(t)) return 'async';
   return null;
 }
@@ -1345,6 +1360,38 @@ const KELLY_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'resolve_product_ingredients',
+      description: 'Resolve a product name/brand to canonical product and INCI ingredient list.',
+      parameters: {
+        type: 'object',
+        properties: {
+          product_name: { type: 'string', description: 'Product name to match (e.g. "CeraVe Hydrating Cleanser")' },
+          brand: { type: 'string', description: 'Optional brand name filter' }
+        },
+        required: ['product_name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'lookup_ingredient_functions',
+      description: 'Lookup ingredient (INCI) functions and regulatory restrictions for cosmetic guidance.',
+      parameters: {
+        type: 'object',
+        properties: {
+          inci_list: {
+            oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'string' }],
+            description: 'INCI ingredient list (array or comma-separated string)'
+          }
+        },
+        required: ['inci_list']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'store_triage_opqrst',
       description: 'Store OPQRST (symptom HPI). Call after EACH material OPQRST answer — do not wait until the end. Use `store_triage_rich_intake` for meds/allergies/PMH/FHx/social context.',
       parameters: {
@@ -1826,10 +1873,21 @@ Antworten Sie durchgehend auf Deutsch.`,
       messageChars: String(message || '').length
     });
 
+    const canonicalState = SessionStateStore.getCanonicalState({ sessionId });
+    if (canonicalState) {
+      _kellyDebugTurn('canonical_state_loaded', {
+        sessionId,
+        complaint: canonicalState.chief_complaint || null,
+        severity: canonicalState.severity ?? null,
+        riskFlags: Array.isArray(canonicalState.risk_flags) ? canonicalState.risk_flags.length : 0
+      });
+    }
+
     // ── 1. Emergency pre-check (before LLM, always) ──────────
     const emergency = detectRedFlags(message);
-    if (emergency?.isEmergency) {
-      const emergencyReply = emergency.suggestedResponse ||
+    const safety = SafetyPreScreen.evaluateSafety({ text: message, eventType: 'chat_turn', payload: { message } });
+    if (emergency?.isEmergency || safety?.emergency) {
+      const emergencyReply = emergency?.suggestedResponse || safety?.suggested_response ||
         'This sounds like a medical emergency. Please call 911 or go to the nearest emergency room right now.';
 
       this._appendToHistory(sessionId, 'user', message);
@@ -2161,6 +2219,20 @@ Antworten Sie durchgehend auf Deutsch.`,
     let routineLocked = routineLockedByHistoryEffective || routineLockedByMeta;
     const msgLcForRoutine = String(message || '').toLowerCase();
     const hasSymptomNow = SYMPTOM_KEYWORDS.some((k) => msgLcForRoutine.includes(k)) && !_hasNoSymptomsRoutineSignal(msgLcForRoutine);
+    const recentUserMessages = (Array.isArray(history) ? history : [])
+      .filter((m) => m?.role === 'user')
+      .slice(-6)
+      .map((m) => String(m?.content || '').toLowerCase());
+    const symptomSeenRecently = recentUserMessages.some(
+      (t) => SYMPTOM_KEYWORDS.some((k) => t.includes(k)) && !_hasNoSymptomsRoutineSignal(t)
+    );
+    // Safety: if we recently saw symptom language, do not keep stale routine lock.
+    if (routineLocked && symptomSeenRecently && !_hasNoSymptomsRoutineSignal(msgLcForRoutine)) {
+      routineLocked = false;
+      try {
+        if (KellyToolExecutor._setSessionMeta) KellyToolExecutor._setSessionMeta(sessionId, 'routine_no_symptoms', '0');
+      } catch (_) {}
+    }
 
     // Recovery: if LLM already told the patient this is a routine visit with no symptoms
     // but the flag wasn't set (e.g. due to a typo), set it now before proceeding
@@ -2474,9 +2546,77 @@ Antworten Sie durchgehend auf Deutsch.`,
       routineIntakeSummaryMarkdown
     };
 
+    // Deterministic required-fields gate before deep retrieval/tool loop.
+    // Question selection is deterministic; wording is LLM-generated by AskNextQuestionService.
+    const pathway =
+      channel === 'voice' ? 'triage'
+        : (orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+           orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP)
+          ? 'routine'
+          : 'triage';
+    const gateEval = SessionStateStore.evaluateGate({ pathway, sessionId });
+    const minimumRequiredByPathway = IntakeRequiredFields.getRequiredFieldsSchema()[pathway]?.minimum_required || [];
+    const shouldGate =
+      minimumRequiredByPathway.length > 0 &&
+      !gateEval.is_minimum_met &&
+      !safety?.emergency &&
+      gateEval.missing_required.length > 0;
+
     // ── 4. Append user message ────────────────────────────────
     this._appendToHistory(sessionId, 'user', message);
     history.push({ role: 'user', content: message });
+
+    if (shouldGate) {
+      const nextField = IntakeRequiredFields.nextRequiredField(pathway, gateEval.state);
+      const gateQuestion = await AskNextQuestionService.generateQuestion({
+        missingField: nextField,
+        pathway,
+        preferredLanguage
+      });
+      this._appendToHistory(sessionId, 'assistant', gateQuestion);
+      return {
+        reply: gateQuestion,
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en',
+        gate_status: gateEval
+      };
+    }
+
+    // Typed query planner (Phase 5): build a deterministic retrieval contract before tool loop.
+    let typedQueryPlan = null;
+    try {
+      typedQueryPlan = QueryPlanner.buildTypedQueryPlan({
+        message,
+        state: gateEval.state,
+        pathway
+      });
+      context.query_plan = typedQueryPlan;
+      // Pathology adapter call using existing triage RAG service (structured inputs).
+      if (typedQueryPlan?.subqueries?.pathology?.enabled) {
+        const pathology = await QueryPlanner.runPathologyRetrieval({
+          sessionId,
+          symptomText: message,
+          opqrst: db.getTriageSession ? (db.getTriageSession(sessionId) || {}) : {},
+          patientId,
+          clinicId
+        });
+        context.pathology_retrieval = pathology;
+      }
+      const serviceRoute = QueryPlanner.resolveServiceOption({
+        plan: typedQueryPlan,
+        safetyStatus: safety?.status || 'green',
+        preferred: 'care_guidance'
+      });
+      context.service_option = serviceRoute;
+        const carePath = CarePathCatalog.resolveCarePath({
+          intent: typedQueryPlan?.intent || null,
+          urgency: context?.pathology_retrieval?.urgency || typedQueryPlan?.subqueries?.pathology?.priority || null,
+          safety_status: safety?.status || 'green',
+          risk_flags: gateEval?.state?.risk_flags || []
+        });
+        context.care_path = carePath;
+    } catch (_) {}
 
     // ── 5. Call LLM with tool loop ────────────────────────────
     let reply, toolsUsed = [], endCall = false, nextStep, nextChips, chipsDisplay;
@@ -2497,6 +2637,23 @@ Antworten Sie durchgehend auf Deutsch.`,
       ]);
       reply = loopResult.reply;
       toolsUsed = loopResult.toolsUsed || [];
+      // Unified output guardrails pass (policy + safety suppression).
+      reply = ClinicalRecommendationPolicy.applyOutputGuardrails(reply, {
+        safetyStatus: safety?.status || 'green',
+        routineSkincare: orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE
+          || orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP
+      });
+      // Safety-aware intent routing from deterministic care-path catalog.
+      if (context?.care_path?.route === 'doctor_needed' && safety?.status !== 'green') {
+        nextStep = 'doctor_needed';
+      } else if (context?.care_path?.route === 'records_question') {
+        nextStep = 'records_question';
+      } else if (context?.care_path?.route === 'evidence_question') {
+        nextStep = 'evidence_question';
+      } else if (context?.care_path?.route === 'care_guidance' && !nextStep) {
+        nextStep = 'care_guidance';
+      }
+
       endCall = loopResult.endCall || false;
       nextStep = loopResult.next_step;
       nextChips = loopResult.next_chips;
@@ -3504,6 +3661,77 @@ Antworten Sie durchgehend auf Deutsch.`,
     }
 
     const orderedTools = _toolsUsedEnsureRagBeforeSlots(sessionId, mergedTools);
+    const fusedEvidence = EvidenceFusion.fuseEvidence({
+      pathology: context?.pathology_retrieval || null,
+      safety_status: safety?.status || 'green',
+      risk_flags: gateEval?.state?.risk_flags || [],
+      records: null,
+      literature: null,
+      ingredient: null
+    });
+    const patientSummary = CaseSummaryComposer.composeCaseSummary({
+      fused: fusedEvidence,
+      audience: 'patient'
+    });
+    patientSummary.summary_text = ClinicalRecommendationPolicy.applyOutputGuardrails(patientSummary.summary_text, {
+      safetyStatus: safety?.status || 'green',
+      routineSkincare: false
+    });
+    const billingPack = BillingReadinessPack.buildBillingReadinessPack({
+      source: 'kelly_chat',
+      session_id: sessionId,
+      rag_context: context?.pathology_retrieval || {},
+      evidence_fusion: fusedEvidence,
+      confidence: fusedEvidence?.confidence ?? null
+    });
+    if (CasePatternsService.isEnabled()) {
+      try {
+        CasePatternsService.ingestCasePattern({
+          source: 'kelly_chat',
+          source_ref: sessionId,
+          chief_complaint: gateEval?.state?.chief_complaint || null,
+          specialty: fusedEvidence?.merged?.specialty || null,
+          urgency: fusedEvidence?.merged?.urgency || null,
+          safety_level: fusedEvidence?.safety_status || null,
+          body_sites: gateEval?.state?.body_sites || [],
+          risk_flags: fusedEvidence?.merged?.risk_flags || [],
+          summary: patientSummary?.summary_text || ''
+        });
+      } catch (_) {}
+    }
+    if (db.insertFinalAssessmentArtifact) {
+      const retrievalKey = `session:${sessionId}:turn`;
+      db.insertFinalAssessmentArtifact({
+        source: 'kelly_chat',
+        session_id: sessionId,
+        trace_id: context?.trace_id || null,
+        artifact_type: 'case_summary',
+        retrieval_key: retrievalKey,
+        payload: patientSummary
+      });
+      db.insertFinalAssessmentArtifact({
+        source: 'kelly_chat',
+        session_id: sessionId,
+        trace_id: context?.trace_id || null,
+        artifact_type: 'billing_readiness_pack',
+        retrieval_key: retrievalKey,
+        payload: billingPack
+      });
+      db.insertFinalAssessmentArtifact({
+        source: 'kelly_chat',
+        session_id: sessionId,
+        trace_id: context?.trace_id || null,
+        artifact_type: 'decision_log',
+        retrieval_key: retrievalKey,
+        payload: {
+          service_option: context?.service_option || null,
+          care_path: context?.care_path || null,
+          safety_status: safety?.status || 'green',
+          next_step: nextStep || null,
+          tools_used: orderedTools
+        }
+      });
+    }
     _kellyDebugTurn('turn_success', {
       sessionId,
       toolsUsed: orderedTools,
@@ -3546,7 +3774,11 @@ Antworten Sie durchgehend auf Deutsch.`,
         next_chips: nextChips,
         chips_display: chipsDisplay,
         redirect_to: redirectTo,
-        llm_usage: loopResult?.llm_usage || null
+        llm_usage: loopResult?.llm_usage || null,
+        care_path: context?.care_path || null,
+        evidence_fusion: fusedEvidence,
+        case_summary: patientSummary,
+        billing_readiness_pack: billingPack
       })
     );
   }

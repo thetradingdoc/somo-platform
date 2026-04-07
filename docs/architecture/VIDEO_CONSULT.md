@@ -1,6 +1,6 @@
 # Video Consult — Architecture, Env & Runbook
 
-**Last Updated:** February 2026
+**Last Updated:** April 7, 2026
 
 Single reference for LiveKit video consult: flow, environment variables, and ops runbook.
 
@@ -68,8 +68,17 @@ LiveKit room → Python agents (transcript, vision_frame, end_session)
 
 ---
 
-## 5. Related
+## 5. Landing Try now (Skin & Care) vs this doc
 
+The **marketing landing** (`littlelab-landing`) can open a **public** LiveKit room (`try-landing-*`) for camera preview + optional real-time session. That path uses **`POST /api/livekit/token` only** — it does **not** feed `video-consult` agent events, transcripts, or YOLO unless you add a separate agent/worker.
+
+**Canonical detail:** [LANDING_TRY_NOW_LIVEKIT.md](./LANDING_TRY_NOW_LIVEKIT.md).
+
+---
+
+## 6. Related
+
+- [LANDING_TRY_NOW_LIVEKIT.md](./LANDING_TRY_NOW_LIVEKIT.md) — Landing UI, preview → LiveKit handoff, debugging
 - [HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md) — Voice vs Video vs PDF, shared RAG/codes
 - [MEDIA_LAYER_ARCHITECTURE.md](./media/MEDIA_LAYER_ARCHITECTURE.md) — Media layer
 - [docs/middleware-platform/LANGGRAPH_LANGSMITH.md](../middleware-platform/LANGGRAPH_LANGSMITH.md) — Tracing (video consult runs, retrieve_context metadata)

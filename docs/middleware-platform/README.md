@@ -99,4 +99,25 @@ When changing Kelly triage, Skin & Care intake, or payment behavior:
 
 ---
 
+## Rollout and rollback flags
+
+| Flag | Purpose | Default |
+|---|---|---|
+| `UNIFIED_CHANNEL_ADAPTER_ENABLED` | Unified adapter is primary ingress path | `0` |
+| `UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED` | Run adapter in shadow (legacy remains source of truth) | `0` |
+| `CASE_DEIDENT_ENABLED` | Persist de-identified case-patterns | `0` in dev/staging |
+
+### Rollout sequence
+
+1. Enable shadow mode (`UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED=1`) and compare trace logs.
+2. Enable primary adapter (`UNIFIED_CHANNEL_ADAPTER_ENABLED=1`) once parity is verified.
+3. Enable case de-ident ingestion (`CASE_DEIDENT_ENABLED=1`) only after privacy review.
+
+### Rollback
+
+- Set the corresponding flag back to `0` and restart the middleware service.
+- Legacy routes remain available as fallback when shadow mode is disabled.
+
+---
+
 **Last updated:** April 2026

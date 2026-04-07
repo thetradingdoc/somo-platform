@@ -10,10 +10,24 @@ const FHIRService = require('./fhir-service');
 const tokenBudget = require('../utils/token-budget');
 const knowledgeService = require('./knowledge-service');
 const reviewTaskService = require('./review-task-service');
+const SessionStateStore = require('./session-state-store');
+const SafetyPreScreen = require('./safety-prescreen');
+const QueryPlanner = require('./query-planner');
+const EvidenceFusion = require('./evidence-fusion');
+const CaseSummaryComposer = require('./case-summary-composer');
+const CasePatternsService = require('./case-patterns-service');
+const BillingReadinessPack = require('./billing-readiness-pack');
+const ClinicalRecommendationPolicy = require('./clinical-recommendation-policy');
+const { mapVisionDetectionsToTags } = require('./video-consult-assistant-service');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
 const SLOW_NODE_MS = parseInt(process.env.VIDEO_CONSULT_SLOW_NODE_MS || '5000', 10);
+
+/** Verbose RAG query/merge logs: off in production unless DEBUG_VIDEO_CONSULT_RAG=1 */
+function videoConsultRagDebugEnabled() {
+  return process.env.NODE_ENV !== 'production' || process.env.DEBUG_VIDEO_CONSULT_RAG === '1';
+}
 
 let graphModule = null;
 let compiledGraph = null;
@@ -155,7 +169,9 @@ async function processEvent(roomId, eventType, payload, options = {}) {
 
       const specialty = state.perceptual_state?.specialty_tag || 'general';
       const queryPreview = text.slice(0, 120);
-      console.log(`[video-consult][RAG] Querying (${specialty}): "${queryPreview}${text.length > 120 ? '…' : ''}"`);
+      if (videoConsultRagDebugEnabled()) {
+        console.log(`[video-consult][RAG] Querying (${specialty}): "${queryPreview}${text.length > 120 ? '…' : ''}"`);
+      }
 
       // §6 Optional: for non-English consults, translate text here (e.g. perception extractAndNormalizeText) before RAG
       const dual = await knowledgeService.getCodeCandidatesDualSource(text, {
@@ -175,7 +191,9 @@ async function processEvent(roomId, eventType, payload, options = {}) {
       const remoteCount = (remote.icd10 || []).length + (remote.cpt || []).length + (remote.hcpcs || []).length;
       const localCount = (local.icd10 || []).length + (local.cpt || []).length + (local.hcpcs || []).length;
 
-      console.log(`[video-consult][RAG] Remote: ${(remote.icd10 || []).length} ICD-10, ${(remote.cpt || []).length} CPT; Local: ${(local.icd10 || []).length} ICD-10, ${(local.cpt || []).length} CPT; Merged (validated): ${mergedCount}`);
+      if (videoConsultRagDebugEnabled()) {
+        console.log(`[video-consult][RAG] Remote: ${(remote.icd10 || []).length} ICD-10, ${(remote.cpt || []).length} CPT; Local: ${(local.icd10 || []).length} ICD-10, ${(local.cpt || []).length} CPT; Merged (validated): ${mergedCount}`);
+      }
 
       // §3 Observability: pipeline summary in node output so LangSmith trace shows remote/local/merged counts
       return {
@@ -325,6 +343,8 @@ async function processEvent(roomId, eventType, payload, options = {}) {
    * If appointment.status === 'completed': insert pending row, fire-and-forget POST to case report service.
    */
   async function triggerCaseReportNode(state) {
+    const deidentEnabled = CasePatternsService.isEnabled();
+    if (!deidentEnabled) return {};
     const caseReportUrl = process.env.CASE_REPORT_SERVICE_URL;
     const callbackToken = process.env.CASE_REPORT_SERVICE_TOKEN;
     if (!caseReportUrl || !callbackToken) {
@@ -404,6 +424,14 @@ async function processEvent(roomId, eventType, payload, options = {}) {
 
   function accumulateNode(state) {
     try {
+      const safetyStatus = state?.session_metadata?.safety_prescreen?.status;
+      const gateMet = state?.session_metadata?.intake_gate?.is_minimum_met;
+      if (state.event_type === 'end_session' && safetyStatus === 'red') {
+        return { current_stage: 'SAFETY_BLOCKED' };
+      }
+      if (state.event_type === 'end_session' && gateMet === false) {
+        return { current_stage: 'INTAKE_GATE_INCOMPLETE' };
+      }
       return {}; // State already merged via reducers; this ensures checkpoint is written
     } catch (err) {
       console.error('[video-consult-graph] accumulateNode error:', err);
@@ -431,6 +459,11 @@ async function processEvent(roomId, eventType, payload, options = {}) {
   }
 
   function routeByEvent(state) {
+    const safetyStatus = state?.session_metadata?.safety_prescreen?.status;
+    if (safetyStatus === 'red') return '__end__';
+    if (state.event_type === 'end_session' && state?.session_metadata?.intake_gate?.is_minimum_met === false) {
+      return '__end__';
+    }
     return state.event_type === 'end_session' ? 'retrieve_context' : '__end__';
   }
 
@@ -461,10 +494,56 @@ async function processEvent(roomId, eventType, payload, options = {}) {
     event_type: eventType
   };
 
+  const canonicalState = SessionStateStore.getCanonicalState({ roomId });
+  if (canonicalState) {
+    input.session_metadata = {
+      ...(input.session_metadata || {}),
+      canonical_state: {
+        complaint: canonicalState.chief_complaint || null,
+        body_sites: canonicalState.body_sites || [],
+        severity: canonicalState.severity ?? null,
+        timeline: canonicalState.timeline || null,
+        risk_flags: canonicalState.risk_flags || []
+      }
+    };
+  }
+
+  const intakeGate = SessionStateStore.evaluateGate({ pathway: 'video', roomId });
+  const safety = SafetyPreScreen.evaluateSafety({
+    eventType,
+    text: String(payload?.text || payload?.content || ''),
+    payload,
+    roomId
+  });
+  input.session_metadata = {
+    ...(input.session_metadata || {}),
+    intake_gate: intakeGate,
+    safety_prescreen: safety
+  };
+  try {
+    const stateHint = canonicalState || {};
+    const plannerInputText = String(payload?.text || payload?.content || '');
+    const typedPlan = QueryPlanner.buildTypedQueryPlan({
+      message: plannerInputText,
+      state: stateHint,
+      pathway: 'video'
+    });
+    input.session_metadata.query_plan = typedPlan;
+    input.session_metadata.service_option = QueryPlanner.resolveServiceOption({
+      plan: typedPlan,
+      safetyStatus: safety?.status || 'green',
+      preferred: 'doctor_needed'
+    });
+  } catch (_) {}
+
   if (eventType === 'transcript') {
     input.audio_transcript = [payload];
   } else if (eventType === 'vision_frame') {
     input.video_frames = [payload];
+    input.session_metadata = {
+      ...(input.session_metadata || {}),
+      vision_tags: mapVisionDetectionsToTags(payload?.detections || payload?.yolo_detections || [])
+    };
   }
 
   const config = {
@@ -475,11 +554,86 @@ async function processEvent(roomId, eventType, payload, options = {}) {
 
   try {
     const result = await compiledGraph.invoke(input, config);
+    // Phase 8: deterministic evidence fusion + structured summary
+    const fused = EvidenceFusion.fuseEvidence({
+      pathology: {
+        confidence: result?.rag_context?.rag_confidence ?? null,
+        specialty: result?.rag_context?.specialty || null,
+        urgency: result?.rag_context?.urgency || null,
+        safety_level: result?.rag_context?.safety_level || null,
+        red_flags: result?.rag_context?.red_flags || []
+      },
+      vision_tags: input?.session_metadata?.vision_tags || [],
+      safety_status: safety?.status || 'green'
+    });
+    const providerSummary = CaseSummaryComposer.composeCaseSummary({ fused, audience: 'provider' });
+    providerSummary.summary_text = ClinicalRecommendationPolicy.applyOutputGuardrails(providerSummary.summary_text, {
+      safetyStatus: safety?.status || 'green',
+      routineSkincare: false
+    });
+    const billingPack = BillingReadinessPack.buildBillingReadinessPack({
+      source: 'video_consult',
+      room_id: roomId,
+      trace_id: input?.session_metadata?.trace_id || null,
+      rag_context: result?.rag_context || {},
+      evidence_fusion: fused,
+      confidence: fused?.confidence
+    });
+    if (CasePatternsService.isEnabled() && eventType === 'end_session') {
+      try {
+        CasePatternsService.ingestCasePattern({
+          source: 'video_consult',
+          source_ref: roomId,
+          chief_complaint: canonicalState?.chief_complaint || null,
+          specialty: fused?.merged?.specialty || null,
+          urgency: fused?.merged?.urgency || null,
+          safety_level: fused?.safety_status || null,
+          body_sites: canonicalState?.body_sites || [],
+          risk_flags: fused?.merged?.risk_flags || [],
+          summary: providerSummary?.summary_text || ''
+        });
+      } catch (_) {}
+    }
+    if (eventType === 'end_session' && db.insertFinalAssessmentArtifact) {
+      const retrievalKey = `room:${roomId}:end_session`;
+      db.insertFinalAssessmentArtifact({
+        source: 'video_consult',
+        room_id: roomId,
+        trace_id: input?.session_metadata?.trace_id || null,
+        artifact_type: 'case_summary',
+        retrieval_key: retrievalKey,
+        payload: providerSummary
+      });
+      db.insertFinalAssessmentArtifact({
+        source: 'video_consult',
+        room_id: roomId,
+        trace_id: input?.session_metadata?.trace_id || null,
+        artifact_type: 'billing_readiness_pack',
+        retrieval_key: retrievalKey,
+        payload: billingPack
+      });
+      db.insertFinalAssessmentArtifact({
+        source: 'video_consult',
+        room_id: roomId,
+        trace_id: input?.session_metadata?.trace_id || null,
+        artifact_type: 'decision_log',
+        retrieval_key: retrievalKey,
+        payload: {
+          stage: result.current_stage,
+          safety_status: safety?.status || 'green',
+          service_option: input?.session_metadata?.service_option || null,
+          confidence: fused?.confidence ?? null
+        }
+      });
+    }
     return {
       success: true,
       stage: result.current_stage,
       requires_review: result.error?.recoverable || false,
       rag_context: result.rag_context || null,
+      evidence_fusion: fused,
+      case_summary: providerSummary,
+      billing_readiness_pack: billingPack,
       error: result.error || null,
       audio_transcript: result.audio_transcript || null
     };

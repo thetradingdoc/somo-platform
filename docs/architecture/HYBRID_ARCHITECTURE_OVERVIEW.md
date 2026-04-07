@@ -72,6 +72,10 @@ See **HYBRID_ARCHITECTURE_IMPROVEMENTS.md** for the improvement plan and **VIDEO
 
 ---
 
+**Last Updated:** April 6, 2026
+
+---
+
 ## Translate before RAG (optional, §6)
 
 **Current:** Coding and RAG (terminology, phrase matching) are English-oriented. Video consult sends the raw transcript to `getCodeCandidatesDualSource` with no language detection or translation.
