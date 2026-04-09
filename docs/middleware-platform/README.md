@@ -120,4 +120,4 @@ When changing Kelly triage, Skin & Care intake, or payment behavior:
 
 ---
 
-**Last updated:** April 2026
+**Last Updated:** April 9, 2026

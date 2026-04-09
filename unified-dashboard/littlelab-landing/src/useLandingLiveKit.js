@@ -16,13 +16,13 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
   const [entryStep, setEntryStep] = useState('invite');
   const [errorMessage, setErrorMessage] = useState('');
   const [permissionHint, setPermissionHint] = useState('');
-  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
   const roomRef = useRef(null);
   const previewStreamRef = useRef(null);
   const intentionalLeaveRef = useRef(false);
   const connectAbortRef = useRef(null);
   const recoveringCameraRef = useRef(false);
-  const desiredCameraOnRef = useRef(true);
+  const desiredCameraOnRef = useRef(false);
 
   const attachLocalVideo = useCallback(
     (room) => {
@@ -86,6 +86,19 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     const mediaTrack = pub?.track?.mediaStreamTrack;
     return !!(pub?.track && !pub.isMuted && mediaTrack && mediaTrack.readyState === 'live');
   }, []);
+
+  const hasLivePreviewTrack = useCallback(() => {
+    const stream = previewStreamRef.current;
+    if (!stream || typeof stream.getVideoTracks !== 'function') return false;
+    return stream.getVideoTracks().some((t) => t && t.readyState === 'live' && t.enabled !== false);
+  }, []);
+
+  const hasRenderableLocalVideo = useCallback(() => {
+    const el = localVideoRef?.current;
+    const stream = el?.srcObject;
+    if (!stream || typeof stream.getVideoTracks !== 'function') return false;
+    return stream.getVideoTracks().some((t) => t && t.readyState === 'live' && t.enabled !== false);
+  }, [localVideoRef]);
 
   const ensureLocalCameraAttached = useCallback(
     async (room, reason = 'sync') => {
@@ -193,13 +206,26 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
           roomRef.current = null;
           clearRemoteVideos();
           const v = localVideoRef?.current;
-          if (v) v.srcObject = null;
           if (intentionalLeaveRef.current) {
+            if (v) v.srcObject = null;
             intentionalLeaveRef.current = false;
             setPhase('idle');
             setErrorMessage('');
             setPermissionHint('');
             return;
+          }
+          const previewStream = previewStreamRef.current;
+          const previewLive = hasLivePreviewTrack();
+          if (v) {
+            if (previewLive && previewStream) {
+              v.srcObject = previewStream;
+              v.muted = true;
+            } else {
+              v.srcObject = null;
+            }
+          }
+          if (!previewLive) {
+            setEntryStep('invite');
           }
           setPhase('failed');
           setErrorMessage('Live video disconnected.');
@@ -220,10 +246,14 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
         room.on(RoomEvent.LocalTrackUnpublished, (pub) => {
           if (pub?.kind === Track.Kind.Video) {
             setCameraEnabled(false);
+            if (desiredCameraOnRef.current) void ensureLocalCameraAttached(room, 'local-track-unpublished');
           }
         });
         room.on(RoomEvent.TrackMuted, (_pub, participant) => {
-          if (participant?.isLocal) setCameraEnabled(false);
+          if (participant?.isLocal) {
+            setCameraEnabled(false);
+            if (desiredCameraOnRef.current) void ensureLocalCameraAttached(room, 'local-track-muted');
+          }
         });
         room.on(RoomEvent.TrackUnmuted, (pub, participant) => {
           if (!participant?.isLocal) return;
@@ -258,9 +288,10 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
         setPhase('connected');
 
         try {
-          await room.localParticipant.enableCameraAndMicrophone();
-          desiredCameraOnRef.current = true;
-          setCameraEnabled(true);
+          // Start in "camera off" mode; user explicitly enables video from UI.
+          await room.localParticipant.setMicrophoneEnabled(true);
+          await room.localParticipant.setCameraEnabled(!!desiredCameraOnRef.current);
+          setCameraEnabled(!!desiredCameraOnRef.current);
         } catch (e) {
           const msg = e?.message || String(e);
           if (/Permission|denied|NotAllowed/i.test(msg)) {
@@ -305,8 +336,24 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     if (room) {
       try {
         await room.localParticipant.setCameraEnabled(on);
-        setCameraEnabled(on);
-        if (on) attachLocalVideo(room);
+        if (on) {
+          // Ensure first "Video On" click actually yields a renderable track.
+          await ensureLocalCameraAttached(room, 'manual-toggle');
+          attachLocalVideo(room);
+          const el = localVideoRef?.current;
+          if (el && typeof el.play === 'function') {
+            el.play().catch(() => {});
+          }
+          // Retry once if track publication is slightly delayed.
+          if (!hasRenderableLocalVideo()) {
+            window.setTimeout(() => {
+              void ensureLocalCameraAttached(room, 'manual-toggle-retry');
+            }, 280);
+          }
+          setCameraEnabled(true);
+        } else {
+          setCameraEnabled(false);
+        }
       } catch (e) {
         const msg = e?.message || String(e);
         if (/Permission|denied|NotAllowed/i.test(msg)) {
@@ -324,12 +371,18 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       s.getVideoTracks().forEach((t) => {
         t.enabled = on;
       });
+      const el = localVideoRef?.current;
+      if (on && el && typeof el.play === 'function') {
+        el.play().catch(() => {});
+      }
       setCameraEnabled(on);
+    } else {
+      setPermissionHint('No camera preview stream available yet. Tap Video On again in a moment.');
     }
-  }, [attachLocalVideo]);
+  }, [attachLocalVideo, ensureLocalCameraAttached, hasRenderableLocalVideo, localVideoRef]);
 
   const beginTryNow = useCallback(async () => {
-    desiredCameraOnRef.current = true;
+    desiredCameraOnRef.current = false;
     setPermissionHint('');
     setErrorMessage('');
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -341,6 +394,10 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
         video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: true
       });
+      // Keep preview/session in a consistent initial "Video Off" state.
+      stream.getVideoTracks().forEach((t) => {
+        t.enabled = false;
+      });
       previewStreamRef.current = stream;
       const el = localVideoRef?.current;
       if (el) {
@@ -348,7 +405,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
         el.muted = true;
       }
       setEntryStep('session');
-      setCameraEnabled(true);
+      setCameraEnabled(false);
     } catch (e) {
       const msg = e?.message || String(e);
       if (/Permission|denied|NotAllowed/i.test(msg)) {
@@ -400,12 +457,12 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       const r = roomRef.current;
       if (!r) return;
       if (!desiredCameraOnRef.current) return;
-      if (!hasActiveLocalCameraTrack(r)) {
+      if (!hasActiveLocalCameraTrack(r) || !hasRenderableLocalVideo()) {
         void ensureLocalCameraAttached(r, 'watchdog');
       }
     }, 1800);
     return () => clearInterval(id);
-  }, [phase, hasActiveLocalCameraTrack, ensureLocalCameraAttached]);
+  }, [phase, hasActiveLocalCameraTrack, hasRenderableLocalVideo, ensureLocalCameraAttached]);
 
   useEffect(() => {
     const el = localVideoRef?.current;
@@ -459,6 +516,9 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     requestCaptureNow,
     syncMicWithVoice,
     isConnected: phase === 'connected',
-    inSession: entryStep === 'session'
+    inSession: entryStep === 'session' && (
+      hasLivePreviewTrack() ||
+      hasRenderableLocalVideo()
+    )
   };
 }

@@ -4,16 +4,18 @@ Test results, test suites, and testing guides.
 
 ## Automated tests
 
-Jest tests are not checked in right now. Add `*.test.js` files under `middleware-platform/__tests__/` when you reintroduce suites.
+Jest suites live under `middleware-platform/__tests__/` (e.g. reasoning-map, session orchestration, security redaction). Playwright E2E specs live under `middleware-platform/e2e/`.
 
-## Running Tests
+## Running tests
 
 ```bash
 cd middleware-platform
-npm test   # jest --passWithNoTests
+npm test                    # jest --passWithNoTests (all __tests__)
+npm run test:reasoning-map  # focused Jest suite
+npm run test:session-orchestration
 ```
 
-## Related Documentation
+## Related documentation
 
 - [Architecture Voice Agent](../architecture/voice-agent/RUNBOOK.md) — medical coding runbook
 - [LangGraph & LangSmith](../middleware-platform/LANGGRAPH_LANGSMITH.md)
@@ -21,4 +23,4 @@ npm test   # jest --passWithNoTests
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** April 9, 2026

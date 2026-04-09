@@ -27,4 +27,4 @@ Use this when two folders both mention Kelly, checkout, or triage. **Start with 
 - **Keep** audit/cleanup docs as **history** unless a maintainer explicitly replaces them with a single “docs index” revision.
 - **Delete** only when the same content lives verbatim elsewhere (rare); prefer **archive** under `docs/archive/` per `DOC_CLEANUP_MARCH_2026.md`.
 
-**Last updated:** April 8, 2026
+**Last updated:** April 9, 2026

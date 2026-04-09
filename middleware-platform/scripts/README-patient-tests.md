@@ -1,5 +1,7 @@
 # Patient Journey Test Cases
 
+**Last Updated:** April 9, 2026
+
 Multiple E2E test cases representing different patients, chief complaints, and specialties.
 
 ## Usage

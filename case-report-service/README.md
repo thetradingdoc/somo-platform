@@ -1,5 +1,7 @@
 # Case report service (Phase 6)
 
+**Last Updated:** April 9, 2026
+
 Containerised Python service that runs the 6-layer case report pipeline (refactor of `patient_rag_pipeline_v3.2`). Consumes transcript + optional files from Azure Blob (or local), produces report markdown and reasoning chain, and POSTs the result to the middleware callback URL.
 
 ## Endpoints

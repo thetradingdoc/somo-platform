@@ -1,5 +1,7 @@
 # Patient App (Mobile)
 
+**Last Updated:** April 9, 2026
+
 ## Booking Scope
 
 Mobile self-booking (`triage`, calendar scheduling, and checkout) is currently out of scope for this app build.

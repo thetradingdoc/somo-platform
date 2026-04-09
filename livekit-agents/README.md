@@ -3,6 +3,8 @@
 Python agents for real-time transcription and vision analysis in LiveKit video rooms.
 Send events to middleware: `POST /api/video-consult/agent-events`.
 
+**Last Updated:** April 9, 2026
+
 ---
 
 ## Setup

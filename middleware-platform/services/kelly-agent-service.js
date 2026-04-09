@@ -3679,14 +3679,14 @@ Antworten Sie durchgehend auf Deutsch.`,
           try { this._appendToHistory(sessionId, 'assistant', reply); } catch (_) {}
           return _errUiReturn(
             _appendSkincareAssessmentToReturn(sessionId, orchestration, {
-              reply,
-              endCall,
-              toolsUsed,
-              language: preferredLanguage,
-              next_step: nextStep,
-              next_chips: nextChips,
-              chips_display: chipsDisplay,
-              usedFallback: true
+            reply,
+            endCall,
+            toolsUsed,
+            language: preferredLanguage,
+            next_step: nextStep,
+            next_chips: nextChips,
+            chips_display: chipsDisplay,
+            usedFallback: true
             })
           );
         } catch (groqErr) {
@@ -4591,13 +4591,13 @@ Antworten Sie durchgehend auf Deutsch.`,
     return _mergeUiSnapIntoReturn(
       KellyToolExecutor.consumeUiAttachments(sessionId),
       _appendSkincareAssessmentToReturn(sessionId, orchestration, {
-        reply,
-        endCall,
-        toolsUsed: orderedTools,
-        language: preferredLanguage,
-        next_step: nextStep,
-        next_chips: nextChips,
-        chips_display: chipsDisplay,
+      reply,
+      endCall,
+      toolsUsed: orderedTools,
+      language: preferredLanguage,
+      next_step: nextStep,
+      next_chips: nextChips,
+      chips_display: chipsDisplay,
         redirect_to: redirectTo,
         llm_usage: loopResult?.llm_usage || null,
         care_path: context?.care_path || null,
@@ -4680,8 +4680,8 @@ Antworten Sie durchgehend auf Deutsch.`,
           const reply = stageAfterReset === 'code_verified'
             ? 'Shipping address confirmed. Say "**continue secure checkout**" when you are ready.'
             : 'Shipping address confirmed. Please continue checkout.';
-          this._appendToHistory(sessionId, 'user', message);
-          this._appendToHistory(sessionId, 'assistant', reply);
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
           return _checkoutReply(reply, ['save_shipping_address'], lang, stageAfterReset, _stageToPolicyFlags(stageAfterReset), _stageToActions(stageAfterReset));
         }
       } else if (noIntent) {
@@ -5208,13 +5208,13 @@ Antworten Sie durchgehend auf Deutsch.`,
                       ? 'Checking cart…'
                       : toolName === 'clear_cart'
                         ? 'Clearing cart…'
-                        : toolName === 'prepare_commerce_checkout'
-                          ? 'Preparing secure checkout…'
+              : toolName === 'prepare_commerce_checkout'
+                ? 'Preparing secure checkout…'
                           : toolName === 'find_clinic_specialists'
                             ? 'Looking up specialists…'
                             : toolName === 'search_medical_literature'
                               ? 'Searching medical literature…'
-                              : 'Working…';
+                : 'Working…';
           try {
             onToolStatus(toolName, label);
           } catch (_) {}

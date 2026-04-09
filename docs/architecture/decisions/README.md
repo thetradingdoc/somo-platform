@@ -1,5 +1,7 @@
 # Architecture Decision Records (ADR)
 
+**Last Updated:** April 9, 2026
+
 Short, durable notes on **why** the platform chose certain approaches. Add a new file `NNN-short-title.md` when a decision is significant for reviewers and new contributors.
 
 | ADR | Topic |

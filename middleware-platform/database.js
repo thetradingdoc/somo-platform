@@ -5564,6 +5564,9 @@ module.exports = {
     run('DELETE FROM triage_sessions WHERE session_id = ?');
     run('DELETE FROM kelly_conversation_history WHERE session_id = ?');
     run('DELETE FROM kelly_session_meta WHERE session_id = ?');
+    run('DELETE FROM kelly_session_meta_kv WHERE session_id = ?');
+    run('DELETE FROM session_result_snapshots WHERE session_id = ?');
+    run('DELETE FROM session_result_edits WHERE session_id = ?');
     return { ok: true };
   },
 

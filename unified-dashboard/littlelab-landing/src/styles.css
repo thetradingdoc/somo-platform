@@ -57,12 +57,21 @@ body {
   padding: 12px 16px;
 }
 .brand-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   text-decoration: none;
   color: var(--brand-black);
   font-size: 2.85rem;
   letter-spacing: -0.03em;
   font-family: "Gloock", Georgia, "Times New Roman", serif;
   line-height: 1;
+}
+.brand-mark-logo {
+  width: 76px;
+  height: 76px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .nav-links { display: flex; gap: 26px; align-items: center; }
 .nav-links a {
@@ -165,6 +174,43 @@ body {
     0 10px 24px rgba(255, 165, 31, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
+.kicker--social {
+  gap: 16px;
+  padding: 12px 18px;
+  border: 2px solid rgba(17, 24, 39, 0.16);
+  background: #fbfbfc;
+  color: #111827;
+  font-size: clamp(0.98rem, 1.35vw, 1.18rem);
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 700;
+  box-shadow: none;
+}
+.kicker-avatars {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 2px;
+}
+.kicker-avatars img {
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.1);
+  margin-left: -10px;
+}
+.kicker-avatars img:first-child {
+  margin-left: 0;
+}
+.kicker-text {
+  font-size: clamp(1rem, 1.55vw, 1.22rem);
+  line-height: 1.2;
+  color: #141414;
+}
+.kicker-star {
+  color: #f2b620;
+}
 .kicker-icon {
   width: 18px;
   height: 18px;
@@ -205,9 +251,9 @@ body {
 .hero-ctas .btn-ghost {
   min-width: 162px;
   min-height: 56px;
-  padding: 13px 28px;
+  padding: 13px 30px;
   font-size: 1.25rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* --------------------------- */
@@ -503,6 +549,32 @@ body {
   position: relative;
   overflow: hidden;
   box-shadow: 0 30px 70px rgba(26, 26, 29, 0.09);
+}
+
+/* Desktop web: keep this section tall and aligned */
+@media (min-width: 1101px) {
+  .scan-results {
+    min-height: 75vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .scan-results-grid {
+    min-height: 75vh;
+    grid-template-columns: minmax(320px, 1fr) minmax(420px, 460px) minmax(320px, 1fr);
+  }
+
+  .scan-results-left,
+  .scan-results-right,
+  .scan-results-center {
+    min-height: 100%;
+  }
+
+  /* Keep bottoms visually level across all three columns */
+  .scan-results-left,
+  .scan-results-right {
+    justify-content: space-between;
+  }
 }
 .scan-phone-img {
   width: 100%;
@@ -2822,6 +2894,19 @@ body {
     font-size: 0.88rem;
   }
   .hero { margin-top: 38px; }
+  .kicker--social {
+    gap: 10px;
+    padding: 10px 12px;
+    border-width: 1.5px;
+  }
+  .kicker-avatars img {
+    width: 38px;
+    height: 38px;
+    margin-left: -8px;
+  }
+  .kicker-text {
+    font-size: 0.92rem;
+  }
   .hero h1 {
     font-size: clamp(2.2rem, 11vw, 3.2rem);
     line-height: 1.02;

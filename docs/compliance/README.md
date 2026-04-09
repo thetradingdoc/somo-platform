@@ -2,6 +2,8 @@
 
 **Purpose**: Central index for legal, regulatory, and compliance requirements. Documentation is key; the platform must abide by applicable law.
 
+**Last Updated:** April 9, 2026
+
 ---
 
 ## Documents

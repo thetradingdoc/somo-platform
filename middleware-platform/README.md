@@ -1,7 +1,8 @@
 # Middleware Platform - Backend API
 
 **Version**: 3.0.0  
-**Status**: Production Ready
+**Status**: Production Ready  
+**Last Updated:** April 9, 2026
 
 > **Documentation:** [docs/](../docs/README.md) is the repo-wide hub. **Middleware-specific** runbooks and Kelly/checkout specs live in **[docs/middleware-platform/](../docs/middleware-platform/README.md)** (not under `middleware-platform/docs/` except a short redirect [README](./docs/README.md)).
 
@@ -171,24 +172,19 @@ See main [README.md](../README.md) for complete environment variable documentati
 
 ## Testing
 
-### Run Tests
+### Run tests
 
 ```bash
-# Full suite (LangSmith, EOB, tool handlers, state transitions)
+# Default Jest (all suites under __tests__/)
 npm test
 
-# Individual suites
-npm run test:langsmith    # LangSmith tracing
-npm run test:langgraph    # LangGraph state flow
-npm run test:eob          # EOB calculation
-npm run test:tool-handlers # validate-code-pair, suggest-codes
-npm run test:state-transitions  # State machine
-npm run test:accuracy     # Medical coding accuracy
-npm run test:load         # Load test
-npm run test:contract     # Stedi contract tests
+# Focused suites (see package.json for the full list)
+npm run test:reasoning-map
+npm run test:session-orchestration
+npm run test:security:redaction
 ```
 
-See [tests/README.md](tests/README.md) for full test documentation.
+Integration and E2E scripts include `npm run smoke:landing-assistant`, `npm run test:e2e-step1-try-now`, and others defined in `package.json`. Unit tests live in [`__tests__/`](./__tests__/).
 
 ## Scripts
 

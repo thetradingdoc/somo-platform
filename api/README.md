@@ -12,7 +12,7 @@
 
 1. [API Reference](../docs/api/API_DOCUMENTATION.md) — Complete API documentation
 2. [Invoice API](../docs/api/INVOICE_API.md) — Invoice endpoints
-3. [SDK & Examples](./examples/README.md) (Coming Soon)
+3. **SDK & examples** — Planned; there is no `api/examples/` directory in the repo yet.
 
 ---
 
@@ -26,22 +26,19 @@
 
 ---
 
-## 📁 Folder Structure
+## 📁 Folder structure
 
 ```
 api/
-├── README.md                    # This file
-└── examples/                    # Code examples & SDKs (Coming Soon)
-    ├── README.md               # Examples index
-    ├── javascript/             # JavaScript SDK & examples
-    ├── python/                 # Python SDK & examples
-    └── curl/                   # cURL examples
+└── README.md                    # This file (customer integration overview)
 
-Documentation in docs/api/:
-├── docs/api/
-│   ├── API_DOCUMENTATION.md    # Complete API reference
-│   └── INVOICE_API.md          # Invoice endpoints
+Canonical API reference:
+../docs/api/
+├── API_DOCUMENTATION.md         # Main API reference
+└── INVOICE_API.md               # Invoice endpoints
 ```
+
+OpenAPI: `middleware-platform/openapi.yaml` (see [docs/api/README.md](../docs/api/README.md)).
 
 ---
 
@@ -65,5 +62,5 @@ Documentation in docs/api/:
 ---
 
 **Status:** 🚧 Design Phase  
-**Last Updated:** January 2026
+**Last Updated:** April 9, 2026
 

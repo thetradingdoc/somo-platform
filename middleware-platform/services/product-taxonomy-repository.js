@@ -36,6 +36,9 @@ function upsertFromBeautyFacts(normalized, mergedGrade) {
     productName,
     labels: normalized?.labels || [],
     categories: normalized?.categories || [],
+    categories_tags: normalized?.categories_tags || [],
+    ingredients_analysis_tags: normalized?.ingredients_analysis_tags || [],
+    states_tags: normalized?.states_tags || [],
     ingredients: normalized?.ingredients || []
   });
   const grade = mergedGrade || {
@@ -98,7 +101,11 @@ function upsertFromBeautyFacts(normalized, mergedGrade) {
   const ingredients = Array.isArray(normalized?.ingredients) ? normalized.ingredients : [];
   const extended = productIngredientsHasExtendedColumns();
   for (let i = 0; i < ingredients.length; i++) {
-    const raw = String(ingredients[i] || '').trim();
+    const row = ingredients[i];
+    const raw =
+      row && typeof row === 'object'
+        ? String(row.text || row.id || '').trim()
+        : String(row || '').trim();
     if (!raw) continue;
     const inci = raw.toLowerCase();
     const norm = normalizeInciToken(raw);

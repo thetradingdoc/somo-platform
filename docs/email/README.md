@@ -37,4 +37,4 @@ See [Local Email Setup](./LOCAL_EMAIL_SETUP.md) for Gmail/SMTP setup.
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** April 9, 2026

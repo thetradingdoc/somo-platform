@@ -615,7 +615,10 @@ function Root() {
         </div>
       ) : null}
       <header className="top-nav">
-        <a href="/" className="brand-mark">Skin &amp; Care</a>
+        <a href="/" className="brand-mark">
+          <img className="brand-mark-logo" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
+          <span>Skin &amp; Care</span>
+        </a>
         <nav aria-label="Main navigation" className="nav-links">
           <a href="#products">Products</a>
           <a href="#scan-results">Skin Diagnosis</a>
@@ -647,18 +650,19 @@ function Root() {
       )}
 
       <section id="main-content" className="hero">
-        <p className="kicker">
-          <img className="kicker-icon" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
-          <span>LOVE YOUR SKIN</span>
+        <p className="kicker kicker--social" aria-label="Loved by users">
+          <span className="kicker-avatars" aria-hidden="true">
+            <img src="/unified-dashboard/littlelab-landing/DOC.png" alt="" />
+          </span>
+          <span className="kicker-text">
+            Loved by doctors with <span className="kicker-star">⭐</span> 4.9 rating
+          </span>
         </p>
         <h1>
-          AI-Powered Skin Scan
-          <br />
-          Instant Results
+          Skincare Ingredients that Work
         </h1>
         <p className="subtext">
-          Discover personalized skincare insights in seconds with Skin &amp; Care.
-          Private-first analysis. Tailored routines. Better daily outcomes.
+          Use the AI-powered app to find the right products for your skin. Snap a photo, scan a product barcode to get instant guidance on concerns, routines, and ingredients.
         </p>
         <div className="hero-ctas">
           <a className="btn-primary" href="/unified-dashboard/patients/patient-login.html" onClick={handleStartAnalysis}>

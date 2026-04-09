@@ -85,6 +85,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Keep hashed build assets fresh (landing React bundles under /static/*).
+  // Old cache-first behavior can pin stale hero copy/icons after deploys.
+  if (reqUrl && reqUrl.origin === self.location.origin && reqUrl.pathname.startsWith('/static/')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;

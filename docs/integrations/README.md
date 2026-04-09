@@ -1,5 +1,7 @@
 # Integrations Documentation
 
+**Last Updated:** April 9, 2026
+
 This directory contains documentation for third-party integrations and APIs.
 
 ## 📁 Files

@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getOrCreateLandingSessionId,
   fetchBeautyFactsByBarcode,
+  fetchLandingResultSnapshot,
   incrementLandingVoiceMetric,
   publishLandingVoiceTimeline,
   publishLandingThreadEvent,
   resolveMiddlewareApiBase,
+  submitLandingResultEdit,
   sendLandingAssistantTurn
 } from './landingAssistantApi';
 import { publishVisionCaptureEvent } from './landingLiveKitApi';
@@ -96,6 +98,31 @@ const QUICK_HOLD_BY_LANG = {
   ru: 'Секунду, я проверяю это.'
 };
 
+const ENTITY_PATTERNS = [
+  ['primary_concern', /\b(redness|rosacea|acne|breakout|eczema|dermatitis|dry|oily|sensitive|pigmentation|dark spots|wrinkle)\b/i],
+  ['ingredient', /\b(retinol|retinoid|tretinoin|azelaic acid|niacinamide|salicylic|aha|bha|vitamin c|ceramide|sunscreen|spf)\b/i],
+  ['product_intent', /\b(scan|barcode|ingredient list|product|cleanser|moisturizer|serum)\b/i],
+  ['body_area', /\b(forehead|cheek|chin|jaw|neck|under eye|scalp)\b/i]
+];
+
+function extractEntityEvents(text) {
+  const input = String(text || '');
+  if (!input.trim()) return [];
+  const out = [];
+  for (const [type, re] of ENTITY_PATTERNS) {
+    const m = input.match(re);
+    if (m && m[0]) {
+      out.push({
+        id: `ee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        type,
+        value: String(m[0]).toLowerCase(),
+        ts: Date.now()
+      });
+    }
+  }
+  return out;
+}
+
 function splitVoiceReply(text) {
   const t = String(text || '').trim().replace(/\s+/g, ' ');
   if (!t) return { first: '', rest: '' };
@@ -138,6 +165,11 @@ function extractBarcodeCandidate(text) {
   return m ? m[0] : '';
 }
 
+function isProductTrackingIntent(text) {
+  const t = String(text || '').toLowerCase();
+  return /\b(scan|barcode|ingredients|ingredient list|review this product|check this product|analyze this product|what product is this)\b/.test(t);
+}
+
 /**
  * Shared assistant state for voice page + chat page (same session_id and message list).
  */
@@ -157,6 +189,9 @@ export function useAssistantSession() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [interimCaption, setInterimCaption] = useState('');
   const [sending, setSending] = useState(false);
+  const [resultSnapshot, setResultSnapshot] = useState(null);
+  const [productTrackingActive, setProductTrackingActive] = useState(false);
+  const [entityEvents, setEntityEvents] = useState([]);
   const [preferredLanguage, setPreferredLanguage] = useState(() => {
     const nav = (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en';
     return String(nav).trim().toLowerCase().split('-')[0] || 'en';
@@ -204,6 +239,12 @@ export function useAssistantSession() {
       void speakAssistantReply(text, { apiBase, lang: speechLang });
     }
   }, [apiBase, copyForLang, preferredLanguage, speechLang]);
+
+  const pushEntityEvents = useCallback((events) => {
+    const list = Array.isArray(events) ? events.filter(Boolean) : [];
+    if (!list.length) return;
+    setEntityEvents((prev) => [...list, ...prev].slice(0, 12));
+  }, []);
 
   const publishAssistantVisionTrigger = useCallback(async (replyText) => {
     if (!apiBase) return;
@@ -254,6 +295,37 @@ export function useAssistantSession() {
     pushAssistant(text);
   }, [abortVoiceKickoff, copyForLang, preferredLanguage, pushAssistant]);
 
+  const refreshResultSnapshot = useCallback(async () => {
+    if (!apiBase) return null;
+    const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+    sessionIdRef.current = sid;
+    try {
+      const data = await fetchLandingResultSnapshot({ apiBase, sessionId: sid });
+      const snap = data?.session_result_snapshot || null;
+      if (snap) setResultSnapshot(snap);
+      return snap;
+    } catch (_) {
+      return null;
+    }
+  }, [apiBase]);
+
+  const submitResultEdit = useCallback(async ({ fieldPath, userValue, reasonForChange, confidenceAfter = null }) => {
+    if (!apiBase) return null;
+    const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+    sessionIdRef.current = sid;
+    const data = await submitLandingResultEdit({
+      apiBase,
+      sessionId: sid,
+      fieldPath,
+      userValue,
+      reasonForChange,
+      confidenceAfter
+    });
+    const snap = data?.session_result_snapshot || null;
+    if (snap) setResultSnapshot(snap);
+    return snap;
+  }, [apiBase]);
+
   const sendUserMessage = useCallback(
     async (text, { sttFinalAt = null } = {}) => {
       abortVoiceKickoff();
@@ -270,6 +342,7 @@ export function useAssistantSession() {
       };
 
       const t = String(text || '').trim();
+      pushEntityEvents(extractEntityEvents(t));
       const inferredLanguage = detectLanguageFromText(t);
       const turnLanguage = String(inferredLanguage || preferredLanguage || 'en')
         .trim()
@@ -283,6 +356,9 @@ export function useAssistantSession() {
       const names = attachments.map((a) => a.name).filter(Boolean);
       if (!t && names.length === 0) return;
       const barcode = extractBarcodeCandidate(t);
+      if (isProductTrackingIntent(t)) {
+        setProductTrackingActive(true);
+      }
 
       const display =
         t + (names.length ? `${t ? '\n\n' : ''}[Attached: ${names.join(', ')}]` : '');
@@ -313,7 +389,7 @@ export function useAssistantSession() {
           pushAssistant(attachmentFollowup);
           void resumeVoiceListeningIfNeeded();
         }, 400);
-        return;
+        return null;
       }
 
       if (!apiBase) {
@@ -327,7 +403,7 @@ export function useAssistantSession() {
           }
           void resumeVoiceListeningIfNeeded();
         }, 400);
-        return;
+        return null;
       }
 
       if (barcode) {
@@ -401,6 +477,12 @@ export function useAssistantSession() {
           setPreferredLanguage(serverLang.split('-')[0]);
         }
         const reply = (data.reply && String(data.reply).trim()) || copyForLang(turnLanguage).genericFallback;
+        pushEntityEvents(extractEntityEvents(reply));
+        if (data?.session_result_snapshot) {
+          setResultSnapshot(data.session_result_snapshot);
+        } else if (data?.next_step === 'skincare_report') {
+          await refreshResultSnapshot();
+        }
         const replySeq = Number(data.reply_seq || 0);
         const isLatestReply = replySeq === latestTurnSeqRef.current;
         const ttsMeta = { ttsVoice: '', ttsModel: '', ttsLang: '' };
@@ -453,6 +535,7 @@ export function useAssistantSession() {
           points: voiceTimelinePoints
         }).catch(() => {});
         void publishAssistantVisionTrigger(reply);
+        return data;
       } catch (e) {
         if (e.name === 'AbortError') return;
         const msg =
@@ -460,6 +543,7 @@ export function useAssistantSession() {
           'I am having trouble connecting right now. Please try again in a moment.';
         const copy = copyForLang(preferredLanguage);
         pushAssistant(`${copy.networkErrorPrefix} ${msg}`, { speak: false });
+        return null;
       } finally {
         window.clearTimeout(holdTimer);
         setSending(false);
@@ -467,7 +551,7 @@ export function useAssistantSession() {
         await resumeVoiceListeningIfNeeded();
       }
     },
-    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, detectLanguageFromText, preferredLanguage, pushAssistant, publishAssistantVisionTrigger]
+    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, detectLanguageFromText, preferredLanguage, pushAssistant, publishAssistantVisionTrigger, pushEntityEvents, refreshResultSnapshot]
   );
 
   const ingestScannedBarcode = useCallback(async (barcode) => {
@@ -503,6 +587,12 @@ export function useAssistantSession() {
       pushAssistant(`${copy.barcodeFoundPrefix}: ${productName}. I added its ingredient profile to your session context.`, {
         speak: true
       });
+      pushEntityEvents([{
+        id: `ee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        type: 'product_match',
+        value: productName,
+        ts: Date.now()
+      }]);
       return { success: true, barcode: clean, productName };
     } catch (e) {
       if (String(e?.message || '').includes('upstream_404')) {
@@ -512,7 +602,7 @@ export function useAssistantSession() {
       pushAssistant(copy.barcodeLookupError, { speak: true });
       return { success: false, reason: 'lookup_failed' };
     }
-  }, [apiBase, copyForLang, preferredLanguage, pushAssistant]);
+  }, [apiBase, copyForLang, preferredLanguage, pushAssistant, pushEntityEvents]);
 
   useEffect(() => {
     const controller = createWebVoiceTurnController({
@@ -615,6 +705,11 @@ export function useAssistantSession() {
     setVoiceActive,
     interimCaption,
     sending,
+    resultSnapshot,
+    setResultSnapshot,
+    productTrackingActive,
+    setProductTrackingActive,
+    entityEvents,
     sessionIdRef,
     recognitionRef: voiceControllerRef,
     pushAssistant,
@@ -624,6 +719,8 @@ export function useAssistantSession() {
     ,
     preferredLanguage,
     leadText: copyForLang(preferredLanguage).opener,
-    ingestScannedBarcode
+    ingestScannedBarcode,
+    refreshResultSnapshot,
+    submitResultEdit
   };
 }

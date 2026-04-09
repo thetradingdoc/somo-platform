@@ -12,6 +12,8 @@ const flags = {
   clinic_rate_limit_enabled: process.env.CLINIC_RATE_LIMIT_ENABLED !== 'false',
   pii_redaction_enabled: process.env.PII_REDACTION_ENABLED !== 'false',
   token_budget_enabled: process.env.TOKEN_BUDGET_ENABLED !== 'false',
+  // Reasoning map controller (step-5 arbitration pipeline)
+  AGENT_REASONING_MAP_V1: process.env.AGENT_REASONING_MAP_V1 === 'true',
   // Patient journey feature flags (portal)
   FEATURE_PATIENT_ONBOARDING: process.env.FEATURE_PATIENT_ONBOARDING !== 'false',
   FEATURE_PATIENT_SELF_SCHEDULING: process.env.FEATURE_PATIENT_SELF_SCHEDULING === 'true',

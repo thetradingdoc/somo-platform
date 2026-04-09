@@ -1,59 +1,38 @@
 # Setup Documentation
 
-Setup guides and configuration instructions.
+Setup guides and configuration instructions. All paths below are relative to this folder (`docs/setup/`).
 
 ---
 
-## 📚 Documentation Index
+## 📚 Documentation index (verified paths)
 
-1. **SETUP.md** 🚀 **MAIN SETUP**
-   - Main setup documentation
-   - Initial configuration
-   - Getting started guide
-
-2. **GOOGLE_CALENDAR_OAUTH_SETUP.md** 📅 **GOOGLE CALENDAR**
-   - Google Calendar OAuth setup
-   - OAuth configuration
-   - Calendar integration
-
-3. **MULTI_TENANT_GOOGLE_OAUTH.md** 🏢 **MULTI-TENANT OAUTH**
-   - Multi-tenant Google OAuth
-   - Tenant-specific OAuth
-   - OAuth flow
-
-4. **QUICK_GOOGLE_OAUTH_SETUP.md** ⚡ **QUICK OAUTH**
-   - Quick Google OAuth guide
-   - Fast setup instructions
-   - Quick reference
-
-5. **GOOGLE_CALENDAR_USER_EXPERIENCE.md** 👤 **UX**
-   - Google Calendar user experience
-   - User flow documentation
-   - UX considerations
-
-6. **STRIPE_ISSUING_SETUP.md** 💳 **STRIPE**
-   - Stripe Issuing setup
-   - Card issuance configuration
-   - Stripe integration
+| Topic | File |
+|--------|------|
+| **Main platform setup** | [`getting-started/SETUP.md`](./getting-started/SETUP.md) |
+| **Google OAuth (Calendar, complete)** | [`google/GOOGLE_OAUTH_COMPLETE_GUIDE.md`](./google/GOOGLE_OAUTH_COMPLETE_GUIDE.md) |
+| **Multi-tenant Google OAuth** | [`google/oauth/MULTI_TENANT_GOOGLE_OAUTH.md`](./google/oauth/MULTI_TENANT_GOOGLE_OAUTH.md) |
+| **Calendar UX notes** | [`google/oauth/GOOGLE_CALENDAR_USER_EXPERIENCE.md`](./google/oauth/GOOGLE_CALENDAR_USER_EXPERIENCE.md) |
+| **Stripe Issuing** | [`../integrations/stripe/issuing/STRIPE_ISSUING.md`](../integrations/stripe/issuing/STRIPE_ISSUING.md) |
+| **Azure email (ACS)** | [`../azure/README.md`](../azure/README.md) |
 
 ---
 
-## 🚀 Quick Setup
+## 🚀 Quick setup
 
-1. **Initial Setup** → See `SETUP.md`
-2. **Google Calendar** → See `GOOGLE_CALENDAR_OAUTH_SETUP.md`
-3. **Stripe** → See `STRIPE_ISSUING_SETUP.md`
-4. **Azure Email** → See `../azure/README.md`
-
----
-
-## 🔗 Related Documentation
-
-- **Azure:** `../azure/README.md`
-- **Deployment:** `../deployment/README.md`
-- **Main Docs:** `../README.md`
+1. Start with [`getting-started/SETUP.md`](./getting-started/SETUP.md).
+2. For Google Calendar / OAuth, use [`google/GOOGLE_OAUTH_COMPLETE_GUIDE.md`](./google/GOOGLE_OAUTH_COMPLETE_GUIDE.md).
+3. For Stripe Issuing, see [`../integrations/stripe/issuing/STRIPE_ISSUING.md`](../integrations/stripe/issuing/STRIPE_ISSUING.md).
+4. For Azure Communication Services email, see [`../azure/README.md`](../azure/README.md).
 
 ---
 
-**Last Updated:** November 15, 2025
+## 🔗 Related documentation
+
+- **Azure:** [`../azure/README.md`](../azure/README.md)
+- **Deployment:** [`../deployment/README.md`](../deployment/README.md)
+- **Main docs hub:** [`../README.md`](../README.md)
+
+---
+
+**Last Updated:** April 9, 2026
 

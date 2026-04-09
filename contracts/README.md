@@ -1,5 +1,7 @@
 # Healthcare Escrow Smart Contracts
 
+**Last Updated:** April 9, 2026
+
 Impact-weighted USDC escrow for the Decentralized Diagnostic Economy. Holds funds until Proof of Care + settlement rules pass, then distributes via **50/20/20/10** split.
 
 ## Split (Impact Matrix)

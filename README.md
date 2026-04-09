@@ -2,7 +2,7 @@
 
 **Version**: 3.0.0  
 **Status**: Production Ready  
-**Last Updated**: March 2026
+**Last Updated:** April 9, 2026
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
@@ -88,7 +88,7 @@ doclittle-platform/
 1. **Clone the repository**
 ```bash
 git clone <repository-url>
-cd agentic-commerce-platform
+cd doclittle-platform
 ```
 
 2. **Install backend dependencies**
@@ -637,6 +637,6 @@ For issues and questions:
 
 ---
 
-**Last Updated**: March 2026  
+**Last Updated:** April 9, 2026  
 **Version**: 3.0.0
 

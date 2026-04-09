@@ -1,6 +1,6 @@
 # DocLittle Platform Documentation
 
-**Last Updated**: April 7, 2026
+**Last Updated:** April 9, 2026
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.  
 > **Overlapping topics (Kelly vs voice vs checkout):** start with **[CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
@@ -22,9 +22,9 @@
 
 ---
 
-## 📊 Documentation Audit (April 2026)
+## 📊 Documentation Audit (April 9, 2026)
 
-- **Total .md files:** 142 (down from 167; Phases 1–5 consolidation applied)
+- **Total .md files (repo, excluding `node_modules` / `.venv`):** ~249 — run `find . -name '*.md' -not -path '*/node_modules/*'` for current count. Historical note: 142 was cited after Phases 1–5 consolidation.
 - **Consolidation plan:** [DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
 - **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and [archived](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md); active gap work: [GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
 

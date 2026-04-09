@@ -54,6 +54,9 @@
         "test:taxonomy:product-ingredient": "bash ./scripts/ci-product-ingredient-taxonomy.sh",
         "seed:cosing:minimal": "node ./scripts/seed-cosing-minimal.js",
         "enrich:ingredient-biochem": "node ./scripts/enrich-ingredients-biochem-from-db.js",
+        "test:reasoning-map": "jest __tests__/reasoning-map-service.test.js --runInBand",
+        "test:session-orchestration": "jest __tests__/landing-turn-seq.test.js __tests__/session-orchestration-edge.test.js --runInBand",
+        "replay:reasoning-map": "node ./scripts/replay-reasoning-map.js",
         "test:security:redaction": "jest __tests__/security.redaction.test.js --runInBand",
         "test:security:scan": "node scripts/security-scan-forbidden-data.cjs",
         "release:security-gate": "npm run test:security:redaction && npm run test:security:scan"

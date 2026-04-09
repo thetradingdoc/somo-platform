@@ -1,5 +1,7 @@
 # Intelligence Layer Architecture
 
+**Last Updated:** April 9, 2026
+
 **Source of Truth**: [MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md](./MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md)  
 **Layer 1 Implementation**: [LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md](./LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md)
 

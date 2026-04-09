@@ -1,5 +1,7 @@
 # Todos
 
+**Last Updated:** April 9, 2026
+
 This folder holds **active** task lists and checklists. **Fully completed** lists are in [`archive/`](./archive/README.md).
 
 **Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/CANONICAL_DOC_MAP.md`](../docs/CANONICAL_DOC_MAP.md).

@@ -4,52 +4,39 @@ Deployment guides, infrastructure setup, and operational documentation.
 
 ---
 
-## 📚 Documentation Index
+## 📚 Documentation index (verified paths)
 
-1. **AZURE_EMAIL_SETUP.md** 📧 **AZURE EMAIL**
-   - Azure email service setup
-   - Email Communication Service
-   - Domain configuration
-
-2. **AZURE_CUSTOM_DOMAIN_SETUP.md** 🌐 **CUSTOM DOMAIN**
-   - Azure custom domain setup
-   - DNS configuration
-   - SSL/TLS certificates
-
-3. **POSTGRES_MIGRATION.md** 🗄️ **POSTGRES HARDENING**
-   - SQLite → Postgres export script
-   - Bicep template for App Service + Postgres
-   - Cutover checklist
-
-4. **BACKUP_STRATEGY.md** 💾 **BACKUPS**
-   - Database backup strategy
-   - Backup procedures
-   - Recovery plans
-
-5. **SECURITY_IMPROVEMENTS.md** 🔒 **SECURITY**
-   - Security best practices
-   - Security improvements
-   - Compliance considerations
+| Topic | File |
+|--------|------|
+| **Main deployment guide** | [`guides/DEPLOYMENT_GUIDE.md`](./guides/DEPLOYMENT_GUIDE.md) |
+| **Quick Azure deploy** | [`guides/basic/QUICK_DEPLOYMENT_GUIDE.md`](./guides/basic/QUICK_DEPLOYMENT_GUIDE.md) |
+| **CI / deploy source of truth** | [`CI_AND_DEPLOY_SOURCE_OF_TRUTH.md`](./CI_AND_DEPLOY_SOURCE_OF_TRUTH.md) |
+| **Azure email (ACS)** | [`../azure/README.md`](../azure/README.md) |
+| **Tenant / DNS automation** | [`azure/AUTOMATED_TENANT_DOMAIN_SETUP.md`](./azure/AUTOMATED_TENANT_DOMAIN_SETUP.md) |
+| **Postgres migration** | [`database/POSTGRES_MIGRATION.md`](./database/POSTGRES_MIGRATION.md) |
+| **Backups** | [`guides/BACKUP_STRATEGY.md`](./guides/BACKUP_STRATEGY.md) |
+| **Security** | [`security/SECURITY_IMPROVEMENTS.md`](./security/SECURITY_IMPROVEMENTS.md) |
+| **Production API keys** | [`security/PRODUCTION_DEPLOYMENT_API_KEYS.md`](./security/PRODUCTION_DEPLOYMENT_API_KEYS.md) |
+| **DNS / SSL** | [`dns/ionos/IONOS_DNS_SETUP.md`](./dns/ionos/IONOS_DNS_SETUP.md), [`dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md`](./dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md) |
 
 ---
 
-## 🚀 Deployment Overview
+## 🚀 Deployment overview
 
-- **Azure** cloud services
-- **Custom domain** configuration
-- **Email** via Azure Communication Services
-- **Database** backup and recovery
-- **Security** hardening
-
----
-
-## 🔗 Related Documentation
-
-- **Azure Setup:** `../azure/README.md`
-- **Architecture:** `../architecture/README.md`
-- **Main Docs:** `../README.md`
+- **Azure** cloud services (see [`../azure/README.md`](../azure/README.md) for email + env)
+- **Custom domain / DNS** (`deployment/dns/`, `deployment/azure/`)
+- **Database** SQLite default; optional Postgres ([`database/POSTGRES_MIGRATION.md`](./database/POSTGRES_MIGRATION.md))
+- **Security** hardening ([`security/`](./security/))
 
 ---
 
-**Last Updated:** November 15, 2025
+## 🔗 Related documentation
+
+- **Azure:** [`../azure/README.md`](../azure/README.md)
+- **Architecture:** [`../architecture/README.md`](../architecture/README.md)
+- **Main docs:** [`../README.md`](../README.md)
+
+---
+
+**Last Updated:** April 9, 2026
 

@@ -1,5 +1,7 @@
 # Regression baselines (Phase 1 — P1.5)
 
+**Last Updated:** April 9, 2026
+
 Snapshot JSON files from the **last offline eval run** (RAGAS + gap reports). Use them to **compare** after pipeline changes.
 
 | File | Role |

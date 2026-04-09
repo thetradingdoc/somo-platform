@@ -310,7 +310,7 @@
 // Register service worker for PWA (installability + basic offline shell)
 (function () {
   if ('serviceWorker' in navigator) {
-    const swUrl = '/unified-dashboard/sw.js';
+    const swUrl = '/unified-dashboard/sw.js?v=8';
     navigator.serviceWorker
       .register(swUrl)
       .then(() => {

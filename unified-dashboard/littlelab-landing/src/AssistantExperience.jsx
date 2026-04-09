@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AssistantChatPage from './AssistantChatPage';
 import AssistantVoicePage from './AssistantVoicePage';
+import AssistantResultsPage from './AssistantResultsPage';
 import { useAssistantSession } from './useAssistantSession';
 import { useConversationSphereLevel } from './useConversationSphereLevel';
 import { useLandingLiveKit } from './useLandingLiveKit';
@@ -11,6 +12,39 @@ import './assistant-shared.css';
 
 const HASH_VOICE = '#assistant/voice';
 const HASH_CHAT = '#assistant/chat';
+const HASH_RESULTS = '#assistant/results';
+const DUMMY_RESULT_SNAPSHOT = {
+  schema_version: '1.0',
+  generated_at: new Date().toISOString(),
+  primary_concern: 'barrier_dryness_sensitivity',
+  routine_conflicts: [
+    {
+      id: 'barrier_vs_strong_actives',
+      severity: 'high',
+      summary: 'Barrier stress appears alongside frequent retinoid + AHA use.',
+      recommendation: 'Pause exfoliating acids for 7-10 days and reduce retinoid cadence.'
+    },
+    {
+      id: 'reported_ingredient_reaction',
+      severity: 'medium',
+      summary: 'User reports stinging with fragranced products and vitamin C serum.',
+      recommendation: 'Use fragrance-free barrier products and reintroduce actives slowly.'
+    }
+  ],
+  secondary_concerns: ['redness_rosacea_dermatitis', 'pigmentation_dark_spots'],
+  intent_primary: 'treat',
+  intent_secondary: ['compare'],
+  likely_triggers: ['retinoid', 'exfoliating_actives', 'fragrance'],
+  body_areas: ['cheeks', 'chin_jaw'],
+  procedure_interest: null,
+  urgency_flag: null,
+  confidence: {
+    global: 0.79,
+    primary_concern: 0.84,
+    routine_conflicts: 0.75
+  },
+  next_ui_step: 'skincare_report'
+};
 
 function useDocumentHiddenPause() {
   const [hidden, setHidden] = useState(() =>
@@ -62,6 +96,7 @@ export default function AssistantExperience({ onClose }) {
     setAttachments,
     sending,
     sendUserMessage,
+    resultSnapshot,
     toggleVoice,
     addFiles,
     interimCaption,
@@ -69,12 +104,19 @@ export default function AssistantExperience({ onClose }) {
     sessionIdRef,
     pushAssistant,
     leadText,
-    ingestScannedBarcode
+    ingestScannedBarcode,
+    productTrackingActive,
+    setProductTrackingActive,
+    refreshResultSnapshot,
+    submitResultEdit
   } = session;
 
-  const [page, setPage] = useState(() =>
-    typeof window !== 'undefined' && window.location.hash === HASH_CHAT ? 'chat' : 'voice'
-  );
+  const [page, setPage] = useState(() => {
+    if (typeof window === 'undefined') return 'voice';
+    if (window.location.hash === HASH_CHAT) return 'chat';
+    if (window.location.hash === HASH_RESULTS) return 'results';
+    return 'voice';
+  });
   const [visionState, setVisionState] = useState({
     checklist: [],
     guidance: null,
@@ -212,22 +254,47 @@ export default function AssistantExperience({ onClose }) {
 
   // Phase 1-2: live barcode detection from camera feed with stabilization window.
   const barcodeSeenRef = useRef(new Map());
+  const scanCoachRef = useRef({ lastPromptMs: 0, stabilizeCycles: 0 });
   useEffect(() => {
+    if (!productTrackingActive) {
+      setScanUi({ status: 'idle', barcode: '', productName: '' });
+      return undefined;
+    }
     if (!liveKit?.inSession || !liveKit?.cameraEnabled) return undefined;
     if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') return undefined;
     let cancelled = false;
-    const supported = window.BarcodeDetector.getSupportedFormats?.() || [];
     const preferredFormats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
-    const formats = preferredFormats.filter((f) => supported.includes(f));
-    const detector = new window.BarcodeDetector(formats.length ? { formats } : undefined);
+    let detector = null;
+    const initDetector = async () => {
+      try {
+        const raw = window.BarcodeDetector.getSupportedFormats?.();
+        const supported = Array.isArray(raw) ? raw : Array.isArray(await raw) ? await raw : [];
+        const formats = preferredFormats.filter((f) => supported.includes(f));
+        detector = new window.BarcodeDetector(formats.length ? { formats } : undefined);
+      } catch (_) {
+        detector = new window.BarcodeDetector();
+      }
+    };
     const tick = async () => {
       if (cancelled) return;
+      if (!detector) return;
       const video = localVideoRef.current;
       if (!video || video.readyState < 2 || video.videoWidth < 8 || video.videoHeight < 8) return;
       try {
         setScanUi((prev) => ({ ...prev, status: 'scanning' }));
         const found = await detector.detect(video);
         const now = Date.now();
+        if (!found?.length) {
+          scanCoachRef.current.stabilizeCycles += 1;
+          if (scanCoachRef.current.stabilizeCycles >= 4 && now - scanCoachRef.current.lastPromptMs > 12000) {
+            scanCoachRef.current.lastPromptMs = now;
+            scanCoachRef.current.stabilizeCycles = 0;
+            pushAssistant(
+              'I am tracking in real-time. Please bring the product label closer, reduce glare, and turn it slightly so the barcode is fully visible.',
+              { speak: true }
+            );
+          }
+        }
         for (const item of found || []) {
           const raw = String(item?.rawValue || '').replace(/[^\d]/g, '');
           if (!/^\d{8,14}$/.test(raw)) continue;
@@ -238,11 +305,20 @@ export default function AssistantExperience({ onClose }) {
           setScanUi({ status: 'stabilizing', barcode: raw, productName: '' });
           const stable = state.hits >= 2 && now - state.firstMs <= 4500;
           if (stable) {
+            scanCoachRef.current.stabilizeCycles = 0;
             const out = await ingestScannedBarcode(raw);
             if (out?.success) {
               setScanUi({ status: 'matched', barcode: raw, productName: out.productName || '' });
+              setProductTrackingActive(false);
             } else if (out?.reason === 'not_found') {
               setScanUi({ status: 'not_found', barcode: raw, productName: '' });
+              if (now - scanCoachRef.current.lastPromptMs > 10000) {
+                scanCoachRef.current.lastPromptMs = now;
+                pushAssistant(
+                  'I can see part of the code but not enough to confirm. Please turn the product around and hold it steady for one second.',
+                  { speak: true }
+                );
+              }
             } else if (out?.reason !== 'cooldown') {
               setScanUi({ status: 'error', barcode: raw, productName: '' });
             }
@@ -254,17 +330,28 @@ export default function AssistantExperience({ onClose }) {
         }
       } catch (_) {}
     };
-    const id = setInterval(() => {
+    let id = null;
+    void initDetector().then(() => {
+      if (cancelled) return;
       void tick();
-    }, 800);
+      id = setInterval(() => {
+        void tick();
+      }, 800);
+    });
     return () => {
       cancelled = true;
-      clearInterval(id);
+      if (id) clearInterval(id);
     };
-  }, [ingestScannedBarcode, liveKit?.cameraEnabled, liveKit?.inSession, localVideoRef]);
+  }, [ingestScannedBarcode, liveKit?.cameraEnabled, liveKit?.inSession, localVideoRef, productTrackingActive, pushAssistant, setProductTrackingActive]);
+
+  useEffect(() => {
+    if (resultSnapshot?.next_ui_step === 'skincare_report') {
+      setPage('results');
+    }
+  }, [resultSnapshot]);
 
   const setHashForPage = useCallback((next) => {
-    const h = next === 'chat' ? HASH_CHAT : HASH_VOICE;
+    const h = next === 'chat' ? HASH_CHAT : next === 'results' ? HASH_RESULTS : HASH_VOICE;
     if (typeof window !== 'undefined' && window.location.hash !== h) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${h}`);
     }
@@ -272,7 +359,9 @@ export default function AssistantExperience({ onClose }) {
 
   useEffect(() => {
     const onHash = () => {
-      setPage(window.location.hash === HASH_CHAT ? 'chat' : 'voice');
+      if (window.location.hash === HASH_CHAT) setPage('chat');
+      else if (window.location.hash === HASH_RESULTS) setPage('results');
+      else setPage('voice');
     };
     onHash();
     window.addEventListener('hashchange', onHash);
@@ -295,7 +384,12 @@ export default function AssistantExperience({ onClose }) {
   const backToVoice = useCallback(() => setPage('voice'), []);
 
   const ariaLabel =
-    page === 'chat' ? 'Skin and Care assistant — chat' : 'Skin and Care assistant — voice';
+    page === 'chat'
+      ? 'Skin and Care assistant — chat'
+      : page === 'results'
+        ? 'Skin and Care assistant — results'
+        : 'Skin and Care assistant — voice';
+  const activeSnapshot = resultSnapshot || DUMMY_RESULT_SNAPSHOT;
 
   return (
     <div className="ax-shell" role="dialog" aria-label={ariaLabel}>
@@ -336,6 +430,7 @@ export default function AssistantExperience({ onClose }) {
         <AssistantVoicePage
           onClose={handleClose}
           onOpenChat={openChat}
+          onOpenUpload={() => imageRef.current?.click()}
           apiBase={apiBase}
           messages={messages}
           interimCaption={interimCaption}
@@ -349,12 +444,12 @@ export default function AssistantExperience({ onClose }) {
           liveKit={liveKit}
           localVideoRef={localVideoRef}
           remoteVideoContainerRef={remoteVideoRef}
-          visionState={visionState}
           leadText={leadText}
           scanUi={scanUi}
-          onAnalyzeSkin={() => liveKit.requestCaptureNow?.('forehead')}
+          productTrackingActive={productTrackingActive}
+          onToggleScan={() => setProductTrackingActive((v) => !v)}
         />
-      ) : (
+      ) : page === 'chat' ? (
         <AssistantChatPage
           onBack={backToVoice}
           onClose={handleClose}
@@ -374,6 +469,15 @@ export default function AssistantExperience({ onClose }) {
           liveKit={liveKit}
           localVideoRef={localVideoRef}
           remoteVideoContainerRef={remoteVideoRef}
+        />
+      ) : (
+        <AssistantResultsPage
+          snapshot={activeSnapshot}
+          loading={sending}
+          onBack={backToVoice}
+          onClose={handleClose}
+          onRefresh={refreshResultSnapshot}
+          onSaveEdit={submitResultEdit}
         />
       )}
     </div>

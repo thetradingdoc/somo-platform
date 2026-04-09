@@ -105,7 +105,7 @@
 
 .ax-lk--invite {
   max-width: 22rem;
-  margin: 12px auto 20px;
+  margin: 4px auto 8px;
 }
 
 .ax-lk-invite-card {
@@ -117,7 +117,7 @@
   font-family: var(--font-display, 'Gloock', serif);
   font-size: 1.2rem;
   font-weight: 400;
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: var(--brand-black, #1a1a1a);
 }
 
@@ -125,7 +125,7 @@
   font-size: 0.9rem;
   color: var(--brand-gray, #64748b);
   line-height: 1.55;
-  margin: 0 0 18px;
+  margin: 0 0 8px;
 }
 
 .ax-lk-invite-cta {
@@ -136,7 +136,7 @@
 
 .ax-lk-invite-dismiss {
   display: block;
-  margin: 12px auto 0;
+  margin: 8px auto 0;
 }
 
 .ax-lk-video-row {

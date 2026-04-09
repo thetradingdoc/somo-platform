@@ -39,7 +39,7 @@ Complete API reference and documentation.
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** April 9, 2026
 
 **Note:** OpenAPI spec is in `middleware-platform/openapi.yaml`.
 

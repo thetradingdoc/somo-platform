@@ -1,5 +1,7 @@
 # Documentation moved
 
+**Last Updated:** April 9, 2026
+
 Middleware-specific documentation now lives in the **repository-wide docs tree**:
 
 **→ [`docs/middleware-platform/`](../../docs/middleware-platform/README.md)**

@@ -1,5 +1,7 @@
 # Archived todo lists (completed work)
 
+**Last Updated:** April 9, 2026
+
 Files moved here are **fully completed** checklists or **superseded** full histories kept for audit. **Active** backlog items live in the parent [`todos/`](../README.md) folder.
 
 | Archive file | Notes |

@@ -19,6 +19,9 @@ function mergeProductGrade({ obfNormalized, fda, dailymed, rxnorm }) {
     productName: obfNormalized?.product_name,
     labels: obfNormalized?.labels || [],
     categories: obfNormalized?.categories || [],
+    categories_tags: obfNormalized?.categories_tags || [],
+    ingredients_analysis_tags: obfNormalized?.ingredients_analysis_tags || [],
+    states_tags: obfNormalized?.states_tags || [],
     ingredients: obfNormalized?.ingredients || []
   });
 

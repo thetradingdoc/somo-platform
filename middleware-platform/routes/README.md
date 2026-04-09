@@ -1,8 +1,10 @@
 # Routes - API Endpoints
 
-This directory contains all API route handlers.
+**Last Updated:** April 9, 2026
 
-## Route Files
+Modular Express route handlers mounted from `server.js`. **Many routes are still declared directly in `server.js`**; use repo search for a path if you do not find it here.
+
+## Route files
 
 ### Voice Routes (`voice.js`)
 - `/voice/appointments/*` - Appointment management

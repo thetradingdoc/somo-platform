@@ -1,5 +1,7 @@
 # Admin Portal Documentation
 
+**Last Updated:** April 9, 2026
+
 Documentation for the DocLittle admin portal (unified dashboard admin section).
 
 ## Documents

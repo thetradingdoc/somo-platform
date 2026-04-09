@@ -14778,6 +14778,7 @@ app.post('/api/patient/async-review', apiLimiter, requirePatientSession, express
 async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, portalSessionId }) {
   const KellyAgentService = require('./services/kelly-agent-service');
   const KellyToolExecutor = require('./services/kelly-tool-executor');
+  const { shouldSkipLandingTurnSeq } = require('./services/landing-turn-seq');
   const extractEmailFromText = (text) => {
     const m = String(text || '').match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
     return m ? String(m[0]).toLowerCase() : null;
@@ -14866,23 +14867,40 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const meta = req.body?.meta || {};
   let session_id = (req.body?.session_id || state.session_id || '').toString().trim() || null;
   if (!session_id) session_id = require('uuid').v4();
+  if (req.path === '/api/public/landing-assistant/turn') {
+    try {
+      const existingTriage = db.getTriageSession ? db.getTriageSession(session_id) : null;
+      if (!existingTriage && db.upsertTriageSession) {
+        db.upsertTriageSession({
+          session_id,
+          patient_id: null,
+          quality: trimmedMessage.slice(0, 500),
+          detected_language: null,
+          opqrst_complete: false,
+          triage_complete: false
+        });
+      }
+    } catch (e) {
+      console.warn('[landing-assistant] triage bootstrap skipped:', e.message);
+    }
+  }
   const incomingTurnSeq = Number(req.body?.turn_seq || 0);
   if (Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0) {
     const latestSeq = Number(KellyToolExecutor._getSessionMeta(session_id, 'web_voice_latest_turn_seq') || 0);
-    if (incomingTurnSeq < latestSeq) {
+    const gate = shouldSkipLandingTurnSeq(incomingTurnSeq, latestSeq);
+    if (gate.skip) {
       return {
         status: 200,
         json: {
           success: true,
           session_id,
           skipped: true,
-          reason: 'stale_turn',
+          reason: gate.reason || 'stale_or_duplicate_turn',
           reply_seq: incomingTurnSeq,
           request_id: req.id
         }
       };
     }
-    KellyToolExecutor._setSessionMeta(session_id, 'web_voice_latest_turn_seq', String(incomingTurnSeq));
   }
 
   if (isUnifiedChannelAdapterEnabled() || isUnifiedChannelAdapterShadowEnabled()) {
@@ -15039,6 +15057,23 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
       result.next_step = result.next_step || 'collect_email_for_report';
     }
   }
+  let sessionResultSnapshot = null;
+  const shouldBuildSnapshot = isGuidanceComplete || result?.next_ui_step === 'skincare_report';
+  try {
+    if (shouldBuildSnapshot) {
+      const SnapshotService = require('./services/session-result-snapshot-service');
+      const built = SnapshotService.buildSessionResultSnapshot({
+        sessionId: session_id,
+        source: 'landing_turn_complete'
+      });
+      sessionResultSnapshot = built?.snapshot || null;
+      if (sessionResultSnapshot?.next_ui_step) {
+        result.next_step = sessionResultSnapshot.next_ui_step;
+      }
+    }
+  } catch (e) {
+    console.warn('[landing-assistant] snapshot build skipped:', e.message);
+  }
   flowStateOut.short_term_thread = shortThread.slice(-20);
   if (isLikelyVoiceStyle) {
     const replyText = String(result.reply || '');
@@ -15114,9 +15149,29 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
         turn_count: newTurnCount,
         preferred_language: preferredLanguage
       });
+      if (Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0) {
+        KellyToolExecutor._setSessionMeta(session_id, 'web_voice_latest_turn_seq', String(incomingTurnSeq));
+      }
     } catch (e) {
       console.warn('⚠️  Failed to persist chat session:', e.message);
     }
+  }
+
+  // Rebuild snapshot after persistence so report payload includes the just-finished turn.
+  try {
+    if (shouldBuildSnapshot) {
+      const SnapshotService = require('./services/session-result-snapshot-service');
+      const rebuilt = SnapshotService.buildSessionResultSnapshot({
+        sessionId: session_id,
+        source: 'landing_turn_post_persist'
+      });
+      sessionResultSnapshot = rebuilt?.snapshot || sessionResultSnapshot;
+      if (sessionResultSnapshot?.next_ui_step) {
+        result.next_step = sessionResultSnapshot.next_ui_step;
+      }
+    }
+  } catch (e) {
+    console.warn('[landing-assistant] post-persist snapshot build skipped:', e.message);
   }
 
   const reply = (result.reply && String(result.reply).trim()) || "I am here with you. Tell me what is bothering your skin most right now.";
@@ -15143,6 +15198,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
       language: responseLanguage,
       preferred_language: responseLanguage,
       report: reportPayload || undefined,
+      session_result_snapshot: sessionResultSnapshot || undefined,
       reply_seq: Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0 ? incomingTurnSeq : undefined,
       short_term_thread: flowStateOut.short_term_thread || [],
       request_id: req.id
@@ -16780,6 +16836,70 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
       request_id: req.id
     });
   } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.get('/api/public/landing-assistant/results/:sessionId', apiLimiter, async (req, res) => {
+  try {
+    const SnapshotService = require('./services/session-result-snapshot-service');
+    const sessionId = String(req.params?.sessionId || '').trim();
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'sessionId required', request_id: req.id });
+    }
+    let latest = SnapshotService.getLatestSessionResultSnapshot(sessionId);
+    if (!latest) {
+      latest = SnapshotService.buildSessionResultSnapshot({ sessionId, source: 'results_api_bootstrap' });
+    }
+    return res.json({
+      success: true,
+      session_id: sessionId,
+      snapshot_id: latest.snapshot_id,
+      session_result_snapshot: latest.snapshot,
+      request_id: req.id
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.post('/api/public/landing-assistant/results/:sessionId/edit', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const SnapshotService = require('./services/session-result-snapshot-service');
+    const sessionId = String(req.params?.sessionId || '').trim();
+    const fieldPath = String(req.body?.field_path || '').trim();
+    const reasonForChange = String(req.body?.reason_for_change || '').trim();
+    if (!sessionId || !fieldPath) {
+      return res.status(400).json({ success: false, error: 'sessionId and field_path required', request_id: req.id });
+    }
+    const expectedSnapshotId =
+      req.body?.expected_snapshot_id != null && req.body?.expected_snapshot_id !== ''
+        ? req.body.expected_snapshot_id
+        : req.body?.snapshot_id;
+    const edited = SnapshotService.applySessionResultEdit({
+      sessionId,
+      fieldPath,
+      userCorrectedValue: req.body?.user_value,
+      reasonForChange,
+      confidenceAfter: req.body?.confidence_after,
+      expectedSnapshotId
+    });
+    return res.json({
+      success: true,
+      session_id: sessionId,
+      snapshot_id: edited.snapshot_id,
+      session_result_snapshot: edited.snapshot,
+      request_id: req.id
+    });
+  } catch (e) {
+    if (e && e.code === 'SNAPSHOT_CONFLICT') {
+      return res.status(409).json({
+        success: false,
+        error: 'snapshot_conflict',
+        code: 'SNAPSHOT_CONFLICT',
+        request_id: req.id
+      });
+    }
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
 });

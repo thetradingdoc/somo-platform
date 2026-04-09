@@ -1,7 +1,8 @@
 # Unified Dashboard - Frontend
 
 **Version**: 3.0.0  
-**Status**: Production Ready
+**Status**: Production Ready  
+**Last Updated:** April 9, 2026
 
 ## Overview
 
@@ -9,9 +10,14 @@ The unified dashboard is the frontend interface for DocLittle, providing web-bas
 
 ## Structure
 
-### Main Pages
-- **landing.html** - Public landing page
-- **login.html** - User authentication
+### Skin & Care landing (CRA)
+
+- **`littlelab-landing/`** — React (Create React App) app: Skin & Care marketing + Try Now assistant (Kelly, LiveKit, results flow). Build with `npm run build` inside that folder; static output is served with the rest of the unified dashboard.
+
+### Main static pages
+
+- **landing.html** — Public landing page (legacy/static)
+- **login.html** — User authentication
 
 ### Business Dashboard (`business/`)
 Provider-facing dashboard pages:
