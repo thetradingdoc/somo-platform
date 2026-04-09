@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getOrCreateLandingSessionId,
+  fetchBeautyFactsByBarcode,
   incrementLandingVoiceMetric,
+  publishLandingVoiceTimeline,
   publishLandingThreadEvent,
   resolveMiddlewareApiBase,
   sendLandingAssistantTurn
@@ -23,7 +25,10 @@ const TRY_NOW_COPY = {
     demoMode: 'This demo is not connected to the live API. Set REACT_APP_API_BASE to your middleware URL (for example, http://localhost:4000) for live replies.',
     voiceUnsupported: 'Voice input is not supported in this browser. Open chat to type your message.',
     genericFallback: 'I am here. How can I help?',
-    networkErrorPrefix: 'Sorry, I could not reach the assistant just now.'
+    networkErrorPrefix: 'Sorry, I could not reach the assistant just now.',
+    barcodeFoundPrefix: 'I found this product',
+    barcodeNotFound: 'I could not match that barcode in Open Beauty Facts yet. Try holding the barcode steady and closer to the camera.',
+    barcodeLookupError: 'I detected a barcode, but the lookup failed. Please try again in a moment.'
   },
   fr: {
     opener: "Bonjour, je suis Kelly. Je serai votre assistante Skin & Care aujourd'hui. Comment puis-je vous aider ?",
@@ -33,7 +38,10 @@ const TRY_NOW_COPY = {
     demoMode: "Cette demo n'est pas connectee a l'API en direct. Configurez REACT_APP_API_BASE vers votre URL middleware (par exemple, http://localhost:4000) pour des reponses en direct.",
     voiceUnsupported: "La saisie vocale n'est pas prise en charge dans ce navigateur. Ouvrez le chat pour taper votre message.",
     genericFallback: 'Je suis la pour vous aider. Comment puis-je vous aider ?',
-    networkErrorPrefix: "Desolee, je n'ai pas pu joindre l'assistant pour le moment."
+    networkErrorPrefix: "Desolee, je n'ai pas pu joindre l'assistant pour le moment.",
+    barcodeFoundPrefix: "J'ai trouve ce produit",
+    barcodeNotFound: "Je n'ai pas encore trouve ce code-barres dans Open Beauty Facts. Essayez de tenir le code-barres bien stable et plus pres de la camera.",
+    barcodeLookupError: "J'ai detecte un code-barres, mais la recherche a echoue. Veuillez reessayer dans un instant."
   },
   sw: {
     opener: 'Hujambo, mimi ni Kelly. Nitakuwa msaidizi wako wa Skin & Care leo. Naweza kukusaidiaje?',
@@ -43,7 +51,10 @@ const TRY_NOW_COPY = {
     demoMode: 'Demo hii haijaunganishwa na API ya moja kwa moja. Weka REACT_APP_API_BASE kwenye URL ya middleware yako (mfano, http://localhost:4000) ili kupata majibu ya moja kwa moja.',
     voiceUnsupported: 'Voice input haipatikani kwenye kivinjari hiki. Fungua chat kuandika ujumbe.',
     genericFallback: 'Nipo hapa kukusaidia. Naweza kusaidiaje?',
-    networkErrorPrefix: 'Samahani, sikuweza kufikia msaidizi kwa sasa.'
+    networkErrorPrefix: 'Samahani, sikuweza kufikia msaidizi kwa sasa.',
+    barcodeFoundPrefix: 'Nimepata bidhaa hii',
+    barcodeNotFound: 'Sijaweza kupata barcode hiyo kwenye Open Beauty Facts bado. Jaribu kushikilia barcode bila kutikisika na karibu na kamera.',
+    barcodeLookupError: 'Nimegundua barcode, lakini utafutaji umeshindikana. Tafadhali jaribu tena baada ya muda mfupi.'
   },
   ru: {
     opener: 'Здравствуйте, я Келли. Сегодня я ваш ассистент Skin & Care. Чем я могу помочь?',
@@ -53,7 +64,10 @@ const TRY_NOW_COPY = {
     demoMode: 'Демо не подключено к live API. Укажите REACT_APP_API_BASE на URL middleware (например, http://localhost:4000), чтобы получить живые ответы.',
     voiceUnsupported: 'Голосовой ввод не поддерживается в этом браузере. Откройте чат и напишите сообщение.',
     genericFallback: 'Я рядом и готова помочь. Чем могу помочь?',
-    networkErrorPrefix: 'Извините, сейчас не удалось подключиться к ассистенту.'
+    networkErrorPrefix: 'Извините, сейчас не удалось подключиться к ассистенту.',
+    barcodeFoundPrefix: 'Я нашла этот продукт',
+    barcodeNotFound: 'Я пока не нашла этот штрихкод в Open Beauty Facts. Попробуйте удерживать штрихкод ровно и ближе к камере.',
+    barcodeLookupError: 'Я обнаружила штрихкод, но поиск не удался. Пожалуйста, попробуйте еще раз через минуту.'
   }
 };
 
@@ -75,6 +89,22 @@ const VISION_EXPLICIT_CAPTURE_RE = /\b(show|capture|focus|point)\s+(your|the)?\s
 const SW_HINT_RE = /\b(habari|karibu|asante|tafadhali|naomba|nina|sina|wiki|leo|jana|usoni|ngozi)\b/i;
 const FR_HINT_RE = /\b(bonjour|merci|s'il|demangeaisons|depuis|semaines|peau|visage|pouvez|aider)\b/i;
 const RU_HINT_RE = /[\u0400-\u04FF]/;
+const QUICK_HOLD_BY_LANG = {
+  en: 'One moment while I check that.',
+  fr: 'Un instant, je verifie cela.',
+  sw: 'Subiri kidogo nikague hilo.',
+  ru: 'Секунду, я проверяю это.'
+};
+
+function splitVoiceReply(text) {
+  const t = String(text || '').trim().replace(/\s+/g, ' ');
+  if (!t) return { first: '', rest: '' };
+  const m = t.match(/^(.+?[.!?])(\s+.+)?$/);
+  if (!m) return { first: t, rest: '' };
+  const first = String(m[1] || '').trim();
+  const rest = String(m[2] || '').trim();
+  return { first: first || t, rest };
+}
 function inferRegionFromAssistantText(text) {
   const s = String(text || '');
   for (const [region, re] of REGION_HINTS) {
@@ -101,6 +131,11 @@ function visionIntentConfidence(text) {
 
 function looksLikeVisionRetry(text) {
   return /\b(tilt|move|closer|farther|clearer|lighting|blurry|again|retry|another shot|hold still)\b/i.test(String(text || ''));
+}
+
+function extractBarcodeCandidate(text) {
+  const m = String(text || '').match(/\b\d{8,14}\b/);
+  return m ? m[0] : '';
 }
 
 /**
@@ -155,6 +190,8 @@ export function useAssistantSession() {
   const visionTriggerCooldownRef = useRef(new Map());
   const lastVisionTriggerSigRef = useRef('');
   const latestTurnSeqRef = useRef(0);
+  const scannedBarcodeCooldownRef = useRef(new Map());
+  const turnLanguageLockRef = useRef('en');
 
   useEffect(() => {
     sessionIdRef.current = getOrCreateLandingSessionId();
@@ -218,7 +255,7 @@ export function useAssistantSession() {
   }, [abortVoiceKickoff, copyForLang, preferredLanguage, pushAssistant]);
 
   const sendUserMessage = useCallback(
-    async (text) => {
+    async (text, { sttFinalAt = null } = {}) => {
       abortVoiceKickoff();
 
       const shouldResumeVoiceListening = voiceResumeAfterSendRef.current;
@@ -234,12 +271,18 @@ export function useAssistantSession() {
 
       const t = String(text || '').trim();
       const inferredLanguage = detectLanguageFromText(t);
+      const turnLanguage = String(inferredLanguage || preferredLanguage || 'en')
+        .trim()
+        .toLowerCase()
+        .split('-')[0] || 'en';
+      turnLanguageLockRef.current = turnLanguage;
       if (inferredLanguage && inferredLanguage !== preferredLanguage) {
         setPreferredLanguage(inferredLanguage);
       }
 
       const names = attachments.map((a) => a.name).filter(Boolean);
       if (!t && names.length === 0) return;
+      const barcode = extractBarcodeCandidate(t);
 
       const display =
         t + (names.length ? `${t ? '\n\n' : ''}[Attached: ${names.join(', ')}]` : '');
@@ -264,8 +307,8 @@ export function useAssistantSession() {
         );
         const hasDocument = names.some((name) => /\.(pdf|doc|docx|txt|rtf)$/i.test(String(name || '')));
         const attachmentFollowup = hasDocument
-          ? copyForLang(inferredLanguage || preferredLanguage).attachDoc
-          : copyForLang(inferredLanguage || preferredLanguage).attachImage;
+          ? copyForLang(turnLanguage).attachDoc
+          : copyForLang(turnLanguage).attachImage;
         window.setTimeout(() => {
           pushAssistant(attachmentFollowup);
           void resumeVoiceListeningIfNeeded();
@@ -274,7 +317,7 @@ export function useAssistantSession() {
       }
 
       if (!apiBase) {
-        const copy = copyForLang(inferredLanguage || preferredLanguage);
+        const copy = copyForLang(turnLanguage);
         window.setTimeout(() => {
           if (names.length) {
             const hasDocument = names.some((name) => /\.(pdf|doc|docx|txt|rtf)$/i.test(String(name || '')));
@@ -287,6 +330,29 @@ export function useAssistantSession() {
         return;
       }
 
+      if (barcode) {
+        try {
+          const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode });
+          const p = facts?.product || {};
+          const productLine = `[Barcode Scan] ${p.product_name || 'Product found'} (${p.barcode || barcode})`;
+          const ingredientLine = p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 500)}` : '';
+          const labelsLine = Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 10).join(', ')}` : '';
+          const payloadText = [productLine, ingredientLine, labelsLine].filter(Boolean).join('\n');
+          const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+          sessionIdRef.current = sid;
+          await publishLandingThreadEvent({
+            apiBase,
+            sessionId: sid,
+            eventType: 'barcode_product_context',
+            text: payloadText
+          });
+          const copy = copyForLang(inferredLanguage || preferredLanguage);
+          pushAssistant(`${copy.micReady} I found this product and added its ingredient profile to context.`, {
+            speak: false
+          });
+        } catch (_) {}
+      }
+
       if (abortRef.current) {
         try {
           abortRef.current.abort();
@@ -295,19 +361,35 @@ export function useAssistantSession() {
       const ac = new AbortController();
       abortRef.current = ac;
       setSending(true);
+      const holdTimer = window.setTimeout(async () => {
+        if (!voiceSessionActiveRef.current || !ac || ac.signal.aborted) return;
+        const holdText = QUICK_HOLD_BY_LANG[turnLanguage] || QUICK_HOLD_BY_LANG.en;
+        pushAssistant(holdText, { speak: false });
+        try {
+          await speakAssistantReply(holdText, {
+            apiBase,
+            lang: resolveTryNowVoiceConfig(turnLanguage).sttLang
+          });
+        } catch (_) {}
+      }, 1800);
       try {
         const sid = sessionIdRef.current || getOrCreateLandingSessionId();
         sessionIdRef.current = sid;
         const turnSeq = ++latestTurnSeqRef.current;
+        const voiceTimelinePoints = {
+          stt_final_at: Number(sttFinalAt) || null,
+          turn_request_sent_at: Date.now()
+        };
         const data = await sendLandingAssistantTurn({
           apiBase,
           message: t,
           sessionId: sid,
           turnSeq,
           clinicId: defaultClinicId,
-          preferredLanguage: inferredLanguage || preferredLanguage || 'en',
+          preferredLanguage: turnLanguage,
           signal: ac.signal
         });
+        voiceTimelinePoints.turn_reply_received_at = Date.now();
         if (data.session_id) {
           sessionIdRef.current = data.session_id;
           try {
@@ -318,18 +400,58 @@ export function useAssistantSession() {
         if (serverLang && serverLang !== preferredLanguage) {
           setPreferredLanguage(serverLang.split('-')[0]);
         }
-        const reply = (data.reply && String(data.reply).trim()) || copyForLang(inferredLanguage || preferredLanguage).genericFallback;
+        const reply = (data.reply && String(data.reply).trim()) || copyForLang(turnLanguage).genericFallback;
         const replySeq = Number(data.reply_seq || 0);
         const isLatestReply = replySeq === latestTurnSeqRef.current;
+        const ttsMeta = { ttsVoice: '', ttsModel: '', ttsLang: '' };
         // Keep chat-only turns silent; only speak while an active voice session is on.
         pushAssistant(reply, { speak: false });
         if (voiceSessionActiveRef.current && isLatestReply) {
-          await speakAssistantReply(reply, { apiBase, lang: resolveTryNowVoiceConfig(inferredLanguage || preferredLanguage).sttLang });
+          const { first, rest } = splitVoiceReply(reply);
+          const firstText = first || reply;
+          voiceTimelinePoints.tts_request_sent_at = Date.now();
+          await speakAssistantReply(firstText, {
+            apiBase,
+            lang: resolveTryNowVoiceConfig(turnLanguage).sttLang,
+            onTtsMeta: (meta) => {
+              if (!meta || typeof meta !== 'object') return;
+              ttsMeta.ttsVoice = String(meta.ttsVoice || '').trim();
+              ttsMeta.ttsModel = String(meta.ttsModel || '').trim();
+              ttsMeta.ttsLang = String(meta.ttsLang || '').trim().toLowerCase();
+            },
+            onFirstByte: () => {
+              if (!voiceTimelinePoints.tts_first_byte_at) voiceTimelinePoints.tts_first_byte_at = Date.now();
+            },
+            onPlaybackReady: () => {
+              if (!voiceTimelinePoints.tts_download_done_at) voiceTimelinePoints.tts_download_done_at = Date.now();
+            },
+            onAudioStart: () => {
+              if (!voiceTimelinePoints.audio_play_start_at) voiceTimelinePoints.audio_play_start_at = Date.now();
+            }
+          });
+          if (rest && voiceSessionActiveRef.current && isLatestReply) {
+            await speakAssistantReply(rest, {
+              apiBase,
+              lang: resolveTryNowVoiceConfig(turnLanguage).sttLang
+            });
+          }
         }
         if (voiceSessionActiveRef.current && voiceControllerRef.current) {
           voiceControllerRef.current.pauseForAssistant();
           await waitForAssistantSpeechToFinish({ timeoutMs: 10000 });
         }
+        void publishLandingVoiceTimeline({
+          apiBase,
+          sessionId: sid,
+          turnSeq,
+          lang: turnLanguage,
+          detectedLanguage: inferredLanguage || '',
+          preferredLanguage: String(preferredLanguage || '').toLowerCase(),
+          ttsVoice: ttsMeta.ttsVoice,
+          ttsModel: ttsMeta.ttsModel,
+          ttsLang: ttsMeta.ttsLang || turnLanguage,
+          points: voiceTimelinePoints
+        }).catch(() => {});
         void publishAssistantVisionTrigger(reply);
       } catch (e) {
         if (e.name === 'AbortError') return;
@@ -339,13 +461,58 @@ export function useAssistantSession() {
         const copy = copyForLang(preferredLanguage);
         pushAssistant(`${copy.networkErrorPrefix} ${msg}`, { speak: false });
       } finally {
+        window.clearTimeout(holdTimer);
         setSending(false);
         abortRef.current = null;
         await resumeVoiceListeningIfNeeded();
       }
     },
-    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, preferredLanguage, pushAssistant, publishAssistantVisionTrigger]
+    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, detectLanguageFromText, preferredLanguage, pushAssistant, publishAssistantVisionTrigger]
   );
+
+  const ingestScannedBarcode = useCallback(async (barcode) => {
+    const clean = String(barcode || '').replace(/[^\d]/g, '');
+    if (!/^\d{8,14}$/.test(clean)) return { success: false, reason: 'invalid_barcode' };
+    const now = Date.now();
+    const prevMs = scannedBarcodeCooldownRef.current.get(clean) || 0;
+    if (now - prevMs < 90000) return { success: false, reason: 'cooldown' };
+    scannedBarcodeCooldownRef.current.set(clean, now);
+    const lang = preferredLanguage || 'en';
+    const copy = copyForLang(lang);
+    if (!apiBase) return { success: false, reason: 'no_api' };
+    try {
+      const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode: clean });
+      const p = facts?.product || {};
+      const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+      sessionIdRef.current = sid;
+      const productName = p.product_name || `barcode ${clean}`;
+      const contextText = [
+        `[Barcode Scan] ${productName} (${p.barcode || clean})`,
+        p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '',
+        Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '',
+        Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : ''
+      ]
+        .filter(Boolean)
+        .join('\n');
+      await publishLandingThreadEvent({
+        apiBase,
+        sessionId: sid,
+        eventType: 'barcode_product_context',
+        text: contextText
+      });
+      pushAssistant(`${copy.barcodeFoundPrefix}: ${productName}. I added its ingredient profile to your session context.`, {
+        speak: true
+      });
+      return { success: true, barcode: clean, productName };
+    } catch (e) {
+      if (String(e?.message || '').includes('upstream_404')) {
+        pushAssistant(copy.barcodeNotFound, { speak: true });
+        return { success: false, reason: 'not_found' };
+      }
+      pushAssistant(copy.barcodeLookupError, { speak: true });
+      return { success: false, reason: 'lookup_failed' };
+    }
+  }, [apiBase, copyForLang, preferredLanguage, pushAssistant]);
 
   useEffect(() => {
     const controller = createWebVoiceTurnController({
@@ -359,7 +526,7 @@ export function useAssistantSession() {
         voiceResumeAfterSendRef.current = voiceSessionActiveRef.current;
         voicePauseForSendRef.current = true;
         if (voiceControllerRef.current) voiceControllerRef.current.pauseForAssistant();
-        await sendUserMessage(said);
+        await sendUserMessage(said, { sttFinalAt: Date.now() });
       },
       onBargeIn: () => {
         stopAssistantSpeech();
@@ -456,6 +623,7 @@ export function useAssistantSession() {
     addFiles
     ,
     preferredLanguage,
-    leadText: copyForLang(preferredLanguage).opener
+    leadText: copyForLang(preferredLanguage).opener,
+    ingestScannedBarcode
   };
 }

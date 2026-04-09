@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { CameraIcon, ChatBubbleLeftRightIcon, ChevronLeftIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
+import { CameraIcon, ChatBubbleLeftRightIcon, ChevronLeftIcon, EllipsisHorizontalIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
 import AgentSphereCanvas from './AgentSphereCanvas';
 import LiveKitPanel from './LiveKitPanel';
 import { segmentCaptionWithKeywordEmphasis } from './captionEmphasis';
@@ -40,7 +40,9 @@ export default function AssistantVoicePage({
   localVideoRef,
   remoteVideoContainerRef,
   visionState,
-  leadText
+  leadText,
+  scanUi,
+  onAnalyzeSkin
 }) {
   const lastAssistantText = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -71,6 +73,18 @@ export default function AssistantVoicePage({
     return '•';
   };
   const prettyRegion = (r) => String(r || 'area').replace(/_/g, ' ');
+  const scanStatusText =
+    scanUi?.status === 'matched'
+      ? `Product detected: ${scanUi.productName || scanUi.barcode}`
+      : scanUi?.status === 'stabilizing'
+        ? `Barcode detected: ${scanUi.barcode} — stabilizing...`
+        : scanUi?.status === 'not_found'
+          ? `Barcode ${scanUi.barcode} not found`
+          : scanUi?.status === 'error'
+            ? 'Scan detected, lookup failed'
+            : scanUi?.status === 'scanning'
+              ? 'Scanning for barcode...'
+              : 'Scanner ready';
 
   return (
     <div className={`axv-root ${inSession ? 'axv-root--session' : ''}`}>
@@ -88,7 +102,9 @@ export default function AssistantVoicePage({
           />
           <span>Skin &amp; Care</span>
         </div>
-        <span className="axv-header-spacer" aria-hidden />
+        <button type="button" className="axv-icon-btn" aria-label="Scanner options">
+          <EllipsisHorizontalIcon className="ax-heroicon" aria-hidden />
+        </button>
       </header>
 
       <div className={`axv-scan-wrap ${inSession ? 'axv-scan-wrap--live' : ''}`}>
@@ -103,6 +119,13 @@ export default function AssistantVoicePage({
         {inSession ? (
           <>
             <div ref={remoteVideoContainerRef} className="axv-scan-remotes" aria-label="Other participants" />
+            <div className="axv-scan-reticle" aria-hidden>
+              <span className="axv-reticle-corner tl" />
+              <span className="axv-reticle-corner tr" />
+              <span className="axv-reticle-corner bl" />
+              <span className="axv-reticle-corner br" />
+            </div>
+            <div className="axv-scan-status">{scanStatusText}</div>
             <div className="axv-provider-pip" aria-hidden="true">
               <AgentSphereCanvas
                 className="axv-sphere-pip-inner"
@@ -153,6 +176,17 @@ export default function AssistantVoicePage({
         />
 
         <div className="axv-dock">
+          <div className="axv-mode-rail" role="tablist" aria-label="Scan modes">
+            <button type="button" className="axv-mode-chip axv-mode-chip--active" aria-selected="true">
+              Scan Product
+            </button>
+            <button type="button" className="axv-mode-chip" onClick={onAnalyzeSkin}>
+              Analyze Skin
+            </button>
+            <button type="button" className="axv-mode-chip" onClick={onOpenChat}>
+              Chat
+            </button>
+          </div>
           <button
             type="button"
             className="axv-dock-side"

@@ -104,6 +104,70 @@ export async function incrementLandingVoiceMetric({ apiBase, sessionId, metricNa
   return data;
 }
 
+export async function publishLandingVoiceTimeline({
+  apiBase,
+  sessionId,
+  turnSeq,
+  lang,
+  detectedLanguage = '',
+  preferredLanguage = '',
+  ttsVoice = '',
+  ttsModel = '',
+  ttsLang = '',
+  points = {},
+  signal
+}) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  if (!base || !sessionId) return { success: false, skipped: true };
+  const safePoints = points && typeof points === 'object' ? points : {};
+  const r = await fetch(`${base}/api/public/landing-assistant/voice-metrics/inc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    body: JSON.stringify({
+      session_id: String(sessionId).trim(),
+      metric_name: 'voice.timeline',
+      value: 1,
+      turn_seq: Number(turnSeq) || 0,
+      lang: String(lang || '').trim().toLowerCase(),
+      detected_language: String(detectedLanguage || '').trim().toLowerCase(),
+      preferred_language: String(preferredLanguage || '').trim().toLowerCase(),
+      tts_voice: String(ttsVoice || '').trim(),
+      tts_model: String(ttsModel || '').trim(),
+      tts_lang: String(ttsLang || '').trim().toLowerCase(),
+      points: safePoints
+    }),
+    signal
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.success) {
+    const err = new Error(data.error || `Request failed (${r.status})`);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+}
+
+export async function fetchBeautyFactsByBarcode({ apiBase, barcode, signal }) {
+  const base = String(apiBase || '').replace(/\/$/, '');
+  const clean = String(barcode || '').replace(/[^\d]/g, '');
+  if (!base) throw new Error('API base URL is not configured');
+  if (!/^\d{8,14}$/.test(clean)) throw new Error('Invalid barcode');
+  const r = await fetch(`${base}/api/public/beautyfacts/${clean}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    credentials: 'omit',
+    signal
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.success) {
+    const err = new Error(data.error || `Request failed (${r.status})`);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+}
+
 export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assistant_sid') {
   try {
     let s = sessionStorage.getItem(storageKey);

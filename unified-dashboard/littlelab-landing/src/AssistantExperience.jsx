@@ -68,7 +68,8 @@ export default function AssistantExperience({ onClose }) {
     voiceActive,
     sessionIdRef,
     pushAssistant,
-    leadText
+    leadText,
+    ingestScannedBarcode
   } = session;
 
   const [page, setPage] = useState(() =>
@@ -83,6 +84,11 @@ export default function AssistantExperience({ onClose }) {
       pending_regions: [],
       failed_regions: []
     }
+  });
+  const [scanUi, setScanUi] = useState({
+    status: 'idle',
+    barcode: '',
+    productName: ''
   });
 
   const cameraRef = useRef(null);
@@ -204,6 +210,59 @@ export default function AssistantExperience({ onClose }) {
     liveKitConnected: liveKit.isConnected
   });
 
+  // Phase 1-2: live barcode detection from camera feed with stabilization window.
+  const barcodeSeenRef = useRef(new Map());
+  useEffect(() => {
+    if (!liveKit?.inSession || !liveKit?.cameraEnabled) return undefined;
+    if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') return undefined;
+    let cancelled = false;
+    const supported = window.BarcodeDetector.getSupportedFormats?.() || [];
+    const preferredFormats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
+    const formats = preferredFormats.filter((f) => supported.includes(f));
+    const detector = new window.BarcodeDetector(formats.length ? { formats } : undefined);
+    const tick = async () => {
+      if (cancelled) return;
+      const video = localVideoRef.current;
+      if (!video || video.readyState < 2 || video.videoWidth < 8 || video.videoHeight < 8) return;
+      try {
+        setScanUi((prev) => ({ ...prev, status: 'scanning' }));
+        const found = await detector.detect(video);
+        const now = Date.now();
+        for (const item of found || []) {
+          const raw = String(item?.rawValue || '').replace(/[^\d]/g, '');
+          if (!/^\d{8,14}$/.test(raw)) continue;
+          const state = barcodeSeenRef.current.get(raw) || { firstMs: now, hits: 0, lastMs: 0 };
+          state.hits += 1;
+          state.lastMs = now;
+          barcodeSeenRef.current.set(raw, state);
+          setScanUi({ status: 'stabilizing', barcode: raw, productName: '' });
+          const stable = state.hits >= 2 && now - state.firstMs <= 4500;
+          if (stable) {
+            const out = await ingestScannedBarcode(raw);
+            if (out?.success) {
+              setScanUi({ status: 'matched', barcode: raw, productName: out.productName || '' });
+            } else if (out?.reason === 'not_found') {
+              setScanUi({ status: 'not_found', barcode: raw, productName: '' });
+            } else if (out?.reason !== 'cooldown') {
+              setScanUi({ status: 'error', barcode: raw, productName: '' });
+            }
+            barcodeSeenRef.current.delete(raw);
+          }
+        }
+        for (const [code, state] of barcodeSeenRef.current.entries()) {
+          if (now - state.lastMs > 5000) barcodeSeenRef.current.delete(code);
+        }
+      } catch (_) {}
+    };
+    const id = setInterval(() => {
+      void tick();
+    }, 800);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [ingestScannedBarcode, liveKit?.cameraEnabled, liveKit?.inSession, localVideoRef]);
+
   const setHashForPage = useCallback((next) => {
     const h = next === 'chat' ? HASH_CHAT : HASH_VOICE;
     if (typeof window !== 'undefined' && window.location.hash !== h) {
@@ -292,6 +351,8 @@ export default function AssistantExperience({ onClose }) {
           remoteVideoContainerRef={remoteVideoRef}
           visionState={visionState}
           leadText={leadText}
+          scanUi={scanUi}
+          onAnalyzeSkin={() => liveKit.requestCaptureNow?.('forehead')}
         />
       ) : (
         <AssistantChatPage

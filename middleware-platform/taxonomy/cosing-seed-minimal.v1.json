@@ -1,0 +1,18 @@
+[
+  {
+    "inci_name": "SODIUM LAURETH SULFATE",
+    "cas_number": "68891-38-3",
+    "ec_number": null,
+    "functions_json": "[\"surfactant\",\"cleansing\"]",
+    "restrictions_json": "[]",
+    "metadata_json": "{\"source\":\"seed_minimal_v1\"}"
+  },
+  {
+    "inci_name": "PHENOXYETHANOL",
+    "cas_number": "122-99-6",
+    "ec_number": "204-589-7",
+    "functions_json": "[\"preservative\"]",
+    "restrictions_json": "[]",
+    "metadata_json": "{\"source\":\"seed_minimal_v1\"}"
+  }
+]

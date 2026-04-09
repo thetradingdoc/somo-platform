@@ -1,16 +1,18 @@
 import { setAssistantSpeaking } from './sphereConversationBridge';
 
 /**
- * Speak assistant text with the browser (Web Speech API).
- * Uses en-US so replies match the landing copy; cancel any in-flight utterance first.
- *
- * Note: Kelly only returns text over HTTP — there is no server audio stream. This is the only
- * “voice” unless you add streaming TTS (e.g. ElevenLabs). On some browsers (especially Safari),
- * speech may not start if `speak()` runs only after a long async gap; `voiceschanged` helps iOS.
+ * Landing TTS: POST /api/public/landing-assistant/tts-stream (OpenAI MP3; server pipes upstream).
+ * Client reads the response body as a stream, then plays via Blob URL (playback still needs full MP3).
+ * stopAssistantSpeech() aborts the fetch and stops playback. Falls back to speechSynthesis on failure.
  */
 let activeAudio = null;
 let activeAudioUrl = null;
 let activeUtterance = null;
+/** AbortController for in-flight TTS fetch (streaming body read). */
+let activeTtsAbort = null;
+let activeReader = null;
+let activeMediaSource = null;
+let activeSourceBuffer = null;
 
 function browserSpeechFallback(text, lang) {
   try {
@@ -34,30 +36,214 @@ function browserSpeechFallback(text, lang) {
   }
 }
 
-export async function speakAssistantReply(text, { lang = 'en-US', apiBase = '' } = {}) {
+function supportsProgressiveMpegPlayback() {
+  try {
+    if (typeof window === 'undefined' || !window.MediaSource || !window.MediaSource.isTypeSupported) return false;
+    return window.MediaSource.isTypeSupported('audio/mpeg');
+  } catch (_) {
+    return false;
+  }
+}
+
+export async function speakAssistantReply(
+  text,
+  { lang = 'en-US', apiBase = '', onFirstByte = null, onAudioStart = null, onPlaybackReady = null, onTtsMeta = null } = {}
+) {
   if (typeof window === 'undefined') return;
   const t = String(text || '').trim();
   if (!t) return;
   const base = String(apiBase || '').replace(/\/$/, '');
   if (!base) return;
   stopAssistantSpeech();
+  const ac = new AbortController();
+  activeTtsAbort = ac;
   try {
     const r = await fetch(`${base}/api/public/landing-assistant/tts-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'omit',
-      body: JSON.stringify({ text: t, lang })
+      body: JSON.stringify({ text: t, lang }),
+      signal: ac.signal
     });
     if (!r.ok) {
       browserSpeechFallback(t, lang);
       return;
     }
-    const blob = await r.blob();
+    if (typeof onTtsMeta === 'function') {
+      const ttsMeta = {
+        ttsVoice: String(r.headers.get('x-tts-voice') || '').trim(),
+        ttsModel: String(r.headers.get('x-tts-model') || '').trim(),
+        ttsLang: String(r.headers.get('x-tts-lang') || '').trim().toLowerCase()
+      };
+      try { onTtsMeta(ttsMeta); } catch (_) {}
+    }
+    const body = r.body;
+    if (!body || !body.getReader) {
+      if (typeof onFirstByte === 'function') {
+        try { onFirstByte(); } catch (_) {}
+      }
+      const blob = await r.blob();
+      if (typeof onPlaybackReady === 'function') {
+        try { onPlaybackReady(); } catch (_) {}
+      }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      activeAudio = audio;
+      activeAudioUrl = url;
+      audio.onplay = () => {
+        setAssistantSpeaking(true);
+        if (typeof onAudioStart === 'function') {
+          try { onAudioStart(); } catch (_) {}
+        }
+      };
+      const clear = () => {
+        setAssistantSpeaking(false);
+        if (activeAudio === audio) activeAudio = null;
+        if (activeAudioUrl === url) {
+          URL.revokeObjectURL(url);
+          activeAudioUrl = null;
+        }
+      };
+      audio.onended = clear;
+      audio.onerror = clear;
+      await audio.play().catch(() => {
+        clear();
+        browserSpeechFallback(t, lang);
+      });
+      return;
+    }
+    const reader = body.getReader();
+    activeReader = reader;
+    if (supportsProgressiveMpegPlayback()) {
+      const mediaSource = new window.MediaSource();
+      activeMediaSource = mediaSource;
+      const url = URL.createObjectURL(mediaSource);
+      const audio = new Audio(url);
+      activeAudio = audio;
+      activeAudioUrl = url;
+      audio.onplay = () => {
+        setAssistantSpeaking(true);
+        if (typeof onAudioStart === 'function') {
+          try { onAudioStart(); } catch (_) {}
+        }
+      };
+      const clear = () => {
+        setAssistantSpeaking(false);
+        if (activeAudio === audio) activeAudio = null;
+        if (activeAudioUrl === url) {
+          URL.revokeObjectURL(url);
+          activeAudioUrl = null;
+        }
+        if (activeMediaSource === mediaSource) activeMediaSource = null;
+        if (activeSourceBuffer) activeSourceBuffer = null;
+      };
+      audio.onended = clear;
+      audio.onerror = clear;
+
+      let started = false;
+      let firstByteMarked = false;
+      let sourceOpenResolved = false;
+      const pendingChunks = [];
+      let sourceBuffer = null;
+      activeSourceBuffer = null;
+
+      const appendIfPossible = () => {
+        if (!sourceBuffer || sourceBuffer.updating || !pendingChunks.length) return;
+        const next = pendingChunks.shift();
+        try {
+          sourceBuffer.appendBuffer(next);
+        } catch (_) {
+          // If append fails (browser codec quirks), audio.onerror path handles fallback/cleanup.
+        }
+      };
+
+      const waitForSourceOpen = new Promise((resolve) => {
+        const onOpen = () => {
+          sourceOpenResolved = true;
+          try {
+            sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+            activeSourceBuffer = sourceBuffer;
+            sourceBuffer.mode = 'sequence';
+            sourceBuffer.addEventListener('updateend', () => {
+              appendIfPossible();
+            });
+          } catch (_) {}
+          resolve();
+        };
+        mediaSource.addEventListener('sourceopen', onOpen, { once: true });
+      });
+
+      await audio.play().catch(() => {});
+      await waitForSourceOpen;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value || !value.length) continue;
+        if (!firstByteMarked) {
+          firstByteMarked = true;
+          if (typeof onFirstByte === 'function') {
+            try { onFirstByte(); } catch (_) {}
+          }
+        }
+        pendingChunks.push(value);
+        appendIfPossible();
+        if (!started) {
+          started = true;
+          await audio.play().catch(() => {});
+        }
+      }
+      const finishSource = () => {
+        if (!sourceOpenResolved || !mediaSource || mediaSource.readyState !== 'open') return;
+        if (sourceBuffer && sourceBuffer.updating) {
+          const onUpdateEnd = () => {
+            sourceBuffer.removeEventListener('updateend', onUpdateEnd);
+            finishSource();
+          };
+          sourceBuffer.addEventListener('updateend', onUpdateEnd);
+          return;
+        }
+        try {
+          mediaSource.endOfStream();
+        } catch (_) {}
+        if (typeof onPlaybackReady === 'function') {
+          try { onPlaybackReady(); } catch (_) {}
+        }
+      };
+      finishSource();
+      return;
+    }
+
+    // Fallback: read full response and play as blob.
+    const chunks = [];
+    let firstByteMarked = false;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) {
+        chunks.push(value);
+        if (!firstByteMarked) {
+          firstByteMarked = true;
+          if (typeof onFirstByte === 'function') {
+            try { onFirstByte(); } catch (_) {}
+          }
+        }
+      }
+    }
+    if (typeof onPlaybackReady === 'function') {
+      try { onPlaybackReady(); } catch (_) {}
+    }
+    const blob = new Blob(chunks, { type: 'audio/mpeg' });
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     activeAudio = audio;
     activeAudioUrl = url;
-    audio.onplay = () => setAssistantSpeaking(true);
+    audio.onplay = () => {
+      setAssistantSpeaking(true);
+      if (typeof onAudioStart === 'function') {
+        try { onAudioStart(); } catch (_) {}
+      }
+    };
     const clear = () => {
       setAssistantSpeaking(false);
       if (activeAudio === audio) activeAudio = null;
@@ -72,13 +258,41 @@ export async function speakAssistantReply(text, { lang = 'en-US', apiBase = '' }
       clear();
       browserSpeechFallback(t, lang);
     });
-  } catch (_) {
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
     if (!browserSpeechFallback(t, lang)) setAssistantSpeaking(false);
+  } finally {
+    activeReader = null;
+    activeTtsAbort = null;
   }
 }
 
 export function stopAssistantSpeech() {
   if (typeof window === 'undefined') return;
+  if (activeTtsAbort) {
+    try {
+      activeTtsAbort.abort();
+    } catch (_) {}
+    activeTtsAbort = null;
+  }
+  if (activeReader) {
+    try { activeReader.cancel(); } catch (_) {}
+    activeReader = null;
+  }
+  if (activeSourceBuffer) {
+    try {
+      if (activeSourceBuffer.updating) {
+        activeSourceBuffer.abort();
+      }
+    } catch (_) {}
+    activeSourceBuffer = null;
+  }
+  if (activeMediaSource) {
+    try {
+      if (activeMediaSource.readyState === 'open') activeMediaSource.endOfStream();
+    } catch (_) {}
+    activeMediaSource = null;
+  }
   if (activeAudio) {
     try {
       activeAudio.pause();

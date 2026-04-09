@@ -1,0 +1,75 @@
+{
+  "taxonomy_module": "skin_type",
+  "version": "1.0.0",
+  "confidence_thresholds": {
+    "high": 0.85,
+    "medium": 0.6
+  },
+  "tie_break_delta": 0.12,
+  "classes": [
+    {
+      "id": "oily",
+      "aliases": ["oily", "greasy", "oil slick", "shiny all day", "shiny by noon", "very oily skin"],
+      "positive_signals": [
+        { "pattern": "my skin is oily", "weight": 0.95 },
+        { "pattern": "very greasy", "weight": 0.9 },
+        { "pattern": "shiny all over", "weight": 0.75 }
+      ],
+      "negative_signals": [
+        { "pattern": "not oily", "weight": -0.8 },
+        { "pattern": "dry and flaky", "weight": -0.65 }
+      ]
+    },
+    {
+      "id": "dry",
+      "aliases": ["dry", "very dry", "flaky", "tight skin", "peeling skin"],
+      "positive_signals": [
+        { "pattern": "my skin is dry", "weight": 0.95 },
+        { "pattern": "tight after washing", "weight": 0.8 },
+        { "pattern": "dry and flaky", "weight": 0.85 }
+      ],
+      "negative_signals": [
+        { "pattern": "not dry", "weight": -0.8 },
+        { "pattern": "greasy all over", "weight": -0.65 }
+      ]
+    },
+    {
+      "id": "combination",
+      "aliases": ["combination", "combo skin", "oily t-zone", "dry cheeks"],
+      "positive_signals": [
+        { "pattern": "combination skin", "weight": 0.95 },
+        { "pattern": "oily t-zone", "weight": 0.85 },
+        { "pattern": "dry cheeks", "weight": 0.8 }
+      ],
+      "negative_signals": [
+        { "pattern": "same all over", "weight": -0.45 }
+      ]
+    },
+    {
+      "id": "normal",
+      "aliases": ["normal", "balanced skin", "not too oily not too dry"],
+      "positive_signals": [
+        { "pattern": "normal skin", "weight": 0.9 },
+        { "pattern": "balanced skin", "weight": 0.85 },
+        { "pattern": "not too oily not too dry", "weight": 0.9 }
+      ],
+      "negative_signals": [
+        { "pattern": "very oily", "weight": -0.55 },
+        { "pattern": "very dry", "weight": -0.55 }
+      ]
+    },
+    {
+      "id": "sensitive",
+      "aliases": ["sensitive", "reactive skin", "easily irritated", "skin reacts to products"],
+      "positive_signals": [
+        { "pattern": "sensitive skin", "weight": 0.95 },
+        { "pattern": "reacts to products", "weight": 0.85 },
+        { "pattern": "gets irritated easily", "weight": 0.8 }
+      ],
+      "negative_signals": [
+        { "pattern": "not sensitive", "weight": -0.8 }
+      ]
+    }
+  ],
+  "negation_terms": ["no", "not", "never", "without", "denies"]
+}

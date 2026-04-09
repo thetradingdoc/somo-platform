@@ -1,0 +1,54 @@
+{
+  "version": "1.1.0",
+  "resolver_version": "ingredient-v1.1.0",
+  "ingredients": [
+    {
+      "name": "retinol",
+      "aliases": ["retinol", "retinoid", "vitamin a", "tretinoin", "retinal"],
+      "roles": ["active", "retinoid"],
+      "mechanism": "keratinocyte turnover modulation",
+      "irritancy_band": "medium",
+      "photosensitivity_risk": "medium",
+      "pregnancy_flag": true,
+      "barrier_risk": "medium",
+      "interaction_strength": "medium",
+      "contraindications": ["barrier_compromised", "high_pigment_risk_with_irritation"]
+    },
+    {
+      "name": "glycolic acid",
+      "aliases": ["glycolic acid", "aha", "alpha hydroxy acid"],
+      "roles": ["active", "exfoliant", "aha"],
+      "mechanism": "corneocyte desquamation",
+      "irritancy_band": "high",
+      "photosensitivity_risk": "high",
+      "pregnancy_flag": false,
+      "barrier_risk": "high",
+      "interaction_strength": "high",
+      "contraindications": ["inflamed", "barrier_compromised"]
+    },
+    {
+      "name": "salicylic acid",
+      "aliases": ["salicylic acid", "bha", "beta hydroxy acid"],
+      "roles": ["active", "exfoliant", "bha"],
+      "mechanism": "lipophilic pore exfoliation",
+      "irritancy_band": "medium",
+      "photosensitivity_risk": "medium",
+      "pregnancy_flag": false,
+      "barrier_risk": "medium",
+      "interaction_strength": "medium",
+      "contraindications": ["barrier_compromised"]
+    },
+    {
+      "name": "hyaluronic acid",
+      "aliases": ["hyaluronic acid", "ha", "sodium hyaluronate"],
+      "roles": ["humectant"],
+      "mechanism": "water-binding humectancy",
+      "irritancy_band": "low",
+      "photosensitivity_risk": "low",
+      "pregnancy_flag": false,
+      "barrier_risk": "low",
+      "interaction_strength": "low",
+      "contraindications": []
+    }
+  ]
+}

@@ -280,10 +280,25 @@ function buildKellySystemPrompt(context, deps) {
   if (slice != null && String(slice).trim()) {
     const safety = buildSharedSafetyBlock({ ...context, languageDirective });
     const orchSection = useOrch ? KellyOrchestratorPhase.buildOrchestrationPromptSection(orch) : '';
+    const missingFields = Array.isArray(context?.missingFields) ? context.missingFields.filter(Boolean) : [];
+    const softGateSection = missingFields.length
+      ? `## Missing required intake fields\nStill missing: ${missingFields.join(', ')}.\nIf any are still missing after this turn, ask one natural follow-up question for only the highest-priority missing field. Do not repeat the exact same phrasing as prior turns.`
+      : '';
+    const skinCond = Array.isArray(context?.skinCondition) ? context.skinCondition : [];
+    const skinCondSection = skinCond.length
+      ? `## Skin condition signals\nDetected condition tags: ${skinCond.map((c) => `${c.id} (${c.confidence})`).join(', ')}.\nChoose one safe next action focused on calming and clarification before strong treatment suggestions.`
+      : '';
+    const skinType = context?.skinType && context.skinType.value ? context.skinType : null;
+    const skinTypeSection = skinType
+      ? `## Skin type state\nCurrent skin type: ${skinType.value} (${skinType.status}, ${skinType.confidence}).\nIf already captured, do not repeat the same skin-type question. Move to the next highest-priority intake question.`
+      : '';
     const parts = [
       phaseIntroLine(phase),
       safety,
       slice,
+      softGateSection,
+      skinTypeSection,
+      skinCondSection,
       orchSection ? `\n${orchSection}\n` : ''
     ];
     return parts.filter((p) => p && String(p).trim()).join('\n\n');

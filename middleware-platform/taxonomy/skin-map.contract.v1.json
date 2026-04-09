@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skin Map V1 Contract",
+  "type": "object",
+  "required": ["value", "status", "confidence", "evidence", "needs_confirmation", "version"],
+  "properties": {
+    "value": {
+      "type": "string",
+      "enum": ["oily", "dry", "combination", "normal", "sensitive", "unknown"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["tentative", "confirmed", "corrected"]
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "turn_seq", "signal", "weight"],
+        "properties": {
+          "source": { "type": "string", "enum": ["text", "history", "vision"] },
+          "turn_seq": { "type": "integer", "minimum": 1 },
+          "span": { "type": "string" },
+          "signal": { "type": "string" },
+          "weight": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "needs_confirmation": { "type": "boolean" },
+    "version": { "type": "integer", "const": 1 },
+    "resolver_version": { "type": "string" }
+    ,
+    "skin_condition": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "confidence"],
+        "properties": {
+          "id": { "type": "string" },
+          "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+          "source": { "type": "string", "enum": ["text", "history", "vision"] }
+        },
+        "additionalProperties": true
+      }
+    },
+    "secondary_signals": {
+      "type": "object",
+      "properties": {
+        "is_dehydrated": { "type": "boolean" },
+        "is_inflamed": { "type": "boolean" },
+        "pigment_risk": { "type": "string", "enum": ["low", "medium", "high"] },
+        "phototype_hint": { "type": ["string", "null"], "enum": ["I", "II", "III", "IV", "V", "VI", null] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

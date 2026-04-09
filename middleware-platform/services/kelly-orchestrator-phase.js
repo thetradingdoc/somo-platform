@@ -51,7 +51,6 @@ const ROUTINE_DENIAL_FRAGMENTS = [
 const SCHEDULING_TOOL_NAMES = new Set([
   'get_available_slots',
   'schedule_appointment',
-  'search_appointments',
   'create_appointment_checkout',
   'verify_checkout_code'
 ]);

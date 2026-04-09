@@ -1,0 +1,24 @@
+{
+  "taxonomy_module": "conflict_ontology",
+  "version": "1.0.0",
+  "conflicts": [
+    {
+      "id": "over_exfoliation_conflict",
+      "when": {
+        "conditions_any": ["inflamed", "barrier_compromised"],
+        "ingredients_any": ["aha", "bha", "glycolic acid", "salicylic acid", "retinoid"]
+      },
+      "severity": "medium",
+      "next_action": "Ask frequency/tolerance and advise conservative pause framing."
+    },
+    {
+      "id": "retinoid_irritation_conflict",
+      "when": {
+        "conditions_any": ["inflamed", "dehydrated"],
+        "ingredients_any": ["retinoid", "tretinoin", "retinal", "retinol"]
+      },
+      "severity": "medium",
+      "next_action": "Clarify dose/frequency and prioritize barrier support language."
+    }
+  ]
+}

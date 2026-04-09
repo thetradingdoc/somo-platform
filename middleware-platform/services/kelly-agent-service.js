@@ -66,7 +66,19 @@ const CaseSummaryComposer = require('./case-summary-composer');
 const CasePatternsService = require('./case-patterns-service');
 const BillingReadinessPack = require('./billing-readiness-pack');
 const ClinicalRecommendationPolicy = require('./clinical-recommendation-policy');
+const Metrics = require('./metrics');
+const { resolveSkinType } = require('./skin-type-resolver');
+const { resolveSkinConditions } = require('./skin-condition-resolver');
+const { resolveSkinConflicts } = require('./skin-conflict-resolver');
+const { resolveBaumannCode } = require('./baumann-skin-map-resolver');
+const { resolveIngredientFacts, evaluateIngredientSafety } = require('./ingredient-ontology-resolver');
+const { mapProductCategory } = require('./product-category-mapper');
+const { resolveTaxonomyGraphAction } = require('./taxonomy-graph-resolver');
 const { formatRoutineIntakeSummaryFromTriageRow } = KellyPromptBuilder;
+const SKIN_TAXONOMY_SHADOW_MODE = String(process.env.SKIN_TAXONOMY_SHADOW_MODE || '0') === '1';
+const SKIN_CONFLICT_HARD_GUARD = String(process.env.SKIN_CONFLICT_HARD_GUARD || '1') === '1';
+const GRAPH_GATE_ENFORCE = String(process.env.GRAPH_GATE_ENFORCE || '0') === '1';
+const KELLY_PRODUCT_TAXONOMY_CAPTURE = String(process.env.KELLY_PRODUCT_TAXONOMY_CAPTURE || '0') === '1';
 
 // ─────────────────────────────────────────────────────────────
 // Groq client (lazy init so missing key doesn't crash on import)
@@ -96,6 +108,175 @@ function _truncateForLLM(content, maxChars) {
   const s = content == null ? '' : String(content);
   if (!maxChars || s.length <= maxChars) return s;
   return s.slice(0, maxChars) + '…';
+}
+
+function _isNegatedEmergencyStatement(text) {
+  const t = String(text || '').toLowerCase();
+  return (
+    /\bno\s+chest\s+pain\b/.test(t) &&
+    /\bno\s+shortness\s+of\s+breath\b/.test(t)
+  ) || (
+    /\bdenies\s+chest\s+pain\b/.test(t) &&
+    /\bdenies\s+shortness\s+of\s+breath\b/.test(t)
+  );
+}
+
+function _isSummaryRequest(text) {
+  const t = String(text || '').toLowerCase();
+  return (
+    (/\bsummar(?:y|ize)\b/.test(t) && /\b(captured|so far|what you got|what you heard)\b/.test(t)) ||
+    /\bwhat did you capture\b/.test(t) ||
+    /\bwhat did you hear\b/.test(t) ||
+    /\bwhat have you captured\b/.test(t)
+  );
+}
+
+function _extractLikelyBarcode(text) {
+  const msg = String(text || '');
+  const hint = /\b(barcode|upc|ean|scan)\b/i.test(msg);
+  const matches = msg.match(/\b\d{8,14}\b/g) || [];
+  if (!matches.length) return null;
+  if (!hint && matches.length > 1) return null;
+  const candidate = String(matches[0] || '').trim();
+  return candidate || null;
+}
+
+async function _tryCaptureProductTaxonomyFromMessage({ sessionId, message }) {
+  if (!KELLY_PRODUCT_TAXONOMY_CAPTURE) return null;
+  const barcode = _extractLikelyBarcode(message);
+  if (!barcode) return null;
+  try {
+    const { resolveProductIdentityFromBarcode } = require('./product-identity-resolver');
+    const {
+      upsertFromBeautyFacts,
+      upsertProductTaxonomyFullPipeline,
+      logBarcodeLookup
+    } = require('./product-taxonomy-repository');
+    const out = await resolveProductIdentityFromBarcode(barcode);
+    if (!out?.success || !out?.normalized?.found) {
+      logBarcodeLookup({
+        barcode,
+        source: 'kelly_chat_barcode',
+        hit: false,
+        details: { error: out?.error || 'not_found' }
+      });
+      return null;
+    }
+    const full = String(process.env.PRODUCT_TAXONOMY_FULL_ENRICH || '0') === '1';
+    const saved = full
+      ? await upsertProductTaxonomyFullPipeline(out.normalized)
+      : upsertFromBeautyFacts(out.normalized);
+    logBarcodeLookup({
+      barcode: out.normalized?.barcode || barcode,
+      source: 'kelly_chat_barcode',
+      hit: !!saved?.ok,
+      productId: saved?.product_id,
+      gradeClass: saved?.grade?.grade_class,
+      confidence: saved?.grade?.confidence,
+      details: { session_id: sessionId, product_name: out.normalized?.product_name || null }
+    });
+    if (saved?.ok && KellyToolExecutor._setSessionMeta) {
+      KellyToolExecutor._setSessionMeta(sessionId, 'step1_last_barcode', String(out.normalized?.barcode || barcode));
+      KellyToolExecutor._setSessionMeta(sessionId, 'step1_last_product_id', String(saved.product_id || ''));
+      KellyToolExecutor._setSessionMeta(sessionId, 'step1_last_product_grade', String(saved?.grade?.grade_class || ''));
+    }
+    return saved?.ok ? saved : null;
+  } catch (e) {
+    try { Metrics.increment('product_taxonomy.kelly_capture_error.count', 1); } catch (_) {}
+    console.warn('[KellyAgent] barcode taxonomy capture failed:', e?.message || e);
+    return null;
+  }
+}
+
+function _hasSkinTypeCorrectionIntent(text) {
+  const t = String(text || '').toLowerCase();
+  return /\b(actually|correction|correct|update|changed|more like|rather|not )\b/.test(t);
+}
+
+function _extractExplicitSkinType(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\bnot\s+oily\b/.test(t) && /\b(dry|tight|flaky)\b/.test(t)) return 'dry';
+  if (/\bnot\s+dry\b/.test(t) && /\b(oily|greasy|shiny)\b/.test(t)) return 'oily';
+  if (/\bnot\s+oily\b/.test(t) && /\b(dry\s+cheeks?|oily\s+(t-zone|nose))\b/.test(t)) return 'combination';
+  if (/\bcombination|combo\b/.test(t)) return 'combination';
+  if (/\boily|greasy\b/.test(t) && !/\bnot\s+oily\b/.test(t)) return 'oily';
+  if (/\bdry|flaky|tight\b/.test(t)) return 'dry';
+  if (/\bsensitive|reactive\b/.test(t)) return 'sensitive';
+  if (/\bnormal|balanced\b/.test(t)) return 'normal';
+  return '';
+}
+
+function _negatesSkinType(text, skinType) {
+  const t = String(text || '').toLowerCase();
+  const s = String(skinType || '').toLowerCase();
+  if (!s) return false;
+  const tokenMap = {
+    oily: 'oily',
+    dry: 'dry',
+    combination: 'combination',
+    sensitive: 'sensitive',
+    normal: 'normal'
+  };
+  const tok = tokenMap[s] || s;
+  return new RegExp(`\\b(not|don't have|do not have|no)\\s+${tok}\\b`, 'i').test(t);
+}
+
+function _composeCapturedSummaryFromState(state) {
+  const s = state || {};
+  const complaint = String(s.chief_complaint || s.quality || '').trim();
+  const onset = String(s.timeline || s.onset || '').trim();
+  const severity = s.severity != null && String(s.severity).trim() !== '' ? String(s.severity).trim() : '';
+  const provocation = String(s.provocation || '').trim();
+  const bits = [];
+  if (complaint) bits.push(`you reported ${complaint}`);
+  if (onset) bits.push(`it started ${onset}`);
+  if (severity) bits.push(`severity is about ${severity}/10`);
+  if (provocation) bits.push(`it is better/worse with ${provocation}`);
+  if (!bits.length) return '';
+  return `So far, ${bits.join(', ')}. I can keep refining this with one more detail if needed.`;
+}
+
+function _hashTurnText(text) {
+  const s = String(text || '').trim().toLowerCase();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i);
+  return String(h >>> 0);
+}
+
+function _extractBodySites(text) {
+  const t = String(text || '').toLowerCase();
+  const map = [
+    ['face', /\b(face|facial|cheek|chin|forehead|jaw)\b/],
+    ['neck', /\bneck\b/],
+    ['chest', /\bchest\b/],
+    ['back', /\bback\b/],
+    ['arm', /\barm|arms|elbow|elbows\b/],
+    ['leg', /\bleg|legs|thigh|calf|knees?\b/],
+    ['hand', /\bhand|hands|wrist|wrists|finger|fingers\b/],
+    ['foot', /\bfoot|feet|ankle|ankles|toe|toes\b/],
+    ['scalp', /\bscalp\b/]
+  ];
+  return map.filter(([, re]) => re.test(t)).map(([label]) => label);
+}
+
+function _extractStep1Fields(message) {
+  const text = String(message || '').trim();
+  if (!text) return { fields: {}, fieldsFilled: 0 };
+  const out = {};
+  if (!/^(hi|hello|hey|ok|okay|thanks?)\b/i.test(text) && text.length >= 8) {
+    out.chief_complaint = text.slice(0, 280);
+  }
+  const sev = text.match(/\b([1-9]|10)\s*(?:\/\s*10|out of 10)\b/i);
+  if (sev) out.severity = Number(sev[1]);
+  const timeline = text.match(/\b(today|yesterday|last night|this morning|(\d+\s*(day|days|week|weeks|month|months)\s+ago)|since\s+[a-z0-9\s-]{2,24})\b/i);
+  if (timeline) out.timeline = timeline[1];
+  const sites = _extractBodySites(text);
+  if (sites.length) out.body_sites = sites;
+  const fieldsFilled = Object.keys(out).filter((k) => {
+    if (k === 'body_sites') return Array.isArray(out[k]) && out[k].length > 0;
+    return out[k] != null && String(out[k]).trim() !== '';
+  }).length;
+  return { fields: out, fieldsFilled };
 }
 
 /**
@@ -587,6 +768,7 @@ const SYMPTOM_KEYWORDS = [
   'discharge', 'lump', 'bump', 'infection', 'sick', 'ill', 'not feeling well',
   'feeling bad', 'something wrong', 'worried about'
 ];
+const STEP1_NOISE_PENALTY_THRESHOLD = Number(process.env.STEP1_NOISE_PENALTY_THRESHOLD || 0.2);
 
 function _classifyIntent(message) {
   const t = String(message || '').toLowerCase();
@@ -594,6 +776,28 @@ function _classifyIntent(message) {
   if (ROUTINE_BOOKING_KEYWORDS.some(k => t.includes(k))) return 'routine_booking';
   if (SYMPTOM_KEYWORDS.some(k => t.includes(k))) return 'symptom';
   return 'unknown';
+}
+
+function _extractLikelySymptomFromText(message) {
+  const t = String(message || '').trim();
+  if (!t) return '';
+  const lower = t.toLowerCase();
+  for (const k of SYMPTOM_KEYWORDS) {
+    if (lower.includes(k)) return k;
+  }
+  return t.split(/\s+/).slice(0, 5).join(' ');
+}
+
+function _noisyConfirmPrompt(preferredLanguage, extractedSymptom) {
+  const symptom = String(extractedSymptom || 'that symptom').trim();
+  const lang = String(preferredLanguage || 'en').toLowerCase().split('-')[0];
+  const map = {
+    en: `Just to be sure I got that right, you mentioned ${symptom}. Is that correct?`,
+    fr: `Pour confirmer, vous avez mentionne ${symptom}. C est bien ca ?`,
+    sw: `Nihakikishe nimekusikia sawa, umetaja ${symptom}. Je, ni sahihi?`,
+    ru: `Чтобы подтвердить, вы упомянули ${symptom}. Это верно?`
+  };
+  return map[lang] || map.en;
 }
 
 function _hasNoSymptomsRoutineSignal(text) {
@@ -1862,6 +2066,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       preferredLanguage: preferredLanguageParam = null,
       commerceCheckout = null,
       checkoutPolicy = null,
+      turnAuthority = null,
       onStreamDelta = null,
       onToolStatus = null
     } = params;
@@ -1872,6 +2077,17 @@ Antworten Sie durchgehend auf Deutsch.`,
       provider: resolvePrimaryProvider(),
       messageChars: String(message || '').length
     });
+    const authorityMode = String(process.env.KELLY_TURN_AUTHORITY_MODE || 'V4').trim().toUpperCase();
+    if (turnAuthority && String(turnAuthority).trim().toUpperCase() !== authorityMode) {
+      try { Metrics.increment('step1.turn_authority_mismatch.count', 1); } catch (_) {}
+      return {
+        reply: 'Please continue in one conversation mode so I can keep state consistent.',
+        endCall: false,
+        toolsUsed: [],
+        language: 'en',
+        authority_mode: authorityMode
+      };
+    }
 
     const canonicalState = SessionStateStore.getCanonicalState({ sessionId });
     if (canonicalState) {
@@ -1883,10 +2099,29 @@ Antworten Sie durchgehend auf Deutsch.`,
       });
     }
 
+    if (_isSummaryRequest(message)) {
+      let state = canonicalState || null;
+      if (!state && db.getTriageSession) state = db.getTriageSession(sessionId) || null;
+      const summary = _composeCapturedSummaryFromState(state);
+      if (summary) {
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', summary);
+        return {
+          reply: summary,
+          endCall: false,
+          toolsUsed: [],
+          language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en'
+        };
+      }
+    }
+
     // ── 1. Emergency pre-check (before LLM, always) ──────────
-    const emergency = detectRedFlags(message);
-    const safety = SafetyPreScreen.evaluateSafety({ text: message, eventType: 'chat_turn', payload: { message } });
-    if (emergency?.isEmergency || safety?.emergency) {
+    const ignoreEmergencyDueToNegation = _isNegatedEmergencyStatement(message);
+    const emergency = ignoreEmergencyDueToNegation ? { isEmergency: false } : detectRedFlags(message);
+    const safety = ignoreEmergencyDueToNegation
+      ? { emergency: false, status: 'green' }
+      : SafetyPreScreen.evaluateSafety({ text: message, eventType: 'chat_turn', payload: { message } });
+    if (!ignoreEmergencyDueToNegation && (emergency?.isEmergency || safety?.emergency)) {
       const emergencyReply = emergency?.suggestedResponse || safety?.suggested_response ||
         'This sounds like a medical emergency. Please call 911 or go to the nearest emergency room right now.';
 
@@ -1896,6 +2131,9 @@ Antworten Sie durchgehend auf Deutsch.`,
 
       return { reply: emergencyReply, endCall: false, toolsUsed: [], language: 'en' };
     }
+
+    // Optional passive capture: persist taxonomy profile if a barcode appears in user text.
+    await _tryCaptureProductTaxonomyFromMessage({ sessionId, message });
 
     if (commerceCheckout && commerceCheckout.productId && commerceCheckout.providerId) {
       if (!clinicId) {
@@ -1923,13 +2161,64 @@ Antworten Sie durchgehend auf Deutsch.`,
     }
 
     const _dedup = KellyOrchestratorPhase.dedupeConsecutiveUserFragments(message);
+    const collapseRatio = _dedup.beforeLength > 0
+      ? Math.max(0, (_dedup.beforeLength - _dedup.afterLength) / _dedup.beforeLength)
+      : 0;
+    const noisyPenaltyApplied =
+      channel === 'voice' &&
+      _dedup.collapsed &&
+      collapseRatio >= STEP1_NOISE_PENALTY_THRESHOLD;
+    try {
+      const pct = Math.round(collapseRatio * 100);
+      Metrics.increment('step1.noise_ratio_percent.total', pct);
+      Metrics.increment('step1.noise_ratio_percent.count', 1);
+      if (_dedup.collapsed) Metrics.increment('step1.dedupe.collapsed.count', 1);
+      if (noisyPenaltyApplied) Metrics.increment('step1.noisy_penalty_applied.count', 1);
+      Metrics.increment(`step1.channel.${channel || 'unknown'}.turns`, 1);
+    } catch (_) {}
     if (_dedup.collapsed) {
       _kellyDebugTurn('message_deduped', {
         sessionId,
         beforeLength: _dedup.beforeLength,
-        afterLength: _dedup.afterLength
+        afterLength: _dedup.afterLength,
+        collapseRatio
       });
       message = _dedup.text;
+    }
+
+    if (noisyPenaltyApplied) {
+      const extractedSymptom = _extractLikelySymptomFromText(message);
+      const confirmReply = _noisyConfirmPrompt(
+        (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+        extractedSymptom
+      );
+      try {
+        if (KellyToolExecutor._setSessionMeta) {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_confidence_band', 'low');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_confirmation_required', '1');
+          KellyToolExecutor._setSessionMeta(
+            sessionId,
+            'step1_tentative_fields_json',
+            JSON.stringify(['onset', 'severity', 'quality'])
+          );
+        }
+      } catch (_) {}
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', confirmReply);
+      return {
+        reply: confirmReply,
+        endCall: false,
+        toolsUsed: [],
+        language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+        confidence_band: 'low',
+        confirmation_required: true,
+        step1_quality: {
+          collapse_ratio: collapseRatio,
+          noisy_penalty_applied: true,
+          fields_filled: 0,
+          overwrite_blocked: false
+        }
+      };
     }
 
     // Load a short history snapshot before fast-intent routing so routine sessions
@@ -1937,6 +2226,200 @@ Antworten Sie durchgehend auf Deutsch.`,
     const historyEarly = this._loadHistory(sessionId);
     const routineLockedEarly = _isRoutineLockedForSession(sessionId, historyEarly);
     const msgLcEarly = String(message || '').toLowerCase().trim();
+    if (_isSummaryRequest(message)) {
+      const st = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_value') || '').toLowerCase();
+      const pending = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_pending_value') || '').toLowerCase();
+      const status = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_status') || '').toLowerCase();
+      if (st && st !== 'unknown') {
+        const qualifier = status === 'corrected' ? ' after your correction' : '';
+        const summaryReply = `So far, I captured your skin type as ${st}${qualifier}.`;
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', summaryReply);
+        return { reply: summaryReply, endCall: false, toolsUsed: [], language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en' };
+      }
+      if (pending && pending !== 'unknown') {
+        const summaryReply = `So far, I captured a tentative skin type as ${pending}, and I am confirming it with you before finalizing.`;
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', summaryReply);
+        return { reply: summaryReply, endCall: false, toolsUsed: [], language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en' };
+      }
+      const ruledOut = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_ruled_out') || '').toLowerCase();
+      if (ruledOut) {
+        const summaryReply = `So far, we ruled out ${ruledOut} skin, and I am currently identifying your specific type.`;
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', summaryReply);
+        return { reply: summaryReply, endCall: false, toolsUsed: [], language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en' };
+      }
+    }
+    const step1ConfirmRequired = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_confirmation_required') || '') === '1';
+    if (step1ConfirmRequired) {
+      const yes = /\b(yes|yeah|yep|correct|right|exactly|si|sí|oui)\b/i.test(msgLcEarly);
+      const no = /\b(no|nope|incorrect|wrong|not really|nah)\b/i.test(msgLcEarly);
+      if (yes) {
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_confirmation_required', '0');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_tentative_fields_json', '[]');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_confidence_band', 'medium');
+        } catch (_) {}
+      } else if (!no) {
+        const confirmReply = 'Before we continue, please confirm what you said in one short sentence so I can document it accurately.';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', confirmReply);
+        return {
+          reply: confirmReply,
+          endCall: false,
+          toolsUsed: [],
+          language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+          confirmation_required: true
+        };
+      }
+    }
+    const skinTypeConfirmRequired = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_confirmation_required') || '') === '1';
+    if (skinTypeConfirmRequired) {
+      const explicitSkinType = _extractExplicitSkinType(msgLcEarly);
+      const yes = /\b(yes|yeah|yep|correct|right|exactly)\b/i.test(msgLcEarly);
+      const no = /\b(no|nope|incorrect|wrong|not really|nah)\b/i.test(msgLcEarly);
+      if (explicitSkinType) {
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_value', explicitSkinType);
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_status', 'confirmed');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', '0');
+        } catch (_) {}
+        const ack = `Got it, I have noted ${explicitSkinType} skin. What is your main skin concern right now?`;
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', ack);
+        return { reply: ack, endCall: false, toolsUsed: [], language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en' };
+      } else if (yes) {
+        const pending = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_pending_value') || '');
+        if (pending && pending !== 'unknown') {
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_value', pending);
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_status', 'confirmed');
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', '0');
+          } catch (_) {}
+          const ack = `Perfect, I have noted ${pending} skin. What is your main skin concern right now?`;
+          this._appendToHistory(sessionId, 'user', message);
+          this._appendToHistory(sessionId, 'assistant', ack);
+          return { reply: ack, endCall: false, toolsUsed: [], language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en' };
+        }
+        if (!pending || pending === 'unknown') {
+          const clarifyUnknown = 'Thanks. Which best describes your skin type: oily, dry, combination, sensitive, or normal?';
+          this._appendToHistory(sessionId, 'user', message);
+          this._appendToHistory(sessionId, 'assistant', clarifyUnknown);
+          return { reply: clarifyUnknown, endCall: false, toolsUsed: [], language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en', confirmation_required: true };
+        }
+      } else if (no) {
+        const clarify = 'Thanks for clarifying. Which fits best right now: oily, dry, combination, sensitive, or normal?';
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', clarify);
+        return {
+          reply: clarify,
+          endCall: false,
+          toolsUsed: [],
+          language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+          confirmation_required: true
+        };
+      }
+    }
+    // Unconditional correction template for common "not oily" correction phrases.
+    if (/\bnot\s+oily\b/i.test(msgLcEarly)) {
+      let correctedType = '';
+      if (/\b(dry\s+cheeks?|oily\s+(t-zone|nose)|t-zone|combination|combo)\b/i.test(msgLcEarly)) correctedType = 'combination';
+      else if (/\b(dry|tight|flaky)\b/i.test(msgLcEarly)) correctedType = 'dry';
+      if (correctedType) {
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_value', correctedType);
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_status', 'corrected');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', '0');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_correction_pending', '0');
+          if (/\btight\b/i.test(msgLcEarly)) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_condition_json', JSON.stringify([{ id: 'dehydrated', confidence: 'medium' }]));
+          }
+        } catch (_) {}
+        const reply = `Thanks for correcting that. I have updated your skin type to ${correctedType}. What is your main skin concern right now?`;
+        this._appendToHistory(sessionId, 'user', message);
+        this._appendToHistory(sessionId, 'assistant', reply);
+        return {
+          reply,
+          endCall: false,
+          toolsUsed: [],
+          language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+          correction_override: true
+        };
+      }
+    }
+    // Correction Override phase: if user negates current skin type, force deterministic correction flow.
+    const currentSkinTypeForOverride = String(KellyToolExecutor._getSessionMeta?.(sessionId, 'step1_skin_type_value') || '');
+    const explicitTypeForOverride = _extractExplicitSkinType(msgLcEarly);
+    const negatesCurrentType = _negatesSkinType(msgLcEarly, currentSkinTypeForOverride);
+    if (currentSkinTypeForOverride && negatesCurrentType) {
+      const corrected = explicitTypeForOverride || '';
+      try {
+        KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_correction_pending', '1');
+        if (corrected) {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_value', corrected);
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_status', 'corrected');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', '0');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_correction_pending', '0');
+        } else {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', '1');
+        }
+      } catch (_) {}
+      const reply = corrected
+        ? `Thanks for correcting that. I have updated your skin type to ${corrected}. What is your main skin concern right now?`
+        : "I've noted you don't have that skin type. To be sure, how would you describe your type: oily, dry, combination, sensitive, or normal?";
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return {
+        reply,
+        endCall: false,
+        toolsUsed: [],
+        language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+        correction_override: true
+      };
+    }
+    // Deterministic negation template when user negates a type without replacement.
+    if (/\bi don't have dry skin\b|\bnot dry skin\b/i.test(msgLcEarly)) {
+      const reply = "I've noted you don't have dry skin. To be sure, how would you describe your type: oily, dry, combination, sensitive, or normal?";
+      try { KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_ruled_out', 'dry'); } catch (_) {}
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', reply);
+      return {
+        reply,
+        endCall: false,
+        toolsUsed: [],
+        language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+        deterministic_negation_template: true
+      };
+    }
+    // Early deterministic skin-type capture before fast-intent routing.
+    if (!skinTypeConfirmRequired) {
+      const explicitEarly = _extractExplicitSkinType(msgLcEarly);
+      const inferredEarly = explicitEarly || (/\bshiny\b.*\bnoon\b|\bshiny by noon\b/.test(msgLcEarly) ? 'oily' : '');
+      if (inferredEarly) {
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_pending_value', inferredEarly);
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_value', inferredEarly);
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_status', explicitEarly ? 'confirmed' : 'tentative');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', explicitEarly ? '0' : '1');
+          if (explicitEarly === 'oily' && /\btight\b/.test(msgLcEarly)) {
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_condition_json', JSON.stringify([{ id: 'dehydrated', confidence: 'medium' }]));
+          }
+        } catch (_) {}
+        if (!explicitEarly) {
+          const ask = `I heard ${inferredEarly} skin. Is that correct?`;
+          this._appendToHistory(sessionId, 'user', message);
+          this._appendToHistory(sessionId, 'assistant', ask);
+          return {
+            reply: ask,
+            endCall: false,
+            toolsUsed: [],
+            language: (db.getKellySessionLanguage && db.getKellySessionLanguage(sessionId)) || 'en',
+            confirmation_required: true
+          };
+        }
+      }
+    }
 
     // Rehydrate booking persona from persisted triage session if meta is missing.
     if (!KellyToolExecutor._getSessionMeta?.(sessionId, 'booking_for')) {
@@ -2543,11 +3026,181 @@ Antworten Sie durchgehend auf Deutsch.`,
       message,
       kellyScriptHint,
       orchestration,
-      routineIntakeSummaryMarkdown
+      routineIntakeSummaryMarkdown,
+      missingFields: [],
+      nextRequiredField: null,
+      skinType: null,
+      skinCondition: null,
+      skinConflicts: []
     };
 
-    // Deterministic required-fields gate before deep retrieval/tool loop.
-    // Question selection is deterministic; wording is LLM-generated by AskNextQuestionService.
+    // Step 1 pre-extract/write before required-fields gate evaluation.
+    let fieldsFilled = 0;
+    let overwriteBlocked = false;
+    let idempotentWriteSkipped = false;
+    const taxonomyModule = 'skin_type';
+    let skinTypeResult = null;
+    let skinTypeConflictBlocked = false;
+    let skinTypeResolveMs = 0;
+    try {
+      const msgHash = _hashTurnText(message);
+      const turnSeq = Math.max(1, history.filter((m) => m.role === 'user').length + 1);
+      const idemKey = `${sessionId}:${turnSeq}:${taxonomyModule}`;
+      const priorModuleHash = String(KellyToolExecutor._getSessionMeta(sessionId, `step1_idempotency:${idemKey}`) || '');
+      const lastModuleTurnSeq = Number(KellyToolExecutor._getSessionMeta(sessionId, `step1_last_turn_seq:${taxonomyModule}`) || 0);
+      if ((msgHash && msgHash === priorModuleHash) || turnSeq <= lastModuleTurnSeq) {
+        idempotentWriteSkipped = true;
+      } else {
+        const extracted = _extractStep1Fields(message);
+        fieldsFilled = Number(extracted.fieldsFilled || 0);
+        const currentState = SessionStateStore.getCanonicalState({ sessionId }) || {};
+        const t0 = Date.now();
+        const skinType = resolveSkinType({
+          text: message,
+          turnSeq,
+          previous: currentState.skin_type || null
+        });
+        const explicitSkinTypeNow = _extractExplicitSkinType(message);
+        if (explicitSkinTypeNow) {
+          skinType.value = explicitSkinTypeNow;
+          skinType.status = (currentState.skin_type && currentState.skin_type !== explicitSkinTypeNow) ? 'corrected' : 'confirmed';
+          skinType.confidence = 'high';
+          skinType.needs_confirmation = false;
+        }
+        skinTypeResolveMs = Date.now() - t0;
+        skinTypeResult = skinType;
+        const currentSkinType = String(currentState.skin_type || KellyToolExecutor._getSessionMeta(sessionId, 'step1_skin_type_value') || '');
+        const currentSkinTypeStatus = String(currentState.skin_type_status || KellyToolExecutor._getSessionMeta(sessionId, 'step1_skin_type_status') || '');
+        if (
+          currentSkinType &&
+          currentSkinTypeStatus === 'confirmed' &&
+          skinType.value &&
+          skinType.value !== 'unknown' &&
+          skinType.value !== currentSkinType &&
+          !_hasSkinTypeCorrectionIntent(message)
+        ) {
+          skinTypeConflictBlocked = true;
+          skinType.value = currentSkinType;
+          skinType.status = 'confirmed';
+          skinType.needs_confirmation = false;
+        }
+        extracted.fields.skin_type = skinType.value;
+        extracted.fields.skin_type_status = skinType.status;
+        extracted.fields.skin_type_confidence = skinType.confidence;
+        extracted.fields.skin_type_needs_confirmation = skinType.needs_confirmation ? 1 : 0;
+        extracted.fields.skin_type_resolver_version = skinType.resolver_version;
+        const skinCond = resolveSkinConditions({
+          text: message,
+          skinType: skinType.value,
+          visionHint: KellyToolExecutor._getSessionMeta(sessionId, 'step1_phototype_hint') || ''
+        });
+        const existingConfirmedPhototype = String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_phototype_confirmed') || '');
+        if (existingConfirmedPhototype && skinCond.secondary_signals.phototype_hint && skinCond.secondary_signals.phototype_hint !== existingConfirmedPhototype) {
+          // Low-authority CV hint must never override confirmed text state.
+          skinCond.secondary_signals.phototype_hint = existingConfirmedPhototype;
+        }
+        extracted.fields.skin_condition = JSON.stringify((skinCond.conditions || []).map((c) => ({ id: c.id, confidence: c.confidence })));
+        extracted.fields.secondary_signals = JSON.stringify(skinCond.secondary_signals || {});
+        extracted.fields.skin_condition_resolver_version = skinCond.resolver_version;
+        const baumannResult = resolveBaumannCode({
+          skinType: skinType.value,
+          secondarySignals: skinCond.secondary_signals
+        });
+        extracted.fields.skin_baumann_code = baumannResult?.code || '';
+        extracted.fields.skin_baumann_confidence = baumannResult?.confidence || 'low';
+        extracted.fields.skin_baumann_json = JSON.stringify(baumannResult || {});
+        const ingredientFacts = resolveIngredientFacts(message);
+        const ingredientSafety = evaluateIngredientSafety({
+          ingredientFacts,
+          conditions: skinCond.conditions,
+          secondarySignals: skinCond.secondary_signals
+        });
+        extracted.fields.ingredient_facts = JSON.stringify(
+          ingredientFacts.map((x) => ({
+            name: x.name,
+            roles: x.roles,
+            mechanism: x.mechanism,
+            irritancy_band: x.irritancy_band,
+            interaction_strength: x.interaction_strength
+          }))
+        );
+        extracted.fields.ingredient_safety_json = JSON.stringify(ingredientSafety || []);
+        extracted.fields.product_category = mapProductCategory(message);
+        if (skinType.value && skinType.value !== 'unknown') fieldsFilled += 1;
+        overwriteBlocked =
+          (!!currentState.severity && extracted.fields.severity == null) ||
+          (!!currentState.timeline && !extracted.fields.timeline);
+        try {
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_pending_value', skinType.value || '');
+          KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_confirmation_required', skinType.needs_confirmation ? '1' : '0');
+        } catch (_) {}
+        if (fieldsFilled > 0) {
+          SessionStateStore.upsertFromNormalizedEvent({
+            envelope: {
+              session_id: sessionId,
+              source: 'kelly_agent',
+              event_type: 'step1_pre_extract',
+              event_id: `step1-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+            },
+            normalizedEvent: {
+              session_id: sessionId,
+              source: 'kelly_agent',
+              event_type: 'step1_pre_extract',
+              text: message,
+              fields: extracted.fields,
+              metadata: {
+                taxonomy_module: taxonomyModule,
+                resolver_version: skinType.resolver_version,
+                trace: {
+                  skin_type_scores: skinType.score_debug || [],
+                  skin_type_reason_codes: (skinType.evidence || []).slice(0, 8).map((e) => `${e.signal}:${e.span || ''}`),
+                  skin_condition_reason_codes: skinCond.reason_codes || []
+                }
+              }
+            }
+          });
+          try {
+            KellyToolExecutor._setSessionMeta(sessionId, `step1_idempotency:${idemKey}`, msgHash);
+            KellyToolExecutor._setSessionMeta(sessionId, `step1_last_turn_seq:${taxonomyModule}`, String(turnSeq));
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_value', skinType.value || '');
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_type_status', skinType.status || 'tentative');
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_skin_condition_json', extracted.fields.skin_condition || '[]');
+            KellyToolExecutor._setSessionMeta(sessionId, 'step1_secondary_signals_json', extracted.fields.secondary_signals || '{}');
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    context.skinType = skinTypeResult ? {
+      value: skinTypeResult.value,
+      status: skinTypeResult.status,
+      confidence: skinTypeResult.confidence,
+      needsConfirmation: !!skinTypeResult.needs_confirmation
+    } : null;
+    try {
+      const cond = JSON.parse(String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_skin_condition_json') || '[]'));
+      context.skinCondition = Array.isArray(cond) ? cond : [];
+    } catch (_) { context.skinCondition = []; }
+    try {
+      const ingredientFactsForConflict = resolveIngredientFacts(message);
+      let secSignalsForGraph = {};
+      try { secSignalsForGraph = JSON.parse(String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_secondary_signals_json') || '{}')); } catch (_) {}
+      context.graphAction = resolveTaxonomyGraphAction({
+        db: db.db,
+        conditions: context.skinCondition,
+        ingredientFacts: ingredientFactsForConflict,
+        secondarySignals: secSignalsForGraph
+      });
+    } catch (_) { context.graphAction = null; }
+    try {
+      const ingredientFactsForConflict = resolveIngredientFacts(message);
+      context.skinConflicts = resolveSkinConflicts({
+        message,
+        conditions: context.skinCondition,
+        ingredientFacts: ingredientFactsForConflict
+      });
+    } catch (_) { context.skinConflicts = []; }
+
+    // Deterministic required-fields gate after pre-extract.
     const pathway =
       channel === 'voice' ? 'triage'
         : (orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
@@ -2555,31 +3208,191 @@ Antworten Sie durchgehend auf Deutsch.`,
           ? 'routine'
           : 'triage';
     const gateEval = SessionStateStore.evaluateGate({ pathway, sessionId });
+    try {
+      const tentativeRaw = KellyToolExecutor._getSessionMeta(sessionId, 'step1_tentative_fields_json') || '[]';
+      const tentative = JSON.parse(tentativeRaw);
+      if (Array.isArray(tentative) && tentative.length) {
+        const map = { quality: 'chief_complaint', onset: 'timeline', severity: 'severity' };
+        for (const tf of tentative) {
+          const gateField = map[String(tf || '').trim()];
+          if (gateField && !gateEval.missing_required.includes(gateField)) {
+            gateEval.missing_required.push(gateField);
+          }
+        }
+        gateEval.is_minimum_met = gateEval.missing_required.length === 0;
+      }
+    } catch (_) {}
     const minimumRequiredByPathway = IntakeRequiredFields.getRequiredFieldsSchema()[pathway]?.minimum_required || [];
     const shouldGate =
       minimumRequiredByPathway.length > 0 &&
       !gateEval.is_minimum_met &&
       !safety?.emergency &&
       gateEval.missing_required.length > 0;
+    const nextMissingField = shouldGate ? IntakeRequiredFields.nextRequiredField(pathway, gateEval.state) : null;
+    context.missingFields = shouldGate ? gateEval.missing_required : [];
+    context.nextRequiredField = nextMissingField;
+    // Prime triage row at intake start so state exists before tool writes.
+    try {
+      if (db.getTriageSession && db.upsertTriageSession) {
+        const existing = db.getTriageSession(sessionId);
+        if (!existing && (shouldGate || nextMissingField)) {
+          db.upsertTriageSession(sessionId, { session_id: sessionId });
+        }
+      }
+    } catch (_) {}
+    let repeatMissingFieldCount = 0;
+    let loopBreakerTriggered = false;
+    if (shouldGate) {
+      const prevField = String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_last_missing_field') || '');
+      const prevCount = Number(KellyToolExecutor._getSessionMeta(sessionId, 'step1_repeat_missing_field_count') || 0);
+      repeatMissingFieldCount = prevField && prevField === String(nextMissingField || '') ? (prevCount + 1) : 1;
+      try {
+        KellyToolExecutor._setSessionMeta(sessionId, 'step1_last_missing_field', String(nextMissingField || ''));
+        KellyToolExecutor._setSessionMeta(sessionId, 'step1_repeat_missing_field_count', String(repeatMissingFieldCount));
+      } catch (_) {}
+      if (repeatMissingFieldCount >= 3) {
+        loopBreakerTriggered = true;
+        try { KellyToolExecutor._setSessionMeta(sessionId, 'orchestrator_force_phase', 'TRIAGE_ACTIVE'); } catch (_) {}
+      }
+    }
+    try {
+      Metrics.increment('step1.fields_filled.total', fieldsFilled || 0);
+      Metrics.increment('step1.fields_filled.count', 1);
+      Metrics.increment('step1.overwrite_blocked.count', overwriteBlocked ? 1 : 0);
+      Metrics.increment('step1.skin_type.conflict_blocked.count', skinTypeConflictBlocked ? 1 : 0);
+      if (skinTypeResult?.value) Metrics.increment(`step1.skin_type.detected.${skinTypeResult.value}.count`, 1);
+      if (skinTypeResult?.status) Metrics.increment(`step1.skin_type.status.${skinTypeResult.status}.count`, 1);
+      if (skinTypeResolveMs > 0) {
+        Metrics.increment('step1.skin_type.resolve_ms.total', skinTypeResolveMs);
+        Metrics.increment('step1.skin_type.resolve_ms.count', 1);
+      }
+      try {
+        const cond = JSON.parse(String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_skin_condition_json') || '[]'));
+        if (Array.isArray(cond)) {
+          for (const c of cond) Metrics.increment(`step1.skin_condition.detected.${String(c.id || 'unknown')}.count`, 1);
+        }
+      } catch (_) {}
+      Metrics.increment('step1.repeat_missing_field.total', repeatMissingFieldCount || 0);
+      for (const cf of context.skinConflicts || []) {
+        Metrics.increment(`step4.skin_conflict.detected.${String(cf.id || 'unknown')}.count`, 1);
+      }
+      Metrics.increment('step1.loop_breaker_triggered.count', loopBreakerTriggered ? 1 : 0);
+      Metrics.increment('step1.idempotent_write_skipped.count', idempotentWriteSkipped ? 1 : 0);
+      Metrics.increment(`taxonomy.idempotent_write_skipped.${taxonomyModule}.count`, idempotentWriteSkipped ? 1 : 0);
+    } catch (_) {}
+
+    if (skinTypeResult && (skinTypeResult.value === 'unknown' || skinTypeResult.confidence === 'low')) {
+      const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
+        ? history[history.length - 1].content
+        : '') || '').toLowerCase();
+      const alreadyAskedType = /oily, dry, combination, sensitive, or normal|what type of skin|skin type/i.test(lastAssistant);
+      if (alreadyAskedType) {
+        // Do not loop the same classifier question; let orchestration continue.
+        context.skinType = context.skinType || { value: 'unknown', status: 'tentative', confidence: 'low', needsConfirmation: true };
+      } else {
+      const clarify = 'Quick check so I can personalize this: would you describe your skin as oily, dry, combination, sensitive, or normal?';
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', clarify);
+      return {
+        reply: clarify,
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en',
+        skin_type_clarifier_required: true
+      };
+      }
+    }
+    if (skinTypeResult && skinTypeResult.status === 'tentative' && skinTypeResult.needs_confirmation) {
+      const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
+        ? history[history.length - 1].content
+        : '') || '').toLowerCase();
+      const alreadyAskedConfirm = /i heard .* skin.*is that correct|is that correct/i.test(lastAssistant);
+      if (alreadyAskedConfirm) {
+        // Avoid robotic loop on same confirmation wording.
+        context.skinType = context.skinType || {
+          value: skinTypeResult.value,
+          status: 'tentative',
+          confidence: skinTypeResult.confidence,
+          needsConfirmation: true
+        };
+      } else {
+      const askConfirm = `I heard ${skinTypeResult.value} skin. Is that correct?`;
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', askConfirm);
+      return {
+        reply: askConfirm,
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en',
+        confirmation_required: true
+      };
+      }
+    }
+    if (!SKIN_TAXONOMY_SHADOW_MODE && SKIN_CONFLICT_HARD_GUARD && Array.isArray(context.skinConflicts) && context.skinConflicts.length > 0) {
+      const c = context.skinConflicts[0];
+      const deterministic = `I want to keep this safe and simple. ${c.next_action}`;
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', deterministic);
+      return {
+        reply: deterministic,
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en',
+        next_step: 'conflict_clarify',
+        conflict_labels: context.skinConflicts.map((x) => x.id),
+        confidence_band: 'low'
+      };
+    }
+    if (GRAPH_GATE_ENFORCE && context.graphAction && context.graphAction.clarify_required) {
+      const deterministic = `I want to keep this safe and specific. ${context.graphAction.next_question}`;
+      this._appendToHistory(sessionId, 'user', message);
+      this._appendToHistory(sessionId, 'assistant', deterministic);
+      return {
+        reply: deterministic,
+        endCall: false,
+        toolsUsed: [],
+        language: preferredLanguage || 'en',
+        next_step: 'graph_clarify',
+        graph_rule: context.graphAction.rule_id,
+        confidence_band: context.graphAction.blocked ? 'low' : 'medium'
+      };
+    }
 
     // ── 4. Append user message ────────────────────────────────
     this._appendToHistory(sessionId, 'user', message);
     history.push({ role: 'user', content: message });
 
-    if (shouldGate) {
-      const nextField = IntakeRequiredFields.nextRequiredField(pathway, gateEval.state);
+    // Deterministic summary path for "what did you capture so far?" requests.
+    if (_isSummaryRequest(message)) {
+      let state = SessionStateStore.getCanonicalState({ sessionId }) || null;
+      if (!state && db.getTriageSession) state = db.getTriageSession(sessionId) || null;
+      const summary = _composeCapturedSummaryFromState(state);
+      if (summary) {
+        this._appendToHistory(sessionId, 'assistant', summary);
+        return {
+          reply: summary,
+          endCall: false,
+          toolsUsed: [],
+          language: preferredLanguage || 'en'
+        };
+      }
+    }
+
+    if (loopBreakerTriggered) {
       const gateQuestion = await AskNextQuestionService.generateQuestion({
-        missingField: nextField,
+        missingField: nextMissingField,
         pathway,
         preferredLanguage
       });
-      this._appendToHistory(sessionId, 'assistant', gateQuestion);
+      const escalated = `I want to make sure we get this exactly right. ${gateQuestion}`;
+      this._appendToHistory(sessionId, 'assistant', escalated);
       return {
-        reply: gateQuestion,
+        reply: escalated,
         endCall: false,
         toolsUsed: [],
         language: preferredLanguage || 'en',
-        gate_status: gateEval
+        gate_status: gateEval,
+        loop_breaker_triggered: true
       };
     }
 
@@ -2636,6 +3449,9 @@ Antworten Sie durchgehend auf Deutsch.`,
         new Promise((_, reject) => setTimeout(() => reject(new Error('LLM_TURN_TIMEOUT')), turnTimeoutMs))
       ]);
       reply = loopResult.reply;
+      if (_isNegatedEmergencyStatement(message) && /possible acute myocardial infarction|do not schedule|direct to 911\/er/i.test(String(reply || ''))) {
+        reply = 'Thanks for clarifying that you do not have chest pain or shortness of breath. Let us continue with your skin symptoms.';
+      }
       toolsUsed = loopResult.toolsUsed || [];
       // Unified output guardrails pass (policy + safety suppression).
       reply = ClinicalRecommendationPolicy.applyOutputGuardrails(reply, {
@@ -2643,6 +3459,15 @@ Antworten Sie durchgehend auf Deutsch.`,
         routineSkincare: orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE
           || orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP
       });
+      try {
+        const sec = JSON.parse(String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_secondary_signals_json') || '{}'));
+        const highPigmentRisk = String(sec?.pigment_risk || '').toLowerCase() === 'high';
+        const mentionsStrongActives = /\b(retinoid|retinol|tretinoin|glycolic|salicylic|aha|bha|peel)\b/i.test(String(reply || ''));
+        if (highPigmentRisk && mentionsStrongActives) {
+          reply = `${reply}\n\nSafety note: because pigment sensitivity risk may be higher, start conservatively and confirm with a clinician before stronger active use.`;
+          Metrics.increment('step6.pigment_safety_guardrail_applied.count', 1);
+        }
+      } catch (_) {}
       // Safety-aware intent routing from deterministic care-path catalog.
       if (context?.care_path?.route === 'doctor_needed' && safety?.status !== 'green') {
         nextStep = 'doctor_needed';

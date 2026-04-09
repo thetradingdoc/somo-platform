@@ -1,0 +1,67 @@
+{
+  "version": "1.1.0",
+  "resolver_version": "baumann-v1.1.0",
+  "confidence_thresholds": { "high": 0.75, "medium": 0.5 },
+  "dimensions": {
+    "sebum": {
+      "labels": ["O", "D"],
+      "signals": {
+        "from_skin_type": {
+          "oily": { "O": 1.0, "D": 0.0 },
+          "combination": { "O": 0.8, "D": 0.2 },
+          "dry": { "O": 0.0, "D": 1.0 },
+          "normal": { "O": 0.45, "D": 0.55 },
+          "sensitive": { "O": 0.35, "D": 0.65 }
+        },
+        "from_secondary_signals": {
+          "is_dehydrated": { "O": 0.05, "D": 0.35 },
+          "oily_finish": { "O": 0.25, "D": 0.0 }
+        }
+      }
+    },
+    "sensitivity": {
+      "labels": ["S", "R"],
+      "signals": {
+        "from_skin_type": {
+          "sensitive": { "S": 1.0, "R": 0.0 },
+          "dry": { "S": 0.6, "R": 0.4 },
+          "oily": { "S": 0.3, "R": 0.7 },
+          "combination": { "S": 0.45, "R": 0.55 },
+          "normal": { "S": 0.4, "R": 0.6 }
+        },
+        "from_secondary_signals": {
+          "is_inflamed": { "S": 0.45, "R": 0.0 },
+          "active_flare": { "S": 0.35, "R": 0.0 }
+        }
+      }
+    },
+    "pigmentation": {
+      "labels": ["P", "N"],
+      "signals": {
+        "from_secondary_signals": {
+          "pigment_risk:high": { "P": 0.95, "N": 0.05 },
+          "pigment_risk:medium": { "P": 0.65, "N": 0.35 },
+          "pigment_risk:low": { "P": 0.25, "N": 0.75 },
+          "phototype_hint:iv": { "P": 0.2, "N": 0.0 },
+          "phototype_hint:v": { "P": 0.25, "N": 0.0 },
+          "phototype_hint:vi": { "P": 0.3, "N": 0.0 }
+        }
+      }
+    },
+    "aging": {
+      "labels": ["W", "T"],
+      "signals": {
+        "from_secondary_signals": {
+          "is_dehydrated": { "W": 0.35, "T": 0.0 },
+          "barrier_compromised": { "W": 0.25, "T": 0.0 }
+        }
+      }
+    }
+  },
+  "profiles": [
+    "OSPW", "OSPT", "OSNW", "OSNT",
+    "ORPW", "ORPT", "ORNW", "ORNT",
+    "DSPW", "DSPT", "DSNW", "DSNT",
+    "DRPW", "DRPT", "DRNW", "DRNT"
+  ]
+}

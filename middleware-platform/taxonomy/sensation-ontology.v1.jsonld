@@ -1,0 +1,14 @@
+{
+  "@context": {
+    "signal": "https://doclittle.ai/ontology/signal",
+    "aliases": "https://doclittle.ai/ontology/aliases",
+    "category": "https://doclittle.ai/ontology/category"
+  },
+  "version": "1.0.0",
+  "signals": [
+    { "signal": "signal_inflammation", "category": "sensation", "aliases": ["angry red patches", "burning", "stinging", "hot skin"] },
+    { "signal": "signal_surface_dehydration", "category": "sensation", "aliases": ["tight after washing", "feels tight", "dehydrated feel"] },
+    { "signal": "signal_oily_finish", "category": "sensation", "aliases": ["glazed donut finish", "super shiny", "greasy by noon", "shiny by noon"] },
+    { "signal": "signal_itch", "category": "sensation", "aliases": ["itchy", "itch", "prickly"] }
+  ]
+}

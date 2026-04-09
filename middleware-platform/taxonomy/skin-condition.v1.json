@@ -1,0 +1,46 @@
+{
+  "taxonomy_module": "skin_condition",
+  "version": "1.0.0",
+  "conditions": [
+    {
+      "id": "dehydrated",
+      "aliases": ["dehydrated", "tight", "tight after washing", "dry but oily", "oily but tight"],
+      "signals": [
+        { "pattern": "tight after washing", "weight": 0.8 },
+        { "pattern": "oily but tight", "weight": 0.9 },
+        { "pattern": "dehydrated", "weight": 0.95 }
+      ],
+      "safe_next_action": "Ask hydration-focused clarifier and avoid strong actives escalation."
+    },
+    {
+      "id": "inflamed",
+      "aliases": ["inflamed", "red and irritated", "burning", "stinging", "angry skin"],
+      "signals": [
+        { "pattern": "burning", "weight": 0.7 },
+        { "pattern": "stinging", "weight": 0.7 },
+        { "pattern": "red and irritated", "weight": 0.8 }
+      ],
+      "safe_next_action": "Prioritize calming/irritation questions; avoid aggressive treatment language."
+    },
+    {
+      "id": "barrier_compromised",
+      "aliases": ["broken barrier", "barrier damaged", "peeling and burning", "raw skin"],
+      "signals": [
+        { "pattern": "broken barrier", "weight": 0.95 },
+        { "pattern": "barrier damaged", "weight": 0.95 },
+        { "pattern": "peeling and burning", "weight": 0.85 }
+      ],
+      "safe_next_action": "Recommend pausing irritants and gather safety context."
+    },
+    {
+      "id": "active_flare",
+      "aliases": ["flare", "flaring", "breakout flare", "sudden flare-up"],
+      "signals": [
+        { "pattern": "flare-up", "weight": 0.8 },
+        { "pattern": "flaring", "weight": 0.75 },
+        { "pattern": "sudden flare", "weight": 0.8 }
+      ],
+      "safe_next_action": "Collect onset/severity/timing before recommendations."
+    }
+  ]
+}

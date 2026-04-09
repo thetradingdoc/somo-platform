@@ -1,0 +1,27 @@
+{
+  "taxonomy_module": "pigment_safety",
+  "version": "1.0.0",
+  "pigment_risk_levels": ["low", "medium", "high"],
+  "phototype_hint_policy": {
+    "authority": "low",
+    "can_override_confirmed_text_state": false
+  },
+  "risk_signals": [
+    {
+      "id": "post_inflammatory_hyperpigmentation_history",
+      "patterns": ["dark marks after acne", "hyperpigmentation", "piH", "dark spots linger"],
+      "risk": "high"
+    },
+    {
+      "id": "mild_pigment_concern",
+      "patterns": ["uneven tone", "tone concern", "slight dark spots"],
+      "risk": "medium"
+    }
+  ],
+  "active_ingredient_guardrails": [
+    {
+      "trigger": "pigment_risk=high",
+      "rule": "Use conservative wording for acids/retinoids and require patch-test/safety caveat."
+    }
+  ]
+}

@@ -56,6 +56,18 @@ const URGENT_PATTERNS = [
 const EMERGENT_RESPONSE = 'This sounds like a medical emergency. Please call 911 or go to the nearest emergency room immediately. Do not delay.';
 const URGENT_RESPONSE = 'These symptoms may require same-day or urgent care. Please consider visiting an urgent care center or emergency room.';
 
+function _isNegatedMention(text, matchedPhrase) {
+  const t = String(text || '').toLowerCase();
+  const p = String(matchedPhrase || '').toLowerCase().trim();
+  if (!t || !p) return false;
+  const idx = t.indexOf(p);
+  if (idx < 0) return false;
+  const before = t.slice(Math.max(0, idx - 36), idx);
+  return /\b(no|denies|without|not|never)\s+$/.test(before) ||
+    /\b(no|denies|without|not|never)\s+(any\s+)?[\w\s]{0,24}$/.test(before) ||
+    /\b(can't|cannot|dont|don't|do not)\s+have\s+[\w\s]{0,20}$/.test(before);
+}
+
 function matchesRule(text, rule) {
   const t = text.toLowerCase();
   const patterns = rule.patterns || rule.symptoms || [];
@@ -68,12 +80,14 @@ function matchesRule(text, rule) {
     const pat = typeof p === 'string' ? p : String(p);
     if (pat.includes('[') || pat.includes('(')) {
       try {
-        if (new RegExp(pat, 'i').test(text)) matchCount++;
+        const re = new RegExp(pat, 'i');
+        const m = text.match(re);
+        if (m && !_isNegatedMention(text, m[0])) matchCount++;
       } catch (e) {
-        if (t.includes(pat.toLowerCase())) matchCount++;
+        if (t.includes(pat.toLowerCase()) && !_isNegatedMention(text, pat)) matchCount++;
         else console.warn('[triage] regex match failed:', e.message);
       }
-    } else if (t.includes(pat.toLowerCase())) {
+    } else if (t.includes(pat.toLowerCase()) && !_isNegatedMention(text, pat)) {
       matchCount++;
     }
   }
@@ -140,7 +154,8 @@ function detectRedFlags(text) {
   for (const re of EMERGENT_PATTERNS) {
     if (re.test(t)) {
       const m = t.match(re);
-      redFlags.push((m && m[0]) || 'emergency indicator');
+      const phrase = (m && m[0]) || 'emergency indicator';
+      if (!_isNegatedMention(t, phrase)) redFlags.push(phrase);
     }
   }
   if (redFlags.length > 0) {
@@ -155,7 +170,8 @@ function detectRedFlags(text) {
   for (const re of URGENT_PATTERNS) {
     if (re.test(t)) {
       const m = t.match(re);
-      redFlags.push((m && m[0]) || 'urgent indicator');
+      const phrase = (m && m[0]) || 'urgent indicator';
+      if (!_isNegatedMention(t, phrase)) redFlags.push(phrase);
     }
   }
   if (redFlags.length > 0) {

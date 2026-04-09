@@ -14784,6 +14784,20 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   };
   const hasUploadSignal = (text) => /\b(upload|image|photo|file|attachment|document|pdf|jpg|png)\b/i.test(String(text || ''));
   const summarizeReplyForReport = (text) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  const wantsSkinReport = (text) =>
+    /\b(report|summary|skin profile|send (me )?(a )?report|email (me )?(the )?(report|summary)|care summary)\b/i.test(
+      String(text || '')
+    );
+  const buildReportEmailPrompt = (lang) => {
+    const code = String(lang || 'en').trim().toLowerCase().split('-')[0];
+    const byLang = {
+      en: 'If you want the report, please share your email (or type it in chat) so I can send it.',
+      fr: 'Si vous voulez le rapport, partagez votre e-mail (ou tapez-le dans le chat) pour que je puisse vous l envoyer.',
+      sw: 'Ikiwa unataka ripoti, tafadhali toa barua pepe yako (au iandike kwenye chat) ili niweze kuituma.',
+      ru: 'Если вы хотите отчет, укажите ваш e-mail (или напишите его в чате), и я отправлю его.'
+    };
+    return byLang[code] || byLang.en;
+  };
   const tokenize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
   const jaccard = (a, b) => {
     const sa = new Set(tokenize(a));
@@ -14997,9 +15011,15 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   if (hasUploadSignal(trimmedMessage)) {
     shortThread.push({ type: 'upload_context', at: nowIso, text: trimmedMessage.slice(0, 240) });
   }
+  const reportIntent = wantsSkinReport(trimmedMessage);
+  if (reportIntent) {
+    KellyToolExecutor._setSessionMeta(session_id, 'report_requested', '1');
+    shortThread.push({ type: 'report_requested', at: nowIso, text: trimmedMessage.slice(0, 180) });
+  }
+  const reportRequested = String(KellyToolExecutor._getSessionMeta(session_id, 'report_requested') || '') === '1' || reportIntent;
   const isGuidanceComplete = result?.skincare_assessment_complete === true || result?.report_ready === true;
   let reportPayload = null;
-  if (isGuidanceComplete) {
+  if (isGuidanceComplete && reportRequested) {
     const reportId = `skin-report-${session_id}`;
     const reportEmail = KellyToolExecutor._getSessionMeta(session_id, 'skincare_contact_email') || extractedEmail || null;
     reportPayload = {
@@ -15014,7 +15034,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     KellyToolExecutor._setSessionMeta(session_id, 'skincare_report_generated_at', nowIso);
     shortThread.push({ type: 'report_generated', at: nowIso, report_id: reportId });
     if (!reportEmail) {
-      result.reply = `${String(result.reply || '').trim()} To send your care summary, what email should I use?`.trim();
+      const prompt = buildReportEmailPrompt(effectivePreferredLanguage || result.language || preferredLanguageFromBody || 'en');
+      result.reply = `${String(result.reply || '').trim()} ${prompt}`.trim();
       result.next_step = result.next_step || 'collect_email_for_report';
     }
   }
@@ -16588,6 +16609,7 @@ app.post('/api/public/landing-assistant/turn', apiLimiter, validatePatientTriage
 
 app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(), async (req, res) => {
   try {
+    const ttsStartMs = Date.now();
     const text = String(req.body?.text || '').trim();
     const lang = String(req.body?.lang || 'en-US').trim();
     if (!text) {
@@ -16596,8 +16618,6 @@ app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(),
     if (!process.env.OPENAI_API_KEY) {
       return res.status(503).json({ success: false, error: 'OPENAI_API_KEY not configured', request_id: req.id });
     }
-    const OpenAI = require('openai');
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const langCode = String(lang || 'en')
       .toLowerCase()
       .split(/[-_]/)[0]
@@ -16610,15 +16630,155 @@ app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(),
     };
     const voice = voiceByLang[langCode] || process.env.WEB_VOICE_TTS_VOICE || 'alloy';
     const model = process.env.WEB_VOICE_TTS_MODEL || 'gpt-4o-mini-tts';
-    const tts = await openai.audio.speech.create({
-      model,
-      voice,
-      input: text.slice(0, 1500)
-    });
-    const buf = Buffer.from(await tts.arrayBuffer());
+    const input = text.slice(0, 1500);
+    const useBufferedTts =
+      String(process.env.WEB_VOICE_TTS_BUFFERED || '').toLowerCase() === '1' ||
+      String(process.env.WEB_VOICE_TTS_BUFFERED || '').toLowerCase() === 'true';
+
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).send(buf);
+    res.setHeader('X-TTS-Voice', voice);
+    res.setHeader('X-TTS-Model', model);
+    res.setHeader('X-TTS-Lang', langCode || 'en');
+    res.setHeader('Access-Control-Expose-Headers', 'X-TTS-Voice, X-TTS-Model, X-TTS-Lang');
+
+    if (useBufferedTts) {
+      const OpenAI = require('openai');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const tts = await openai.audio.speech.create({
+        model,
+        voice,
+        input
+      });
+      const upstreamReadyMs = Date.now();
+      const buf = Buffer.from(await tts.arrayBuffer());
+      const doneMs = Date.now();
+      Metrics.increment('voice.metrics.timeline.server_tts.buffered_upstream_ready_ms.total', Math.max(0, upstreamReadyMs - ttsStartMs));
+      Metrics.increment('voice.metrics.timeline.server_tts.buffered_upstream_ready_ms.count', 1);
+      Metrics.increment('voice.metrics.timeline.server_tts.buffered_total_ms.total', Math.max(0, doneMs - ttsStartMs));
+      Metrics.increment('voice.metrics.timeline.server_tts.buffered_total_ms.count', 1);
+      return res.status(200).send(buf);
+    }
+
+    const { Readable } = require('stream');
+    const upstream = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        voice,
+        input,
+        response_format: 'mp3'
+      })
+    });
+
+    if (!upstream.ok) {
+      const errBody = await upstream.text().catch(() => '');
+      return res.status(502).json({
+        success: false,
+        error: errBody.slice(0, 300) || `OpenAI TTS upstream ${upstream.status}`,
+        request_id: req.id
+      });
+    }
+    const upstreamHeadersMs = Date.now();
+    Metrics.increment('voice.metrics.timeline.server_tts.upstream_headers_ms.total', Math.max(0, upstreamHeadersMs - ttsStartMs));
+    Metrics.increment('voice.metrics.timeline.server_tts.upstream_headers_ms.count', 1);
+
+    if (!upstream.body) {
+      return res.status(502).json({ success: false, error: 'OpenAI TTS returned empty body', request_id: req.id });
+    }
+
+    if (typeof Readable.fromWeb !== 'function') {
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      return res.status(200).send(buf);
+    }
+
+    const nodeStream = Readable.fromWeb(upstream.body);
+    let firstChunkAt = 0;
+    const onClientClose = () => {
+      try {
+        nodeStream.destroy();
+      } catch (_) {}
+    };
+    req.once('close', onClientClose);
+    req.once('aborted', onClientClose);
+    nodeStream.on('error', (err) => {
+      try {
+        req.off('close', onClientClose);
+        req.off('aborted', onClientClose);
+      } catch (_) {}
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: err.message, request_id: req.id });
+      } else {
+        try {
+          res.end();
+        } catch (_) {}
+      }
+    });
+    nodeStream.on('data', (chunk) => {
+      if (firstChunkAt || !chunk || !chunk.length) return;
+      firstChunkAt = Date.now();
+      Metrics.increment('voice.metrics.timeline.server_tts.first_chunk_ms.total', Math.max(0, firstChunkAt - ttsStartMs));
+      Metrics.increment('voice.metrics.timeline.server_tts.first_chunk_ms.count', 1);
+    });
+    nodeStream.on('end', () => {
+      const doneAt = Date.now();
+      try {
+        req.off('close', onClientClose);
+        req.off('aborted', onClientClose);
+      } catch (_) {}
+      Metrics.increment('voice.metrics.timeline.server_tts.total_ms.total', Math.max(0, doneAt - ttsStartMs));
+      Metrics.increment('voice.metrics.timeline.server_tts.total_ms.count', 1);
+    });
+    return nodeStream.pipe(res);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+  }
+});
+
+app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
+  try {
+    const { fetchBeautyFactsByBarcode } = require('./services/open-beauty-facts-service');
+    const barcode = String(req.params?.barcode || '').trim();
+    const out = await fetchBeautyFactsByBarcode(barcode);
+    if (!out.success) {
+      const status = out.error === 'invalid_barcode' ? 400 : 502;
+      return res.status(status).json({ success: false, error: out.error, barcode, request_id: req.id });
+    }
+    let persisted = null;
+    if (String(process.env.PRODUCT_TAXONOMY_PERSIST_PUBLIC_LOOKUP || '').trim() === '1') {
+      try {
+        const repo = require('./services/product-taxonomy-repository');
+        const full = String(process.env.PRODUCT_TAXONOMY_FULL_ENRICH || '').trim() === '1';
+        const saved = full
+          ? await repo.upsertProductTaxonomyFullPipeline(out.normalized)
+          : repo.upsertFromBeautyFacts(out.normalized);
+        if (saved?.ok) {
+          repo.logBarcodeLookup({
+            barcode: out.normalized?.barcode || barcode,
+            source: 'open_beauty_facts',
+            hit: true,
+            productId: saved.product_id,
+            gradeClass: saved?.grade?.grade_class,
+            confidence: saved?.grade?.confidence,
+            details: { product_name: out.normalized?.product_name, public_api: true, full_enrich: full }
+          });
+          persisted = { product_id: saved.product_id, grade: saved.grade };
+        }
+      } catch (persistErr) {
+        console.warn('[beautyfacts] taxonomy persist skipped:', persistErr?.message || persistErr);
+      }
+    }
+    return res.json({
+      success: true,
+      barcode: out.normalized?.barcode || barcode,
+      product: out.normalized,
+      ...(persisted ? { taxonomy: persisted } : {}),
+      request_id: req.id
+    });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
@@ -16670,9 +16830,74 @@ app.post('/api/public/landing-assistant/voice-metrics/inc', apiLimiter, express.
     const sessionId = String(req.body?.session_id || '').trim();
     const metricName = String(req.body?.metric_name || '').trim();
     const value = Math.max(1, Number(req.body?.value || 1));
-    const allowed = new Set(['voice.interruption', 'voice.stt_fatal']);
+    const allowed = new Set(['voice.interruption', 'voice.stt_fatal', 'voice.timeline']);
     if (!sessionId || !metricName || !allowed.has(metricName)) {
       return res.status(400).json({ success: false, error: 'Invalid session_id or metric_name', request_id: req.id });
+    }
+    if (metricName === 'voice.timeline') {
+      const points = req.body?.points && typeof req.body.points === 'object' ? req.body.points : {};
+      const turnSeq = Math.max(0, Number(req.body?.turn_seq || 0));
+      const lang = String(req.body?.lang || '').trim().toLowerCase();
+      const detectedLanguage = String(req.body?.detected_language || '').trim().toLowerCase();
+      const preferredLanguage = String(req.body?.preferred_language || '').trim().toLowerCase();
+      const ttsVoice = String(req.body?.tts_voice || '').trim().toLowerCase();
+      const ttsModel = String(req.body?.tts_model || '').trim().toLowerCase();
+      const ttsLang = String(req.body?.tts_lang || '').trim().toLowerCase();
+      const keys = [
+        'stt_final_at',
+        'turn_request_sent_at',
+        'turn_reply_received_at',
+        'tts_request_sent_at',
+        'tts_first_byte_at',
+        'tts_download_done_at',
+        'audio_play_start_at'
+      ];
+      const safeMs = (n) => {
+        const v = Number(n || 0);
+        return Number.isFinite(v) && v > 0 ? v : 0;
+      };
+      const at = Object.create(null);
+      for (const k of keys) at[k] = safeMs(points[k]);
+      const durations = {
+        stt_to_turn_request_ms: at.stt_final_at && at.turn_request_sent_at ? Math.max(0, at.turn_request_sent_at - at.stt_final_at) : 0,
+        turn_latency_ms: at.turn_request_sent_at && at.turn_reply_received_at ? Math.max(0, at.turn_reply_received_at - at.turn_request_sent_at) : 0,
+        tts_upstream_first_byte_ms: at.tts_request_sent_at && at.tts_first_byte_at ? Math.max(0, at.tts_first_byte_at - at.tts_request_sent_at) : 0,
+        tts_download_ms: at.tts_request_sent_at && at.tts_download_done_at ? Math.max(0, at.tts_download_done_at - at.tts_request_sent_at) : 0,
+        tts_play_start_after_request_ms: at.tts_request_sent_at && at.audio_play_start_at ? Math.max(0, at.audio_play_start_at - at.tts_request_sent_at) : 0,
+        turn_to_audio_start_ms: at.turn_request_sent_at && at.audio_play_start_at ? Math.max(0, at.audio_play_start_at - at.turn_request_sent_at) : 0
+      };
+      Metrics.increment('voice.metrics.timeline.turns', 1);
+      Metrics.increment(`voice.metrics.session.${sessionId}.timeline.turns`, 1);
+      if (turnSeq > 0) {
+        Metrics.increment(`voice.metrics.session.${sessionId}.timeline.turn.${turnSeq}.seen`, 1);
+      }
+      if (lang) {
+        Metrics.increment(`voice.metrics.timeline.lang.${lang}.turns`, 1);
+        Metrics.increment(`voice.metrics.session.${sessionId}.timeline.lang.${lang}.turns`, 1);
+      }
+      if (detectedLanguage) {
+        Metrics.increment(`voice.metrics.timeline.detected_lang.${detectedLanguage}.turns`, 1);
+      }
+      if (preferredLanguage) {
+        Metrics.increment(`voice.metrics.timeline.preferred_lang.${preferredLanguage}.turns`, 1);
+      }
+      if (ttsVoice) {
+        Metrics.increment(`voice.metrics.timeline.voice.${ttsVoice}.turns`, 1);
+      }
+      if (ttsModel) {
+        Metrics.increment(`voice.metrics.timeline.model.${ttsModel}.turns`, 1);
+      }
+      if (ttsLang) {
+        Metrics.increment(`voice.metrics.timeline.tts_lang.${ttsLang}.turns`, 1);
+      }
+      for (const [name, ms] of Object.entries(durations)) {
+        if (!ms) continue;
+        Metrics.increment(`voice.metrics.timeline.${name}.total`, ms);
+        Metrics.increment(`voice.metrics.timeline.${name}.count`, 1);
+        Metrics.increment(`voice.metrics.session.${sessionId}.timeline.${name}.total`, ms);
+        Metrics.increment(`voice.metrics.session.${sessionId}.timeline.${name}.count`, 1);
+      }
+      return res.json({ success: true, request_id: req.id, timeline_recorded: true });
     }
     Metrics.increment(`voice.metrics.${metricName}.count`, value);
     Metrics.increment(`voice.metrics.session.${sessionId}.${metricName}.count`, value);

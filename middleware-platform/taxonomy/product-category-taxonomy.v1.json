@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "categories": ["CLEANSER", "EXFOLIANT", "SERUM", "MOISTURIZER", "SPF", "TREATMENT"],
+  "mapping_rules": [
+    { "pattern": "cleanser|face wash|wash", "category": "CLEANSER" },
+    { "pattern": "scrub|aha|bha|peel|exfol", "category": "EXFOLIANT" },
+    { "pattern": "serum", "category": "SERUM" },
+    { "pattern": "moisturizer|cream|lotion", "category": "MOISTURIZER" },
+    { "pattern": "spf|sunscreen|sunblock", "category": "SPF" },
+    { "pattern": "retinol|tretinoin|adapalene|treatment", "category": "TREATMENT" }
+  ]
+}
