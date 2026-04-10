@@ -32,7 +32,10 @@ export default function AssistantChatPage({
   spherePaused,
   liveKit,
   localVideoRef,
-  remoteVideoContainerRef
+  remoteVideoContainerRef,
+  scanResult,
+  pendingScanDecision,
+  onResolvePendingScanDecision
 }) {
   const listRef = useRef(null);
 
@@ -81,6 +84,18 @@ export default function AssistantChatPage({
         </div>
 
         <div className="axc-thread-col">
+          {scanResult ? (
+            <div className="axc-chip" style={{ margin: '8px 0' }}>
+              Pinned product: {scanResult?.product?.product_name || scanResult?.barcode} • {scanResult?.dataSource || 'unknown'}
+            </div>
+          ) : null}
+          {pendingScanDecision ? (
+            <div className="axc-attachments" style={{ marginBottom: 8 }}>
+              <button type="button" className="axc-tool-btn" onClick={() => onResolvePendingScanDecision?.('compare')}>Compare A vs B</button>
+              <button type="button" className="axc-tool-btn" onClick={() => onResolvePendingScanDecision?.('refine')}>Refine</button>
+              <button type="button" className="axc-tool-btn" onClick={() => onResolvePendingScanDecision?.('reset')}>Reset</button>
+            </div>
+          ) : null}
           <div className="axc-messages" ref={listRef} role="log" aria-relevant="additions" aria-label="Chat messages">
             {messages.map((m) => (
               <div key={m.id} className={`axc-bubble axc-bubble--${m.role}`}>

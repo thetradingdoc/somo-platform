@@ -100,6 +100,32 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     return stream.getVideoTracks().some((t) => t && t.readyState === 'live' && t.enabled !== false);
   }, [localVideoRef]);
 
+  const recoverPreviewCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return false;
+    try {
+      const next = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true
+      });
+      const prev = previewStreamRef.current;
+      if (prev) {
+        try { prev.getTracks().forEach((t) => t.stop()); } catch (_) {}
+      }
+      previewStreamRef.current = next;
+      const el = localVideoRef?.current;
+      if (el) {
+        el.srcObject = next;
+        el.muted = true;
+        if (typeof el.play === 'function') {
+          el.play().catch(() => {});
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }, [localVideoRef]);
+
   const ensureLocalCameraAttached = useCallback(
     async (room, reason = 'sync') => {
       if (!room) return;
@@ -350,6 +376,15 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
               void ensureLocalCameraAttached(room, 'manual-toggle-retry');
             }, 280);
           }
+          // Some mobile browsers report camera "on" but render black frames.
+          // If we still cannot render shortly after retries, force a fresh preview stream.
+          window.setTimeout(() => {
+            if (!hasRenderableLocalVideo()) {
+              void recoverPreviewCamera().then((ok) => {
+                if (ok) setPermissionHint('Camera recovered from black frame. Continuing with refreshed preview.');
+              });
+            }
+          }, 900);
           setCameraEnabled(true);
         } else {
           setCameraEnabled(false);
@@ -366,7 +401,7 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       }
       return;
     }
-    const s = previewStreamRef.current;
+    let s = previewStreamRef.current;
     if (s) {
       s.getVideoTracks().forEach((t) => {
         t.enabled = on;
@@ -375,11 +410,25 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       if (on && el && typeof el.play === 'function') {
         el.play().catch(() => {});
       }
+      if (on && !hasRenderableLocalVideo()) {
+        const recovered = await recoverPreviewCamera();
+        if (recovered) {
+          s = previewStreamRef.current;
+          if (s) s.getVideoTracks().forEach((t) => { t.enabled = true; });
+        }
+      }
       setCameraEnabled(on);
     } else {
+      if (on) {
+        const recovered = await recoverPreviewCamera();
+        if (recovered) {
+          setCameraEnabled(true);
+          return;
+        }
+      }
       setPermissionHint('No camera preview stream available yet. Tap Video On again in a moment.');
     }
-  }, [attachLocalVideo, ensureLocalCameraAttached, hasRenderableLocalVideo, localVideoRef]);
+  }, [attachLocalVideo, ensureLocalCameraAttached, hasRenderableLocalVideo, localVideoRef, recoverPreviewCamera]);
 
   const beginTryNow = useCallback(async () => {
     desiredCameraOnRef.current = false;

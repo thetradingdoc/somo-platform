@@ -9,6 +9,7 @@ import './assistant-livekit.css';
 export default function AssistantVoicePage({
   onClose,
   onOpenChat,
+  onRequestScanAnalysis,
   onOpenUpload,
   apiBase,
   voiceActive,
@@ -22,6 +23,18 @@ export default function AssistantVoicePage({
   remoteVideoContainerRef,
   productTrackingActive,
   scanUi,
+  scanResult,
+  manualBarcodeInput,
+  setManualBarcodeInput,
+  onManualBarcodeSubmit,
+  manualIngredientsInput,
+  setManualIngredientsInput,
+  onManualIngredientsSubmit,
+  onUploadIngredientPhoto,
+  ocrBusy,
+  ocrError,
+  pendingScanDecision,
+  onResolvePendingScanDecision,
   onToggleScan
 }) {
   const inSession = liveKit?.inSession;
@@ -38,7 +51,17 @@ export default function AssistantVoicePage({
             ? 'Scan detected, lookup failed. Try better lighting and hold still.'
             : scanUi?.status === 'scanning'
               ? 'Tracking label in real-time...'
-              : 'Tracker active — point barcode toward camera.';
+                : 'Scan Barcode — point product barcode toward camera.';
+  const quality = scanResult?.quality || null;
+  const analyzeLabel = quality?.analyzeLabel || 'Analyze for my skin';
+  const canAnalyze = !!quality?.analyzeEnabled;
+  const handleAnalyzeClick = () => {
+    if (typeof onRequestScanAnalysis === 'function') {
+      void onRequestScanAnalysis();
+    } else {
+      onOpenChat();
+    }
+  };
 
   return (
     <div className={`axv-root ${inSessionStage ? 'axv-root--session' : ''}`}>
@@ -76,7 +99,7 @@ export default function AssistantVoicePage({
         />
         {inSessionStage ? (
           <>
-            <div ref={remoteVideoContainerRef} className="axv-scan-remotes" aria-label="Other participants" />
+            <div ref={remoteVideoContainerRef} className="axv-scan-remotes" role="region" aria-label="Other participants" />
             {productTrackingActive ? (
               <>
                 <div className="axv-scan-reticle" aria-hidden>
@@ -86,11 +109,75 @@ export default function AssistantVoicePage({
                   <span className="axv-reticle-corner br" />
                 </div>
                 <div className="axv-scan-status">{scanStatusText}</div>
+                <div className="axv-scan-manual">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="axv-scan-input"
+                    placeholder="Enter barcode (8–14 digits)"
+                    value={manualBarcodeInput}
+                    onChange={(e) => setManualBarcodeInput(e.target.value)}
+                  />
+                  <button type="button" className="axv-scan-submit" onClick={onManualBarcodeSubmit}>
+                    Lookup
+                  </button>
+                </div>
+                {(scanUi?.status === 'not_found' || scanUi?.reason === 'not_found') ? (
+                  <div className="axv-scan-recovery">
+                    <p className="axv-scan-recovery-title">Product not found. Add ingredients to continue analysis:</p>
+                    <textarea
+                      className="axv-scan-textarea"
+                      rows={3}
+                      placeholder="Paste ingredient list here..."
+                      value={manualIngredientsInput}
+                      onChange={(e) => setManualIngredientsInput(e.target.value)}
+                    />
+                    <button type="button" className="axv-scan-submit" onClick={onManualIngredientsSubmit}>
+                      Analyze ingredients
+                    </button>
+                    <button type="button" className="axv-scan-submit" onClick={onUploadIngredientPhoto} disabled={ocrBusy}>
+                      {ocrBusy ? 'Reading image…' : 'Upload ingredient photo (OCR)'}
+                    </button>
+                    {ocrError ? <p className="axv-scan-recovery-title">{ocrError}</p> : null}
+                  </div>
+                ) : null}
+                {scanUi?.reason === 'invalid_barcode' ? (
+                  <p className="axv-scan-recovery-title">Invalid barcode. Use digits only (8–14).</p>
+                ) : null}
               </>
             ) : null}
           </>
         ) : null}
       </div>
+      {scanResult ? (
+        <div className="axv-analysis-cta">
+          <span className={`axv-quality axv-quality--${quality?.tier || 'insufficient'}`}>
+            {quality?.summary || 'Scan profile'}
+          </span>
+          <span className="axv-provenance">Source: {scanResult?.dataSource || 'unknown'}</span>
+          <button type="button" className={`axv-liquid-btn ${canAnalyze ? 'axv-liquid-btn--active' : ''}`} disabled={!canAnalyze} onClick={handleAnalyzeClick}>
+            {analyzeLabel}
+          </button>
+        </div>
+      ) : null}
+      {scanResult ? (
+        <div className="axv-analysis-cta axv-analysis-cta--meta">
+          <span className="axv-provenance">Category: {scanResult?.categoryRoute || 'unknown'}</span>
+          <span className="axv-provenance">Ingredients: {scanResult?.ingredientFlags?.hasIngredients ? 'available' : 'missing'}</span>
+          {scanResult?.sparseData ? <span className="axv-provenance">Sparse data</span> : null}
+        </div>
+      ) : null}
+      {pendingScanDecision ? (
+        <div className="axv-scan-recovery">
+          <p className="axv-scan-recovery-title">Second product detected. Compare with previous, refine current context, or reset?</p>
+          <div className="axv-scan-manual">
+            <button type="button" className="axv-scan-submit" onClick={() => onResolvePendingScanDecision?.('compare')}>Compare A vs B</button>
+            <button type="button" className="axv-scan-submit" onClick={() => onResolvePendingScanDecision?.('refine')}>Refine</button>
+            <button type="button" className="axv-scan-submit" onClick={() => onResolvePendingScanDecision?.('reset')}>Reset</button>
+          </div>
+        </div>
+      ) : null}
 
       <div className={`axv-body ${inSessionStage ? 'axv-body--session-bar' : ''}`}>
         {!inSessionStage ? (

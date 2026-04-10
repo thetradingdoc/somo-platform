@@ -11521,6 +11521,8 @@ app.get('/api/admin/metrics', async (req, res) => {
   try {
     const days = parseInt(req.query.days, 10) || 7;
     const inMemory = Metrics.getAll();
+    const obfFallbackWarnThreshold = Number(process.env.OBF_FALLBACK_RATE_WARN || 0.4);
+    const obfFallbackCritThreshold = Number(process.env.OBF_FALLBACK_RATE_CRIT || 0.7);
     let llmAggregates = null;
     let cacheStats = null;
     try {
@@ -11699,9 +11701,30 @@ app.get('/api/admin/metrics', async (req, res) => {
         status: alerts.length > 0 ? 'alert' : 'ok'
       };
     } catch (_) {}
+    const obfMiss = Number(inMemory['obf.index_cache.miss.count'] || 0);
+    const obfHit = Number(inMemory['obf.index_cache.hit.count'] || 0);
+    const obfFallback = Number(inMemory['obf.index_cache.fallback_to_live.count'] || 0);
+    const obfFallbackRate = obfMiss > 0 ? Number((obfFallback / obfMiss).toFixed(4)) : 0;
+    const obfStatus = obfFallbackRate >= obfFallbackCritThreshold
+      ? 'critical'
+      : obfFallbackRate >= obfFallbackWarnThreshold
+        ? 'warning'
+        : 'ok';
+
     return res.json({
       success: true,
       metrics: inMemory,
+      obf: {
+        cache_hit: obfHit,
+        cache_miss: obfMiss,
+        fallback_to_live: obfFallback,
+        fallback_rate: obfFallbackRate,
+        thresholds: {
+          warn: obfFallbackWarnThreshold,
+          critical: obfFallbackCritThreshold
+        },
+        status: obfStatus
+      },
       checkout_policy: checkoutPolicy,
       llm: llmAggregates,
       cache: cacheStats,
@@ -15019,7 +15042,9 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const isLandingRoute = req.path === '/api/public/landing-assistant/turn';
   const isLikelyVoiceStyle = isLandingRoute;
   const flowStateOut = (result.state && typeof result.state === 'object') ? { ...result.state } : {};
-  const shortThread = Array.isArray(flowStateOut.short_term_thread) ? [...flowStateOut.short_term_thread] : [];
+  const priorThread = Array.isArray(existingFlowState?.short_term_thread) ? [...existingFlowState.short_term_thread] : [];
+  const kellyThread = Array.isArray(flowStateOut.short_term_thread) ? [...flowStateOut.short_term_thread] : [];
+  const shortThread = [...priorThread, ...kellyThread];
   const nowIso = new Date().toISOString();
   const extractedEmail = extractEmailFromText(trimmedMessage) || extractEmailFromText(email);
   if (extractedEmail) {
@@ -15036,6 +15061,24 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   }
   const reportRequested = String(KellyToolExecutor._getSessionMeta(session_id, 'report_requested') || '') === '1' || reportIntent;
   const isGuidanceComplete = result?.skincare_assessment_complete === true || result?.report_ready === true;
+  const landingThreadHasBarcodeContext = (() => {
+    try {
+      const threads = row?.flow_state?.short_term_thread;
+      if (!Array.isArray(threads)) return false;
+      return threads.some(
+        (e) =>
+          String(e?.type || '') === 'barcode_product_context' ||
+          String(e?.text || '').includes('[Barcode Scan]')
+      );
+    } catch (_) {
+      return false;
+    }
+  })();
+  const scanAnalysisIntent =
+    /\b(analyze|analysis|build|generate)\b.*\b(skin|routine|product|ingredients|profile|snapshot|report)\b/i.test(
+      trimmedMessage
+    ) || /\b(skincare (result|report|snapshot)|routine analysis|product analysis)\b/i.test(trimmedMessage);
+  const forceSnapshotForBarcodeSession = isLandingRoute && landingThreadHasBarcodeContext && scanAnalysisIntent;
   let reportPayload = null;
   if (isGuidanceComplete && reportRequested) {
     const reportId = `skin-report-${session_id}`;
@@ -15058,7 +15101,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     }
   }
   let sessionResultSnapshot = null;
-  const shouldBuildSnapshot = isGuidanceComplete || result?.next_ui_step === 'skincare_report';
+  const shouldBuildSnapshot =
+    isGuidanceComplete || result?.next_ui_step === 'skincare_report' || forceSnapshotForBarcodeSession;
   try {
     if (shouldBuildSnapshot) {
       const SnapshotService = require('./services/session-result-snapshot-service');
@@ -16797,12 +16841,125 @@ app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(),
 
 app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
   try {
+    const buildScanQuality = (p = {}) => {
+      const hasName = !!String(p.product_name || '').trim();
+      const hasIngredients = !!String(p.ingredients_text || '').trim();
+      const hasCategories = Array.isArray(p.categories_tags) && p.categories_tags.length > 0;
+      const hasImage = !!String(p.image_url || '').trim();
+      const missing = [];
+      if (!hasName) missing.push('name');
+      if (!hasIngredients) missing.push('ingredients');
+      if (!hasCategories) missing.push('categories');
+      if (!hasImage) missing.push('image');
+      if (hasName && hasIngredients && hasCategories) {
+        return { tier: 'full', analyze_enabled: true, analyze_label: 'Analyze for my skin', missing };
+      }
+      if (hasName && (hasIngredients || hasCategories)) {
+        return {
+          tier: 'partial',
+          analyze_enabled: hasIngredients,
+          analyze_label: hasIngredients ? 'Analyze with partial profile' : 'Add ingredients to analyze',
+          missing
+        };
+      }
+      return { tier: 'insufficient', analyze_enabled: false, analyze_label: 'Add ingredients to analyze', missing };
+    };
+    const deriveCategoryRoute = (tags = []) => {
+      const arr = Array.isArray(tags) ? tags.map((x) => String(x || '').toLowerCase()) : [];
+      if (arr.some((t) => t.includes('cosmetic'))) return 'cosmetic';
+      if (arr.some((t) => t.includes('hygiene'))) return 'hygiene';
+      if (arr.some((t) => t.includes('non-food') || t.includes('non_food'))) return 'non_food';
+      return 'unknown';
+    };
+    const deriveIngredientFlags = (p = {}) => {
+      const analysis = Array.isArray(p.ingredients_analysis_tags)
+        ? p.ingredients_analysis_tags.map((x) => String(x || '').toLowerCase())
+        : [];
+      const txt = String(p.ingredients_text || '').toLowerCase();
+      return {
+        has_ingredients: !!txt.trim(),
+        has_fragrance: /\bfragrance|parfum|perfume\b/.test(txt),
+        has_palm_oil: analysis.some((t) => t.includes('palm-oil') || t.includes('palm_oil')) || /\bpalm\b/.test(txt)
+      };
+    };
     const { fetchBeautyFactsByBarcode } = require('./services/open-beauty-facts-service');
+    const db = require('./database');
     const barcode = String(req.params?.barcode || '').trim();
-    const out = await fetchBeautyFactsByBarcode(barcode);
+    if (String(req.query?.simulate || '').trim() === 'timeout') {
+      return res.status(502).json({
+        success: false,
+        error: 'upstream_timeout',
+        barcode,
+        recovery: { type: 'retry', message: 'Network is slow right now. Please retry, or add ingredients manually.' },
+        request_id: req.id
+      });
+    }
+    const disableCacheRead = String(req.query?.cache || '').trim() === '0' || String(req.query?.force_live || '').trim() === '1';
+    const cached = db.getObfIndexProductByCode(barcode);
+    let out = null;
+    let dataSource = 'live_api';
+    if (!disableCacheRead && cached && String(process.env.OBF_INDEX_CACHE_READ || '1') !== '0') {
+      out = {
+        success: true,
+        normalized: {
+          source: 'open_beauty_facts',
+          barcode: cached.code,
+          found: true,
+          product_name: cached.product_name || null,
+          brands: String(cached.brands || '')
+            .split(',')
+            .map((x) => x.trim())
+            .filter(Boolean),
+          ingredients_text: cached.ingredients_text || null,
+          ingredients: [],
+          allergens: [],
+          labels: [],
+          categories: [],
+          categories_tags: Array.isArray(cached.categories_tags) ? cached.categories_tags : [],
+          categories_hierarchy: Array.isArray(cached.categories_hierarchy) ? cached.categories_hierarchy : [],
+          ingredients_analysis_tags: Array.isArray(cached.ingredients_analysis_tags) ? cached.ingredients_analysis_tags : [],
+          states_tags: Array.isArray(cached.states_tags) ? cached.states_tags : [],
+          product_type: null,
+          image_url: cached.image_url || null,
+          product_url: cached.product_url || null
+        }
+      };
+      dataSource = 'obf_index_cache';
+      try { Metrics.increment('obf.index_cache.hit.count', 1); } catch (_) {}
+    } else {
+      try { Metrics.increment('obf.index_cache.miss.count', 1); } catch (_) {}
+      out = await fetchBeautyFactsByBarcode(barcode);
+      if (out?.success) {
+        try { Metrics.increment('obf.index_cache.fallback_to_live.count', 1); } catch (_) {}
+      }
+    }
     if (!out.success) {
       const status = out.error === 'invalid_barcode' ? 400 : 502;
-      return res.status(status).json({ success: false, error: out.error, barcode, request_id: req.id });
+      const isTimeout = out.error === 'upstream_timeout' || out.error === 'upstream_unreachable';
+      return res.status(status).json({
+        success: false,
+        error: out.error,
+        barcode,
+        recovery: out.error === 'invalid_barcode'
+          ? { type: 'manual_barcode_entry', message: 'Enter a valid 8-14 digit barcode.' }
+          : isTimeout
+            ? { type: 'retry', message: 'Network is slow right now. Please retry, or add ingredients manually.' }
+            : { type: 'retry', message: 'Lookup failed. Try again, or add ingredients manually.' },
+        request_id: req.id
+      });
+    }
+    if (out.normalized && out.normalized.found === false) {
+      return res.status(404).json({
+        success: false,
+        error: 'upstream_404',
+        barcode: out.normalized?.barcode || barcode,
+        data_source: dataSource,
+        recovery: {
+          type: 'manual_ingredients',
+          message: 'Product not found. Add ingredient list for analysis.'
+        },
+        request_id: req.id
+      });
     }
     let persisted = null;
     if (String(process.env.PRODUCT_TAXONOMY_PERSIST_PUBLIC_LOOKUP || '').trim() === '1') {
@@ -16828,15 +16985,27 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
         console.warn('[beautyfacts] taxonomy persist skipped:', persistErr?.message || persistErr);
       }
     }
+    const scanQuality = buildScanQuality(out.normalized || {});
+    const categoryRoute = deriveCategoryRoute(out.normalized?.categories_tags || []);
+    const ingredientFlags = deriveIngredientFlags(out.normalized || {});
     return res.json({
       success: true,
       barcode: out.normalized?.barcode || barcode,
       product: out.normalized,
+      scan_quality: scanQuality,
+      cta_state: {
+        analyze_enabled: scanQuality.analyze_enabled,
+        analyze_label: scanQuality.analyze_label
+      },
+      category_route: categoryRoute,
+      ingredient_flags: ingredientFlags,
+      sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
+      data_source: dataSource,
       ...(persisted ? { taxonomy: persisted } : {}),
       request_id: req.id
     });
   } catch (e) {
-    return res.status(500).json({ success: false, error: e.message, request_id: req.id });
+    return res.status(500).json({ success: false, error: 'internal_error', request_id: req.id });
   }
 });
 

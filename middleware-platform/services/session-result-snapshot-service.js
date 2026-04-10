@@ -107,6 +107,25 @@ function _extractLikelyTriggers(row, text) {
   return [...new Set(out)].filter(Boolean).slice(0, 12);
 }
 
+function _extractProductFromThread(orch) {
+  const thread = Array.isArray(orch?.flow_state?.short_term_thread) ? orch.flow_state.short_term_thread : [];
+  for (let i = thread.length - 1; i >= 0; i--) {
+    const e = thread[i];
+    const text = String(e?.text || '');
+    const typeOk = String(e?.type || '') === 'barcode_product_context';
+    if (!typeOk && !text.includes('[Barcode Scan]')) continue;
+    const nameMatch = text.match(/\[Barcode Scan\]\s*([^\n(]+?)\s*\(/);
+    const imgMatch = text.match(/Product image:\s*(https?:\/\/\S+)/i);
+    const barcodeMatch = text.match(/\((\d{8,14})\)/);
+    return {
+      name: nameMatch ? nameMatch[1].trim() : null,
+      image_url: imgMatch ? imgMatch[1].trim() : null,
+      barcode: barcodeMatch ? barcodeMatch[1] : null
+    };
+  }
+  return null;
+}
+
 function _deriveRoutineConflicts(row, text) {
   const conflicts = [];
   const reactions = String(row?.ingredient_reactions || '').trim();
@@ -202,14 +221,18 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
   const historyText = Array.isArray(orch?.conversation_history)
     ? orch.conversation_history.map((m) => String(m?.content || '')).join(' ')
     : '';
+  const threadText = Array.isArray(orch?.flow_state?.short_term_thread)
+    ? orch.flow_state.short_term_thread.map((e) => String(e?.text || '')).join(' ')
+    : '';
+  const combinedText = `${historyText} ${threadText}`.trim();
   const concerns = _parseConcerns(triage || {});
-  const primaryConcern = _pickPrimaryConcern(concerns, historyText);
-  const routineConflicts = _deriveRoutineConflicts(triage || {}, historyText);
-  const intent = _classifyPrimaryIntent(historyText);
-  const urgencyFlag = _deriveUrgencyFlag(historyText, triage || {});
-  const likelyTriggers = _extractLikelyTriggers(triage || {}, historyText);
-  const bodyAreas = _extractBodyAreas(historyText);
-  const procedureInterest = _extractProcedureInterest(historyText);
+  const primaryConcern = _pickPrimaryConcern(concerns, combinedText);
+  const routineConflicts = _deriveRoutineConflicts(triage || {}, combinedText);
+  const intent = _classifyPrimaryIntent(combinedText);
+  const urgencyFlag = _deriveUrgencyFlag(combinedText, triage || {});
+  const likelyTriggers = _extractLikelyTriggers(triage || {}, combinedText);
+  const bodyAreas = _extractBodyAreas(combinedText);
+  const procedureInterest = _extractProcedureInterest(combinedText);
   const concernConfidence = concerns.length ? 0.82 : 0.62;
   const conflictConfidence = routineConflicts.length ? 0.78 : 0.42;
   const globalConfidence = _clamp01((concernConfidence + conflictConfidence) / 2);
@@ -219,7 +242,7 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
     const productTaxonomy = _safeJsonParse(triage?.product_taxonomy_json, null);
     reasoningMap = buildReasoningMap({
       triage,
-      historyText,
+      historyText: combinedText,
       productTaxonomy,
       routineConflicts,
       primaryConcern,
@@ -258,6 +281,15 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
     next_ui_step: nextUiStep,
     reasoning_map: reasoningMap
   };
+
+  const threadProduct = _extractProductFromThread(orch);
+  if (threadProduct && (threadProduct.name || threadProduct.image_url || threadProduct.barcode)) {
+    snapshot.product = {
+      ...(threadProduct.name ? { name: threadProduct.name } : {}),
+      ...(threadProduct.image_url ? { image_url: threadProduct.image_url } : {}),
+      ...(threadProduct.barcode ? { barcode: threadProduct.barcode } : {})
+    };
+  }
 
   const snapshotId = _persistSnapshot({ sessionId: sid, snapshot, source });
   const elapsed = Date.now() - startedAt;

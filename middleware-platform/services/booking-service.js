@@ -196,6 +196,21 @@ class BookingService {
         };
       }
 
+      // Option 1b: Workload Identity / ADC (no static key in env)
+      if (String(process.env.GOOGLE_USE_WORKLOAD_IDENTITY || '1') !== '0') {
+        if (!google || !google.auth) return null;
+        const auth = new google.auth.GoogleAuth({
+          scopes: ['https://www.googleapis.com/auth/calendar']
+        });
+        const calendarId = providerSelectedCalendarId || process.env.GOOGLE_CALENDAR_ID || 'primary';
+        return {
+          client: google ? google.calendar({ version: 'v3', auth }) : null,
+          calendarId,
+          authType: 'workload_identity',
+          calendar_resolution_source: providerSelectedCalendarId ? 'clinic_selected_calendar' : (process.env.GOOGLE_CALENDAR_ID ? 'env_shared_calendar' : 'primary')
+        };
+      }
+
       // Option 2: OAuth2 - single calendar per env (Task 1)
       if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         let user = null;

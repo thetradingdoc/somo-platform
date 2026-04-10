@@ -2,6 +2,9 @@
 
 const OBF_BASE = (process.env.OPEN_BEAUTY_FACTS_BASE_URL || 'https://world.openbeautyfacts.org').replace(/\/$/, '');
 const UA = process.env.OPEN_BEAUTY_FACTS_USER_AGENT || 'doclittle-platform/1.0 (integration; support@doclittle.com)';
+const OBF_TIMEOUT_MS = Number(process.env.OBF_HTTP_TIMEOUT_MS || 3500);
+const OBF_MAX_RETRIES = Math.max(0, Number(process.env.OBF_HTTP_MAX_RETRIES || 1));
+const db = require('../database');
 
 function normalizeBarcode(barcode) {
   return String(barcode || '').replace(/[^\d]/g, '');
@@ -66,25 +69,74 @@ function normalizeProduct(payload = {}) {
   };
 }
 
+async function fetchWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(new Error('obf_timeout')), Math.max(250, Number(timeoutMs) || OBF_TIMEOUT_MS));
+  try {
+    return await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': UA
+      },
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 async function fetchBeautyFactsByBarcode(barcode) {
   const clean = normalizeBarcode(barcode);
   if (!/^\d{8,14}$/.test(clean)) {
     return { success: false, error: 'invalid_barcode', normalized: null };
   }
   const url = `${OBF_BASE}/api/v2/product/${clean}`;
-  const r = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': UA
+  let lastErr = null;
+  let r = null;
+  for (let attempt = 0; attempt <= OBF_MAX_RETRIES; attempt++) {
+    try {
+      r = await fetchWithTimeout(url, OBF_TIMEOUT_MS);
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
     }
-  });
+  }
+  if (!r) {
+    if (String(lastErr?.name || '').includes('AbortError') || String(lastErr?.message || '').includes('obf_timeout')) {
+      return { success: false, error: 'upstream_timeout', normalized: null };
+    }
+    return { success: false, error: 'upstream_unreachable', normalized: null };
+  }
   if (!r.ok) {
     return { success: false, error: `upstream_${r.status}`, normalized: null };
   }
   const data = await r.json().catch(() => null);
   if (!data) return { success: false, error: 'invalid_upstream_json', normalized: null };
-  return { success: true, normalized: normalizeProduct(data), raw: data };
+  const normalized = normalizeProduct(data);
+  try {
+    db.upsertObfIndexProduct({
+      code: normalized.barcode,
+      product_name: normalized.product_name,
+      brands: normalized.brands.join(', '),
+      brands_tags: toTagList(data?.product?.brands_tags),
+      categories_tags: normalized.categories_tags,
+      categories_hierarchy: normalized.categories_hierarchy,
+      ingredients_text: normalized.ingredients_text,
+      ingredients_tags: toTagList(data?.product?.ingredients_tags),
+      ingredients_analysis_tags: normalized.ingredients_analysis_tags,
+      states_tags: normalized.states_tags,
+      image_url: normalized.image_url,
+      product_url: normalized.product_url,
+      source: 'live_api',
+      source_file: null,
+      last_modified_t: Number(data?.product?.last_modified_t || 0) || null
+    });
+  } catch (_) {
+    // best-effort index cache; API response should still succeed
+  }
+  return { success: true, normalized, raw: data };
 }
 
 module.exports = {

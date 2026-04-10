@@ -14,6 +14,9 @@ import { publishVisionCaptureEvent } from './landingLiveKitApi';
 import { speakAssistantReply, stopAssistantSpeech, waitForAssistantSpeechToFinish } from './assistantSpeech';
 import { createWebVoiceTurnController } from './webVoiceTurnController';
 import { resolveTryNowVoiceConfig } from './tryNowVoiceConfig';
+import { buildScanQuality } from './scanQuality';
+import { buildFollowupMessageWithPinnedContext, buildPinnedContextText, compareProducts, deriveCategoryRoute, deriveIngredientFlags, isSparseProductData } from './scanInsights';
+import { prependManualIngredientGuard } from './manualIngredientGuard';
 
 const ASSISTANT_FIRST_ENABLED =
   String(process.env.REACT_APP_TRYNOW_ASSISTANT_FIRST || '1').trim().toLowerCase() !== '0';
@@ -170,6 +173,10 @@ function isProductTrackingIntent(text) {
   return /\b(scan|barcode|ingredients|ingredient list|review this product|check this product|analyze this product|what product is this)\b/.test(t);
 }
 
+function normalizeBarcodeInput(value) {
+  return String(value || '').replace(/[^\d]/g, '');
+}
+
 /**
  * Shared assistant state for voice page + chat page (same session_id and message list).
  */
@@ -191,6 +198,8 @@ export function useAssistantSession() {
   const [sending, setSending] = useState(false);
   const [resultSnapshot, setResultSnapshot] = useState(null);
   const [productTrackingActive, setProductTrackingActive] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [pendingScanDecision, setPendingScanDecision] = useState(null);
   const [entityEvents, setEntityEvents] = useState([]);
   const [preferredLanguage, setPreferredLanguage] = useState(() => {
     const nav = (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en';
@@ -226,6 +235,7 @@ export function useAssistantSession() {
   const lastVisionTriggerSigRef = useRef('');
   const latestTurnSeqRef = useRef(0);
   const scannedBarcodeCooldownRef = useRef(new Map());
+  const lastPinnedBarcodeRef = useRef('');
   const turnLanguageLockRef = useRef('en');
 
   useEffect(() => {
@@ -405,11 +415,34 @@ export function useAssistantSession() {
         }, 400);
         return null;
       }
+      if (scanResult?.product && scanResult?.barcode && lastPinnedBarcodeRef.current !== scanResult.barcode) {
+        const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+        sessionIdRef.current = sid;
+        const pinText = buildPinnedContextText(scanResult);
+        await publishLandingThreadEvent({
+          apiBase,
+          sessionId: sid,
+          eventType: 'scan_context_pinned',
+          text: pinText
+        }).catch(() => {});
+        lastPinnedBarcodeRef.current = scanResult.barcode;
+      }
 
       if (barcode) {
         try {
           const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode });
           const p = facts?.product || {};
+          if (p && p.found === false) {
+            pushAssistant(copyForLang(turnLanguage).barcodeNotFound, { speak: false });
+          } else {
+            const quality = buildScanQuality(p);
+            setScanResult({
+              barcode: p.barcode || barcode,
+              product: p,
+              quality,
+              dataSource: facts?.data_source || 'unknown'
+            });
+          }
           const productLine = `[Barcode Scan] ${p.product_name || 'Product found'} (${p.barcode || barcode})`;
           const ingredientLine = p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 500)}` : '';
           const labelsLine = Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 10).join(', ')}` : '';
@@ -456,9 +489,14 @@ export function useAssistantSession() {
           stt_final_at: Number(sttFinalAt) || null,
           turn_request_sent_at: Date.now()
         };
+        const turnMessage = buildFollowupMessageWithPinnedContext(
+          t,
+          scanResult,
+          !!(scanResult?.product && scanResult?.barcode && lastPinnedBarcodeRef.current === scanResult.barcode)
+        );
         const data = await sendLandingAssistantTurn({
           apiBase,
-          message: t,
+          message: turnMessage,
           sessionId: sid,
           turnSeq,
           clinicId: defaultClinicId,
@@ -551,11 +589,11 @@ export function useAssistantSession() {
         await resumeVoiceListeningIfNeeded();
       }
     },
-    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, detectLanguageFromText, preferredLanguage, pushAssistant, publishAssistantVisionTrigger, pushEntityEvents, refreshResultSnapshot]
+    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, detectLanguageFromText, preferredLanguage, pushAssistant, publishAssistantVisionTrigger, pushEntityEvents, refreshResultSnapshot, scanResult]
   );
 
   const ingestScannedBarcode = useCallback(async (barcode) => {
-    const clean = String(barcode || '').replace(/[^\d]/g, '');
+    const clean = normalizeBarcodeInput(barcode);
     if (!/^\d{8,14}$/.test(clean)) return { success: false, reason: 'invalid_barcode' };
     const now = Date.now();
     const prevMs = scannedBarcodeCooldownRef.current.get(clean) || 0;
@@ -567,14 +605,46 @@ export function useAssistantSession() {
     try {
       const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode: clean });
       const p = facts?.product || {};
+      if (p && p.found === false) {
+        setScanResult({
+          barcode: clean,
+          product: null,
+          quality: { tier: 'insufficient', analyzeEnabled: false, analyzeLabel: 'Add ingredients to analyze', summary: 'Product not found', missing: ['product'] },
+          dataSource: facts?.data_source || 'live_api',
+          recoveryRequired: true
+        });
+        pushAssistant(copy.barcodeNotFound, { speak: true });
+        return { success: false, reason: 'not_found', barcode: clean };
+      }
       const sid = sessionIdRef.current || getOrCreateLandingSessionId();
       sessionIdRef.current = sid;
       const productName = p.product_name || `barcode ${clean}`;
+      const quality = buildScanQuality(p);
+      const nextScan = {
+        barcode: p.barcode || clean,
+        product: p,
+        quality,
+        dataSource: facts?.data_source || 'unknown',
+        recoveryRequired: !quality.analyzeEnabled,
+        categoryRoute: deriveCategoryRoute(p.categories_tags),
+        ingredientFlags: deriveIngredientFlags(p),
+        sparseData: isSparseProductData(p)
+      };
+      if (scanResult?.product && scanResult?.barcode && scanResult.barcode !== nextScan.barcode) {
+        setPendingScanDecision({ previous: scanResult, next: nextScan });
+        return { success: true, barcode: clean, productName, quality, pendingDecision: true };
+      }
+      setScanResult(nextScan);
+      const imgUrl = String(p.image_url || p.image_front_url || '').trim();
       const contextText = [
         `[Barcode Scan] ${productName} (${p.barcode || clean})`,
+        imgUrl ? `Product image: ${imgUrl}` : '',
         p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '',
         Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '',
-        Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : ''
+        Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : '',
+        `Category Route: ${nextScan.categoryRoute}`,
+        `Sparse Data: ${nextScan.sparseData ? 'yes' : 'no'}`,
+        `Provenance: ${nextScan.dataSource}`
       ]
         .filter(Boolean)
         .join('\n');
@@ -593,16 +663,102 @@ export function useAssistantSession() {
         value: productName,
         ts: Date.now()
       }]);
-      return { success: true, barcode: clean, productName };
+      return { success: true, barcode: clean, productName, quality };
     } catch (e) {
-      if (String(e?.message || '').includes('upstream_404')) {
+      const errCode = String(e?.body?.error || e?.message || '');
+      if (String(errCode).includes('upstream_404')) {
+        setScanResult({
+          barcode: clean,
+          product: null,
+          quality: { tier: 'insufficient', analyzeEnabled: false, analyzeLabel: 'Add ingredients to analyze', summary: 'Product not found', missing: ['product'] },
+          dataSource: 'live_api',
+          recoveryRequired: true
+        });
         pushAssistant(copy.barcodeNotFound, { speak: true });
         return { success: false, reason: 'not_found' };
+      }
+      if (String(errCode).includes('invalid_barcode')) {
+        return { success: false, reason: 'invalid_barcode' };
       }
       pushAssistant(copy.barcodeLookupError, { speak: true });
       return { success: false, reason: 'lookup_failed' };
     }
-  }, [apiBase, copyForLang, preferredLanguage, pushAssistant, pushEntityEvents]);
+  }, [apiBase, copyForLang, preferredLanguage, pushAssistant, pushEntityEvents, scanResult]);
+
+  const ingestManualBarcode = useCallback(async (barcode) => {
+    return ingestScannedBarcode(barcode);
+  }, [ingestScannedBarcode]);
+
+  const resolvePendingScanDecision = useCallback(async (mode = 'refine') => {
+    const pending = pendingScanDecision;
+    if (!pending?.next) return { success: false, reason: 'no_pending_scan' };
+    if (mode === 'compare' && pending.previous?.product && pending.next?.product) {
+      const cmp = compareProducts(pending.previous.product, pending.next.product);
+      pushAssistant(
+        `Comparison A vs B: overlap ${cmp.overlapCount} ingredients. Only A: ${cmp.onlyA.join(', ') || 'none'}. Only B: ${cmp.onlyB.join(', ') || 'none'}.`,
+        { speak: false }
+      );
+    }
+    if (mode === 'reset') {
+      setMessages((prev) => prev.filter((m) => !String(m.text || '').includes('[Pinned Product Context]')));
+    }
+    setScanResult(pending.next);
+    setPendingScanDecision(null);
+    lastPinnedBarcodeRef.current = '';
+    return { success: true };
+  }, [pendingScanDecision, pushAssistant]);
+
+  const submitManualIngredients = useCallback(async (ingredientsText) => {
+    const text = String(ingredientsText || '').trim();
+    if (!text) return { success: false, reason: 'empty_ingredients' };
+    const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+    sessionIdRef.current = sid;
+    if (!apiBase) return { success: false, reason: 'no_api' };
+    const bundle = `[Manual Ingredients]\n${text.slice(0, 2000)}`;
+    await publishLandingThreadEvent({
+      apiBase,
+      sessionId: sid,
+      eventType: 'manual_ingredients_context',
+      text: bundle
+    });
+    setMessages((prev) => [...prev, { id: `u${Date.now()}_${Math.random()}`, role: 'user', text: `Please analyze these ingredients for my skin:\n${text}` }]);
+    setSending(true);
+    try {
+      const turnSeq = ++latestTurnSeqRef.current;
+      const data = await sendLandingAssistantTurn({
+        apiBase,
+        message: `Analyze this ingredient list for my skin profile and explain safety/risk in bullets:\n${text}`,
+        sessionId: sid,
+        turnSeq,
+        clinicId: defaultClinicId,
+        preferredLanguage
+      });
+      const reply = (data.reply && String(data.reply).trim()) || copyForLang(preferredLanguage).genericFallback;
+      if (data?.session_result_snapshot) {
+        setResultSnapshot(data.session_result_snapshot);
+      } else if (data?.next_step === 'skincare_report') {
+        await refreshResultSnapshot();
+      }
+      pushAssistant(prependManualIngredientGuard(reply), { speak: false });
+      return { success: true };
+    } catch (e) {
+      pushAssistant(`${copyForLang(preferredLanguage).networkErrorPrefix} ${e.message || 'Failed to analyze ingredients.'}`, { speak: false });
+      return { success: false, reason: 'analysis_failed' };
+    } finally {
+      setSending(false);
+    }
+  }, [apiBase, copyForLang, defaultClinicId, preferredLanguage, pushAssistant, refreshResultSnapshot]);
+
+  /** Sends a landing turn so the middleware can build a real session_result_snapshot (not the UI dummy). */
+  const requestScanAnalysis = useCallback(async () => {
+    if (!scanResult?.product) {
+      pushAssistant('Scan or enter a product barcode first, then tap analyze.', { speak: false });
+      return;
+    }
+    await sendUserMessage(
+      'Analyze the scanned product in my session for my skin: summarize fit, ingredient risks, and routine conflicts. Generate my skincare report snapshot.'
+    );
+  }, [pushAssistant, scanResult, sendUserMessage]);
 
   useEffect(() => {
     const controller = createWebVoiceTurnController({
@@ -709,6 +865,10 @@ export function useAssistantSession() {
     setResultSnapshot,
     productTrackingActive,
     setProductTrackingActive,
+    scanResult,
+    setScanResult,
+    pendingScanDecision,
+    resolvePendingScanDecision,
     entityEvents,
     sessionIdRef,
     recognitionRef: voiceControllerRef,
@@ -720,6 +880,9 @@ export function useAssistantSession() {
     preferredLanguage,
     leadText: copyForLang(preferredLanguage).opener,
     ingestScannedBarcode,
+    ingestManualBarcode,
+    submitManualIngredients,
+    requestScanAnalysis,
     refreshResultSnapshot,
     submitResultEdit
   };

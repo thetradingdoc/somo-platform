@@ -272,7 +272,20 @@ function Root() {
     return raw.startsWith('/') ? raw : `/${raw}`;
   };
 
-  const [showAssistant, setShowAssistant] = useState(false);
+  /** Deep links like `/#assistant/voice` must mount the shell; hash is read inside AssistantExperience. */
+  const [showAssistant, setShowAssistant] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.location.hash.startsWith('#assistant');
+  });
+
+  useEffect(() => {
+    const onHash = () => {
+      if (typeof window === 'undefined') return;
+      if (window.location.hash.startsWith('#assistant')) setShowAssistant(true);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   const [bottleOffset, setBottleOffset] = useState({ x: 0, y: 0 });
   const [isDraggingBottle, setIsDraggingBottle] = useState(false);
   const [solutionsNav, setSolutionsNav] = useState({ atStart: true, atEnd: false });

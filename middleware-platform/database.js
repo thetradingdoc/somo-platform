@@ -16581,6 +16581,192 @@ module.exports.getProductIngredients = function getProductIngredients(productId)
   }
 };
 
+module.exports.upsertObfIndexProduct = function upsertObfIndexProduct(row = {}) {
+  const code = String(row.code || row.barcode || '').trim();
+  if (!code) return { success: false, error: 'code_required' };
+  try {
+    db.prepare(`
+      INSERT INTO products_obf_index (
+        code, product_name, brands, brands_tags_json, categories_tags_json, categories_hierarchy_json,
+        ingredients_text, ingredients_tags_json, ingredients_analysis_tags_json, states_tags_json,
+        image_url, product_url, source, source_file, last_modified_t, ingested_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(code) DO UPDATE SET
+        product_name = COALESCE(excluded.product_name, products_obf_index.product_name),
+        brands = COALESCE(excluded.brands, products_obf_index.brands),
+        brands_tags_json = COALESCE(excluded.brands_tags_json, products_obf_index.brands_tags_json),
+        categories_tags_json = COALESCE(excluded.categories_tags_json, products_obf_index.categories_tags_json),
+        categories_hierarchy_json = COALESCE(excluded.categories_hierarchy_json, products_obf_index.categories_hierarchy_json),
+        ingredients_text = COALESCE(excluded.ingredients_text, products_obf_index.ingredients_text),
+        ingredients_tags_json = COALESCE(excluded.ingredients_tags_json, products_obf_index.ingredients_tags_json),
+        ingredients_analysis_tags_json = COALESCE(excluded.ingredients_analysis_tags_json, products_obf_index.ingredients_analysis_tags_json),
+        states_tags_json = COALESCE(excluded.states_tags_json, products_obf_index.states_tags_json),
+        image_url = COALESCE(excluded.image_url, products_obf_index.image_url),
+        product_url = COALESCE(excluded.product_url, products_obf_index.product_url),
+        source = COALESCE(excluded.source, products_obf_index.source),
+        source_file = COALESCE(excluded.source_file, products_obf_index.source_file),
+        last_modified_t = COALESCE(excluded.last_modified_t, products_obf_index.last_modified_t),
+        updated_at = datetime('now')
+    `).run(
+      code,
+      row.product_name || null,
+      row.brands || null,
+      JSON.stringify(Array.isArray(row.brands_tags) ? row.brands_tags : []),
+      JSON.stringify(Array.isArray(row.categories_tags) ? row.categories_tags : []),
+      JSON.stringify(Array.isArray(row.categories_hierarchy) ? row.categories_hierarchy : []),
+      row.ingredients_text || null,
+      JSON.stringify(Array.isArray(row.ingredients_tags) ? row.ingredients_tags : []),
+      JSON.stringify(Array.isArray(row.ingredients_analysis_tags) ? row.ingredients_analysis_tags : []),
+      JSON.stringify(Array.isArray(row.states_tags) ? row.states_tags : []),
+      row.image_url || null,
+      row.product_url || null,
+      row.source || 'baseline',
+      row.source_file || null,
+      Number.isFinite(Number(row.last_modified_t)) ? Number(row.last_modified_t) : null
+    );
+    return { success: true, code };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.getObfIndexProductByCode = function getObfIndexProductByCode(code) {
+  try {
+    const row = db.prepare(`SELECT * FROM products_obf_index WHERE code = ?`).get(String(code || '').trim());
+    if (!row) return null;
+    const parse = (x, fallback = []) => { try { return JSON.parse(x || '[]'); } catch (_) { return fallback; } };
+    return {
+      ...row,
+      barcode: row.code,
+      brands_tags: parse(row.brands_tags_json),
+      categories_tags: parse(row.categories_tags_json),
+      categories_hierarchy: parse(row.categories_hierarchy_json),
+      ingredients_tags: parse(row.ingredients_tags_json),
+      ingredients_analysis_tags: parse(row.ingredients_analysis_tags_json),
+      states_tags: parse(row.states_tags_json)
+    };
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.insertObfDlq = function insertObfDlq(row = {}) {
+  try {
+    const id = row.id || `obf_dlq:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO obf_ingestion_dlq (id, source_file, line_number, code, error, raw_payload, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      id,
+      row.source_file || null,
+      Number.isFinite(Number(row.line_number)) ? Number(row.line_number) : null,
+      row.code || null,
+      row.error || 'unknown_error',
+      row.raw_payload || null
+    );
+    return { success: true, id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.listObfDlq = function listObfDlq(limit = 100) {
+  try {
+    return db.prepare(`
+      SELECT id, source_file, line_number, code, error, raw_payload, created_at
+      FROM obf_ingestion_dlq
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(Math.max(1, Number(limit) || 100));
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.deleteObfDlqById = function deleteObfDlqById(id) {
+  try {
+    db.prepare(`DELETE FROM obf_ingestion_dlq WHERE id = ?`).run(String(id || '').trim());
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.beginObfIngestionRun = function beginObfIngestionRun(row = {}) {
+  const id = row.id || `obf_run:${require('crypto').randomUUID()}`;
+  try {
+    db.prepare(`
+      INSERT INTO obf_ingestion_runs (
+        id, run_type, source_file, status, rows_seen, rows_upserted, rows_failed, notes_json, started_at
+      ) VALUES (?, ?, ?, 'started', 0, 0, 0, ?, datetime('now'))
+    `).run(id, row.run_type || 'baseline', row.source_file || null, JSON.stringify(row.notes || {}));
+    return { success: true, id };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.finishObfIngestionRun = function finishObfIngestionRun(row = {}) {
+  try {
+    db.prepare(`
+      UPDATE obf_ingestion_runs
+      SET status = ?, rows_seen = ?, rows_upserted = ?, rows_failed = ?, notes_json = ?, finished_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      row.status || 'completed',
+      Number(row.rows_seen) || 0,
+      Number(row.rows_upserted) || 0,
+      Number(row.rows_failed) || 0,
+      JSON.stringify(row.notes || {}),
+      row.id
+    );
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.getAppliedObfDeltaFilenames = function getAppliedObfDeltaFilenames() {
+  try {
+    return db.prepare(`SELECT filename FROM obf_delta_applied ORDER BY applied_at DESC`).all().map((r) => r.filename);
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.recordObfDeltaApplied = function recordObfDeltaApplied(row = {}) {
+  try {
+    db.prepare(`
+      INSERT INTO obf_delta_applied (filename, checksum, applied_at, rows_seen, rows_upserted, rows_failed)
+      VALUES (?, ?, datetime('now'), ?, ?, ?)
+      ON CONFLICT(filename) DO UPDATE SET
+        checksum = COALESCE(excluded.checksum, obf_delta_applied.checksum),
+        rows_seen = excluded.rows_seen,
+        rows_upserted = excluded.rows_upserted,
+        rows_failed = excluded.rows_failed,
+        applied_at = datetime('now')
+    `).run(
+      row.filename,
+      row.checksum || null,
+      Number(row.rows_seen) || 0,
+      Number(row.rows_upserted) || 0,
+      Number(row.rows_failed) || 0
+    );
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.countObfDeltaAppliedByFilename = function countObfDeltaAppliedByFilename(filename) {
+  try {
+    const row = db.prepare(`SELECT COUNT(*) AS n FROM obf_delta_applied WHERE filename = ?`).get(String(filename || '').trim());
+    return Number(row?.n || 0);
+  } catch (_) {
+    return 0;
+  }
+};
+
 module.exports.getCosingIngredientByInci = function getCosingIngredientByInci(inciName) {
   try {
     const row = db.prepare(`SELECT * FROM cosing_ingredients WHERE inci_name = ?`).get(String(inciName || '').trim().toLowerCase());

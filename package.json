@@ -6,7 +6,8 @@
     "retention:cleanup": "node scripts/retention-cleanup.cjs",
     "verify:agentic-checkout": "node scripts/verify-agentic-checkout.cjs",
     "ci:local": "node scripts/check-performance-budgets.cjs && node scripts/check-auth-ui-guardrails.cjs && RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs && node scripts/verify-agentic-checkout.cjs && npm test --prefix middleware-platform && npm run release:security-gate --prefix middleware-platform",
-    "test:landing": "npm test --prefix unified-dashboard/littlelab-landing -- --watchAll=false --runInBand"
+    "test:landing": "npm test --prefix unified-dashboard/littlelab-landing -- --watchAll=false --runInBand",
+    "test:e2e-results-snapshot-batch": "npm run test:e2e-results-snapshot-batch --prefix middleware-platform"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",

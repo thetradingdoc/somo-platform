@@ -7,6 +7,7 @@ import { useConversationSphereLevel } from './useConversationSphereLevel';
 import { useLandingLiveKit } from './useLandingLiveKit';
 import { getOrCreateLandingSessionId } from './landingAssistantApi';
 import { fetchVisionSessionState, incrementVisionMetric } from './landingLiveKitApi';
+import { extractIngredientsFromImage } from './ingredientOcr';
 import './skin-care-tokens.css';
 import './assistant-shared.css';
 
@@ -105,8 +106,14 @@ export default function AssistantExperience({ onClose }) {
     pushAssistant,
     leadText,
     ingestScannedBarcode,
+    ingestManualBarcode,
+    submitManualIngredients,
+    requestScanAnalysis,
     productTrackingActive,
     setProductTrackingActive,
+    scanResult,
+    pendingScanDecision,
+    resolvePendingScanDecision,
     refreshResultSnapshot,
     submitResultEdit
   } = session;
@@ -130,12 +137,18 @@ export default function AssistantExperience({ onClose }) {
   const [scanUi, setScanUi] = useState({
     status: 'idle',
     barcode: '',
-    productName: ''
+    productName: '',
+    reason: ''
   });
+  const [manualBarcodeInput, setManualBarcodeInput] = useState('');
+  const [manualIngredientsInput, setManualIngredientsInput] = useState('');
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrError, setOcrError] = useState('');
 
   const cameraRef = useRef(null);
   const imageRef = useRef(null);
   const fileRef = useRef(null);
+  const ocrImageRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
@@ -257,7 +270,7 @@ export default function AssistantExperience({ onClose }) {
   const scanCoachRef = useRef({ lastPromptMs: 0, stabilizeCycles: 0 });
   useEffect(() => {
     if (!productTrackingActive) {
-      setScanUi({ status: 'idle', barcode: '', productName: '' });
+      setScanUi({ status: 'idle', barcode: '', productName: '', reason: '' });
       return undefined;
     }
     if (!liveKit?.inSession || !liveKit?.cameraEnabled) return undefined;
@@ -302,16 +315,16 @@ export default function AssistantExperience({ onClose }) {
           state.hits += 1;
           state.lastMs = now;
           barcodeSeenRef.current.set(raw, state);
-          setScanUi({ status: 'stabilizing', barcode: raw, productName: '' });
+          setScanUi({ status: 'stabilizing', barcode: raw, productName: '', reason: '' });
           const stable = state.hits >= 2 && now - state.firstMs <= 4500;
           if (stable) {
             scanCoachRef.current.stabilizeCycles = 0;
             const out = await ingestScannedBarcode(raw);
             if (out?.success) {
-              setScanUi({ status: 'matched', barcode: raw, productName: out.productName || '' });
+              setScanUi({ status: 'matched', barcode: raw, productName: out.productName || '', reason: '' });
               setProductTrackingActive(false);
             } else if (out?.reason === 'not_found') {
-              setScanUi({ status: 'not_found', barcode: raw, productName: '' });
+              setScanUi({ status: 'not_found', barcode: raw, productName: '', reason: out.reason });
               if (now - scanCoachRef.current.lastPromptMs > 10000) {
                 scanCoachRef.current.lastPromptMs = now;
                 pushAssistant(
@@ -320,7 +333,7 @@ export default function AssistantExperience({ onClose }) {
                 );
               }
             } else if (out?.reason !== 'cooldown') {
-              setScanUi({ status: 'error', barcode: raw, productName: '' });
+              setScanUi({ status: 'error', barcode: raw, productName: '', reason: out?.reason || 'lookup_failed' });
             }
             barcodeSeenRef.current.delete(raw);
           }
@@ -343,6 +356,51 @@ export default function AssistantExperience({ onClose }) {
       if (id) clearInterval(id);
     };
   }, [ingestScannedBarcode, liveKit?.cameraEnabled, liveKit?.inSession, localVideoRef, productTrackingActive, pushAssistant, setProductTrackingActive]);
+
+  const handleManualBarcodeSubmit = useCallback(async () => {
+    const out = await ingestManualBarcode(manualBarcodeInput);
+    if (out?.success) {
+      setScanUi({ status: 'matched', barcode: out.barcode || manualBarcodeInput, productName: out.productName || '', reason: '' });
+      setManualBarcodeInput('');
+      return;
+    }
+    if (out?.reason === 'invalid_barcode') {
+      setScanUi({ status: 'error', barcode: manualBarcodeInput, productName: '', reason: 'invalid_barcode' });
+      return;
+    }
+    if (out?.reason === 'not_found') {
+      setScanUi({ status: 'not_found', barcode: manualBarcodeInput, productName: '', reason: 'not_found' });
+      return;
+    }
+    setScanUi({ status: 'error', barcode: manualBarcodeInput, productName: '', reason: out?.reason || 'lookup_failed' });
+  }, [ingestManualBarcode, manualBarcodeInput]);
+
+  const handleManualIngredientsSubmit = useCallback(async () => {
+    const out = await submitManualIngredients(manualIngredientsInput);
+    if (out?.success) {
+      setManualIngredientsInput('');
+      setScanUi((prev) => ({ ...prev, status: 'manual_ingredients_sent' }));
+    }
+  }, [manualIngredientsInput, submitManualIngredients]);
+
+  const handleIngredientOcrFiles = useCallback(async (fileList) => {
+    const file = Array.from(fileList || [])[0] || null;
+    if (!file) return;
+    setOcrBusy(true);
+    setOcrError('');
+    try {
+      const text = await extractIngredientsFromImage(file);
+      setManualIngredientsInput(text);
+      const out = await submitManualIngredients(text);
+      if (!out?.success) {
+        setOcrError('OCR extracted text, but analysis failed. You can edit and retry.');
+      }
+    } catch (e) {
+      setOcrError('Could not read ingredients from image. Please type ingredients manually.');
+    } finally {
+      setOcrBusy(false);
+    }
+  }, [setManualIngredientsInput, submitManualIngredients]);
 
   useEffect(() => {
     if (resultSnapshot?.next_ui_step === 'skincare_report') {
@@ -389,7 +447,26 @@ export default function AssistantExperience({ onClose }) {
       : page === 'results'
         ? 'Skin and Care assistant — results'
         : 'Skin and Care assistant — voice';
-  const activeSnapshot = resultSnapshot || DUMMY_RESULT_SNAPSHOT;
+
+  /** Prefer server snapshot; fill hero image from last scan when API omitted `product.image_url`. */
+  const activeSnapshot = useMemo(() => {
+    const base = resultSnapshot ? { ...resultSnapshot } : { ...DUMMY_RESULT_SNAPSHOT };
+    const p = scanResult?.product;
+    const scanImg = String(p?.image_url || p?.image_front_url || '').trim();
+    const scanName = String(p?.product_name || '').trim();
+    const existingImg = String(
+      base?.product?.image_url || base?.source_product?.image_url || base?.image_url || ''
+    ).trim();
+    if (scanImg && !existingImg) {
+      base.product = {
+        ...(base.product || {}),
+        ...(scanName ? { name: scanName } : {}),
+        image_url: scanImg
+      };
+    }
+    return base;
+  }, [resultSnapshot, scanResult]);
+
 
   return (
     <div className="ax-shell" role="dialog" aria-label={ariaLabel}>
@@ -416,6 +493,16 @@ export default function AssistantExperience({ onClose }) {
           }}
         />
         <input
+          ref={ocrImageRef}
+          type="file"
+          accept="image/*"
+          className="ax-hidden-input"
+          onChange={(e) => {
+            void handleIngredientOcrFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+        <input
           ref={fileRef}
           type="file"
           className="ax-hidden-input"
@@ -430,6 +517,7 @@ export default function AssistantExperience({ onClose }) {
         <AssistantVoicePage
           onClose={handleClose}
           onOpenChat={openChat}
+          onRequestScanAnalysis={requestScanAnalysis}
           onOpenUpload={() => imageRef.current?.click()}
           apiBase={apiBase}
           messages={messages}
@@ -446,6 +534,18 @@ export default function AssistantExperience({ onClose }) {
           remoteVideoContainerRef={remoteVideoRef}
           leadText={leadText}
           scanUi={scanUi}
+          scanResult={scanResult}
+          pendingScanDecision={pendingScanDecision}
+          onResolvePendingScanDecision={resolvePendingScanDecision}
+          manualBarcodeInput={manualBarcodeInput}
+          setManualBarcodeInput={setManualBarcodeInput}
+          onManualBarcodeSubmit={handleManualBarcodeSubmit}
+          manualIngredientsInput={manualIngredientsInput}
+          setManualIngredientsInput={setManualIngredientsInput}
+          onManualIngredientsSubmit={handleManualIngredientsSubmit}
+          onUploadIngredientPhoto={() => ocrImageRef.current?.click()}
+          ocrBusy={ocrBusy}
+          ocrError={ocrError}
           productTrackingActive={productTrackingActive}
           onToggleScan={() => setProductTrackingActive((v) => !v)}
         />
@@ -469,6 +569,9 @@ export default function AssistantExperience({ onClose }) {
           liveKit={liveKit}
           localVideoRef={localVideoRef}
           remoteVideoContainerRef={remoteVideoRef}
+          scanResult={scanResult}
+          pendingScanDecision={pendingScanDecision}
+          onResolvePendingScanDecision={resolvePendingScanDecision}
         />
       ) : (
         <AssistantResultsPage

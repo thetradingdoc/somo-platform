@@ -99,6 +99,7 @@ export async function incrementLandingVoiceMetric({ apiBase, sessionId, metricNa
   if (!r.ok || !data.success) {
     const err = new Error(data.error || `Request failed (${r.status})`);
     err.status = r.status;
+    err.body = data;
     throw err;
   }
   return data;
