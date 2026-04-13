@@ -10,6 +10,7 @@ This folder holds **active** task lists and checklists. **Fully completed** list
 
 | Document | Purpose |
 |----------|---------|
+| [PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md](PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md) | Phase 0 trust layer checklist: security, financial integrity, impact verification, reliability |
 | [PRODUCTION_READINESS_TASKS.md](PRODUCTION_READINESS_TASKS.md) | Production readiness, Azure, security, telemedicine, payments, monitoring |
 | [TELEMEDICINE_TODOS.md](TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2) |
 | [TELEMEDICINE_ARCHITECTURE_REVIEW.md](TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: video consult → case report |

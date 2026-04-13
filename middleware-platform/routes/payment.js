@@ -17,9 +17,76 @@ const {
 } = require('../utils/naming-aliases');
 
 const router = express.Router();
+const { evaluateAndRecord, enqueueFraudReview } = require('../services/anti-sybil-service');
 
 // Note: Stripe integration would go here in production
 // For now, we'll simulate payment processing
+
+function resolveIdempotencyKey(req, fallbackSeed) {
+  const headerKey = (req.headers['idempotency-key'] || '').toString().trim();
+  if (headerKey) return headerKey;
+  const bodyKey = (req.body?.idempotency_key || '').toString().trim();
+  if (bodyKey) return bodyKey;
+  if (!fallbackSeed) return '';
+  return `auto:${fallbackSeed}`;
+}
+
+function withPaymentIdempotency(operationType, fallbackFromReq) {
+  return (req, res, next) => {
+    const key = resolveIdempotencyKey(req, fallbackFromReq ? fallbackFromReq(req) : '');
+    if (!key) return next();
+
+    const cached = db.getIdempotentResult && db.getIdempotentResult(key, operationType);
+    if (cached && cached.result) {
+      return res.json({ ...cached.result, idempotent: true });
+    }
+    const reservation = db.reserveIdempotencyKey && db.reserveIdempotencyKey(key, operationType);
+    if (reservation === 'in_progress') {
+      return res.status(409).json({ success: false, error: 'Request already in progress for this Idempotency-Key' });
+    }
+    if (reservation === 'completed') {
+      const c2 = db.getIdempotentResult && db.getIdempotentResult(key, operationType);
+      if (c2 && c2.result) return res.json({ ...c2.result, idempotent: true });
+    }
+
+    req.idempotencyKey = key;
+    req.idempotencyOperation = operationType;
+    const originalJson = res.json.bind(res);
+    res.json = (body) => {
+      try {
+        if (key && body && body.success && db.completeIdempotentResult) {
+          db.completeIdempotentResult(key, operationType, body);
+        }
+      } catch (_) {}
+      return originalJson(body);
+    };
+    res.on('finish', () => {
+      if (key && res.statusCode >= 400 && db.releaseIdempotencyKey) {
+        try { db.releaseIdempotencyKey(key, operationType); } catch (_) {}
+      }
+    });
+    return next();
+  };
+}
+
+function rejectDuplicatePaymentAttempt(checkout) {
+  if (!checkout || !checkout.id || !db.getVoiceCheckout) return null;
+  try {
+    const row = db.getVoiceCheckout(checkout.id);
+    if (!row) return null;
+    const paid = String(row.status || '').toLowerCase() === 'completed' || !!row.payment_intent_id;
+    if (!paid) return null;
+    return {
+      success: false,
+      error: 'Duplicate payment attempt blocked',
+      error_code: 'DUPLICATE_PAYMENT_ATTEMPT',
+      checkout_id: row.id,
+      payment_intent_id: row.payment_intent_id || null
+    };
+  } catch (_) {
+    return null;
+  }
+}
 
 /**
  * Task 32, 33: Payment success page (Stripe 3DS redirect target)
@@ -179,7 +246,10 @@ router.get('/methods', (req, res) => {
  * Returns client_secret for client-side Stripe.js confirmation.
  * POST /api/payment/create-intent
  */
-router.post('/create-intent', async (req, res) => {
+router.post(
+  '/create-intent',
+  withPaymentIdempotency('payment_create_intent', (req) => `create_intent:${req.body?.checkout_id || req.body?.prescription_checkout_id || ''}`),
+  async (req, res) => {
   try {
     logAliasUsage('payment-create-intent', req);
     const body = req.body || {};
@@ -213,10 +283,10 @@ router.post('/create-intent', async (req, res) => {
  * 
  * For demo, we'll simulate successful payment
  */
-router.post('/process', async (req, res) => {
+router.post('/process', withPaymentIdempotency('payment_process', (req) => `payment:${req.body?.payment_token || ''}`), async (req, res) => {
     try {
         const { payment_token, payment_method_id, amount, currency, idempotency_key } = req.body;
-        const idemKey = idempotency_key || req.headers['idempotency-key'] || `payment_${payment_token}`;
+        const idemKey = req.idempotencyKey || idempotency_key || req.headers['idempotency-key'] || `payment_${payment_token}`;
 
         const db = require('../database');
 
@@ -252,19 +322,38 @@ router.post('/process', async (req, res) => {
             });
         }
         const claimOpType = 'payment_process';
-        const cached = db.getIdempotentResult && db.getIdempotentResult(idemKey, claimOpType);
-        if (cached) {
-            try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_success'); } catch (_) {}
-            return res.json({ ...cached.result, idempotent: true });
-        }
-        const reserve = db.reserveIdempotencyKey && db.reserveIdempotencyKey(idemKey, claimOpType);
-        if (reserve === 'in_progress') {
+
+        const duplicateGuard = rejectDuplicatePaymentAttempt(checkout);
+        if (duplicateGuard) {
             try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
-            return res.status(409).json({ success: false, error: 'Payment in progress', idempotent: true });
+            return res.status(409).json(duplicateGuard);
         }
-        if (reserve === 'completed') {
-            const c2 = db.getIdempotentResult(idemKey, claimOpType);
-            if (c2) return res.json({ ...c2.result, idempotent: true });
+
+        const antiSybil = evaluateAndRecord({
+          scope: 'payment_process',
+          identityKey: checkout.customer_email || checkout.customer_phone || payment_token,
+          ip: req.ip || req.headers['x-forwarded-for'] || '',
+          userAgent: req.headers['user-agent'] || '',
+          amountCents: Math.round((parseFloat(checkout.amount || amount || 0) || 0) * 100)
+        });
+        if (antiSybil.decision === 'block') {
+          let review = null;
+          try {
+            review = enqueueFraudReview({
+              antiSybilEventId: antiSybil.eventId,
+              scope: 'payment_process',
+              priority: antiSybil.score >= 85 ? 'critical' : 'high',
+              slaMinutes: antiSybil.score >= 85 ? 30 : 120
+            });
+          } catch (_) {}
+          try { db.incrementOpsCounter && db.incrementOpsCounter('payment_process_failed'); } catch (_) {}
+          return res.status(429).json({
+            success: false,
+            error: 'Payment attempt blocked for risk review',
+            error_code: 'ANTI_SYBIL_BLOCKED',
+            risk_score: antiSybil.score,
+            fraud_review_id: review?.id || null
+          });
         }
 
         // Task 28: Amount revalidation - always use server-side checkout amount, never client
@@ -460,7 +549,7 @@ router.post('/token/cancel', (req, res) => {
  * POST /api/payment/capture
  * Body: { payment_intent_id }
  */
-router.post('/capture', async (req, res) => {
+router.post('/capture', withPaymentIdempotency('payment_capture', (req) => `capture:${req.body?.payment_intent_id || ''}`), async (req, res) => {
   try {
     const { payment_intent_id } = req.body;
     if (!payment_intent_id) {
@@ -495,7 +584,7 @@ router.post('/capture', async (req, res) => {
  * POST /api/payment/refund
  * Body: { checkout_id?, payment_intent_id?, amount?, reason }
  */
-router.post('/refund', async (req, res) => {
+router.post('/refund', withPaymentIdempotency('payment_refund', (req) => `refund:${req.body?.payment_intent_id || req.body?.checkout_id || ''}:${req.body?.amount || 'full'}`), async (req, res) => {
   try {
     logAliasUsage('payment-refund', req);
     const { payment_intent_id, amount, reason = 'refund' } = req.body;
@@ -557,7 +646,7 @@ router.post('/refund', async (req, res) => {
  * POST /api/payment/cancel
  * Body: { payment_intent_id }
  */
-router.post('/cancel', async (req, res) => {
+router.post('/cancel', withPaymentIdempotency('payment_cancel', (req) => `cancel:${req.body?.payment_intent_id || ''}`), async (req, res) => {
   try {
     const { payment_intent_id } = req.body;
     if (!payment_intent_id) {

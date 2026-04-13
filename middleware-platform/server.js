@@ -132,6 +132,16 @@ const EHRAggregatorService = require('./services/ehr-aggregator-service');
 const EHRSyncService = require('./services/ehr-sync-service');
 const EpicAdapter = require('./services/epic-adapter');
 const RetellService = require('./services/retell-service');
+const { twilioSignatureRequired, replayGuard } = require('./middleware/webhook-security');
+const {
+  evaluateAndRecord,
+  enqueueFraudReview,
+  listFraudReviews,
+  assignFraudReview,
+  resolveFraudReview,
+  listOverdueFraudReviews,
+  markFraudReviewAlerted
+} = require('./services/anti-sybil-service');
 const livekitTokenRoutes = require('./routes/livekit');
 const authTokenRoutes = require('./routes/auth-tokens');
 const jwt = require('jsonwebtoken');
@@ -145,6 +155,39 @@ function isUnifiedChannelAdapterEnabled() {
 function isUnifiedChannelAdapterShadowEnabled() {
   const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED || '').toLowerCase().trim();
   return v === '1' || v === 'true' || v === 'yes';
+}
+
+function antiSybilGuard(scope, identityBuilder, amountBuilder = null) {
+  return (req, res, next) => {
+    try {
+      const result = evaluateAndRecord({
+        scope,
+        identityKey: identityBuilder ? identityBuilder(req) : '',
+        ip: req.ip || req.headers['x-forwarded-for'] || '',
+        userAgent: req.headers['user-agent'] || '',
+        amountCents: amountBuilder ? Number(amountBuilder(req) || 0) : 0
+      });
+      if (result.decision === 'block') {
+        let review = null;
+        try {
+          review = enqueueFraudReview({
+            antiSybilEventId: result.eventId,
+            scope,
+            priority: result.score >= 85 ? 'critical' : 'high',
+            slaMinutes: result.score >= 85 ? 30 : 120
+          });
+        } catch (_) {}
+        return res.status(429).json({
+          success: false,
+          error: 'Request blocked for risk review',
+          error_code: 'ANTI_SYBIL_BLOCKED',
+          risk_score: result.score,
+          fraud_review_id: review?.id || null
+        });
+      }
+    } catch (_) {}
+    return next();
+  };
 }
 
 // Import Stripe Issuing Service (optional)
@@ -1043,7 +1086,15 @@ const allowedOrigins = [
   'https://api.myskinandcare.com',
   'http://localhost:4000',
   'http://localhost:3000',
-  'http://localhost:3001'
+  'http://localhost:3001',
+  'http://localhost:5199',
+  'http://localhost:8080',
+  'http://127.0.0.1:4000',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:5199',
+  'http://127.0.0.1:8080',
+  'http://[::1]:8080'
 ];
 
 const corsOptions = {
@@ -1870,6 +1921,9 @@ app.use('/api/rag', ragSearchRoutes);
 const videoConsultRoutes = require('./routes/video-consult');
 app.use('/api/video-consult', videoConsultRoutes);
 
+const { registerFaceReadPublicRoute } = require('./routes/public-face-read');
+registerFaceReadPublicRoute(app, { apiLimiter });
+
 // Retell custom function endpoints
 const retellFunctionsRoutes = require('./routes/retell-functions');
 app.use('/api/retell', retellFunctionsRoutes);
@@ -2228,7 +2282,17 @@ function calculateFraudScore(data) {
 // TWILIO VOICE INCOMING HANDLER
 // ============================================
 // Twilio sends `application/x-www-form-urlencoded` by default, so we must parse it here.
-app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true }), async (req, res) => {
+app.post(
+  '/voice/incoming',
+  voiceLimiter,
+  express.urlencoded({ extended: true }),
+  twilioSignatureRequired,
+  replayGuard({
+    source: 'twilio_voice_incoming',
+    ttlMinutes: 30,
+    keyBuilder: (req) => `${req.body?.CallSid || ''}:${req.body?.From || ''}:${req.body?.To || ''}`
+  }),
+  async (req, res) => {
   try {
     console.log('\n📞 INCOMING CALL from Twilio');
     console.log('From:', req.body.From);
@@ -2859,7 +2923,16 @@ app.post('/voice/incoming', voiceLimiter, express.urlencoded({ extended: true })
 // TWILIO SMS INCOMING (Call deflection P2)
 // ============================================
 // Configure Twilio Phone Number SMS webhook: https://yoursite.com/sms/incoming
-app.post('/sms/incoming', express.urlencoded({ extended: true }), async (req, res) => {
+app.post(
+  '/sms/incoming',
+  express.urlencoded({ extended: true }),
+  twilioSignatureRequired,
+  replayGuard({
+    source: 'twilio_sms_incoming',
+    ttlMinutes: 30,
+    keyBuilder: (req) => `${req.body?.SmsSid || ''}:${req.body?.From || ''}:${req.body?.To || ''}:${req.body?.Body || ''}`
+  }),
+  async (req, res) => {
   try {
     const from = req.body.From;
     const to = req.body.To;
@@ -2885,7 +2958,17 @@ function escapeXml(s) {
 }
 
 // Twilio Status Callback - receives call status updates
-app.post('/voice/status-callback', voiceLimiter, express.urlencoded({ extended: true }), async (req, res) => {
+app.post(
+  '/voice/status-callback',
+  voiceLimiter,
+  express.urlencoded({ extended: true }),
+  twilioSignatureRequired,
+  replayGuard({
+    source: 'twilio_voice_status',
+    ttlMinutes: 60,
+    keyBuilder: (req) => `${req.body?.CallSid || ''}:${req.body?.CallStatus || ''}:${req.body?.SequenceNumber || ''}`
+  }),
+  async (req, res) => {
   try {
     const callSid = req.body.CallSid;
     const callStatus = req.body.CallStatus;
@@ -4158,6 +4241,53 @@ app.post('/process-payment', paymentLimiter, async (req, res) => {
     idemKey = idempotency_key || req.headers['idempotency-key'] || `process_${resolvedCheckoutId}_${payment_method}`;
 
     console.log(`\n💳 Processing payment for checkout: ${resolvedCheckoutId}`);
+
+    // Duplicate-charge guardrail: block if checkout already completed/has payment intent.
+    try {
+      const existingCheckout = db.getVoiceCheckout ? await db.getVoiceCheckout(resolvedCheckoutId) : null;
+      const alreadyPaid =
+        existingCheckout &&
+        (String(existingCheckout.status || '').toLowerCase() === 'completed' || !!existingCheckout.payment_intent_id);
+      if (alreadyPaid) {
+        return res.status(409).json({
+          success: false,
+          error: 'Duplicate payment attempt blocked',
+          error_code: 'DUPLICATE_PAYMENT_ATTEMPT',
+          checkout_id: resolvedCheckoutId,
+          payment_intent_id: existingCheckout.payment_intent_id || null
+        });
+      }
+    } catch (_) {}
+
+    // Anti-sybil baseline for payment processing path.
+    try {
+      const antiSybil = evaluateAndRecord({
+        scope: 'process_payment',
+        identityKey: checkout.customer_email || checkout.customer_phone || resolvedCheckoutId,
+        ip: req.ip || req.headers['x-forwarded-for'] || '',
+        userAgent: req.headers['user-agent'] || '',
+        amountCents: Math.round((parseFloat(checkout.amount || 0) || 0) * 100)
+      });
+      if (antiSybil.decision === 'block') {
+        let review = null;
+        try {
+          review = enqueueFraudReview({
+            antiSybilEventId: antiSybil.eventId,
+            scope: 'process_payment',
+            priority: antiSybil.score >= 85 ? 'critical' : 'high',
+            slaMinutes: antiSybil.score >= 85 ? 30 : 120
+          });
+        } catch (_) {}
+        if (db.releaseIdempotencyKey) db.releaseIdempotencyKey(idemKey, claimOpType);
+        return res.status(429).json({
+          success: false,
+          error: 'Payment attempt blocked for risk review',
+          error_code: 'ANTI_SYBIL_BLOCKED',
+          risk_score: antiSybil.score,
+          fraud_review_id: review?.id || null
+        });
+      }
+    } catch (_) {}
 
     // SECURITY: if this checkout/token requires identity verification, require the token to be verified
     // before allowing payment redemption/settlement.
@@ -11255,7 +11385,7 @@ app.post('/api/admin/claims/:claimId/resubmit', async (req, res) => {
  */
 app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
-    const signature = req.headers['circle-signature'];
+    const signature = req.headers['x-circle-signature'] || req.headers['circle-signature'];
     const payload = req.body.toString();
 
     // Verify webhook signature
@@ -11267,6 +11397,30 @@ app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async
 
     const event = JSON.parse(payload);
     console.log('🔔 Circle webhook received:', event.type);
+
+    // Replay defense for Circle webhook events.
+    const replayWindowSec = parseInt(process.env.CIRCLE_WEBHOOK_REPLAY_WINDOW_SEC || '900', 10);
+    const createdEpoch = Number(event?.notification?.createDate || event?.createDate || event?.created || 0);
+    if (Number.isFinite(replayWindowSec) && replayWindowSec > 0 && Number.isFinite(createdEpoch) && createdEpoch > 0) {
+      const normalizedCreated = createdEpoch > 1e12 ? Math.floor(createdEpoch / 1000) : Math.floor(createdEpoch);
+      const ageSec = Math.floor(Date.now() / 1000) - normalizedCreated;
+      if (ageSec > replayWindowSec) {
+        return res.status(200).json({ received: true, stale: true });
+      }
+    }
+    const replayOp = 'replay:circle_webhook';
+    const replayEventId = String(
+      event?.notification?.notificationId ||
+      event?.notificationId ||
+      event?.id ||
+      event?.data?.id ||
+      ''
+    ).trim();
+    const replayKey = replayEventId ? `circle:${replayEventId}` : `circlehash:${crypto.createHash('sha256').update(payload).digest('hex')}`;
+    const replayState = db.reserveIdempotencyKey ? db.reserveIdempotencyKey(replayKey, replayOp) : 'reserved';
+    if (replayState === 'completed' || replayState === 'in_progress') {
+      return res.status(200).json({ received: true, replay_skipped: true });
+    }
 
     // Handle different webhook event types
     if (event.type === 'transfer.completed' || event.type === 'transfer.settlement_completed') {
@@ -11310,6 +11464,9 @@ app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async
       }
     }
 
+    if (db.completeIdempotentResult) {
+      try { db.completeIdempotentResult(replayKey, replayOp, { received: true }); } catch (_) {}
+    }
     res.json({ received: true });
   } catch (error) {
     console.error('❌ Error processing Circle webhook:', error);
@@ -16936,6 +17093,10 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
     if (!out.success) {
       const status = out.error === 'invalid_barcode' ? 400 : 502;
       const isTimeout = out.error === 'upstream_timeout' || out.error === 'upstream_unreachable';
+      const isUpstreamFail =
+        isTimeout ||
+        String(out.error || '').startsWith('upstream_') ||
+        out.error === 'upstream_unreachable';
       return res.status(status).json({
         success: false,
         error: out.error,
@@ -16944,7 +17105,13 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
           ? { type: 'manual_barcode_entry', message: 'Enter a valid 8-14 digit barcode.' }
           : isTimeout
             ? { type: 'retry', message: 'Network is slow right now. Please retry, or add ingredients manually.' }
-            : { type: 'retry', message: 'Lookup failed. Try again, or add ingredients manually.' },
+            : isUpstreamFail
+              ? {
+                  type: 'ingredient_scan_or_manual',
+                  message:
+                    'Product database is slow or unavailable. Hold the label for a scan, type ingredients, or retry the barcode shortly.'
+                }
+              : { type: 'retry', message: 'Lookup failed. Try again, or add ingredients manually.' },
         request_id: req.id
       });
     }
@@ -17002,6 +17169,154 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
       sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
       data_source: dataSource,
       ...(persisted ? { taxonomy: persisted } : {}),
+      request_id: req.id
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: 'internal_error', request_id: req.id });
+  }
+});
+
+app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
+  try {
+    const buildScanQuality = (p = {}) => {
+      const hasName = !!String(p.product_name || '').trim();
+      const hasIngredients = !!String(p.ingredients_text || '').trim();
+      const hasCategories = Array.isArray(p.categories_tags) && p.categories_tags.length > 0;
+      const hasImage = !!String(p.image_url || '').trim();
+      const missing = [];
+      if (!hasName) missing.push('name');
+      if (!hasIngredients) missing.push('ingredients');
+      if (!hasCategories) missing.push('categories');
+      if (!hasImage) missing.push('image');
+      if (hasName && hasIngredients && hasCategories) {
+        return { tier: 'full', analyze_enabled: true, analyze_label: 'Analyze for my skin', missing };
+      }
+      if (hasName && (hasIngredients || hasCategories)) {
+        return {
+          tier: 'partial',
+          analyze_enabled: hasIngredients,
+          analyze_label: hasIngredients ? 'Analyze with partial profile' : 'Add ingredients to analyze',
+          missing
+        };
+      }
+      return { tier: 'insufficient', analyze_enabled: false, analyze_label: 'Add ingredients to analyze', missing };
+    };
+    const deriveCategoryRoute = (tags = []) => {
+      const arr = Array.isArray(tags) ? tags.map((x) => String(x || '').toLowerCase()) : [];
+      if (arr.some((t) => t.includes('beverage') || t.includes('drink'))) return 'beverage';
+      if (arr.some((t) => t.includes('snack') || t.includes('sweet'))) return 'snacks_sweets';
+      if (arr.some((t) => t.includes('dairy') || t.includes('milk'))) return 'dairy';
+      return 'unknown';
+    };
+    const deriveIngredientFlags = (p = {}) => {
+      const analysis = Array.isArray(p.ingredients_analysis_tags)
+        ? p.ingredients_analysis_tags.map((x) => String(x || '').toLowerCase())
+        : [];
+      const txt = String(p.ingredients_text || '').toLowerCase();
+      return {
+        has_ingredients: !!txt.trim(),
+        has_fragrance: /\bfragrance|parfum|perfume\b/.test(txt),
+        has_palm_oil: analysis.some((t) => t.includes('palm-oil') || t.includes('palm_oil')) || /\bpalm\b/.test(txt)
+      };
+    };
+    const { fetchFoodFactsByBarcode, ingredientsTextFromTags } = require('./services/open-food-facts-service');
+    const db = require('./database');
+    const barcode = String(req.params?.barcode || '').trim();
+    if (String(req.query?.simulate || '').trim() === 'timeout') {
+      return res.status(502).json({
+        success: false,
+        error: 'upstream_timeout',
+        barcode,
+        recovery: { type: 'retry', message: 'Network is slow right now. Please retry, or add ingredients manually.' },
+        request_id: req.id
+      });
+    }
+    const disableCacheRead = String(req.query?.cache || '').trim() === '0' || String(req.query?.force_live || '').trim() === '1';
+    const cached = db.getOffIndexProductByCode(barcode);
+    let out = null;
+    let dataSource = 'live_api';
+    if (!disableCacheRead && cached && String(process.env.OFF_INDEX_CACHE_READ || '1') !== '0') {
+      out = {
+        success: true,
+        normalized: {
+          source: 'open_food_facts',
+          barcode: cached.code,
+          found: true,
+          product_name: cached.product_name || null,
+          brands: String(cached.brands || '')
+            .split(',')
+            .map((x) => x.trim())
+            .filter(Boolean),
+          ingredients_text:
+            (cached.ingredients_text && String(cached.ingredients_text).trim()) ||
+            ingredientsTextFromTags(cached.ingredients_tags) ||
+            null,
+          ingredients: [],
+          allergens: [],
+          labels: [],
+          categories: [],
+          categories_tags: Array.isArray(cached.categories_tags) ? cached.categories_tags : [],
+          categories_hierarchy: Array.isArray(cached.categories_hierarchy) ? cached.categories_hierarchy : [],
+          ingredients_analysis_tags: Array.isArray(cached.ingredients_analysis_tags) ? cached.ingredients_analysis_tags : [],
+          states_tags: Array.isArray(cached.states_tags) ? cached.states_tags : [],
+          product_type: null,
+          image_url: cached.image_url || null,
+          product_url: cached.product_url || null
+        }
+      };
+      dataSource = 'off_index_cache';
+      try { Metrics.increment('off.index_cache.hit.count', 1); } catch (_) {}
+    } else {
+      try { Metrics.increment('off.index_cache.miss.count', 1); } catch (_) {}
+      out = await fetchFoodFactsByBarcode(barcode);
+      if (out?.success) {
+        try { Metrics.increment('off.index_cache.fallback_to_live.count', 1); } catch (_) {}
+      }
+    }
+    if (!out.success) {
+      const status = out.error === 'invalid_barcode' ? 400 : 502;
+      const isTimeout = out.error === 'upstream_timeout' || out.error === 'upstream_unreachable';
+      return res.status(status).json({
+        success: false,
+        error: out.error,
+        barcode,
+        recovery: out.error === 'invalid_barcode'
+          ? { type: 'manual_barcode_entry', message: 'Enter a valid 8-14 digit barcode.' }
+          : isTimeout
+            ? { type: 'retry', message: 'Network is slow right now. Please retry, or add ingredients manually.' }
+            : { type: 'retry', message: 'Lookup failed. Try again, or add ingredients manually.' },
+        request_id: req.id
+      });
+    }
+    if (out.normalized && out.normalized.found === false) {
+      return res.status(404).json({
+        success: false,
+        error: 'upstream_404',
+        barcode: out.normalized?.barcode || barcode,
+        data_source: dataSource,
+        recovery: {
+          type: 'manual_ingredients',
+          message: 'Product not found. Add ingredient list for analysis.'
+        },
+        request_id: req.id
+      });
+    }
+    const scanQuality = buildScanQuality(out.normalized || {});
+    const categoryRoute = deriveCategoryRoute(out.normalized?.categories_tags || []);
+    const ingredientFlags = deriveIngredientFlags(out.normalized || {});
+    return res.json({
+      success: true,
+      barcode: out.normalized?.barcode || barcode,
+      product: out.normalized,
+      scan_quality: scanQuality,
+      cta_state: {
+        analyze_enabled: scanQuality.analyze_enabled,
+        analyze_label: scanQuality.analyze_label
+      },
+      category_route: categoryRoute,
+      ingredient_flags: ingredientFlags,
+      sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
+      data_source: dataSource,
       request_id: req.id
     });
   } catch (e) {
@@ -17073,6 +17388,80 @@ app.post('/api/public/landing-assistant/results/:sessionId/edit', apiLimiter, ex
   }
 });
 
+const { waitlistRoute } = require('./migrations/037_waitlist');
+app.post(
+  '/api/public/waitlist',
+  apiLimiter,
+  express.json(),
+  antiSybilGuard(
+    'public_waitlist',
+    (req) => String(req.body?.email || req.body?.name || '').trim().toLowerCase()
+  ),
+  waitlistRoute(db.db)
+);
+
+app.post('/api/public/risk-appeals', apiLimiter, express.json(), async (req, res) => {
+  try {
+    const { submitAppeal } = require('./services/anti-sybil-service');
+    const contactEmail = String(req.body?.contact_email || '').trim().toLowerCase();
+    const reason = String(req.body?.reason || '').trim();
+    if (!reason || reason.length < 10) {
+      return res.status(400).json({ success: false, error: 'reason must be at least 10 characters' });
+    }
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      return res.status(400).json({ success: false, error: 'contact_email must be valid when provided' });
+    }
+    const out = submitAppeal({
+      antiSybilEventId: req.body?.anti_sybil_event_id || null,
+      contactEmail: contactEmail || null,
+      scope: req.body?.scope || null,
+      reason
+    });
+    return res.status(201).json({ success: true, appeal_id: out.id, status: out.status });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/admin/fraud-reviews', requireAdminAuth, async (req, res) => {
+  try {
+    const status = String(req.query?.status || '').trim() || null;
+    const limit = Number(req.query?.limit || 100);
+    const items = listFraudReviews({ status, limit });
+    return res.json({ success: true, items });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/admin/fraud-reviews/:id/assign', requireAdminAuth, express.json(), async (req, res) => {
+  try {
+    const out = assignFraudReview({
+      reviewId: String(req.params?.id || '').trim(),
+      reviewer: String(req.body?.reviewer || req.body?.assigned_to || '').trim(),
+      slaMinutes: req.body?.sla_minutes
+    });
+    if (!out.success) return res.status(404).json({ success: false, error: out.error || 'not_found' });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/admin/fraud-reviews/:id/resolve', requireAdminAuth, express.json(), async (req, res) => {
+  try {
+    const out = resolveFraudReview({
+      reviewId: String(req.params?.id || '').trim(),
+      outcome: String(req.body?.outcome || '').trim(),
+      note: req.body?.note || ''
+    });
+    if (!out.success) return res.status(400).json({ success: false, error: out.error || 'resolve_failed' });
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(), async (req, res) => {
   try {
     const sessionId = String(req.body?.session_id || '').trim();
@@ -17081,6 +17470,9 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
     if (!sessionId || !text) {
       return res.status(400).json({ success: false, error: 'session_id and text required', request_id: req.id });
     }
+    const rawPd = req.body?.product_data;
+    const productData =
+      rawPd != null && typeof rawPd === 'object' && !Array.isArray(rawPd) ? rawPd : null;
     const row = db?.getOrchestrateSessionBySessionId?.(sessionId) || null;
     const currentFlow = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
     const thread = Array.isArray(currentFlow.short_term_thread) ? currentFlow.short_term_thread : [];
@@ -17091,6 +17483,7 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
         text,
         file_name: req.body?.file_name || null,
         mime_type: req.body?.mime_type || null,
+        product_data: productData,
         actor: 'user',
         created_at: new Date().toISOString()
       }
@@ -17107,6 +17500,14 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
         turn_count: Number(row?.turn_count || 0),
         preferred_language: row?.preferred_language || 'en'
       });
+    }
+    if (type === 'barcode_product_context') {
+      try {
+        const SnapshotService = require('./services/session-result-snapshot-service');
+        SnapshotService.buildSessionResultSnapshot({ sessionId, source: 'barcode_scan_thread_event' });
+      } catch (snapErr) {
+        console.warn('[landing-assistant] thread-event snapshot:', snapErr?.message || snapErr);
+      }
     }
     return res.json({ success: true, session_id: sessionId, short_term_thread_count: nextThread.length });
   } catch (e) {
@@ -21189,6 +21590,44 @@ const server = app.listen(PORT, HOST, () => {
       }, 24 * 60 * 60 * 1000);
     }
   } catch (e) { /* ignore */ }
+
+  // Fraud review SLA breach monitor
+  try {
+    const pollMs = Math.max(
+      15 * 1000,
+      parseInt(process.env.FRAUD_REVIEW_SLA_ALERT_INTERVAL_MS || '60000', 10) || 60000
+    );
+    const maxPerRun = Math.max(
+      1,
+      Math.min(200, parseInt(process.env.FRAUD_REVIEW_SLA_ALERT_BATCH || '50', 10) || 50)
+    );
+    const runFraudReviewSlaMonitor = () => {
+      try {
+        const overdue = listOverdueFraudReviews({ limit: maxPerRun });
+        if (!Array.isArray(overdue) || overdue.length === 0) return;
+        for (const item of overdue) {
+          const marked = markFraudReviewAlerted(item.id);
+          if (!marked) continue;
+          try { db.incrementOpsCounter && db.incrementOpsCounter('fraud_review_sla_breach'); } catch (_) {}
+          console.warn('[FraudReview][SLA_BREACH]', JSON.stringify({
+            review_id: item.id,
+            scope: item.scope || null,
+            priority: item.priority || null,
+            assigned_to: item.assigned_to || null,
+            status: item.status || null,
+            sla_due_at: item.sla_due_at || null
+          }));
+        }
+      } catch (e) {
+        console.warn('[FraudReview] SLA monitor error:', e.message);
+      }
+    };
+    runFraudReviewSlaMonitor();
+    setInterval(runFraudReviewSlaMonitor, pollMs);
+    console.log(`✅ Fraud review SLA monitor started (interval ${pollMs}ms, batch ${maxPerRun})`);
+  } catch (e) {
+    console.warn('⚠️  Fraud review SLA monitor disabled:', e.message);
+  }
 
   // Expired commerce quote sessions (checkout_sessions)
   try {

@@ -111,6 +111,15 @@ router.post(
 
     console.log('[StripeWebhook] Received event:', event.type, event.id);
 
+    const replayWindowSec = parseInt(process.env.STRIPE_WEBHOOK_REPLAY_WINDOW_SEC || '600', 10);
+    if (Number.isFinite(replayWindowSec) && replayWindowSec > 0 && Number.isFinite(event?.created)) {
+      const ageSec = Math.floor(Date.now() / 1000) - Number(event.created);
+      if (ageSec > replayWindowSec) {
+        console.warn('[StripeWebhook] Rejected stale event outside replay window:', { eventId: event.id, ageSec, replayWindowSec });
+        return res.status(200).json({ received: true, stale: true });
+      }
+    }
+
     try {
       const existing = db.db.prepare(`
         SELECT id FROM stripe_webhook_events WHERE stripe_event_id = ? LIMIT 1

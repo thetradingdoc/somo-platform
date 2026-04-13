@@ -551,6 +551,21 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
+    const replayWindowSec = parseInt(process.env.STRIPE_WEBHOOK_REPLAY_WINDOW_SEC || '600', 10);
+    if (Number.isFinite(replayWindowSec) && replayWindowSec > 0 && Number.isFinite(event?.created)) {
+        const ageSec = Math.floor(Date.now() / 1000) - Number(event.created);
+        if (ageSec > replayWindowSec) {
+            return res.status(200).json({ received: true, stale: true });
+        }
+    }
+
+    const replayOp = 'replay:credits_stripe';
+    const replayKey = `credits:${event.id}`;
+    const replayState = db.reserveIdempotencyKey ? db.reserveIdempotencyKey(replayKey, replayOp) : 'reserved';
+    if (replayState === 'completed' || replayState === 'in_progress') {
+        return res.status(200).json({ received: true, replay_skipped: true });
+    }
+
     // Handle the event
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
@@ -573,6 +588,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         }
     }
 
+    if (db.completeIdempotentResult) {
+        try { db.completeIdempotentResult(replayKey, replayOp, { received: true }); } catch (_) {}
+    }
     res.json({ received: true });
 });
 
