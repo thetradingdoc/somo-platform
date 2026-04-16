@@ -15142,6 +15142,25 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
       return reply;
     }
   };
+  const enforceRouteContractOnChatReply = ({ reply, semanticContract = null, preRoute = false }) => {
+    let out = String(reply || '');
+    if (!out) return out;
+    const forbidden = Array.isArray(semanticContract?.forbidden_vocab) ? semanticContract.forbidden_vocab : [];
+    for (const term of forbidden) {
+      const safe = String(term || '').trim();
+      if (!safe) continue;
+      try {
+        out = out.replace(new RegExp(`\\b${safe}\\b`, 'ig'), 'route-specific guidance');
+      } catch (_) {}
+    }
+    if (preRoute) {
+      out = out.replace(/\b(skincare|skin type|actives?|tone evening|anti[- ]?aging|blemish)\b/gi, 'product');
+      if (!/route/i.test(out)) {
+        out = `${out} I will keep guidance neutral until route classification is available.`;
+      }
+    }
+    return out;
+  };
   // S-1: No last-resort fallback clinic (multi-tenant leak). Use env, request, or patient's clinic only.
   let clinicId = resolveClinicIdFromRequest(req, req.body || {}) || FALLBACK_CLINIC_ID;
   if (!clinicId && mappedPatientId && db?.getPatientClinicIds) {
@@ -15400,6 +15419,13 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   } catch (e) {
     console.warn('[landing-assistant] snapshot build skipped:', e.message);
   }
+  const semanticContract = sessionResultSnapshot?.result_summary?.semantic_contract || null;
+  const preRouteTurn = !landingThreadHasBarcodeContext;
+  result.reply = enforceRouteContractOnChatReply({
+    reply: result.reply,
+    semanticContract,
+    preRoute: preRouteTurn
+  });
   flowStateOut.short_term_thread = shortThread.slice(-20);
   if (isLikelyVoiceStyle) {
     const replyText = String(result.reply || '');

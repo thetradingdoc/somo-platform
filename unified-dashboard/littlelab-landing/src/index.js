@@ -270,6 +270,7 @@ function Root() {
   const STATIC_CATALOG_FALLBACK = [
     {
       id: 'prod-vitamin-b3-serum-pore-sebum-control',
+      brand: 'Skin & Care',
       name: 'Vitamin B3 Serum | Pore & Sebum Control',
       price: 27.99,
       image_url: '/images/products/vitamin-b3-serum.png',
@@ -283,6 +284,7 @@ function Root() {
     },
     {
       id: 'prod-retinol-peptide-night-serum',
+      brand: 'Skin & Care',
       name: 'Retinol Brightening Night Serum',
       price: 29.99,
       image_url: '/images/products/retinol-brightening-night-serum.png',
@@ -296,6 +298,7 @@ function Root() {
     },
     {
       id: SNAIL_MUCIN_PRODUCT_ID,
+      brand: 'Skin & Care',
       name: SNAIL_MUCIN_TITLE,
       price: 29.99,
       image_url: '/images/products/dark-spot-repair-snail-mucin-serum.png',
@@ -310,6 +313,7 @@ function Root() {
     },
     {
       id: VITAMIN_C_PRODUCT_ID,
+      brand: 'Skin & Care',
       name: 'Vitamin C Serum | Antioxidant Pro-Shield',
       price: 21.99,
       image_url: '/images/products/vitamin-c-serum.png',
@@ -390,6 +394,23 @@ function Root() {
     const amount = Number(value);
     if (!Number.isFinite(amount)) return '$0.00';
     return `$${amount.toFixed(2)}`;
+  };
+
+  const parseRatingValue = (raw) => {
+    const n = Number.parseFloat(String(raw || '').replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 4.9;
+  };
+
+  const extractBrand = (product) => {
+    const explicit = String(product?.brand || '').trim();
+    if (explicit) return explicit;
+    const firstBrand = String(product?.brands || '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)[0];
+    if (firstBrand) return firstBrand;
+    const fromName = String(product?.name || '').split('|')[0].trim();
+    return fromName ? fromName.split(/\s+/).slice(0, 2).join(' ') : 'Unknown';
   };
 
   const normalizeProductImageUrl = (product) => {
@@ -643,6 +664,7 @@ function Root() {
       (STATIC_CATALOG_FALLBACK.find((x) => x.id === product.id)?.short_description || '').trim();
     return {
       id: product.id,
+      brand: extractBrand(product),
       name: fullName,
       displayName,
       titleShort,
@@ -650,6 +672,7 @@ function Root() {
       shortDescription,
       size: '30ml',
       rating: '4.9 (Verified)',
+      ratingValue: parseRatingValue(product.rating || '4.9'),
       image: normalizeProductImageUrl(product),
       featured: FEATURED_PRODUCT_ORDER.includes(product.id),
       isNew: index === 0,
@@ -663,6 +686,33 @@ function Root() {
   const filteredProductCards = Array.isArray(activeFilter.productIds)
     ? productCards.filter((p) => activeFilter.productIds.includes(p.id))
     : productCards;
+
+  const catalogStats = useMemo(() => {
+    const rows = filteredProductCards;
+    const brandCounts = rows.reduce((acc, p) => {
+      const key = String(p.brand || 'Unknown').trim() || 'Unknown';
+      acc.set(key, (acc.get(key) || 0) + 1);
+      return acc;
+    }, new Map());
+    const topBrands = [...brandCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([brand, count]) => ({ brand, count }));
+    const avgRating = rows.length
+      ? rows.reduce((sum, p) => sum + Number(p.ratingValue || 0), 0) / rows.length
+      : 0;
+    const categoryCounts = CATALOG_FILTERS.filter((f) => Array.isArray(f.productIds)).map((f) => ({
+      id: f.id,
+      label: f.label,
+      count: productCards.filter((p) => f.productIds.includes(p.id)).length
+    }));
+    return {
+      topBrands,
+      avgRating: avgRating.toFixed(1),
+      totalShown: rows.length,
+      categoryCounts
+    };
+  }, [filteredProductCards, productCards]);
 
   const buildCheckoutInChatUrl = (product) => {
     const params = new URLSearchParams({
@@ -836,8 +886,7 @@ function Root() {
               </p>
             </div>
             <h1 className="hero-title hero-title--cal">
-              <span className="hero-title-line1">Scan your products</span>{' '}
-              <span className="hero-title-line2">with just a picture</span>
+              <span className="hero-title-line1">See what&apos;s really inside your products</span>
             </h1>
             <p className="subtext subtext--cal">
               Scan any product barcode to instantly reveal product ingredients and check exactly what&apos;s inside.
@@ -923,6 +972,32 @@ function Root() {
                   {f.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="solutions-insights" aria-label="Catalog insights">
+            <div className="solutions-insight-block">
+              <p className="solutions-insight-title">Top brands</p>
+              <div className="solutions-insight-pills">
+                {catalogStats.topBrands.map((entry) => (
+                  <span key={entry.brand} className="solutions-insight-pill">
+                    {entry.brand} ({entry.count})
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="solutions-insight-block">
+              <p className="solutions-insight-title">Category groups</p>
+              <div className="solutions-insight-pills">
+                {catalogStats.categoryCounts.map((entry) => (
+                  <span key={entry.id} className="solutions-insight-pill solutions-insight-pill--category">
+                    {entry.label}: {entry.count}
+                  </span>
+                ))}
+                <span className="solutions-insight-pill solutions-insight-pill--rating">
+                  Avg rating: {catalogStats.avgRating}★
+                </span>
+              </div>
             </div>
           </div>
 

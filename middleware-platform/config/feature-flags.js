@@ -14,6 +14,12 @@ const flags = {
   token_budget_enabled: process.env.TOKEN_BUDGET_ENABLED !== 'false',
   // Reasoning map controller (step-5 arbitration pipeline)
   AGENT_REASONING_MAP_V1: process.env.AGENT_REASONING_MAP_V1 === 'true',
+  // Scan/result-summary reasoning augmentation: keep off for deterministic-only mode unless explicitly enabled.
+  RESULT_SUMMARY_REASONING_V1: process.env.RESULT_SUMMARY_REASONING_V1 === 'true',
+  // Route-scoped semantic gate for reasoning merge. Default ON; set to 'false' for rollback.
+  RESULT_SUMMARY_SEMANTIC_GUARD_V1: process.env.RESULT_SUMMARY_SEMANTIC_GUARD_V1 !== 'false',
+  // Shadow mode: record semantic reject metrics even when semantic guard is disabled.
+  RESULT_SUMMARY_SEMANTIC_GUARD_SHADOW: process.env.RESULT_SUMMARY_SEMANTIC_GUARD_SHADOW === 'true',
   // Patient journey feature flags (portal)
   FEATURE_PATIENT_ONBOARDING: process.env.FEATURE_PATIENT_ONBOARDING !== 'false',
   FEATURE_PATIENT_SELF_SCHEDULING: process.env.FEATURE_PATIENT_SELF_SCHEDULING === 'true',

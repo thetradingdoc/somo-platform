@@ -234,3 +234,47 @@ This section summarizes gaps identified during review and now reflected above:
 - **Payments:** Retell webhook secret (P11), no-show deposit option (P10), idempotency for claims (P8), `surge_enabled` on clinics (P3b).
 - **Monitoring / Ops:** Feature flags (M7), E2E test (M8), dependency scanning (M9), CI/CD verification (M10).
 - **Env:** Optional Stedi and LangSmith vars in Section 6.
+
+---
+
+## 10. Scanning Feature Production Readiness
+
+Scope: barcode scan -> catalog retrieval -> category route resolution -> deterministic summary -> reasoning merge -> results UI/chat copy.
+
+### 10.1 P0 Launch Blockers (Must Pass Before Default-On)
+
+| # | Task | Status / Notes |
+|---|------|----------------|
+| SCN-P0-1 | Route-safe verdict copy | Enforce semantic contract across all verdict fields (`what_it_does`, `good_for_me`, `harmful`, `children_safe`, `side_effects`, `alternatives`) so non-cosmetic routes never emit cosmetic framing |
+| SCN-P0-2 | Deterministic route guard | Ensure deterministic builders are route-dispatched (`cosmetic` vs non-cosmetic) for tiles and side-effects baseline |
+| SCN-P0-3 | Merge-time semantic validation | `applyReasoningPatch` must block unsupported field paths and forbidden vocabulary; write durable reject audit rows |
+| SCN-P0-4 | Snapshot compatibility | Backward-compatible reads for pre-contract snapshots; `semantic_contract_version` present on new snapshots; legacy fallback rendering verified |
+| SCN-P0-5 | Chat parity | `POST /api/public/landing-assistant/turn` enforces same route contract and pre-route neutral copy as results pipeline |
+| SCN-P0-6 | Adversarial eval gate | CI guardrail suite includes cross-domain fixtures (food/meds/non_food) and fails on route-leaking vocabulary |
+
+### 10.2 P1 Reliability and Quality Gates
+
+| # | Task | Status / Notes |
+|---|------|----------------|
+| SCN-P1-1 | Coverage baseline by route | Define minimum found-rate targets per route (food/beauty/hair/supplement/meds) and track weekly |
+| SCN-P1-2 | Route confidence policy | Persist `route_confidence`, apply minimum threshold fallback to restrictive contract, and record conflict policy decisions |
+| SCN-P1-3 | Retrieval grounding quality | Require per-field provenance minimums; monitor fallback/deferred rates by route and field |
+| SCN-P1-4 | Scan latency SLO | Track p50/p95 for scan -> summary and scan -> reasoning-applied; define alerts on regressions |
+| SCN-P1-5 | Error budget | Alert on spikes in `not_found`, reasoning deferrals, semantic rejects, and patch conflicts |
+| SCN-P1-6 | Human QA set | Maintain 50-100 real barcode gold set across routes; run before release and on every major contract/version change |
+
+### 10.3 P2 Hardening and Operational Excellence
+
+| # | Task | Status / Notes |
+|---|------|----------------|
+| SCN-P2-1 | Provider-facing fallback UX | Add explicit route-safe copy for unsupported/deferred fields across all result cards and chat |
+| SCN-P2-2 | Contract tooling | Export semantic contracts and semantic reject audits in release artifacts for reviewer sign-off |
+| SCN-P2-3 | Backfill automation | Scheduled job for legacy snapshot contract backfill with idempotent progress tracking |
+| SCN-P2-4 | Route ambiguity model upgrades | Improve multi-route handling and classifier confidence calibration from production feedback |
+| SCN-P2-5 | Release dashboard | Single dashboard: found-rate, route distribution, semantic reject rate, unsupported_for_route rate, reasoning applied rate |
+
+### 10.4 Go/No-Go Criteria for Scanning Feature
+
+- Go only when SCN-P0 items are complete and CI guardrails are green.
+- Keep feature in staged rollout (shadow/canary) until P1 metrics stabilize for at least 7 consecutive days.
+- No-Go if any cross-domain leakage reappears in gold set or production telemetry.

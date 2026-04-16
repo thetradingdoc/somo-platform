@@ -1,6 +1,76 @@
 'use strict';
 
 const SCHEMA_VERSION = '1';
+const FeatureFlags = require('../config/feature-flags');
+const Metrics = require('./metrics');
+const SemanticRejectAudit = require('./semantic-reject-audit-service');
+const SemanticContractRegistry = require('./semantic-contract-registry');
+const SEMANTIC_CONTRACT_VERSION = SemanticContractRegistry.getLiveSemanticContractVersion();
+
+const REASONING_ALLOWED_UPGRADE_FIELDS = [
+  'tiles.skin_type',
+  'verdict.good_for_me.summary',
+  'verdict.good_for_me.detail',
+  'verdict.harmful.flags',
+  'verdict.harmful.top_evidence',
+  'verdict.harmful.summary',
+  'verdict.children_safe.summary',
+  'verdict.children_safe.text',
+  'verdict.side_effects.summary',
+  'verdict.side_effects.text',
+  'verdict.alternatives.candidates',
+  'verdict.alternatives.footer'
+];
+
+const REASONING_MIN_CONFIDENCE = {
+  'tiles.skin_type': 0.72,
+  'verdict.good_for_me.summary': 0.72,
+  'verdict.good_for_me.detail': 0.72,
+  'verdict.harmful.flags': 0.8,
+  'verdict.harmful.top_evidence': 0.8,
+  'verdict.harmful.summary': 0.78,
+  'verdict.children_safe.summary': 0.8,
+  'verdict.children_safe.text': 0.8,
+  'verdict.side_effects.summary': 0.8,
+  'verdict.side_effects.text': 0.8,
+  'verdict.alternatives.candidates': 0.76,
+  'verdict.alternatives.footer': 0.7
+};
+
+const REASONING_MIN_CONFIDENCE_BY_ROUTE = {
+  default: {},
+  food: {
+    'verdict.harmful.flags': 0.82,
+    'verdict.harmful.top_evidence': 0.82,
+    'verdict.good_for_me.summary': 0.76
+  },
+  supplement: {
+    'verdict.harmful.flags': 0.82,
+    'verdict.harmful.top_evidence': 0.82,
+    'verdict.good_for_me.summary': 0.76
+  },
+  meds: {
+    'verdict.harmful.flags': 0.85,
+    'verdict.harmful.top_evidence': 0.85,
+    'verdict.children_safe.summary': 0.84
+  }
+};
+
+const REASONING_MIN_EVIDENCE_BY_ROUTE = {
+  default: {
+    'verdict.harmful.flags': 1,
+    'verdict.harmful.top_evidence': 1
+  },
+  cosmetic: {
+    'verdict.alternatives.candidates': 1
+  },
+  food: {
+    'verdict.good_for_me.summary': 1
+  },
+  supplement: {
+    'verdict.good_for_me.summary': 1
+  }
+};
 
 const ACTIVE_DICTIONARY = [
   { key: 'niacinamide', label: 'Niacinamide', functionTags: ['blemish_control', 'oil_balance'] },
@@ -107,6 +177,293 @@ function describeProductFunction(categoryRoute, functionTags = []) {
   return byRoute[categoryRoute] || byRoute.unknown;
 }
 
+function formatTagLabel(tag) {
+  return String(tag || '')
+    .replace(/_/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+function buildPendingReasoningState() {
+  return {
+    status: 'deferred',
+    source: 'none',
+    confidence: null,
+    pending: true,
+    reason_unavailable: 'reasoning_pending',
+    pending_copy: 'Deeper analysis running - results will update shortly'
+  };
+}
+
+function summarizeRoutineConflictFlags(routineConflicts = []) {
+  return routineConflicts
+    .slice(0, 4)
+    .map((c) => String(c?.summary || c?.recommendation || c?.id || '').trim())
+    .filter(Boolean);
+}
+
+function summarizeWatchFlagsFromIngredients(ingredientsText = '') {
+  const t = String(ingredientsText || '').toLowerCase();
+  const out = [];
+  if (/\bphenoxyethanol\b/.test(t)) out.push('Phenoxyethanol preservative');
+  if (/\bfragrance|parfum|limonene|linalool\b/.test(t)) out.push('Fragrance allergens present');
+  else out.push('No fragrance allergens detected');
+  if (/\bretinol|tretinoin|salicylic acid|glycolic acid|lactic acid|benzoyl peroxide\b/.test(t)) {
+    out.push('High-activity exfoliant or retinoid present');
+  }
+  return out.slice(0, 4);
+}
+
+function buildDeterministicSideEffects({
+  ingredientsText = '',
+  functionTags = [],
+  harmfulSeverity = 'low',
+  categoryRoute = 'unknown'
+}) {
+  const route = String(categoryRoute || 'unknown').toLowerCase();
+  // Route guard: non-cosmetic contracts should never emit cosmetic adverse-effect copy.
+  if (route !== 'cosmetic' && route !== 'hygiene') {
+    return 'Not assessed in this scan.';
+  }
+  const t = String(ingredientsText || '').toLowerCase();
+  if (/\bniacinamide\b/.test(t)) {
+    return 'Potential flushing with high-dose niacinamide in sensitive individuals.';
+  }
+  if (/\bretinol|tretinoin\b/.test(t)) {
+    return 'Dryness or irritation is possible while skin adjusts to retinoid activity.';
+  }
+  if (/\bsalicylic acid|glycolic acid|lactic acid|azelaic acid\b/.test(t)) {
+    return 'Mild dryness, tingling, or irritation is possible with active acid formulas.';
+  }
+  if (harmfulSeverity === 'high') {
+    return 'Potential irritation signals detected from current deterministic checks.';
+  }
+  if (Array.isArray(functionTags) && functionTags.includes('hydration')) {
+    return 'Generally well tolerated from current deterministic checks.';
+  }
+  return 'Not assessed in this scan.';
+}
+
+function _clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function _getByPath(target, path) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  let ref = target;
+  for (const p of parts) {
+    if (!ref || typeof ref !== 'object') return undefined;
+    ref = ref[p];
+  }
+  return ref;
+}
+
+function _setByPath(target, path, value) {
+  const parts = String(path || '').split('.').filter(Boolean);
+  if (!parts.length) return false;
+  let ref = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i];
+    if (!ref[p] || typeof ref[p] !== 'object') ref[p] = {};
+    ref = ref[p];
+  }
+  ref[parts[parts.length - 1]] = value;
+  return true;
+}
+
+function sanitizeReasoningText(input) {
+  const text = String(input || '').trim();
+  if (!text) return '';
+  return text
+    .replace(/\bdiagnos(?:is|es|e|ed|ing)\b/gi, 'assess')
+    .replace(/\bcure(?:s|d|ing)?\b/gi, 'support')
+    .replace(/\btreat(?:s|ed|ing)?\b/gi, 'help with')
+    .replace(/\bmedical advice\b/gi, 'consumer guidance')
+    .replace(/\bguarantee(?:d)?\b/gi, 'suggest')
+    .replace(/\bdefinitively\b/gi, 'likely');
+}
+
+function isFieldAllowedByContract(contract, fieldPath) {
+  const validFields = Array.isArray(contract?.valid_fields) ? contract.valid_fields : [];
+  if (!validFields.length) return true;
+  const path = String(fieldPath || '').trim();
+  return validFields.some((vf) => path === vf || path.startsWith(`${vf}.`));
+}
+
+function hasForbiddenVocabulary(contract, candidate) {
+  const blocked = Array.isArray(contract?.forbidden_vocab) ? contract.forbidden_vocab : [];
+  if (!blocked.length) return false;
+  const blob = Array.isArray(candidate) ? candidate.join(' ') : String(candidate || '');
+  const lower = blob.toLowerCase();
+  return blocked.some((term) => lower.includes(String(term || '').toLowerCase()));
+}
+
+function getRouteMinConfidence(route, fieldPath) {
+  const r = String(route || 'default').toLowerCase();
+  const routeMap = REASONING_MIN_CONFIDENCE_BY_ROUTE[r] || {};
+  return Number(routeMap[fieldPath] ?? REASONING_MIN_CONFIDENCE[fieldPath] ?? 1);
+}
+
+function getRouteMinEvidence(route, fieldPath) {
+  const r = String(route || 'default').toLowerCase();
+  const routeMap = REASONING_MIN_EVIDENCE_BY_ROUTE[r] || {};
+  const dflt = REASONING_MIN_EVIDENCE_BY_ROUTE.default || {};
+  return Number(routeMap[fieldPath] ?? dflt[fieldPath] ?? 0);
+}
+
+function buildReasoningMeta({ enabled = false, status = 'disabled', patch = null, inputHash = null } = {}) {
+  return {
+    enabled: !!enabled,
+    status,
+    allowed_upgrade_fields: REASONING_ALLOWED_UPGRADE_FIELDS,
+    min_confidence_by_field: { ...REASONING_MIN_CONFIDENCE },
+    reasoning_model: patch?.reasoning_model || null,
+    reasoning_version: patch?.reasoning_version || null,
+    reasoning_evidence_refs: Array.isArray(patch?.reasoning_evidence_refs) ? patch.reasoning_evidence_refs : [],
+    reasoning_generated_at: patch?.generated_at || null,
+    reasoning_input_hash: patch?.reasoning_input_hash || inputHash || null,
+    guardrails: ['no_diagnosis_language', 'no_medical_advice', 'confidence_gate_per_field']
+  };
+}
+
+function applyReasoningPatch(resultSummary, patch = null, options = {}) {
+  const out = _clone(resultSummary || {});
+  const enabled = options.enabled !== false;
+  const inputHash = options.inputHash || null;
+  const semanticContract = out?.semantic_contract || buildSemanticContract('unknown');
+  const route = String(semanticContract?.route || 'unknown').toLowerCase();
+  const sessionId = options.sessionId ? String(options.sessionId) : null;
+  const semanticGuardEnabled = FeatureFlags.isEnabled('RESULT_SUMMARY_SEMANTIC_GUARD_V1');
+  const semanticGuardShadow = FeatureFlags.isEnabled('RESULT_SUMMARY_SEMANTIC_GUARD_SHADOW');
+
+  function emitSemanticMetric(name, fieldPath) {
+    Metrics.increment(name, 1);
+    Metrics.increment(`${name}.route.${route}.count`, 1);
+    Metrics.increment(`${name}.field.${String(fieldPath || 'unknown').replace(/\./g, '_')}.count`, 1);
+  }
+  if (!enabled) {
+    out.reasoning = buildReasoningMeta({ enabled: false, status: 'disabled', patch: null, inputHash });
+    return out;
+  }
+  if (!patch || typeof patch !== 'object') {
+    out.reasoning = buildReasoningMeta({ enabled: true, status: 'pending', patch: null, inputHash });
+    return out;
+  }
+
+  const evidenceRefs = Array.isArray(patch.reasoning_evidence_refs) ? patch.reasoning_evidence_refs : [];
+  let appliedCount = 0;
+  for (const fieldPath of REASONING_ALLOWED_UPGRADE_FIELDS) {
+    const candidate = _getByPath(patch, fieldPath);
+    if (candidate == null || candidate === '') continue;
+    const patchContractVersion = String(patch?.semantic_contract_version || '').trim() || null;
+    const liveContractVersion = String(semanticContract?.semantic_contract_version || SEMANTIC_CONTRACT_VERSION);
+    if (patchContractVersion && patchContractVersion !== liveContractVersion) {
+      continue;
+    }
+    const conf = Number(_getByPath(patch, `${fieldPath}_confidence`) || _getByPath(patch, `${fieldPath}_score`) || 0);
+    const minConf = getRouteMinConfidence(route, fieldPath);
+    if (!Number.isFinite(conf) || conf < minConf) {
+      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+      const container = _getByPath(out, containerPath);
+      if (container && typeof container === 'object') {
+        container.status = 'deferred';
+        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
+        container.reason_unavailable = 'reasoning_low_confidence';
+      }
+      continue;
+    }
+    const fieldBlocked = !isFieldAllowedByContract(semanticContract, fieldPath);
+    if (fieldBlocked && semanticGuardShadow) emitSemanticMetric('reasoning.semantic_reject.count', fieldPath);
+    if (fieldBlocked && semanticGuardEnabled) {
+      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+      const container = _getByPath(out, containerPath);
+      if (container && typeof container === 'object') {
+        container.status = 'unsupported_for_route';
+        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
+        container.reason_unavailable = 'unsupported_for_route';
+      }
+      emitSemanticMetric('reasoning.unsupported_for_route.count', fieldPath);
+      SemanticRejectAudit.logSemanticReject({
+        sessionId,
+        route,
+        field: fieldPath,
+        rejectedValue: candidate,
+        contractVersion: liveContractVersion,
+        reason: 'field_not_allowed_for_route'
+      });
+      continue;
+    }
+    const safeValue =
+      typeof candidate === 'string'
+        ? sanitizeReasoningText(candidate)
+        : Array.isArray(candidate)
+          ? candidate.map((v) => (typeof v === 'string' ? sanitizeReasoningText(v) : v)).filter(Boolean)
+          : candidate;
+    const hasBlockedTerm = hasForbiddenVocabulary(semanticContract, safeValue);
+    if (hasBlockedTerm && semanticGuardShadow) emitSemanticMetric('reasoning.semantic_reject.count', fieldPath);
+    if (hasBlockedTerm && semanticGuardEnabled) {
+      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+      const container = _getByPath(out, containerPath);
+      if (container && typeof container === 'object') {
+        container.status = 'unsupported_for_route';
+        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
+        container.reason_unavailable = 'unsupported_for_route';
+      }
+      emitSemanticMetric('reasoning.unsupported_for_route.count', fieldPath);
+      SemanticRejectAudit.logSemanticReject({
+        sessionId,
+        route,
+        field: fieldPath,
+        rejectedValue: safeValue,
+        contractVersion: liveContractVersion,
+        reason: 'forbidden_vocab_for_route'
+      });
+      continue;
+    }
+    const claimProv = patch?.reasoning_claim_provenance && typeof patch.reasoning_claim_provenance === 'object'
+      ? patch.reasoning_claim_provenance[fieldPath] || []
+      : [];
+    const minEvidence = getRouteMinEvidence(route, fieldPath);
+    if (minEvidence > 0 && (!Array.isArray(claimProv) || claimProv.length < minEvidence)) {
+      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+      const container = _getByPath(out, containerPath);
+      if (container && typeof container === 'object') {
+        container.status = 'deferred';
+        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
+        container.reason_unavailable = 'reasoning_insufficient_evidence';
+      }
+      continue;
+    }
+    _setByPath(out, fieldPath, safeValue);
+    const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+    const container = _getByPath(out, containerPath);
+    if (container && typeof container === 'object') {
+      container.source = 'reasoning';
+      const claimProv = patch?.reasoning_claim_provenance && typeof patch.reasoning_claim_provenance === 'object'
+        ? patch.reasoning_claim_provenance[fieldPath] || []
+        : [];
+      container.reasoning = {
+        confidence: conf,
+        reasoning_model: patch.reasoning_model || null,
+        reasoning_version: patch.reasoning_version || null,
+        reasoning_evidence_refs: evidenceRefs,
+        claim_provenance: Array.isArray(claimProv) ? claimProv : []
+      };
+    }
+    appliedCount += 1;
+  }
+
+  out.reasoning = buildReasoningMeta({
+    enabled: true,
+    status: appliedCount > 0 ? 'applied' : 'deferred',
+    patch,
+    inputHash
+  });
+  return out;
+}
+
 function buildDeterministicAlternatives({ categoryRoute, functionTags = [] }) {
   if (categoryRoute === 'unknown') {
     return {
@@ -149,6 +506,64 @@ function buildDeterministicAlternatives({ categoryRoute, functionTags = [] }) {
       };
 }
 
+function buildSemanticContract(categoryRoute = 'unknown') {
+  return SemanticContractRegistry.getSemanticContract(categoryRoute);
+}
+
+function buildCosmeticDeterministicTiles({ ingredientsText, categoryRoute }) {
+  const actives = extractKeyActives(ingredientsText);
+  const fn = mapFunctionFromActives(actives, categoryRoute);
+  const formulation = classifyFormulation(ingredientsText);
+  const hasIngredients = !!ingredientsText.trim();
+  return {
+    keyActivesTile: (() => {
+      if (!hasIngredients) return mkTile({ status: 'unavailable', source: 'none', reason: 'missing_ingredients' });
+      if (actives.length) return mkTile({ status: 'available', source: 'deterministic', confidence: 'medium', value: actives });
+      return mkTile({ status: 'unavailable', source: 'deterministic', reason: 'missing_ingredients' });
+    })(),
+    functionTile: (() => {
+      if (fn.length) return mkTile({ status: 'available', source: 'deterministic', confidence: 'medium', value: fn });
+      if (!hasIngredients) return mkTile({ status: 'unavailable', source: 'deterministic', reason: categoryRoute === 'unknown' ? 'category_unknown' : 'missing_ingredients' });
+      return mkTile({ status: 'unavailable', source: 'deterministic', reason: categoryRoute === 'unknown' ? 'category_unknown' : 'missing_ingredients' });
+    })(),
+    formulationTile: (() => {
+      if (!hasIngredients) return mkTile({ status: 'unavailable', source: 'none', reason: 'missing_ingredients' });
+      return mkTile({
+        status: 'available',
+        source: 'deterministic',
+        confidence: formulation?.confidence || 'low',
+        value: formulation?.label || 'Unknown'
+      });
+    })(),
+    functionTags: fn
+  };
+}
+
+function buildNonCosmeticDeterministicTiles({ ingredientsText, categoryRoute }) {
+  const hasIngredients = !!ingredientsText.trim();
+  const foodFormulation = classifyFoodOrSupplementFormulation(ingredientsText);
+  const keyActivesTile = !hasIngredients
+    ? mkTile({ status: 'unavailable', source: 'none', reason: 'missing_ingredients' })
+    : mkTile({ status: 'unavailable', source: 'deterministic', reason: 'not_applicable_cosmetic_actives' });
+  const functionTile = !hasIngredients
+    ? mkTile({ status: 'unavailable', source: 'deterministic', reason: categoryRoute === 'unknown' ? 'category_unknown' : 'missing_ingredients' })
+    : mkTile({ status: 'unavailable', source: 'deterministic', reason: 'not_applicable_cosmetic_function' });
+  const formulationTile = !hasIngredients
+    ? mkTile({ status: 'unavailable', source: 'none', reason: 'missing_ingredients' })
+    : mkTile({
+        status: 'available',
+        source: 'deterministic',
+        confidence: foodFormulation?.confidence || 'low',
+        value: foodFormulation?.label || 'See ingredient list'
+      });
+  return {
+    keyActivesTile,
+    functionTile,
+    formulationTile,
+    functionTags: []
+  };
+}
+
 function buildScanSummary({
   product = {},
   categoryRoute = 'unknown',
@@ -158,61 +573,23 @@ function buildScanSummary({
 }) {
   const generatedAt = new Date().toISOString();
   const ingredientsText = String(product.ingredients_text || '');
-  const actives = extractKeyActives(ingredientsText);
-  const formulation = classifyFormulation(ingredientsText);
-  const foodFormulation = classifyFoodOrSupplementFormulation(ingredientsText);
-  const fn = mapFunctionFromActives(actives, categoryRoute);
-  const hasIngredients = !!ingredientsText.trim();
-  const isFoodOrSupplement = categoryRoute === 'food' || categoryRoute === 'supplement';
-  const noCosmeticActivesButHasText = hasIngredients && !actives.length;
-
-  const keyActivesTile = (() => {
-    if (!hasIngredients) return mkTile({ status: 'unavailable', source: 'none', reason: 'missing_ingredients' });
-    if (actives.length) return mkTile({ status: 'available', source: 'deterministic', confidence: 'medium', value: actives });
-    if (isFoodOrSupplement) {
-      return mkTile({ status: 'unavailable', source: 'deterministic', reason: 'not_applicable_cosmetic_actives' });
-    }
-    return mkTile({ status: 'unavailable', source: 'deterministic', reason: 'missing_ingredients' });
-  })();
-
-  const formulationTile = (() => {
-    if (!hasIngredients) return mkTile({ status: 'unavailable', source: 'none', reason: 'missing_ingredients' });
-    if (isFoodOrSupplement) {
-      return mkTile({
-        status: 'available',
-        source: 'deterministic',
-        confidence: foodFormulation?.confidence || 'low',
-        value: foodFormulation?.label || 'See ingredient list'
-      });
-    }
-    return mkTile({
-      status: 'available',
-      source: 'deterministic',
-      confidence: formulation?.confidence || 'low',
-      value: formulation?.label || 'Unknown'
-    });
-  })();
-
-  const functionTile = (() => {
-    if (fn.length) return mkTile({ status: 'available', source: 'deterministic', confidence: 'medium', value: fn });
-    if (!hasIngredients) {
-      return mkTile({ status: 'unavailable', source: 'deterministic', reason: categoryRoute === 'unknown' ? 'category_unknown' : 'missing_ingredients' });
-    }
-    if (isFoodOrSupplement && noCosmeticActivesButHasText) {
-      return mkTile({ status: 'unavailable', source: 'deterministic', reason: 'not_applicable_cosmetic_function' });
-    }
-    return mkTile({ status: 'unavailable', source: 'deterministic', reason: categoryRoute === 'unknown' ? 'category_unknown' : 'missing_ingredients' });
-  })();
+  const contract = buildSemanticContract(categoryRoute);
+  const deterministicTiles =
+    categoryRoute === 'cosmetic' || categoryRoute === 'hygiene'
+      ? buildCosmeticDeterministicTiles({ ingredientsText, categoryRoute })
+      : buildNonCosmeticDeterministicTiles({ ingredientsText, categoryRoute });
 
   const tiles = {
-    key_actives: keyActivesTile,
-    formulation: formulationTile,
-    function: functionTile,
+    key_actives: deterministicTiles.keyActivesTile,
+    formulation: deterministicTiles.formulationTile,
+    function: deterministicTiles.functionTile,
     skin_type: mkTile({ status: 'deferred', source: 'none', reason: 'no_profile_context' }),
     safety_score: mkTile({ status: 'deferred', source: 'none', reason: 'no_scoring_pipeline' })
   };
   return {
     schema_version: SCHEMA_VERSION,
+    semantic_contract_version: SEMANTIC_CONTRACT_VERSION,
+    semantic_contract: contract,
     generated_at: generatedAt,
     resolver_source: categoryRouteSource || null,
     route_rule_id: categoryRouteRuleId || null,
@@ -223,14 +600,21 @@ function buildScanSummary({
 
 function buildResultSummary({
   scanSummary = null,
+  product = null,
   hasProfileContext = false,
   routineConflicts = [],
-  categoryRoute = 'unknown'
+  categoryRoute = 'unknown',
+  reasoningPatch = null,
+  reasoningEnabled = FeatureFlags.isEnabled('RESULT_SUMMARY_REASONING_V1')
 }) {
   const baseTiles = scanSummary?.tiles || buildScanSummary({ categoryRoute }).tiles;
+  const semanticContract = scanSummary?.semantic_contract || buildSemanticContract(categoryRoute);
   const functionTags = Array.isArray(baseTiles?.function?.value)
     ? baseTiles.function.value
     : [];
+  const keyActives = Array.isArray(baseTiles?.key_actives?.value) ? baseTiles.key_actives.value : [];
+  const activeLabels = keyActives.map((x) => String(x?.display || x?.name || '').trim()).filter(Boolean);
+  const ingredientsText = String(product?.ingredients_text || '');
   const harmfulSeverity =
     routineConflicts.some((c) => String(c?.severity || '').toLowerCase() === 'high')
       ? 'high'
@@ -238,8 +622,36 @@ function buildResultSummary({
         ? 'medium'
         : 'low';
   const goodAnswer = hasProfileContext ? (categoryRoute === 'unknown' ? 'unclear' : 'yes') : 'unknown';
-  return {
+  const goodForMeSummary = hasProfileContext
+    ? (
+        routineConflicts.length
+          ? 'Some routine conflict signals were detected. Review before layering with your current regimen.'
+          : activeLabels.length
+            ? `Works well for ${activeLabels.slice(0, 2).join(' and ')} goals in your current session context.`
+            : 'No profile conflicts detected in your current routine.'
+      )
+    : null;
+  const harmfulFlags = [
+    ...summarizeRoutineConflictFlags(routineConflicts),
+    ...summarizeWatchFlagsFromIngredients(ingredientsText)
+  ].slice(0, 4);
+  const deterministicAlternatives = buildDeterministicAlternatives({ categoryRoute, functionTags });
+  const alternativesWithMeta =
+    deterministicAlternatives.status === 'available'
+      ? {
+          ...deterministicAlternatives,
+          count: Array.isArray(deterministicAlternatives.candidates) ? deterministicAlternatives.candidates.length : 0,
+          footer: 'Or ask Kelly for personalised alternatives based on your routine.'
+        }
+      : {
+          ...deterministicAlternatives,
+          count: 0,
+          footer: 'Ask Kelly for personalised alternatives based on your routine.'
+        };
+  const summary = {
     schema_version: SCHEMA_VERSION,
+    semantic_contract_version: SEMANTIC_CONTRACT_VERSION,
+    semantic_contract: semanticContract,
     generated_at: new Date().toISOString(),
     disclaimer: 'informational_only',
     tiles: {
@@ -252,6 +664,7 @@ function buildResultSummary({
       product_overview: {
         status: 'available',
         source: 'deterministic',
+        confidence: functionTags.length ? 'medium' : 'low',
         what_it_does: describeProductFunction(categoryRoute, functionTags)
       },
       good_for_me: {
@@ -259,7 +672,9 @@ function buildResultSummary({
         source: hasProfileContext ? 'graph' : 'none',
         confidence: hasProfileContext ? 'low' : null,
         answer: goodAnswer,
-        summary: hasProfileContext ? 'Based on current session context.' : null,
+        summary: goodForMeSummary,
+        detail: hasProfileContext ? null : buildPendingReasoningState().pending_copy,
+        pending: !hasProfileContext,
         reason_unavailable: hasProfileContext ? null : 'no_profile_context'
       },
       harmful: {
@@ -267,8 +682,14 @@ function buildResultSummary({
         source: 'graph',
         confidence: routineConflicts.length ? 'medium' : 'low',
         severity: harmfulSeverity,
-        flags: routineConflicts.slice(0, 3).map((c) => String(c?.id || 'routine_conflict')),
-        top_evidence: routineConflicts[0]?.summary || 'No major routine conflict detected.',
+        flags: harmfulFlags,
+        top_evidence: routineConflicts[0]?.summary || 'All flagged ingredients are within concern thresholds from current deterministic checks.',
+        summary:
+          harmfulSeverity === 'high'
+            ? 'Conflict or irritant signals were detected from deterministic checks.'
+            : harmfulSeverity === 'medium'
+              ? 'Some flagged ingredients may matter for sensitive or acne-prone skin.'
+              : 'No immediate high-risk signals detected in the deterministic scan.',
         reason_unavailable: null
       },
       children_safe: {
@@ -279,16 +700,19 @@ function buildResultSummary({
         summary:
           harmfulSeverity === 'high'
             ? 'Potential irritant/conflict signals detected. Use caution for children.'
-            : 'No strong child-safety signal from current deterministic checks.',
+            : categoryRoute === 'food'
+              ? 'No strong child-safety signal from current deterministic checks.'
+              : 'No pediatric safety data available in the current deterministic catalog read.',
+        pending: categoryRoute !== 'food' && harmfulSeverity !== 'high',
         reason_unavailable: null
       },
-      /** No fabrication: stub until a vetted side-effect signal exists. */
       side_effects: {
         status: 'available',
         source: 'deterministic',
-        summary: 'Not assessed in this scan.'
+        confidence: 'low',
+        summary: buildDeterministicSideEffects({ ingredientsText, functionTags, harmfulSeverity, categoryRoute })
       },
-      alternatives: buildDeterministicAlternatives({ categoryRoute, functionTags })
+      alternatives: alternativesWithMeta
     },
     missing_more: [
       'Unlock personal-fit mode for age, sensitivity, and routine conflicts.',
@@ -296,9 +720,15 @@ function buildResultSummary({
       'Compare against safer alternatives in one tap.'
     ]
   };
+  return applyReasoningPatch(summary, reasoningPatch, { enabled: reasoningEnabled });
 }
 
 module.exports = {
+  buildSemanticContract,
   buildScanSummary,
-  buildResultSummary
+  buildResultSummary,
+  applyReasoningPatch,
+  sanitizeReasoningText,
+  REASONING_ALLOWED_UPGRADE_FIELDS,
+  SEMANTIC_CONTRACT_VERSION
 };

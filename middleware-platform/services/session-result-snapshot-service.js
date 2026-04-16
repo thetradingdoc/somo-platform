@@ -10,10 +10,11 @@ const {
   routineConflictsFromGraphHits
 } = require('./reasoning-map-service');
 const { inferCanonicalIngredientIdsFromText } = require('./skincare-routine-infer');
-const { buildResultSummary, buildScanSummary } = require('./product-summary-service');
+const { buildResultSummary, buildScanSummary, applyReasoningPatch } = require('./product-summary-service');
 const { pickFirstCatalogImageUrl } = require('./catalog-image-url');
 
 const SCHEMA_VERSION = '1.0';
+const ROUTE_CONFIDENCE_MIN = Number(process.env.CATEGORY_ROUTE_CONFIDENCE_MIN || 0.55);
 const db = dbModule.db;
 
 class SnapshotConflictError extends Error {
@@ -246,6 +247,41 @@ function _setByPath(target, path, value) {
   return true;
 }
 
+function _routeConfidenceToScore(raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) return 0;
+  const numeric = Number(v);
+  if (Number.isFinite(numeric)) return Math.max(0, Math.min(1, numeric));
+  if (v === 'high') return 0.9;
+  if (v === 'medium') return 0.65;
+  if (v === 'low') return 0.35;
+  return 0;
+}
+
+function _withSemanticContractCompat(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  const out = JSON.parse(JSON.stringify(snapshot));
+  const categoryRoute = String(
+    out?.result_summary?.semantic_contract?.route
+      || out?.scanned_product?.category_route
+      || out?.category_route
+      || 'unknown'
+  ).toLowerCase();
+  const hasContract = !!out?.result_summary?.semantic_contract;
+  const hasVersion = !!out?.result_summary?.semantic_contract_version;
+  if (!hasContract || !hasVersion) {
+    const legacyContract = buildScanSummary({ categoryRoute }).semantic_contract;
+    if (!out.result_summary || typeof out.result_summary !== 'object') out.result_summary = {};
+    out.result_summary.semantic_contract = out.result_summary.semantic_contract || legacyContract;
+    out.result_summary.semantic_contract_version =
+      out.result_summary.semantic_contract_version || legacyContract?.semantic_contract_version || null;
+    out.result_summary.legacy_pre_contract = true;
+  } else {
+    out.result_summary.legacy_pre_contract = !!out.result_summary.legacy_pre_contract;
+  }
+  return out;
+}
+
 function _getByPath(target, path) {
   const parts = String(path || '').split('.').filter(Boolean);
   let ref = target;
@@ -260,9 +296,16 @@ function _persistSnapshot({ sessionId, snapshot, source }) {
   const id = crypto.randomUUID();
   db.prepare(`UPDATE session_result_snapshots SET is_latest = 0 WHERE session_id = ? AND is_latest = 1`).run(sessionId);
   db.prepare(`
-    INSERT INTO session_result_snapshots (id, session_id, schema_version, snapshot_json, source, is_latest, generated_at)
-    VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-  `).run(id, sessionId, String(snapshot.schema_version || SCHEMA_VERSION), JSON.stringify(snapshot), source || 'assembler_v1');
+    INSERT INTO session_result_snapshots (id, session_id, schema_version, semantic_contract_version, snapshot_json, source, is_latest, generated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+  `).run(
+    id,
+    sessionId,
+    String(snapshot.schema_version || SCHEMA_VERSION),
+    String(snapshot?.result_summary?.semantic_contract_version || ''),
+    JSON.stringify(snapshot),
+    source || 'assembler_v1'
+  );
   return id;
 }
 
@@ -270,7 +313,7 @@ function getLatestSessionResultSnapshot(sessionId) {
   const sid = String(sessionId || '').trim();
   if (!sid) return null;
   const row = db.prepare(`
-    SELECT id, snapshot_json, schema_version, generated_at
+    SELECT id, snapshot_json, schema_version, semantic_contract_version, generated_at
     FROM session_result_snapshots
     WHERE session_id = ? AND is_latest = 1
     ORDER BY created_at DESC
@@ -280,8 +323,9 @@ function getLatestSessionResultSnapshot(sessionId) {
   return {
     snapshot_id: row.id,
     schema_version: row.schema_version,
+    semantic_contract_version: row.semantic_contract_version || null,
     generated_at: row.generated_at,
-    snapshot: _safeJsonParse(row.snapshot_json, null)
+    snapshot: _withSemanticContractCompat(_safeJsonParse(row.snapshot_json, null))
   };
 }
 
@@ -406,6 +450,15 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
       obfPd.facts_source === 'open_food_facts' || obfPd.facts_source === 'open_beauty_facts'
         ? obfPd.facts_source
         : 'open_beauty_facts';
+    const rawRoute = String(obfPd.category_route || 'unknown');
+    const rawRouteConfidence = obfPd.category_route_confidence || null;
+    const routeScore = _routeConfidenceToScore(rawRouteConfidence);
+    const routeConflict = String(obfPd.category_route_fallback || '').toLowerCase() === 'true' || routeScore < ROUTE_CONFIDENCE_MIN;
+    const effectiveRoute = routeConflict ? 'unknown' : rawRoute;
+    snapshot.category_route = effectiveRoute;
+    snapshot.route_confidence = routeScore;
+    snapshot.route_conflict = !!routeConflict;
+    snapshot.route_conflict_policy = routeConflict ? 'fallback_to_catalog_context' : 'single_route_selected';
     snapshot.scanned_product = {
       source: factsSource,
       barcode: obfPd.barcode != null ? String(obfPd.barcode).trim() : mergedBarcode,
@@ -417,6 +470,9 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
       categories_tags: Array.isArray(obfPd.categories_tags)
         ? obfPd.categories_tags.map((x) => String(x || '').trim()).filter(Boolean)
         : [],
+      category_route: effectiveRoute,
+      category_route_confidence: routeScore,
+      category_route_conflict: !!routeConflict,
       data_source: obfPd.data_source != null ? String(obfPd.data_source).trim() : null,
       ingredient_graph_conflicts: ingredientGraphConflicts
     };
@@ -425,7 +481,7 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
         ? obfPd.scan_summary
         : buildScanSummary({
             product: snapshot.scanned_product,
-            categoryRoute: String(obfPd.category_route || 'unknown'),
+            categoryRoute: effectiveRoute,
             categoryRouteSource: obfPd.category_route_source || null,
             categoryRouteRuleId: obfPd.category_route_rule_id || null,
             catalogSource: factsSource
@@ -447,9 +503,10 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
   if (includeResultSummary) {
     snapshot.result_summary = buildResultSummary({
       scanSummary: snapshot.scan_summary || null,
+      product: snapshot.scanned_product || snapshot.product || null,
       hasProfileContext: !!(Array.isArray(concerns) && concerns.length),
       routineConflicts,
-      categoryRoute: String(obfPd?.category_route || 'unknown')
+      categoryRoute: String(snapshot?.scanned_product?.category_route || obfPd?.category_route || 'unknown')
     });
     try {
       const tileEntries = Object.entries(snapshot?.result_summary?.tiles || {});
@@ -466,6 +523,19 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
   }
 
   const snapshotId = _persistSnapshot({ sessionId: sid, snapshot, source });
+  try {
+    const ReasoningService = require('./result-summary-reasoning-service');
+    const next = ReasoningService.shouldEnqueueReasoning({ snapshot });
+    if (next.shouldEnqueue) {
+      ReasoningService.enqueueReasoningJob({
+        sessionId: sid,
+        snapshotId,
+        inputHash: next.inputHash
+      });
+    }
+  } catch (_) {
+    /* async reasoning scaffold is best-effort */
+  }
   const elapsed = Date.now() - startedAt;
   try {
     Metrics.increment('session_result_snapshot.generated.count', 1);
@@ -540,7 +610,66 @@ function applySessionResultEdit({
   });
 
   const out = run();
-  try { Metrics.increment('session_result_snapshot.edit.count', 1); } catch (_) {}
+  try {
+    Metrics.increment('session_result_snapshot.edit.count', 1);
+    const latestReasoningStatus = String(out?.snapshot?.result_summary?.reasoning?.status || '');
+    if (path.startsWith('result_summary.verdict.') && latestReasoningStatus === 'applied') {
+      Metrics.increment('result_summary.reasoning.user_correction.count', 1);
+    }
+  } catch (_) {}
+  return out;
+}
+
+function applySessionResultReasoningPatch({
+  sessionId,
+  reasoningPatch,
+  expectedSnapshotId = null,
+  inputHash = null
+}) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) throw new Error('sessionId required');
+  if (!reasoningPatch || typeof reasoningPatch !== 'object') throw new Error('reasoningPatch required');
+
+  const run = db.transaction(() => {
+    const latestRow = getLatestSessionResultSnapshot(sid);
+    if (!latestRow?.snapshot) throw new Error('latest snapshot missing');
+    if (expectedSnapshotId != null && String(expectedSnapshotId).trim() !== '') {
+      const want = String(expectedSnapshotId).trim();
+      if (String(latestRow.snapshot_id || '') !== want) {
+        throw new SnapshotConflictError();
+      }
+    }
+    const latestSnapshot = latestRow.snapshot || {};
+    const nextSnapshot = JSON.parse(JSON.stringify(latestSnapshot));
+    nextSnapshot.generated_at = new Date().toISOString();
+    nextSnapshot.result_summary = applyReasoningPatch(nextSnapshot.result_summary || {}, reasoningPatch, {
+      enabled: true,
+      inputHash,
+      sessionId: sid
+    });
+    const nextSnapshotId = _persistSnapshot({ sessionId: sid, snapshot: nextSnapshot, source: 'reasoning_patch' });
+    return { snapshot_id: nextSnapshotId, snapshot: nextSnapshot };
+  });
+
+  const out = run();
+  try {
+    Metrics.increment('session_result_snapshot.reasoning_patch.count', 1);
+    const status = String(out?.snapshot?.result_summary?.reasoning?.status || 'unknown');
+    const route = String(
+      out?.snapshot?.result_summary?.semantic_contract?.route
+        || out?.snapshot?.scanned_product?.category_route
+        || out?.snapshot?.category_route
+        || 'unknown'
+    ).toLowerCase();
+    Metrics.increment(`result_summary.reasoning.status.${status}.count`, 1);
+    Metrics.increment(`result_summary.reasoning.status.${status}.route.${route}.count`, 1);
+    Metrics.increment('result_summary.reasoning.generated.count', 1);
+    if (status === 'applied') Metrics.increment('result_summary.reasoning.accepted.count', 1);
+    const altCount = Array.isArray(out?.snapshot?.result_summary?.verdict?.alternatives?.candidates)
+      ? out.snapshot.result_summary.verdict.alternatives.candidates.length
+      : 0;
+    if (altCount > 0) Metrics.increment('result_summary.reasoning.alternatives_suggested.count', altCount);
+  } catch (_) {}
   return out;
 }
 
@@ -549,5 +678,6 @@ module.exports = {
   SnapshotConflictError,
   buildSessionResultSnapshot,
   getLatestSessionResultSnapshot,
-  applySessionResultEdit
+  applySessionResultEdit,
+  applySessionResultReasoningPatch
 };

@@ -408,6 +408,13 @@ describe('buildPinnedContextText', () => {
     const result = { ...scanResult, dataSource: undefined };
     expect(buildPinnedContextText(result)).toContain('Provenance: unknown');
   });
+
+  test('uses diet-context framing for food routes', () => {
+    const result = { ...scanResult, categoryRoute: 'food' };
+    const text = buildPinnedContextText(result);
+    expect(text).toContain('Diet context:');
+    expect(text).not.toContain('Skin & care:');
+  });
 });
 
 describe('buildFollowupMessageWithPinnedContext', () => {

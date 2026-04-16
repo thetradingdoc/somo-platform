@@ -431,20 +431,113 @@ Implemented and verified in first batch:
 
 #### 4.2A) Backend reasoning augmentation contract (P1)
 
-- [ ] [❌ Missing][P1] Allow reasoning to upgrade only permitted fields (explanations, alternatives, skin-type rationale), not overwrite deterministic provenance fields silently.
-- [ ] [❌ Missing][P1] Add reasoning provenance fields (`reasoning_model`, `reasoning_version`, `reasoning_evidence_refs`) in `result_summary`.
-- [ ] [❌ Missing][P1] Add reasoning confidence gate per field; below threshold must revert to deterministic/deferred state.
-- [ ] [❌ Missing][P1] Add safety guardrails to block over-claiming and diagnosis language in consumer UI responses.
+- [x] [✅ Done][P1] Add backend reasoning augmentation scaffold in `middleware-platform/services/product-summary-service.js`:
+  - top-level `result_summary.reasoning` / `reasoning_meta`
+  - kill switch flag for deterministic-only mode
+  - explicit `allowed_upgrade_fields` contract for reasoning-owned patches
+- [x] [✅ Done][P1] Allow reasoning to upgrade only permitted fields (explanations, alternatives, skin-type rationale), not overwrite deterministic provenance fields silently.
+- [x] [✅ Done][P1] Add reasoning provenance fields (`reasoning_model`, `reasoning_version`, `reasoning_evidence_refs`) in `result_summary`.
+- [x] [✅ Done][P1] Add reasoning confidence gate per field; below threshold must revert to deterministic/deferred state.
+- [x] [✅ Done][P1] Add safety guardrails to block over-claiming and diagnosis language in consumer UI responses.
+- [x] [✅ Done][P1] Add server-owned enqueue/staleness check after deterministic snapshot generation (reasoning missing / stale / invalidated by new scan or profile change).
+- [x] [✅ Done][P1] Add async reasoning worker/service that reads deterministic snapshot + retrieval inputs and returns field-scoped JSON patches.
 
 #### 4.2B) Frontend reasoning UX integration (P1)
 
-- [ ] [❌ Missing][P1] Visually separate deterministic facts vs reasoning-derived recommendations (“why this answer” panel).
-- [ ] [❌ Missing][P1] Add explicit “reasoning unavailable” fallback behavior when reasoning is disabled or low-confidence.
-- [ ] [❌ Missing][P1] Add alternatives module fed by reasoning only when confidence and policy checks pass.
+- [x] [✅ Done][P1] Visually separate deterministic facts vs reasoning-derived recommendations (“why this answer” panel).
+- [x] [✅ Done][P1] Add explicit “reasoning unavailable” fallback behavior when reasoning is disabled or low-confidence.
+- [x] [✅ Done][P1] Add alternatives module fed by reasoning only when confidence and policy checks pass.
+- [x] [✅ Done][P1] Surface reasoning provenance / evidence refs in the UI without blending them into deterministic facts.
 
 #### 4.2C) Reasoning QA + governance (P1)
 
-- [ ] [❌ Missing][P1] Add eval set for recommendation quality (`good_for_me`, `harmful`, `alternatives`) with pass thresholds.
-- [ ] [❌ Missing][P1] Add hallucination/unsupported-claim checks in CI for reasoning responses.
-- [ ] [❌ Missing][P1] Track post-launch reasoning KPIs (acceptance, deflection, dissatisfaction/correction rate).
-- [ ] [❌ Missing][P1] Keep one-click kill switch to deterministic mode.
+- [x] [✅ Done][P1] Add eval set for recommendation quality (`good_for_me`, `harmful`, `alternatives`) with pass thresholds.
+- [x] [✅ Done][P1] Add hallucination/unsupported-claim checks in CI for reasoning responses.
+- [~] [🟡 In Progress][P1] Track post-launch reasoning KPIs (acceptance, deflection, dissatisfaction/correction rate).
+- [x] [✅ Done][P1] Keep one-click kill switch to deterministic mode.
+
+### Phase 4.3) Route-scoped semantic contract hardening (P0/P1/P2) — prevent cross-domain reasoning leaks
+
+**Context:** Routing is often correct (`food`, `cosmetic`, `non_food`), but deterministic + reasoning content can still leak cosmetic vocabulary into non-cosmetic outputs. This phase makes route semantics first-class across deterministic builders, reasoning generation, and merge gates.
+
+#### 4.3A) Route semantic contract (P0)
+
+- [x] [✅ Done][P0] Add `SemanticContract` generation at route resolution (`route`, `valid_fields`, `forbidden_vocab`, `verdict_framing`, `fallback_policy`).
+- [x] [✅ Done][P0] Persist contract metadata in snapshot/result summary (`semantic_contract_version`, route frame) so all layers use one contract source.
+- [x] [✅ Done][P0] Add `catalog_context` default contract for non-cosmetic/unknown routes to block cosmetic framing by default.
+
+#### 4.3B) Deterministic route dispatch (P0)
+
+- [x] [✅ Done][P0] Refactor deterministic builders to route dispatch (`cosmeticBuilder`, `foodBuilder`, `supplementBuilder`, `medsBuilder`, `nonFoodBuilder`).
+- [x] [✅ Done][P0] Block cosmetic taxonomy emission for non-cosmetic routes (`tone_evening`, cosmetic actives/function labels).
+- [x] [✅ Done][P0] Emit explicit `not_applicable` / `unsupported_for_route` row states for route-invalid fields instead of fallback cosmetic text.
+
+#### 4.3C) Reasoning generation route-scoping (P0)
+
+- [x] [✅ Done][P0] Pass route semantic contract into reasoning input hash + prompt/build flow.
+- [x] [✅ Done][P0] Add route-scoped reasoning templates (or equivalent generator policy) so food/meds/supplement outputs use domain-appropriate framing.
+- [x] [✅ Done][P0] Add route-specific forbidden-vocabulary rejection in reasoning pre-apply validation.
+
+#### 4.3D) Merge gate semantic validation (P0)
+
+- [x] [✅ Done][P0] Extend `applyReasoningPatch` with semantic route checks (in addition to existing field allowlist + confidence gate).
+- [x] [✅ Done][P0] On semantic mismatch, downgrade to `unsupported_for_route` (do not apply patch text).
+- [x] [✅ Done][P0] Preserve deterministic baseline as authoritative whenever semantic gate rejects a reasoning field.
+
+#### 4.3E) Retrieval grounding upgrades (P1)
+
+- [x] [✅ Done][P1] Add route-aware keyword extraction module for ingredient/query terms (food vs cosmetic vs meds frame differences).
+- [x] [✅ Done][P1] Add route-specific retrieval planner (which sources feed which verdict fields per route).
+- [x] [✅ Done][P1] Attach retrieval provenance per reasoning claim (`source`, `doc_id/ref`, evidence snippet key).
+
+#### 4.3F) Frontend route-safe UX states (P1)
+
+- [x] [✅ Done][P1] Add explicit UI rendering for `unsupported_for_route` / `not_applicable` so rows stay visible without domain-leaking language.
+- [x] [✅ Done][P1] Suppress route-invalid labels/icons in results page and chat summaries.
+- [x] [✅ Done][P1] Keep deterministic and reasoning lanes visually separated with route-safe fallback copy.
+
+#### 4.3G) QA, eval, and rollout (P1)
+
+- [x] [✅ Done][P1] Expand eval fixtures with adversarial cross-domain cases (food with cosmetic-like ingredients, meds with cosmetic terms, etc.).
+- [x] [✅ Done][P1] Add CI assertions for forbidden vocabulary by route and expected `unsupported_for_route` behavior.
+- [x] [✅ Done][P1] Add metrics for semantic rejects (`reasoning.semantic_reject.count`, `reasoning.unsupported_for_route.count`) by route.
+- [x] [✅ Done][P1] Add feature flag for semantic gate rollout (`RESULT_SUMMARY_SEMANTIC_GUARD_V1`) with shadow-mode comparison.
+
+#### 4.3H) Post-hardening refinements (P2)
+
+- [x] [✅ Done][P2] Tune route-specific confidence thresholds and evidence requirements per verdict field.
+- [x] [✅ Done][P2] Add route-level quality dashboards (applied/deferred/rejected/corrected trends).
+- [x] [✅ Done][P2] Add curated 50-code gold set with known metal-hit + non-hit examples across all routes.
+
+#### 4.3V) Contract versioning and developer tooling (P1)
+
+- [x] [✅ Done][P1] Define a `SemanticContract` registry as a single source of truth per route listing valid fields, forbidden vocabulary, verdict framing, and fallback policy.
+- [x] [✅ Done][P1] Stamp every generated reasoning patch with the `semantic_contract_version` it was built against.
+- [x] [✅ Done][P1] In `applyReasoningPatch`, reject patches whose `semantic_contract_version` is older than the current live contract (treat as stale; fall back to deterministic).
+- [x] [✅ Done][P1] Expose the contract registry as developer-readable docs/tooling so builder/template authors can validate vocabulary without reading implementation internals.
+
+#### 4.3W) Audit durability for semantic rejects (P1)
+
+- [x] [✅ Done][P1] Persist semantic rejection events to a durable log (not only counters) with: `session_id`, `route`, `field`, `rejected_value_hash`, `contract_version`, `reason`, `timestamp`.
+- [x] [✅ Done][P1] Ensure reject logs are replayable for debugging and contract tuning workflows (metrics alone are insufficient for root-cause analysis).
+
+#### 4.3X) Snapshot schema migration and backward compatibility (P0)
+
+- [x] [✅ Done][P0] Add `semantic_contract_version` to snapshot schema and handle null/missing values on reads for snapshots created before this rollout.
+- [x] [✅ Done][P0] Add read-side compatibility shim: when contract metadata is missing, resolve to safe default contract (e.g. `catalog_context`) and suppress route-invalid output.
+- [x] [✅ Done][P0] Implement backfill strategy for existing snapshots (re-derive route/contract from stored product context, or mark as `legacy_pre_contract` with explicit handling).
+- [x] [✅ Done][P0] Add UI fallback rendering for `legacy_pre_contract` so results page stays stable for pre-contract sessions.
+
+#### 4.3Y) Chat layer route contract enforcement (P0)
+
+- [x] [✅ Done][P0] Inject route semantic contract into `POST /api/public/landing-assistant/turn` handling so chat output follows the same route safety rules as results.
+- [x] [✅ Done][P0] Add chat-copy validation against contract `forbidden_vocab` to block domain-leaking language in turn responses.
+- [x] [✅ Done][P0] Define pre-route turn behavior (before barcode/route resolution): use neutral generic framing, never default to cosmetic vocabulary.
+- [x] [✅ Done][P1] Add chat-specific `unsupported_for_route` fallback copy so chat degrades gracefully parallel to results UI behavior.
+
+#### 4.3Z) Route ambiguity and classifier confidence (P1)
+
+- [x] [✅ Done][P1] Add route-classifier confidence output and minimum threshold policy for contract selection.
+- [x] [✅ Done][P1] Define conflict policy for multi-route products (e.g. `meds + cosmetic`) including precedence/field sharing rules.
+- [x] [✅ Done][P1] For below-threshold route confidence, fall back to restrictive `catalog_context` contract rather than guessing a higher-risk route.
+- [x] [✅ Done][P1] Surface `route_confidence` and `route_conflict` in snapshot provenance for auditability and debugging.

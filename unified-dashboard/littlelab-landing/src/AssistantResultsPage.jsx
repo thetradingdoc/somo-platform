@@ -131,7 +131,9 @@ const TILE_REASON_COPY = {
   no_scoring_pipeline: 'Safety score not available yet',
   sparse_data: 'Not enough ingredient detail for a full read',
   reasoning_disabled: 'Deeper analysis not enabled for this scan',
-  insufficient_data: 'Not enough data yet'
+  insufficient_data: 'Not enough data yet',
+  unsupported_for_route: 'Not applicable for this category route',
+  reasoning_insufficient_evidence: 'Reasoning skipped due to insufficient route-grounded evidence'
 };
 
 const TILE_SOURCE_COPY = {
@@ -197,6 +199,154 @@ function formatDisclaimerLine(raw) {
   return d || 'For informational guidance only. Not medical advice.';
 }
 
+function formatVerdictAnswer(answer, fallback = 'Unknown') {
+  const v = String(answer || '').trim().toLowerCase();
+  if (!v) return fallback;
+  if (v === 'yes') return 'Yes';
+  if (v === 'no') return 'No';
+  if (v === 'low') return 'Low risk';
+  if (v === 'medium') return 'Moderate risk';
+  if (v === 'high') return 'High risk';
+  if (v === 'safe') return 'Generally safe';
+  if (v === 'caution') return 'Caution';
+  if (v === 'unknown') return fallback;
+  if (v === 'insufficient_data') return 'Need more data';
+  return _titleCase(v.replace(/_/g, ' '));
+}
+
+function verdictBadgeTone(kind, answer) {
+  const v = String(answer || '').trim().toLowerCase();
+  if (kind === 'good') {
+    if (v === 'yes') return 'good';
+    if (v === 'no') return 'risk';
+    return 'pending';
+  }
+  if (kind === 'harmful') {
+    if (v === 'low') return 'good';
+    if (v === 'medium') return 'warn';
+    if (v === 'high') return 'risk';
+    return 'pending';
+  }
+  if (kind === 'children') {
+    if (v === 'safe') return 'good';
+    if (v === 'caution') return 'warn';
+    return 'pending';
+  }
+  return 'pending';
+}
+
+function buildPendingText(reasoningReady) {
+  return reasoningReady ? null : 'Deeper analysis running - results will update shortly';
+}
+
+function normalizeEvidenceFlags(harmful) {
+  const flags = Array.isArray(harmful?.flags) ? harmful.flags : [];
+  return flags
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        return String(item.label || item.text || item.name || '').trim();
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function normalizeAlternativesList(alt) {
+  const candidates = Array.isArray(alt?.candidates) ? alt.candidates : [];
+  return candidates
+    .map((item) => (typeof item === 'string' ? item.trim() : String(item?.name || item?.title || '').trim()))
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function formatReasoningEvidenceRef(ref) {
+  const v = String(ref || '').trim();
+  if (!v) return '';
+  return v
+    .split(':')
+    .map((part) => part.replace(/[_-]/g, ' '))
+    .map((part) => _titleCase(part))
+    .join(' - ');
+}
+
+function getReasoningUnavailableCopy(resultSummary, field) {
+  const top = resultSummary?.reasoning || {};
+  const reason = String(field?.reason_unavailable || '').trim();
+  if (reason === 'unsupported_for_route' || String(field?.status || '') === 'unsupported_for_route') {
+    return 'Reasoning skipped for this category route - deterministic guidance is shown instead.';
+  }
+  if (reason.startsWith('not_applicable')) {
+    return 'This field is not applicable for the current product category route.';
+  }
+  if (reason === 'reasoning_low_confidence') {
+    return 'Reasoning unavailable - confidence was too low, so deterministic guidance is shown instead.';
+  }
+  if (String(top?.enabled) === 'false' || String(top?.status || '') === 'disabled') {
+    return 'Reasoning is disabled for this scan - deterministic guidance is shown instead.';
+  }
+  return '';
+}
+
+function verdictChipTone(label) {
+  const t = String(label || '').toLowerCase();
+  if (/no |detected|safe|within concern|fragrance-free|allergen/.test(t)) return 'good';
+  if (/phenoxyethanol|preservative|caution|adult-targeted|retinoid|acid/.test(t)) return 'warn';
+  if (/conflict|avoid|high risk|irritant|metal/.test(t)) return 'risk';
+  return 'neutral';
+}
+
+function VerdictIcon({ type }) {
+  const common = { width: 14, height: 14, viewBox: '0 0 20 20', fill: 'none', 'aria-hidden': true };
+  if (type === 'info') {
+    return (
+      <svg {...common}>
+        <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M10 8v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="10" cy="5.8" r="0.9" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (type === 'check') {
+    return (
+      <svg {...common}>
+        <path d="M5.5 10.5l3 3 6-7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  if (type === 'warning') {
+    return (
+      <svg {...common}>
+        <path d="M10 4.2l6.1 10.6H3.9L10 4.2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M10 8v3.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <circle cx="10" cy="13.8" r="0.9" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (type === 'person') {
+    return (
+      <svg {...common}>
+        <circle cx="10" cy="6.4" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M5.8 15.2c.6-2.1 2.2-3.2 4.2-3.2s3.6 1.1 4.2 3.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (type === 'flag') {
+    return (
+      <svg {...common}>
+        <path d="M6 16V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M6.7 4.8h6.3l-1.7 2.7 1.7 2.7H6.7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <path d="M5.5 6.2h9M5.5 10h9M5.5 13.8h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const TILE_ICON_VARIANT = {
   key_actives: 'teal',
   function: 'blue',
@@ -250,13 +400,76 @@ function TileArticle({ title, tile, iconVariant = 'gray', layout = 'card' }) {
   );
 }
 
-function VerdictRow({ iconClass, q, children }) {
+function VerdictRow({
+  iconClass,
+  icon,
+  q,
+  badge = null,
+  badgeTone = 'pending',
+  summary = '',
+  detail = '',
+  chips = [],
+  listItems = [],
+  footer = '',
+  pending = '',
+  reasoning = null,
+  fallback = '',
+  children = null
+}) {
   return (
-    <div className="arp-verdict-row">
-      <div className={`arp-verdict-icon ${iconClass}`} aria-hidden />
+    <div className={`arp-verdict-row ${iconClass.replace('arp-verdict-icon--', 'arp-verdict-row--')}`}>
+      <div className={`arp-verdict-icon ${iconClass}`} aria-hidden>
+        <VerdictIcon type={icon} />
+      </div>
       <div className="arp-verdict-copy">
-        <p className="arp-verdict-q">{q}</p>
-        <div className="arp-verdict-a">{children}</div>
+        <div className="arp-verdict-head">
+          <p className="arp-verdict-q">{q}</p>
+          {badge ? <span className={`arp-verdict-badge arp-verdict-badge--${badgeTone}`}>{badge}</span> : null}
+        </div>
+        <div className="arp-verdict-a">
+          {summary ? <p className="arp-verdict-summary">{summary}</p> : null}
+          {detail ? <p className="arp-verdict-why">{detail}</p> : null}
+          {chips.length ? (
+            <div className="arp-verdict-chip-row">
+              {chips.map((chip, idx) => (
+                <span key={`${chip}-${idx}`} className={`arp-verdict-chip arp-verdict-chip--${verdictChipTone(chip)}`}>
+                  {chip}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {listItems.length ? (
+            <ul className="arp-verdict-list">
+              {listItems.map((item, idx) => (
+                <li key={`${item}-${idx}`}>{item}</li>
+              ))}
+            </ul>
+          ) : null}
+          {footer ? <p className="arp-verdict-footer">{footer}</p> : null}
+          {pending ? <p className="arp-verdict-pending">{pending}</p> : null}
+          {fallback ? <p className="arp-verdict-fallback">{fallback}</p> : null}
+          {reasoning ? (
+            <div className="arp-reasoning-panel" aria-label="Why this answer">
+              <div className="arp-reasoning-head">
+                <span className="arp-reasoning-kicker">Why this answer</span>
+                {reasoning.confidenceLabel ? (
+                  <span className="arp-reasoning-badge">{reasoning.confidenceLabel}</span>
+                ) : null}
+              </div>
+              {reasoning.summary ? <p className="arp-reasoning-copy">{reasoning.summary}</p> : null}
+              {reasoning.evidenceRefs?.length ? (
+                <div className="arp-reasoning-evidence">
+                  {reasoning.evidenceRefs.map((ref, idx) => (
+                    <span key={`${ref}-${idx}`} className="arp-reasoning-evidence-pill">
+                      {ref}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -442,6 +655,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
   const notFound = String(snapshot?.scanned_product?.lookup_status || '') === 'not_found';
   const scanSummary = snapshot?.scan_summary || null;
   const resultSummary = snapshot?.result_summary || null;
+  const legacyPreContract = !!resultSummary?.legacy_pre_contract;
   const tiles = summaryV1Enabled ? (resultSummary?.tiles || scanSummary?.tiles || null) : null;
   const verdict = summaryV1Enabled ? (resultSummary?.verdict || null) : null;
   const missingMore = Array.isArray(resultSummary?.missing_more) ? resultSummary.missing_more : [];
@@ -477,7 +691,10 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     : null;
   const altBlock = verdict?.alternatives;
   const alternativesLine = formatAlternativesVerdictLine(altBlock);
-  const showAlternatives = shouldShowAlternativesCta(altBlock);
+  const showAlternatives =
+    shouldShowAlternativesCta(altBlock) &&
+    String(altBlock?.source || '') === 'reasoning' &&
+    Number(altBlock?.reasoning?.confidence || 0) >= 0.76;
   const whatItDoes = verdict?.product_overview?.what_it_does || (functionText ? `Supports ${functionText}.` : 'Deterministic product summary.');
   const goodForMeAnswer = verdict?.good_for_me?.answer || 'unknown';
   const harmfulAnswer = verdict?.harmful?.severity || 'unknown';
@@ -504,6 +721,84 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     if (m === 'supplement') return 'Supplement scan';
     return 'Scan results';
   }, [categoryPresentation.mod]);
+
+  const reasoningReady = !!verdict;
+  const pendingText = buildPendingText(reasoningReady);
+  const harmfulFlags = normalizeEvidenceFlags(verdict?.harmful);
+  const harmfulEvidence = String(verdict?.harmful?.top_evidence || verdict?.harmful?.summary || '').trim();
+  const alternativesList = normalizeAlternativesList(verdict?.alternatives);
+
+  const fallbackWhatItDoes =
+    whatItDoes ||
+    (functionText ? `Supports ${functionText}.` : categoryRoute === 'food' ? 'Food or beverage item from the scanned catalog.' : 'Product summary is still loading.');
+  const fallbackGoodSummary =
+    verdict?.good_for_me?.summary ||
+    (graphConflicts.length
+      ? 'Potential routine conflicts detected. Review the conflict section below.'
+      : good.length
+        ? `Works well for ${good.slice(0, 2).map((item) => item.label).join(' and ')} signals found in the ingredient line.`
+        : 'No routine conflicts detected from the current deterministic scan.');
+  const fallbackGoodAnswer =
+    verdict?.good_for_me?.answer ||
+    (graphConflicts.length ? 'caution' : good.length ? 'yes' : 'unknown');
+  const fallbackHarmfulAnswer =
+    verdict?.harmful?.severity ||
+    (watch.length ? 'medium' : product?.nyc_metal_context ? 'low' : 'low');
+  const fallbackHarmfulSummary =
+    harmfulEvidence ||
+    (watch.length
+      ? 'Some flagged ingredients may matter for sensitive or acne-prone skin.'
+      : 'No immediate high-risk signals detected in the deterministic scan.');
+  const fallbackHarmfulFlags =
+    harmfulFlags.length
+      ? harmfulFlags
+      : [
+          ...(product?.nyc_metal_context ? ['NYC metals reference checked'] : []),
+          ...(watch.slice(0, 3).map((item) => item.label))
+        ].slice(0, 4);
+  const fallbackChildrenAnswer =
+    verdict?.children_safe?.answer ||
+    (keyActiveTag || /retinol|acid|benzoyl peroxide/i.test(ingredientsText) ? 'caution' : 'insufficient_data');
+  const fallbackChildrenSummary =
+    childrenSafeSummary ||
+    (fallbackChildrenAnswer === 'caution'
+      ? 'Active-focused formulas may be better suited for adult routines. Pediatric guidance was not confirmed in this scan.'
+      : 'No pediatric-specific catalog guidance available yet.');
+  const fallbackSideEffects =
+    sideEffectsLine !== 'Not assessed in this scan.'
+      ? sideEffectsLine
+      : watch.length
+        ? `Potential sensitivity around ${watch.slice(0, 2).map((item) => item.label).join(' and ')}.`
+        : 'Not assessed in this scan.';
+  const fallbackAlternativesFooter =
+    alternativesList.length
+      ? 'Or ask Kelly for personalised alternatives based on your routine.'
+      : 'Ask Kelly for personalised alternatives based on your routine.';
+  const resultReasoning = resultSummary?.reasoning || null;
+  const reasoningConfidenceLabel = (n) => {
+    const x = Number(n || 0);
+    if (!Number.isFinite(x) || x <= 0) return '';
+    if (x >= 0.85) return 'High confidence';
+    if (x >= 0.72) return 'Medium confidence';
+    return 'Low confidence';
+  };
+  const reasoningPanelFor = (field) => {
+    if (!field || String(field?.source || '') !== 'reasoning') return null;
+    const refs = Array.isArray(field?.reasoning?.reasoning_evidence_refs)
+      ? field.reasoning.reasoning_evidence_refs.map(formatReasoningEvidenceRef).filter(Boolean)
+      : Array.isArray(resultReasoning?.reasoning_evidence_refs)
+        ? resultReasoning.reasoning_evidence_refs.map(formatReasoningEvidenceRef).filter(Boolean)
+        : [];
+    return {
+      confidenceLabel: reasoningConfidenceLabel(field?.reasoning?.confidence),
+      summary:
+        `Reasoning model ${String(field?.reasoning?.reasoning_model || resultReasoning?.reasoning_model || 'unknown')} ${
+          String(field?.reasoning?.reasoning_version || resultReasoning?.reasoning_version || '').trim() || ''
+        }`
+          .trim(),
+      evidenceRefs: refs.slice(0, 4)
+    };
+  };
 
   return (
     <div className="arp-root" role="dialog" aria-label="Scan results">
@@ -684,39 +979,83 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
           </section>
         ) : null}
 
-        {verdict ? (
-          <section className="arp-section" aria-label="Deterministic verdict block">
+        <section className="arp-section" aria-label="Decision answers">
             <h2 className="arp-section-heading">
               <span className="arp-heading-icon icon-warn">?</span>
               Decision answers
             </h2>
+            {legacyPreContract ? (
+              <p className="arp-ingredient-note arp-ingredient-note--muted">
+                Legacy session detected. Route-safe contract defaults were applied for compatibility.
+              </p>
+            ) : null}
             <div className="arp-verdict-block">
-              <VerdictRow iconClass="arp-verdict-icon--neutral" q="What does it do?">
-                {whatItDoes}
-              </VerdictRow>
-              <VerdictRow iconClass="arp-verdict-icon--good" q="1) Is this good for me?">
-                {goodForMeAnswer}
-                {verdict?.good_for_me?.summary ? (
-                  <p className="arp-verdict-why">{verdict.good_for_me.summary}</p>
-                ) : null}
-              </VerdictRow>
-              <VerdictRow iconClass="arp-verdict-icon--risk" q="2) Harmful ingredients / risk">
-                {harmfulAnswer}
-              </VerdictRow>
-              <VerdictRow iconClass="arp-verdict-icon--kids" q="3) Good for children">
-                {childrenAnswer}
-                {childrenSafeSummary ? <p className="arp-verdict-why">{childrenSafeSummary}</p> : null}
-              </VerdictRow>
-              <VerdictRow iconClass="arp-verdict-icon--fx" q="4) Side effects">
-                {sideEffectsLine}
-              </VerdictRow>
-              <VerdictRow iconClass="arp-verdict-icon--alt" q="5) Alternatives I can use">
-                {alternativesLine}
-              </VerdictRow>
+              <VerdictRow
+                iconClass="arp-verdict-icon--neutral"
+                icon="info"
+                q="What does it do?"
+                summary={fallbackWhatItDoes}
+              />
+              <VerdictRow
+                iconClass="arp-verdict-icon--good"
+                icon="check"
+                q="Is this good for me?"
+                badge={formatVerdictAnswer(fallbackGoodAnswer, 'Needs more context')}
+                badgeTone={verdictBadgeTone('good', fallbackGoodAnswer)}
+                summary={fallbackGoodSummary}
+                detail={!reasoningReady && graphConflicts.length === 0 ? 'Using deterministic scan signals until deeper reasoning is available.' : ''}
+                pending={pendingText}
+                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.good_for_me)}
+                reasoning={reasoningPanelFor(verdict?.good_for_me)}
+              />
+              <VerdictRow
+                iconClass="arp-verdict-icon--risk"
+                icon="warning"
+                q="Harmful ingredients / risk"
+                badge={formatVerdictAnswer(fallbackHarmfulAnswer, 'Unknown')}
+                badgeTone={verdictBadgeTone('harmful', fallbackHarmfulAnswer)}
+                summary={fallbackHarmfulSummary}
+                chips={fallbackHarmfulFlags}
+                pending={!harmfulFlags.length ? pendingText : ''}
+                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.harmful)}
+                reasoning={reasoningPanelFor(verdict?.harmful)}
+              />
+              <VerdictRow
+                iconClass="arp-verdict-icon--kids"
+                icon="person"
+                q="Good for children?"
+                badge={formatVerdictAnswer(fallbackChildrenAnswer, 'Need more data')}
+                badgeTone={verdictBadgeTone('children', fallbackChildrenAnswer)}
+                summary={fallbackChildrenSummary}
+                pending={pendingText}
+                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.children_safe)}
+                reasoning={reasoningPanelFor(verdict?.children_safe)}
+              />
+              <VerdictRow
+                iconClass="arp-verdict-icon--fx"
+                icon="flag"
+                q="Side effects"
+                summary={fallbackSideEffects}
+                pending={pendingText}
+                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.side_effects)}
+                reasoning={reasoningPanelFor(verdict?.side_effects)}
+              />
+              <VerdictRow
+                iconClass="arp-verdict-icon--alt"
+                icon="list"
+                q="Alternatives I can use"
+                badge={alternativesList.length ? `${alternativesList.length} found` : null}
+                badgeTone="alt"
+                summary={!alternativesList.length ? alternativesLine : ''}
+                listItems={alternativesList}
+                footer={fallbackAlternativesFooter}
+                pending={!alternativesList.length ? pendingText : ''}
+                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.alternatives)}
+                reasoning={reasoningPanelFor(verdict?.alternatives)}
+              />
               <p className="arp-verdict-disclaimer">{formatDisclaimerLine(resultSummary?.disclaimer)}</p>
             </div>
           </section>
-        ) : null}
 
         {missingMore.length ? (
           <section className="arp-section" aria-label="Upgrade conversion layer">
@@ -741,7 +1080,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
             {sourceLine ? <p className="arp-ingredient-source">From {sourceLine}</p> : null}
             <p className="arp-ingredient-note arp-ingredient-note--muted">
               {categoryRoute === 'food' || categoryRoute === 'supplement'
-                ? 'Tiles above summarize skincare-style signals when relevant. This block is the complete catalog ingredient line (authoritative for this scan).'
+                ? 'Tiles above summarize route-safe catalog signals for this product type. This block is the complete ingredient line (authoritative for this scan).'
                 : 'This is the full catalog ingredient line. The tiles above highlight structured signals; wording may differ from your package.'}
             </p>
             {!hasData && categoryRoute !== 'food' && categoryRoute !== 'supplement' ? (

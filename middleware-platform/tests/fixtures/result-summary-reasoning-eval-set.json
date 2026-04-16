@@ -1,0 +1,101 @@
+[
+  {
+    "id": "niacinamide_serum_profile_fit",
+    "snapshot": {
+      "scanned_product": {
+        "product_name": "Niacinamide Serum",
+        "ingredients_text": "Water, Niacinamide, Phenoxyethanol",
+        "category_route": "cosmetic"
+      },
+      "routine_conflicts": [],
+      "result_summary": {
+        "tiles": {
+          "skin_type": { "status": "available" }
+        }
+      }
+    },
+    "expect": {
+      "good_for_me_summary_includes": ["Reasoning layer", "routine context"],
+      "alternatives_min": 1,
+      "forbidden_phrases": ["diagnosis", "cure", "guaranteed"]
+    }
+  },
+  {
+    "id": "low_context_should_defer",
+    "snapshot": {
+      "scanned_product": {
+        "product_name": "Plain Moisturizer",
+        "ingredients_text": "Water, Glycerin",
+        "category_route": "cosmetic"
+      },
+      "routine_conflicts": [],
+      "result_summary": {
+        "tiles": {
+          "skin_type": { "status": "deferred" }
+        }
+      }
+    },
+    "expect": {
+      "good_for_me_summary_includes": ["Reasoning unavailable", "profile context"],
+      "alternatives_min": 0,
+      "forbidden_phrases": ["diagnosis", "cure", "guaranteed"]
+    }
+  },
+  {
+    "id": "food_cross_domain_guard",
+    "snapshot": {
+      "scanned_product": {
+        "product_name": "Mixed Fruit Snacks",
+        "ingredients_text": "Water, Vitamin C, Sugar",
+        "category_route": "food"
+      },
+      "routine_conflicts": [],
+      "result_summary": {
+        "semantic_contract_version": "1",
+        "semantic_contract": {
+          "route": "food",
+          "verdict_framing": "catalog_context",
+          "forbidden_vocab": ["tone_evening", "anti_aging", "blemish_control"]
+        },
+        "tiles": {
+          "skin_type": { "status": "available" }
+        }
+      }
+    },
+    "expect": {
+      "good_for_me_summary_includes": ["catalog context"],
+      "alternatives_min": 0,
+      "forbidden_phrases": ["tone_evening", "anti_aging", "blemish_control", "diagnosis", "cure"],
+      "forbidden_route_terms": ["tone_evening", "anti_aging", "blemish_control"],
+      "unsupported_field_paths": ["verdict.good_for_me.summary"]
+    }
+  },
+  {
+    "id": "meds_route_guard",
+    "snapshot": {
+      "scanned_product": {
+        "product_name": "Pain Relief Tablets",
+        "ingredients_text": "Acetaminophen, Starch",
+        "category_route": "meds"
+      },
+      "routine_conflicts": [],
+      "result_summary": {
+        "semantic_contract_version": "1",
+        "semantic_contract": {
+          "route": "meds",
+          "verdict_framing": "catalog_context",
+          "forbidden_vocab": ["tone_evening", "anti_aging", "blemish_control"]
+        },
+        "tiles": {
+          "skin_type": { "status": "available" }
+        }
+      }
+    },
+    "expect": {
+      "good_for_me_summary_includes": ["catalog context"],
+      "alternatives_min": 0,
+      "forbidden_phrases": ["tone_evening", "anti_aging", "blemish_control", "diagnosis", "cure"],
+      "forbidden_route_terms": ["tone_evening", "anti_aging", "blemish_control"]
+    }
+  }
+]

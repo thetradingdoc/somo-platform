@@ -291,7 +291,7 @@ describe('AssistantResultsPage', () => {
             verdict: {
               product_overview: { what_it_does: 'Helps with hydration.' },
               good_for_me: { answer: 'yes', summary: 'Fits your session context.' },
-              harmful: { severity: 'low' },
+              harmful: { severity: 'low', flags: ['No fragrance allergens'], top_evidence: 'All flagged ingredients are within concern thresholds.' },
               children_safe: { answer: 'caution', summary: 'Use caution for young children.' },
               side_effects: { summary: 'Not assessed in this scan.' },
               alternatives: {
@@ -305,16 +305,49 @@ describe('AssistantResultsPage', () => {
         onAskKelly={noop}
       />
     );
-    const verdictRegion = screen.getByRole('region', { name: /Deterministic verdict block/i });
+    const verdictRegion = screen.getByRole('region', { name: /Decision answers/i });
     expect(verdictRegion).toBeInTheDocument();
-    expect(screen.getByText(/1\) Is this good for me\?/i)).toBeInTheDocument();
-    expect(screen.getByText(/3\) Good for children/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Is this good for me\?$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Yes$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Low risk$/i)).toBeInTheDocument();
+    expect(screen.getByText(/All flagged ingredients are within concern thresholds/i)).toBeInTheDocument();
+    expect(screen.getByText(/No fragrance allergens/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Good for children\?$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Caution$/i)).toBeInTheDocument();
     expect(screen.getByText(/Use caution for young children/i)).toBeInTheDocument();
-    expect(screen.getByText(/4\) Side effects/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Side effects$/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Not assessed in this scan/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/5\) Alternatives I can use/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Alternatives I can use$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^1 found$/i)).toBeInTheDocument();
     expect(screen.getByText(/Fragrance-free ceramide moisturizer/i)).toBeInTheDocument();
     expect(screen.getByText(/For informational guidance only/i)).toBeInTheDocument();
+  });
+
+  test('renders deterministic fallback verdict rows when reasoning verdict is absent', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          scanned_product: {
+            source: 'open_beauty_facts',
+            category_route: 'cosmetic',
+            product_name: 'Niacinamide Serum',
+            ingredients_text: 'Water, Niacinamide, Phenoxyethanol'
+          },
+          scan_summary: {
+            tiles: {
+              function: { status: 'available', source: 'deterministic', value: ['oil control'] },
+              key_actives: { status: 'available', source: 'deterministic', value: [{ display: 'Niacinamide 10%' }] }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByRole('region', { name: /Decision answers/i })).toBeInTheDocument();
+    expect(screen.getByText(/^What does it do\?$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Supports oil control/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Deeper analysis running/i).length).toBeGreaterThan(0);
   });
 
   test('renders conversion layer prompts when missing_more present', () => {
@@ -353,10 +386,13 @@ describe('AssistantResultsPage', () => {
       <AssistantResultsPage
         snapshot={makeSnapshot({
           result_summary: {
+            reasoning: { enabled: true },
             tiles: {},
             verdict: {
               alternatives: {
                 status: 'available',
+                source: 'reasoning',
+                reasoning: { confidence: 0.82 },
                 candidates: ['Fragrance-free ceramide moisturizer']
               }
             }
@@ -367,5 +403,106 @@ describe('AssistantResultsPage', () => {
       />
     );
     expect(screen.getByRole('button', { name: /See alternatives/i })).toBeInTheDocument();
+  });
+
+  test('does not show See alternatives for deterministic-only alternatives', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            reasoning: { enabled: true },
+            verdict: {
+              alternatives: {
+                status: 'available',
+                source: 'deterministic',
+                candidates: ['Fragrance-free ceramide moisturizer']
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /See alternatives/i })).not.toBeInTheDocument();
+  });
+
+  test('surfaces reasoning provenance in a why-this-answer panel', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            reasoning: {
+              enabled: true,
+              reasoning_model: 'reasoning-stub',
+              reasoning_version: 'v1',
+              reasoning_evidence_refs: ['pinecone:ingredient:niacinamide']
+            },
+            verdict: {
+              good_for_me: {
+                source: 'reasoning',
+                answer: 'yes',
+                summary: 'Reasoning-backed fit summary.',
+                reasoning: {
+                  confidence: 0.84,
+                  reasoning_model: 'reasoning-stub',
+                  reasoning_version: 'v1',
+                  reasoning_evidence_refs: ['pinecone:ingredient:niacinamide']
+                }
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(/Why this answer/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reasoning model reasoning-stub v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pinecone - Ingredient - Niacinamide/i)).toBeInTheDocument();
+  });
+
+  test('shows reasoning unavailable fallback when confidence is too low', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            reasoning: { enabled: true, status: 'deferred' },
+            verdict: {
+              harmful: {
+                severity: 'low',
+                reason_unavailable: 'reasoning_low_confidence'
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(/confidence was too low/i)).toBeInTheDocument();
+  });
+
+  test('shows route-safe fallback when reasoning is unsupported for route', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            reasoning: { enabled: true, status: 'deferred' },
+            verdict: {
+              good_for_me: {
+                status: 'unsupported_for_route',
+                answer: 'unknown',
+                summary: 'Deterministic fallback summary.',
+                reason_unavailable: 'unsupported_for_route'
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(/Reasoning skipped for this category route/i)).toBeInTheDocument();
   });
 });

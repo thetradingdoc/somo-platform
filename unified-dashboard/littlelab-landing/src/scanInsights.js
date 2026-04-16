@@ -139,19 +139,26 @@ export function compareProducts(a = {}, b = {}) {
 export function buildPinnedContextText(scanResult = {}) {
   const p = scanResult?.product || {};
   const rc = scanResult?.resolvedCatalog;
+  const route = String(scanResult?.categoryRoute || '').toLowerCase();
   const matched =
     rc === 'off'
       ? 'Open Food Facts'
       : rc === 'obf'
         ? 'Open Beauty Facts'
         : '';
+  const routeScopedAsk =
+    route === 'food' || route === 'supplement'
+      ? 'Diet context: summarize ingredient-level safety and nutrition-relevant cautions for this category. Not medical advice.'
+      : route === 'non_food'
+        ? 'General product context: summarize ingredient-level cautions and compatibility notes without skincare-only framing.'
+        : 'Skin & care: explain ingredient-level fit, likely irritants, and helpful actives for this user; not medical advice.';
   return [
     `[Pinned Product Context] ${p.product_name || scanResult?.barcode || 'unknown'} (${scanResult?.barcode || 'unknown'})`,
     matched ? `Matched in: ${matched} (auto-detected)` : '',
     p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '',
     `Category Route: ${scanResult?.categoryRoute || 'unknown'}`,
     `Provenance: ${scanResult?.dataSource || 'unknown'}`,
-    `Skin & care: Explain how these ingredients may relate to skin (topical or diet-linked). Call out likely irritants or helpful actives for this user; not medical advice.`
+    routeScopedAsk
   ].filter(Boolean).join('\n');
 }
 

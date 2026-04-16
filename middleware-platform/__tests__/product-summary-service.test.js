@@ -1,4 +1,10 @@
-const { buildScanSummary, buildResultSummary } = require('../services/product-summary-service');
+const {
+  buildSemanticContract,
+  buildScanSummary,
+  buildResultSummary,
+  applyReasoningPatch,
+  sanitizeReasoningText
+} = require('../services/product-summary-service');
 
 describe('product-summary-service', () => {
   test('builds available deterministic tiles when ingredients are present', () => {
@@ -27,6 +33,42 @@ describe('product-summary-service', () => {
     expect(String(out.tiles.formulation.value)).toMatch(/liquid/i);
   });
 
+  test('non-cosmetic route does not emit cosmetic actives/function tags even when ingredient text contains cosmetic keywords', () => {
+    const out = buildScanSummary({
+      product: { ingredients_text: 'Water, Vitamin C, Niacinamide, Sugar' },
+      categoryRoute: 'food',
+      catalogSource: 'open_food_facts'
+    });
+    expect(out.tiles.key_actives.status).toBe('unavailable');
+    expect(out.tiles.key_actives.reason_unavailable).toBe('not_applicable_cosmetic_actives');
+    expect(out.tiles.function.status).toBe('unavailable');
+    expect(out.tiles.function.reason_unavailable).toBe('not_applicable_cosmetic_function');
+  });
+
+  test('non-cosmetic result summary side effects stays route-safe even with acid ingredients', () => {
+    const result = buildResultSummary({
+      scanSummary: buildScanSummary({
+        product: { ingredients_text: 'water, sugar, lactic acid, vitamin c' },
+        categoryRoute: 'food'
+      }),
+      product: { ingredients_text: 'water, sugar, lactic acid, vitamin c' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'food',
+      reasoningEnabled: false
+    });
+    expect(result.verdict.side_effects.summary).toBe('Not assessed in this scan.');
+  });
+
+  test('builds semantic contract by route', () => {
+    const cosmetic = buildSemanticContract('cosmetic');
+    const food = buildSemanticContract('food');
+    expect(cosmetic.verdict_framing).toBe('cosmetic');
+    expect(cosmetic.valid_fields).toContain('tiles.key_actives');
+    expect(food.verdict_framing).toBe('catalog_context');
+    expect(food.forbidden_vocab).toContain('tone_evening');
+  });
+
   test('returns unavailable tiles when ingredients missing', () => {
     const out = buildScanSummary({
       product: { ingredients_text: '' },
@@ -38,17 +80,159 @@ describe('product-summary-service', () => {
 
   test('builds result summary with disclaimer and verdict', () => {
     const result = buildResultSummary({
-      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Niacinamide' }, categoryRoute: 'cosmetic' }),
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Niacinamide, Phenoxyethanol' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Niacinamide, Phenoxyethanol' },
       hasProfileContext: true,
       routineConflicts: [{ id: 'c1', severity: 'high', summary: 'Conflict detected' }],
       categoryRoute: 'cosmetic'
     });
     expect(result.disclaimer).toBe('informational_only');
     expect(result.verdict.good_for_me.status).toBe('available');
+    expect(result.verdict.good_for_me.summary).toMatch(/routine|session context/i);
     expect(result.verdict.harmful.severity).toBe('high');
+    expect(Array.isArray(result.verdict.harmful.flags)).toBe(true);
+    expect(result.verdict.harmful.flags.join(' ')).toMatch(/phenoxyethanol|conflict/i);
+    expect(result.verdict.harmful.top_evidence).toMatch(/conflict/i);
     expect(result.verdict.children_safe.answer).toBe('caution');
-    expect(result.verdict.side_effects.summary).toBe('Not assessed in this scan.');
+    expect(result.verdict.children_safe.pending).toBe(false);
+    expect(result.verdict.side_effects.summary).toMatch(/niacinamide|irritation/i);
     expect(result.verdict.alternatives.status).toBe('available');
+    expect(result.verdict.alternatives.count).toBeGreaterThan(0);
+    expect(result.verdict.alternatives.footer).toMatch(/Kelly|routine/i);
     expect(Array.isArray(result.missing_more)).toBe(true);
+    expect(result.semantic_contract.route).toBe('cosmetic');
+  });
+
+  test('marks reasoning-backed verdict fields as pending when profile context is absent', () => {
+    const result = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Glycerin' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Glycerin' },
+      hasProfileContext: false,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic'
+    });
+    expect(result.verdict.good_for_me.status).toBe('deferred');
+    expect(result.verdict.good_for_me.pending).toBe(true);
+    expect(result.verdict.good_for_me.detail).toMatch(/Deeper analysis running/i);
+    expect(result.verdict.children_safe.pending).toBe(true);
+  });
+
+  test('keeps deterministic mode when reasoning feature is disabled', () => {
+    const result = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Glycerin' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Glycerin' },
+      hasProfileContext: false,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    expect(result.reasoning.enabled).toBe(false);
+    expect(result.reasoning.status).toBe('disabled');
+    expect(Array.isArray(result.reasoning.allowed_upgrade_fields)).toBe(true);
+  });
+
+  test('applies reasoning only to permitted fields with confidence gate', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Niacinamide' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Niacinamide' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    const out = applyReasoningPatch(base, {
+      reasoning_model: 'test-model',
+      reasoning_version: 'v1',
+      reasoning_evidence_refs: ['pinecone:ingredient:niacinamide'],
+      verdict: {
+        good_for_me: {
+          summary: 'This can diagnose acne quickly.',
+          summary_confidence: 0.9
+        },
+        product_overview: {
+          what_it_does: 'Should not overwrite deterministic field.'
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.good_for_me.source).toBe('reasoning');
+    expect(out.verdict.good_for_me.summary).toMatch(/assess acne/i);
+    expect(out.verdict.product_overview.what_it_does).not.toMatch(/overwrite/i);
+    expect(out.reasoning.reasoning_model).toBe('test-model');
+    expect(out.reasoning.status).toBe('applied');
+  });
+
+  test('marks reasoning-owned field deferred when confidence is too low', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Niacinamide' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Niacinamide' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    const out = applyReasoningPatch(base, {
+      verdict: {
+        harmful: {
+          top_evidence: 'Low-confidence speculative claim.',
+          top_evidence_confidence: 0.2
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.harmful.reason_unavailable).toBe('reasoning_low_confidence');
+    expect(out.reasoning.status).toBe('deferred');
+  });
+
+  test('rejects route-invalid reasoning field updates with unsupported_for_route and keeps deterministic baseline', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'water, sugar, niacinamide' }, categoryRoute: 'food' }),
+      product: { ingredients_text: 'water, sugar, niacinamide' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'food',
+      reasoningEnabled: false
+    });
+    const before = base.verdict.good_for_me.summary;
+    const out = applyReasoningPatch(base, {
+      reasoning_model: 'test-model',
+      reasoning_version: 'v1',
+      verdict: {
+        good_for_me: {
+          summary: 'Targets tone_evening and anti_aging for this item.',
+          summary_confidence: 0.95
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.good_for_me.status).toBe('unsupported_for_route');
+    expect(out.verdict.good_for_me.reason_unavailable).toBe('unsupported_for_route');
+    expect(out.verdict.good_for_me.summary).toBe(before);
+  });
+
+  test('ignores reasoning patch built against stale semantic contract version', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Niacinamide' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Niacinamide' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    const before = base.verdict.good_for_me.summary;
+    const out = applyReasoningPatch(base, {
+      semantic_contract_version: '0',
+      verdict: {
+        good_for_me: {
+          summary: 'Would overwrite if version matched.',
+          summary_confidence: 0.95
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.good_for_me.summary).toBe(before);
+    expect(out.verdict.good_for_me.source).not.toBe('reasoning');
+  });
+
+  test('sanitizes unsafe diagnosis-style reasoning copy', () => {
+    expect(sanitizeReasoningText('This diagnoses and cures acne with guaranteed results.')).toBe(
+      'This assess and support acne with suggest results.'
+    );
   });
 });

@@ -60,7 +60,6 @@ __pycache__/
 /test-results/
 middleware-platform/test-results/
 playwright-report/
-middleware-platform/.playwright-browsers/
 
 # Build outputs
 dist/
@@ -89,9 +88,6 @@ middleware-platform/uploads/
 # Railway/Netlify
 .railway/
 .netlify/
-
-# gcloud CLI local state (never commit)
-.gcloud-tmp/
 
 # Test files (optional - uncomment if you don't want to commit tests)
 # tests/
