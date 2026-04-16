@@ -2,9 +2,11 @@
 
 const OBF_BASE = (process.env.OPEN_BEAUTY_FACTS_BASE_URL || 'https://world.openbeautyfacts.org').replace(/\/$/, '');
 const UA = process.env.OPEN_BEAUTY_FACTS_USER_AGENT || 'doclittle-platform/1.0 (integration; support@doclittle.com)';
-const OBF_TIMEOUT_MS = Number(process.env.OBF_HTTP_TIMEOUT_MS || 3500);
-const OBF_MAX_RETRIES = Math.max(0, Number(process.env.OBF_HTTP_MAX_RETRIES || 1));
+/** Single attempt default avoids ~2× timeout (slow OBF upstream looked like 6s+ in logs). Override OBF_HTTP_MAX_RETRIES=1 to retry. */
+const OBF_TIMEOUT_MS = Number(process.env.OBF_HTTP_TIMEOUT_MS || 4000);
+const OBF_MAX_RETRIES = Math.max(0, Number(process.env.OBF_HTTP_MAX_RETRIES || 0));
 const db = require('../database');
+const { pickFirstCatalogImageUrl } = require('./catalog-image-url');
 
 function normalizeBarcode(barcode) {
   return String(barcode || '').replace(/[^\d]/g, '');
@@ -64,7 +66,7 @@ function normalizeProduct(payload = {}) {
     states_tags: toTagList(p.states_tags),
     // Upstream field; not a documented fixed enum in official API docs — pass through only, do not branch on assumed values.
     product_type: p.product_type != null && p.product_type !== '' ? String(p.product_type) : null,
-    image_url: p.image_front_url || p.image_url || null,
+    image_url: pickFirstCatalogImageUrl(p) || null,
     product_url: p.url || null
   };
 }

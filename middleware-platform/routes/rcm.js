@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const FinancialIntegrityService = require('../services/financial-integrity-service');
 
 /**
  * GET /api/rcm/unified-ledger/:empi_id
@@ -129,6 +130,73 @@ router.get('/exceptions', (req, res) => {
     });
   } catch (err) {
     console.error('[rcm] exceptions error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/rcm/reconciliation/run
+ * Run deterministic reconciliation (provider report vs internal ledger vs processor state).
+ */
+router.post('/reconciliation/run', (req, res) => {
+  try {
+    const { window_start, window_end, owner } = req.body || {};
+    const result = FinancialIntegrityService.runDeterministicReconciliation({
+      windowStart: window_start,
+      windowEnd: window_end,
+      owner
+    });
+    return res.json({
+      success: true,
+      run: result.run,
+      mismatch_count: result.exceptions.length,
+      exceptions: result.exceptions
+    });
+  } catch (err) {
+    console.error('[rcm] reconciliation/run error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/rcm/reconciliation/exceptions
+ * Operational exception queue with owner/SLA fields.
+ */
+router.get('/reconciliation/exceptions', (req, res) => {
+  try {
+    const status = (req.query.status || 'open').toString().trim();
+    const limit = Math.min(parseInt(req.query.limit || '200', 10) || 200, 500);
+    const items = FinancialIntegrityService.listExceptionQueue({ status, limit });
+    return res.json({
+      success: true,
+      status,
+      total: items.length,
+      items
+    });
+  } catch (err) {
+    console.error('[rcm] reconciliation/exceptions error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/rcm/financial-close?date=YYYY-MM-DD
+ * Read or generate daily financial close report.
+ */
+router.get('/financial-close', (req, res) => {
+  try {
+    const date = (req.query.date || '').toString().trim();
+    const closeDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : new Date().toISOString().slice(0, 10);
+    let report = db.getFinancialCloseReport(closeDate);
+    if (!report || req.query.refresh === '1') {
+      report = FinancialIntegrityService.generateDailyFinancialCloseReport(closeDate);
+    }
+    return res.json({
+      success: true,
+      report
+    });
+  } catch (err) {
+    console.error('[rcm] financial-close error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

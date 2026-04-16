@@ -4,7 +4,14 @@ const crypto = require('crypto');
 const dbModule = require('../database');
 const Metrics = require('./metrics');
 const FeatureFlags = require('../config/feature-flags');
-const { buildReasoningMap } = require('./reasoning-map-service');
+const {
+  buildReasoningMap,
+  routineConflictsFromGraphVerdict,
+  routineConflictsFromGraphHits
+} = require('./reasoning-map-service');
+const { inferCanonicalIngredientIdsFromText } = require('./skincare-routine-infer');
+const { buildResultSummary, buildScanSummary } = require('./product-summary-service');
+const { pickFirstCatalogImageUrl } = require('./catalog-image-url');
 
 const SCHEMA_VERSION = '1.0';
 const db = dbModule.db;
@@ -117,11 +124,25 @@ function _extractProductFromThread(orch) {
     const nameMatch = text.match(/\[Barcode Scan\]\s*([^\n(]+?)\s*\(/);
     const imgMatch = text.match(/Product image:\s*(https?:\/\/\S+)/i);
     const barcodeMatch = text.match(/\((\d{8,14})\)/);
+    const pd = e?.product_data && typeof e.product_data === 'object' && !Array.isArray(e.product_data) ? e.product_data : null;
+    const imgFromPd = pd ? pickFirstCatalogImageUrl(pd) : null;
     return {
       name: nameMatch ? nameMatch[1].trim() : null,
-      image_url: imgMatch ? imgMatch[1].trim() : null,
+      image_url: imgFromPd || (imgMatch ? imgMatch[1].trim() : null),
       barcode: barcodeMatch ? barcodeMatch[1] : null
     };
+  }
+  return null;
+}
+
+/** Latest structured OBF payload from client thread events (see `product_data` on `barcode_product_context`). */
+function _extractLatestObfProductDataFromThread(orch) {
+  const thread = Array.isArray(orch?.flow_state?.short_term_thread) ? orch.flow_state.short_term_thread : [];
+  for (let i = thread.length - 1; i >= 0; i--) {
+    const e = thread[i];
+    if (String(e?.type || '') !== 'barcode_product_context') continue;
+    const pd = e?.product_data;
+    if (pd && typeof pd === 'object' && !Array.isArray(pd)) return pd;
   }
   return null;
 }
@@ -147,6 +168,58 @@ function _deriveRoutineConflicts(row, text) {
     });
   }
   return conflicts.slice(0, 5);
+}
+
+function _readKellyRoutineVerdict(sessionId) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) return null;
+  try {
+    const row = db.prepare(`
+      SELECT value FROM kelly_session_meta_kv
+      WHERE session_id = ? AND meta_key = 'kelly_routine_verdict_json'
+      LIMIT 1
+    `).get(sid);
+    if (!row?.value) return null;
+    return JSON.parse(String(row.value));
+  } catch (_) {
+    return null;
+  }
+}
+
+function _mergeGraphRoutineConflicts(sessionId, combinedText, heuristicConflicts) {
+  const verdict = _readKellyRoutineVerdict(sessionId);
+  let graphConflicts = [];
+  if (verdict && Array.isArray(verdict.conflicts) && verdict.conflicts.length) {
+    graphConflicts = routineConflictsFromGraphVerdict(verdict);
+  } else {
+    try {
+      const cg = dbModule.createIngredientConflictGraph && dbModule.createIngredientConflictGraph();
+      if (cg && combinedText) {
+        const ids = inferCanonicalIngredientIdsFromText(combinedText);
+        if (ids.length >= 2) {
+          const { conflicts: hits } = cg.buildBasket(ids);
+          graphConflicts = routineConflictsFromGraphHits(hits);
+        }
+      }
+    } catch (_) {}
+  }
+  return [...graphConflicts, ...heuristicConflicts].slice(0, 12);
+}
+
+/** Graph-derived conflicts for a single OBF ingredient line (scan-only enrichment). */
+function _graphConflictsFromIngredientText(ingredientsText) {
+  const t = String(ingredientsText || '').trim();
+  if (!t) return [];
+  try {
+    const cg = dbModule.createIngredientConflictGraph && dbModule.createIngredientConflictGraph();
+    if (!cg) return [];
+    const ids = inferCanonicalIngredientIdsFromText(t);
+    if (ids.length < 2) return [];
+    const { conflicts: hits } = cg.buildBasket(ids);
+    return routineConflictsFromGraphHits(hits).slice(0, 8);
+  } catch (_) {
+    return [];
+  }
 }
 
 function _pickPrimaryConcern(concerns, text) {
@@ -213,6 +286,7 @@ function getLatestSessionResultSnapshot(sessionId) {
 }
 
 function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
+  const includeResultSummary = String(process.env.RESULT_SUMMARY_V1 || '1').trim() !== '0';
   const sid = String(sessionId || '').trim();
   if (!sid) throw new Error('sessionId required');
   const startedAt = Date.now();
@@ -227,7 +301,7 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
   const combinedText = `${historyText} ${threadText}`.trim();
   const concerns = _parseConcerns(triage || {});
   const primaryConcern = _pickPrimaryConcern(concerns, combinedText);
-  const routineConflicts = _deriveRoutineConflicts(triage || {}, combinedText);
+  const routineConflicts = _mergeGraphRoutineConflicts(sid, combinedText, _deriveRoutineConflicts(triage || {}, combinedText));
   const intent = _classifyPrimaryIntent(combinedText);
   const urgencyFlag = _deriveUrgencyFlag(combinedText, triage || {});
   const likelyTriggers = _extractLikelyTriggers(triage || {}, combinedText);
@@ -283,12 +357,112 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
   };
 
   const threadProduct = _extractProductFromThread(orch);
-  if (threadProduct && (threadProduct.name || threadProduct.image_url || threadProduct.barcode)) {
+  const obfPd = _extractLatestObfProductDataFromThread(orch);
+  const mergedName = obfPd?.product_name || threadProduct?.name || null;
+  const mergedImage =
+    pickFirstCatalogImageUrl(obfPd) || (threadProduct?.image_url != null ? String(threadProduct.image_url).trim() : '') || null;
+  const mergedBarcode = obfPd?.barcode || threadProduct?.barcode || null;
+  if (mergedName || mergedImage || mergedBarcode) {
     snapshot.product = {
-      ...(threadProduct.name ? { name: threadProduct.name } : {}),
-      ...(threadProduct.image_url ? { image_url: threadProduct.image_url } : {}),
-      ...(threadProduct.barcode ? { barcode: threadProduct.barcode } : {})
+      ...(mergedName ? { name: mergedName } : {}),
+      ...(mergedImage ? { image_url: mergedImage } : {}),
+      ...(mergedBarcode ? { barcode: mergedBarcode } : {})
     };
+  }
+  if (obfPd && obfPd.lookup_status === 'not_found') {
+    const factsSource =
+      obfPd.facts_source === 'open_food_facts' ||
+      obfPd.facts_source === 'open_beauty_facts' ||
+      obfPd.facts_source === 'both'
+        ? obfPd.facts_source
+        : 'both';
+    snapshot.scanned_product = {
+      source: factsSource,
+      barcode: obfPd.barcode != null ? String(obfPd.barcode).trim() : mergedBarcode,
+      product_name: null,
+      image_url: null,
+      lookup_status: 'not_found',
+      ingredients_text: null,
+      labels: [],
+      allergens: [],
+      categories_tags: [],
+      data_source: obfPd.data_source != null ? String(obfPd.data_source).trim() : null,
+      ingredient_graph_conflicts: []
+    };
+    snapshot.scan_summary =
+      obfPd.scan_summary && typeof obfPd.scan_summary === 'object'
+        ? obfPd.scan_summary
+        : buildScanSummary({
+            product: { ingredients_text: '', product_name: null },
+            categoryRoute: 'unknown',
+            categoryRouteSource: 'none',
+            categoryRouteRuleId: null,
+            catalogSource: factsSource
+          });
+  } else if (obfPd) {
+    const ingText = obfPd.ingredients_text != null ? String(obfPd.ingredients_text) : null;
+    const ingredientGraphConflicts = ingText ? _graphConflictsFromIngredientText(ingText) : [];
+    const factsSource =
+      obfPd.facts_source === 'open_food_facts' || obfPd.facts_source === 'open_beauty_facts'
+        ? obfPd.facts_source
+        : 'open_beauty_facts';
+    snapshot.scanned_product = {
+      source: factsSource,
+      barcode: obfPd.barcode != null ? String(obfPd.barcode).trim() : mergedBarcode,
+      product_name: obfPd.product_name != null ? String(obfPd.product_name).trim() : mergedName,
+      image_url: mergedImage,
+      ingredients_text: ingText,
+      labels: Array.isArray(obfPd.labels) ? obfPd.labels.map((x) => String(x || '').trim()).filter(Boolean) : [],
+      allergens: Array.isArray(obfPd.allergens) ? obfPd.allergens.map((x) => String(x || '').trim()).filter(Boolean) : [],
+      categories_tags: Array.isArray(obfPd.categories_tags)
+        ? obfPd.categories_tags.map((x) => String(x || '').trim()).filter(Boolean)
+        : [],
+      data_source: obfPd.data_source != null ? String(obfPd.data_source).trim() : null,
+      ingredient_graph_conflicts: ingredientGraphConflicts
+    };
+    snapshot.scan_summary =
+      obfPd.scan_summary && typeof obfPd.scan_summary === 'object'
+        ? obfPd.scan_summary
+        : buildScanSummary({
+            product: snapshot.scanned_product,
+            categoryRoute: String(obfPd.category_route || 'unknown'),
+            categoryRouteSource: obfPd.category_route_source || null,
+            categoryRouteRuleId: obfPd.category_route_rule_id || null,
+            catalogSource: factsSource
+          });
+    try {
+      const { buildNycMetalContext } = require('./nyc-metal-context-service');
+      const nycCtx = buildNycMetalContext({
+        productName: snapshot.scanned_product.product_name,
+        categoriesTags: snapshot.scanned_product.categories_tags,
+        ingredientsText: snapshot.scanned_product.ingredients_text,
+        factsSource: snapshot.scanned_product.source
+      });
+      if (nycCtx) snapshot.scanned_product.nyc_metal_context = nycCtx;
+    } catch (_) {
+      /* optional enrichment */
+    }
+  }
+
+  if (includeResultSummary) {
+    snapshot.result_summary = buildResultSummary({
+      scanSummary: snapshot.scan_summary || null,
+      hasProfileContext: !!(Array.isArray(concerns) && concerns.length),
+      routineConflicts,
+      categoryRoute: String(obfPd?.category_route || 'unknown')
+    });
+    try {
+      const tileEntries = Object.entries(snapshot?.result_summary?.tiles || {});
+      tileEntries.forEach(([tile, data]) => {
+        const status = String(data?.status || 'unknown');
+        Metrics.increment(`result_summary.tile.${tile}.${status}.count`, 1);
+        if (status === 'available') Metrics.increment(`result_summary.tile_available_rate.${tile}.hit`, 1);
+        Metrics.increment(`result_summary.tile_available_rate.${tile}.total`, 1);
+        if (data?.reason_unavailable) {
+          Metrics.increment(`result_summary.tile_reason.${tile}.${String(data.reason_unavailable)}.count`, 1);
+        }
+      });
+    } catch (_) {}
   }
 
   const snapshotId = _persistSnapshot({ sessionId: sid, snapshot, source });

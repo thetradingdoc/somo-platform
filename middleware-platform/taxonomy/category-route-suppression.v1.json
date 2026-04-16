@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "notes": [
+    "Suppressed tags are metadata/noise and must not be used as routing signals."
+  ],
+  "suppressed_tags": [
+    "en:open-beauty-facts",
+    "fr:open-beauty-facts",
+    "en:non-open-products-facts",
+    "fr:non-alimentaire"
+  ]
+}

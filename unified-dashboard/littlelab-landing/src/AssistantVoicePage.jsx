@@ -24,9 +24,6 @@ export default function AssistantVoicePage({
   productTrackingActive,
   scanUi,
   scanResult,
-  manualBarcodeInput,
-  setManualBarcodeInput,
-  onManualBarcodeSubmit,
   manualIngredientsInput,
   setManualIngredientsInput,
   onManualIngredientsSubmit,
@@ -55,6 +52,13 @@ export default function AssistantVoicePage({
   const quality = scanResult?.quality || null;
   const analyzeLabel = quality?.analyzeLabel || 'Analyze for my skin';
   const canAnalyze = !!quality?.analyzeEnabled;
+  const routeUnknownFound =
+    !!scanResult?.product &&
+    String(scanResult?.categoryRoute || '').toLowerCase() === 'unknown';
+  const routeKnownFound =
+    !!scanResult?.product &&
+    !routeUnknownFound &&
+    String(scanResult?.categoryRoute || '').trim().length > 0;
   const handleAnalyzeClick = () => {
     if (typeof onRequestScanAnalysis === 'function') {
       void onRequestScanAnalysis();
@@ -109,23 +113,12 @@ export default function AssistantVoicePage({
                   <span className="axv-reticle-corner br" />
                 </div>
                 <div className="axv-scan-status">{scanStatusText}</div>
-                <div className="axv-scan-manual">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    className="axv-scan-input"
-                    placeholder="Enter barcode (8–14 digits)"
-                    value={manualBarcodeInput}
-                    onChange={(e) => setManualBarcodeInput(e.target.value)}
-                  />
-                  <button type="button" className="axv-scan-submit" onClick={onManualBarcodeSubmit}>
-                    Lookup
-                  </button>
-                </div>
                 {(scanUi?.status === 'not_found' || scanUi?.reason === 'not_found') ? (
-                  <div className="axv-scan-recovery">
-                    <p className="axv-scan-recovery-title">Product not found. Add ingredients to continue analysis:</p>
+                  <div className="axv-scan-recovery axv-scan-recovery--not-found" role="alert">
+                    <p className="axv-scan-recovery-title">
+                      We couldn&apos;t find this barcode in our product database. Try a different item, or add ingredients
+                      manually below.
+                    </p>
                     <textarea
                       className="axv-scan-textarea"
                       rows={3}
@@ -143,7 +136,7 @@ export default function AssistantVoicePage({
                   </div>
                 ) : null}
                 {scanUi?.reason === 'invalid_barcode' ? (
-                  <p className="axv-scan-recovery-title">Invalid barcode. Use digits only (8–14).</p>
+                  <p className="axv-scan-recovery-title">Barcode could not be read. Hold the label steady in frame.</p>
                 ) : null}
               </>
             ) : null}
@@ -166,6 +159,27 @@ export default function AssistantVoicePage({
           <span className="axv-provenance">Category: {scanResult?.categoryRoute || 'unknown'}</span>
           <span className="axv-provenance">Ingredients: {scanResult?.ingredientFlags?.hasIngredients ? 'available' : 'missing'}</span>
           {scanResult?.sparseData ? <span className="axv-provenance">Sparse data</span> : null}
+        </div>
+      ) : null}
+      {routeUnknownFound ? (
+        <div className="axv-scan-recovery" role="status">
+          <p className="axv-scan-recovery-title">
+            Product found, but category is still unknown. You can continue with ingredient-based analysis or ask Kelly for guidance.
+          </p>
+        </div>
+      ) : null}
+      {routeKnownFound ? (
+        <div className="axv-scan-recovery" role="status">
+          <p className="axv-scan-recovery-title">
+            Product found with category <strong>{scanResult?.categoryRoute}</strong>. You can analyze now or ask Kelly for a deeper explanation.
+          </p>
+        </div>
+      ) : null}
+      {scanResult?.sparseData ? (
+        <div className="axv-scan-recovery" role="status">
+          <p className="axv-scan-recovery-title">
+            We found this barcode, but product details are sparse. Add ingredient text or upload a label photo for a stronger analysis.
+          </p>
         </div>
       ) : null}
       {pendingScanDecision ? (

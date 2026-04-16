@@ -16,6 +16,7 @@ fi
 # Kill any existing ngrok processes on port 4000
 pkill -f "ngrok.*4000" 2>/dev/null
 
-# Start ngrok tunnel
+# Start ngrok tunnel (middleware API — Retell, patient app, CORS, etc.)
 echo "📡 Starting tunnel: http://localhost:4000 → https://..."
+echo "   For Team Kelly static site on :8080, use: scripts/start-ngrok-teamkelly-landing.sh"
 ngrok http 4000 --log=stdout

@@ -20,7 +20,7 @@
 
 ## Patient Orchestrator (impl-5 / C1)
 
-- [ ] Understand: orchestrator applies **`evaluateTriageGuardrailsForSession`** only when a **`triage_sessions`** row exists for **`session.session_id`** — see `docs/architecture/PATIENT_ORCHESTRATOR_TRIAGE_PROVENANCE.md`.
+- [ ] Understand: orchestrator applies **`evaluateTriageGuardrailsForSession`** only when a **`triage_sessions`** row exists for **`session.session_id`** — see `docs/architecture/patients/PATIENT_ORCHESTRATOR_TRIAGE_PROVENANCE.md`.
 - [ ] Voice E2E: orchestrator session id aligned with Kelly triage → booking blocked until triage complete (if testing that path).
 
 ## Postgres `voice_checkouts` (impl-9)

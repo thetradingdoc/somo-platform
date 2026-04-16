@@ -1,0 +1,183 @@
+{
+  "version": "1.0.0",
+  "enum": [
+    "cosmetic",
+    "hygiene",
+    "non_food",
+    "food",
+    "supplement",
+    "unknown"
+  ],
+  "precedence": [
+    "non_food",
+    "supplement",
+    "food",
+    "hygiene",
+    "cosmetic",
+    "unknown"
+  ],
+  "tag_to_route": {
+    "en:cosmetic": "cosmetic",
+    "en:cosmetics": "cosmetic",
+    "en:cosmetic-products": "cosmetic",
+    "en:beauty": "cosmetic",
+    "en:face": "cosmetic",
+    "en:facial-creams": "cosmetic",
+    "en:face-creams": "cosmetic",
+    "en:body-creams": "cosmetic",
+    "en:hand-creams": "cosmetic",
+    "en:makeup": "cosmetic",
+    "en:face-makeup": "cosmetic",
+    "en:nail-makeup": "cosmetic",
+    "en:nail-polish": "cosmetic",
+    "en:lip-balms": "cosmetic",
+    "en:perfumes": "cosmetic",
+    "en:suncare": "cosmetic",
+    "en:in-sun-protections": "cosmetic",
+    "en:sunscreen": "cosmetic",
+    "en:hair": "hygiene",
+    "en:hair-care": "hygiene",
+    "en:shampoos": "hygiene",
+    "en:anti-dandruff-shampoos": "hygiene",
+    "en:hair-conditioners": "hygiene",
+    "en:cleansers": "hygiene",
+    "en:body": "hygiene",
+    "en:hygiene": "hygiene",
+    "en:moist-wipes": "hygiene",
+    "fr:dentifrice": "hygiene",
+    "en:oral-care": "hygiene",
+    "en:toothpaste": "hygiene",
+    "en:soap": "hygiene",
+    "en:soaps": "hygiene",
+    "en:mouthwash": "hygiene",
+    "en:deodorant": "hygiene",
+    "en:deodorants": "hygiene",
+    "en:toilet-paper": "hygiene",
+    "en:non-food-products": "non_food",
+    "en:non_food": "non_food",
+    "en:accessories": "non_food",
+    "en:dietary-supplements": "supplement",
+    "en:supplements": "supplement",
+    "en:vitamins": "supplement",
+    "en:protein-powders": "supplement",
+    "en:beverages": "food",
+    "en:snacks": "food",
+    "en:breakfast-cereals": "food",
+    "en:dairy": "food",
+    "en:milk": "food",
+    "en:shaving": "hygiene",
+    "en:lotion": "cosmetic",
+    "en:body-lotion": "cosmetic",
+    "en:creams": "cosmetic",
+    "fr:non-food-products": "non_food",
+    "en:shampoo": "hygiene",
+    "en:face-wash": "cosmetic",
+    "en:facial-wash": "cosmetic",
+    "en:supplement": "supplement",
+    "en:shaving-foam": "hygiene",
+    "en:cream": "cosmetic",
+    "en:facial-cleanser": "cosmetic",
+    "en:skin-cream": "cosmetic",
+    "en:eye-cream": "cosmetic",
+    "en:vitamin": "supplement",
+    "es:shampoo": "hygiene",
+    "en:hair-oil": "hygiene",
+    "en:fermented-milk-products": "food",
+    "pt:limpeza-facial": "cosmetic",
+    "en:dentifrice": "hygiene",
+    "en:face-oil": "cosmetic",
+    "de:deodorant": "hygiene",
+    "de:make-up-entferner": "cosmetic",
+    "en:face-mist": "cosmetic",
+    "en:skin-lotion": "cosmetic",
+    "en:skincare": "cosmetic",
+    "en:moisturizers": "cosmetic",
+    "fr:shampooing": "hygiene",
+    "fr:serviettes-hygieniques": "hygiene",
+    "fr:mouchoirs": "hygiene",
+    "de:nagellacke": "cosmetic",
+    "pt:cuidados-com-a-pele": "cosmetic"
+  },
+  "conflict_policy": {
+    "catalog_tie_break": "prefer_source_specific_route_then_precedence",
+    "notes": [
+      "When OBF and OFF disagree, use catalog-specific route if endpoint is catalog-specific.",
+      "When merged context is required, evaluate all matched routes then pick the highest precedence route.",
+      "A route change must include change_reason and map_version."
+    ]
+  },
+  "heuristics": {
+    "low_confidence_policy": {
+      "queue_when": [
+        "route_unknown",
+        "confidence_low"
+      ],
+      "fallback_copy": {
+        "unknown": "We could not confidently classify this product yet. You can still continue with ingredient-based analysis.",
+        "low_confidence": "This category is a low-confidence estimate and may be adjusted after review."
+      }
+    },
+    "negative_signals": {
+      "top_ingredients_n": 3,
+      "strong_food_tokens": [
+        "flour",
+        "sugar",
+        "salt",
+        "wheat",
+        "corn syrup"
+      ],
+      "weak_food_tokens": [
+        "milk",
+        "butter",
+        "cocoa",
+        "rice",
+        "oat",
+        "soy"
+      ],
+      "requires_weak_token_count": 2
+    },
+    "positive_signals": {
+      "title_or_brand": [
+        {
+          "pattern": "\\b(spf|sunscreen|sunblock)\\b",
+          "route": "cosmetic",
+          "rule_id": "title_spf"
+        },
+        {
+          "pattern": "\\b(shampoo|conditioner|body wash|toothpaste)\\b",
+          "route": "hygiene",
+          "rule_id": "title_hygiene"
+        },
+        {
+          "pattern": "\\b(vitamin|probiotic|supplement|protein powder)\\b",
+          "route": "supplement",
+          "rule_id": "title_supplement"
+        }
+      ],
+      "regulatory_drug_adjacent": [
+        {
+          "pattern": "\\bdrug facts\\b",
+          "route": "non_food",
+          "rule_id": "drug_facts"
+        },
+        {
+          "pattern": "\\bover-the-counter|otc\\b",
+          "route": "non_food",
+          "rule_id": "otc_signal"
+        }
+      ],
+      "ingredient_substrings": [
+        {
+          "pattern": "\\bretinol|adapalene|benzoyl peroxide|salicylic acid\\b",
+          "route": "non_food",
+          "rule_id": "ingredient_drug_adjacent"
+        },
+        {
+          "pattern": "\\bfragrance|parfum|perfume\\b",
+          "route": "cosmetic",
+          "rule_id": "ingredient_cosmetic"
+        }
+      ]
+    }
+  }
+}

@@ -15,11 +15,11 @@ System architecture, design decisions, and technical documentation.
 - **[payments/PAYMENT_ARCHITECTURE.md](./payments/PAYMENT_ARCHITECTURE.md)** — Payment processing, orchestrator
 
 ### Hybrid (Voice + Video + PDF)
-- **[HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md)** — One-page: entry points, how codes are obtained, shared RAG/FHIR, boundaries
-- **[HYBRID_ARCHITECTURE_IMPROVEMENTS.md](./HYBRID_ARCHITECTURE_IMPROVEMENTS.md)** — Implemented improvements summary
-- **[VIDEO_CONSULT.md](./VIDEO_CONSULT.md)** — Video consult: flow, env vars, runbook (single doc)
-- **[LANDING_TRY_NOW_LIVEKIT.md](./LANDING_TRY_NOW_LIVEKIT.md)** — Skin & Care landing Try now: camera + orb PiP, LiveKit token, not video-consult agents
-- **[VISION_UV_R_AND_D.md](./VISION_UV_R_AND_D.md)** — UV imaging as separate hardware/calibration validation track
+- **[overview/HYBRID_ARCHITECTURE_OVERVIEW.md](./overview/HYBRID_ARCHITECTURE_OVERVIEW.md)** — One-page: entry points, how codes are obtained, shared RAG/FHIR, boundaries
+- **[overview/HYBRID_ARCHITECTURE_IMPROVEMENTS.md](./overview/HYBRID_ARCHITECTURE_IMPROVEMENTS.md)** — Implemented improvements summary
+- **[care-delivery/VIDEO_CONSULT.md](./care-delivery/VIDEO_CONSULT.md)** — Video consult: flow, env vars, runbook (single doc)
+- **[experience/LANDING_TRY_NOW_LIVEKIT.md](./experience/LANDING_TRY_NOW_LIVEKIT.md)** — Skin & Care landing Try now: camera + orb PiP, LiveKit token, not video-consult agents
+- **[vision/VISION_UV_R_AND_D.md](./vision/VISION_UV_R_AND_D.md)** — UV imaging as separate hardware/calibration validation track
 
 ### Layer-Specific
 - **[intelligence-layer/README.md](./intelligence-layer/README.md)** — Multimodal medical AI (Layers 1–4), perception, RAG, coding agents
@@ -65,4 +65,4 @@ System architecture, design decisions, and technical documentation.
 
 ---
 
-**Last Updated:** April 9, 2026
+**Last Updated:** April 13, 2026

@@ -102,4 +102,4 @@ LANGGRAPH_CHECKPOINT_SCHEMA=public
 ## Related
 
 - [LANGCHAIN_LANGGRAPH_RAG_ARCHITECTURE.md](../architecture/ai/LANGCHAIN_LANGGRAPH_RAG_ARCHITECTURE.md)
-- [VIDEO_CONSULT.md](../architecture/VIDEO_CONSULT.md)
+- [VIDEO_CONSULT.md](../architecture/care-delivery/VIDEO_CONSULT.md)

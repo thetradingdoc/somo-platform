@@ -1,0 +1,34 @@
+[
+  {
+    "code": "0001",
+    "source": "open_beauty_facts",
+    "categories_tags": ["en:shampoos"],
+    "expected_route": "hygiene"
+  },
+  {
+    "code": "0002",
+    "source": "open_beauty_facts",
+    "categories_tags": [],
+    "product_name": "Daily Vitamin Gummies",
+    "expected_route": "supplement"
+  },
+  {
+    "code": "0003",
+    "source": "open_beauty_facts",
+    "categories_tags": [],
+    "ingredients_text": "Sugar, flour, cocoa butter",
+    "expected_route": "food"
+  },
+  {
+    "code": "0004",
+    "source": "open_food_facts",
+    "categories_tags": ["en:non-food-products", "en:shampoos"],
+    "expected_route": "non_food"
+  },
+  {
+    "code": "0005",
+    "source": "open_beauty_facts",
+    "categories_tags": ["en:unmapped-category"],
+    "expected_route": "unknown"
+  }
+]

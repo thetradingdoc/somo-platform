@@ -1,0 +1,1219 @@
+{
+  "barcode": "8809652637891",
+  "capturedScan": {
+    "dataSource": "obf_index_cache",
+    "productName": "Glad2Glow Peach Retinol Moisturizer 30 gr",
+    "barcode": "8809652637891",
+    "endpoint": "beautyfacts",
+    "status": 200
+  },
+  "scanContextAck": null,
+  "scanContextErr": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[aria-label=\"Chat messages\"] .axc-bubble--assistant p').last() to be visible\u001b[22m\n",
+  "q1Reply": null,
+  "q1Err": "Unable to send chat message: composer never became stable/enabled",
+  "states": {
+    "s1": {
+      "url": "http://127.0.0.1:5199/#assistant/chat",
+      "title": "Skin and Care assistant — chat",
+      "hasResultsDialog": false,
+      "hasChatDialog": true,
+      "hasAskKellyButton": true,
+      "inputs": [
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": "Message",
+          "placeholder": "Type something…",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Your name",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Email address",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Phone number",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "textarea",
+          "ariaLabel": null,
+          "placeholder": "Type here",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        }
+      ],
+      "buttons": [
+        {
+          "text": "",
+          "ariaLabel": "Back to voice",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-icon-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Close assistant",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-icon-btn"
+        },
+        {
+          "text": "Allow camera & start",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "ax-lk-btn ax-lk-btn--primary ax-lk-invite-cta"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Take photo (attach, not live video)",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-tool-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Choose from library",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-tool-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Attach file",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-tool-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Send",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-send"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-cal btn-cal--get-app"
+        },
+        {
+          "text": "All serums",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab active"
+        },
+        {
+          "text": "Brightening",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Anti-Aging",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Repair",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Hydration",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "‹",
+          "ariaLabel": "Previous products",
+          "disabled": true,
+          "visible": true,
+          "className": "solutions-nav prev"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin B3 Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Retinol Brightening Night Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Dark Spot Repair Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin C Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "›",
+          "ariaLabel": "Next products",
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-nav next"
+        },
+        {
+          "text": "Texture & tone pattern82%Uneven texture and micro-contrast in the central face—c",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight active"
+        },
+        {
+          "text": "Pigmentation signals76%Focal darker areas may reflect sun exposure or post-infla",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Barrier & redness71%Diffuse redness can mean barrier stress, irritation, or flus",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Try now",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-primary-btn"
+        },
+        {
+          "text": "←",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "→",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "Send",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "btn-primary contact-book-btn"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-ghost btn-get-app"
+        }
+      ],
+      "lastMessages": [
+        "Hi, I'm Kelly. I'll be your Skin & Care assistant today. How can I help?"
+      ]
+    },
+    "s2": {
+      "url": "http://127.0.0.1:5199/#assistant/results",
+      "title": "Skin and Care assistant — results",
+      "hasResultsDialog": true,
+      "hasChatDialog": false,
+      "hasAskKellyButton": true,
+      "inputs": [
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Your name",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Email address",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Phone number",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "textarea",
+          "ariaLabel": null,
+          "placeholder": "Type here",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        }
+      ],
+      "buttons": [
+        {
+          "text": "",
+          "ariaLabel": "Go back",
+          "disabled": false,
+          "visible": true,
+          "className": "arp-back"
+        },
+        {
+          "text": "Build my routine",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "arp-cta-primary"
+        },
+        {
+          "text": "Ask Kelly",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "arp-cta-secondary"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-cal btn-cal--get-app"
+        },
+        {
+          "text": "All serums",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab active"
+        },
+        {
+          "text": "Brightening",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Anti-Aging",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Repair",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Hydration",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "‹",
+          "ariaLabel": "Previous products",
+          "disabled": true,
+          "visible": true,
+          "className": "solutions-nav prev"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin B3 Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Retinol Brightening Night Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Dark Spot Repair Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin C Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "›",
+          "ariaLabel": "Next products",
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-nav next"
+        },
+        {
+          "text": "Texture & tone pattern82%Uneven texture and micro-contrast in the central face—c",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight active"
+        },
+        {
+          "text": "Pigmentation signals76%Focal darker areas may reflect sun exposure or post-infla",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Barrier & redness71%Diffuse redness can mean barrier stress, irritation, or flus",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Try now",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-primary-btn"
+        },
+        {
+          "text": "←",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "→",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "Send",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "btn-primary contact-book-btn"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-ghost btn-get-app"
+        }
+      ],
+      "lastMessages": []
+    },
+    "s3": {
+      "url": "http://127.0.0.1:5199/#assistant/results",
+      "title": "Skin and Care assistant — results",
+      "hasResultsDialog": true,
+      "hasChatDialog": false,
+      "hasAskKellyButton": true,
+      "inputs": [
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Your name",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Email address",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Phone number",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "textarea",
+          "ariaLabel": null,
+          "placeholder": "Type here",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        }
+      ],
+      "buttons": [
+        {
+          "text": "",
+          "ariaLabel": "Go back",
+          "disabled": false,
+          "visible": true,
+          "className": "arp-back"
+        },
+        {
+          "text": "Build my routine",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "arp-cta-primary"
+        },
+        {
+          "text": "Ask Kelly",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "arp-cta-secondary"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-cal btn-cal--get-app"
+        },
+        {
+          "text": "All serums",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab active"
+        },
+        {
+          "text": "Brightening",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Anti-Aging",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Repair",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Hydration",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "‹",
+          "ariaLabel": "Previous products",
+          "disabled": true,
+          "visible": true,
+          "className": "solutions-nav prev"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin B3 Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Retinol Brightening Night Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Dark Spot Repair Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin C Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "›",
+          "ariaLabel": "Next products",
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-nav next"
+        },
+        {
+          "text": "Texture & tone pattern82%Uneven texture and micro-contrast in the central face—c",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight active"
+        },
+        {
+          "text": "Pigmentation signals76%Focal darker areas may reflect sun exposure or post-infla",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Barrier & redness71%Diffuse redness can mean barrier stress, irritation, or flus",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Try now",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-primary-btn"
+        },
+        {
+          "text": "←",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "→",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "Send",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "btn-primary contact-book-btn"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-ghost btn-get-app"
+        }
+      ],
+      "lastMessages": []
+    },
+    "s4": {
+      "url": "http://127.0.0.1:5199/#assistant/chat",
+      "title": "Skin and Care assistant — chat",
+      "hasResultsDialog": false,
+      "hasChatDialog": true,
+      "hasAskKellyButton": true,
+      "inputs": [
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": false,
+          "className": "ax-hidden-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": "Message",
+          "placeholder": "Type something…",
+          "disabled": true,
+          "visible": true,
+          "className": "axc-input"
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Your name",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Email address",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": "Phone number",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "textarea",
+          "ariaLabel": null,
+          "placeholder": "Type here",
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "tag": "input",
+          "ariaLabel": null,
+          "placeholder": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        }
+      ],
+      "buttons": [
+        {
+          "text": "",
+          "ariaLabel": "Back to voice",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-icon-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Close assistant",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-icon-btn"
+        },
+        {
+          "text": "Allow camera & start",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "ax-lk-btn ax-lk-btn--primary ax-lk-invite-cta"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Take photo (attach, not live video)",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-tool-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Choose from library",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-tool-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Attach file",
+          "disabled": false,
+          "visible": true,
+          "className": "axc-tool-btn"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Send",
+          "disabled": true,
+          "visible": true,
+          "className": "axc-send"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-cal btn-cal--get-app"
+        },
+        {
+          "text": "All serums",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab active"
+        },
+        {
+          "text": "Brightening",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Anti-Aging",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Repair",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "Hydration",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-tab "
+        },
+        {
+          "text": "‹",
+          "ariaLabel": "Previous products",
+          "disabled": true,
+          "visible": true,
+          "className": "solutions-nav prev"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin B3 Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Retinol Brightening Night Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Dark Spot Repair Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "",
+          "ariaLabel": "Checkout in chat — Vitamin C Serum",
+          "disabled": false,
+          "visible": true,
+          "className": "solution-checkout-icon"
+        },
+        {
+          "text": "Learn more",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "solution-ingredients-link"
+        },
+        {
+          "text": "›",
+          "ariaLabel": "Next products",
+          "disabled": false,
+          "visible": true,
+          "className": "solutions-nav next"
+        },
+        {
+          "text": "Texture & tone pattern82%Uneven texture and micro-contrast in the central face—c",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight active"
+        },
+        {
+          "text": "Pigmentation signals76%Focal darker areas may reflect sun exposure or post-infla",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Barrier & redness71%Diffuse redness can mean barrier stress, irritation, or flus",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-insight "
+        },
+        {
+          "text": "Try now",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "scan-primary-btn"
+        },
+        {
+          "text": "←",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "→",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": ""
+        },
+        {
+          "text": "Send",
+          "ariaLabel": null,
+          "disabled": false,
+          "visible": true,
+          "className": "btn-primary contact-book-btn"
+        },
+        {
+          "text": "Get The App",
+          "ariaLabel": "Get The App — join the Skin and Care waitlist",
+          "disabled": false,
+          "visible": true,
+          "className": "btn-ghost btn-get-app"
+        }
+      ],
+      "lastMessages": [
+        "Hi, I'm Kelly. I'll be your Skin & Care assistant today. How can I help?",
+        "Scan barcode 8809652637891",
+        "I'm listening. Tell me what you'd like help with. I found this product and added its ingredient profile to context.",
+        "Hi! I scanned the barcode for **Glad2Glow Peach Retinol Moisturizer** (30 gr), but I don't have the full ingredient list in my database yet to give you a detailed breakdown.\n\n**Based on the product name**, here's what I can tell you:\n\n🍑 **Peach extract** – Often includes vitamins and antioxidants (like vitamin C) that can brighten and soothe skin. Generally gentle, though fragranced fruit extracts can occasionally irritate very sensitive skin.\n\n💊 **Retinol** – A form of vitamin A and a gold-standard anti-aging active. It:\n- Boosts collagen production and cell turnover\n- Helps with fine lines, texture, and pigmentation\n- Can cause dryness, flaking, or irritation, especially when you first start or use it too often\n- Should be used at **night only** (retinol breaks down in sunlight and makes your skin more sun-sensitive)\n- **Not safe during pregnancy or breastfeeding**\n\n---\n\n**A few questions to help you use this safely:**\n\n1. **Have you used retinol before**, or is this new for you?\n2. **What's your skin type** – oily, dry, combination, or sensitive?\n3. **Are you pregnant, breastfeeding, or trying to conceive?** (This is important for retinol safety.)\n\nOnce I know a bit more about your skin and routine, I can give you tips on how to layer this moisturizer and what to pair (or avoid) with it!"
+      ]
+    }
+  },
+  "netLog": [
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:4000/api/public/products",
+      "ts": 1776203597109
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:4000/api/public/beautyfacts/8809652637891",
+      "ts": 1776203599948
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:4000/api/public/landing-assistant/thread-event",
+      "ts": 1776203600012
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:4000/api/public/landing-assistant/results/e0af15c6-4fea-492d-a804-e7538b2405c8",
+      "ts": 1776203600026
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:4000/api/public/landing-assistant/turn",
+      "ts": 1776203622238
+    },
+    {
+      "status": 200,
+      "url": "http://127.0.0.1:4000/api/public/landing-assistant/tts-stream",
+      "ts": 1776203625284
+    }
+  ]
+}

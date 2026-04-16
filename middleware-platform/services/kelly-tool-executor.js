@@ -979,6 +979,18 @@ class KellyToolExecutor {
         case 'lookup_ingredient_functions':
           return await this._lookupIngredientFunctions(args);
 
+        case 'evaluate_skincare_routine':
+          return await KellyToolExecutor._evaluateSkincareRoutine(args, sessionId);
+
+        case 'retrieve_ingredient_monographs':
+          return KellyToolExecutor._retrieveIngredientMonographs(args);
+
+        case 'get_ingredient_resolution_metrics':
+          return KellyToolExecutor._getIngredientResolutionMetrics();
+
+        case 'get_catalog_coverage_metrics':
+          return KellyToolExecutor._getCatalogCoverageMetrics();
+
         case 'run_derm_patient_qa':
           return await KellyToolExecutor._runDermPatientQA(args, patientId);
 
@@ -3070,6 +3082,182 @@ class KellyToolExecutor {
     else if (raw != null) inciList = String(raw).split(',').map((v) => v.trim()).filter(Boolean);
     if (!inciList.length) return { success: false, error: 'inci_list_required' };
     return ProductIngredientResolver.lookupIngredientFunctions(inciList);
+  }
+
+  /**
+   * Deterministic routine verdict (Layer B) + curated RAG chunk pointers.
+   * Persists JSON to kelly_session_meta_kv for session snapshot / reasoning_map merge.
+   */
+  static async _evaluateSkincareRoutine(args, sessionId) {
+    try {
+      const graph = db.createIngredientConflictGraph && db.createIngredientConflictGraph();
+      if (!graph) return { success: false, error: 'conflict_graph_unavailable' };
+      let slots = Array.isArray(args?.slots) ? args.slots : [];
+      const sid = sessionId ? String(sessionId) : '';
+      if (!slots.length && sid) {
+        try {
+          const { createSessionStateService } = require('./session-state');
+          const sessions = createSessionStateService(db.db);
+          const pack = sessions.getRoutineForEvaluation(sid);
+          slots = pack && Array.isArray(pack.slots) ? pack.slots : [];
+        } catch (_) {}
+      }
+      if (!slots.length) {
+        return { success: false, error: 'slots_required', message: 'Provide slots or persist a routine in user_sessions for this session.' };
+      }
+      const verdict = graph.evaluateRoutine(slots);
+      if (sessionId) {
+        KellyToolExecutor._setSessionMeta(sessionId, 'kelly_routine_verdict_json', JSON.stringify(verdict));
+      }
+      const {
+        getChunksForRoutineVerdict,
+        legacyRowsFromUnifiedChunks,
+        unifiedChunksFromLegacyRagRows,
+      } = require('./ingredient-rag-chunks-service');
+
+      let knowledge_chunk_bundle = null;
+      let routine_reply = null;
+      let routine_reply_validation = null;
+      let system_prompt = null;
+      let user_prompt = null;
+      let agent_turn = null;
+      const skipUnified = process.env.KELLY_SKIP_UNIFIED_ROUTINE_BUNDLE === '1';
+      if (!skipUnified) {
+        try {
+          const { buildRoutineReasoningPayload } = require('./routine-reasoning-orchestrator');
+          const payload = buildRoutineReasoningPayload({
+            db: db.db,
+            sessionId: sid || 'kelly',
+            slots,
+            userMessage: (args?.user_message || args?.message || '').toString(),
+            productIds: Array.isArray(args?.product_ids)
+              ? args.product_ids.map((x) => String(x || '').trim()).filter(Boolean)
+              : undefined,
+          });
+          knowledge_chunk_bundle = payload.chunkBundle;
+          routine_reply = payload.routine_reply;
+          routine_reply_validation = payload.validation;
+          if (routine_reply_validation && routine_reply_validation.valid === false) {
+            try {
+              const { logRoutineReplyRejected } = require('./composer');
+              logRoutineReplyRejected({
+                source: 'kelly_unified_routine_bundle',
+                errors: routine_reply_validation.errors,
+                reply: routine_reply,
+                context: { stage: 'orchestrator', sessionId: sid || null },
+              });
+            } catch (_) {}
+          }
+          system_prompt = payload.system_prompt;
+          user_prompt = payload.user_prompt;
+          agent_turn = payload.agentTurn || null;
+        } catch (_) {
+          /* optional path if migrations 031 not applied */
+        }
+      }
+
+      const legacyRagRows =
+        knowledge_chunk_bundle && Array.isArray(knowledge_chunk_bundle.chunks)
+          ? legacyRowsFromUnifiedChunks(knowledge_chunk_bundle.chunks)
+          : getChunksForRoutineVerdict(verdict);
+
+      let evidence_bundle;
+      if (knowledge_chunk_bundle && Array.isArray(knowledge_chunk_bundle.chunks)) {
+        evidence_bundle = {
+          schema_version: '1',
+          chunks: knowledge_chunk_bundle.chunks,
+          chunk_ids: Array.isArray(knowledge_chunk_bundle.chunk_ids) ? knowledge_chunk_bundle.chunk_ids : [],
+          coverage: Array.isArray(knowledge_chunk_bundle.coverage) ? knowledge_chunk_bundle.coverage : [],
+        };
+      } else {
+        const uChunks = unifiedChunksFromLegacyRagRows(legacyRagRows);
+        evidence_bundle = {
+          schema_version: '1',
+          chunks: uChunks,
+          chunk_ids: legacyRagRows.map((r) => r.id),
+          coverage: [],
+        };
+      }
+
+      const dualRag =
+        String(process.env.KELLY_ROUTINE_DUAL_RAG_SHAPES || '').toLowerCase() === '1' ||
+        String(process.env.KELLY_ROUTINE_DUAL_RAG_SHAPES || '').toLowerCase() === 'true';
+
+      const base = {
+        success: true,
+        verdict,
+        evidence_bundle,
+        routine_reply,
+        routine_reply_validation,
+        system_prompt,
+        user_prompt,
+        agent_turn,
+        kelly_contract: {
+          version: '1',
+          must_not_soften_avoid: true,
+          cite: ['overall', 'conflicts', 'reason_codes', 'suggested_split', 'evidence_bundle'],
+        },
+      };
+
+      if (dualRag) {
+        base.rag_chunks = legacyRagRows;
+        base.knowledge_chunk_bundle =
+          knowledge_chunk_bundle ||
+          (evidence_bundle
+            ? {
+                chunks: evidence_bundle.chunks,
+                chunk_ids: evidence_bundle.chunk_ids,
+                coverage: evidence_bundle.coverage,
+              }
+            : null);
+      }
+
+      return base;
+    } catch (e) {
+      return { success: false, error: 'evaluate_skincare_routine_failed', message: e.message };
+    }
+  }
+
+  static _retrieveIngredientMonographs(args) {
+    try {
+      const { getChunksByIngredientIds, getChunksByReasonCodes } = require('./ingredient-rag-chunks-service');
+      const ids = Array.isArray(args?.ingredient_ids) ? args.ingredient_ids.map((x) => String(x || '').trim()).filter(Boolean) : [];
+      const codes = Array.isArray(args?.reason_codes) ? args.reason_codes.map((x) => String(x || '').trim()).filter(Boolean) : [];
+      const byId = ids.length ? getChunksByIngredientIds(ids) : [];
+      const byRc = codes.length ? getChunksByReasonCodes(codes) : [];
+      const seen = new Set();
+      const chunks = [];
+      for (const row of [...byId, ...byRc]) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        chunks.push(row);
+      }
+      return { success: true, chunks, count: chunks.length };
+    } catch (e) {
+      return { success: false, error: e.message, chunks: [] };
+    }
+  }
+
+  static _getIngredientResolutionMetrics() {
+    try {
+      const m = require('./ingredient-resolution-metrics');
+      return {
+        success: true,
+        ...m.getIngredientResolutionMetrics(),
+        top_unresolved_tokens: m.getTopUnresolvedInciTokens(20)
+      };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  static _getCatalogCoverageMetrics() {
+    try {
+      const { getCatalogCoverageMetrics } = require('./catalog-coverage-metrics');
+      return { success: true, ...getCatalogCoverageMetrics() };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   }
 
   /** Phase 5 — same pipeline as POST /api/patient/derm-qa (feature-flagged). */

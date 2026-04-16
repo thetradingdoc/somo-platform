@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AssistantExperience from './AssistantExperience';
+import { normalizeHttpApiBase } from './landingAssistantApi';
 import './skin-care-tokens.css';
 import './styles.css';
 
@@ -35,6 +36,9 @@ const SKIN_PIPELINE_DEMO_INSIGHTS = [
   }
 ];
 
+/** Routine-band / marketing bottle art (`public/images` → CRA `build`). New filename avoids stale cache on `routine-bottle.png`. */
+const DEFAULT_ROUTINE_BOTTLE_IMAGE = '/images/products/effaclar-routine-bottle.png';
+
 function emitCheckoutFunnelEvent(name, detail) {
   try {
     if (typeof window !== 'undefined' && Array.isArray(window.dataLayer)) {
@@ -44,13 +48,145 @@ function emitCheckoutFunnelEvent(name, detail) {
   } catch (_) {}
 }
 
-/** Agent / care line — hero + footer call CTAs */
-const SKIN_CARE_PHONE_TEL = 'tel:+13639990205';
-const SKIN_CARE_PHONE_DISPLAY = '+1 (363) 999-0205';
+/** Newsletter-style waitlist capture on the landing page (same API as assistant waitlist). */
+function GetAppWaitlistOverlay({ open, onClose, apiBaseCandidates }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState('idle');
+  const [errMsg, setErrMsg] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      setName('');
+      setEmail('');
+      setStatus('idle');
+      setErrMsg('');
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  const submit = useCallback(async () => {
+    if (!name.trim() || !email.trim()) {
+      setErrMsg('Please enter your name and email.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setErrMsg('Please enter a valid email address.');
+      return;
+    }
+    setStatus('loading');
+    setErrMsg('');
+    const base = normalizeHttpApiBase(apiBaseCandidates[0] || '');
+    const url = base ? `${base}/api/public/waitlist` : '/api/public/waitlist';
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          source: 'landing_get_app',
+          product: null
+        })
+      });
+      if (!res.ok) throw new Error('server');
+      setStatus('success');
+      emitCheckoutFunnelEvent('landing_waitlist_joined', { source: 'get_app_overlay' });
+    } catch {
+      setStatus('error');
+      setErrMsg('Something went wrong — please try again.');
+    }
+  }, [name, email, apiBaseCandidates]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="get-app-overlay"
+      role="presentation"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="get-app-card" role="dialog" aria-modal="true" aria-labelledby="get-app-title">
+        <button type="button" className="get-app-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+        {status === 'success' ? (
+          <>
+            <p className="get-app-eyebrow">You&apos;re in</p>
+            <h2 id="get-app-title" className="get-app-title">
+              Thanks, {name.trim().split(/\s+/)[0]}.
+            </h2>
+            <p className="get-app-sub">
+              We&apos;ll email <strong>{email}</strong> when the Skin &amp; Care app is ready to download.
+            </p>
+            <button type="button" className="get-app-submit" onClick={onClose}>
+              Done
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="get-app-eyebrow">Get The App</p>
+            <h2 id="get-app-title" className="get-app-title">
+              Join the waitlist
+            </h2>
+            <p className="get-app-sub">
+              Be first to scan products, see ingredients, and build routines when we launch. One short form — no
+              extra page.
+            </p>
+            <div className="get-app-fields">
+              <label className="get-app-label" htmlFor="get-app-name">
+                Name
+              </label>
+              <input
+                id="get-app-name"
+                className="get-app-input"
+                type="text"
+                autoComplete="name"
+                placeholder="Your name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <label className="get-app-label" htmlFor="get-app-email">
+                Email
+              </label>
+              <input
+                id="get-app-email"
+                className="get-app-input"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void submit()}
+              />
+            </div>
+            {errMsg ? (
+              <p className="get-app-error" role="alert">
+                {errMsg}
+              </p>
+            ) : null}
+            <button type="button" className="get-app-submit" onClick={submit} disabled={status === 'loading'}>
+              {status === 'loading' ? 'Sending…' : 'Join the waitlist'}
+            </button>
+            <p className="get-app-privacy">No spam. Unsubscribe any time.</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Root() {
   const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  const configuredApiBase = process.env.REACT_APP_API_BASE || '';
+  const configuredApiBase = normalizeHttpApiBase(process.env.REACT_APP_API_BASE || '');
   // Stable reference so catalog-loading effect does not re-fire on every render.
   const API_BASE_CANDIDATES = useMemo(
     () =>
@@ -263,7 +399,7 @@ function Root() {
     const raw = String(
       (product && (product.image_url || product.image || product.imageUrl)) || ''
     ).trim();
-    if (!raw) return '/images/products/routine-bottle.png';
+    if (!raw) return DEFAULT_ROUTINE_BOTTLE_IMAGE;
     if (/^https?:\/\//i.test(raw) || raw.startsWith('data:')) return raw;
     if (raw.startsWith('/images/products/')) return raw;
     const clean = raw.replace(/^\/+/, '');
@@ -291,6 +427,7 @@ function Root() {
   const [solutionsNav, setSolutionsNav] = useState({ atStart: true, atEnd: false });
   const [activeInsightId, setActiveInsightId] = useState(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showGetAppModal, setShowGetAppModal] = useState(false);
   const [beforeAfterPct, setBeforeAfterPct] = useState(50);
   const [isDraggingBA, setIsDraggingBA] = useState(false);
   const [baBottleOffset, setBaBottleOffset] = useState({ x: 0, y: 0 });
@@ -314,23 +451,16 @@ function Root() {
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+  const scrollLocked = showMobileMenu || showAssistant || showGetAppModal;
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
-    const previous = document.body.style.overflow;
-    if (showMobileMenu) document.body.style.overflow = 'hidden';
+    if (!scrollLocked) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = previous;
+      document.body.style.overflow = previousOverflow;
     };
-  }, [showMobileMenu]);
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-    const previous = document.body.style.overflow;
-    if (showAssistant) document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [showAssistant]);
+  }, [scrollLocked]);
 
   const handleBottlePointerDown = (event) => {
     if (window.matchMedia('(max-width: 640px)').matches) return;
@@ -616,11 +746,17 @@ function Root() {
   };
 
   return (
-    <main className="page">
+    <main className="landing-shell">
       {showAssistant ? (
         <AssistantExperience onClose={() => setShowAssistant(false)} />
       ) : null}
+      <GetAppWaitlistOverlay
+        open={showGetAppModal}
+        onClose={() => setShowGetAppModal(false)}
+        apiBaseCandidates={API_BASE_CANDIDATES}
+      />
       <a className="skip-link" href="#main-content">Skip to content</a>
+      <div className="page page--topbar">
       {checkoutBlockedNoMerchant ? (
         <div className="ll-merchant-banner" role="alert">
           Checkout links need <code>REACT_APP_MERCHANT_ID</code> (your merchant UUID) in the landing build. Localhost is
@@ -639,17 +775,18 @@ function Root() {
           <a href="#patient-reviews">Bestsellers</a>
         </nav>
         <div className="nav-actions">
-          <a className="btn-primary nav-start-btn" href="/unified-dashboard/patients/patient-login.html" onClick={handleStartAnalysis}>
-            Start Analysis
-          </a>
           <button
             type="button"
-            className="mobile-menu-toggle"
-            aria-label="Toggle navigation menu"
+            className={`mobile-menu-toggle${showMobileMenu ? ' is-open' : ''}`}
+            aria-label={showMobileMenu ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={showMobileMenu}
             onClick={() => setShowMobileMenu((v) => !v)}
           >
-            {showMobileMenu ? 'Close' : 'Menu'}
+            <span className="mobile-menu-toggle__bars" aria-hidden="true">
+              <span className="mobile-menu-toggle__bar" />
+              <span className="mobile-menu-toggle__bar" />
+              <span className="mobile-menu-toggle__bar" />
+            </span>
           </button>
         </div>
       </header>
@@ -661,52 +798,96 @@ function Root() {
           <a href="#patient-reviews" onClick={() => setShowMobileMenu(false)}>Bestsellers</a>
         </div>
       )}
+      </div>
 
-      <section id="main-content" className="hero">
-        <p className="kicker kicker--social" aria-label="Loved by users">
-          <span className="kicker-avatars" aria-hidden="true">
-            <img src="/unified-dashboard/littlelab-landing/DOC.png" alt="" />
-          </span>
-          <span className="kicker-text">
-            Loved by doctors with <span className="kicker-star">⭐</span> 4.9 rating
-          </span>
-        </p>
-        <h1>
-          Skincare Ingredients that Work
-        </h1>
-        <p className="subtext">
-          Use the AI-powered app to find the right products for your skin. Snap a photo, scan a product barcode to get instant guidance on concerns, routines, and ingredients.
-        </p>
-        <div className="hero-ctas">
-          <a className="btn-primary" href="/unified-dashboard/patients/patient-login.html" onClick={handleStartAnalysis}>
-            Start Analysis
-          </a>
-          <a
-            className="btn-ghost"
-            href={SKIN_CARE_PHONE_TEL}
-            aria-label={`Call Skin and Care at ${SKIN_CARE_PHONE_DISPLAY}`}
-          >
-            {SKIN_CARE_PHONE_DISPLAY}
-          </a>
-        </div>
-
-        <div id="demo" className="scan-stage" aria-label="Skin scan preview">
-          <img
-            src="/images/hero/form-10-hero.png"
-            alt="Skin and Care face scan analysis preview"
-            className="hero-image-full"
-          />
+      <section id="main-content" className="hero hero-cal hero-cal--fullscreen">
+        <div className="hero-cal-grid">
+          <div id="demo" className="hero-cal-visual" aria-label="Product scan preview">
+            <img
+              src="/images/hero/phone-mockup.png"
+              alt="Scan a skincare product barcode to see ingredients and formulation details in the app"
+              className="hero-cal-mockup"
+              width={1200}
+              height={900}
+              loading="eager"
+              decoding="async"
+            />
+          </div>
+          <div className="hero-cal-copy">
+            <div className="hero-kicker-row">
+              <div className="hero-kicker-seal-wrap">
+                <img
+                  className="hero-kicker-seal"
+                  src="/images/branding/approvedicon.png"
+                  alt="Doctor approved"
+                  width={160}
+                  height={160}
+                  loading="eager"
+                  decoding="async"
+                />
+              </div>
+              <p className="kicker kicker--social kicker--cal">
+                <span className="kicker-avatars" aria-hidden="true">
+                  <img src="/unified-dashboard/littlelab-landing/DOC.png" alt="" />
+                </span>
+                <span className="kicker-text">
+                  Loved by doctors with <span className="kicker-star">⭐</span> 4.9 rating
+                </span>
+              </p>
+            </div>
+            <h1 className="hero-title hero-title--cal">
+              <span className="hero-title-line1">Scan your products</span>{' '}
+              <span className="hero-title-line2">with just a picture</span>
+            </h1>
+            <p className="subtext subtext--cal">
+              Scan any product barcode to instantly reveal product ingredients and check exactly what&apos;s inside.
+            </p>
+            <div className="hero-ctas hero-ctas--cal">
+              <a className="btn-cal btn-cal--primary" href="/waitlist" onClick={handleStartAnalysis}>
+                Start Analysis
+              </a>
+              <button
+                type="button"
+                className="btn-cal btn-cal--get-app"
+                aria-label="Get The App — join the Skin and Care waitlist"
+                onClick={() => {
+                  emitCheckoutFunnelEvent('landing_get_app_open', { source: 'hero' });
+                  setShowGetAppModal(true);
+                }}
+              >
+                Get The App
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
+      {!showAssistant ? (
+        <button
+          type="button"
+          className="panda-fab"
+          onClick={(e) => {
+            e.preventDefault();
+            emitCheckoutFunnelEvent('landing_panda_fab', { source: 'spinning_sc_fab' });
+            setShowAssistant(true);
+          }}
+          aria-label="Open Skin and Care assistant"
+        >
+          <span className="panda-fab__spin" aria-hidden="true">
+            S<span className="panda-fab__amp">&amp;</span>C
+          </span>
+        </button>
+      ) : null}
+
+      <div className="page page--below-fold">
       <section className="routine-band" aria-label="Discover your skincare routine">
         <h2 className="routine-title">
           <span className="routine-title-strong">Reveal the best skin</span>{' '}
           <span className="routine-title-soft">routine made uniquely for you.</span>
         </h2>
         <img
-          src="/images/products/routine-bottle.png"
-          alt="Skin and Care Vitamin C serum bottle"
+          src={DEFAULT_ROUTINE_BOTTLE_IMAGE}
+          alt="Skincare serum bottle"
           className={`routine-bottle ${isDraggingBottle ? 'is-dragging' : ''}`}
           style={{
             '--bottle-x': `${bottleOffset.x}px`,
@@ -914,7 +1095,7 @@ function Root() {
               </p>
               <div className="scan-assistant-product">
                 <img
-                  src={scanSpotlightProduct?.image || '/images/products/routine-bottle.png'}
+                  src={scanSpotlightProduct?.image || DEFAULT_ROUTINE_BOTTLE_IMAGE}
                   alt={scanSpotlightProduct?.displayName || 'Recommended serum'}
                 />
                 <div>
@@ -1150,8 +1331,8 @@ function Root() {
               <div className="ba-spotlight-stage" aria-label="Move the bottle">
                 <img
                   className={`ba-spotlight-bottle ${isDraggingBaBottle ? 'is-dragging' : ''}`}
-                  src="/images/products/routine-bottle.png"
-                  alt="Vitamin C Serum bottle"
+                  src={DEFAULT_ROUTINE_BOTTLE_IMAGE}
+                  alt="Serum bottle"
                   style={{
                     '--ba-bottle-x': `${baBottleOffset.x}px`,
                     '--ba-bottle-y': `${baBottleOffset.y}px`
@@ -1164,7 +1345,7 @@ function Root() {
               </div>
               <a
                 className="ba-buy"
-                href="/unified-dashboard/patients/patient-login.html"
+                href="/waitlist"
                 onClick={handleStartAnalysis}
               >
                 Buy Vitamin C Serum <span aria-hidden="true">→</span>
@@ -1218,7 +1399,7 @@ function Root() {
 
           <a
             className="contact-visual-card"
-            href="/unified-dashboard/patients/patient-login.html"
+            href="/waitlist"
             onClick={handleStartAnalysis}
             aria-label="Open patient portal for general inquiries"
           >
@@ -1248,18 +1429,22 @@ function Root() {
                   <div className="site-footer-ctas">
                     <a
                       className="btn-primary"
-                      href="/unified-dashboard/patients/patient-login.html"
+                      href="/waitlist"
                       onClick={handleStartAnalysis}
                     >
                       Start Analysis
                     </a>
-                    <a
-                      className="btn-ghost"
-                      href={SKIN_CARE_PHONE_TEL}
-                      aria-label={`Call Skin and Care at ${SKIN_CARE_PHONE_DISPLAY}`}
+                    <button
+                      type="button"
+                      className="btn-ghost btn-get-app"
+                      aria-label="Get The App — join the Skin and Care waitlist"
+                      onClick={() => {
+                        emitCheckoutFunnelEvent('landing_get_app_open', { source: 'footer' });
+                        setShowGetAppModal(true);
+                      }}
                     >
-                      {SKIN_CARE_PHONE_DISPLAY}
-                    </a>
+                      Get The App
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1283,6 +1468,7 @@ function Root() {
           </div>
         </div>
       </footer>
+      </div>
 
     </main>
   );

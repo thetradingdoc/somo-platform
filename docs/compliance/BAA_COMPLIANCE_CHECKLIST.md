@@ -1,7 +1,7 @@
 # BAA Compliance Checklist (Telemedicine Phase 1)
 
 **Purpose:** Track Business Associate Agreement (BAA) status before PHI flows through new telemedicine endpoints.  
-**Reference:** `todos/TELEMEDICINE_TODOS.md` Phase 1 — Tasks 1–4.
+**Reference:** `todos/pending/TELEMEDICINE_TODOS.md` Phase 1 — Tasks 1–4.
 
 | # | Task | Owner | Status | Notes |
 |---|------|--------|--------|-------|

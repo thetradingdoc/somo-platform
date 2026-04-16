@@ -1,0 +1,25 @@
+{
+  "notes": "Fill with real staging/prod barcodes before rollout validation.",
+  "samples": [
+    {
+      "barcode": "3033490000282",
+      "expected_state": "known_route",
+      "expected_cta": "analyze_enabled"
+    },
+    {
+      "barcode": "0000000000000",
+      "expected_state": "route_unknown",
+      "expected_cta": "ingredient_analysis_or_manual"
+    },
+    {
+      "barcode": "9999999999999",
+      "expected_state": "not_found",
+      "expected_cta": "manual_ingredients"
+    },
+    {
+      "barcode": "4005808223144",
+      "expected_state": "sparse_data",
+      "expected_cta": "manual_ingredients"
+    }
+  ]
+}

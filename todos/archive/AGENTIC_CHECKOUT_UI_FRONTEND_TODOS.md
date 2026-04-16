@@ -2,7 +2,7 @@
 
 > **Experience spec level:** product + design blueprint — not only a feature checklist.  
 > **Scope:** HTML/CSS/JS, React Native, copy, motion — no API contracts here.  
-> **Companion:** [`AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`](./AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (backend / payments).
+> **Companion:** [`pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`](./pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (backend / payments).
 
 **North star:** **Chat = primary interface** · **Payment = outcome of conversation** (continuation, not a competing “real” checkout). Target feel: **iMessage + Apple Pay + Glossier** — not hospital portal + chatbot + Stripe form.
 
@@ -165,7 +165,7 @@ Reference **width 375px**, ~800px scroll; **desktop** scales width, same vertica
 
 ## P9 — Design system hygiene
 
-- [x] Canonical asset paths + env vars documented. — *[`docs/architecture/SKIN_CARE_TOKENS_AND_ASSETS.md`](../docs/architecture/SKIN_CARE_TOKENS_AND_ASSETS.md).*
+- [x] Canonical asset paths + env vars documented. — *[`docs/architecture/experience/SKIN_CARE_TOKENS_AND_ASSETS.md`](../docs/architecture/experience/SKIN_CARE_TOKENS_AND_ASSETS.md).*
 - [x] `skin-care-tokens.css` import rule for new Skin & Care surfaces. — *Same doc + comment header in `skin-care-tokens.css`.*
 
 ---

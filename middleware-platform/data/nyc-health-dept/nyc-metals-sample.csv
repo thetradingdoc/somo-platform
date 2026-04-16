@@ -1,0 +1,6 @@
+"ROW_ID","PRODUCT_TYPE","PRODUCT_NAME","METAL","CONCENTRATION","UNITS","MANUFACTURER","MADE_IN_COUNTRY","PURCHASE COUNTRY","COLLECTION_DATE","INVESTIGATION TYPE"
+"9001","Food-Spice","Turmeric powder","Lead","2.9","ppm","UNKNOWN OR NOT STATED","INDIA","UNITED STATES","01/04/2011","C"
+"9002","Food-Spice","Turmeric powder","Lead","610","ppm","UNKNOWN OR NOT STATED","BANGLADESH","BANGLADESH","01/21/2011","C"
+"9003","Food-Spice","Organic turmeric","Lead","-1","ppm","Test Co","INDIA","UNITED STATES","02/01/2011","C"
+"9004","Cosmetics","Johnson & Johnson Baby Powder","Lead","-1","ppm","Dipsoduske oleh","INDONESIA","UNKNOWN OR NOT STATED","02/07/2011","C"
+"9005","Food Other","Cheetos Crunchy","Lead","-1","ppm","Frito Lays","DOMINICAN REPUBLIC","DOMINICAN REPUBLIC","02/07/2011","C"

@@ -1,0 +1,30 @@
+# Canonical documentation map (reduce duplicate reading)
+
+Use this when two folders both mention Kelly, checkout, or triage. **Start with the primary doc**; secondaries add depth or a different audience.
+
+| Topic | Read first | Also useful (do not duplicate maintenance) |
+|-------|------------|-----------------------------------------------|
+| **Kelly phase prompts, Skin & Care intake, orchestrator** | [`middleware-platform/kelly-phase-prompt-architecture.md`](./middleware-platform/kelly-phase-prompt-architecture.md) + [`kelly-god-object-fix-todos.md`](./middleware-platform/kelly-god-object-fix-todos.md) | [`retell-kelly-flow.md`](./middleware-platform/retell-kelly-flow.md); voice prompt text in [`voice-agent/prompts/`](./voice-agent/prompts/) |
+| **Kelly + payment / checkout (middleware behavior)** | [`middleware-platform/architecture-kelly-payment.md`](./middleware-platform/architecture-kelly-payment.md) | [`architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md`](./architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md) (product/surface); [`AGENTIC_CHECKOUT_FILE_MAP.md`](./architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md) (file index) |
+| **Checkout runbooks & incidents** | [`middleware-platform/runbook-payment-settlement.md`](./middleware-platform/runbook-payment-settlement.md), [`CHECKOUT_STATE_CONTAMINATION_RUNBOOK.md`](./middleware-platform/CHECKOUT_STATE_CONTAMINATION_RUNBOOK.md) | [`PAYMENT_DATA_INCIDENT_PLAYBOOK.md`](./middleware-platform/PAYMENT_DATA_INCIDENT_PLAYBOOK.md); [`STRIPE_WEBHOOK_PATHS.md`](./middleware-platform/STRIPE_WEBHOOK_PATHS.md) |
+| **Voice agent architecture (Retell, tools, coding)** | [`architecture/voice-agent/RUNBOOK.md`](./architecture/voice-agent/RUNBOOK.md) + [`VOICE_AGENT_TODO_AND_STATUS.md`](./architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md) | [`middleware-platform/VOICE_TRIAGE_PARITY.md`](./middleware-platform/VOICE_TRIAGE_PARITY.md); [`RETELL_CONFIG_QUICK_REFERENCE.md`](./middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md) |
+| **Landing Try now + LiveKit (public demo, not provider consult)** | [`architecture/experience/LANDING_TRY_NOW_LIVEKIT.md`](./architecture/experience/LANDING_TRY_NOW_LIVEKIT.md) | [`architecture/care-delivery/VIDEO_CONSULT.md`](./architecture/care-delivery/VIDEO_CONSULT.md) (provider rooms + agents); [`middleware-platform/kelly-phase-prompt-architecture.md`](./middleware-platform/kelly-phase-prompt-architecture.md) (Kelly HTTP) |
+| **UV imaging track (future, separate from RGB CV)** | [`architecture/vision/VISION_UV_R_AND_D.md`](./architecture/vision/VISION_UV_R_AND_D.md) | [`architecture/care-delivery/VIDEO_CONSULT.md`](./architecture/care-delivery/VIDEO_CONSULT.md) (current production vision boundaries) |
+| **Repo / service layout** | [`middleware-platform/ARCHITECTURE.md`](./middleware-platform/ARCHITECTURE.md) | [`architecture/overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`](./architecture/overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md) (broader RAG/product) |
+| **Derm patient Q&A (RAG pipeline)** | [`architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md`](./architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md) (then phases 2–5 in same folder) | [`development/KELLY_ENV_AND_DEBUG.md`](./development/KELLY_ENV_AND_DEBUG.md) for env debugging |
+| **Richer triage schema / records (gap analysis)** | [`meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md`](./meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md) | Patient journey gaps (if present): `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` under architecture when maintained |
+| **Doc hygiene / what was merged when** | [`meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md`](./meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md) (historical consolidation plan) | [`meta/DOC_CLEANUP_MARCH_2026.md`](./meta/DOC_CLEANUP_MARCH_2026.md) (changelog-style summary only) |
+
+## Meta docs (not product runbooks)
+
+| File | Purpose |
+|------|---------|
+| [`meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md`](./meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md) | Past audit: overlaps identified, many marked **DONE** — keep for history; do not re-merge without a new ticket. |
+| [`meta/DOC_CLEANUP_MARCH_2026.md`](./meta/DOC_CLEANUP_MARCH_2026.md) | Short log of link fixes and archive moves (March 2026). |
+
+## When to delete vs keep
+
+- **Keep** audit/cleanup docs as **history** unless a maintainer explicitly replaces them with a single “docs index” revision.
+- **Delete** only when the same content lives verbatim elsewhere (rare); prefer **archive** under `docs/archive/` per `meta/DOC_CLEANUP_MARCH_2026.md`.
+
+**Last updated:** April 9, 2026

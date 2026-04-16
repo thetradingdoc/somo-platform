@@ -2,8 +2,15 @@
 
 **Last Updated:** April 9, 2026
 
-> **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` under their respective subfolders. Root and module READMEs point here.  
-> **Overlapping topics (Kelly vs voice vs checkout):** start with **[CANONICAL_DOC_MAP.md](./CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
+> **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
+> **Overlapping topics (Kelly vs voice vs checkout):** start with **[meta/CANONICAL_DOC_MAP.md](./meta/CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
+
+### Documentation placement policy (April 2026)
+
+- Canonical docs: `docs/`
+- Task tracking only: `todos/pending` and `todos/archive`
+- Non-canonical root exceptions: `README.md`, `CONTRIBUTING.md`
+- Migrated legacy docs from module folders: `docs/repo-migrated/`
 
 ### For new developers
 
@@ -14,7 +21,7 @@
 5. Code layout: **[CODE_STRUCTURE.md](./development/guides/CODE_STRUCTURE.md)**.
 6. Staging-only product checks (quote parity, chat → pay): **[STAGING_PRODUCT_VERIFICATION.md](./testing/STAGING_PRODUCT_VERIFICATION.md)**.
 7. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/decisions/README.md)**.
-8. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/AGENTIC_CHECKOUT_FILE_MAP.md)**.
+8. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md)**.
 9. `server.js` policy: **[SERVER_JS_REFACTOR_POLICY.md](./development/SERVER_JS_REFACTOR_POLICY.md)**.
 10. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/PERIODIC_MAINTENANCE.md)**.
 11. Secret scanning expectations: **[SECRET_SCANNING.md](./security/SECRET_SCANNING.md)**.
@@ -25,8 +32,8 @@
 ## 📊 Documentation Audit (April 9, 2026)
 
 - **Total .md files (repo, excluding `node_modules` / `.venv`):** ~249 — run `find . -name '*.md' -not -path '*/node_modules/*'` for current count. Historical note: 142 was cited after Phases 1–5 consolidation.
-- **Consolidation plan:** [DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
-- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and [archived](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md); active gap work: [GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
+- **Consolidation plan:** [meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
+- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and [archived](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md); active gap work: [meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
 
 ---
 
@@ -41,7 +48,7 @@
 
 #### Architecture
 - **[Architecture decisions (ADRs)](./architecture/decisions/README.md)** — SQLite, Kelly LLM, agentic checkout surfaces
-- **[Agentic checkout file map](./architecture/AGENTIC_CHECKOUT_FILE_MAP.md)** — web, RN, API ownership
+- **[Agentic checkout file map](./architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md)** — web, RN, API ownership
 - **[Platform Vision](./architecture/vision/VISION.md)** - Platform goals and roadmap
 - **[Healthcare Assessment](./architecture/healthcare/HEALTHCARE_ASSESSMENT.md)** - Healthcare platform analysis
 - **[Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)** - Payment system design
@@ -89,15 +96,15 @@
 - **[Clinic Onboarding](./onboarding/CLINIC_ONBOARDING_CHECKLIST.md)** - Clinic setup
 
 #### Patient booking, triage & agentic commerce
-- **[Richer Triage & Records](./GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** — Schema, records Q&A
-- **[Public agentic checkout](./architecture/PUBLIC_AGENTIC_CHECKOUT.md)** — Landing → quote → pay, Kelly tools, APIs
+- **[Richer Triage & Records](./meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** — Schema, records Q&A
+- **[Public agentic checkout](./architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md)** — Landing → quote → pay, Kelly tools, APIs
 - **[Triage phased todos (archived, all complete)](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md)** — Historical phased roadmap
-- **[Agentic checkout backlog / status](../todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md)** — Backend audit + open items (read status at top). Frontend UI spec (complete): [archive](../todos/archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
+- **[Agentic checkout backlog / status](../todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md)** — Backend audit + open items (read status at top). Frontend UI spec (complete): [archive](../todos/archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
 
 #### Voice Agent, Video Consult & Medical Coding
-- **[Hybrid Architecture Overview](./architecture/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
-- **[Video Consult](./architecture/VIDEO_CONSULT.md)** - LiveKit video: flow, env, runbook
-- **[Landing Try now & LiveKit](./architecture/LANDING_TRY_NOW_LIVEKIT.md)** - Skin & Care landing camera-first UI, `try-landing-*` rooms, Kelly vs LiveKit
+- **[Hybrid Architecture Overview](./architecture/overview/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
+- **[Video Consult](./architecture/care-delivery/VIDEO_CONSULT.md)** - LiveKit video: flow, env, runbook
+- **[Landing Try now & LiveKit](./architecture/experience/LANDING_TRY_NOW_LIVEKIT.md)** - Skin & Care landing camera-first UI, `try-landing-*` rooms, Kelly vs LiveKit
 - **[Voice Agent Config](./voice-agent/README.md)** - Voice agent setup
 - **[Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)** - Imports, evaluation, tools, configure-retell
 - **[Tool Schemas](./architecture/voice-agent/TOOL_SCHEMAS.md)** - Retell functions (suggest_codes_from_symptoms, extract_medical_text, etc.)
@@ -241,8 +248,8 @@ docs/
 
 ### Voice Agent & Medical Coding
 - [Voice Agent Config](./voice-agent/README.md)
-- [Video Consult](./architecture/VIDEO_CONSULT.md)
-- [Landing Try now & LiveKit](./architecture/LANDING_TRY_NOW_LIVEKIT.md)
+- [Video Consult](./architecture/care-delivery/VIDEO_CONSULT.md)
+- [Landing Try now & LiveKit](./architecture/experience/LANDING_TRY_NOW_LIVEKIT.md)
 - [Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)
 - [Retell Configuration](./middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md)
 - [Voice Agent Todo & Status](./architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)

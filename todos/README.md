@@ -1,27 +1,31 @@
 # Todos
 
-**Last Updated:** April 9, 2026
+**Last Updated:** April 13, 2026
 
-This folder holds **active** task lists and checklists. **Fully completed** lists are in [`archive/`](./archive/README.md).
+This folder holds todo indexes and active checklists. **Pending** tracking is centralized in [`pending/README.md`](./pending/README.md). **Fully completed** lists are in [`archive/`](./archive/README.md).
 
-**Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/CANONICAL_DOC_MAP.md`](../docs/CANONICAL_DOC_MAP.md).
+**Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/meta/CANONICAL_DOC_MAP.md`](../docs/meta/CANONICAL_DOC_MAP.md).
 
-## Active
+## Pending
+
+See [`pending/README.md`](./pending/README.md) for the current pending backlog list.
+
+## Pending Files
 
 | Document | Purpose |
 |----------|---------|
-| [PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md](PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md) | Phase 0 trust layer checklist: security, financial integrity, impact verification, reliability |
-| [PRODUCTION_READINESS_TASKS.md](PRODUCTION_READINESS_TASKS.md) | Production readiness, Azure, security, telemedicine, payments, monitoring |
-| [TELEMEDICINE_TODOS.md](TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2) |
-| [TELEMEDICINE_ARCHITECTURE_REVIEW.md](TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: video consult → case report |
-| [AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout backend audit; open items mixed with implemented fixes |
-| [Orchestration-todos.md](Orchestration-todos.md) | Hybrid orchestration context + **pending** QA/parity/debt items |
-| [Step10-LangChain-LangGraph-LangSmith-todos.md](Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10: LangChain/LangGraph/LangSmith, provider cards |
-| [DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm patient Q&A pipeline: UI, eval, corpus ops (many items still open) |
+| [pending/PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md](pending/PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md) | Phase 0 trust layer checklist: security, financial integrity, impact verification, reliability |
+| [pending/PRODUCTION_READINESS_TASKS.md](pending/PRODUCTION_READINESS_TASKS.md) | Production readiness, Azure, security, telemedicine, payments, monitoring |
+| [pending/TELEMEDICINE_TODOS.md](pending/TELEMEDICINE_TODOS.md) | Telemedicine production tasks (P0–P2) |
+| [pending/TELEMEDICINE_ARCHITECTURE_REVIEW.md](pending/TELEMEDICINE_ARCHITECTURE_REVIEW.md) | Architecture review: video consult → case report |
+| [pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) | Agentic checkout backend audit; open items mixed with implemented fixes |
+| [pending/Orchestration-todos.md](pending/Orchestration-todos.md) | Hybrid orchestration context + **pending** QA/parity/debt items |
+| [pending/Step10-LangChain-LangGraph-LangSmith-todos.md](pending/Step10-LangChain-LangGraph-LangSmith-todos.md) | Step 10: LangChain/LangGraph/LangSmith, provider cards |
+| [pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md](pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md) | Derm patient Q&A pipeline: UI, eval, corpus ops (many items still open) |
 
 ## Archived (completed history)
 
-See [`archive/README.md`](./archive/README.md) — includes triage phased roadmap (all complete), agentic checkout **frontend** spec (all complete), and orchestration completed checklist extract.
+See [`archive/README.md`](./archive/README.md) — includes triage phased roadmap (all complete), agentic checkout **frontend** spec (all complete), orchestration completed checklist extract, and the completed landing-consolidation set.
 
 ## Related in `docs/`
 

@@ -88,7 +88,7 @@ function productImageUrl(p?: CatalogProduct | null, apiBase = API_BASE) {
  *
  * File map (search symbols): session/catalog state, fetchQuote, sendMessage (SSE + /turn fallback),
  * openPayModal / startStripeCheckout, emitCheckoutAnalytics, product picker Modal.
- * Architecture: docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md
+ * Architecture: docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md
  */
 export default function CheckoutChatScreen() {
   const router = useRouter();

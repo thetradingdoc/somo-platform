@@ -148,21 +148,60 @@ function buildEvidenceFromInputs({ normalized, productTaxonomy, routineConflicts
     );
   }
   for (const c of _asArray(routineConflicts)) {
+    const rc = _asArray(c?.reason_codes);
+    const tags = ['routine_conflict', ...rc];
+    const fromGraph = Boolean(c?.graph || c?.source === 'ingredient_interaction_graph');
     evidenceItems.push(
       createEvidenceItem({
         source_type: 'taxonomy_rule',
         source_id: `routine_conflict:${_slug(c?.id || c?.summary || 'conflict')}`,
-        source_label: 'routine_conflict_detector',
+        source_label: fromGraph ? 'ingredient_interaction_graph' : 'routine_conflict_detector',
         evidence_grade: 'taxonomy_rule',
-        source_reliability_score: 0.88,
-        confidence: c?.severity === 'high' ? 0.88 : 0.73,
+        source_reliability_score: fromGraph ? 0.9 : 0.88,
+        confidence:
+          c?.severity === 'high' || c?.severity === 'critical' ? 0.88 : c?.severity === 'medium' ? 0.76 : 0.73,
         relevance: 0.86,
-        tags: ['routine_conflict'],
-        payload: c
+        tags,
+        payload: {
+          ...c,
+          ingredient_canonical_ids: c.ingredient_canonical_ids || null,
+          reason_codes: rc
+        }
       })
     );
   }
   return evidenceItems.map(scoreEvidence).sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Map deterministic graph hits / Kelly RoutineVerdict conflicts into routineConflicts[] shape
+ * for rails + evidence (ingredient_id + reason_codes for RAG keys).
+ */
+function _cosingId(raw) {
+  const s = String(raw || '').trim().toLowerCase().replace(/^cosing:/, '');
+  return s ? `cosing:${s}` : '';
+}
+
+function routineConflictsFromGraphHits(hits) {
+  return (hits || []).map((c) => ({
+    id: `graph:${String(c.ingredient_a)}:${String(c.ingredient_b)}:${c.interaction_type}`,
+    severity: c.severity === 'critical' ? 'high' : c.severity === 'high' ? 'high' : 'medium',
+    summary: c.notes || c.interaction_type,
+    recommendation:
+      c.verdict === 'avoid'
+        ? 'Avoid combining these actives in the same session; alternate nights or separate AM/PM per notes.'
+        : c.verdict === 'caution'
+          ? 'Use caution: spacing or formulation matters; see interaction notes.'
+          : 'Informational interaction; monitor irritation.',
+    graph: true,
+    source: 'ingredient_interaction_graph',
+    ingredient_canonical_ids: [_cosingId(c.ingredient_a), _cosingId(c.ingredient_b)].filter(Boolean),
+    reason_codes: _asArray(c.reason_codes)
+  }));
+}
+
+function routineConflictsFromGraphVerdict(verdict) {
+  return routineConflictsFromGraphHits(verdict?.conflicts);
 }
 
 function runNegativeRules({ signals, normalized }) {
@@ -392,6 +431,8 @@ module.exports = {
   buildReasoningMap,
   validateReasoningMap,
   createEvidenceItem,
-  scoreEvidence
+  scoreEvidence,
+  routineConflictsFromGraphHits,
+  routineConflictsFromGraphVerdict
 };
 

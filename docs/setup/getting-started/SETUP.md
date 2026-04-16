@@ -105,7 +105,7 @@ AZURE_EMAIL_SENDER=DoNotReply@your-domain.com
 
 ```bash
 # Option 1: Use the start script
-./start-local.sh
+./scripts/root/start-local.sh
 
 # Option 2: Manual start
 cd middleware-platform

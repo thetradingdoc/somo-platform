@@ -4,6 +4,7 @@
  * Centralized Stripe configuration with environment-aware key selection
  * and validation to prevent security issues (production keys in dev, test keys in prod)
  */
+const SecretManager = require('../services/secret-manager');
 
 /**
  * Get Stripe secret key with validation
@@ -11,7 +12,10 @@
  * @throws {Error} If key is missing or invalid
  */
 function getStripeSecretKey() {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = SecretManager.getSecret('STRIPE_SECRET_KEY', {
+    consumer: 'stripe-config',
+    purpose: 'stripe_secret_key'
+  });
   
   if (!key) {
     throw new Error('STRIPE_SECRET_KEY environment variable is required');
@@ -54,7 +58,10 @@ function getStripeSecretKey() {
  * @throws {Error} If key is missing or invalid
  */
 function getStripePublishableKey() {
-  const key = process.env.STRIPE_PUBLISHABLE_KEY;
+  const key = SecretManager.getSecret('STRIPE_PUBLISHABLE_KEY', {
+    consumer: 'stripe-config',
+    purpose: 'stripe_publishable_key'
+  });
   
   if (!key) {
     throw new Error('STRIPE_PUBLISHABLE_KEY environment variable is required');

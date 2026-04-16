@@ -25,13 +25,11 @@ function voiceProps(overrides = {}) {
     productTrackingActive: true,
     scanUi: { status: 'scanning', barcode: '', productName: '', reason: '' },
     scanResult: null,
-    manualBarcodeInput: '',
-    setManualBarcodeInput: () => {},
-    onManualBarcodeSubmit: () => {},
     manualIngredientsInput: '',
     setManualIngredientsInput: () => {},
     onManualIngredientsSubmit: () => {},
     onUploadIngredientPhoto: () => {},
+    onRequestScanAnalysis: () => {},
     ocrBusy: false,
     ocrError: '',
     pendingScanDecision: null,
@@ -46,7 +44,6 @@ test('scanner controls expose accessible names and order', async () => {
   expect(screen.getByRole('button', { name: /scan/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /talk/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /upload/i })).toBeInTheDocument();
-  expect(screen.getByRole('textbox')).toBeInTheDocument();
   const results = await axe(container);
   expect(results).toHaveNoViolations();
 });
@@ -63,12 +60,47 @@ test('results page has basic landmark semantics and labels', async () => {
       }}
       onBack={() => {}}
       onClose={() => {}}
-      onRefresh={() => {}}
-      onSaveEdit={async () => {}}
+      onAskKelly={() => {}}
     />
   );
-  expect(screen.getByRole('button', { name: /done/i })).toBeInTheDocument();
-  expect(screen.getByRole('progressbar')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Done$/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Ask Agent/i })).toBeInTheDocument();
+  const results = await axe(container);
+  expect(results).toHaveNoViolations();
+});
+
+test('results page with summary tiles and verdict has no obvious a11y regressions', async () => {
+  const { container } = render(
+    <AssistantResultsPage
+      snapshot={{
+        schema_version: '1.0',
+        confidence: { global: 0.62 },
+        scan_summary: {
+          tiles: {
+            key_actives: { status: 'available', source: 'deterministic', confidence: 'medium', value: [{ display: 'Niacinamide' }] },
+            formulation: { status: 'available', source: 'deterministic', confidence: 'low', value: 'Water-Based' },
+            function: { status: 'available', source: 'deterministic', confidence: 'medium', value: ['hydration'] },
+            skin_type: { status: 'deferred', source: 'none', reason_unavailable: 'no_profile_context' },
+            safety_score: { status: 'deferred', source: 'none', reason_unavailable: 'no_scoring_pipeline' }
+          }
+        },
+        result_summary: {
+          disclaimer: 'informational_only',
+          verdict: {
+            product_overview: { what_it_does: 'Topical care.' },
+            good_for_me: { answer: 'unknown' },
+            harmful: { severity: 'low' },
+            children_safe: { answer: 'insufficient_data', summary: 'Limited deterministic signal.' },
+            side_effects: { summary: 'Not assessed in this scan.' },
+            alternatives: { status: 'deferred', reason_unavailable: 'insufficient_data' }
+          }
+        }
+      }}
+      onBack={() => {}}
+      onClose={() => {}}
+      onAskKelly={() => {}}
+    />
+  );
   const results = await axe(container);
   expect(results).toHaveNoViolations();
 });

@@ -8,9 +8,65 @@ import { setAssistantSpeaking } from './sphereConversationBridge';
 let activeAudio = null;
 let activeAudioUrl = null;
 let activeUtterance = null;
+/** Set after first silent-oscillator tick (one-time Web Audio unlock gesture). */
+let audioGatePrimed = false;
+/** Reused so resume() before TTS still counts as the same unlocked graph (autoplay policy). */
+let sharedAudioUnlockCtx = null;
+
+async function ensureAudioPlaybackUnlocked() {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!sharedAudioUnlockCtx || sharedAudioUnlockCtx.state === 'closed') return;
+    if (sharedAudioUnlockCtx.state === 'suspended' && typeof sharedAudioUnlockCtx.resume === 'function') {
+      await sharedAudioUnlockCtx.resume();
+    }
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+/**
+ * Run synchronously from a click/tap (Send, Allow camera, mic on, etc.) so later Kelly TTS
+ * (`new Audio().play()`) is not blocked after async API work. Call on every Send — not only once.
+ */
+export function primeAssistantAudioGate() {
+  if (typeof window === 'undefined') return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!sharedAudioUnlockCtx || sharedAudioUnlockCtx.state === 'closed') {
+      sharedAudioUnlockCtx = new AC();
+    }
+    const ctx = sharedAudioUnlockCtx;
+    if (!audioGatePrimed) {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      g.gain.value = 0.0001;
+      osc.connect(g);
+      g.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.001);
+      audioGatePrimed = true;
+    }
+    if (typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+  } catch (_) {
+    /* allow retry on next gesture */
+  }
+}
 /** AbortController for in-flight TTS fetch (streaming body read). */
 let activeTtsAbort = null;
 let activeReader = null;
+
+async function readNextOrAbort(reader) {
+  try {
+    return await reader.read();
+  } catch (e) {
+    if (e && e.name === 'AbortError') return { done: true, value: undefined };
+    throw e;
+  }
+}
 let activeMediaSource = null;
 let activeSourceBuffer = null;
 
@@ -177,7 +233,7 @@ export async function speakAssistantReply(
       await waitForSourceOpen;
 
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readNextOrAbort(reader);
         if (done) break;
         if (!value || !value.length) continue;
         if (!firstByteMarked) {
@@ -218,7 +274,7 @@ export async function speakAssistantReply(
     const chunks = [];
     let firstByteMarked = false;
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readNextOrAbort(reader);
       if (done) break;
       if (value && value.length) {
         chunks.push(value);
@@ -254,6 +310,7 @@ export async function speakAssistantReply(
     };
     audio.onended = clear;
     audio.onerror = clear;
+    await ensureAudioPlaybackUnlocked();
     await audio.play().catch(() => {
       clear();
       browserSpeechFallback(t, lang);
@@ -269,15 +326,17 @@ export async function speakAssistantReply(
 
 export function stopAssistantSpeech() {
   if (typeof window === 'undefined') return;
+  if (activeReader) {
+    try {
+      activeReader.cancel();
+    } catch (_) {}
+    activeReader = null;
+  }
   if (activeTtsAbort) {
     try {
       activeTtsAbort.abort();
     } catch (_) {}
     activeTtsAbort = null;
-  }
-  if (activeReader) {
-    try { activeReader.cancel(); } catch (_) {}
-    activeReader = null;
   }
   if (activeSourceBuffer) {
     try {

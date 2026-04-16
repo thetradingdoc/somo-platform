@@ -45,7 +45,7 @@ Optional: `cd patient-app && npm run lint` (not all CI jobs run Expo lint yet).
 - Canonical docs live under **`docs/`** (`docs/README.md` index).
 - Kelly / LLM debug flags: **`docs/development/KELLY_ENV_AND_DEBUG.md`**.
 - CI vs deploy expectations: **`docs/deployment/CI_AND_DEPLOY_SOURCE_OF_TRUTH.md`**.
-- Agentic checkout (which file owns what): **`docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md`**.
+- Agentic checkout (which file owns what): **`docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md`**.
 - `server.js` growth policy: **`docs/development/SERVER_JS_REFACTOR_POLICY.md`**.
 - Quarterly doc/CI hygiene: **`docs/development/PERIODIC_MAINTENANCE.md`**.
 - Secret scanning expectations: **`docs/security/SECRET_SCANNING.md`**.

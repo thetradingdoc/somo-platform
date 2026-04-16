@@ -8,7 +8,7 @@
 
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
 
-> **Architecture notes:** [ADRs](docs/architecture/decisions/README.md) · [Agentic checkout file map](docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md) · [`server.js` policy](docs/development/SERVER_JS_REFACTOR_POLICY.md)
+> **Architecture notes:** [ADRs](docs/architecture/decisions/README.md) · [Agentic checkout file map](docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md) · [`server.js` policy](docs/development/SERVER_JS_REFACTOR_POLICY.md)
 
 ---
 
@@ -71,7 +71,7 @@ doclittle-platform/
 └── README.md                # This file
 ```
 
-**Agentic commerce (chat → quote → pay):** see [docs/architecture/PUBLIC_AGENTIC_CHECKOUT.md](docs/architecture/PUBLIC_AGENTIC_CHECKOUT.md) and [todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](todos/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (status note at top).
+**Agentic commerce (chat → quote → pay):** see [docs/architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md](docs/architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md) and [todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (status note at top).
 
 ---
 

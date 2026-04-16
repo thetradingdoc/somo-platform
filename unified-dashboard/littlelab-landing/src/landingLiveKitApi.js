@@ -1,10 +1,12 @@
+import { normalizeHttpApiBase } from './landingAssistantApi';
+
 /**
  * LiveKit token for landing "Try now" demo rooms (no appointment).
  * Uses POST /api/livekit/token — same as business video; room is try-landing-{slug}.
  */
 
 export async function fetchLiveKitToken({ apiBase, room, identity, name, signal }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base) {
     throw new Error('API base URL is not configured');
   }
@@ -43,7 +45,7 @@ export function landingLiveKitIdentity(sessionId) {
  * Publish canonical vision capture events to middleware.
  */
 export async function publishVisionCaptureEvent({ apiBase, eventType, payload, idempotencyKey, actor = 'assistant', signal }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base) return { success: false, skipped: true, reason: 'missing_api_base' };
   const res = await fetch(`${base}/api/video-consult/vision/capture-events`, {
     method: 'POST',
@@ -85,7 +87,7 @@ export async function fetchVisionSessionState({ apiBase, sessionId, signal }) {
 }
 
 export async function incrementVisionMetric({ apiBase, sessionId, metricName, signal }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base || !sessionId || !metricName) return { success: false, skipped: true };
   const res = await fetch(`${base}/api/video-consult/vision/metrics/inc`, {
     method: 'POST',

@@ -11,8 +11,17 @@ Reference documentation for product-related features.
 
 **Note:** PRODUCT_LIST and related files may be tenant-specific.
 
-**Barcode / product lookup (current code):** middleware exposes `GET /api/public/beautyfacts/:barcode` (Open Beauty Facts upstream). Implementation: `middleware-platform/services/open-beauty-facts-service.js` (route registration in `server.js`).
+**Barcode / product lookup (current code):**
+
+- `GET /api/public/beautyfacts/:barcode` (OBF) and `GET /api/public/foodfacts/:barcode` (OFF)
+- master-first serving from local catalog indexes (`products_obf_index`, `products_off_index`)
+- live upstream calls are fallback only, with successful fallback results upserted into master indexes
+
+Canonical admin stats/KPI:
+
+- `GET /api/admin/catalog/master-stats`
+- `GET /api/admin/metrics` → `catalog_master`
 
 ---
 
-**Last Updated:** April 9, 2026
+**Last Updated:** April 14, 2026

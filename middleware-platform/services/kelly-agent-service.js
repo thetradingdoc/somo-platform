@@ -193,6 +193,29 @@ function _hasSkinTypeCorrectionIntent(text) {
   return /\b(actually|correction|correct|update|changed|more like|rather|not )\b/.test(t);
 }
 
+/**
+ * When skin type is still unknown/low-confidence, Kelly normally short-circuits with a fixed
+ * skin-type question. Skip that for asks that are clearly about face/vision/product analysis
+ * so the user's question reaches the LLM (e.g. "describe my face" vs oily/dry intake).
+ */
+function _defersStep1SkinTypeClarifier(message) {
+  const t = String(message || '').trim().toLowerCase();
+  if (!t) return false;
+  if (/\bdescribe my (face|skin)\b/.test(t)) return true;
+  if (/\b(what do you see|what can you see)\b/.test(t) && /\b(face|camera|photo|picture|selfie|image)\b/.test(t)) {
+    return true;
+  }
+  if (/\b(describe|analyze|analyse)\b/.test(t) && /\b(my |the )?(face|selfie|photo|picture|camera)\b/.test(t)) {
+    return true;
+  }
+  if (/\b(how does|how do)\b.*\b(my face|my skin)\b.*\b(look)\b/.test(t)) return true;
+  // Product / scan context should not be replaced by generic skin-type intake.
+  if (/\b(barcode|ingredients?|i scanned|this product)\b/.test(t)) {
+    return true;
+  }
+  return false;
+}
+
 function _extractExplicitSkinType(text) {
   const t = String(text || '').toLowerCase();
   if (/\bnot\s+oily\b/.test(t) && /\b(dry|tight|flaky)\b/.test(t)) return 'dry';
@@ -1591,6 +1614,68 @@ const KELLY_TOOLS = [
         },
         required: ['inci_list']
       }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'evaluate_skincare_routine',
+      description:
+        'Deterministic skincare conflict check on resolved canonical ingredient IDs (e.g. cosing:retinol). Returns RoutineVerdict JSON: overall safe|caution|avoid, conflicts[], reason_codes for RAG, suggested_split, and **evidence_bundle** `{ schema_version, chunks, chunk_ids, coverage }` (single canonical RAG surface). You must not soften an avoid verdict. Call when the user lists products/actives for the same day or asks if combinations are safe.',
+      parameters: {
+        type: 'object',
+        properties: {
+          slots: {
+            type: 'array',
+            description: 'Routine slots with AM/PM ingredient id lists',
+            items: {
+              type: 'object',
+              properties: {
+                time: { type: 'string', enum: ['am', 'pm'] },
+                ingredient_ids: {
+                  type: 'array',
+                  items: { type: 'string', description: 'Canonical id e.g. cosing:retinol or bare inci key' }
+                }
+              },
+              required: ['time', 'ingredient_ids']
+            }
+          }
+        },
+        required: ['slots']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'retrieve_ingredient_monographs',
+      description:
+        'Fetch short curated monograph chunks for education (ingredient ids and/or graph reason_codes like class:retinoid). Use after evaluate_skincare_routine or for ingredient deep-dives.',
+      parameters: {
+        type: 'object',
+        properties: {
+          ingredient_ids: { type: 'array', items: { type: 'string' } },
+          reason_codes: { type: 'array', items: { type: 'string' } }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_ingredient_resolution_metrics',
+      description:
+        'Internal/catalog metric: % of product ingredient rows resolved to COSING and top unresolved INCI tokens. Use for gap analysis, not patient-facing.',
+      parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_catalog_coverage_metrics',
+      description:
+        'Internal X2 metric: product/SKU catalog rows, knowledge_chunks and ingredient_rag counts, and conflict-pair coverage in knowledge_chunks (pair_key). For ops/gap analysis, not patient-facing.',
+      parameters: { type: 'object', properties: {} }
     }
   },
   {
@@ -3281,7 +3366,11 @@ Antworten Sie durchgehend auf Deutsch.`,
       Metrics.increment(`taxonomy.idempotent_write_skipped.${taxonomyModule}.count`, idempotentWriteSkipped ? 1 : 0);
     } catch (_) {}
 
-    if (skinTypeResult && (skinTypeResult.value === 'unknown' || skinTypeResult.confidence === 'low')) {
+    if (
+      skinTypeResult &&
+      (skinTypeResult.value === 'unknown' || skinTypeResult.confidence === 'low') &&
+      !_defersStep1SkinTypeClarifier(message)
+    ) {
       const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
         ? history[history.length - 1].content
         : '') || '').toLowerCase();
@@ -3302,7 +3391,12 @@ Antworten Sie durchgehend auf Deutsch.`,
       };
       }
     }
-    if (skinTypeResult && skinTypeResult.status === 'tentative' && skinTypeResult.needs_confirmation) {
+    if (
+      skinTypeResult &&
+      skinTypeResult.status === 'tentative' &&
+      skinTypeResult.needs_confirmation &&
+      !_defersStep1SkinTypeClarifier(message)
+    ) {
       const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
         ? history[history.length - 1].content
         : '') || '').toLowerCase();
@@ -3361,6 +3455,31 @@ Antworten Sie durchgehend auf Deutsch.`,
     // ── 4. Append user message ────────────────────────────────
     this._appendToHistory(sessionId, 'user', message);
     history.push({ role: 'user', content: message });
+
+    // D3 — Routine pathway: skip LLM for greetings/smalltalk when routine is still empty.
+    if (pathway === 'routine' && process.env.KELLY_ROUTINE_SMALLTALK_SHORTCIRCUIT !== '0') {
+      try {
+        const { tryRoutinePhaseCheapTurn } = require('./routine-cheap-turn');
+        const cheap = tryRoutinePhaseCheapTurn({ db: db.db, sessionId, message });
+        if (cheap && cheap.reply) {
+          this._appendToHistory(sessionId, 'assistant', cheap.reply);
+          return _mergeUiSnapIntoReturn(
+            KellyToolExecutor.consumeUiAttachments(sessionId),
+            _appendSkincareAssessmentToReturn(sessionId, orchestration, {
+              reply: cheap.reply,
+              endCall: false,
+              toolsUsed: [],
+              language: preferredLanguage,
+              next_step: null,
+              next_chips: [],
+              chips_display: null,
+              llm_usage: null,
+              routine_smalltalk_short_circuit: true,
+            })
+          );
+        }
+      } catch (_) {}
+    }
 
     // Deterministic summary path for "what did you capture so far?" requests.
     if (_isSummaryRequest(message)) {
@@ -4588,6 +4707,17 @@ Antworten Sie durchgehend auf Deutsch.`,
       } catch (_) {}
     }
 
+    let skincare_compose_sidecar = null;
+    if (pathway === 'routine' && process.env.KELLY_SKINCARE_POST_TURN_COMPOSE === '1') {
+      try {
+        skincare_compose_sidecar = require('./skincare-post-turn-compose').runDefaultSkincarePostTurnCompose({
+          db: db.db,
+          sessionId,
+          userMessage: message,
+        });
+      } catch (_) {}
+    }
+
     return _mergeUiSnapIntoReturn(
       KellyToolExecutor.consumeUiAttachments(sessionId),
       _appendSkincareAssessmentToReturn(sessionId, orchestration, {
@@ -4603,7 +4733,8 @@ Antworten Sie durchgehend auf Deutsch.`,
         care_path: context?.care_path || null,
         evidence_fusion: fusedEvidence,
         case_summary: patientSummary,
-        billing_readiness_pack: billingPack
+        billing_readiness_pack: billingPack,
+        skincare_compose: skincare_compose_sidecar,
       })
     );
   }
@@ -5345,6 +5476,13 @@ Antworten Sie durchgehend auf Deutsch.`,
         } catch (err) {
           console.error(`[KellyAgent] Tool ${toolName} failed:`, err.message);
           toolResult = { success: false, error: err.message };
+        }
+
+        if (toolName === 'evaluate_skincare_routine' && toolResult?.success) {
+          try {
+            const { persistRoutinePostHookSnapshot } = require('./routine-post-turn-hook');
+            persistRoutinePostHookSnapshot(sessionId, toolResult, { userMessage: context?.message });
+          } catch (_) {}
         }
 
         if (

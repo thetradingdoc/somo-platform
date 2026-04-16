@@ -14,7 +14,7 @@ This document orients new contributors. Deep dives live in `docs/` and `docs/arc
 ## Checkout chat (web)
 
 - **Page shell:** `unified-dashboard/patients/checkout-chat.html` links `checkout-chat.css`, `checkout-phone-e164.js` (browser mirror of `utils/phone-e164.js`), and `checkout-chat.js`.
-- **Behavior map:** `docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md`.
+- **Behavior map:** `docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md`.
 - **UX notes:** `docs/CHECKOUT_CHAT_UI_NOTES.md`.
 - **Static verify (no server):** `node scripts/verify-agentic-checkout.cjs` from repo root.
 

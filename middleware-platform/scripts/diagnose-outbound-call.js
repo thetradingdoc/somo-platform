@@ -137,7 +137,7 @@ async function testRetellAPI() {
     logInfo(`Testing Retell API with agent: ${salesAgentId}`);
     
     const response = await axios.get(
-      `https://api.retellai.com/v2/get-agent/${salesAgentId}`,
+      `https://api.retellai.com/get-agent/${salesAgentId}`,
       {
         headers: {
           'Authorization': `Bearer ${apiKey}`
@@ -150,7 +150,11 @@ async function testRetellAPI() {
       logSuccess('Retell API is accessible');
       logInfo(`Agent Name: ${response.data.agent_name || 'N/A'}`);
       logInfo(`Agent Version: ${response.data.agent_version || 'N/A'}`);
-      logInfo(`WebSocket URL: ${response.data.llm_websocket_url || 'N/A'}`);
+      const wsUrl =
+        response.data.response_engine?.llm_websocket_url ||
+        response.data.llm_websocket_url ||
+        'N/A';
+      logInfo(`WebSocket URL: ${wsUrl}`);
       return true;
     }
   } catch (error) {
@@ -441,7 +445,8 @@ async function testWebhookEndpoints() {
   const endpoints = [
     { name: 'Voice Incoming', url: `${apiBaseUrl}/voice/incoming` },
     { name: 'SMS Incoming', url: `${apiBaseUrl}/sms/incoming` },
-    { name: 'Retell LLM WebSocket', url: `${apiBaseUrl.replace('http', 'ws')}/retell-llm` }
+    // HTTP health for LLM path (WebSocket is wss:// same path — tested separately)
+    { name: 'Retell LLM (HTTP health)', url: `${apiBaseUrl}/webhook/retell/llm` }
   ];
   
   for (const endpoint of endpoints) {

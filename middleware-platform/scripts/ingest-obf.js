@@ -16,13 +16,6 @@ function parseArgs(argv) {
   return out;
 }
 
-function splitIngredients(inciText) {
-  return String(inciText || '')
-    .split(/[;,]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 function loadCheckpoint(fp) {
   try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { return { line: 0 }; }
 }
@@ -78,12 +71,11 @@ async function run() {
     });
     if (!up?.success) continue;
 
-    const ings = splitIngredients(inciText).map((ing, idx) => ({
-      inci_name: ing.toLowerCase(),
-      ingredient_order: idx,
-      raw_ingredient: ing
-    }));
-    db.replaceProductIngredients(up.id, ings);
+    if (inciText) {
+      db.replaceProductIngredientsFromInciText(up.id, inciText);
+    } else {
+      db.replaceProductIngredients(up.id, []);
+    }
     inserted += 1;
 
     if (lineNo % 500 === 0) {

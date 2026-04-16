@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import AgentSphereCanvas from './AgentSphereCanvas';
 import LiveKitPanel from './LiveKitPanel';
+import { primeAssistantAudioGate } from './assistantSpeech';
 import './assistant-shared.css';
 import './assistant-chat.css';
 import './assistant-livekit.css';
@@ -44,7 +45,10 @@ export default function AssistantChatPage({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
 
-  const onSend = () => sendUserMessage(input);
+  const onSend = () => {
+    primeAssistantAudioGate();
+    sendUserMessage(input);
+  };
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

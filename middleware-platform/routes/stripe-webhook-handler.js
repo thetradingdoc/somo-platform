@@ -25,6 +25,7 @@ const {
   reconcileMerchantOrderPaymentSucceeded,
   finalizeCommerceRetailPayment
 } = require('../services/commerce-payment-settlement');
+const FinancialIntegrityService = require('../services/financial-integrity-service');
 
 const router = express.Router();
 
@@ -138,6 +139,16 @@ router.post(
         case 'payment_intent.payment_failed':
           await handlePaymentFailed(event.data.object);
           break;
+        case 'refund.created':
+        case 'refund.updated':
+        case 'charge.refunded':
+          await handleRefundEvent(event);
+          break;
+        case 'charge.dispute.created':
+        case 'charge.dispute.updated':
+        case 'charge.dispute.closed':
+          await handleChargeDispute(event.data.object);
+          break;
         default:
           console.log('[StripeWebhook] Unhandled event type:', event.type);
       }
@@ -151,10 +162,58 @@ router.post(
   }
 );
 
+async function handleChargeDispute(dispute) {
+  try {
+    const PaymentDisputeService = require('../services/payment-dispute-service');
+    PaymentDisputeService.upsertFromStripeDispute(dispute);
+  } catch (e) {
+    console.warn('[StripeWebhook] dispute intake (non-fatal):', e.message);
+  }
+}
+
+async function handleRefundEvent(event) {
+  try {
+    const obj = event?.data?.object || {};
+    const refund = obj.object === 'refund' ? obj : null;
+    if (refund && refund.id) {
+      FinancialIntegrityService.recordStripeRefundReconciliation({
+        refundId: refund.id,
+        paymentIntentId: refund.payment_intent || null,
+        amount: (Number(refund.amount || 0) || 0) / 100,
+        checkoutId: null,
+        currency: (refund.currency || 'usd').toUpperCase()
+      });
+      return;
+    }
+
+    // charge.refunded shape can contain an array of refund objects
+    if (obj.object === 'charge' && obj.refunds && Array.isArray(obj.refunds.data)) {
+      for (const r of obj.refunds.data) {
+        if (!r || !r.id) continue;
+        FinancialIntegrityService.recordStripeRefundReconciliation({
+          refundId: r.id,
+          paymentIntentId: obj.payment_intent || null,
+          amount: (Number(r.amount || 0) || 0) / 100,
+          checkoutId: null,
+          currency: (r.currency || obj.currency || 'usd').toUpperCase()
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[StripeWebhook] refund reconciliation ingest (non-fatal):', e.message);
+  }
+}
+
 async function handlePaymentSucceeded(paymentIntent) {
   const { id: stripePaymentIntentId, amount, metadata } = paymentIntent;
 
   await reconcileMerchantOrderPaymentSucceeded(paymentIntent);
+
+  try {
+    FinancialIntegrityService.recordStripePaymentIntentReconciliation(paymentIntent);
+  } catch (e) {
+    console.warn('[StripeWebhook] financial integrity ingest (non-fatal):', e.message);
+  }
 
   const appointmentId = metadata?.appointment_id;
   const patientEmail = metadata?.patient_email;
@@ -277,6 +336,11 @@ async function handlePaymentSucceeded(paymentIntent) {
 
 async function handlePaymentFailed(paymentIntent) {
   await reconcileMerchantOrderPaymentFailed(paymentIntent);
+  try {
+    FinancialIntegrityService.recordStripePaymentIntentReconciliation(paymentIntent);
+  } catch (e) {
+    console.warn('[StripeWebhook] financial integrity ingest (non-fatal):', e.message);
+  }
   const cartSessionId = paymentIntent.metadata?.cart_session_id;
   const merchantId = paymentIntent.metadata?.merchant_id;
   if (cartSessionId && merchantId && db.clearCommerceCartCheckoutLock) {

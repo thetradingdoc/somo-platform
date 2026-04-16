@@ -9,10 +9,12 @@ describe('open-beauty-facts retry/timeout handling', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    delete process.env.OBF_HTTP_MAX_RETRIES;
     jest.resetModules();
   });
 
   test('retries once then succeeds', async () => {
+    process.env.OBF_HTTP_MAX_RETRIES = '1';
     let calls = 0;
     global.fetch = jest.fn(async () => {
       calls += 1;
@@ -22,6 +24,7 @@ describe('open-beauty-facts retry/timeout handling', () => {
         json: async () => ({ status: 1, code: '12345678', product: { product_name: 'Retry OK' } })
       };
     });
+    jest.resetModules();
     const svc = require('../services/open-beauty-facts-service');
     const out = await svc.fetchBeautyFactsByBarcode('12345678');
     expect(out.success).toBe(true);

@@ -7,6 +7,7 @@ function props(overrides = {}) {
   return {
     onClose: () => {},
     onOpenChat: () => {},
+    onRequestScanAnalysis: () => {},
     onOpenUpload: () => {},
     apiBase: 'http://localhost:4000',
     voiceActive: false,
@@ -21,12 +22,12 @@ function props(overrides = {}) {
     productTrackingActive: false,
     scanUi: { status: 'idle', barcode: '', productName: '', reason: '' },
     scanResult: null,
-    manualBarcodeInput: '',
-    setManualBarcodeInput: () => {},
-    onManualBarcodeSubmit: () => {},
     manualIngredientsInput: '',
     setManualIngredientsInput: () => {},
     onManualIngredientsSubmit: () => {},
+    onUploadIngredientPhoto: () => {},
+    ocrBusy: false,
+    ocrError: '',
     pendingScanDecision: null,
     onResolvePendingScanDecision: () => {},
     onToggleScan: () => {},
@@ -51,6 +52,24 @@ test('surfaces provenance/category/sparse labels', () => {
   expect(screen.getByText(/Source: obf_index_cache/i)).toBeInTheDocument();
   expect(screen.getByText(/Category: hygiene/i)).toBeInTheDocument();
   expect(screen.getByText(/Sparse data/i)).toBeInTheDocument();
+});
+
+test('shows found+known guidance when route is resolved', () => {
+  render(
+    <AssistantVoicePage
+      {...props({
+        scanResult: {
+          product: { product_name: 'Known product' },
+          quality: { tier: 'full', analyzeEnabled: true, analyzeLabel: 'Analyze for my skin', summary: 'Complete profile' },
+          dataSource: 'obf_index_cache',
+          categoryRoute: 'cosmetic',
+          ingredientFlags: { hasIngredients: true },
+          sparseData: false
+        }
+      })}
+    />
+  );
+  expect(screen.getByText(/Product found with category/i)).toBeInTheDocument();
 });
 
 test('pending decision controls call compare/refine/reset', () => {

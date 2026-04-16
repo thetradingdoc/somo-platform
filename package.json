@@ -3,10 +3,15 @@
   "scripts": {
     "perf:lighthouse": "node perf/run-lighthouse.mjs",
     "perf:budgets": "node scripts/check-performance-budgets.cjs",
+    "check:landing-routes": "node scripts/check-landing-route-canonicalization.cjs",
+    "report:legacy-landing-refs": "node scripts/report-legacy-landing-references.cjs",
+    "report:landing-deletion-candidates": "node scripts/report-landing-deletion-candidates.cjs",
     "retention:cleanup": "node scripts/retention-cleanup.cjs",
     "verify:agentic-checkout": "node scripts/verify-agentic-checkout.cjs",
-    "ci:local": "node scripts/check-performance-budgets.cjs && node scripts/check-auth-ui-guardrails.cjs && RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs && node scripts/verify-agentic-checkout.cjs && npm test --prefix middleware-platform && npm run release:security-gate --prefix middleware-platform",
+    "ci:local": "node scripts/check-performance-budgets.cjs && node scripts/check-auth-ui-guardrails.cjs && node scripts/check-landing-route-canonicalization.cjs && RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs && node scripts/verify-agentic-checkout.cjs && npm test --prefix middleware-platform && npm run release:security-gate --prefix middleware-platform",
     "test:landing": "npm test --prefix unified-dashboard/littlelab-landing -- --watchAll=false --runInBand",
+    "test:e2e-landing": "cd middleware-platform && npm run test:e2e-landing --",
+    "test:e2e-landing:quick": "cd middleware-platform && npm run test:e2e-landing:quick --",
     "test:e2e-results-snapshot-batch": "npm run test:e2e-results-snapshot-batch --prefix middleware-platform"
   },
   "devDependencies": {

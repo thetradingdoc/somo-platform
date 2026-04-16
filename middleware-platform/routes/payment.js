@@ -590,6 +590,7 @@ router.post('/refund', withPaymentIdempotency('payment_refund', (req) => `refund
     const { payment_intent_id, amount, reason = 'refund' } = req.body;
     const checkout_id = req.body.checkout_id || req.body.prescription_checkout_id;
     const db = require('../database');
+    const RefundWorkflowService = require('../services/refund-workflow-service');
 
     let checkout = null;
     let piId = payment_intent_id;
@@ -601,35 +602,61 @@ router.post('/refund', withPaymentIdempotency('payment_refund', (req) => `refund
       }
       piId = piId || checkout.payment_intent_id;
     }
+    if (!checkout && piId) {
+      checkout = await db.getVoiceCheckoutByPaymentIntentId(piId);
+    }
+    if (!piId && checkout) {
+      piId = checkout.payment_intent_id;
+    }
     if (!piId) {
       return res.status(400).json({ success: false, error: 'payment_intent_id or checkout_id with completed payment required' });
+    }
+
+    const stripeReason = ['requested_by_customer', 'duplicate', 'fraudulent'].includes(reason) ? reason : 'requested_by_customer';
+
+    if (checkout) {
+      const result = await RefundWorkflowService.executeRefundWorkflow({
+        checkout,
+        amount: amount != null && amount !== '' ? parseFloat(amount) : null,
+        reason: stripeReason,
+        actor_type: 'api',
+        actor_id: null
+      });
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error || 'Refund failed',
+          workflow_id: result.workflow_id,
+          eligibility: result.eligibility || null,
+          stripe_error_code: result.stripe_error_code
+        });
+      }
+      return res.json({
+        success: true,
+        workflow_id: result.workflow_id,
+        refund_id: result.refund_id,
+        amount_refunded: result.amount_refunded,
+        status: 'succeeded'
+      });
     }
 
     const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     const refundCents = amount != null ? Math.round(parseFloat(amount) * 100) : undefined;
     const refundOpts = {
       payment_intent: piId,
-      reason: ['requested_by_customer', 'duplicate', 'fraudulent'].includes(reason) ? reason : 'requested_by_customer'
+      reason: stripeReason
     };
     if (refundCents != null && refundCents > 0) refundOpts.amount = refundCents;
 
     const refund = await stripe.refunds.create(refundOpts);
     const amtRefunded = (refund.amount || 0) / 100;
 
-    if (checkout) {
-      try {
-        const PaymentProcessorService = require('../services/payment-processor-service');
-        await PaymentProcessorService.recordRefundEvent({ checkout, amount: amtRefunded, refundId: refund.id });
-      } catch (e) {
-        console.warn('Record refund event failed:', e.message);
-      }
-    }
-
     res.json({
       success: true,
       refund_id: refund.id,
       amount_refunded: amtRefunded,
-      status: refund.status
+      status: refund.status,
+      note: 'No voice_checkout row matched; refund executed without workflow audit linkage.'
     });
   } catch (error) {
     console.error('Refund error:', error.message);

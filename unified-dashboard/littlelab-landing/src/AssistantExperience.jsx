@@ -7,42 +7,35 @@ import { useConversationSphereLevel } from './useConversationSphereLevel';
 import { useLandingLiveKit } from './useLandingLiveKit';
 import { getOrCreateLandingSessionId } from './landingAssistantApi';
 import { fetchVisionSessionState, incrementVisionMetric } from './landingLiveKitApi';
-import { extractIngredientsFromImage } from './ingredientOcr';
+import { captureVideoFrameAsJpegFile, extractIngredientsFromImage } from './ingredientOcr';
+import { pickFirstProductImageUrl } from './scanInsights';
+import { stopAssistantSpeech } from './assistantSpeech';
 import './skin-care-tokens.css';
 import './assistant-shared.css';
 
 const HASH_VOICE = '#assistant/voice';
 const HASH_CHAT = '#assistant/chat';
 const HASH_RESULTS = '#assistant/results';
-const DUMMY_RESULT_SNAPSHOT = {
+/**
+ * When `resultSnapshot` is not yet loaded (or failed), we must not show invented routine conflicts.
+ * Previously a "demo" snapshot looked like real scan output and confused barcode/food flows.
+ */
+const EMPTY_RESULT_SNAPSHOT = {
   schema_version: '1.0',
-  generated_at: new Date().toISOString(),
-  primary_concern: 'barrier_dryness_sensitivity',
-  routine_conflicts: [
-    {
-      id: 'barrier_vs_strong_actives',
-      severity: 'high',
-      summary: 'Barrier stress appears alongside frequent retinoid + AHA use.',
-      recommendation: 'Pause exfoliating acids for 7-10 days and reduce retinoid cadence.'
-    },
-    {
-      id: 'reported_ingredient_reaction',
-      severity: 'medium',
-      summary: 'User reports stinging with fragranced products and vitamin C serum.',
-      recommendation: 'Use fragrance-free barrier products and reintroduce actives slowly.'
-    }
-  ],
-  secondary_concerns: ['redness_rosacea_dermatitis', 'pigmentation_dark_spots'],
+  generated_at: null,
+  primary_concern: null,
+  routine_conflicts: [],
+  secondary_concerns: [],
   intent_primary: 'treat',
-  intent_secondary: ['compare'],
-  likely_triggers: ['retinoid', 'exfoliating_actives', 'fragrance'],
-  body_areas: ['cheeks', 'chin_jaw'],
+  intent_secondary: [],
+  likely_triggers: [],
+  body_areas: [],
   procedure_interest: null,
   urgency_flag: null,
   confidence: {
-    global: 0.79,
-    primary_concern: 0.84,
-    routine_conflicts: 0.75
+    global: 0.55,
+    primary_concern: 0.55,
+    routine_conflicts: 0.35
   },
   next_ui_step: 'skincare_report'
 };
@@ -106,7 +99,6 @@ export default function AssistantExperience({ onClose }) {
     pushAssistant,
     leadText,
     ingestScannedBarcode,
-    ingestManualBarcode,
     submitManualIngredients,
     requestScanAnalysis,
     productTrackingActive,
@@ -114,8 +106,7 @@ export default function AssistantExperience({ onClose }) {
     scanResult,
     pendingScanDecision,
     resolvePendingScanDecision,
-    refreshResultSnapshot,
-    submitResultEdit
+    refreshResultSnapshot
   } = session;
 
   const [page, setPage] = useState(() => {
@@ -140,7 +131,10 @@ export default function AssistantExperience({ onClose }) {
     productName: '',
     reason: ''
   });
-  const [manualBarcodeInput, setManualBarcodeInput] = useState('');
+  const scanUiStatusRef = useRef(scanUi.status);
+  useEffect(() => {
+    scanUiStatusRef.current = scanUi.status;
+  }, [scanUi.status]);
   const [manualIngredientsInput, setManualIngredientsInput] = useState('');
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrError, setOcrError] = useState('');
@@ -151,6 +145,8 @@ export default function AssistantExperience({ onClose }) {
   const ocrImageRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  /** Hidden <audio> elements for LiveKit agent TTS (remote participant audio was never attached before). */
+  const remoteAudioRef = useRef(null);
 
   const getSessionId = useCallback(
     () => sessionIdRef.current || getOrCreateLandingSessionId(),
@@ -162,6 +158,7 @@ export default function AssistantExperience({ onClose }) {
     getSessionId,
     localVideoRef,
     remoteVideoContainerRef: remoteVideoRef,
+    remoteAudioContainerRef: remoteAudioRef,
     assistantPage: page
   });
 
@@ -170,6 +167,21 @@ export default function AssistantExperience({ onClose }) {
       liveKit.syncMicWithVoice(voiceActive);
     }
   }, [voiceActive, liveKit.isConnected, liveKit.syncMicWithVoice]);
+
+  /** Lets automated E2E (and devtools) refresh the snapshot after server-side thread events without typed barcode entry. */
+  useEffect(() => {
+    const onRefresh = () => {
+      void refreshResultSnapshot();
+    };
+    window.addEventListener('littlelab-refresh-result-snapshot', onRefresh);
+    return () => window.removeEventListener('littlelab-refresh-result-snapshot', onRefresh);
+  }, [refreshResultSnapshot]);
+
+  /** Deep link / hash navigation to results must load `session_result_snapshot` (otherwise tiles stay empty). */
+  useEffect(() => {
+    if (page !== 'results') return;
+    void refreshResultSnapshot();
+  }, [page, refreshResultSnapshot]);
 
   useEffect(() => {
     if (!liveKit?.inSession || !apiBase) return undefined;
@@ -298,8 +310,18 @@ export default function AssistantExperience({ onClose }) {
         const found = await detector.detect(video);
         const now = Date.now();
         if (!found?.length) {
-          scanCoachRef.current.stabilizeCycles += 1;
-          if (scanCoachRef.current.stabilizeCycles >= 4 && now - scanCoachRef.current.lastPromptMs > 12000) {
+          const st = scanUiStatusRef.current;
+          if (st === 'error' || st === 'not_found') {
+            scanCoachRef.current.stabilizeCycles = 0;
+          } else {
+            scanCoachRef.current.stabilizeCycles += 1;
+          }
+          if (
+            st !== 'error' &&
+            st !== 'not_found' &&
+            scanCoachRef.current.stabilizeCycles >= 5 &&
+            now - scanCoachRef.current.lastPromptMs > 22000
+          ) {
             scanCoachRef.current.lastPromptMs = now;
             scanCoachRef.current.stabilizeCycles = 0;
             pushAssistant(
@@ -316,22 +338,27 @@ export default function AssistantExperience({ onClose }) {
           state.lastMs = now;
           barcodeSeenRef.current.set(raw, state);
           setScanUi({ status: 'stabilizing', barcode: raw, productName: '', reason: '' });
-          const stable = state.hits >= 2 && now - state.firstMs <= 4500;
+          // Require two positive frames. Do not use a short wall-clock window: after a few seconds
+          // `now - firstMs` exceeds the window and ingest would *never* run (stuck on "stabilizing…").
+          const stable = state.hits >= 2;
           if (stable) {
             scanCoachRef.current.stabilizeCycles = 0;
-            const out = await ingestScannedBarcode(raw);
+            let labelFile = null;
+            try {
+              labelFile = await captureVideoFrameAsJpegFile(localVideoRef.current);
+            } catch (_) {
+              labelFile = null;
+            }
+            const out = await ingestScannedBarcode(raw, {
+              labelFrameFile: labelFile,
+              labelVideo: localVideoRef.current
+            });
             if (out?.success) {
               setScanUi({ status: 'matched', barcode: raw, productName: out.productName || '', reason: '' });
               setProductTrackingActive(false);
             } else if (out?.reason === 'not_found') {
               setScanUi({ status: 'not_found', barcode: raw, productName: '', reason: out.reason });
-              if (now - scanCoachRef.current.lastPromptMs > 10000) {
-                scanCoachRef.current.lastPromptMs = now;
-                pushAssistant(
-                  'I can see part of the code but not enough to confirm. Please turn the product around and hold it steady for one second.',
-                  { speak: true }
-                );
-              }
+              // not_found: barcode was read; product missing from catalog — copy + TTS come from ingestScannedBarcode
             } else if (out?.reason !== 'cooldown') {
               setScanUi({ status: 'error', barcode: raw, productName: '', reason: out?.reason || 'lookup_failed' });
             }
@@ -356,24 +383,6 @@ export default function AssistantExperience({ onClose }) {
       if (id) clearInterval(id);
     };
   }, [ingestScannedBarcode, liveKit?.cameraEnabled, liveKit?.inSession, localVideoRef, productTrackingActive, pushAssistant, setProductTrackingActive]);
-
-  const handleManualBarcodeSubmit = useCallback(async () => {
-    const out = await ingestManualBarcode(manualBarcodeInput);
-    if (out?.success) {
-      setScanUi({ status: 'matched', barcode: out.barcode || manualBarcodeInput, productName: out.productName || '', reason: '' });
-      setManualBarcodeInput('');
-      return;
-    }
-    if (out?.reason === 'invalid_barcode') {
-      setScanUi({ status: 'error', barcode: manualBarcodeInput, productName: '', reason: 'invalid_barcode' });
-      return;
-    }
-    if (out?.reason === 'not_found') {
-      setScanUi({ status: 'not_found', barcode: manualBarcodeInput, productName: '', reason: 'not_found' });
-      return;
-    }
-    setScanUi({ status: 'error', barcode: manualBarcodeInput, productName: '', reason: out?.reason || 'lookup_failed' });
-  }, [ingestManualBarcode, manualBarcodeInput]);
 
   const handleManualIngredientsSubmit = useCallback(async () => {
     const out = await submitManualIngredients(manualIngredientsInput);
@@ -402,8 +411,24 @@ export default function AssistantExperience({ onClose }) {
     }
   }, [setManualIngredientsInput, submitManualIngredients]);
 
+  /** Path B (thread-event snapshot) + Path A (turn returns snapshot): open results when report is ready or scan context exists. */
   useEffect(() => {
-    if (resultSnapshot?.next_ui_step === 'skincare_report') {
+    if (!resultSnapshot) return;
+    const step = resultSnapshot.next_ui_step;
+    const sp = resultSnapshot.scanned_product;
+    const hasObfBlock =
+      sp &&
+      (sp.ingredients_text ||
+        (Array.isArray(sp.labels) && sp.labels.length) ||
+        (Array.isArray(sp.allergens) && sp.allergens.length) ||
+        (Array.isArray(sp.ingredient_graph_conflicts) && sp.ingredient_graph_conflicts.length));
+    const hasScannedProductRow = !!(sp && (sp.barcode || sp.product_name));
+    if (
+      step === 'skincare_report' ||
+      step === 'clinical_handoff' ||
+      hasObfBlock ||
+      hasScannedProductRow
+    ) {
       setPage('results');
     }
   }, [resultSnapshot]);
@@ -431,12 +456,19 @@ export default function AssistantExperience({ onClose }) {
   }, [page, setHashForPage]);
 
   const handleClose = useCallback(() => {
+    stopAssistantSpeech();
     liveKit.leaveRoom();
     if (typeof window !== 'undefined') {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     }
     onClose();
   }, [liveKit, onClose]);
+
+  useEffect(() => {
+    return () => {
+      stopAssistantSpeech();
+    };
+  }, []);
 
   const openChat = useCallback(() => setPage('chat'), []);
   const backToVoice = useCallback(() => setPage('voice'), []);
@@ -450,12 +482,16 @@ export default function AssistantExperience({ onClose }) {
 
   /** Prefer server snapshot; fill hero image from last scan when API omitted `product.image_url`. */
   const activeSnapshot = useMemo(() => {
-    const base = resultSnapshot ? { ...resultSnapshot } : { ...DUMMY_RESULT_SNAPSHOT };
+    const base = resultSnapshot ? { ...resultSnapshot } : { ...EMPTY_RESULT_SNAPSHOT };
     const p = scanResult?.product;
-    const scanImg = String(p?.image_url || p?.image_front_url || '').trim();
+    const scanImg = String(pickFirstProductImageUrl(p) || '').trim();
     const scanName = String(p?.product_name || '').trim();
     const existingImg = String(
-      base?.product?.image_url || base?.source_product?.image_url || base?.image_url || ''
+      pickFirstProductImageUrl(base?.product) ||
+        pickFirstProductImageUrl(base?.source_product) ||
+        pickFirstProductImageUrl(base?.scanned_product) ||
+        (base?.image_url != null ? String(base.image_url).trim() : '') ||
+        ''
     ).trim();
     if (scanImg && !existingImg) {
       base.product = {
@@ -463,6 +499,12 @@ export default function AssistantExperience({ onClose }) {
         ...(scanName ? { name: scanName } : {}),
         image_url: scanImg
       };
+      if (base.scanned_product && typeof base.scanned_product === 'object') {
+        base.scanned_product = {
+          ...base.scanned_product,
+          image_url: scanImg
+        };
+      }
     }
     return base;
   }, [resultSnapshot, scanResult]);
@@ -470,6 +512,7 @@ export default function AssistantExperience({ onClose }) {
 
   return (
     <div className="ax-shell" role="dialog" aria-label={ariaLabel}>
+      <div ref={remoteAudioRef} className="ax-lk-remote-audio-root" aria-hidden="true" />
       <div className="ax-hidden-file-root" aria-hidden>
         <input
           ref={cameraRef}
@@ -537,9 +580,6 @@ export default function AssistantExperience({ onClose }) {
           scanResult={scanResult}
           pendingScanDecision={pendingScanDecision}
           onResolvePendingScanDecision={resolvePendingScanDecision}
-          manualBarcodeInput={manualBarcodeInput}
-          setManualBarcodeInput={setManualBarcodeInput}
-          onManualBarcodeSubmit={handleManualBarcodeSubmit}
           manualIngredientsInput={manualIngredientsInput}
           setManualIngredientsInput={setManualIngredientsInput}
           onManualIngredientsSubmit={handleManualIngredientsSubmit}
@@ -547,7 +587,12 @@ export default function AssistantExperience({ onClose }) {
           ocrBusy={ocrBusy}
           ocrError={ocrError}
           productTrackingActive={productTrackingActive}
-          onToggleScan={() => setProductTrackingActive((v) => !v)}
+          onToggleScan={() => {
+            setProductTrackingActive((was) => {
+              if (was) stopAssistantSpeech();
+              return !was;
+            });
+          }}
         />
       ) : page === 'chat' ? (
         <AssistantChatPage
@@ -576,11 +621,10 @@ export default function AssistantExperience({ onClose }) {
       ) : (
         <AssistantResultsPage
           snapshot={activeSnapshot}
-          loading={sending}
           onBack={backToVoice}
           onClose={handleClose}
-          onRefresh={refreshResultSnapshot}
-          onSaveEdit={submitResultEdit}
+          onAskKelly={() => setPage('chat')}
+          apiBase={apiBase}
         />
       )}
     </div>

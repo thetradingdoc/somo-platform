@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Room, RoomEvent, Track } from 'livekit-client';
+import { primeAssistantAudioGate } from './assistantSpeech';
 import { fetchLiveKitToken, landingLiveKitIdentity, landingTryRoomName, publishVisionCaptureEvent } from './landingLiveKitApi';
 
 function safeDomId(s) {
@@ -8,9 +9,16 @@ function safeDomId(s) {
 
 /**
  * Landing Try-now LiveKit: token, connect/reconnect UI phases, local/remote video, mic sync hook.
- * @param {{ apiBase: string, getSessionId: () => string, localVideoRef: React.RefObject<HTMLVideoElement|null>, remoteVideoContainerRef?: React.RefObject<HTMLElement|null>, assistantPage?: string }} opts
+ * @param {{ apiBase: string, getSessionId: () => string, localVideoRef: React.RefObject<HTMLVideoElement|null>, remoteVideoContainerRef?: React.RefObject<HTMLElement|null>, remoteAudioContainerRef?: React.RefObject<HTMLElement|null>, assistantPage?: string }} opts
  */
-export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remoteVideoContainerRef, assistantPage }) {
+export function useLandingLiveKit({
+  apiBase,
+  getSessionId,
+  localVideoRef,
+  remoteVideoContainerRef,
+  remoteAudioContainerRef,
+  assistantPage
+}) {
   const [phase, setPhase] = useState('idle');
   /** 'invite' = pre-camera gate; 'session' = user in full-screen preview or LiveKit */
   const [entryStep, setEntryStep] = useState('invite');
@@ -23,7 +31,6 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
   const connectAbortRef = useRef(null);
   const recoveringCameraRef = useRef(false);
   const desiredCameraOnRef = useRef(false);
-
   const attachLocalVideo = useCallback(
     (room) => {
       const el = localVideoRef?.current;
@@ -31,6 +38,17 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       const pub = room.localParticipant.getTrackPublication(Track.Source.Camera);
       if (pub?.track) {
         pub.track.attach(el);
+        el.muted = true;
+        const play = () => {
+          if (typeof el.play === 'function') el.play().catch(() => {});
+        };
+        play();
+        if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+          window.requestAnimationFrame(() => {
+            play();
+            window.setTimeout(play, 160);
+          });
+        }
       }
     },
     [localVideoRef]
@@ -40,6 +58,11 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     const c = remoteVideoContainerRef?.current;
     if (c) c.innerHTML = '';
   }, [remoteVideoContainerRef]);
+
+  const clearRemoteAudios = useCallback(() => {
+    const c = remoteAudioContainerRef?.current;
+    if (c) c.innerHTML = '';
+  }, [remoteAudioContainerRef]);
 
   const attachRemoteTrack = useCallback(
     (track, participant) => {
@@ -71,6 +94,26 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     [remoteVideoContainerRef]
   );
 
+  const attachRemoteAudioTrack = useCallback(
+    (track, participant) => {
+      const c = remoteAudioContainerRef?.current;
+      if (!c || track.kind !== Track.Kind.Audio) return;
+      const id = `lk-audio-${safeDomId(participant.identity)}`;
+      let audioEl = c.querySelector(`#${id}`);
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.id = id;
+        audioEl.autoplay = true;
+        audioEl.setAttribute('playsinline', '');
+        audioEl.playsInline = true;
+        c.appendChild(audioEl);
+      }
+      track.attach(audioEl);
+      audioEl.play().catch(() => {});
+    },
+    [remoteAudioContainerRef]
+  );
+
   const removeRemoteParticipantVideo = useCallback(
     (identity) => {
       const c = remoteVideoContainerRef?.current;
@@ -79,6 +122,21 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
       if (el) el.remove();
     },
     [remoteVideoContainerRef]
+  );
+
+  const removeRemoteParticipantAudio = useCallback(
+    (identity) => {
+      const c = remoteAudioContainerRef?.current;
+      if (!c) return;
+      const el = c.querySelector(`#lk-audio-${safeDomId(identity)}`);
+      if (el) {
+        try {
+          el.srcObject = null;
+        } catch (_) {}
+        el.remove();
+      }
+    },
+    [remoteAudioContainerRef]
   );
 
   const hasActiveLocalCameraTrack = useCallback((room) => {
@@ -103,9 +161,11 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
   const recoverPreviewCamera = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) return false;
     try {
+      // Video-only: requesting mic here while LiveKit already holds the microphone causes macOS
+      // freezes / NotReadable churn and fights with the room's audio track.
       const next = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true
+        audio: false
       });
       const prev = previewStreamRef.current;
       if (prev) {
@@ -181,11 +241,12 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     } else {
       roomRef.current = null;
       clearRemoteVideos();
+      clearRemoteAudios();
       intentionalLeaveRef.current = false;
       setPhase('idle');
       setErrorMessage('');
     }
-  }, [clearRemoteVideos, localVideoRef]);
+  }, [clearRemoteAudios, clearRemoteVideos, localVideoRef]);
 
   const connect = useCallback(async () => {
     if (roomRef.current) return;
@@ -292,22 +353,41 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
 
         room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
           if (participant.isLocal) return;
-          attachRemoteTrack(track, participant);
+          if (track.kind === Track.Kind.Video) attachRemoteTrack(track, participant);
+          if (track.kind === Track.Kind.Audio) attachRemoteAudioTrack(track, participant);
         });
 
-        room.on(RoomEvent.TrackUnsubscribed, (_track, pub, participant) => {
+        room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
           if (participant.isLocal) return;
           if (pub.kind === Track.Kind.Video) removeRemoteParticipantVideo(participant.identity);
+          if (pub.kind === Track.Kind.Audio) {
+            const c = remoteAudioContainerRef?.current;
+            const id = `lk-audio-${safeDomId(participant.identity)}`;
+            const el = c?.querySelector(`#${id}`);
+            if (el && track) {
+              try {
+                track.detach(el);
+              } catch (_) {}
+            }
+            el?.remove();
+          }
         });
 
         room.on(RoomEvent.ParticipantDisconnected, (participant) => {
           removeRemoteParticipantVideo(participant.identity);
+          removeRemoteParticipantAudio(participant.identity);
         });
 
         await room.connect(url, token);
         if (ac.signal.aborted) {
           room.disconnect();
           return;
+        }
+
+        try {
+          await room.startAudio();
+        } catch (_) {
+          /* Browser may require an extra tap; visitor mic / TTS still work after primeAssistantAudioGate */
         }
 
         roomRef.current = room;
@@ -340,7 +420,9 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
 
         room.remoteParticipants.forEach((p) => {
           p.trackPublications.forEach((pub) => {
-            if (pub.track && pub.kind === Track.Kind.Video) attachRemoteTrack(pub.track, p);
+            if (!pub.track) return;
+            if (pub.kind === Track.Kind.Video) attachRemoteTrack(pub.track, p);
+            if (pub.kind === Track.Kind.Audio) attachRemoteAudioTrack(pub.track, p);
           });
         });
         await ensureLocalCameraAttached(room, 'post-connect');
@@ -354,10 +436,26 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
 
     setPhase('failed');
     setErrorMessage(lastErr?.message || 'Could not connect to live video.');
-  }, [apiBase, getSessionId, attachLocalVideo, attachRemoteTrack, clearRemoteVideos, removeRemoteParticipantVideo, localVideoRef, ensureLocalCameraAttached]);
+  }, [
+    apiBase,
+    getSessionId,
+    attachLocalVideo,
+    attachRemoteAudioTrack,
+    attachRemoteTrack,
+    clearRemoteAudios,
+    clearRemoteVideos,
+    ensureLocalCameraAttached,
+    localVideoRef,
+    removeRemoteParticipantAudio,
+    removeRemoteParticipantVideo,
+    remoteAudioContainerRef
+  ]);
 
   const setCameraOn = useCallback(async (on) => {
     desiredCameraOnRef.current = !!on;
+    if (on) {
+      primeAssistantAudioGate();
+    }
     const room = roomRef.current;
     if (room) {
       try {
@@ -376,13 +474,22 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
               void ensureLocalCameraAttached(room, 'manual-toggle-retry');
             }, 280);
           }
-          // Some mobile browsers report camera "on" but render black frames.
-          // If we still cannot render shortly after retries, force a fresh preview stream.
+          // Black-frame fallback: never replace the <video> element with a raw getUserMedia stream
+          // while LiveKit is connected — that detaches the published track from the element and
+          // deadlocks camera state on desktop Safari/Chrome. Only retry LiveKit attach/re-enable.
           window.setTimeout(() => {
             if (!hasRenderableLocalVideo()) {
-              void recoverPreviewCamera().then((ok) => {
-                if (ok) setPermissionHint('Camera recovered from black frame. Continuing with refreshed preview.');
-              });
+              void (async () => {
+                try {
+                  await room.localParticipant.setCameraEnabled(false);
+                  await new Promise((r) => setTimeout(r, 120));
+                  await room.localParticipant.setCameraEnabled(true);
+                  await ensureLocalCameraAttached(room, 'black-frame-retry');
+                  attachLocalVideo(room);
+                  const v = localVideoRef?.current;
+                  if (v && typeof v.play === 'function') v.play().catch(() => {});
+                } catch (_) {}
+              })();
             }
           }, 900);
           setCameraEnabled(true);
@@ -565,9 +672,9 @@ export function useLandingLiveKit({ apiBase, getSessionId, localVideoRef, remote
     requestCaptureNow,
     syncMicWithVoice,
     isConnected: phase === 'connected',
-    inSession: entryStep === 'session' && (
-      hasLivePreviewTrack() ||
-      hasRenderableLocalVideo()
-    )
+    // "In session" = past the invite gate. Do not require a visible frame first — that caused
+    // scan/barcode and overlays to wait on flaky hasRenderableLocalVideo() (black/stalling video).
+    // Features that need an actual frame still gate on `cameraEnabled` or video dimensions in callers.
+    inSession: entryStep === 'session'
   };
 }

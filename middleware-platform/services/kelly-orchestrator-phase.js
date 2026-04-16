@@ -77,6 +77,10 @@ const TRIAGE_TRIAGE_TOOL_NAMES = new Set([
   'request_document_upload',
   'resolve_product_ingredients',
   'lookup_ingredient_functions',
+  'evaluate_skincare_routine',
+  'retrieve_ingredient_monographs',
+  'get_ingredient_resolution_metrics',
+  'get_catalog_coverage_metrics',
   'query_patient_records',
   'search_medical_literature',
   'find_clinic_specialists',
@@ -103,7 +107,12 @@ const ROUTINE_INTAKE_TOOL_NAMES = new Set([
   'return_to_triage',
   'request_document_upload',
   'get_triage_session',
-  'store_triage_opqrst'
+  'store_triage_opqrst',
+  'resolve_product_ingredients',
+  'lookup_ingredient_functions',
+  'evaluate_skincare_routine',
+  'retrieve_ingredient_monographs',
+  'get_catalog_coverage_metrics'
 ]);
 
 /** `kelly_flow` / body values that turn on routine intake for the session (Retell dynamic_variables or HTTP). */
@@ -465,7 +474,17 @@ const ROUTINE_INTAKE_TOOL_DESCRIPTION_OVERRIDES = {
     'Switch to **clinical triage** when the user reports **new concerning medical symptoms** (e.g. chest pain, stroke signs, severe systemic illness) or needs a routed medical visit. Do not use for routine skincare or product shopping.',
   end_call: 'End the chat or voice session when the user is finished.',
   run_derm_patient_qa:
-    'Dermatology / skin **education** only (not a diagnosis). For product and routine questions. For emergencies, direct to urgent care/911; use **return_to_triage** if they need clinical triage — do not reference scheduling or run_triage_rag from this tool.'
+    'Dermatology / skin **education** only (not a diagnosis). For product and routine questions. For emergencies, direct to urgent care/911; use **return_to_triage** if they need clinical triage — do not reference scheduling or run_triage_rag from this tool.',
+  evaluate_skincare_routine:
+    'Deterministic **ingredient interaction** check (retrieved graph). Pass AM/PM slots with **canonical ingredient ids** (e.g. cosing:retinol). The tool returns **overall** safe|caution|avoid and **evidence_bundle** (unified chunk list) — if **avoid**, do not contradict it. Use **retrieve_ingredient_monographs** for short citations keyed by **reason_codes**.',
+  retrieve_ingredient_monographs:
+    'Short **curated** monograph snippets for ingredients or graph **reason_codes** — supports education after **evaluate_skincare_routine**.',
+  resolve_product_ingredients:
+    'Resolve a product name to INCI list and canonical ingredient rows when available — use before building slots for **evaluate_skincare_routine**.',
+  lookup_ingredient_functions:
+    'COSING/regulatory lookup for INCI names — complementary to routine evaluation.',
+  get_catalog_coverage_metrics:
+    'Internal **catalog coverage** snapshot (products, SKU catalog, knowledge_chunks, RAG tables, graph pair coverage). Not for patient-facing explanation.'
 };
 
 /**

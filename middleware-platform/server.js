@@ -55,6 +55,7 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 // Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
 const stripeConfig = require('./utils/stripe-config');
@@ -155,6 +156,42 @@ function isUnifiedChannelAdapterEnabled() {
 function isUnifiedChannelAdapterShadowEnabled() {
   const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED || '').toLowerCase().trim();
   return v === '1' || v === 'true' || v === 'yes';
+}
+
+function isTruthyFlag(value, defaultValue = false) {
+  if (value == null || String(value).trim() === '') return Boolean(defaultValue);
+  const v = String(value).trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+function buildCatalogMasterKpi(inMemory = {}, catalogStats = {}) {
+  const obfHit = Number(inMemory['obf.index_cache.hit.count'] || 0);
+  const offHit = Number(inMemory['off.index_cache.hit.count'] || 0);
+  const obfMiss = Number(inMemory['obf.index_cache.miss.count'] || 0);
+  const offMiss = Number(inMemory['off.index_cache.miss.count'] || 0);
+  const obfFallback = Number(inMemory['obf.index_cache.fallback_to_live.count'] || 0);
+  const offFallback = Number(inMemory['off.index_cache.fallback_to_live.count'] || 0);
+  const scanRequests = obfHit + offHit + obfMiss + offMiss;
+  const servedFromMaster = obfHit + offHit;
+  const fallbackLive = obfFallback + offFallback;
+  const servedFromMasterRate = scanRequests > 0 ? Number((servedFromMaster / scanRequests).toFixed(4)) : 1;
+  const fallbackRate = scanRequests > 0 ? Number((fallbackLive / scanRequests).toFixed(4)) : 0;
+  const minRate = Number(process.env.CATALOG_MASTER_MIN_RATE || 0.85);
+  const status = servedFromMasterRate >= minRate ? 'ok' : 'warning';
+  return {
+    status,
+    min_master_served_rate: minRate,
+    scan_requests: scanRequests,
+    served_from_master: servedFromMaster,
+    served_from_master_rate: servedFromMasterRate,
+    fallback_to_live: fallbackLive,
+    fallback_rate: fallbackRate,
+    catalog_size: Number(catalogStats?.total_count || 0),
+    obf_catalog_size: Number(catalogStats?.obf_count || 0),
+    off_catalog_size: Number(catalogStats?.off_count || 0),
+    latest_obf_ingestion_run: catalogStats?.latest_obf_ingestion_run || null,
+    latest_obf_delta_applied: catalogStats?.latest_obf_delta_applied || null
+  };
 }
 
 function antiSybilGuard(scope, identityBuilder, amountBuilder = null) {
@@ -1385,17 +1422,17 @@ function getLittleLabBuildPath(...subPaths) {
   return path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
 }
 
-/** Prefer CRA LittleLab landing build, then middleware public marketing page. */
-function trySendLittleLabOrPublicLanding(res) {
+/** Prefer CRA LittleLab build; fallback to source public index for dev. */
+function trySendCanonicalLanding(res) {
   const fs = require('fs');
   const landingBuild = getLittleLabBuildPath('index.html');
   if (fs.existsSync(landingBuild)) {
     res.sendFile(landingBuild);
     return true;
   }
-  const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
-  if (fs.existsSync(legacyLandingPath)) {
-    res.sendFile(legacyLandingPath);
+  const sourceLandingPath = getUnifiedDashboardPath('littlelab-landing', 'public', 'index.html');
+  if (fs.existsSync(sourceLandingPath)) {
+    res.sendFile(sourceLandingPath);
     return true;
   }
   return false;
@@ -1409,7 +1446,7 @@ const ROOT_API_RUNNING_STUB_HTML =
   '</body></html>';
 
 function sendLittleLabOrApiRunningStub(res) {
-  if (trySendLittleLabOrPublicLanding(res)) return;
+  if (trySendCanonicalLanding(res)) return;
   res.type('text/html').send(ROOT_API_RUNNING_STUB_HTML);
 }
 
@@ -1456,7 +1493,7 @@ app.get('/', (req, res) => {
     // Subdomain not found - fall through to default routing
   }
 
-  // Local / dev hosts — same marketing priority as production (LittleLab build, then public/landing.html)
+  // Local / dev hosts — same marketing priority as production (canonical Skin & Care landing)
   if (isLocalDevRootHost(hostname)) {
     sendLittleLabOrApiRunningStub(res);
     return;
@@ -1494,17 +1531,9 @@ app.get('/', (req, res) => {
     return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
 
-  // Root domain - prefer LittleLab React landing build, otherwise legacy marketing page
+  // Root domain - prefer canonical Skin & Care landing (build first, then source fallback).
   if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname === 'doclittle.azurewebsites.net') {
-    const landingBuild = getLittleLabBuildPath('index.html');
-    if (require('fs').existsSync(landingBuild)) {
-      console.log('[ROOT ROUTE] Serving LittleLab landing build (doclittle.site)');
-      return res.sendFile(landingBuild);
-    }
-    const legacyLandingPath = path.join(__dirname, 'public', 'landing.html');
-    if (require('fs').existsSync(legacyLandingPath)) {
-      return res.sendFile(legacyLandingPath);
-    }
+    if (trySendCanonicalLanding(res)) return;
   }
 
   // Default fallback - ONLY for API subdomain or unknown domains
@@ -1581,10 +1610,12 @@ app.use('/assets', express.static(getUnifiedDashboardPath('assets'), {
   maxAge: '1d' // Cache static assets for 1 day
 }));
 
-// Serve LittleLab React landing static assets
+// Serve LittleLab React landing static assets (hashed filenames — long cache in prod only;
+// in dev, disable immutable cache so `npm run build` in littlelab-landing is picked up without fighting 1y immutable entries)
+const _littleLabStaticIsProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
 app.use('/static', express.static(getLittleLabBuildPath('static'), {
-  maxAge: '1y',
-  immutable: true
+  maxAge: _littleLabStaticIsProd ? '1y' : 0,
+  immutable: _littleLabStaticIsProd
 }));
 
 // Serve extra LittleLab landing assets emitted by CRA build
@@ -1596,12 +1627,55 @@ app.use('/videos', express.static(getLittleLabBuildPath('videos'), {
 }));
 
 // Serve unified-dashboard HTML pages
-app.get('/landing', (req, res) => {
+app.get(['/landing', '/landing.html'], (req, res) => {
+  const utmSource = req.query?.utm_source || '';
+  const utmCampaign = req.query?.utm_campaign || '';
+  const source = req.query?.source || '';
+  if (utmSource || utmCampaign || source) {
+    console.log(`[LANDING REDIRECT] from=${req.path} utm_source=${utmSource || '-'} utm_campaign=${utmCampaign || '-'} source=${source || '-'}`);
+  }
+  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  return res.redirect(301, `/${qs}`);
+});
+
+// Canonical marketing alias for acquisition campaigns.
+app.get('/skin-care', (req, res) => {
+  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  return res.redirect(302, `/${qs}`);
+});
+
+// Segment page for Team Kelly campaign traffic.
+app.get('/team-kelly', (req, res) => {
+  const fs = require('fs');
+  const localPath = path.join(__dirname, '..', 'teamkelly', 'website', 'index.html');
+  const azurePath = path.join(__dirname, 'teamkelly', 'website', 'index.html');
+  const target = fs.existsSync(azurePath) ? azurePath : localPath;
+  if (fs.existsSync(target)) return res.sendFile(target);
+  return res.redirect(302, '/');
+});
+
+// Public waitlist gateway for non-invited users.
+app.get('/waitlist', (req, res) => {
   const hostname = getHostname(req);
   if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
-    return res.redirect('/');
+    return res.status(404).json({ error: 'Not found on API subdomain' });
   }
-  res.sendFile(getUnifiedDashboardPath('landing.html'));
+  return res.sendFile(getUnifiedDashboardPath('waitlist.html'));
+});
+
+// Invite links route approved users directly to login.
+app.get('/invite', (req, res) => {
+  const code = String(req.query?.code || '').trim();
+  if (code) {
+    return res.redirect(`/login?invite_code=${encodeURIComponent(code)}`);
+  }
+  return res.redirect('/login?access=invite');
+});
+
+app.get('/invite/:code', (req, res) => {
+  const code = String(req.params?.code || '').trim();
+  if (!code) return res.redirect('/invite');
+  return res.redirect(`/login?invite_code=${encodeURIComponent(code)}`);
 });
 
 app.get('/login', (req, res) => {
@@ -2013,6 +2087,10 @@ app.use('/api/voice', voiceWebCallRoutes);
 // RCM / Financial Intelligence APIs (EMPI-based)
 const rcmRoutes = require('./routes/rcm');
 app.use('/api/rcm', rcmRoutes);
+const internalServiceOpsRoutes = require('./routes/internal-service-ops');
+app.use('/api/internal/service-ops', internalServiceOpsRoutes);
+const impactPublicRoutes = require('./routes/impact-public');
+app.use('/api/public/impact', impactPublicRoutes);
 
 // Research Bounties (Pharma Data Requests - Impact-Weighted Escrow)
 const researchBountiesRoutes = require('./routes/research-bounties');
@@ -5899,6 +5977,11 @@ app.post('/api/admin/patients/seed-test', async (req, res) => {
 });
 
 app.use('/api/admin', requireAdminAuth);
+const impactAdminRoutes = require('./routes/impact-admin');
+app.use('/api/admin/impact', impactAdminRoutes);
+
+const paymentOpsRoutes = require('./routes/payment-ops');
+app.use('/api/admin/payment-ops', paymentOpsRoutes);
 
 // Visit pricing admin (Task 16)
 app.post('/api/admin/pricing', pricingRoutes.postPricing);
@@ -11445,6 +11528,12 @@ app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async
 
           console.log(`✅ Payment completed for claim ${transfer.claim_id}`);
         }
+        try {
+          const FinancialIntegrityService = require('./services/financial-integrity-service');
+          FinancialIntegrityService.recordCircleTransferReconciliation(transfer, event.type);
+        } catch (e) {
+          console.warn('[CircleWebhook] financial integrity ingest (non-fatal):', e.message);
+        }
       }
     } else if (event.type === 'transfer.failed') {
       const transferId = event.data?.id || event.data?.transferId;
@@ -11460,6 +11549,12 @@ app.post('/api/circle/webhook', express.raw({ type: 'application/json' }), async
           db.updateInsuranceClaim(transfer.claim_id, {
             payment_status: 'failed'
           });
+        }
+        try {
+          const FinancialIntegrityService = require('./services/financial-integrity-service');
+          FinancialIntegrityService.recordCircleTransferReconciliation(transfer, event.type);
+        } catch (e) {
+          console.warn('[CircleWebhook] financial integrity ingest (non-fatal):', e.message);
         }
       }
     }
@@ -11858,6 +11953,13 @@ app.get('/api/admin/metrics', async (req, res) => {
         status: alerts.length > 0 ? 'alert' : 'ok'
       };
     } catch (_) {}
+    let catalogMasterStats = null;
+    try {
+      if (typeof db.getMasterCatalogStats === 'function') {
+        catalogMasterStats = db.getMasterCatalogStats();
+      }
+    } catch (_) {}
+    const catalogMasterKpi = buildCatalogMasterKpi(inMemory, catalogMasterStats || {});
     const obfMiss = Number(inMemory['obf.index_cache.miss.count'] || 0);
     const obfHit = Number(inMemory['obf.index_cache.hit.count'] || 0);
     const obfFallback = Number(inMemory['obf.index_cache.fallback_to_live.count'] || 0);
@@ -11882,6 +11984,7 @@ app.get('/api/admin/metrics', async (req, res) => {
         },
         status: obfStatus
       },
+      catalog_master: catalogMasterKpi,
       checkout_policy: checkoutPolicy,
       llm: llmAggregates,
       cache: cacheStats,
@@ -11892,6 +11995,28 @@ app.get('/api/admin/metrics', async (req, res) => {
       clinic_rate_limit: clinicRateLimit,
       dlq_tool_calls: dlqToolCalls,
       days
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/admin/catalog/master-stats', async (req, res) => {
+  try {
+    const inMemory = Metrics.getAll();
+    const catalogStats =
+      typeof db.getMasterCatalogStats === 'function'
+        ? db.getMasterCatalogStats()
+        : { total_count: 0, obf_count: 0, off_count: 0 };
+    return res.json({
+      success: true,
+      source_of_truth: 'local_master_catalog_index',
+      storage: {
+        obf_table: 'products_obf_index',
+        off_table: 'products_off_index'
+      },
+      catalog: catalogStats,
+      kpi: buildCatalogMasterKpi(inMemory, catalogStats)
     });
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
@@ -16998,46 +17123,40 @@ app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(),
 
 app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
   try {
-    const buildScanQuality = (p = {}) => {
-      const hasName = !!String(p.product_name || '').trim();
-      const hasIngredients = !!String(p.ingredients_text || '').trim();
-      const hasCategories = Array.isArray(p.categories_tags) && p.categories_tags.length > 0;
-      const hasImage = !!String(p.image_url || '').trim();
-      const missing = [];
-      if (!hasName) missing.push('name');
-      if (!hasIngredients) missing.push('ingredients');
-      if (!hasCategories) missing.push('categories');
-      if (!hasImage) missing.push('image');
-      if (hasName && hasIngredients && hasCategories) {
-        return { tier: 'full', analyze_enabled: true, analyze_label: 'Analyze for my skin', missing };
+    const includeScanSummary = String(process.env.SCAN_SUMMARY_V1 || '1').trim() !== '0';
+    const {
+      buildScanQuality,
+      deriveIngredientFlags,
+      buildCategoryRoutePayload
+    } = require('./services/scan-route-response');
+    const { buildScanSummary } = require('./services/product-summary-service');
+    const { resolveCategoryRoute } = require('./services/category-route-resolver');
+    const { rolloutConfig, shouldUseCanary } = require('./services/category-route-rollout');
+    const deriveCategoryRoute = (product = {}, barcode = '') => {
+      const cfg = rolloutConfig();
+      const primary = resolveCategoryRoute({
+        source: 'open_beauty_facts',
+        categories_tags: product.categories_tags || [],
+        categories_hierarchy: product.categories_hierarchy || [],
+        product_name: product.product_name || '',
+        brands: product.brands || [],
+        ingredients_text: product.ingredients_text || ''
+      });
+      let shadow = null;
+      if (cfg.shadowMapFile) {
+        shadow = resolveCategoryRoute({
+          source: 'open_beauty_facts',
+          categories_tags: product.categories_tags || [],
+          categories_hierarchy: product.categories_hierarchy || [],
+          product_name: product.product_name || '',
+          brands: product.brands || [],
+          ingredients_text: product.ingredients_text || '',
+          mapFile: cfg.shadowMapFile
+        });
       }
-      if (hasName && (hasIngredients || hasCategories)) {
-        return {
-          tier: 'partial',
-          analyze_enabled: hasIngredients,
-          analyze_label: hasIngredients ? 'Analyze with partial profile' : 'Add ingredients to analyze',
-          missing
-        };
-      }
-      return { tier: 'insufficient', analyze_enabled: false, analyze_label: 'Add ingredients to analyze', missing };
-    };
-    const deriveCategoryRoute = (tags = []) => {
-      const arr = Array.isArray(tags) ? tags.map((x) => String(x || '').toLowerCase()) : [];
-      if (arr.some((t) => t.includes('cosmetic'))) return 'cosmetic';
-      if (arr.some((t) => t.includes('hygiene'))) return 'hygiene';
-      if (arr.some((t) => t.includes('non-food') || t.includes('non_food'))) return 'non_food';
-      return 'unknown';
-    };
-    const deriveIngredientFlags = (p = {}) => {
-      const analysis = Array.isArray(p.ingredients_analysis_tags)
-        ? p.ingredients_analysis_tags.map((x) => String(x || '').toLowerCase())
-        : [];
-      const txt = String(p.ingredients_text || '').toLowerCase();
-      return {
-        has_ingredients: !!txt.trim(),
-        has_fragrance: /\bfragrance|parfum|perfume\b/.test(txt),
-        has_palm_oil: analysis.some((t) => t.includes('palm-oil') || t.includes('palm_oil')) || /\bpalm\b/.test(txt)
-      };
+      const canaryOn = shadow && cfg.mode !== 'shadow_only' && shouldUseCanary(barcode || product.barcode || '', cfg.canaryPercent);
+      const active = cfg.mode === 'shadow_only' && shadow ? shadow : canaryOn ? shadow : primary;
+      return { active, primary, shadow, canary_applied: !!canaryOn, rollout_mode: cfg.mode };
     };
     const { fetchBeautyFactsByBarcode } = require('./services/open-beauty-facts-service');
     const db = require('./database');
@@ -17153,8 +17272,27 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
       }
     }
     const scanQuality = buildScanQuality(out.normalized || {});
-    const categoryRoute = deriveCategoryRoute(out.normalized?.categories_tags || []);
+    const categoryEval = deriveCategoryRoute(out.normalized || {}, out.normalized?.barcode || barcode);
     const ingredientFlags = deriveIngredientFlags(out.normalized || {});
+    const scanSummary = buildScanSummary({
+      product: out.normalized || {},
+      categoryRoute: categoryEval?.active?.route || 'unknown',
+      categoryRouteSource: categoryEval?.active?.source || null,
+      categoryRouteRuleId: categoryEval?.active?.rule_id || null,
+      catalogSource: out?.normalized?.source || 'open_beauty_facts'
+    });
+    try {
+      const tileEntries = Object.entries(scanSummary?.tiles || {});
+      tileEntries.forEach(([tile, data]) => {
+        const status = String(data?.status || 'unknown');
+        Metrics.increment(`scan_summary.tile.${tile}.${status}.count`, 1);
+        if (status === 'available') Metrics.increment(`scan_summary.tile_available_rate.${tile}.hit`, 1);
+        Metrics.increment(`scan_summary.tile_available_rate.${tile}.total`, 1);
+        if (data?.reason_unavailable) {
+          Metrics.increment(`scan_summary.tile_reason.${tile}.${String(data.reason_unavailable)}.count`, 1);
+        }
+      });
+    } catch (_) {}
     return res.json({
       success: true,
       barcode: out.normalized?.barcode || barcode,
@@ -17164,7 +17302,8 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
         analyze_enabled: scanQuality.analyze_enabled,
         analyze_label: scanQuality.analyze_label
       },
-      category_route: categoryRoute,
+      ...buildCategoryRoutePayload(categoryEval),
+      ...(includeScanSummary ? { scan_summary: scanSummary } : {}),
       ingredient_flags: ingredientFlags,
       sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
       data_source: dataSource,
@@ -17178,46 +17317,40 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
 
 app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
   try {
-    const buildScanQuality = (p = {}) => {
-      const hasName = !!String(p.product_name || '').trim();
-      const hasIngredients = !!String(p.ingredients_text || '').trim();
-      const hasCategories = Array.isArray(p.categories_tags) && p.categories_tags.length > 0;
-      const hasImage = !!String(p.image_url || '').trim();
-      const missing = [];
-      if (!hasName) missing.push('name');
-      if (!hasIngredients) missing.push('ingredients');
-      if (!hasCategories) missing.push('categories');
-      if (!hasImage) missing.push('image');
-      if (hasName && hasIngredients && hasCategories) {
-        return { tier: 'full', analyze_enabled: true, analyze_label: 'Analyze for my skin', missing };
+    const includeScanSummary = String(process.env.SCAN_SUMMARY_V1 || '1').trim() !== '0';
+    const {
+      buildScanQuality,
+      deriveIngredientFlags,
+      buildCategoryRoutePayload
+    } = require('./services/scan-route-response');
+    const { buildScanSummary } = require('./services/product-summary-service');
+    const { resolveCategoryRoute } = require('./services/category-route-resolver');
+    const { rolloutConfig, shouldUseCanary } = require('./services/category-route-rollout');
+    const deriveCategoryRoute = (product = {}, barcode = '') => {
+      const cfg = rolloutConfig();
+      const primary = resolveCategoryRoute({
+        source: 'open_food_facts',
+        categories_tags: product.categories_tags || [],
+        categories_hierarchy: product.categories_hierarchy || [],
+        product_name: product.product_name || '',
+        brands: product.brands || [],
+        ingredients_text: product.ingredients_text || ''
+      });
+      let shadow = null;
+      if (cfg.shadowMapFile) {
+        shadow = resolveCategoryRoute({
+          source: 'open_food_facts',
+          categories_tags: product.categories_tags || [],
+          categories_hierarchy: product.categories_hierarchy || [],
+          product_name: product.product_name || '',
+          brands: product.brands || [],
+          ingredients_text: product.ingredients_text || '',
+          mapFile: cfg.shadowMapFile
+        });
       }
-      if (hasName && (hasIngredients || hasCategories)) {
-        return {
-          tier: 'partial',
-          analyze_enabled: hasIngredients,
-          analyze_label: hasIngredients ? 'Analyze with partial profile' : 'Add ingredients to analyze',
-          missing
-        };
-      }
-      return { tier: 'insufficient', analyze_enabled: false, analyze_label: 'Add ingredients to analyze', missing };
-    };
-    const deriveCategoryRoute = (tags = []) => {
-      const arr = Array.isArray(tags) ? tags.map((x) => String(x || '').toLowerCase()) : [];
-      if (arr.some((t) => t.includes('beverage') || t.includes('drink'))) return 'beverage';
-      if (arr.some((t) => t.includes('snack') || t.includes('sweet'))) return 'snacks_sweets';
-      if (arr.some((t) => t.includes('dairy') || t.includes('milk'))) return 'dairy';
-      return 'unknown';
-    };
-    const deriveIngredientFlags = (p = {}) => {
-      const analysis = Array.isArray(p.ingredients_analysis_tags)
-        ? p.ingredients_analysis_tags.map((x) => String(x || '').toLowerCase())
-        : [];
-      const txt = String(p.ingredients_text || '').toLowerCase();
-      return {
-        has_ingredients: !!txt.trim(),
-        has_fragrance: /\bfragrance|parfum|perfume\b/.test(txt),
-        has_palm_oil: analysis.some((t) => t.includes('palm-oil') || t.includes('palm_oil')) || /\bpalm\b/.test(txt)
-      };
+      const canaryOn = shadow && cfg.mode !== 'shadow_only' && shouldUseCanary(barcode || product.barcode || '', cfg.canaryPercent);
+      const active = cfg.mode === 'shadow_only' && shadow ? shadow : canaryOn ? shadow : primary;
+      return { active, primary, shadow, canary_applied: !!canaryOn, rollout_mode: cfg.mode };
     };
     const { fetchFoodFactsByBarcode, ingredientsTextFromTags } = require('./services/open-food-facts-service');
     const db = require('./database');
@@ -17302,8 +17435,27 @@ app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
       });
     }
     const scanQuality = buildScanQuality(out.normalized || {});
-    const categoryRoute = deriveCategoryRoute(out.normalized?.categories_tags || []);
+    const categoryEval = deriveCategoryRoute(out.normalized || {}, out.normalized?.barcode || barcode);
     const ingredientFlags = deriveIngredientFlags(out.normalized || {});
+    const scanSummary = buildScanSummary({
+      product: out.normalized || {},
+      categoryRoute: categoryEval?.active?.route || 'unknown',
+      categoryRouteSource: categoryEval?.active?.source || null,
+      categoryRouteRuleId: categoryEval?.active?.rule_id || null,
+      catalogSource: out?.normalized?.source || 'open_food_facts'
+    });
+    try {
+      const tileEntries = Object.entries(scanSummary?.tiles || {});
+      tileEntries.forEach(([tile, data]) => {
+        const status = String(data?.status || 'unknown');
+        Metrics.increment(`scan_summary.tile.${tile}.${status}.count`, 1);
+        if (status === 'available') Metrics.increment(`scan_summary.tile_available_rate.${tile}.hit`, 1);
+        Metrics.increment(`scan_summary.tile_available_rate.${tile}.total`, 1);
+        if (data?.reason_unavailable) {
+          Metrics.increment(`scan_summary.tile_reason.${tile}.${String(data.reason_unavailable)}.count`, 1);
+        }
+      });
+    } catch (_) {}
     return res.json({
       success: true,
       barcode: out.normalized?.barcode || barcode,
@@ -17313,7 +17465,8 @@ app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
         analyze_enabled: scanQuality.analyze_enabled,
         analyze_label: scanQuality.analyze_label
       },
-      category_route: categoryRoute,
+      ...buildCategoryRoutePayload(categoryEval),
+      ...(includeScanSummary ? { scan_summary: scanSummary } : {}),
       ingredient_flags: ingredientFlags,
       sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
       data_source: dataSource,
@@ -21561,6 +21714,59 @@ const server = app.listen(PORT, HOST, () => {
     console.warn('⚠️  Failed to start notification queue worker:', e.message);
   }
 
+  // Canonical catalog sync: keep master OBF index updated daily (GCS + delta apply).
+  try {
+    const syncEnabled = isTruthyFlag(
+      process.env.CATALOG_MASTER_SYNC_ENABLED,
+      process.env.NODE_ENV === 'production'
+    );
+    if (syncEnabled) {
+      const intervalMs = Math.max(
+        60 * 60 * 1000,
+        parseInt(process.env.CATALOG_MASTER_SYNC_INTERVAL_MS || `${24 * 60 * 60 * 1000}`, 10) || 24 * 60 * 60 * 1000
+      );
+      const baselineOnEmpty = isTruthyFlag(process.env.CATALOG_MASTER_BOOTSTRAP_BASELINE_ON_EMPTY, false);
+      let running = false;
+      const runCatalogSync = (reason = 'scheduled') => {
+        if (running) {
+          console.log(`[CatalogMasterSync] skip (${reason}) - previous run still in progress`);
+          return;
+        }
+        running = true;
+        const stats = typeof db.getMasterCatalogStats === 'function' ? db.getMasterCatalogStats() : { obf_count: 0 };
+        const scriptRel = baselineOnEmpty && Number(stats?.obf_count || 0) === 0
+          ? './scripts/obf-baseline-csv-to-gcs-and-index.cjs'
+          : './scripts/obf-sync-delta-and-apply.cjs';
+        const child = spawn(process.execPath, [scriptRel], {
+          cwd: __dirname,
+          env: process.env,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+        child.stdout.on('data', (d) => console.log(`[CatalogMasterSync][out] ${String(d).trimEnd()}`));
+        child.stderr.on('data', (d) => console.warn(`[CatalogMasterSync][err] ${String(d).trimEnd()}`));
+        child.on('close', (code) => {
+          running = false;
+          if (code === 0) {
+            try { Metrics.increment('catalog.master.sync.success.count', 1); } catch (_) {}
+            console.log(`[CatalogMasterSync] completed (${reason})`);
+          } else {
+            try { Metrics.increment('catalog.master.sync.failed.count', 1); } catch (_) {}
+            console.warn(`[CatalogMasterSync] failed (${reason}) exit_code=${code}`);
+          }
+        });
+      };
+      setTimeout(() => runCatalogSync('startup'), 15000);
+      setInterval(() => runCatalogSync('interval'), intervalMs);
+      console.log(
+        `✅ Catalog master sync worker started (interval=${intervalMs}ms baseline_on_empty=${baselineOnEmpty ? 'on' : 'off'})`
+      );
+    } else {
+      console.log('ℹ️  Catalog master sync worker disabled (CATALOG_MASTER_SYNC_ENABLED)');
+    }
+  } catch (e) {
+    console.warn('⚠️  Catalog master sync worker disabled:', e.message);
+  }
+
   // Start EHR sync service (with error handling)
   try {
     EHRSyncService.start();
@@ -21730,6 +21936,124 @@ const server = app.listen(PORT, HOST, () => {
     }
   } catch (e) {
     console.warn('⚠️  Case record cleanup disabled:', e.message);
+  }
+
+  // Phase 0: Financial integrity deterministic reconciliation + daily close
+  try {
+    const FinancialIntegrityService = require('./services/financial-integrity-service');
+    const enabled = process.env.FINANCIAL_INTEGRITY_JOBS_ENABLED !== '0';
+    if (enabled) {
+      const reconMs = Math.max(
+        5 * 60 * 1000,
+        parseInt(process.env.RECONCILIATION_JOB_INTERVAL_MS || `${6 * 60 * 60 * 1000}`, 10) || 6 * 60 * 60 * 1000
+      );
+      const closeMs = Math.max(
+        60 * 60 * 1000,
+        parseInt(process.env.FINANCIAL_CLOSE_INTERVAL_MS || `${24 * 60 * 60 * 1000}`, 10) || 24 * 60 * 60 * 1000
+      );
+      const runReconciliation = () => {
+        try {
+          const now = new Date();
+          const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const { run, exceptions } = FinancialIntegrityService.runDeterministicReconciliation({
+            windowStart: start.toISOString(),
+            windowEnd: now.toISOString()
+          });
+          console.log(
+            `✅ Reconciliation job completed: run=${run.id} mismatches=${exceptions.length} delta=${run.total_delta}`
+          );
+        } catch (e) {
+          console.warn('⚠️  Reconciliation job failed:', e.message);
+        }
+      };
+      const runDailyClose = () => {
+        try {
+          const report = FinancialIntegrityService.generateDailyFinancialCloseReport();
+          console.log(
+            `✅ Financial close generated: date=${report.close_date} unresolved=${report.unexplained_delta_count}`
+          );
+        } catch (e) {
+          console.warn('⚠️  Financial close generation failed:', e.message);
+        }
+      };
+      runReconciliation();
+      runDailyClose();
+      setInterval(runReconciliation, reconMs);
+      setInterval(runDailyClose, closeMs);
+      console.log(
+        `✅ Financial integrity workers started (reconciliation=${reconMs}ms close=${closeMs}ms)`
+      );
+    } else {
+      console.log('ℹ️  Financial integrity workers disabled (FINANCIAL_INTEGRITY_JOBS_ENABLED=0)');
+    }
+  } catch (e) {
+    console.warn('⚠️  Financial integrity workers disabled:', e.message);
+  }
+
+  // Phase 0 §3: failed instant-settlement retries (exponential backoff + dead-letter)
+  try {
+    const settlementRetryEnabled = process.env.SETTLEMENT_RETRY_JOB_ENABLED !== '0';
+    if (settlementRetryEnabled) {
+      const SettlementRetryService = require('./services/settlement-retry-service');
+      const retryMs = Math.max(
+        60 * 1000,
+        parseInt(process.env.SETTLEMENT_RETRY_JOB_INTERVAL_MS || `${5 * 60 * 1000}`, 10) || 5 * 60 * 1000
+      );
+      const tick = async () => {
+        try {
+          const summary = await SettlementRetryService.processDueRetries();
+          if (
+            summary.processed > 0 ||
+            summary.dead_lettered > 0 ||
+            summary.errors.length > 0
+          ) {
+            console.log('[SettlementRetry] tick', summary);
+          }
+        } catch (e) {
+          console.warn('⚠️  Settlement retry job failed:', e.message);
+        }
+      };
+      tick();
+      setInterval(tick, retryMs);
+      console.log(`✅ Settlement retry worker started (interval=${retryMs}ms)`);
+    } else {
+      console.log('ℹ️  Settlement retry worker disabled (SETTLEMENT_RETRY_JOB_ENABLED=0)');
+    }
+  } catch (e) {
+    console.warn('⚠️  Settlement retry worker disabled:', e.message);
+  }
+
+  // Phase 0 §4: payment reliability monitor (alerts for webhooks, reconciliation, error spikes)
+  try {
+    const reliabilityEnabled = process.env.PAYMENT_RELIABILITY_MONITOR_ENABLED !== '0';
+    if (reliabilityEnabled) {
+      const PaymentReliabilityMonitor = require('./services/payment-reliability-monitor');
+      const intervalMs = Math.max(
+        60 * 1000,
+        parseInt(process.env.PAYMENT_RELIABILITY_MONITOR_INTERVAL_MS || `${5 * 60 * 1000}`, 10) || 5 * 60 * 1000
+      );
+      const tick = () => {
+        try {
+          const report = PaymentReliabilityMonitor.computeAlerts();
+          if (report.alerts && report.alerts.length) {
+            console.warn('[PaymentReliability] alerts', report.alerts);
+            try {
+              const db = require('./database');
+              if (db.incrementOpsCounter) db.incrementOpsCounter('payment_reliability_alerts_emitted');
+            } catch (_) {}
+          }
+        } catch (e) {
+          console.warn('⚠️  Payment reliability monitor failed:', e.message);
+        }
+      };
+      tick();
+      setInterval(tick, intervalMs);
+      console.log(`✅ Payment reliability monitor started (interval=${intervalMs}ms)`);
+    } else {
+      console.log('ℹ️  Payment reliability monitor disabled (PAYMENT_RELIABILITY_MONITOR_ENABLED=0)');
+    }
+  } catch (e) {
+    console.warn('⚠️  Payment reliability monitor disabled:', e.message);
   }
 
   console.log('⚙️  Configuration Status:');

@@ -17,4 +17,4 @@ Patients may start from **LittleLab landing**, **deep links**, or the **Expo app
 ## Consequences
 
 - UI or copy changes may require **two clients** unless extracted to shared docs/API-only behavior.
-- Use **`docs/architecture/AGENTIC_CHECKOUT_FILE_MAP.md`** as the reviewer checklist for cross-surface changes.
+- Use **`docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md`** as the reviewer checklist for cross-surface changes.

@@ -1,0 +1,33 @@
+{
+  "version": "1.0.0",
+  "notes": [
+    "Alias table is intentionally narrow and deterministic.",
+    "Do not add metadata/noise tags here; use suppression list instead."
+  ],
+  "aliases": {
+    "fr:cosmetique": "en:cosmetic-products",
+    "fr:cosmetiques": "en:cosmetic-products",
+    "de:kosmetik": "en:cosmetic-products",
+    "es:belleza": "en:beauty",
+    "fr:beaute": "en:beauty",
+    "en:cosmetic-product": "en:cosmetic-products",
+    "en:skin-care": "en:face-creams",
+    "en:hand-cream": "en:hand-creams",
+    "fr:dentifrice": "en:toothpaste",
+    "it:dentifricio": "en:toothpaste",
+    "de:zahnpasta": "en:toothpaste",
+    "de:zahnpasten": "en:toothpaste",
+    "ru:шампунь": "en:shampoo",
+    "fr:shampoing": "en:shampoo",
+    "fr:deodorant": "en:deodorant",
+    "it:deodorante": "en:deodorant",
+    "de:mundspülung": "en:mouthwash",
+    "fr:complement-alimentaire": "en:dietary-supplements",
+    "fr:complements-alimentaires": "en:dietary-supplements",
+    "de:waschmittel": "en:non-food-products",
+    "fr:lessive": "en:non-food-products",
+    "fr:liquide-vaisselle": "en:non-food-products",
+    "en:visage": "en:face",
+    "en:corps": "en:body"
+  }
+}

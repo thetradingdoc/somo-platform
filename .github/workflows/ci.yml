@@ -11,6 +11,10 @@ on:
         description: "Appointment ID for clinical prep gate"
         required: false
         default: "appt-5f04ffbd3a29"
+      staging_api_base:
+        description: "Optional staging API base for route evidence (e.g. https://staging.example.com)"
+        required: false
+        default: ""
 
 jobs:
   test:
@@ -60,6 +64,24 @@ jobs:
       - name: Run Jest tests (middleware-platform)
         working-directory: ./middleware-platform
         run: npm test
+
+      - name: Category representative guard baseline flow
+        working-directory: ./middleware-platform
+        run: |
+          npm run catalog:observability:report -- --output ./tmp/category-route-observability.local.json --limit 2000
+          npm run catalog:guard:baseline:freeze -- --report ./tmp/category-route-observability.local.json --output ./tmp/category-route-guard-baseline.local.json --sample-source ci_local_db --map-version ci
+          cp ./tmp/category-route-observability.local.json ./tmp/category-route-observability.representative.json
+          npm run catalog:guard:sensitivity-check -- --local ./tmp/category-route-observability.local.json --representative ./tmp/category-route-observability.representative.json --output ./tmp/category-route-guard-sensitivity.json
+
+      - name: Upload category guard evidence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: category-guard-evidence
+          path: |
+            middleware-platform/tmp/category-route-observability.local.json
+            middleware-platform/tmp/category-route-guard-baseline.local.json
+            middleware-platform/tmp/category-route-guard-sensitivity.json
+          if-no-files-found: error
 
       - name: Security gate (redaction + forbidden data scan)
         working-directory: ./middleware-platform
@@ -143,6 +165,26 @@ jobs:
           if [ -f /tmp/api_pid ]; then
             kill $(cat /tmp/api_pid) || true
           fi
+
+      - name: Route-field evidence (local API)
+        working-directory: ./middleware-platform
+        run: |
+          node ./scripts/category-staging-route-field-check.cjs --api-base http://127.0.0.1:4000 --output ./tmp/category-route-field-evidence.local.json
+
+      - name: Route-field evidence (staging API)
+        if: ${{ github.event.inputs.staging_api_base != '' }}
+        working-directory: ./middleware-platform
+        run: |
+          node ./scripts/category-staging-route-field-check.cjs --api-base "${{ github.event.inputs.staging_api_base }}" --output ./tmp/category-route-field-evidence.staging.json
+
+      - name: Upload route-field evidence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: category-route-field-evidence
+          path: |
+            middleware-platform/tmp/category-route-field-evidence.local.json
+            middleware-platform/tmp/category-route-field-evidence.staging.json
+          if-no-files-found: warn
 
       - name: Run accuracy evaluation (Section 4)
         working-directory: ./middleware-platform

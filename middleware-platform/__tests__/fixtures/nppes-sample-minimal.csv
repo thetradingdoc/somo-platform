@@ -1,0 +1,4 @@
+NPI,Entity Type Code,Provider Organization Name (Legal Business Name),Provider Last Name (Legal Name),Provider First Name,Provider Name Prefix Text,Provider Name Suffix Text,Provider Credential Text,Provider First Line Business Practice Location Address,Provider Second Line Business Practice Location Address,Provider Business Practice Location Address City Name,Provider Business Practice Location Address State Name,Provider Business Practice Location Address Postal Code,Provider Business Practice Location Address Telephone Number,Healthcare Provider Taxonomy Code_1,NPI Deactivation Date,Provider License Number_1,Provider License Number State Code_1
+1003000126,1,,Doe,Jane,Dr,,MD,123 Main Street,,Brooklyn,NY,11201,7185550100,207Q00000X,,E123456,NY
+2003000125,1,,,,,,,No Address Here,,,,,5550000000,207Q00000X,,,
+3003000124,2,Acme Clinic Corp,,,,,,456 Oak Ave,,Albany,NY,12207,5185550199,261Q00000X,,,

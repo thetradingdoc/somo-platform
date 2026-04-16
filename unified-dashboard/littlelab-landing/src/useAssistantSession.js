@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   getOrCreateLandingSessionId,
-  fetchBeautyFactsByBarcode,
+  fetchBarcodeFactsAutodetect,
   fetchLandingResultSnapshot,
   incrementLandingVoiceMetric,
   publishLandingVoiceTimeline,
@@ -11,12 +11,29 @@ import {
   sendLandingAssistantTurn
 } from './landingAssistantApi';
 import { publishVisionCaptureEvent } from './landingLiveKitApi';
-import { speakAssistantReply, stopAssistantSpeech, waitForAssistantSpeechToFinish } from './assistantSpeech';
+import {
+  speakAssistantReply,
+  stopAssistantSpeech,
+  waitForAssistantSpeechToFinish,
+  primeAssistantAudioGate
+} from './assistantSpeech';
 import { createWebVoiceTurnController } from './webVoiceTurnController';
 import { resolveTryNowVoiceConfig } from './tryNowVoiceConfig';
 import { buildScanQuality } from './scanQuality';
-import { buildFollowupMessageWithPinnedContext, buildPinnedContextText, compareProducts, deriveCategoryRoute, deriveIngredientFlags, isSparseProductData } from './scanInsights';
+import {
+  buildFollowupMessageWithPinnedContext,
+  buildPinnedContextText,
+  compareProducts,
+  deriveCategoryRoute,
+  deriveIngredientFlags,
+  isSparseProductData,
+  pickFirstProductImageUrl,
+  resolveServerCategoryRoute,
+  serializeBarcodeNotFoundForThread,
+  serializeObfProductForThread
+} from './scanInsights';
 import { prependManualIngredientGuard } from './manualIngredientGuard';
+import { isProductTrackingIntent } from './productScanIntent';
 
 const ASSISTANT_FIRST_ENABLED =
   String(process.env.REACT_APP_TRYNOW_ASSISTANT_FIRST || '1').trim().toLowerCase() !== '0';
@@ -32,8 +49,11 @@ const TRY_NOW_COPY = {
     genericFallback: 'I am here. How can I help?',
     networkErrorPrefix: 'Sorry, I could not reach the assistant just now.',
     barcodeFoundPrefix: 'I found this product',
-    barcodeNotFound: 'I could not match that barcode in Open Beauty Facts yet. Try holding the barcode steady and closer to the camera.',
-    barcodeLookupError: 'I detected a barcode, but the lookup failed. Please try again in a moment.'
+    barcodeNotFound:
+      'I could not find that barcode in Open Beauty Facts or Open Food Facts. Try a steadier scan, or add ingredients manually.',
+    barcodeLookupError: 'I detected a barcode, but the lookup failed. Please try again in a moment.',
+    barcodeOcrFallbackIntro:
+      'The catalog lookup did not return this product, so I captured your label in a snapshot and I am reading ingredients from that photo next.'
   },
   fr: {
     opener: "Bonjour, je suis Kelly. Je serai votre assistante Skin & Care aujourd'hui. Comment puis-je vous aider ?",
@@ -45,8 +65,11 @@ const TRY_NOW_COPY = {
     genericFallback: 'Je suis la pour vous aider. Comment puis-je vous aider ?',
     networkErrorPrefix: "Desolee, je n'ai pas pu joindre l'assistant pour le moment.",
     barcodeFoundPrefix: "J'ai trouve ce produit",
-    barcodeNotFound: "Je n'ai pas encore trouve ce code-barres dans Open Beauty Facts. Essayez de tenir le code-barres bien stable et plus pres de la camera.",
-    barcodeLookupError: "J'ai detecte un code-barres, mais la recherche a echoue. Veuillez reessayer dans un instant."
+    barcodeNotFound:
+      "Je n'ai pas trouve ce code-barres dans Open Beauty Facts ni Open Food Facts. Reessayez plus stable ou ajoutez la liste d'ingredients.",
+    barcodeLookupError: "J'ai detecte un code-barres, mais la recherche a echoue. Veuillez reessayer dans un instant.",
+    barcodeOcrFallbackIntro:
+      "La base catalogue n'a pas repondu; j'ai capture votre etiquette et je lis les ingredients sur la photo."
   },
   sw: {
     opener: 'Hujambo, mimi ni Kelly. Nitakuwa msaidizi wako wa Skin & Care leo. Naweza kukusaidiaje?',
@@ -58,7 +81,8 @@ const TRY_NOW_COPY = {
     genericFallback: 'Nipo hapa kukusaidia. Naweza kusaidiaje?',
     networkErrorPrefix: 'Samahani, sikuweza kufikia msaidizi kwa sasa.',
     barcodeFoundPrefix: 'Nimepata bidhaa hii',
-    barcodeNotFound: 'Sijaweza kupata barcode hiyo kwenye Open Beauty Facts bado. Jaribu kushikilia barcode bila kutikisika na karibu na kamera.',
+    barcodeNotFound:
+      'Sikuipata barcode hiyo kwenye Open Beauty Facts wala Open Food Facts. Jaribu tena au ongeza orodha ya viungo.',
     barcodeLookupError: 'Nimegundua barcode, lakini utafutaji umeshindikana. Tafadhali jaribu tena baada ya muda mfupi.'
   },
   ru: {
@@ -71,10 +95,38 @@ const TRY_NOW_COPY = {
     genericFallback: 'Я рядом и готова помочь. Чем могу помочь?',
     networkErrorPrefix: 'Извините, сейчас не удалось подключиться к ассистенту.',
     barcodeFoundPrefix: 'Я нашла этот продукт',
-    barcodeNotFound: 'Я пока не нашла этот штрихкод в Open Beauty Facts. Попробуйте удерживать штрихкод ровно и ближе к камере.',
-    barcodeLookupError: 'Я обнаружила штрихкод, но поиск не удался. Пожалуйста, попробуйте еще раз через минуту.'
+    barcodeNotFound:
+      'Не нашла этот штрихкод ни в Open Beauty Facts, ни в Open Food Facts. Попробуйте еще раз или введите состав вручную.',
+    barcodeLookupError: 'Я обнаружила штрихкод, но поиск не удался. Пожалуйста, попробуйте еще раз через минуту.',
+    barcodeOcrFallbackIntro:
+      'Каталог не ответил — я сохранила кадр с этикетки и читаю состав с фото.'
   }
 };
+
+const MIN_BARCODE_OCR_FALLBACK_CHARS = 28;
+
+async function tryBarcodeLabelOcrFallback({ labelFrameFile, labelVideo, submitManualIngredients, pushAssistant, copy }) {
+  if ((!labelFrameFile && !labelVideo) || typeof submitManualIngredients !== 'function') {
+    return { recovered: false };
+  }
+  let text;
+  try {
+    const { extractBestLabelTextFromVideoOrFile } = await import('./ingredientOcr');
+    text = await extractBestLabelTextFromVideoOrFile({
+      video: labelVideo || null,
+      file: labelFrameFile || null
+    });
+  } catch {
+    return { recovered: false };
+  }
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (t.length < MIN_BARCODE_OCR_FALLBACK_CHARS) return { recovered: false };
+  pushAssistant(copy.barcodeOcrFallbackIntro, { speak: true });
+  const out = await submitManualIngredients(t);
+  return { recovered: !!out?.success, ocrText: t };
+}
 
 const REGION_HINTS = [
   ['forehead', /\bforehead|brow\b/i],
@@ -168,11 +220,6 @@ function extractBarcodeCandidate(text) {
   return m ? m[0] : '';
 }
 
-function isProductTrackingIntent(text) {
-  const t = String(text || '').toLowerCase();
-  return /\b(scan|barcode|ingredients|ingredient list|review this product|check this product|analyze this product|what product is this)\b/.test(t);
-}
-
 function normalizeBarcodeInput(value) {
   return String(value || '').replace(/[^\d]/g, '');
 }
@@ -218,6 +265,11 @@ export function useAssistantSession() {
   }, [preferredLanguage]);
   const voiceConfig = useMemo(() => resolveTryNowVoiceConfig(preferredLanguage), [preferredLanguage]);
   const speechLang = voiceConfig.sttLang;
+  /** Typed chat: speak Kelly replies via TTS unless REACT_APP_ASSISTANT_CHAT_TTS is 0/false (build-time). */
+  const chatReplyTtsEnabled = useMemo(() => {
+    const v = String(process.env.REACT_APP_ASSISTANT_CHAT_TTS || '').trim().toLowerCase();
+    return v !== '0' && v !== 'false';
+  }, []);
 
   const sessionIdRef = useRef(null);
   const abortRef = useRef(null);
@@ -235,8 +287,21 @@ export function useAssistantSession() {
   const lastVisionTriggerSigRef = useRef('');
   const latestTurnSeqRef = useRef(0);
   const scannedBarcodeCooldownRef = useRef(new Map());
+  const lastBarcodeLookupFailureSpeechRef = useRef(0);
   const lastPinnedBarcodeRef = useRef('');
   const turnLanguageLockRef = useRef('en');
+  const submitManualIngredientsRef = useRef(null);
+
+  const incrementScanMetric = useCallback((metricName) => {
+    if (!apiBase || !metricName) return;
+    const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+    sessionIdRef.current = sid;
+    void incrementLandingVoiceMetric({
+      apiBase,
+      sessionId: sid,
+      metricName
+    }).catch(() => {});
+  }, [apiBase]);
 
   useEffect(() => {
     sessionIdRef.current = getOrCreateLandingSessionId();
@@ -415,6 +480,14 @@ export function useAssistantSession() {
         }, 400);
         return null;
       }
+      /** Snapshot for this turn’s LLM request (React state may lag behind in-message barcode lookup). */
+      let scanForTurn = scanResult;
+      let pinReadyForTurn = !!(
+        scanResult?.product &&
+        scanResult?.barcode &&
+        lastPinnedBarcodeRef.current === scanResult.barcode
+      );
+
       if (scanResult?.product && scanResult?.barcode && lastPinnedBarcodeRef.current !== scanResult.barcode) {
         const sid = sessionIdRef.current || getOrCreateLandingSessionId();
         sessionIdRef.current = sid;
@@ -429,37 +502,89 @@ export function useAssistantSession() {
       }
 
       if (barcode) {
+        const cleanVoice = normalizeBarcodeInput(barcode);
         try {
-          const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode });
+          const { facts, resolvedCatalog } = await fetchBarcodeFactsAutodetect({ apiBase, barcode: cleanVoice });
           const p = facts?.product || {};
-          if (p && p.found === false) {
-            pushAssistant(copyForLang(turnLanguage).barcodeNotFound, { speak: false });
-          } else {
-            const quality = buildScanQuality(p);
-            setScanResult({
-              barcode: p.barcode || barcode,
-              product: p,
-              quality,
-              dataSource: facts?.data_source || 'unknown'
-            });
+          const quality = buildScanQuality(p);
+          const { route: resolvedRoute, usedFallback: routeFallback } = resolveServerCategoryRoute(
+            facts?.category_route
+          );
+          const categoryRoute = routeFallback ? deriveCategoryRoute(p.categories_tags) : resolvedRoute;
+          if (routeFallback) {
+            incrementScanMetric('scan.category_route.client_fallback_used');
           }
-          const productLine = `[Barcode Scan] ${p.product_name || 'Product found'} (${p.barcode || barcode})`;
-          const ingredientLine = p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 500)}` : '';
-          const labelsLine = Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 10).join(', ')}` : '';
-          const payloadText = [productLine, ingredientLine, labelsLine].filter(Boolean).join('\n');
+          const nextScan = {
+            barcode: p.barcode || cleanVoice,
+            product: p,
+            quality,
+            dataSource: facts?.data_source || 'unknown',
+            resolvedCatalog,
+            recoveryRequired: !quality.analyzeEnabled,
+            categoryRoute,
+            categoryRouteSource: routeFallback ? 'legacy_client_derive' : (facts?.category_route_source || 'server'),
+            categoryRouteConfidence: routeFallback ? null : (facts?.category_route_confidence || null),
+            categoryRouteRuleId: routeFallback ? null : (facts?.category_route_rule_id || null),
+            categoryRouteFallback: routeFallback ? null : (facts?.category_route_fallback || null),
+            scanSummary: facts?.scan_summary || null,
+            ingredientFlags: deriveIngredientFlags(p),
+            sparseData: isSparseProductData(p)
+          };
+          if (categoryRoute === 'unknown') {
+            incrementScanMetric('scan.lookup_found_route_unknown.count');
+          } else {
+            incrementScanMetric('scan.lookup_found_route_known.count');
+          }
+          setScanResult(nextScan);
+          scanForTurn = nextScan;
+          pinReadyForTurn = !!(nextScan.product && nextScan.barcode);
+          if (nextScan.barcode) lastPinnedBarcodeRef.current = String(nextScan.barcode);
+          const imgUrlChat = String(pickFirstProductImageUrl(p) || '').trim();
+          const productLine = `[Barcode Scan] ${p.product_name || 'Product found'} (${p.barcode || cleanVoice})`;
+          const imageLine = imgUrlChat ? `Product image: ${imgUrlChat}` : '';
+          const ingredientLine = p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '';
+          const labelsLine = Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '';
+          const allergensLine =
+            Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : '';
+          const payloadText = [productLine, imageLine, ingredientLine, labelsLine, allergensLine].filter(Boolean).join('\n');
           const sid = sessionIdRef.current || getOrCreateLandingSessionId();
           sessionIdRef.current = sid;
           await publishLandingThreadEvent({
             apiBase,
             sessionId: sid,
             eventType: 'barcode_product_context',
-            text: payloadText
+            text: payloadText,
+            productData: serializeObfProductForThread(p, facts?.data_source || null, {
+              categoryRoute: nextScan.categoryRoute,
+              categoryRouteSource: nextScan.categoryRouteSource,
+              categoryRouteConfidence: nextScan.categoryRouteConfidence,
+              categoryRouteRuleId: nextScan.categoryRouteRuleId,
+              categoryRouteFallback: nextScan.categoryRouteFallback,
+              scanSummary: facts?.scan_summary || null
+            })
           });
+          await refreshResultSnapshot();
           const copy = copyForLang(inferredLanguage || preferredLanguage);
           pushAssistant(`${copy.micReady} I found this product and added its ingredient profile to context.`, {
             speak: false
           });
-        } catch (_) {}
+        } catch (e) {
+          const errCode = String(e?.body?.error || e?.message || '');
+          if (String(errCode).includes('upstream_404')) {
+            incrementScanMetric('scan.lookup_not_found.count');
+            const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+            sessionIdRef.current = sid;
+            await publishLandingThreadEvent({
+              apiBase,
+              sessionId: sid,
+              eventType: 'barcode_product_context',
+              text: `[Barcode Scan] No match in Open Beauty Facts or Open Food Facts for barcode (${cleanVoice})`,
+              productData: serializeBarcodeNotFoundForThread(cleanVoice, 'live_api', 'both')
+            }).catch(() => {});
+            await refreshResultSnapshot().catch(() => {});
+            pushAssistant(copyForLang(turnLanguage).barcodeNotFound, { speak: false });
+          }
+        }
       }
 
       if (abortRef.current) {
@@ -489,11 +614,7 @@ export function useAssistantSession() {
           stt_final_at: Number(sttFinalAt) || null,
           turn_request_sent_at: Date.now()
         };
-        const turnMessage = buildFollowupMessageWithPinnedContext(
-          t,
-          scanResult,
-          !!(scanResult?.product && scanResult?.barcode && lastPinnedBarcodeRef.current === scanResult.barcode)
-        );
+        const turnMessage = buildFollowupMessageWithPinnedContext(t, scanForTurn, pinReadyForTurn);
         const data = await sendLandingAssistantTurn({
           apiBase,
           message: turnMessage,
@@ -521,38 +642,60 @@ export function useAssistantSession() {
         } else if (data?.next_step === 'skincare_report') {
           await refreshResultSnapshot();
         }
-        const replySeq = Number(data.reply_seq || 0);
-        const isLatestReply = replySeq === latestTurnSeqRef.current;
+        const rawReplySeq = data.reply_seq;
+        const replySeq = Number(rawReplySeq);
+        // If middleware omits reply_seq, do not suppress TTS (older proxies or skipped payloads).
+        const isLatestReply =
+          rawReplySeq == null || rawReplySeq === ''
+            ? true
+            : replySeq === latestTurnSeqRef.current;
         const ttsMeta = { ttsVoice: '', ttsModel: '', ttsLang: '' };
-        // Keep chat-only turns silent; only speak while an active voice session is on.
         pushAssistant(reply, { speak: false });
-        if (voiceSessionActiveRef.current && isLatestReply) {
-          const { first, rest } = splitVoiceReply(reply);
-          const firstText = first || reply;
+        const shouldPlayTts =
+          isLatestReply && (voiceSessionActiveRef.current || chatReplyTtsEnabled);
+        if (shouldPlayTts) {
+          const voiceCfg = resolveTryNowVoiceConfig(turnLanguage);
+          const onTtsMeta = (meta) => {
+            if (!meta || typeof meta !== 'object') return;
+            ttsMeta.ttsVoice = String(meta.ttsVoice || '').trim();
+            ttsMeta.ttsModel = String(meta.ttsModel || '').trim();
+            ttsMeta.ttsLang = String(meta.ttsLang || '').trim().toLowerCase();
+          };
+          const onFirstByte = () => {
+            if (!voiceTimelinePoints.tts_first_byte_at) voiceTimelinePoints.tts_first_byte_at = Date.now();
+          };
+          const onPlaybackReady = () => {
+            if (!voiceTimelinePoints.tts_download_done_at) voiceTimelinePoints.tts_download_done_at = Date.now();
+          };
+          const onAudioStart = () => {
+            if (!voiceTimelinePoints.audio_play_start_at) voiceTimelinePoints.audio_play_start_at = Date.now();
+          };
           voiceTimelinePoints.tts_request_sent_at = Date.now();
-          await speakAssistantReply(firstText, {
-            apiBase,
-            lang: resolveTryNowVoiceConfig(turnLanguage).sttLang,
-            onTtsMeta: (meta) => {
-              if (!meta || typeof meta !== 'object') return;
-              ttsMeta.ttsVoice = String(meta.ttsVoice || '').trim();
-              ttsMeta.ttsModel = String(meta.ttsModel || '').trim();
-              ttsMeta.ttsLang = String(meta.ttsLang || '').trim().toLowerCase();
-            },
-            onFirstByte: () => {
-              if (!voiceTimelinePoints.tts_first_byte_at) voiceTimelinePoints.tts_first_byte_at = Date.now();
-            },
-            onPlaybackReady: () => {
-              if (!voiceTimelinePoints.tts_download_done_at) voiceTimelinePoints.tts_download_done_at = Date.now();
-            },
-            onAudioStart: () => {
-              if (!voiceTimelinePoints.audio_play_start_at) voiceTimelinePoints.audio_play_start_at = Date.now();
-            }
-          });
-          if (rest && voiceSessionActiveRef.current && isLatestReply) {
-            await speakAssistantReply(rest, {
+          if (voiceSessionActiveRef.current) {
+            const { first, rest } = splitVoiceReply(reply);
+            const firstText = first || reply;
+            await speakAssistantReply(firstText, {
               apiBase,
-              lang: resolveTryNowVoiceConfig(turnLanguage).sttLang
+              lang: voiceCfg.sttLang,
+              onTtsMeta,
+              onFirstByte,
+              onPlaybackReady,
+              onAudioStart
+            });
+            if (rest && voiceSessionActiveRef.current && isLatestReply) {
+              await speakAssistantReply(rest, {
+                apiBase,
+                lang: voiceCfg.sttLang
+              });
+            }
+          } else {
+            await speakAssistantReply(reply, {
+              apiBase,
+              lang: voiceCfg.sttLang,
+              onTtsMeta,
+              onFirstByte,
+              onPlaybackReady,
+              onAudioStart
             });
           }
         }
@@ -589,105 +732,218 @@ export function useAssistantSession() {
         await resumeVoiceListeningIfNeeded();
       }
     },
-    [abortVoiceKickoff, apiBase, attachments, copyForLang, defaultClinicId, detectLanguageFromText, preferredLanguage, pushAssistant, publishAssistantVisionTrigger, pushEntityEvents, refreshResultSnapshot, scanResult]
+    [
+      abortVoiceKickoff,
+      apiBase,
+      attachments,
+      chatReplyTtsEnabled,
+      copyForLang,
+      defaultClinicId,
+      detectLanguageFromText,
+      preferredLanguage,
+      pushAssistant,
+      publishAssistantVisionTrigger,
+      pushEntityEvents,
+      refreshResultSnapshot,
+      scanResult
+    ]
   );
 
-  const ingestScannedBarcode = useCallback(async (barcode) => {
-    const clean = normalizeBarcodeInput(barcode);
-    if (!/^\d{8,14}$/.test(clean)) return { success: false, reason: 'invalid_barcode' };
-    const now = Date.now();
-    const prevMs = scannedBarcodeCooldownRef.current.get(clean) || 0;
-    if (now - prevMs < 90000) return { success: false, reason: 'cooldown' };
-    scannedBarcodeCooldownRef.current.set(clean, now);
-    const lang = preferredLanguage || 'en';
-    const copy = copyForLang(lang);
-    if (!apiBase) return { success: false, reason: 'no_api' };
-    try {
-      const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode: clean });
-      const p = facts?.product || {};
-      if (p && p.found === false) {
-        setScanResult({
-          barcode: clean,
-          product: null,
-          quality: { tier: 'insufficient', analyzeEnabled: false, analyzeLabel: 'Add ingredients to analyze', summary: 'Product not found', missing: ['product'] },
-          dataSource: facts?.data_source || 'live_api',
-          recoveryRequired: true
-        });
-        pushAssistant(copy.barcodeNotFound, { speak: true });
-        return { success: false, reason: 'not_found', barcode: clean };
-      }
-      const sid = sessionIdRef.current || getOrCreateLandingSessionId();
-      sessionIdRef.current = sid;
-      const productName = p.product_name || `barcode ${clean}`;
-      const quality = buildScanQuality(p);
-      const nextScan = {
-        barcode: p.barcode || clean,
-        product: p,
-        quality,
-        dataSource: facts?.data_source || 'unknown',
-        recoveryRequired: !quality.analyzeEnabled,
-        categoryRoute: deriveCategoryRoute(p.categories_tags),
-        ingredientFlags: deriveIngredientFlags(p),
-        sparseData: isSparseProductData(p)
-      };
-      if (scanResult?.product && scanResult?.barcode && scanResult.barcode !== nextScan.barcode) {
-        setPendingScanDecision({ previous: scanResult, next: nextScan });
-        return { success: true, barcode: clean, productName, quality, pendingDecision: true };
-      }
-      setScanResult(nextScan);
-      const imgUrl = String(p.image_url || p.image_front_url || '').trim();
-      const contextText = [
-        `[Barcode Scan] ${productName} (${p.barcode || clean})`,
-        imgUrl ? `Product image: ${imgUrl}` : '',
-        p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '',
-        Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '',
-        Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : '',
-        `Category Route: ${nextScan.categoryRoute}`,
-        `Sparse Data: ${nextScan.sparseData ? 'yes' : 'no'}`,
-        `Provenance: ${nextScan.dataSource}`
-      ]
-        .filter(Boolean)
-        .join('\n');
-      await publishLandingThreadEvent({
-        apiBase,
-        sessionId: sid,
-        eventType: 'barcode_product_context',
-        text: contextText
-      });
-      pushAssistant(`${copy.barcodeFoundPrefix}: ${productName}. I added its ingredient profile to your session context.`, {
-        speak: true
-      });
-      pushEntityEvents([{
-        id: `ee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        type: 'product_match',
-        value: productName,
-        ts: Date.now()
-      }]);
-      return { success: true, barcode: clean, productName, quality };
-    } catch (e) {
-      const errCode = String(e?.body?.error || e?.message || '');
-      if (String(errCode).includes('upstream_404')) {
-        setScanResult({
-          barcode: clean,
-          product: null,
-          quality: { tier: 'insufficient', analyzeEnabled: false, analyzeLabel: 'Add ingredients to analyze', summary: 'Product not found', missing: ['product'] },
-          dataSource: 'live_api',
-          recoveryRequired: true
-        });
-        pushAssistant(copy.barcodeNotFound, { speak: true });
-        return { success: false, reason: 'not_found' };
-      }
-      if (String(errCode).includes('invalid_barcode')) {
-        return { success: false, reason: 'invalid_barcode' };
-      }
-      pushAssistant(copy.barcodeLookupError, { speak: true });
-      return { success: false, reason: 'lookup_failed' };
-    }
-  }, [apiBase, copyForLang, preferredLanguage, pushAssistant, pushEntityEvents, scanResult]);
+  const ingestScannedBarcode = useCallback(
+    async (barcode, opts = {}) => {
+      const labelFrameFile = opts.labelFrameFile || null;
+      const labelVideo = opts.labelVideo || null;
+      const clean = normalizeBarcodeInput(barcode);
+      if (!/^\d{8,14}$/.test(clean)) return { success: false, reason: 'invalid_barcode' };
+      const now = Date.now();
+      const prevMs = scannedBarcodeCooldownRef.current.get(clean) || 0;
+      if (now - prevMs < 90000) return { success: false, reason: 'cooldown' };
+      scannedBarcodeCooldownRef.current.set(clean, now);
+      const lang = preferredLanguage || 'en';
+      const copy = copyForLang(lang);
+      if (!apiBase) return { success: false, reason: 'no_api' };
 
-  const ingestManualBarcode = useCallback(async (barcode) => {
-    return ingestScannedBarcode(barcode);
-  }, [ingestScannedBarcode]);
+      const applyOcrLabelScan = (ocrText) => {
+        const product = {
+          product_name: 'From label snapshot',
+          ingredients_text: ocrText.slice(0, 2000),
+          barcode: clean,
+          source: 'ocr_label_photo'
+        };
+        setScanResult({
+          barcode: clean,
+          product,
+          dataSource: 'ocr_label_photo',
+          resolvedCatalog: null,
+          quality: buildScanQuality(product),
+          recoveryRequired: false,
+          categoryRoute: deriveCategoryRoute(product.categories_tags || []),
+          categoryRouteSource: 'legacy_client_derive',
+          categoryRouteConfidence: null,
+          categoryRouteRuleId: null,
+          categoryRouteFallback: null,
+          scanSummary: null,
+          ingredientFlags: deriveIngredientFlags(product),
+          sparseData: isSparseProductData(product)
+        });
+      };
+
+      try {
+        const { facts, resolvedCatalog } = await fetchBarcodeFactsAutodetect({ apiBase, barcode: clean });
+        const p = facts?.product || {};
+        const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+        sessionIdRef.current = sid;
+        const productName = p.product_name || `barcode ${clean}`;
+        const quality = buildScanQuality(p);
+        const { route: resolvedRoute, usedFallback: routeFallback } = resolveServerCategoryRoute(
+          facts?.category_route
+        );
+        const categoryRoute = routeFallback ? deriveCategoryRoute(p.categories_tags) : resolvedRoute;
+        if (routeFallback) {
+          incrementScanMetric('scan.category_route.client_fallback_used');
+        }
+        const nextScan = {
+          barcode: p.barcode || clean,
+          product: p,
+          resolvedCatalog,
+          quality,
+          dataSource: facts?.data_source || 'unknown',
+          recoveryRequired: !quality.analyzeEnabled,
+          // Prefer server-resolved category contract to avoid client/server drift.
+          categoryRoute,
+          categoryRouteSource: routeFallback ? 'legacy_client_derive' : (facts?.category_route_source || 'server'),
+          categoryRouteConfidence: routeFallback ? null : (facts?.category_route_confidence || null),
+          categoryRouteRuleId: routeFallback ? null : (facts?.category_route_rule_id || null),
+          categoryRouteFallback: routeFallback ? null : (facts?.category_route_fallback || null),
+          scanSummary: facts?.scan_summary || null,
+          ingredientFlags: deriveIngredientFlags(p),
+          sparseData: isSparseProductData(p)
+        };
+        if (categoryRoute === 'unknown') {
+          incrementScanMetric('scan.lookup_found_route_unknown.count');
+        } else {
+          incrementScanMetric('scan.lookup_found_route_known.count');
+        }
+        if (scanResult?.product && scanResult?.barcode && scanResult.barcode !== nextScan.barcode) {
+          setPendingScanDecision({ previous: scanResult, next: nextScan });
+          return { success: true, barcode: clean, productName, quality, pendingDecision: true };
+        }
+        setScanResult(nextScan);
+        const imgUrl = String(pickFirstProductImageUrl(p) || '').trim();
+        const contextText = [
+          `[Barcode Scan] ${productName} (${p.barcode || clean})`,
+          imgUrl ? `Product image: ${imgUrl}` : '',
+          p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '',
+          Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '',
+          Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : '',
+          `Category Route: ${nextScan.categoryRoute}`,
+          nextScan.categoryRouteSource ? `Category Route Source: ${nextScan.categoryRouteSource}` : '',
+          nextScan.categoryRouteConfidence ? `Category Route Confidence: ${nextScan.categoryRouteConfidence}` : '',
+          `Sparse Data: ${nextScan.sparseData ? 'yes' : 'no'}`,
+          `Provenance: ${nextScan.dataSource}`
+        ]
+          .filter(Boolean)
+          .join('\n');
+        await publishLandingThreadEvent({
+          apiBase,
+          sessionId: sid,
+          eventType: 'barcode_product_context',
+          text: contextText,
+          productData: serializeObfProductForThread(p, nextScan.dataSource, {
+            categoryRoute: nextScan.categoryRoute,
+            categoryRouteSource: nextScan.categoryRouteSource,
+            categoryRouteConfidence: nextScan.categoryRouteConfidence,
+            categoryRouteRuleId: nextScan.categoryRouteRuleId,
+            categoryRouteFallback: nextScan.categoryRouteFallback,
+            scanSummary: facts?.scan_summary || null
+          })
+        });
+        await refreshResultSnapshot();
+        pushAssistant(`${copy.barcodeFoundPrefix}: ${productName}. I added its ingredient profile to your session context.`, {
+          speak: true
+        });
+        pushEntityEvents([{
+          id: `ee_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          type: 'product_match',
+          value: productName,
+          ts: Date.now()
+        }]);
+        return { success: true, barcode: clean, productName, quality };
+      } catch (e) {
+        const errCode = String(e?.body?.error || e?.message || '');
+        const sub = submitManualIngredientsRef.current;
+
+        if (String(errCode).includes('upstream_404')) {
+          incrementScanMetric('scan.lookup_not_found.count');
+          if ((labelFrameFile || labelVideo) && typeof sub === 'function') {
+            const ocrTry = await tryBarcodeLabelOcrFallback({
+              labelFrameFile,
+              labelVideo,
+              submitManualIngredients: sub,
+              pushAssistant,
+              copy
+            });
+            if (ocrTry.recovered && ocrTry.ocrText) {
+              applyOcrLabelScan(ocrTry.ocrText);
+              await refreshResultSnapshot().catch(() => {});
+              return { success: true, barcode: clean, productName: 'From label snapshot', reason: 'ocr_fallback' };
+            }
+          }
+          const sid = sessionIdRef.current || getOrCreateLandingSessionId();
+          sessionIdRef.current = sid;
+          setScanResult({
+            barcode: clean,
+            product: null,
+            quality: {
+              tier: 'insufficient',
+              analyzeEnabled: false,
+              analyzeLabel: 'Add ingredients to analyze',
+              summary: 'Product not found',
+              missing: ['product']
+            },
+            dataSource: 'live_api',
+            recoveryRequired: true
+          });
+          const notFoundText = `[Barcode Scan] No match in Open Beauty Facts or Open Food Facts for barcode (${clean})`;
+          await publishLandingThreadEvent({
+            apiBase,
+            sessionId: sid,
+            eventType: 'barcode_product_context',
+            text: notFoundText,
+            productData: serializeBarcodeNotFoundForThread(clean, 'live_api', 'both')
+          });
+          await refreshResultSnapshot();
+          pushAssistant(copy.barcodeNotFound, { speak: true });
+          return { success: false, reason: 'not_found' };
+        }
+        if (String(errCode).includes('invalid_barcode')) {
+          return { success: false, reason: 'invalid_barcode' };
+        }
+
+        if ((labelFrameFile || labelVideo) && typeof sub === 'function') {
+          const ocrTry = await tryBarcodeLabelOcrFallback({
+            labelFrameFile,
+            labelVideo,
+            submitManualIngredients: sub,
+            pushAssistant,
+            copy
+          });
+          if (ocrTry.recovered && ocrTry.ocrText) {
+            applyOcrLabelScan(ocrTry.ocrText);
+            await refreshResultSnapshot().catch(() => {});
+            return { success: true, barcode: clean, productName: 'From label snapshot', reason: 'ocr_fallback' };
+          }
+        }
+
+        const t = Date.now();
+        const speakErr = t - lastBarcodeLookupFailureSpeechRef.current > 55000;
+        if (speakErr) lastBarcodeLookupFailureSpeechRef.current = t;
+        pushAssistant(copy.barcodeLookupError, { speak: speakErr });
+        return { success: false, reason: 'lookup_failed' };
+      }
+    },
+    [apiBase, copyForLang, incrementScanMetric, preferredLanguage, pushAssistant, pushEntityEvents, refreshResultSnapshot, scanResult]
+  );
 
   const resolvePendingScanDecision = useCallback(async (mode = 'refine') => {
     const pending = pendingScanDecision;
@@ -748,6 +1004,8 @@ export function useAssistantSession() {
       setSending(false);
     }
   }, [apiBase, copyForLang, defaultClinicId, preferredLanguage, pushAssistant, refreshResultSnapshot]);
+
+  submitManualIngredientsRef.current = submitManualIngredients;
 
   /** Sends a landing turn so the middleware can build a real session_result_snapshot (not the UI dummy). */
   const requestScanAnalysis = useCallback(async () => {
@@ -832,6 +1090,7 @@ export function useAssistantSession() {
         return;
       }
       setInterimCaption('');
+      primeAssistantAudioGate();
       stopAssistantSpeech();
       voiceSessionActiveRef.current = true;
       voicePauseForSendRef.current = false;
@@ -880,7 +1139,6 @@ export function useAssistantSession() {
     preferredLanguage,
     leadText: copyForLang(preferredLanguage).opener,
     ingestScannedBarcode,
-    ingestManualBarcode,
     submitManualIngredients,
     requestScanAnalysis,
     refreshResultSnapshot,

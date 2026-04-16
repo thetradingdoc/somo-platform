@@ -8,6 +8,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
+const SecretManager = require('./secret-manager');
 
 let CircleSDK;
 try {
@@ -22,8 +23,20 @@ class CircleService {
         // Circle API configuration
         // Circle API keys should be in format: ENVIRONMENT:ID:SECRET (e.g., TEST_API_KEY:id:secret)
         // Get your API key from: https://console.circle.com/
-        this.apiKey = process.env.CIRCLE_API_KEY || null;
-        this.entitySecret = process.env.CIRCLE_ENTITY_SECRET || process.env.ENTITY_SECRET || null;
+        this.apiKey = SecretManager.getSecret('CIRCLE_API_KEY', {
+            consumer: 'circle-service',
+            purpose: 'circle_api_key'
+        }) || null;
+        this.entitySecret =
+            SecretManager.getSecret('CIRCLE_ENTITY_SECRET', {
+                consumer: 'circle-service',
+                purpose: 'circle_entity_secret'
+            }) ||
+            SecretManager.getSecret('ENTITY_SECRET', {
+                consumer: 'circle-service',
+                purpose: 'legacy_entity_secret'
+            }) ||
+            null;
         this.baseURL = process.env.CIRCLE_BASE_URL || 'https://api-sandbox.circle.com';
         this.environment = process.env.CIRCLE_ENVIRONMENT || 'sandbox';
 

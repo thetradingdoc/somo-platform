@@ -34,6 +34,24 @@ export default function AgentSphereCanvas({ speechLevelRef, prefersReducedMotion
           onCreated={({ gl }) => {
             gl.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2));
             gl.setClearColor(0x000000, 0);
+            const canvas = gl.domElement;
+            canvas.addEventListener(
+              'webglcontextlost',
+              (e) => {
+                e.preventDefault();
+              },
+              false
+            );
+            canvas.addEventListener(
+              'webglcontextrestored',
+              () => {
+                try {
+                  gl.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2));
+                  gl.setClearColor(0x000000, 0);
+                } catch (_) {}
+              },
+              false
+            );
           }}
         >
           <MagicPlasmaScene speechLevelRef={speechLevelRef} paused={paused} />

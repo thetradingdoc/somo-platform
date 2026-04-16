@@ -26,7 +26,7 @@ cd "$ROOT"
 echo ""
 
 # 2. E2E with curl (optional – requires server running)
-echo "2. E2E via API (start server first: ./start-local.sh)"
+echo "2. E2E via API (start server first: ./scripts/root/start-local.sh)"
 echo "   In another terminal:"
 echo "   curl -X POST http://localhost:4000/api/video-consult/agent-events \\"
 echo "     -H 'Content-Type: application/json' \\"

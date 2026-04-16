@@ -1,4 +1,24 @@
 /**
+ * Returns a safe http(s) origin for API calls, or '' if `raw` is missing or invalid.
+ * Rejects placeholder paste mistakes (e.g. leading/trailing Unicode ellipsis …) that
+ * otherwise produce requests like `GET /%E2%80%A6/api/public/products`.
+ */
+export function normalizeHttpApiBase(raw) {
+  let s = String(raw || '').trim();
+  s = s.replace(/^[\u2026…]+|[\u2026…]+$/g, '').trim();
+  if (!s) return '';
+  if (!/^https?:\/\//i.test(s)) return '';
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    if (!u.hostname) return '';
+    return s.replace(/\/$/, '');
+  } catch (_) {
+    return '';
+  }
+}
+
+/**
  * @param {{ apiBase: string, message: string, sessionId: string, clinicId?: string|null, preferredLanguage?: string, kellyFlow?: string|null, signal?: AbortSignal }} opts
  * @param {string|null} [opts.kellyFlow='skincare'] — Sent as `kelly_flow` so middleware sets `routine_intake_active` (Skin & Care). Pass `null` to omit (default triage tools/prompt).
  * @returns {Promise<{ success?: boolean, reply?: string, session_id?: string, error?: string, toolsUsed?: string[] }>}
@@ -13,7 +33,7 @@ export async function sendLandingAssistantTurn({
   kellyFlow = 'skincare',
   signal
 }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base) {
     return Promise.reject(new Error('API base URL is not configured'));
   }
@@ -52,9 +72,11 @@ export async function publishLandingThreadEvent({
   text,
   fileName = null,
   mimeType = null,
+  /** Optional structured Open Beauty Facts payload (e.g. for `barcode_product_context`). */
+  productData = null,
   signal
 }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base) throw new Error('API base URL is not configured');
   const url = `${base}/api/public/landing-assistant/thread-event`;
   const body = {
@@ -62,7 +84,8 @@ export async function publishLandingThreadEvent({
     type: String(eventType || 'note').trim(),
     text: String(text || '').trim(),
     file_name: fileName ? String(fileName).trim() : null,
-    mime_type: mimeType ? String(mimeType).trim() : null
+    mime_type: mimeType ? String(mimeType).trim() : null,
+    ...(productData != null && typeof productData === 'object' ? { product_data: productData } : {})
   };
   const r = await fetch(url, {
     method: 'POST',
@@ -82,7 +105,7 @@ export async function publishLandingThreadEvent({
 }
 
 export async function incrementLandingVoiceMetric({ apiBase, sessionId, metricName, value = 1, signal }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base || !sessionId || !metricName) return { success: false, skipped: true };
   const r = await fetch(`${base}/api/public/landing-assistant/voice-metrics/inc`, {
     method: 'POST',
@@ -118,7 +141,7 @@ export async function publishLandingVoiceTimeline({
   points = {},
   signal
 }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   if (!base || !sessionId) return { success: false, skipped: true };
   const safePoints = points && typeof points === 'object' ? points : {};
   const r = await fetch(`${base}/api/public/landing-assistant/voice-metrics/inc`, {
@@ -150,7 +173,7 @@ export async function publishLandingVoiceTimeline({
 }
 
 export async function fetchBeautyFactsByBarcode({ apiBase, barcode, signal }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   const clean = String(barcode || '').replace(/[^\d]/g, '');
   if (!base) throw new Error('API base URL is not configured');
   if (!/^\d{8,14}$/.test(clean)) throw new Error('Invalid barcode');
@@ -169,8 +192,71 @@ export async function fetchBeautyFactsByBarcode({ apiBase, barcode, signal }) {
   return data;
 }
 
+/** Open Food Facts barcode lookup (parity with {@link fetchBeautyFactsByBarcode}). */
+export async function fetchFoodFactsByBarcode({ apiBase, barcode, signal }) {
+  const base = normalizeHttpApiBase(apiBase);
+  const clean = String(barcode || '').replace(/[^\d]/g, '');
+  if (!base) throw new Error('API base URL is not configured');
+  if (!/^\d{8,14}$/.test(clean)) throw new Error('Invalid barcode');
+  const r = await fetch(`${base}/api/public/foodfacts/${clean}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    credentials: 'omit',
+    signal
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.success) {
+    const err = new Error(data.error || `Request failed (${r.status})`);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * Try Open Beauty Facts, then Open Food Facts. No manual catalog toggle.
+ * @returns {Promise<{ facts: object, resolvedCatalog: 'obf' | 'off' }>}
+ */
+export async function fetchBarcodeFactsAutodetect({ apiBase, barcode, signal }) {
+  const clean = String(barcode || '').replace(/[^\d]/g, '');
+  if (!normalizeHttpApiBase(apiBase)) throw new Error('API base URL is not configured');
+  if (!/^\d{8,14}$/.test(clean)) throw new Error('Invalid barcode');
+
+  /** Any OBF failure (404, 502, timeout, etc.) should fall through to Open Food Facts — not only `upstream_404`. */
+  const isObfSkippableFailure = (e) => {
+    const msg = String(e?.message || '');
+    if (msg.includes('Invalid barcode')) return false;
+    return true;
+  };
+
+  try {
+    const facts = await fetchBeautyFactsByBarcode({ apiBase, barcode: clean, signal });
+    const p = facts?.product;
+    if (p && p.found !== false) {
+      return { facts, resolvedCatalog: 'obf' };
+    }
+  } catch (e) {
+    if (!isObfSkippableFailure(e)) throw e;
+  }
+
+  try {
+    const facts = await fetchFoodFactsByBarcode({ apiBase, barcode: clean, signal });
+    const p = facts?.product;
+    if (p && p.found !== false) {
+      return { facts, resolvedCatalog: 'off' };
+    }
+  } catch (e) {
+    const msg = String(e?.message || '');
+    if (!msg.includes('upstream_404')) throw e;
+  }
+
+  const err = new Error('upstream_404');
+  err.body = { error: 'upstream_404' };
+  throw err;
+}
+
 export async function fetchLandingResultSnapshot({ apiBase, sessionId, signal }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   const sid = String(sessionId || '').trim();
   if (!base) throw new Error('API base URL is not configured');
   if (!sid) throw new Error('sessionId required');
@@ -198,7 +284,7 @@ export async function submitLandingResultEdit({
   confidenceAfter = null,
   signal
 }) {
-  const base = String(apiBase || '').replace(/\/$/, '');
+  const base = normalizeHttpApiBase(apiBase);
   const sid = String(sessionId || '').trim();
   if (!base) throw new Error('API base URL is not configured');
   if (!sid) throw new Error('sessionId required');
@@ -240,11 +326,25 @@ export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assi
 }
 
 export function resolveMiddlewareApiBase() {
-  const fromEnv = (process.env.REACT_APP_API_BASE || '').trim();
+  const fromEnv = normalizeHttpApiBase(process.env.REACT_APP_API_BASE || '');
   if (fromEnv) return fromEnv;
   if (typeof window !== 'undefined' && window.location?.origin) {
     const h = window.location.hostname;
-    if (h === 'localhost' || h === '127.0.0.1') return window.location.origin;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      const port = String(window.location.port || '');
+      // CRA dev (:3000) and static preview ports have no API; middleware runs on :4000.
+      if (
+        port === '3000' ||
+        port === '3001' ||
+        port === '5199' ||
+        port === '5200' ||
+        port === '4173' ||
+        port === '5000'
+      ) {
+        return h === 'localhost' ? 'http://localhost:4000' : 'http://127.0.0.1:4000';
+      }
+      return window.location.origin;
+    }
   }
   if (process.env.NODE_ENV === 'development') return 'http://localhost:4000';
   return '';

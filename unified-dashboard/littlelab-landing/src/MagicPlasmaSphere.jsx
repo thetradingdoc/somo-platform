@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
+import { assistantSpeakingRef } from './sphereConversationBridge';
 
 /**
  * "Magic Plasma Sphere" — GLSL plasma + fresnel shell + sparkles (ported from Sabo Sugi-style demo).
@@ -192,6 +193,8 @@ function MagicPlasmaGroup({ speechLevelRef, paused }) {
   const groupRef = useRef(null);
   const plasmaMeshRef = useRef(null);
   const smoothLevelRef = useRef(0);
+  /** ~30fps sphere updates while TTS streams to reduce GPU contention with camera/vision. */
+  const ttsFrameSkipRef = useRef(0);
 
   const {
     shellGeo,
@@ -289,6 +292,12 @@ function MagicPlasmaGroup({ speechLevelRef, paused }) {
 
   useFrame((state, delta) => {
     if (paused) return;
+    if (assistantSpeakingRef.current) {
+      ttsFrameSkipRef.current += 1;
+      if (ttsFrameSkipRef.current % 2 === 1) return;
+    } else {
+      ttsFrameSkipRef.current = 0;
+    }
     const t = state.clock.elapsedTime;
     const raw = speechLevelRef && typeof speechLevelRef.current === 'number' ? speechLevelRef.current : 0;
     const k = 1 - Math.exp(-delta * 14);

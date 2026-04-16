@@ -1074,12 +1074,15 @@ Rescheduled from: ${appointment.date} at ${appointment.time}
       // Refund any completed payment for this appointment (Stripe only)
       let refundResult = null;
       try {
-        const PaymentProcessorService = require('./payment-processor-service');
+        const RefundWorkflowService = require('./refund-workflow-service');
         const checkout = await db.getCompletedCheckoutByAppointmentId(appointmentId);
         if (checkout) {
-          refundResult = await PaymentProcessorService.refundCheckout(checkout, {
+          refundResult = await RefundWorkflowService.executeRefundWorkflow({
+            checkout,
             reason: 'requested_by_customer',
-            amount: parseFloat(checkout.amount) || undefined
+            amount: parseFloat(checkout.amount) || undefined,
+            actor_type: 'system',
+            actor_id: null
           });
           if (refundResult.success) {
             console.log(`✅ Refund issued: ${refundResult.refund_id}, $${refundResult.amount_refunded}`);

@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -u
 
-# Single-command Step 1 E2E runner:
-# - Starts middleware server
-# - Runs Playwright Step 1 conversation test
-# - Stops server cleanly
-# - Prints server logs if test fails
+# E2E runner: middleware + Playwright landing pipeline (static bundle + optional API tests).
+# - Starts middleware on :4000
+# - Builds littlelab-landing, then runs e2e/landing-pipeline.spec.cjs
+# - Stops server cleanly; prints server logs if tests fail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR" || exit 1
@@ -17,7 +16,7 @@ CLINIC_ID_VALUE="${DEFAULT_CLINIC_ID:-}"
 WAIT_SECS="${WAIT_SECS:-5}"
 PLAYWRIGHT_TIMEOUT_MS="${PLAYWRIGHT_TIMEOUT_MS:-120000}"
 BOOT_TIMEOUT_SECS="${BOOT_TIMEOUT_SECS:-25}"
-STEP1_SPEC="${STEP1_SPEC:-e2e/step1-try-now-chat.spec.cjs}"
+STEP1_SPEC="${STEP1_SPEC:-e2e/landing-pipeline.spec.cjs}"
 
 if [[ -z "$CLINIC_ID_VALUE" ]]; then
   echo "ERROR: DEFAULT_CLINIC_ID is required."
@@ -64,7 +63,12 @@ until curl -fsS "http://127.0.0.1:4000/health" >/dev/null 2>&1; do
   sleep 1
 done
 
-echo "Running Playwright Step1 E2E..."
+echo "Building Skin & Care landing (CRA)..."
+(cd "$ROOT_DIR/../unified-dashboard/littlelab-landing" && npm run build) || exit 1
+
+export PW_API_BASE_URL="${PW_API_BASE_URL:-http://127.0.0.1:4000}"
+
+echo "Running Playwright landing pipeline..."
 npx playwright test "$STEP1_SPEC" --reporter=list --timeout="$PLAYWRIGHT_TIMEOUT_MS"
 TEST_EXIT=$?
 

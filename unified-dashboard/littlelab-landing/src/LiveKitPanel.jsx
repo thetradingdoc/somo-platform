@@ -1,4 +1,5 @@
 import React from 'react';
+import { primeAssistantAudioGate } from './assistantSpeech';
 
 /**
  * Landing Try-now: invite gate, session toolbar, optional in-panel video (chat).
@@ -45,7 +46,10 @@ export default function LiveKitPanel({
           <button
             type="button"
             className="ax-lk-btn ax-lk-btn--primary ax-lk-invite-cta"
-            onClick={() => beginTryNow()}
+            onClick={() => {
+              primeAssistantAudioGate();
+              void beginTryNow();
+            }}
             disabled={busy}
           >
             {busy ? 'Starting…' : 'Allow camera & start'}

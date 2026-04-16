@@ -169,7 +169,8 @@ dig doclittle.site
    ```
 
 2. **Verify routes in server.js:**
-   - Root domain should serve `unified-dashboard/landing.html`
+   - Root domain should serve canonical `/` (LittleLab landing build when present)
+   - Legacy `/landing` and `/landing.html` should redirect to `/`
    - API subdomain should serve `public/signup/index.html`
 
 3. **Check static files:**

@@ -1,7 +1,7 @@
 # Orchestration — completed work (archived April 2026)
 
-Extracted from `Orchestration-todos.md` when the live file was trimmed to **pending items only**.  
-Current architecture intro and **open** tasks: [`../Orchestration-todos.md`](../Orchestration-todos.md).
+Extracted from `pending/Orchestration-todos.md` when the live file was trimmed to **pending items only**.  
+Current architecture intro and **open** tasks: [`../pending/Orchestration-todos.md`](../pending/Orchestration-todos.md).
 
 ---
 

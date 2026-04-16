@@ -18,7 +18,32 @@ const securityHeaders = helmet({
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers (onclick, onmouseover, etc.)
       workerSrc: ["'self'", "blob:", "https://cdnjs.cloudflare.com"], // Allow PDF.js worker and blob URLs
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", "https://js.stripe.com", "https://api.stripe.com", "https://hooks.stripe.com", "https://api.retellai.com", "https://api.elevenlabs.io", "wss://api.elevenlabs.io", "https://api.doclittle.site", "https://api.doclittle.azurewebsites.net", "https://api.myskinandcare.com", "https://cdn.jsdelivr.net", "https://esm.sh", "https://fonts.googleapis.com", "https://*.livekit.cloud", "wss://*.livekit.cloud"],
+      // TTS playback uses blob: object URLs on <audio>; camera/WebRTC uses blob: mediastream.
+      // Without media-src blob:, browsers block Audio assigned from createObjectURL(blob).
+      mediaSrc: ["'self'", "blob:", "data:"],
+      // Some paths attach MediaSource / object URLs — keep aligned with media-src.
+      objectSrc: ["'self'", "blob:"],
+      // Include local middleware origins explicitly: `connect-src 'self'` only matches the page origin.
+      // e.g. page at http://localhost:4000 + fetch to http://127.0.0.1:4000 is cross-origin and blocked without these.
+      connectSrc: [
+        "'self'",
+        'http://localhost:4000',
+        'http://127.0.0.1:4000',
+        'https://js.stripe.com',
+        'https://api.stripe.com',
+        'https://hooks.stripe.com',
+        'https://api.retellai.com',
+        'https://api.elevenlabs.io',
+        'wss://api.elevenlabs.io',
+        'https://api.doclittle.site',
+        'https://api.doclittle.azurewebsites.net',
+        'https://api.myskinandcare.com',
+        'https://cdn.jsdelivr.net',
+        'https://esm.sh',
+        'https://fonts.googleapis.com',
+        'https://*.livekit.cloud',
+        'wss://*.livekit.cloud'
+      ],
       frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"], // Allow Stripe iframes for card input
     },
   },

@@ -75,18 +75,50 @@ if (process.env.DB_NAME) {
 }
 
 // DB_PATH overrides location (use project-local path to avoid readonly HOME dir)
-const dbPath = process.env.DB_PATH
-  ? path.resolve(process.cwd(), process.env.DB_PATH)
-  : path.join(defaultDbDir, dbFileName);
+function canWriteDir(dirPath) {
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+  } catch (_) {}
+  try {
+    fs.accessSync(dirPath, fs.constants.W_OK);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function resolveDbPath() {
+  if (process.env.DB_PATH) {
+    // Explicit override always wins (still may be readonly, but that's an operator choice).
+    return path.resolve(process.cwd(), process.env.DB_PATH);
+  }
+
+  // Production should remain on /home for persistence on Azure App Service.
+  if (isProdEnv) {
+    return path.join(defaultDbDir, dbFileName);
+  }
+
+  // Dev/test: prefer HOME if writable, otherwise fall back to workspace-local DB.
+  const homeCandidate = path.join(defaultDbDir, dbFileName);
+  const homeDir = path.dirname(homeCandidate);
+  if (canWriteDir(homeDir)) return homeCandidate;
+
+  // Workspace-local fallback (this repo is always writable in Cursor).
+  return path.join(__dirname, dbFileName);
+}
+
+const dbPath = resolveDbPath();
 console.log(`📁 Database path: ${dbPath} (environment: ${env})`);
 
-// Ensure directory exists
+// Ensure target directory exists (and warn if readonly).
 try {
-  if (!fs.existsSync(defaultDbDir)) {
-    fs.mkdirSync(defaultDbDir, { recursive: true });
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!canWriteDir(dir)) {
+    console.warn(`⚠️  DB directory not writable: ${dir}`);
   }
 } catch (e) {
-  console.warn('⚠️  Could not create db directory, using current directory');
+  console.warn('⚠️  Could not ensure db directory:', e.message);
 }
 
 if (usePostgres) {
@@ -102,6 +134,17 @@ if (usePostgres) {
 }
 
 const db = new Database(dbPath);
+
+// Long NPPES imports and concurrent readers (dev server, sqlite3 CLI) otherwise hit SQLITE_BUSY.
+// WAL allows readers during writes; busy_timeout makes writers wait for locks instead of failing immediately.
+try {
+  db.pragma('journal_mode = WAL');
+} catch (e) {
+  console.warn('⚠️  SQLite journal_mode pragma failed:', e.message);
+}
+const _busyMs = parseInt(process.env.SQLITE_BUSY_TIMEOUT_MS || '60000', 10);
+const busyTimeoutMs = Number.isFinite(_busyMs) && _busyMs >= 0 ? Math.min(_busyMs, 600000) : 60000;
+db.pragma(`busy_timeout = ${busyTimeoutMs}`);
 
 // Environment helpers for better prod vs staging management
 const isProduction = () => {
@@ -6342,6 +6385,669 @@ module.exports = {
   },
 
   // ============================================
+  // PHASE 0: FINANCIAL INTEGRITY RECONCILIATION
+  // ============================================
+  insertCanonicalLedgerEvent: (event = {}) => {
+    const id = event.id || `lce_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO ledger_events_canonical (
+        id, event_group_id, event_key, event_type, source_system,
+        external_ref_type, external_ref_id, amount, currency, status,
+        occurred_at, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_system, event_key, event_type) DO UPDATE SET
+        event_group_id = COALESCE(excluded.event_group_id, ledger_events_canonical.event_group_id),
+        external_ref_type = COALESCE(excluded.external_ref_type, ledger_events_canonical.external_ref_type),
+        external_ref_id = COALESCE(excluded.external_ref_id, ledger_events_canonical.external_ref_id),
+        amount = excluded.amount,
+        currency = excluded.currency,
+        status = COALESCE(excluded.status, ledger_events_canonical.status),
+        occurred_at = excluded.occurred_at,
+        metadata = COALESCE(excluded.metadata, ledger_events_canonical.metadata)
+    `).run(
+      id,
+      event.event_group_id || null,
+      event.event_key,
+      event.event_type,
+      event.source_system,
+      event.external_ref_type || null,
+      event.external_ref_id || null,
+      Number(event.amount || 0),
+      event.currency || 'USD',
+      event.status || null,
+      event.occurred_at || new Date().toISOString(),
+      safeStringify(event.metadata || {})
+    );
+    return db.prepare(`
+      SELECT * FROM ledger_events_canonical
+      WHERE source_system = ? AND event_key = ? AND event_type = ?
+      LIMIT 1
+    `).get(event.source_system, event.event_key, event.event_type);
+  },
+  upsertProviderReconciliationRow: (row = {}) => {
+    const id = row.id || `prr_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO provider_reconciliation_rows (
+        id, provider_report_id, event_key, amount, currency, status, settled_at, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider_report_id, event_key) DO UPDATE SET
+        amount = excluded.amount,
+        currency = excluded.currency,
+        status = excluded.status,
+        settled_at = excluded.settled_at,
+        metadata = excluded.metadata
+    `).run(
+      id,
+      row.provider_report_id,
+      row.event_key,
+      Number(row.amount || 0),
+      row.currency || 'USD',
+      row.status || null,
+      row.settled_at || null,
+      safeStringify(row.metadata || {})
+    );
+    return db.prepare(`
+      SELECT * FROM provider_reconciliation_rows
+      WHERE provider_report_id = ? AND event_key = ?
+      LIMIT 1
+    `).get(row.provider_report_id, row.event_key);
+  },
+  upsertProcessorReconciliationRow: (row = {}) => {
+    const id = row.id || `psr_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO processor_reconciliation_rows (
+        id, processor_name, event_key, amount, currency, status, settled_at, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(processor_name, event_key) DO UPDATE SET
+        amount = excluded.amount,
+        currency = excluded.currency,
+        status = excluded.status,
+        settled_at = excluded.settled_at,
+        metadata = excluded.metadata
+    `).run(
+      id,
+      row.processor_name,
+      row.event_key,
+      Number(row.amount || 0),
+      row.currency || 'USD',
+      row.status || null,
+      row.settled_at || null,
+      safeStringify(row.metadata || {})
+    );
+    return db.prepare(`
+      SELECT * FROM processor_reconciliation_rows
+      WHERE processor_name = ? AND event_key = ?
+      LIMIT 1
+    `).get(row.processor_name, row.event_key);
+  },
+  createReconciliationJobRun: (payload = {}) => {
+    const id = payload.id || `rjr_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO reconciliation_job_runs (
+        id, job_name, window_start, window_end, deterministic_key,
+        status, input_hash, mismatch_count, unresolved_count, total_delta
+      ) VALUES (?, ?, ?, ?, ?, COALESCE(?, 'running'), ?, ?, ?, ?)
+    `).run(
+      id,
+      payload.job_name || 'deterministic_reconciliation',
+      payload.window_start,
+      payload.window_end,
+      payload.deterministic_key,
+      payload.status || 'running',
+      payload.input_hash || null,
+      Number(payload.mismatch_count || 0),
+      Number(payload.unresolved_count || 0),
+      Number(payload.total_delta || 0)
+    );
+    return db.prepare(`SELECT * FROM reconciliation_job_runs WHERE id = ?`).get(id);
+  },
+  updateReconciliationJobRun: (id, updates = {}) => {
+    const fields = [];
+    const values = [];
+    const add = (field, value) => {
+      fields.push(`${field} = ?`);
+      values.push(value);
+    };
+    if (updates.status !== undefined) add('status', updates.status);
+    if (updates.input_hash !== undefined) add('input_hash', updates.input_hash);
+    if (updates.mismatch_count !== undefined) add('mismatch_count', Number(updates.mismatch_count || 0));
+    if (updates.unresolved_count !== undefined) add('unresolved_count', Number(updates.unresolved_count || 0));
+    if (updates.total_delta !== undefined) add('total_delta', Number(updates.total_delta || 0));
+    if (updates.error_message !== undefined) add('error_message', updates.error_message || null);
+    if (updates.completed_at !== undefined) add('completed_at', updates.completed_at || null);
+    if (!fields.length) return db.prepare(`SELECT * FROM reconciliation_job_runs WHERE id = ?`).get(id) || null;
+    values.push(id);
+    db.prepare(`UPDATE reconciliation_job_runs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return db.prepare(`SELECT * FROM reconciliation_job_runs WHERE id = ?`).get(id) || null;
+  },
+  upsertReconciliationException: (item = {}) => {
+    const id = item.id || `rxe_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO reconciliation_exceptions (
+        id, run_id, event_key, classification, severity, internal_amount, provider_amount,
+        processor_amount, delta, status, owner, sla_due_at, resolved_at, resolution_note, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      item.run_id || null,
+      item.event_key,
+      item.classification,
+      item.severity || 'medium',
+      item.internal_amount ?? null,
+      item.provider_amount ?? null,
+      item.processor_amount ?? null,
+      item.delta ?? null,
+      item.status || 'open',
+      item.owner || null,
+      item.sla_due_at || null,
+      item.resolved_at || null,
+      item.resolution_note || null,
+      safeStringify(item.metadata || {})
+    );
+    return db.prepare(`SELECT * FROM reconciliation_exceptions WHERE id = ?`).get(id);
+  },
+  listReconciliationExceptions: (options = {}) => {
+    const where = [];
+    const args = [];
+    if (options.status) {
+      where.push('status = ?');
+      args.push(options.status);
+    }
+    if (options.owner) {
+      where.push('owner = ?');
+      args.push(options.owner);
+    }
+    if (options.classification) {
+      where.push('classification = ?');
+      args.push(options.classification);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const limit = Math.max(1, Math.min(500, parseInt(options.limit || '100', 10) || 100));
+    return db.prepare(`
+      SELECT * FROM reconciliation_exceptions
+      ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(...args, limit);
+  },
+  insertReconciliationSnapshot: (payload = {}) => {
+    const id = payload.id || `rxs_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO reconciliation_snapshots (
+        id, run_id, snapshot_type, payload_json, payload_hash, previous_hash
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      payload.run_id || null,
+      payload.snapshot_type,
+      safeStringify(payload.payload_json || payload.payload || {}),
+      payload.payload_hash,
+      payload.previous_hash || null
+    );
+    return db.prepare(`SELECT * FROM reconciliation_snapshots WHERE id = ?`).get(id);
+  },
+  getLatestReconciliationSnapshot: () => {
+    return db.prepare(`
+      SELECT * FROM reconciliation_snapshots
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `).get() || null;
+  },
+  upsertFinancialCloseReport: (report = {}) => {
+    const id = report.id || `fcr_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO financial_close_reports (
+        id, close_date, currency, total_authorizations, total_captures, total_settlements,
+        total_refunds, total_disputes, pending_amount, failed_settlement_amount,
+        unexplained_delta_amount, unexplained_delta_count, metadata
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(close_date) DO UPDATE SET
+        currency = excluded.currency,
+        total_authorizations = excluded.total_authorizations,
+        total_captures = excluded.total_captures,
+        total_settlements = excluded.total_settlements,
+        total_refunds = excluded.total_refunds,
+        total_disputes = excluded.total_disputes,
+        pending_amount = excluded.pending_amount,
+        failed_settlement_amount = excluded.failed_settlement_amount,
+        unexplained_delta_amount = excluded.unexplained_delta_amount,
+        unexplained_delta_count = excluded.unexplained_delta_count,
+        generated_at = CURRENT_TIMESTAMP,
+        metadata = excluded.metadata
+    `).run(
+      id,
+      report.close_date,
+      report.currency || 'USD',
+      Number(report.total_authorizations || 0),
+      Number(report.total_captures || 0),
+      Number(report.total_settlements || 0),
+      Number(report.total_refunds || 0),
+      Number(report.total_disputes || 0),
+      Number(report.pending_amount || 0),
+      Number(report.failed_settlement_amount || 0),
+      Number(report.unexplained_delta_amount || 0),
+      Number(report.unexplained_delta_count || 0),
+      safeStringify(report.metadata || {})
+    );
+    return db.prepare(`SELECT * FROM financial_close_reports WHERE close_date = ?`).get(report.close_date) || null;
+  },
+  getFinancialCloseReport: (closeDate) => {
+    return db.prepare(`SELECT * FROM financial_close_reports WHERE close_date = ? LIMIT 1`).get(closeDate) || null;
+  },
+
+  // Phase 0 §3 — refund audit, disputes, settlement DLQ, exception queue roles
+  insertPaymentRefundAudit: (row = {}) => {
+    const id = row.id || `pra_${require('crypto').randomBytes(12).toString('hex')}`;
+    const created = row.created_at || new Date().toISOString();
+    db.prepare(`
+      INSERT INTO payment_refund_audit (
+        id, workflow_id, checkout_id, payment_intent_id, actor_type, actor_id, refund_kind,
+        amount_requested, amount_refunded, eligibility_json, stripe_refund_id, status, error_message, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      row.workflow_id,
+      row.checkout_id || null,
+      row.payment_intent_id || null,
+      row.actor_type || null,
+      row.actor_id || null,
+      row.refund_kind || null,
+      row.amount_requested != null ? Number(row.amount_requested) : null,
+      row.amount_refunded != null ? Number(row.amount_refunded) : null,
+      typeof row.eligibility_json === 'string' ? row.eligibility_json : safeStringify(row.eligibility_json || {}),
+      row.stripe_refund_id || null,
+      row.status || 'pending',
+      row.error_message || null,
+      created
+    );
+    return db.prepare(`SELECT * FROM payment_refund_audit WHERE id = ?`).get(id);
+  },
+  updatePaymentRefundAudit: (id, updates = {}) => {
+    const fields = [];
+    const values = [];
+    const add = (k, v) => {
+      fields.push(`${k} = ?`);
+      values.push(v);
+    };
+    if (updates.status !== undefined) add('status', updates.status);
+    if (updates.amount_refunded !== undefined) add('amount_refunded', updates.amount_refunded != null ? Number(updates.amount_refunded) : null);
+    if (updates.stripe_refund_id !== undefined) add('stripe_refund_id', updates.stripe_refund_id);
+    if (updates.error_message !== undefined) add('error_message', updates.error_message);
+    if (updates.eligibility_json !== undefined) {
+      add('eligibility_json', typeof updates.eligibility_json === 'string' ? updates.eligibility_json : safeStringify(updates.eligibility_json));
+    }
+    if (!fields.length) return db.prepare(`SELECT * FROM payment_refund_audit WHERE id = ?`).get(id) || null;
+    values.push(id);
+    db.prepare(`UPDATE payment_refund_audit SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return db.prepare(`SELECT * FROM payment_refund_audit WHERE id = ?`).get(id) || null;
+  },
+  listPaymentRefundAudit: (options = {}) => {
+    try {
+      const limit = Math.max(1, Math.min(200, parseInt(options.limit || '50', 10) || 50));
+      if (options.checkout_id) {
+        return db.prepare(`
+          SELECT * FROM payment_refund_audit WHERE checkout_id = ? ORDER BY created_at DESC LIMIT ?
+        `).all(options.checkout_id, limit);
+      }
+      return db.prepare(`
+        SELECT * FROM payment_refund_audit ORDER BY created_at DESC LIMIT ?
+      `).all(limit);
+    } catch (_) {
+      return [];
+    }
+  },
+  upsertPaymentDispute: (row = {}) => {
+    const now = new Date().toISOString();
+    const existing = db
+      .prepare(`SELECT id FROM payment_disputes WHERE stripe_dispute_id = ?`)
+      .get(row.stripe_dispute_id);
+    const id = existing?.id || row.id || `pd_${require('crypto').randomBytes(12).toString('hex')}`;
+    const meta = safeStringify(row.metadata || {});
+    if (existing) {
+      db.prepare(`
+        UPDATE payment_disputes SET
+          charge_id = COALESCE(?, charge_id),
+          payment_intent_id = COALESCE(?, payment_intent_id),
+          amount = ?,
+          currency = ?,
+          stripe_status = ?,
+          workflow_status = ?,
+          owner = COALESCE(?, owner),
+          backup_owner = COALESCE(?, backup_owner),
+          evidence_due_at = COALESCE(?, evidence_due_at),
+          metadata = ?,
+          updated_at = ?
+        WHERE id = ?
+      `).run(
+        row.charge_id || null,
+        row.payment_intent_id || null,
+        Number(row.amount || 0),
+        row.currency || 'USD',
+        row.stripe_status || null,
+        row.workflow_status || 'open',
+        row.owner || null,
+        row.backup_owner || null,
+        row.evidence_due_at || null,
+        meta,
+        now,
+        id
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO payment_disputes (
+          id, stripe_dispute_id, charge_id, payment_intent_id, amount, currency,
+          stripe_status, workflow_status, owner, backup_owner, evidence_due_at, metadata, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        row.stripe_dispute_id,
+        row.charge_id || null,
+        row.payment_intent_id || null,
+        Number(row.amount || 0),
+        row.currency || 'USD',
+        row.stripe_status || null,
+        row.workflow_status || 'open',
+        row.owner || null,
+        row.backup_owner || null,
+        row.evidence_due_at || null,
+        meta,
+        row.created_at || now,
+        now
+      );
+    }
+    return db.prepare(`SELECT * FROM payment_disputes WHERE stripe_dispute_id = ?`).get(row.stripe_dispute_id);
+  },
+  listPaymentDisputes: (options = {}) => {
+    try {
+      const limit = Math.max(1, Math.min(500, parseInt(options.limit || '100', 10) || 100));
+      const args = [];
+      let where = '1=1';
+      if (options.workflow_status) {
+        where += ' AND workflow_status = ?';
+        args.push(options.workflow_status);
+      }
+      return db.prepare(`
+        SELECT * FROM payment_disputes WHERE ${where} ORDER BY updated_at DESC LIMIT ?
+      `).all(...args, limit);
+    } catch (_) {
+      return [];
+    }
+  },
+  getPaymentDispute: (id) => {
+    try {
+      return db.prepare(`SELECT * FROM payment_disputes WHERE id = ?`).get(id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  getPaymentDisputeByStripeId: (stripeDisputeId) => {
+    try {
+      return db.prepare(`SELECT * FROM payment_disputes WHERE stripe_dispute_id = ?`).get(stripeDisputeId) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  updatePaymentDispute: (id, updates = {}) => {
+    const now = new Date().toISOString();
+    const fields = [];
+    const values = [];
+    const add = (k, v) => {
+      fields.push(`${k} = ?`);
+      values.push(v);
+    };
+    if (updates.workflow_status !== undefined) add('workflow_status', updates.workflow_status);
+    if (updates.owner !== undefined) add('owner', updates.owner);
+    if (updates.backup_owner !== undefined) add('backup_owner', updates.backup_owner);
+    if (updates.metadata !== undefined) add('metadata', safeStringify(updates.metadata));
+    if (updates.stripe_status !== undefined) add('stripe_status', updates.stripe_status);
+    if (!fields.length) return db.prepare(`SELECT * FROM payment_disputes WHERE id = ?`).get(id) || null;
+    add('updated_at', now);
+    values.push(id);
+    db.prepare(`UPDATE payment_disputes SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return db.prepare(`SELECT * FROM payment_disputes WHERE id = ?`).get(id) || null;
+  },
+  insertSettlementDeadLetter: (row = {}) => {
+    const id = row.id || `sdl_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO settlement_dead_letter_queue (
+        id, claim_id, settlement_attempt_id, reason, error_summary, metadata, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+    `).run(
+      id,
+      row.claim_id,
+      row.settlement_attempt_id || null,
+      row.reason || null,
+      row.error_summary || null,
+      safeStringify(row.metadata || {}),
+      row.created_at || null
+    );
+    return db.prepare(`SELECT * FROM settlement_dead_letter_queue WHERE id = ?`).get(id);
+  },
+  listSettlementDeadLetter: (options = {}) => {
+    try {
+      const limit = Math.max(1, Math.min(200, parseInt(options.limit || '50', 10) || 50));
+      return db.prepare(`
+        SELECT * FROM settlement_dead_letter_queue ORDER BY created_at DESC LIMIT ?
+      `).all(limit);
+    } catch (_) {
+      return [];
+    }
+  },
+  getPaymentExceptionQueueRoles: (rid = 'default') => {
+    try {
+      return db.prepare(`SELECT * FROM payment_exception_queue_roles WHERE id = ?`).get(rid) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  upsertPaymentExceptionQueueRoles: (row = {}) => {
+    const id = row.id || 'default';
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO payment_exception_queue_roles (id, dri, backup, owner_pool, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        dri = COALESCE(excluded.dri, payment_exception_queue_roles.dri),
+        backup = COALESCE(excluded.backup, payment_exception_queue_roles.backup),
+        owner_pool = COALESCE(excluded.owner_pool, payment_exception_queue_roles.owner_pool),
+        updated_at = excluded.updated_at
+    `).run(id, row.dri || null, row.backup || null, row.owner_pool || null, now);
+    return db.prepare(`SELECT * FROM payment_exception_queue_roles WHERE id = ?`).get(id);
+  },
+  listSettlementAttemptsForRetry: () => {
+    try {
+      return db.prepare(`
+        SELECT * FROM settlement_attempts
+        WHERE (completed_at IS NULL OR trim(completed_at) = '')
+          AND (dead_letter_at IS NULL OR trim(dead_letter_at) = '')
+          AND (
+            transfer_1_status = 'failed' OR transfer_2_status = 'failed' OR transfer_3_status = 'failed'
+          )
+          AND NOT (
+            transfer_1_status = 'completed' AND transfer_2_status = 'completed' AND transfer_3_status = 'completed'
+          )
+          AND (
+            next_settlement_retry_at IS NULL OR trim(next_settlement_retry_at) = ''
+            OR datetime(next_settlement_retry_at) <= datetime('now')
+          )
+        ORDER BY datetime(COALESCE(updated_at, created_at)) ASC
+        LIMIT 25
+      `).all();
+    } catch (_) {
+      return [];
+    }
+  },
+
+  // Phase 0 §6: Secret access audit + scoped service credentials + rotation registry
+  insertSecretAccessAudit: (row = {}) => {
+    try {
+      const id = row.id || `sec_aud_${require('crypto').randomBytes(12).toString('hex')}`;
+      db.prepare(`
+        INSERT INTO secret_access_audit (
+          id, secret_name, consumer, access_context, result, source, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+      `).run(
+        id,
+        row.secret_name || 'unknown',
+        row.consumer || null,
+        row.access_context || null,
+        row.result || 'unknown',
+        row.source || null,
+        safeStringify(row.metadata || {}),
+        row.created_at || null
+      );
+      return db.prepare(`SELECT * FROM secret_access_audit WHERE id = ?`).get(id);
+    } catch (_) {
+      return null;
+    }
+  },
+  listSecretAccessAudit: (options = {}) => {
+    try {
+      const where = [];
+      const args = [];
+      if (options.secret_name) {
+        where.push('secret_name = ?');
+        args.push(options.secret_name);
+      }
+      if (options.result) {
+        where.push('result = ?');
+        args.push(options.result);
+      }
+      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+      const limit = Math.max(1, Math.min(500, parseInt(options.limit || '100', 10) || 100));
+      return db.prepare(`
+        SELECT * FROM secret_access_audit
+        ${whereSql}
+        ORDER BY datetime(created_at) DESC
+        LIMIT ?
+      `).all(...args, limit);
+    } catch (_) {
+      return [];
+    }
+  },
+  createServiceCredential: (row = {}) => {
+    const id = row.id || `svc_cred_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO service_credentials (
+        id, service_name, token_hash, scopes_json, status, created_by, expires_at, last_used_at, created_at, revoked_at
+      ) VALUES (?, ?, ?, ?, COALESCE(?, 'active'), ?, ?, ?, COALESCE(?, datetime('now')), ?)
+    `).run(
+      id,
+      row.service_name,
+      row.token_hash,
+      safeStringify(Array.isArray(row.scopes) ? row.scopes : []),
+      row.status || 'active',
+      row.created_by || null,
+      row.expires_at || null,
+      row.last_used_at || null,
+      row.created_at || null,
+      row.revoked_at || null
+    );
+    return db.prepare(`SELECT * FROM service_credentials WHERE id = ?`).get(id);
+  },
+  getServiceCredentialByTokenHash: (tokenHash) => {
+    try {
+      return db.prepare(`
+        SELECT * FROM service_credentials
+        WHERE token_hash = ? AND status = 'active'
+        LIMIT 1
+      `).get(tokenHash) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  listServiceCredentials: (options = {}) => {
+    try {
+      const status = options.status || null;
+      const limit = Math.max(1, Math.min(200, parseInt(options.limit || '50', 10) || 50));
+      if (status) {
+        return db.prepare(`
+          SELECT * FROM service_credentials
+          WHERE status = ?
+          ORDER BY datetime(created_at) DESC
+          LIMIT ?
+        `).all(status, limit);
+      }
+      return db.prepare(`
+        SELECT * FROM service_credentials
+        ORDER BY datetime(created_at) DESC
+        LIMIT ?
+      `).all(limit);
+    } catch (_) {
+      return [];
+    }
+  },
+  markServiceCredentialUsed: (id) => {
+    try {
+      db.prepare(`UPDATE service_credentials SET last_used_at = datetime('now') WHERE id = ?`).run(id);
+    } catch (_) {}
+  },
+  revokeServiceCredential: (id) => {
+    try {
+      db.prepare(`
+        UPDATE service_credentials
+        SET status = 'revoked', revoked_at = datetime('now')
+        WHERE id = ?
+      `).run(id);
+      return db.prepare(`SELECT * FROM service_credentials WHERE id = ?`).get(id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+  upsertSecretRotationRegistry: (row = {}) => {
+    const id = row.id || `sec_rot_${require('crypto').randomBytes(12).toString('hex')}`;
+    db.prepare(`
+      INSERT INTO secret_rotation_registry (
+        id, secret_name, owner, rotation_interval_days, last_rotated_at, next_rotation_due_at,
+        emergency_runbook_url, custody_notes, metadata_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), datetime('now'))
+      ON CONFLICT(secret_name) DO UPDATE SET
+        owner = COALESCE(excluded.owner, secret_rotation_registry.owner),
+        rotation_interval_days = COALESCE(excluded.rotation_interval_days, secret_rotation_registry.rotation_interval_days),
+        last_rotated_at = COALESCE(excluded.last_rotated_at, secret_rotation_registry.last_rotated_at),
+        next_rotation_due_at = COALESCE(excluded.next_rotation_due_at, secret_rotation_registry.next_rotation_due_at),
+        emergency_runbook_url = COALESCE(excluded.emergency_runbook_url, secret_rotation_registry.emergency_runbook_url),
+        custody_notes = COALESCE(excluded.custody_notes, secret_rotation_registry.custody_notes),
+        metadata_json = COALESCE(excluded.metadata_json, secret_rotation_registry.metadata_json),
+        updated_at = datetime('now')
+    `).run(
+      id,
+      row.secret_name,
+      row.owner || null,
+      Number(row.rotation_interval_days || 90),
+      row.last_rotated_at || null,
+      row.next_rotation_due_at || null,
+      row.emergency_runbook_url || null,
+      row.custody_notes || null,
+      safeStringify(row.metadata || {}),
+      row.created_at || null
+    );
+    return db.prepare(`SELECT * FROM secret_rotation_registry WHERE secret_name = ?`).get(row.secret_name) || null;
+  },
+  listSecretRotationRegistry: (options = {}) => {
+    try {
+      const limit = Math.max(1, Math.min(200, parseInt(options.limit || '100', 10) || 100));
+      const dueOnly = options.due_only === true;
+      if (dueOnly) {
+        return db.prepare(`
+          SELECT * FROM secret_rotation_registry
+          WHERE next_rotation_due_at IS NOT NULL
+            AND datetime(next_rotation_due_at) <= datetime('now')
+          ORDER BY datetime(next_rotation_due_at) ASC
+          LIMIT ?
+        `).all(limit);
+      }
+      return db.prepare(`
+        SELECT * FROM secret_rotation_registry
+        ORDER BY datetime(updated_at) DESC
+        LIMIT ?
+      `).all(limit);
+    } catch (_) {
+      return [];
+    }
+  },
+
+  // ============================================
   // FINANCIAL EVENTS & AUDIT LOG
   // ============================================
   insertFinancialEvent: (event) => {
@@ -7516,6 +8222,27 @@ module.exports = {
     } else {
       return db.prepare('SELECT * FROM voice_checkouts WHERE id = ?').get(id);
     }
+  },
+
+  getVoiceCheckoutByPaymentIntentId: async (paymentIntentId) => {
+    if (!paymentIntentId) return null;
+    if (usePostgres && pgPool) {
+      const results = await pgPool`
+        SELECT * FROM voice_checkouts
+        WHERE payment_intent_id = ${paymentIntentId}
+        ORDER BY updated_at DESC NULLS LAST
+        LIMIT 1
+      `;
+      return results[0] || null;
+    }
+    return (
+      db.prepare(`
+        SELECT * FROM voice_checkouts
+        WHERE payment_intent_id = ?
+        ORDER BY datetime(COALESCE(updated_at, created_at)) DESC
+        LIMIT 1
+      `).get(paymentIntentId) || null
+    );
   },
 
   updateVoiceCheckout: async (id, updates) => {
@@ -11149,7 +11876,8 @@ module.exports = {
       'transfer_1_id', 'transfer_2_id', 'transfer_3_id',
       'transfer_1_circle_id', 'transfer_2_circle_id', 'transfer_3_circle_id',
       'error_message', 'recovery_attempts', 'last_recovery_attempt',
-      'completed_at'
+      'completed_at',
+      'next_settlement_retry_at', 'dead_letter_at'
     ];
     
     for (const [key, value] of Object.entries(updates)) {
@@ -16488,24 +17216,63 @@ module.exports.upsertProductCatalog = function upsertProductCatalog(product) {
   }
 };
 
+let _cosingInciCandidatesCache = null;
+module.exports.invalidateCosingInciCandidatesCache = function invalidateCosingInciCandidatesCache() {
+  _cosingInciCandidatesCache = null;
+};
+/** Normalised inci_name list for inci-resolve fuzzy matching (refreshed when COSING changes). */
+module.exports.getCosingInciCandidatesNormalized = function getCosingInciCandidatesNormalized() {
+  if (_cosingInciCandidatesCache) return _cosingInciCandidatesCache;
+  try {
+    _cosingInciCandidatesCache = db
+      .prepare(`SELECT inci_name FROM cosing_ingredients`)
+      .all()
+      .map((r) =>
+        String(r.inci_name || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, ' ')
+      )
+      .filter(Boolean);
+  } catch (_) {
+    _cosingInciCandidatesCache = [];
+  }
+  return _cosingInciCandidatesCache;
+};
+
 module.exports.replaceProductIngredients = function replaceProductIngredients(productId, ingredients) {
   try {
     const del = db.prepare(`DELETE FROM product_ingredients WHERE product_id = ?`);
     const ins = db.prepare(`
-      INSERT INTO product_ingredients (id, product_id, inci_name, ingredient_order, raw_ingredient, created_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
+      INSERT INTO product_ingredients (
+        id, product_id, inci_name, ingredient_order, raw_ingredient,
+        normalized_inci, ingredient_role, confidence,
+        ingredient_canonical_id, match_method,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `);
     const tx = db.transaction((rows) => {
       del.run(productId);
       rows.forEach((ing, idx) => {
         const inci = String(ing?.inci_name || '').trim();
         if (!inci) return;
+        const order = Number.isFinite(Number(ing?.ingredient_order)) ? Number(ing.ingredient_order) : idx;
         ins.run(
-          `${productId}:${idx}:${inci.toLowerCase()}`,
+          `${productId}:${order}:${inci.toLowerCase()}`,
           productId,
           inci.toLowerCase(),
-          Number.isFinite(Number(ing?.ingredient_order)) ? Number(ing.ingredient_order) : idx,
-          ing?.raw_ingredient || null
+          order,
+          ing?.raw_ingredient != null ? String(ing.raw_ingredient) : null,
+          ing?.normalized_inci != null ? String(ing.normalized_inci).trim().toLowerCase() : null,
+          ing?.ingredient_role != null ? String(ing.ingredient_role) : null,
+          (() => {
+            if (ing?.confidence == null || ing.confidence === '') return null;
+            const n = Number(ing.confidence);
+            return Number.isFinite(n) ? n : null;
+          })(),
+          ing?.ingredient_canonical_id != null ? String(ing.ingredient_canonical_id) : null,
+          ing?.match_method != null ? String(ing.match_method) : null
         );
       });
     });
@@ -16538,6 +17305,9 @@ module.exports.upsertCosingIngredient = function upsertCosingIngredient(row) {
       JSON.stringify(row?.restrictions || []),
       JSON.stringify(row?.metadata || {})
     );
+    try {
+      module.exports.invalidateCosingInciCandidatesCache();
+    } catch (_) {}
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
@@ -16571,7 +17341,10 @@ module.exports.findProductCatalogByName = function findProductCatalogByName(prod
 module.exports.getProductIngredients = function getProductIngredients(productId) {
   try {
     return db.prepare(`
-      SELECT inci_name, ingredient_order, raw_ingredient
+      SELECT
+        inci_name, ingredient_order, raw_ingredient,
+        normalized_inci, ingredient_role, confidence,
+        ingredient_canonical_id, match_method
       FROM product_ingredients
       WHERE product_id = ?
       ORDER BY ingredient_order ASC
@@ -16579,6 +17352,112 @@ module.exports.getProductIngredients = function getProductIngredients(productId)
   } catch (_) {
     return [];
   }
+};
+
+/** Same key shape as inci-resolve _norm() for alias lookups. */
+function normalizeIngredientAliasKey(aliasNorm) {
+  return String(aliasNorm || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+module.exports.normalizeIngredientAliasKey = normalizeIngredientAliasKey;
+
+module.exports.getIngredientAliasCanonical = function getIngredientAliasCanonical(aliasNorm) {
+  try {
+    const key = normalizeIngredientAliasKey(aliasNorm);
+    if (!key) return null;
+    const row = db.prepare(`
+      SELECT canonical_inci FROM ingredient_aliases WHERE alias_norm = ?
+    `).get(key);
+    return row?.canonical_inci ? String(row.canonical_inci).trim().toLowerCase() : null;
+  } catch (_) {
+    return null;
+  }
+};
+
+let _ingredientAliasesTableCols = null;
+function _ingredientAliasesHasExtendedCols() {
+  if (_ingredientAliasesTableCols) return _ingredientAliasesTableCols.hasSource;
+  try {
+    const names = db.prepare(`PRAGMA table_info(ingredient_aliases)`).all().map((c) => c.name);
+    _ingredientAliasesTableCols = { hasSource: names.includes('source') };
+  } catch (_) {
+    _ingredientAliasesTableCols = { hasSource: false };
+  }
+  return _ingredientAliasesTableCols.hasSource;
+}
+
+/**
+ * Curated alias → canonical INCI (COSING key). Single auditable write path.
+ * Normalization matches getIngredientAliasCanonical / inci-resolve token _norm.
+ */
+module.exports.upsertIngredientAlias = function upsertIngredientAlias(
+  alias,
+  canonicalInci,
+  note = null,
+  source = 'manual'
+) {
+  const alias_norm = normalizeIngredientAliasKey(alias);
+  const canon = String(canonicalInci || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  if (!alias_norm || !canon) {
+    return { success: false, error: 'alias_and_canonical_inci_required' };
+  }
+  try {
+    const src = String(source || 'manual').slice(0, 64);
+    const noteStr = note != null ? String(note) : null;
+    if (_ingredientAliasesHasExtendedCols()) {
+      db.prepare(`
+        INSERT INTO ingredient_aliases (alias_norm, canonical_inci, note, source, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(alias_norm) DO UPDATE SET
+          canonical_inci = excluded.canonical_inci,
+          note = excluded.note,
+          source = excluded.source,
+          updated_at = datetime('now')
+      `).run(alias_norm, canon, noteStr, src);
+    } else {
+      db.prepare(`
+        INSERT INTO ingredient_aliases (alias_norm, canonical_inci, note)
+        VALUES (?, ?, ?)
+        ON CONFLICT(alias_norm) DO UPDATE SET
+          canonical_inci = excluded.canonical_inci,
+          note = excluded.note
+      `).run(alias_norm, canon, noteStr);
+    }
+    return { success: true, alias_norm, canonical_inci: canon };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.replaceProductIngredientsFromInciText = function replaceProductIngredientsFromInciText(productId, inciText) {
+  const { resolveInciTextToRows } = require('./services/inci-resolve');
+  const rows = resolveInciTextToRows(inciText, {
+    getCosingIngredientByInci: module.exports.getCosingIngredientByInci,
+    getAliasCanonical: module.exports.getIngredientAliasCanonical,
+    cosingCandidates: module.exports.getCosingInciCandidatesNormalized()
+  });
+  return module.exports.replaceProductIngredients(productId, rows);
+};
+
+/** Layer B: deterministic conflicts from `ingredient_interactions` (migration 028). */
+module.exports.createIngredientConflictGraph = function createIngredientConflictGraph() {
+  const { createConflictGraph } = require('./services/ingredient-conflict-graph');
+  return createConflictGraph(db);
+};
+
+/** Catalog quality: % resolved + top unresolved tokens (for ops / Kelly tool). */
+module.exports.getIngredientResolutionMetricsSnapshot = function getIngredientResolutionMetricsSnapshot() {
+  const m = require('./services/ingredient-resolution-metrics');
+  return {
+    ...m.getIngredientResolutionMetrics(),
+    top_unresolved_tokens: m.getTopUnresolvedInciTokens(25)
+  };
 };
 
 module.exports.upsertObfIndexProduct = function upsertObfIndexProduct(row = {}) {
@@ -16633,6 +17512,75 @@ module.exports.upsertObfIndexProduct = function upsertObfIndexProduct(row = {}) 
 module.exports.getObfIndexProductByCode = function getObfIndexProductByCode(code) {
   try {
     const row = db.prepare(`SELECT * FROM products_obf_index WHERE code = ?`).get(String(code || '').trim());
+    if (!row) return null;
+    const parse = (x, fallback = []) => { try { return JSON.parse(x || '[]'); } catch (_) { return fallback; } };
+    return {
+      ...row,
+      barcode: row.code,
+      brands_tags: parse(row.brands_tags_json),
+      categories_tags: parse(row.categories_tags_json),
+      categories_hierarchy: parse(row.categories_hierarchy_json),
+      ingredients_tags: parse(row.ingredients_tags_json),
+      ingredients_analysis_tags: parse(row.ingredients_analysis_tags_json),
+      states_tags: parse(row.states_tags_json)
+    };
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.upsertOffIndexProduct = function upsertOffIndexProduct(row = {}) {
+  const code = String(row.code || row.barcode || '').trim();
+  if (!code) return { success: false, error: 'code_required' };
+  try {
+    db.prepare(`
+      INSERT INTO products_off_index (
+        code, product_name, brands, brands_tags_json, categories_tags_json, categories_hierarchy_json,
+        ingredients_text, ingredients_tags_json, ingredients_analysis_tags_json, states_tags_json,
+        image_url, product_url, source, source_file, last_modified_t, ingested_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(code) DO UPDATE SET
+        product_name = COALESCE(excluded.product_name, products_off_index.product_name),
+        brands = COALESCE(excluded.brands, products_off_index.brands),
+        brands_tags_json = COALESCE(excluded.brands_tags_json, products_off_index.brands_tags_json),
+        categories_tags_json = COALESCE(excluded.categories_tags_json, products_off_index.categories_tags_json),
+        categories_hierarchy_json = COALESCE(excluded.categories_hierarchy_json, products_off_index.categories_hierarchy_json),
+        ingredients_text = COALESCE(excluded.ingredients_text, products_off_index.ingredients_text),
+        ingredients_tags_json = COALESCE(excluded.ingredients_tags_json, products_off_index.ingredients_tags_json),
+        ingredients_analysis_tags_json = COALESCE(excluded.ingredients_analysis_tags_json, products_off_index.ingredients_analysis_tags_json),
+        states_tags_json = COALESCE(excluded.states_tags_json, products_off_index.states_tags_json),
+        image_url = COALESCE(excluded.image_url, products_off_index.image_url),
+        product_url = COALESCE(excluded.product_url, products_off_index.product_url),
+        source = COALESCE(excluded.source, products_off_index.source),
+        source_file = COALESCE(excluded.source_file, products_off_index.source_file),
+        last_modified_t = COALESCE(excluded.last_modified_t, products_off_index.last_modified_t),
+        updated_at = datetime('now')
+    `).run(
+      code,
+      row.product_name || null,
+      row.brands || null,
+      JSON.stringify(Array.isArray(row.brands_tags) ? row.brands_tags : []),
+      JSON.stringify(Array.isArray(row.categories_tags) ? row.categories_tags : []),
+      JSON.stringify(Array.isArray(row.categories_hierarchy) ? row.categories_hierarchy : []),
+      row.ingredients_text || null,
+      JSON.stringify(Array.isArray(row.ingredients_tags) ? row.ingredients_tags : []),
+      JSON.stringify(Array.isArray(row.ingredients_analysis_tags) ? row.ingredients_analysis_tags : []),
+      JSON.stringify(Array.isArray(row.states_tags) ? row.states_tags : []),
+      row.image_url || null,
+      row.product_url || null,
+      row.source || 'baseline',
+      row.source_file || null,
+      Number.isFinite(Number(row.last_modified_t)) ? Number(row.last_modified_t) : null
+    );
+    return { success: true, code };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+};
+
+module.exports.getOffIndexProductByCode = function getOffIndexProductByCode(code) {
+  try {
+    const row = db.prepare(`SELECT * FROM products_off_index WHERE code = ?`).get(String(code || '').trim());
     if (!row) return null;
     const parse = (x, fallback = []) => { try { return JSON.parse(x || '[]'); } catch (_) { return fallback; } };
     return {
@@ -16767,6 +17715,47 @@ module.exports.countObfDeltaAppliedByFilename = function countObfDeltaAppliedByF
   }
 };
 
+module.exports.getMasterCatalogStats = function getMasterCatalogStats() {
+  try {
+    const obfCount = Number(db.prepare(`SELECT COUNT(*) AS n FROM products_obf_index`).get()?.n || 0);
+    const offCount = Number(db.prepare(`SELECT COUNT(*) AS n FROM products_off_index`).get()?.n || 0);
+    const obfLatest = db.prepare(`SELECT MAX(updated_at) AS latest FROM products_obf_index`).get()?.latest || null;
+    const offLatest = db.prepare(`SELECT MAX(updated_at) AS latest FROM products_off_index`).get()?.latest || null;
+    const latestObfRun = db.prepare(`
+      SELECT id, run_type, status, started_at, finished_at, rows_seen, rows_upserted, rows_failed
+      FROM obf_ingestion_runs
+      ORDER BY datetime(COALESCE(finished_at, started_at)) DESC
+      LIMIT 1
+    `).get() || null;
+    const latestDelta = db.prepare(`
+      SELECT filename, applied_at, rows_seen, rows_upserted, rows_failed
+      FROM obf_delta_applied
+      ORDER BY datetime(applied_at) DESC
+      LIMIT 1
+    `).get() || null;
+    return {
+      obf_count: obfCount,
+      off_count: offCount,
+      total_count: obfCount + offCount,
+      obf_latest_updated_at: obfLatest,
+      off_latest_updated_at: offLatest,
+      latest_obf_ingestion_run: latestObfRun,
+      latest_obf_delta_applied: latestDelta
+    };
+  } catch (e) {
+    return {
+      obf_count: 0,
+      off_count: 0,
+      total_count: 0,
+      obf_latest_updated_at: null,
+      off_latest_updated_at: null,
+      latest_obf_ingestion_run: null,
+      latest_obf_delta_applied: null,
+      error: e.message
+    };
+  }
+};
+
 module.exports.getCosingIngredientByInci = function getCosingIngredientByInci(inciName) {
   try {
     const row = db.prepare(`SELECT * FROM cosing_ingredients WHERE inci_name = ?`).get(String(inciName || '').trim().toLowerCase());
@@ -16893,5 +17882,279 @@ module.exports.getFinalAssessmentArtifacts = function getFinalAssessmentArtifact
     }));
   } catch (_) {
     return [];
+  }
+};
+
+// Phase 0 §5/§7: Impact ledger + privacy governance helpers
+module.exports.insertImpactLedgerEvent = function insertImpactLedgerEvent(row = {}) {
+  try {
+    db.prepare(`
+      INSERT INTO impact_ledger_events (
+        id, event_type, subject_type, subject_id, provenance_source, verification_state,
+        privacy_classification, quantity, unit, evidence_json, evidence_hash, previous_evidence_hash,
+        evidence_chain_hash, metadata_json, occurred_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+    `).run(
+      row.id,
+      row.event_type,
+      row.subject_type || null,
+      row.subject_id || null,
+      row.provenance_source || null,
+      row.verification_state || 'pending',
+      row.privacy_classification || 'public_aggregate',
+      Number(row.quantity || 0),
+      row.unit || null,
+      JSON.stringify(row.evidence || {}),
+      row.evidence_hash || null,
+      row.previous_evidence_hash || null,
+      row.evidence_chain_hash || null,
+      JSON.stringify(row.metadata || {}),
+      row.occurred_at || new Date().toISOString(),
+      row.created_at || null
+    );
+    return db.prepare(`SELECT * FROM impact_ledger_events WHERE id = ?`).get(row.id) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.updateImpactLedgerEvent = function updateImpactLedgerEvent(id, updates = {}) {
+  try {
+    const fields = [];
+    const values = [];
+    const add = (k, v) => { fields.push(`${k} = ?`); values.push(v); };
+    if (updates.verification_state !== undefined) add('verification_state', updates.verification_state);
+    if (updates.privacy_classification !== undefined) add('privacy_classification', updates.privacy_classification);
+    if (updates.metadata !== undefined) add('metadata_json', JSON.stringify(updates.metadata || {}));
+    if (!fields.length) return db.prepare(`SELECT * FROM impact_ledger_events WHERE id = ?`).get(id) || null;
+    values.push(id);
+    db.prepare(`UPDATE impact_ledger_events SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    return db.prepare(`SELECT * FROM impact_ledger_events WHERE id = ?`).get(id) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.listImpactLedgerEvents = function listImpactLedgerEvents(options = {}) {
+  try {
+    const where = [];
+    const args = [];
+    if (options.verification_state) { where.push('verification_state = ?'); args.push(options.verification_state); }
+    if (options.event_type) { where.push('event_type = ?'); args.push(options.event_type); }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const limit = Math.max(1, Math.min(1000, Number(options.limit) || 200));
+    return db.prepare(`
+      SELECT * FROM impact_ledger_events
+      ${whereSql}
+      ORDER BY datetime(occurred_at) DESC
+      LIMIT ?
+    `).all(...args, limit);
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.getLatestImpactEvidenceHash = function getLatestImpactEvidenceHash() {
+  try {
+    const row = db.prepare(`
+      SELECT evidence_chain_hash FROM impact_ledger_events
+      WHERE evidence_chain_hash IS NOT NULL AND trim(evidence_chain_hash) != ''
+      ORDER BY datetime(created_at) DESC, id DESC
+      LIMIT 1
+    `).get();
+    return row?.evidence_chain_hash || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.insertImpactVerificationSample = function insertImpactVerificationSample(row = {}) {
+  try {
+    const id = row.id || `ivs:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO impact_verification_samples (
+        id, event_id, sampled_at, reviewer, expected_state, observed_state, is_false_positive, notes
+      ) VALUES (?, ?, COALESCE(?, datetime('now')), ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      row.event_id,
+      row.sampled_at || null,
+      row.reviewer || null,
+      row.expected_state || null,
+      row.observed_state || null,
+      row.is_false_positive ? 1 : 0,
+      row.notes || null
+    );
+    return db.prepare(`SELECT * FROM impact_verification_samples WHERE id = ?`).get(id) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.getImpactVerificationStats = function getImpactVerificationStats(windowDays = 30) {
+  try {
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN is_false_positive = 1 THEN 1 ELSE 0 END) AS false_positives
+      FROM impact_verification_samples
+      WHERE datetime(sampled_at) >= datetime('now', '-' || ? || ' days')
+    `).get(Number(windowDays) || 30);
+    const total = Number(row?.total || 0);
+    const fp = Number(row?.false_positives || 0);
+    return {
+      total_samples: total,
+      false_positives: fp,
+      false_positive_rate: total > 0 ? fp / total : 0
+    };
+  } catch (_) {
+    return { total_samples: 0, false_positives: 0, false_positive_rate: 0 };
+  }
+};
+
+module.exports.upsertDataInventoryItem = function upsertDataInventoryItem(row = {}) {
+  try {
+    const id = row.id || `dir:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO data_inventory_registry (
+        id, system_name, data_domain, dataset_name, contains_phi, contains_pii, privacy_tier,
+        retention_days, owner, access_roles_json, redaction_policy, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), datetime('now'))
+      ON CONFLICT(system_name, dataset_name) DO UPDATE SET
+        data_domain = COALESCE(excluded.data_domain, data_inventory_registry.data_domain),
+        contains_phi = COALESCE(excluded.contains_phi, data_inventory_registry.contains_phi),
+        contains_pii = COALESCE(excluded.contains_pii, data_inventory_registry.contains_pii),
+        privacy_tier = COALESCE(excluded.privacy_tier, data_inventory_registry.privacy_tier),
+        retention_days = COALESCE(excluded.retention_days, data_inventory_registry.retention_days),
+        owner = COALESCE(excluded.owner, data_inventory_registry.owner),
+        access_roles_json = COALESCE(excluded.access_roles_json, data_inventory_registry.access_roles_json),
+        redaction_policy = COALESCE(excluded.redaction_policy, data_inventory_registry.redaction_policy),
+        updated_at = datetime('now')
+    `).run(
+      id,
+      row.system_name,
+      row.data_domain,
+      row.dataset_name,
+      row.contains_phi ? 1 : 0,
+      row.contains_pii ? 1 : 0,
+      row.privacy_tier || 'internal',
+      Number(row.retention_days || 365),
+      row.owner || null,
+      JSON.stringify(Array.isArray(row.access_roles) ? row.access_roles : []),
+      row.redaction_policy || null,
+      row.created_at || null
+    );
+    return db.prepare(`
+      SELECT * FROM data_inventory_registry WHERE system_name = ? AND dataset_name = ?
+    `).get(row.system_name, row.dataset_name) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.listDataInventory = function listDataInventory(limit = 500) {
+  try {
+    return db.prepare(`
+      SELECT * FROM data_inventory_registry
+      ORDER BY datetime(updated_at) DESC
+      LIMIT ?
+    `).all(Math.max(1, Math.min(2000, Number(limit) || 500)));
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.createDataRetentionJob = function createDataRetentionJob(row = {}) {
+  try {
+    const id = row.id || `drj:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO data_retention_jobs (
+        id, dataset_name, cutoff_at, status, records_deleted, error_message, started_at, completed_at
+      ) VALUES (?, ?, ?, COALESCE(?, 'running'), ?, ?, COALESCE(?, datetime('now')), ?)
+    `).run(
+      id,
+      row.dataset_name,
+      row.cutoff_at,
+      row.status || 'running',
+      Number(row.records_deleted || 0),
+      row.error_message || null,
+      row.started_at || null,
+      row.completed_at || null
+    );
+    return db.prepare(`SELECT * FROM data_retention_jobs WHERE id = ?`).get(id) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.insertIncidentDrill = function insertIncidentDrill(row = {}) {
+  try {
+    const id = row.id || `idr:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO incident_drills (
+        id, drill_type, scenario, outcome, retro_closed, evidence_url, conducted_by, conducted_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')))
+    `).run(
+      id,
+      row.drill_type || 'tabletop',
+      row.scenario || 'unspecified',
+      row.outcome || null,
+      row.retro_closed ? 1 : 0,
+      row.evidence_url || null,
+      row.conducted_by || null,
+      row.conducted_at || new Date().toISOString(),
+      row.created_at || null
+    );
+    return db.prepare(`SELECT * FROM incident_drills WHERE id = ?`).get(id) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.listIncidentDrills = function listIncidentDrills(limit = 100) {
+  try {
+    return db.prepare(`
+      SELECT * FROM incident_drills
+      ORDER BY datetime(conducted_at) DESC
+      LIMIT ?
+    `).all(Math.max(1, Math.min(500, Number(limit) || 100)));
+  } catch (_) {
+    return [];
+  }
+};
+
+module.exports.upsertComplianceSignoff = function upsertComplianceSignoff(row = {}) {
+  try {
+    const id = row.id || `csf:${require('crypto').randomUUID()}`;
+    db.prepare(`
+      INSERT INTO compliance_signoffs (
+        id, signoff_key, signed_by, signed_at, notes, evidence_url, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), datetime('now'))
+      ON CONFLICT(signoff_key) DO UPDATE SET
+        signed_by = COALESCE(excluded.signed_by, compliance_signoffs.signed_by),
+        signed_at = excluded.signed_at,
+        notes = COALESCE(excluded.notes, compliance_signoffs.notes),
+        evidence_url = COALESCE(excluded.evidence_url, compliance_signoffs.evidence_url),
+        updated_at = datetime('now')
+    `).run(
+      id,
+      row.signoff_key,
+      row.signed_by || null,
+      row.signed_at || new Date().toISOString(),
+      row.notes || null,
+      row.evidence_url || null,
+      row.created_at || null
+    );
+    return db.prepare(`SELECT * FROM compliance_signoffs WHERE signoff_key = ?`).get(row.signoff_key) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.getComplianceSignoff = function getComplianceSignoff(signoffKey) {
+  try {
+    return db.prepare(`SELECT * FROM compliance_signoffs WHERE signoff_key = ?`).get(signoffKey) || null;
+  } catch (_) {
+    return null;
   }
 };

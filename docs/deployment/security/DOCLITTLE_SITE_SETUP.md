@@ -6,7 +6,8 @@
 
 1. **`doclittle.site`** - Main SaaS Site (Root Domain)
    - Frontend: Unified Dashboard (`/unified-dashboard/`)
-   - Landing page: `/landing.html`
+   - Canonical landing page: `/`
+   - Legacy `/landing.html` redirects to `/`
    - Admin portal: `/admin` (from unified-dashboard/admin)
    - Customer signup: `/signup` (from middleware-platform/public/signup)
    - Main SaaS frontend and backend

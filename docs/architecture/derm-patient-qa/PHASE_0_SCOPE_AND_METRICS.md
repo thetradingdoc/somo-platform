@@ -1,6 +1,6 @@
 # Phase 0 — Derm patient Q&A: scope, intent taxonomy, metrics, positioning
 
-This document implements **Phase 0** from `todos/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md` (align and scope). It is the **product + evaluation contract** for the Reddit-informed patient Q&A pipeline (intent router → passage retrieval → grounded answers).
+This document implements **Phase 0** from `todos/pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md` (align and scope). It is the **product + evaluation contract** for the Reddit-informed patient Q&A pipeline (intent router → passage retrieval → grounded answers).
 
 ---
 
@@ -82,8 +82,8 @@ Every user turn is classified into **exactly one** primary intent before heavy r
 
 ## 4. References
 
-- Todo roadmap: `todos/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md`
-- RAG integration overview: `docs/architecture/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`
+- Todo roadmap: `todos/pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md`
+- RAG integration overview: `docs/architecture/overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`
 - Triage rules (reuse for red flags): `Knowledge/rules/triage-rules.json` (paths may vary)
 
 ---

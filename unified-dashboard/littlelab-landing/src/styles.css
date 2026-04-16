@@ -8,6 +8,20 @@ body {
 }
 
 .page { max-width: 1240px; margin: 0 auto; padding: 16px 20px 90px; }
+
+/* Full-bleed landing: nav in a column, hero edge-to-edge, rest in .page */
+.landing-shell {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: clip;
+  background: var(--brand-white);
+}
+.page.page--topbar {
+  padding: 16px 20px 14px;
+}
+.page.page--below-fold {
+  padding: clamp(12px, 3vw, 32px) 20px 90px;
+}
 .sr-only {
   position: absolute !important;
   width: 1px !important;
@@ -46,8 +60,9 @@ body {
   border-radius: 4px;
 }
 .top-nav {
-  background: var(--brand-white);
-  border: 1px solid #eee8df;
+  /* Solid white (#fff) — lighter than previous beige tile */
+  background: #ffffff;
+  border: 1px solid var(--brand-border, #eee8df);
   border-radius: 20px;
   display: flex;
   align-items: center;
@@ -91,9 +106,51 @@ body {
   border: 1px solid #e9e4db;
   background: #fff;
   color: var(--brand-black);
-  padding: 9px 15px;
-  font-weight: 700;
-  font-size: 0.92rem;
+  padding: 0;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.mobile-menu-toggle__bars {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 16px;
+}
+.mobile-menu-toggle__bar {
+  position: absolute;
+  left: 0;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.mobile-menu-toggle__bar:nth-child(1) {
+  top: 0;
+  transform-origin: center;
+}
+.mobile-menu-toggle__bar:nth-child(2) {
+  top: 7px;
+}
+.mobile-menu-toggle__bar:nth-child(3) {
+  top: 14px;
+  transform-origin: center;
+}
+.mobile-menu-toggle.is-open .mobile-menu-toggle__bar:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.mobile-menu-toggle.is-open .mobile-menu-toggle__bar:nth-child(2) {
+  opacity: 0;
+}
+.mobile-menu-toggle.is-open .mobile-menu-toggle__bar:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+.mobile-menu-toggle:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
 }
 .mobile-menu-panel {
   margin-top: 10px;
@@ -233,6 +290,12 @@ body {
   font-family: "Gloock", Georgia, "Times New Roman", serif;
   color: var(--brand-black);
 }
+/* Default: headline flows as normal inline text on wide viewports */
+.hero-title-line1,
+.hero-title-line2 {
+  display: inline;
+  white-space: normal;
+}
 .subtext {
   margin: 30px auto 0;
   max-width: 760px;
@@ -254,6 +317,471 @@ body {
   padding: 13px 30px;
   font-size: 1.25rem;
   font-weight: 700;
+}
+
+/* --------------------------- */
+/* Hero — Cal AI–inspired split (visual left, copy right) */
+/* --------------------------- */
+.hero-cal {
+  text-align: left;
+  margin-top: 48px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* Cal-style: hero spans full viewport width; inner grid stays capped */
+.hero-cal.hero-cal--fullscreen {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  /* Tighter horizontal padding so the split can read ~50/50 vs viewport */
+  padding: clamp(16px, 3vmin, 44px) clamp(12px, 2.5vw, 36px) clamp(24px, 5vmin, 56px);
+  /* Stay within first-screen height (nav + hero) on typical laptops */
+  min-height: min(88dvh, calc(100dvh - 108px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+/* Nearly full viewport width — visual column slightly wider than copy (Cal-style weight) */
+.hero-cal--fullscreen .hero-cal-grid {
+  width: 100%;
+  max-width: min(1840px, calc(100vw - 20px));
+  margin: 0 auto;
+  grid-template-columns: minmax(0, 1.14fr) minmax(0, 0.86fr);
+  gap: clamp(16px, 2.8vw, 40px);
+  align-items: center;
+}
+.hero-cal--fullscreen .hero-cal-visual {
+  justify-content: center;
+  min-width: 0;
+}
+/* Large phones graphic, capped so the hero + nav fit in the viewport */
+.hero-cal--fullscreen .hero-cal-mockup {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  max-height: min(82vh, min(960px, calc(100dvh - 200px)));
+  object-fit: contain;
+  object-position: center;
+}
+.hero-cal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: clamp(28px, 4vw, 64px);
+  align-items: center;
+}
+.hero-cal-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  order: 0;
+}
+.hero-cal-mockup {
+  width: 100%;
+  max-width: min(560px, 100%);
+  height: auto;
+  display: block;
+  object-fit: contain;
+  border-radius: 28px;
+}
+.hero-cal-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  min-width: 0;
+  order: 1;
+  padding-inline-start: 0;
+  box-sizing: border-box;
+}
+.kicker--cal {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+/* Trust seal sits outside (before) the “Loved by doctors…” pill */
+.hero-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 0;
+  column-gap: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.hero-kicker-row .kicker.kicker--social.kicker--cal {
+  padding: 8px 14px 8px 6px;
+  gap: 10px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.hero-kicker-seal-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: center;
+  /* Negative X pulls visible seal left vs bitmap box + Inter “S” cap line */
+  transform: translate(-24px, 3px);
+}
+.hero-kicker-seal {
+  width: clamp(92px, 22vw, 148px);
+  height: auto;
+  flex-shrink: 0;
+  display: block;
+  object-fit: contain;
+  object-position: left center;
+  /* Pull pill closer to visible seal (PNG slack on the right of artwork) */
+  margin-inline-end: clamp(-52px, -14vw, -18px);
+}
+.hero-title--cal {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  margin-top: 20px;
+  width: 100%;
+  text-align: left;
+  padding-inline-start: 0;
+  margin-inline-start: 0;
+  text-indent: 0;
+}
+/* Beat `.hero h1` serif size for Cal-style headline */
+.hero.hero-cal h1.hero-title--cal {
+  font-size: clamp(2.5rem, 4.2vw, 4.25rem);
+}
+.subtext--cal {
+  margin: 24px 0 0;
+  max-width: 34rem;
+  font-size: clamp(1.05rem, 1.35vw, 1.25rem);
+  line-height: 1.55;
+  color: #52525b;
+  font-weight: 450;
+}
+.hero-ctas--cal {
+  margin-top: 32px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+/* Match Cal hero buttons (primary + get app): same box as legacy `.hero-ctas` pill sizing */
+.hero-ctas--cal .btn-cal {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  /* Don’t shrink below one label line — equal flex + min-width:0 was wrapping “Start Analysis”. */
+  min-width: min-content;
+  min-height: 56px;
+  padding: 13px 30px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.btn-cal {
+  border-radius: 999px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 28px;
+  font-weight: 600;
+  font-size: 1.05rem;
+  border: 1px solid transparent;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  min-height: 52px;
+}
+.btn-cal--primary {
+  background: var(--brand-accent);
+  color: var(--brand-black);
+  border-color: var(--brand-accent);
+  box-shadow: 0 8px 22px rgba(255, 165, 31, 0.35);
+}
+.btn-cal--primary:hover {
+  background: var(--brand-accent-hover);
+  border-color: var(--brand-accent-hover);
+  transform: translateY(-1px);
+}
+.btn-cal--ghost {
+  background: #fff;
+  color: #0a0a0a;
+  border-color: #d4d4d8;
+}
+.btn-cal--ghost:hover {
+  background: #fafafa;
+  transform: translateY(-1px);
+}
+.btn-cal:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+
+button.btn-cal {
+  cursor: pointer;
+  font: inherit;
+  appearance: none;
+  /* Align with anchored `.btn-cal` so hero primary vs get-app match */
+  margin: 0;
+}
+
+/* “Get The App” — pill palette (lavender / indigo) */
+.btn-cal--get-app {
+  background: #eef2ff;
+  color: #2e3192;
+  border-color: #c7d2fe;
+  box-shadow: none;
+}
+.btn-cal--get-app:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+  transform: translateY(-1px);
+}
+
+.btn-ghost.btn-get-app {
+  background: #eef2ff;
+  color: #2e3192;
+  border-color: #c7d2fe;
+  font-weight: 600;
+}
+.btn-ghost.btn-get-app:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+button.btn-ghost.btn-get-app {
+  cursor: pointer;
+  font: inherit;
+  appearance: none;
+}
+
+/* Get app — newsletter-style waitlist overlay */
+.get-app-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px max(20px, env(safe-area-inset-right)) 20px max(20px, env(safe-area-inset-left));
+  box-sizing: border-box;
+}
+.get-app-card {
+  width: min(420px, 100%);
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 20px;
+  padding: 28px 24px 24px;
+  box-shadow: 0 24px 48px rgba(46, 49, 146, 0.15);
+  position: relative;
+  color: #2e3192;
+}
+.get-app-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid #c7d2fe;
+  background: #fff;
+  color: #2e3192;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms ease;
+}
+.get-app-close:hover {
+  background: #e0e7ff;
+}
+.get-app-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4338ca;
+  margin: 0 0 8px;
+}
+.get-app-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+  line-height: 1.2;
+  color: #2e3192;
+}
+.get-app-sub {
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #3730a3;
+}
+.get-app-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.get-app-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #312e81;
+}
+.get-app-input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 1px solid #c7d2fe;
+  padding: 12px 14px;
+  font-size: 1rem;
+  background: #fff;
+  color: #1e1b4b;
+}
+.get-app-input:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+.get-app-input::placeholder {
+  color: #a5b4fc;
+}
+.get-app-error {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: #b91c1c;
+}
+.get-app-submit {
+  width: 100%;
+  margin-top: 4px;
+  border-radius: 999px;
+  padding: 14px 20px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 1px solid #2e3192;
+  background: #2e3192;
+  color: #eef2ff;
+  transition: transform 150ms ease, background 150ms ease;
+}
+.get-app-submit:hover:not(:disabled) {
+  background: #252171;
+  border-color: #252171;
+  transform: translateY(-1px);
+}
+.get-app-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.get-app-privacy {
+  margin: 14px 0 0;
+  font-size: 0.8rem;
+  color: #4338ca;
+  text-align: center;
+}
+
+/* Floating assistant: spinning S&C (brand serif), bottom-left */
+.panda-fab {
+  position: fixed;
+  left: max(16px, env(safe-area-inset-left, 0px));
+  right: auto;
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  min-width: 56px;
+  height: 56px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #ffffff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.panda-fab:hover {
+  transform: scale(1.04);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+}
+.panda-fab:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 3px;
+}
+.panda-fab__spin {
+  font-family: "Gloock", Georgia, "Times New Roman", serif;
+  font-size: clamp(0.8rem, 2.8vw, 0.98rem);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #0a0a0a;
+  display: inline-block;
+  animation: scFabSpin 14s linear infinite;
+}
+.panda-fab__amp {
+  font-size: 0.88em;
+  margin: 0 0.02em;
+}
+@keyframes scFabSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panda-fab__spin {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .hero-cal-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  /* Fullscreen uses 50/50 on desktop; must stack here (same specificity as base fullscreen grid) */
+  .hero-cal--fullscreen .hero-cal-grid {
+    grid-template-columns: 1fr;
+    max-width: min(100%, calc(100vw - 24px));
+  }
+  .hero-cal--fullscreen .hero-cal-mockup {
+    max-width: min(720px, 98vw);
+    max-height: min(62svh, 560px);
+    width: auto;
+    margin: 0 auto;
+  }
+  /* Stack: headline + trust row first, phone mockup second */
+  .hero-cal-visual {
+    order: 1;
+  }
+  .hero-cal-copy {
+    order: 0;
+    /* Left-align with headline so seal lines up with “S” in Scan (centered row broke alignment) */
+    align-items: flex-start;
+    text-align: left;
+  }
+  .hero-ctas--cal {
+    justify-content: flex-start;
+  }
+  .subtext--cal {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .hero-kicker-row {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+  }
+  .kicker--cal {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  /* Stacked: stronger nudge — PNG padding otherwise sits right of “Scan” */
+  .hero-kicker-seal-wrap {
+    transform: translate(-32px, 3px);
+  }
 }
 
 /* --------------------------- */
@@ -2856,10 +3384,24 @@ body {
 
 @media (max-width: 900px) {
   .nav-links { display: none; }
-  .mobile-menu-toggle { display: inline-flex; align-items: center; justify-content: center; }
+  .mobile-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
   .brand-mark { font-size: 2.2rem; }
-  .nav-start-btn { display: none; }
+  .hero-cal { margin-top: 28px; }
+  .hero-cal.hero-cal--fullscreen {
+    margin-top: 0;
+    min-height: auto;
+    max-height: none;
+    padding-top: 16px;
+    padding-bottom: 40px;
+  }
   .hero h1 { font-size: clamp(2.8rem, 8vw, 4.6rem); }
+  .hero h1.hero-title--cal {
+    font-size: clamp(2.2rem, 6.5vw, 3.4rem);
+  }
   .subtext {
     font-size: 1.3rem;
     max-width: 680px;
@@ -2883,6 +3425,8 @@ body {
 
 @media (max-width: 640px) {
   .page { padding: 12px 12px 42px; }
+  .page.page--topbar { padding: 12px 12px 10px; }
+  .page.page--below-fold { padding: 8px 12px 42px; }
   .top-nav {
     min-height: 58px;
     border-radius: 16px;
@@ -2890,10 +3434,26 @@ body {
   }
   .brand-mark { font-size: 1.6rem; }
   .mobile-menu-toggle {
-    padding: 8px 13px;
-    font-size: 0.88rem;
+    min-width: 42px;
+    min-height: 42px;
   }
   .hero { margin-top: 38px; }
+  .hero-cal { margin-top: 24px; }
+  /* Align with header bar: no extra inset (FAB moved to bottom-right below) */
+  .hero-cal-copy {
+    padding-inline-start: 0;
+  }
+  .panda-fab {
+    min-width: 52px;
+    height: 52px;
+    padding: 0 12px;
+    left: auto;
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  .panda-fab__spin {
+    font-size: 0.76rem;
+  }
   .kicker--social {
     gap: 10px;
     padding: 10px 12px;
@@ -2907,9 +3467,26 @@ body {
   .kicker-text {
     font-size: 0.92rem;
   }
-  .hero h1 {
-    font-size: clamp(2.2rem, 11vw, 3.2rem);
-    line-height: 1.02;
+  .hero-kicker-seal {
+    width: clamp(76px, 24vw, 120px);
+    margin-inline-end: clamp(-44px, -13vw, -12px);
+  }
+  .hero-kicker-seal-wrap {
+    /* No FAB left gutter — lighter nudge vs headline “S” + PNG slack */
+    transform: translate(-28px, 4px);
+  }
+  .hero h1.hero-title {
+    font-size: clamp(1.92rem, 9.2vw, 3.2rem);
+    line-height: 1.06;
+  }
+  /* Phone: exactly two lines — first phrase does not break */
+  .hero h1.hero-title .hero-title-line1 {
+    display: block;
+    white-space: nowrap;
+  }
+  .hero h1.hero-title .hero-title-line2 {
+    display: block;
+    white-space: normal;
   }
   .subtext {
     margin-top: 18px;
@@ -2918,6 +3495,12 @@ body {
     line-height: 1.45;
   }
   .hero-ctas { flex-direction: column; }
+  .hero-ctas--cal .btn-cal {
+    flex: none;
+    width: 100%;
+    min-height: 48px;
+    font-size: 1rem;
+  }
   .btn-primary, .btn-ghost {
     width: 100%;
     min-height: 48px;
@@ -2929,6 +3512,16 @@ body {
     min-height: auto;
     padding: 20px 14px 20px;
     margin-top: 2px;
+  }
+  /* Match `.page.page--topbar` horizontal gutter (12px) with header card */
+  .hero-cal.hero-cal--fullscreen {
+    margin-top: 0;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .hero-cal--fullscreen .hero-cal-mockup {
+    max-width: min(760px, 100%);
+    max-height: min(66svh, 600px);
   }
   .routine-title {
     font-size: clamp(2.1rem, 10.2vw, 3rem);

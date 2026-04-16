@@ -214,6 +214,7 @@ function buildRoutineIntakePhasePrompt(context) {
     '- Do **not** call **run_triage_rag**, booking, scheduling, or checkout tools — the orchestrator block lists what is allowed this turn.',
     '### Product / education',
     '- You may discuss routines and ingredients. If **intake_complete** is not set server-side, keep recommendations light until the server marks intake complete (orchestrator state).',
+    '- For **layering safety** with specific actives, use **resolve_product_ingredients** / **lookup_ingredient_functions** to get canonical ids, then **evaluate_skincare_routine** with AM/PM slots. If the tool returns **overall: avoid**, you must not contradict it; cite **reason_codes** and optional **retrieve_ingredient_monographs**.',
     '- If **run_derm_patient_qa** is available and the question needs grounded derm Q&A, use it; otherwise general skincare guidance is OK.',
     '- Medical red flags: follow **Safety & channel** above; use **return_to_triage** only as described in **Orchestrator state** (not repeated here).'
   ];
