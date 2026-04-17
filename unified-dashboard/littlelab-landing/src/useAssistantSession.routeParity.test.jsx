@@ -1,5 +1,4 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useAssistantSession } from './useAssistantSession';
 
 jest.mock('./landingAssistantApi', () => ({
   getOrCreateLandingSessionId: jest.fn(() => 'sid-test'),
@@ -32,6 +31,7 @@ jest.mock('./webVoiceTurnController', () => ({
 
 describe('useAssistantSession parity', () => {
   test('sendUserMessage and ingestScannedBarcode produce same route metadata', async () => {
+    const { useAssistantSession } = require('./useAssistantSession');
     const api = require('./landingAssistantApi');
     const mockedFacts = {
       data_source: 'obf_index_cache',
@@ -51,21 +51,25 @@ describe('useAssistantSession parity', () => {
     api.fetchBarcodeFactsAutodetect.mockResolvedValue({ facts: mockedFacts, resolvedCatalog: 'obf' });
 
     const { result } = renderHook(() => useAssistantSession());
+    expect(result.current.apiBase).toBeTruthy();
 
+    let ingestOut;
     await act(async () => {
-      await result.current.ingestScannedBarcode('3033490000282');
+      ingestOut = await result.current.ingestScannedBarcode('3033490000282');
+    });
+    expect(ingestOut?.success).toBeTruthy();
+    await waitFor(() => {
+      expect(result.current.scanResult).toBeTruthy();
     });
     const fromIngest = result.current.scanResult;
 
     await act(async () => {
       await result.current.sendUserMessage('scan 3033490000282');
     });
-    const fromSend = result.current.scanResult;
-
     await waitFor(() => {
-      expect(fromIngest).toBeTruthy();
-      expect(fromSend).toBeTruthy();
+      expect(result.current.scanResult).toBeTruthy();
     });
+    const fromSend = result.current.scanResult;
     expect(fromIngest.categoryRoute).toBe(fromSend.categoryRoute);
     expect(fromIngest.categoryRouteSource).toBe(fromSend.categoryRouteSource);
     expect(fromIngest.categoryRouteConfidence).toBe(fromSend.categoryRouteConfidence);

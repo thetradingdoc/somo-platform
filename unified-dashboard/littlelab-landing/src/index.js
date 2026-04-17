@@ -5,37 +5,6 @@ import { normalizeHttpApiBase } from './landingAssistantApi';
 import './skin-care-tokens.css';
 import './styles.css';
 
-/**
- * Illustrative “pipeline” signals for the face-scan section (Step 10–shaped narrative: perception → differentials → plan).
- * Shown on the marketing landing only — not a diagnosis; real analysis runs in the patient flow.
- */
-const SKIN_PIPELINE_DEMO_INSIGHTS = [
-  {
-    id: 'demo-texture-tone',
-    label: 'Texture & tone pattern',
-    confidence: 0.82,
-    summary:
-      'Uneven texture and micro-contrast in the central face—consistent with common photoaging and mild congestion patterns. A single image cannot confirm cause.',
-    nextStep: 'In-app analysis pairs this with your history to suggest SPF, barrier care, and actives.'
-  },
-  {
-    id: 'demo-pigment',
-    label: 'Pigmentation signals',
-    confidence: 0.76,
-    summary:
-      'Focal darker areas may reflect sun exposure or post-inflammatory change. Lighting, angle, and skin type change how this reads on camera.',
-    nextStep: 'Persistent or spreading pigment warrants clinician review to distinguish benign overlap from conditions like melasma.'
-  },
-  {
-    id: 'demo-barrier',
-    label: 'Barrier & redness',
-    confidence: 0.71,
-    summary:
-      'Diffuse redness can mean barrier stress, irritation, or flushing—context (new products, heat, duration) matters more than one frame.',
-    nextStep: 'Burning, rapid spread, or eye involvement: seek urgent in-person care.'
-  }
-];
-
 /** Routine-band / marketing bottle art (`public/images` → CRA `build`). New filename avoids stale cache on `routine-bottle.png`. */
 const DEFAULT_ROUTINE_BOTTLE_IMAGE = '/images/products/effaclar-routine-bottle.png';
 
@@ -198,23 +167,7 @@ function Root() {
   const MERCHANT_ID = process.env.REACT_APP_MERCHANT_ID || '';
   /** Non-localhost hosts require a merchant id so checkout links include provider_id (catalog + quote resolve). */
   const checkoutBlockedNoMerchant = !isLocalHost && !MERCHANT_ID;
-  /** Patient portal HTML (served by middleware). */
-  const PATIENT_PORTAL_PREFIX = process.env.REACT_APP_PATIENT_PORTAL_PREFIX || '/unified-dashboard/patients';
 
-  const appendCheckoutQueryHints = (params, product) => {
-    const name = (product.displayName || product.name || '').trim();
-    if (name) params.set('product_name', name.slice(0, 160));
-    const rawImg = product.image || product.image_url || '';
-    if (rawImg && typeof window !== 'undefined') {
-      try {
-        const abs = new URL(rawImg, window.location.origin).href;
-        if (abs.length < 1800) params.set('product_image', abs);
-      } catch (_) {
-        /* ignore bad image URL */
-      }
-    }
-    if (MERCHANT_ID) params.set('provider_id', MERCHANT_ID);
-  };
   const FEATURED_PRODUCT_ORDER = [
     'prod-vitamin-b3-serum-pore-sebum-control',
     'prod-retinol-peptide-night-serum',
@@ -263,6 +216,116 @@ function Root() {
         'prod-vitamin-b3-serum-pore-sebum-control',
         'prod-retinol-peptide-night-serum'
       ]
+    }
+  ];
+  const BRAND_CATEGORY_FILTERS = [
+    { id: 'skincare', label: 'Skincare' },
+    { id: 'supplements', label: 'Supplements' },
+    { id: 'haircare', label: 'HairCare' },
+    { id: 'bodycare', label: 'BodyCare' }
+  ];
+  const POPULAR_BRAND_DEFINITIONS = [
+    {
+      id: 'loreal',
+      name: "L'Oreal",
+      logoUrl: '/images/brands/loreal.png',
+      categories: ['skincare', 'supplements', 'haircare', 'bodycare']
+    },
+    {
+      id: 'la-roche-posay',
+      name: 'La Roche-Posay',
+      logoUrl: '/images/brands/la-roche-posay.png',
+      categories: ['skincare']
+    },
+    {
+      id: 'cerave',
+      name: 'CeraVe',
+      logoUrl: '/images/brands/cerave.png',
+      categories: ['skincare']
+    },
+    {
+      id: 'cetaphil',
+      name: 'Cetaphil',
+      logoUrl: '/images/brands/cetaphil.png',
+      categories: ['skincare']
+    },
+    {
+      id: 'bioderma',
+      name: 'Bioderma',
+      logoUrl: '/images/brands/bioderma.png',
+      categories: ['skincare', 'supplements']
+    },
+    {
+      id: 'henkel',
+      name: 'Henkel',
+      logoUrl: '/images/brands/henkel.png',
+      categories: ['supplements', 'haircare']
+    },
+    {
+      id: 'unilever',
+      name: 'Unilever',
+      logoUrl: '/images/brands/unilever.png',
+      categories: ['skincare', 'haircare', 'bodycare']
+    },
+    {
+      id: 'head-shoulders',
+      name: 'Head & Shoulders',
+      logoUrl: '/images/brands/head-and-shoulders.png',
+      categories: ['haircare']
+    },
+    {
+      id: 'nivea',
+      name: 'Nivea',
+      logoUrl: '/images/brands/nivea.png',
+      categories: ['skincare', 'bodycare']
+    },
+    {
+      id: 'axe',
+      name: 'Axe',
+      logoUrl: '/images/brands/axe.png',
+      categories: ['bodycare']
+    },
+    {
+      id: 'garnier',
+      name: 'Garnier',
+      logoUrl: '/images/brands/garnier.png',
+      categories: ['skincare', 'supplements', 'haircare', 'bodycare']
+    },
+    {
+      id: 'dove',
+      name: 'Dove',
+      logoUrl: '/images/brands/dove.png',
+      categories: ['bodycare', 'haircare']
+    },
+    {
+      id: 'schwarzkopf',
+      name: 'Schwarzkopf',
+      logoUrl: '/images/brands/schwarzkopf.png',
+      categories: ['haircare']
+    },
+    {
+      id: 'elseve',
+      name: 'Elseve',
+      logoUrl: '/images/brands/elseve.png',
+      categories: ['supplements', 'haircare']
+    },
+    {
+      id: 'the-body-shop',
+      name: 'The Body Shop',
+      logoUrl: '/images/brands/the-body-shop.png',
+      categories: ['bodycare', 'skincare']
+    },
+    {
+      id: 'cien',
+      name: 'Cien',
+      logoUrl: '/images/brands/cien.png',
+      categories: ['bodycare']
+    },
+    {
+      id: 'balea',
+      name: 'Balea',
+      logoUrl: '/images/brands/balea.png',
+      categories: ['bodycare']
     }
   ];
 
@@ -443,10 +506,7 @@ function Root() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  const [bottleOffset, setBottleOffset] = useState({ x: 0, y: 0 });
-  const [isDraggingBottle, setIsDraggingBottle] = useState(false);
   const [solutionsNav, setSolutionsNav] = useState({ atStart: true, atEnd: false });
-  const [activeInsightId, setActiveInsightId] = useState(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showGetAppModal, setShowGetAppModal] = useState(false);
   const [beforeAfterPct, setBeforeAfterPct] = useState(50);
@@ -456,19 +516,14 @@ function Root() {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState('');
-  const [checkoutBusyProductId, setCheckoutBusyProductId] = useState(null);
-  const [catalogFilterId, setCatalogFilterId] = useState('all');
+  const [catalogFilterId] = useState('all');
+  const [brandCategoryId, setBrandCategoryId] = useState('skincare');
+  const [activeChatThread, setActiveChatThread] = useState(0);
+  const [visibleChatMessages, setVisibleChatMessages] = useState(1);
   const solutionsViewportRef = useRef(null);
+  const routineCarouselRef = useRef(null);
   const baRef = useRef({ active: false, pointerId: null });
   const baBottleRef = useRef({ active: false, pointerId: null, startX: 0, startY: 0, baseX: 0, baseY: 0 });
-  const dragRef = useRef({
-    active: false,
-    pointerId: null,
-    startX: 0,
-    startY: 0,
-    baseX: 0,
-    baseY: 0
-  });
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -483,43 +538,15 @@ function Root() {
     };
   }, [scrollLocked]);
 
-  const handleBottlePointerDown = (event) => {
-    if (window.matchMedia('(max-width: 640px)').matches) return;
-    event.preventDefault();
-    dragRef.current.active = true;
-    dragRef.current.pointerId = event.pointerId;
-    dragRef.current.startX = event.clientX;
-    dragRef.current.startY = event.clientY;
-    dragRef.current.baseX = bottleOffset.x;
-    dragRef.current.baseY = bottleOffset.y;
-    setIsDraggingBottle(true);
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const handleBottlePointerMove = (event) => {
-    if (!dragRef.current.active) return;
-    const deltaX = event.clientX - dragRef.current.startX;
-    const deltaY = event.clientY - dragRef.current.startY;
-    setBottleOffset({
-      x: clamp(dragRef.current.baseX + deltaX, -260, 260),
-      y: clamp(dragRef.current.baseY + deltaY, -180, 180)
-    });
-  };
-
-  const endBottleDrag = (event) => {
-    if (!dragRef.current.active) return;
-    dragRef.current.active = false;
-    if (dragRef.current.pointerId != null) {
-      event.currentTarget.releasePointerCapture?.(dragRef.current.pointerId);
-    }
-    dragRef.current.pointerId = null;
-    setIsDraggingBottle(false);
-  };
-
   const handleStartAnalysis = (event) => {
     event.preventDefault();
     emitCheckoutFunnelEvent('landing_open_assistant', { source: 'cta' });
     setShowAssistant(true);
+  };
+  const handleOpenGetApp = (event, source = 'nav') => {
+    if (event?.preventDefault) event.preventDefault();
+    emitCheckoutFunnelEvent('landing_get_app_open', { source });
+    setShowGetAppModal(true);
   };
 
   const updateBeforeAfterFromEvent = (event) => {
@@ -686,80 +713,87 @@ function Root() {
   const filteredProductCards = Array.isArray(activeFilter.productIds)
     ? productCards.filter((p) => activeFilter.productIds.includes(p.id))
     : productCards;
+  const filteredPopularBrands = useMemo(() => {
+    return POPULAR_BRAND_DEFINITIONS.filter((brand) => brand.categories.includes(brandCategoryId));
+  }, [brandCategoryId, POPULAR_BRAND_DEFINITIONS]);
+  const loopingPopularBrands = useMemo(() => {
+    if (!filteredPopularBrands.length) return [];
+    return [...filteredPopularBrands, ...filteredPopularBrands];
+  }, [filteredPopularBrands]);
 
-  const catalogStats = useMemo(() => {
-    const rows = filteredProductCards;
-    const brandCounts = rows.reduce((acc, p) => {
-      const key = String(p.brand || 'Unknown').trim() || 'Unknown';
-      acc.set(key, (acc.get(key) || 0) + 1);
-      return acc;
-    }, new Map());
-    const topBrands = [...brandCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([brand, count]) => ({ brand, count }));
-    const avgRating = rows.length
-      ? rows.reduce((sum, p) => sum + Number(p.ratingValue || 0), 0) / rows.length
-      : 0;
-    const categoryCounts = CATALOG_FILTERS.filter((f) => Array.isArray(f.productIds)).map((f) => ({
-      id: f.id,
-      label: f.label,
-      count: productCards.filter((p) => f.productIds.includes(p.id)).length
-    }));
-    return {
-      topBrands,
-      avgRating: avgRating.toFixed(1),
-      totalShown: rows.length,
-      categoryCounts
-    };
-  }, [filteredProductCards, productCards]);
-
-  const buildCheckoutInChatUrl = (product) => {
-    const params = new URLSearchParams({
-      source: 'landing',
-      intent: 'checkout_chat',
-      product_id: product.id,
-      bridge: '1',
-      cart_bootstrap: '1'
-    });
-    appendCheckoutQueryHints(params, product);
-    return `${PATIENT_PORTAL_PREFIX}/checkout-chat.html?${params.toString()}`;
-  };
-
-  const handleStartProductCheckout = (product) => {
-    emitCheckoutFunnelEvent('landing_cta_checkout_chat', { product_id: product.id, source: 'landing' });
-    setCheckoutBusyProductId(product.id);
-    const dest = buildCheckoutInChatUrl(product);
-    window.requestAnimationFrame(() => {
-      window.location.assign(dest);
-    });
-  };
-
-  /** Secondary: ingredient Q&A in chat — no cart bootstrap (browse-first). */
-  const handleChatAboutIngredients = (product) => {
-    emitCheckoutFunnelEvent('landing_cta_ingredients_chat', { product_id: product.id, source: 'landing' });
-    const params = new URLSearchParams({
-      source: 'landing',
-      intent: 'checkout_chat',
-      product_id: product.id,
-      bridge: '1',
-      chat_focus: 'ingredients'
-    });
-    appendCheckoutQueryHints(params, product);
-    const dest = `${PATIENT_PORTAL_PREFIX}/checkout-chat.html?${params.toString()}`;
-    window.requestAnimationFrame(() => {
-      window.location.assign(dest);
-    });
-  };
-
-  const insights = SKIN_PIPELINE_DEMO_INSIGHTS;
 
   const scanSpotlightProduct =
     productCards.find((p) => p.id === VITAMIN_C_PRODUCT_ID) || productCards[0] || null;
+  const chatLeadProduct = scanSpotlightProduct || filteredProductCards[0] || productCards[0] || null;
+  const chatThreads = useMemo(() => {
+    const source = (filteredProductCards.length ? filteredProductCards : productCards).slice(0, 2);
+    return source.map((product, idx) => ({
+      id: product.id || `chat-${idx}`,
+      productName: product.displayName || `Product ${idx + 1}`,
+      image: product.image || DEFAULT_ROUTINE_BOTTLE_IMAGE,
+      unread: idx === 0 ? 3 : idx === 1 ? 1 : 0,
+      preview:
+        idx % 2 === 0
+          ? 'Is this good for sensitive skin?'
+          : 'How should I use this in week one?',
+      messages: [
+        {
+          role: 'patient',
+          text: `I scanned ${product.displayName || 'this serum'}. Is this a good fit for sensitive skin and daily use?`
+        },
+        {
+          role: 'guide',
+          text: 'Great question. Based on the ingredient profile, start 2-3 nights weekly, then layer moisturizer and daytime SPF.'
+        },
+        {
+          role: 'patient',
+          text: 'What should I watch for in week one?'
+        },
+        {
+          role: 'guide',
+          text: 'Watch for dryness, redness, or stinging. If that happens, reduce frequency and focus on barrier repair. If symptoms continue, get clinician review.'
+        }
+      ]
+    }));
+  }, [filteredProductCards, productCards]);
+  const activeThread = chatThreads[activeChatThread] || chatThreads[0] || null;
 
   useEffect(() => {
-    if (!activeInsightId && insights.length) setActiveInsightId(insights[0].id);
-  }, [activeInsightId, insights]);
+    if (!chatThreads.length) return;
+    if (activeChatThread > chatThreads.length - 1) {
+      setActiveChatThread(0);
+      return;
+    }
+    const currentThread = chatThreads[activeChatThread] || null;
+    const cap = currentThread?.messages?.length || 1;
+    const startingCount = Math.max(1, Math.min(Number(currentThread?.unread || 1), cap));
+    setVisibleChatMessages(startingCount);
+    const t = window.setInterval(() => {
+      setVisibleChatMessages((n) => (n >= cap ? cap : n + 1));
+    }, 900);
+    return () => window.clearInterval(t);
+  }, [activeChatThread, chatThreads]);
+
+  useEffect(() => {
+    const el = routineCarouselRef.current;
+    if (!el) return undefined;
+    let rafId = 0;
+    let stopped = false;
+    const step = () => {
+      if (stopped) return;
+      const resetPoint = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+      if (resetPoint > 0) {
+        el.scrollLeft += 0.3;
+        if (el.scrollLeft >= resetPoint) el.scrollLeft = 0;
+      }
+      rafId = window.requestAnimationFrame(step);
+    };
+    rafId = window.requestAnimationFrame(step);
+    return () => {
+      stopped = true;
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   const updateSolutionsNav = () => {
     const el = solutionsViewportRef.current;
@@ -781,12 +815,33 @@ function Root() {
     if (el) el.scrollLeft = 0;
     const t = window.setTimeout(() => updateSolutionsNav(), 0);
     return () => window.clearTimeout(t);
-  }, [catalogFilterId, products.length]);
+  }, [brandCategoryId, products.length]);
+
+  useEffect(() => {
+    const el = solutionsViewportRef.current;
+    if (!el) return undefined;
+    let rafId = 0;
+    let stopped = false;
+    const step = () => {
+      if (stopped) return;
+      const resetPoint = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+      if (resetPoint > 0) {
+        el.scrollLeft += 0.24;
+        if (el.scrollLeft >= resetPoint) el.scrollLeft = 0;
+      }
+      rafId = window.requestAnimationFrame(step);
+    };
+    rafId = window.requestAnimationFrame(step);
+    return () => {
+      stopped = true;
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
+  }, [brandCategoryId, loopingPopularBrands.length]);
 
   const scrollSolutionsBy = (direction) => {
     const el = solutionsViewportRef.current;
     if (!el) return;
-    const cards = el.querySelectorAll('.solution-card');
+    const cards = el.querySelectorAll('.brand-card, .solution-card');
     const first = cards[0];
     const second = cards[1];
     const gap =
@@ -823,6 +878,7 @@ function Root() {
           <a href="#scan-results">Skin Diagnosis</a>
           <a href="#before-after">New</a>
           <a href="#patient-reviews">Bestsellers</a>
+          <a href="/waitlist" onClick={(e) => handleOpenGetApp(e, 'top_nav_menu')}>App</a>
         </nav>
         <div className="nav-actions">
           <button
@@ -846,6 +902,15 @@ function Root() {
           <a href="#scan-results" onClick={() => setShowMobileMenu(false)}>Skin Diagnosis</a>
           <a href="#before-after" onClick={() => setShowMobileMenu(false)}>New</a>
           <a href="#patient-reviews" onClick={() => setShowMobileMenu(false)}>Bestsellers</a>
+          <a
+            href="/waitlist"
+            onClick={(e) => {
+              setShowMobileMenu(false);
+              handleOpenGetApp(e, 'mobile_nav_menu');
+            }}
+          >
+            App
+          </a>
         </div>
       )}
       </div>
@@ -886,7 +951,7 @@ function Root() {
               </p>
             </div>
             <h1 className="hero-title hero-title--cal">
-              <span className="hero-title-line1">See what&apos;s really inside your products</span>
+              <span className="hero-title-line1">Know what&apos;s really inside your products</span>
             </h1>
             <p className="subtext subtext--cal">
               Scan any product barcode to instantly reveal product ingredients and check exactly what&apos;s inside.
@@ -929,273 +994,110 @@ function Root() {
       ) : null}
 
       <div className="page page--below-fold">
-      <section className="routine-band" aria-label="Discover your skincare routine">
-        <h2 className="routine-title">
-          <span className="routine-title-strong">Reveal the best skin</span>{' '}
-          <span className="routine-title-soft">routine made uniquely for you.</span>
-        </h2>
-        <img
-          src={DEFAULT_ROUTINE_BOTTLE_IMAGE}
-          alt="Skincare serum bottle"
-          className={`routine-bottle ${isDraggingBottle ? 'is-dragging' : ''}`}
-          style={{
-            '--bottle-x': `${bottleOffset.x}px`,
-            '--bottle-y': `${bottleOffset.y}px`
-          }}
-          onPointerDown={handleBottlePointerDown}
-          onPointerMove={handleBottlePointerMove}
-          onPointerUp={endBottleDrag}
-          onPointerCancel={endBottleDrag}
-        />
-      </section>
-
-      <section className="solutions" aria-label="Our skincare solutions" id="products">
-        <p className="solutions-kicker">
-          <img className="pill-panda" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
-          <span>MOST POPULAR PRODUCT</span>
-        </p>
-        <h2>Our Skincare Prescriptions</h2>
-
-        <div className="solutions-shell">
-          <div className="solutions-controls">
-            <p className="solutions-browse-copy">Browse by serum</p>
-            <div className="solutions-controls-right" role="tablist" aria-label="Filter by serum concern">
-              {CATALOG_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={catalogFilterId === f.id}
-                  className={`solutions-tab ${catalogFilterId === f.id ? 'active' : ''}`}
-                  onClick={() => setCatalogFilterId(f.id)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="solutions-insights" aria-label="Catalog insights">
-            <div className="solutions-insight-block">
-              <p className="solutions-insight-title">Top brands</p>
-              <div className="solutions-insight-pills">
-                {catalogStats.topBrands.map((entry) => (
-                  <span key={entry.brand} className="solutions-insight-pill">
-                    {entry.brand} ({entry.count})
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="solutions-insight-block">
-              <p className="solutions-insight-title">Category groups</p>
-              <div className="solutions-insight-pills">
-                {catalogStats.categoryCounts.map((entry) => (
-                  <span key={entry.id} className="solutions-insight-pill solutions-insight-pill--category">
-                    {entry.label}: {entry.count}
-                  </span>
-                ))}
-                <span className="solutions-insight-pill solutions-insight-pill--rating">
-                  Avg rating: {catalogStats.avgRating}★
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="solutions-carousel">
-            <button
-              type="button"
-              className="solutions-nav prev"
-              aria-label="Previous products"
-              onClick={() => scrollSolutionsBy(-1)}
-              disabled={solutionsNav.atStart}
-            >
-              ‹
-            </button>
-
-            <div
-              className="solutions-viewport"
-              aria-label="Skincare product carousel"
-              ref={solutionsViewportRef}
-              onScroll={updateSolutionsNav}
-            >
-              <div
-                className={`solutions-track${catalogFilterId !== 'all' ? ' solutions-track--focused' : ''}`}
-              >
-                {filteredProductCards.map((product) => (
-                  <article
-                    key={product.id}
-                    className={`solution-card ${product.featured ? 'featured' : ''}`}
-                    aria-label={product.displayName}
-                  >
-                    <div className="solution-media">
-                      <img src={product.image} alt={product.displayName} />
-                      <button
-                        type="button"
-                        className="solution-checkout-icon"
-                        onClick={() => handleStartProductCheckout(product)}
-                        disabled={checkoutBusyProductId === product.id}
-                        aria-label={`Checkout in chat — ${product.displayName}`}
-                        title={checkoutBusyProductId === product.id ? 'Opening checkout chat…' : 'Checkout in chat'}
-                      >
-                        {checkoutBusyProductId === product.id ? (
-                          <span aria-hidden="true">…</span>
-                        ) : (
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-                            <path d="M3 6h18" />
-                            <path d="M16 10a4 4 0 0 1-8 0" />
-                          </svg>
-                        )}
-                      </button>
-                      <p className="solution-media-title">{product.displayName}</p>
-                    </div>
-                    <div className="solution-meta">
-                      <div className="solution-product-badges" aria-label="Product tags">
-                        {product.colorBadges.category ? (
-                          <span className="solution-cat-pill">{product.colorBadges.category}</span>
-                        ) : null}
-                        {product.colorBadges.protocol ? (
-                          <span className="solution-protocol-pill">{product.colorBadges.protocol}</span>
-                        ) : null}
-                        {product.colorBadges.highlight ? (
-                          <span className="solution-label-pill">{product.colorBadges.highlight}</span>
-                        ) : null}
-                      </div>
-                      <div className="solution-row solution-row-title">
-                        <h3>{product.displayName}</h3>
-                        <p className="solution-size">{product.size}</p>
-                      </div>
-                      {product.shortDescription ? (
-                        <p className="solution-blurb">{product.shortDescription}</p>
-                      ) : null}
-                      <div className="solution-footer">
-                        <div className="solution-footer-left">
-                          <p className="solution-verified">{product.rating}</p>
-                          <p className="solution-card-secondary">
-                            <button
-                              type="button"
-                              className="solution-ingredients-link"
-                              disabled={checkoutBlockedNoMerchant}
-                              onClick={() => {
-                                if (checkoutBlockedNoMerchant) return;
-                                handleChatAboutIngredients(product);
-                              }}
-                              title={
-                                checkoutBlockedNoMerchant
-                                  ? 'Set REACT_APP_MERCHANT_ID to open checkout chat from this host'
-                                  : undefined
-                              }
-                            >
-                              Learn more
-                            </button>
-                          </p>
-                        </div>
-                        <div className="solution-footer-right">
-                          <p className="solution-price-line">{product.price || '$0.00'}</p>
-                          <p className="solution-stars">★★★★★</p>
-                        </div>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="solutions-nav next"
-              aria-label="Next products"
-              onClick={() => scrollSolutionsBy(1)}
-              disabled={solutionsNav.atEnd}
-            >
-              ›
-            </button>
-          </div>
-          {!productsLoading && productsError && (
-            <p className="solutions-browse-copy" role="status">
-              Product catalog unavailable ({productsError}). Showing fallback until API is reachable.
-            </p>
-          )}
-        </div>
-      </section>
-
-      <section className="scan-results" aria-label="Scan your face and get result" id="scan-results">
+      <section className="scan-results" aria-label="Ask Skin and Care questions" id="scan-results">
         <div className="scan-results-intro">
           <p className="scan-results-badge">
             <img className="scan-badge-icon" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
-            <span>AI SCAN</span>
+            <span>SKIN &amp; CARE QUESTIONS</span>
           </p>
-          <h2 className="scan-results-title">Scan Your Face &amp; Get Result</h2>
+          <h2 className="scan-results-title">Ask Skin &amp; Care Questions</h2>
           <p className="scan-results-sub">
-            Live analysis, product guidance, and next steps — in one flow. Example cards below illustrate the kind of
-            signals a full scan surfaces; they are not a diagnosis.
+            Get clinically backed product guidance with clear answers on ingredients, routine fit, and daily skincare
+            choices you can trust.
           </p>
         </div>
 
-        <div className="scan-results-grid">
-          <aside className="scan-results-left" aria-label="Skin insights">
-            {insights.map((item) => {
-              const pct =
-                typeof item.confidence === 'number' && Number.isFinite(item.confidence)
-                  ? Math.round(Math.max(0, Math.min(1, item.confidence)) * 100)
-                  : null;
-              return (
+        <div className="scan-chat-layout">
+          <div className="scan-chat-cluster">
+            <aside className="scan-chat-threads" aria-label="Saved product conversations">
+              {chatThreads.map((thread, idx) => (
                 <button
-                  key={item.id}
+                  key={thread.id}
                   type="button"
-                  className={`scan-insight ${item.id === activeInsightId ? 'active' : ''}`}
-                  onClick={() => setActiveInsightId(item.id)}
+                  className={`scan-thread-item ${idx === activeChatThread ? 'active' : ''}`}
+                  onClick={() => setActiveChatThread(idx)}
+                  aria-label={`Open ${thread.productName} conversation`}
+                  title={thread.productName}
                 >
-                  <div className="scan-insight-pill">
-                    <span className="scan-insight-dot" aria-hidden="true" />
-                    <span className="scan-insight-label">{item.label}</span>
-                    {pct != null ? (
-                      <span className="scan-insight-confidence" aria-label={`Model confidence ${pct} percent`}>
-                        {pct}%
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="scan-insight-text">{item.summary}</p>
-                  {item.nextStep ? <p className="scan-insight-next">{item.nextStep}</p> : null}
+                  <img src={thread.image} alt={thread.productName} />
+                  {thread.unread > 0 ? <span className="scan-thread-badge">{thread.unread}</span> : null}
                 </button>
-              );
-            })}
+              ))}
+            </aside>
 
-            <div className="scan-card scan-assistant-card" aria-label="Assistant recommendation">
-              <div className="scan-card-badge" aria-hidden="true">AI</div>
-              <p className="scan-card-title">Thank you for the photo!</p>
-              <p className="scan-card-subtitle">
-                While we analyze your skin in the patient flow, here is a serum that often complements brightening and
-                daily protection goals.
-              </p>
-              <div className="scan-assistant-product">
+            <article className="scan-chat-shell" aria-label="Sample customer conversation">
+              <header className="scan-chat-header">
                 <img
-                  src={scanSpotlightProduct?.image || DEFAULT_ROUTINE_BOTTLE_IMAGE}
-                  alt={scanSpotlightProduct?.displayName || 'Recommended serum'}
+                  className="scan-chat-header-img"
+                  src={activeThread?.image || chatLeadProduct?.image || DEFAULT_ROUTINE_BOTTLE_IMAGE}
+                  alt={activeThread?.productName || chatLeadProduct?.displayName || 'Product'}
                 />
                 <div>
-                  <p className="scan-assistant-name">
-                    {scanSpotlightProduct?.displayName || 'Vitamin C Serum'}
-                  </p>
-                  <p className="scan-assistant-note">
-                    {scanSpotlightProduct?.shortDescription ||
-                      'Brightens uneven tone and supports a more even-looking glow.'}
-                  </p>
+                  <p className="scan-chat-header-title">{activeThread?.productName || chatLeadProduct?.displayName || 'Vitamin C Serum'}</p>
+                  <p className="scan-chat-header-sub">{activeThread?.preview || 'Product-first conversation'}</p>
                 </div>
-              </div>
-              <p className="scan-assistant-disclaimer">
-                Commerce suggestions are separate from medical advice; your clinician may recommend different actives.
-              </p>
-            </div>
-          </aside>
+              </header>
 
-          <div className="scan-results-center" aria-label="Scan preview">
+              <div className="scan-chat-messages" role="list" aria-label="Product-first chat preview">
+                <div className="scan-chat-time">
+                  <span className="scan-chat-live-dot" aria-hidden="true" />
+                  Live conversation preview
+                </div>
+                {(activeThread?.messages || []).slice(0, visibleChatMessages).map((msg, idx) => (
+                  <article
+                    key={`${activeThread?.id || 'thread'}-${idx}`}
+                    className={`scan-chat-msg ${msg.role === 'guide' ? 'scan-chat-msg--guide' : 'scan-chat-msg--patient'}`}
+                    role="listitem"
+                  >
+                    <div className="scan-chat-bubble">{msg.text}</div>
+                  </article>
+                ))}
+                {visibleChatMessages < (activeThread?.messages?.length || 0) ? (
+                  <article className="scan-chat-msg scan-chat-msg--guide" role="listitem" aria-label="Typing">
+                    <div className="scan-chat-bubble scan-chat-bubble--typing">
+                      <span className="scan-typing-dot" />
+                      <span className="scan-typing-dot" />
+                      <span className="scan-typing-dot" />
+                    </div>
+                  </article>
+                ) : null}
+              </div>
+
+              <footer className="scan-chat-input">
+                <button type="button" className="scan-chat-input-icon" aria-label="Attach product image">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 7a2 2 0 0 1 2-2h2l1.2-1.4c.2-.23.49-.36.8-.36h2c.31 0 .6.13.8.36L15.99 5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7Z" />
+                    <circle cx="12" cy="12" r="3.5" />
+                  </svg>
+                </button>
+                <button type="button" className="scan-chat-input-icon" aria-label="Add emoji reaction">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="9" cy="10" r="1.1" />
+                    <circle cx="15" cy="10" r="1.1" />
+                    <path d="M8.4 14.2c.9 1.1 2.2 1.8 3.6 1.8 1.4 0 2.7-.7 3.6-1.8" />
+                  </svg>
+                </button>
+                <div className="scan-chat-input-field">Type your message here!</div>
+                <button type="button" className="scan-chat-input-icon" aria-label="Send voice message">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="9" y="3" width="6" height="11" rx="3" />
+                    <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0" />
+                    <path d="M12 17v4" />
+                    <path d="M8.5 21h7" />
+                  </svg>
+                </button>
+              </footer>
+            </article>
+          </div>
+
+          <div className="scan-results-center" aria-label="Live scan preview">
             <div className="scan-phone">
-              <img src="/images/sections/scan-middle-face.png" alt="Scan preview" className="scan-phone-img" />
+              <img src="/images/sections/scan-middle-face.png" alt="Live skin scan preview" className="scan-phone-img" />
               <div className="scan-cv-overlay" aria-hidden="true">
                 <div className="scan-cv-top">
-                  <span className="scan-cv-tag">AI</span>
-                  <span className="scan-cv-status">Face detected • Live CV</span>
+                  <span className="scan-cv-tag">LIVE</span>
+                  <span className="scan-cv-status">Face scan in progress</span>
                 </div>
                 <div className="scan-cv-face-mesh" />
                 <div className="scan-cv-corners">
@@ -1212,160 +1114,204 @@ function Root() {
                 <span className="corner br" />
               </div>
               <div className="scan-phone-overlay" aria-hidden="true" />
-              <button className="scan-primary-btn" type="button" onClick={handleStartAnalysis}>
-                Try now
-              </button>
             </div>
           </div>
 
-          <aside className="scan-results-right" aria-label="Dermatology FAQs">
+          <aside className="scan-trust-panel" aria-label="Clinical trust and safety notes">
             <div className="scan-faq-header" aria-hidden="true">
               <img className="pill-panda" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
-              <span>MEDICAL DERMATOLOGY</span>
+              <span>CLINICAL TRUST</span>
             </div>
-            <h3 className="scan-faq-title">Science-backed care for all skin conditions</h3>
-            <div className="scan-faq" aria-label="Frequently asked questions">
+            <h3 className="scan-faq-title">Trusted answers for real skincare decisions</h3>
+            <div className="scan-faq" aria-label="Trust and safety frequently asked questions">
               <details className="faq-item" open>
                 <summary>
-                  What does the AI skin scan analyze?
+                  How is guidance personalized?
                   <span className="faq-control" aria-hidden="true" />
                 </summary>
                 <p>
-                  It looks for common skin signals like acne, tone and texture concerns, visible irritation, and early
-                  signs of uneven pigmentation—then translates them into a simple routine and next steps.
+                  We start with your scanned product and ingredients, then tailor routine guidance to your skin concerns.
                 </p>
               </details>
-
               <details className="faq-item">
                 <summary>
-                  Is this a medical diagnosis?
+                  Is this medical advice?
                   <span className="faq-control" aria-hidden="true" />
                 </summary>
                 <p>
-                  No. The scan provides guidance and education, not a diagnosis. If we detect signs that need clinical
-                  review, we’ll guide you into a dermatologist consult through the patient portal.
+                  Guidance supports everyday decisions. For persistent, painful, or worsening symptoms, continue with a
+                  clinician review.
                 </p>
               </details>
-
               <details className="faq-item">
                 <summary>
-                  Do you store my photo or scan results?
+                  What should I ask first?
                   <span className="faq-control" aria-hidden="true" />
                 </summary>
-                <p>
-                  Your scan is used to generate results and recommendations. We minimize retention and keep access limited
-                  to your care experience in the patient portal.
-                </p>
-              </details>
-
-              <details className="faq-item">
-                <summary>
-                  How accurate is the scan?
-                  <span className="faq-control" aria-hidden="true" />
-                </summary>
-                <p>
-                  Accuracy depends on lighting and image quality. We show results with clear next steps, and you can always
-                  confirm with a clinician—especially for persistent, painful, or rapidly changing concerns.
-                </p>
-              </details>
-
-              <details className="faq-item">
-                <summary>
-                  What happens after I get results?
-                  <span className="faq-control" aria-hidden="true" />
-                </summary>
-                <p>
-                  You’ll get a recommended routine and product guidance. If you want, you can continue into the patient
-                  portal to ask questions, share more context, and get clinician-backed next steps.
-                </p>
+                <p>Ask about ingredient fit, frequency, and what to monitor in your first week.</p>
               </details>
             </div>
+            <button className="scan-primary-btn scan-primary-btn--inline" type="button" onClick={handleStartAnalysis}>
+              Ask now
+            </button>
           </aside>
         </div>
       </section>
 
-      <section className="patient-reviews" aria-label="What our patients say" id="patient-reviews">
-        <div className="patient-reviews-grid">
-          <div className="patient-reviews-copy">
-            <h2>What our patients say</h2>
-            <div className="reviews-nav" aria-hidden="true">
-              <button type="button">←</button>
-              <button type="button">→</button>
+      <section className="routine-track" aria-label="Track your skincare routines">
+        <div className="routine-track-head">
+          <h2>Track your skincare routines</h2>
+          <p>
+            Join us in taking skincare <em>beyond the bathroom</em>
+          </p>
+        </div>
+        <div className="routine-track-carousel" aria-label="Routine inspiration feed" ref={routineCarouselRef}>
+          <article className="routine-track-card routine-track-card--short">
+            <img src="/images/form.svg" alt="Routine snapshot card" loading="lazy" />
+          </article>
+          <article className="routine-track-card routine-track-card--medium">
+            <img src="/images/give up.svg" alt="Skincare creator content" loading="lazy" />
+          </article>
+          <article className="routine-track-card routine-track-card--tall">
+            <video
+              src="/videos/routine-carousel.mp4"
+              className="routine-track-video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              controls={false}
+            />
+          </article>
+          <article className="routine-track-card routine-track-card--medium">
+            <img src="/images/give up (1).svg" alt="Product routine clip" loading="lazy" />
+          </article>
+          <article className="routine-track-card routine-track-card--short">
+            <video
+              src="/videos/routine-eye-patch.mp4"
+              className="routine-track-video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              controls={false}
+            />
+          </article>
+
+          <article className="routine-track-card routine-track-card--short" aria-hidden="true">
+            <img src="/images/form.svg" alt="" loading="lazy" />
+          </article>
+          <article className="routine-track-card routine-track-card--medium" aria-hidden="true">
+            <img src="/images/give up.svg" alt="" loading="lazy" />
+          </article>
+          <article className="routine-track-card routine-track-card--tall" aria-hidden="true">
+            <video
+              src="/videos/routine-carousel.mp4"
+              className="routine-track-video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              controls={false}
+            />
+          </article>
+          <article className="routine-track-card routine-track-card--medium" aria-hidden="true">
+            <img src="/images/give up (1).svg" alt="" loading="lazy" />
+          </article>
+          <article className="routine-track-card routine-track-card--short" aria-hidden="true">
+            <video
+              src="/videos/routine-eye-patch.mp4"
+              className="routine-track-video"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              controls={false}
+            />
+          </article>
+        </div>
+      </section>
+
+      <section className="solutions" aria-label="Popular skincare brands" id="products">
+        <p className="solutions-kicker">
+          <img className="pill-panda" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
+          <span>SCAN POPULAR BRANDS</span>
+        </p>
+        <h2>Most Popular Brands</h2>
+
+        <div className="solutions-shell">
+          <div className="solutions-controls">
+            <p className="solutions-browse-copy">Browse by category</p>
+            <div className="solutions-controls-right" role="tablist" aria-label="Filter brand categories">
+              {BRAND_CATEGORY_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={brandCategoryId === f.id}
+                  className={`solutions-tab ${brandCategoryId === f.id ? 'active' : ''}`}
+                  onClick={() => setBrandCategoryId(f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
           </div>
+          <p className="solutions-popular-note">
+            Brands from the latest GCP catalog audit across Skincare, Supplements, HairCare, and BodyCare.
+          </p>
 
-          <div className="reviews-track-wrap" aria-label="Auto-moving testimonials">
-            <div className="reviews-track">
-              <article className="review-mini-card">
-                <div className="review-mini-stars">★★★★★</div>
-                <p>
-                  The personalized approach made all the difference. They didn’t rush anything and created a plan that
-                  worked for my skin.
-                </p>
-                <div className="review-mini-author">
-                  <span className="avatar a2" aria-hidden="true" />
-                  <div>
-                    <strong>Olivia Chen</strong>
-                    <small>Creative Director</small>
-                  </div>
-                </div>
-              </article>
+          <div className="brand-carousel" aria-label="Popular brand logo carousel">
+            <button
+              type="button"
+              className="solutions-nav prev"
+              aria-label="Previous brands"
+              onClick={() => scrollSolutionsBy(-1)}
+              disabled={solutionsNav.atStart}
+            >
+              ‹
+            </button>
 
-              <article className="review-mini-card">
-                <div className="review-mini-stars">★★★★★</div>
-                <p>
-                  My acne finally cleared after years of trying everything. The treatment plan was simple, clear, and
-                  effective.
-                </p>
-                <div className="review-mini-author">
-                  <span className="avatar a1" aria-hidden="true" />
-                  <div>
-                    <strong>Sofia Hale</strong>
-                    <small>Actress</small>
-                  </div>
-                </div>
-              </article>
-
-              <article className="review-mini-card">
-                <div className="review-mini-stars">★★★★★</div>
-                <p>
-                  Professional, clean clinic with advanced tools. I felt informed at every step and saw visible
-                  improvement quickly.
-                </p>
-                <div className="review-mini-author">
-                  <span className="avatar a3" aria-hidden="true" />
-                  <div>
-                    <strong>Priya Mehta</strong>
-                    <small>Product Manager</small>
-                  </div>
-                </div>
-              </article>
-
-              <article className="review-mini-card">
-                <div className="review-mini-stars">★★★★★</div>
-                <p>
-                  The personalized approach made all the difference. They didn’t rush anything and created a plan that
-                  worked for my skin.
-                </p>
-                <div className="review-mini-author">
-                  <span className="avatar a2" aria-hidden="true" />
-                  <div>
-                    <strong>Olivia Chen</strong>
-                    <small>Creative Director</small>
-                  </div>
-                </div>
-              </article>
+            <div className="brand-carousel-viewport" ref={solutionsViewportRef} onScroll={updateSolutionsNav}>
+              <div className="brand-carousel-track">
+                {loopingPopularBrands.map((brand, idx) => (
+                  <article
+                    key={`${brand.id}-${idx}`}
+                    className="brand-card"
+                    aria-label={idx >= filteredPopularBrands.length ? undefined : brand.name}
+                    aria-hidden={idx >= filteredPopularBrands.length ? 'true' : undefined}
+                  >
+                    <div className="brand-logo-badge">
+                      {brand.logoUrl ? (
+                        <img
+                          src={brand.logoUrl}
+                          alt={`${brand.name} logo`}
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
             </div>
+
+            <button
+              type="button"
+              className="solutions-nav next"
+              aria-label="Next brands"
+              onClick={() => scrollSolutionsBy(1)}
+              disabled={solutionsNav.atEnd}
+            >
+              ›
+            </button>
           </div>
-
-          <aside className="reviews-score-card">
-            <img src="/images/hero/patient-rating-hero.png" alt="Patient result close-up" />
-            <div className="reviews-score-overlay">
-              <div className="score-number">4.9</div>
-              <div className="review-mini-stars">★★★★★</div>
-              <div className="score-label">CLIENTS RATING</div>
-            </div>
-          </aside>
         </div>
       </section>
 
@@ -1400,31 +1346,83 @@ function Root() {
             </div>
           </div>
 
-          <aside className="before-after-right" aria-label="Suggested products">
-            <div className="ba-spotlight" aria-label="Vitamin C serum spotlight">
-              <p className="ba-spotlight-kicker">Vitamin C Serum</p>
-              <div className="ba-spotlight-stage" aria-label="Move the bottle">
-                <img
-                  className={`ba-spotlight-bottle ${isDraggingBaBottle ? 'is-dragging' : ''}`}
-                  src={DEFAULT_ROUTINE_BOTTLE_IMAGE}
-                  alt="Serum bottle"
-                  style={{
-                    '--ba-bottle-x': `${baBottleOffset.x}px`,
-                    '--ba-bottle-y': `${baBottleOffset.y}px`
-                  }}
-                  onPointerDown={handleBaBottlePointerDown}
-                  onPointerMove={handleBaBottlePointerMove}
-                  onPointerUp={endBaBottleDrag}
-                  onPointerCancel={endBaBottleDrag}
-                />
+          <aside className="before-after-right" aria-label="Patient testimonials" id="patient-reviews">
+            <div className="ba-spotlight ba-spotlight--reviews" aria-label="What our patients say">
+              <p className="ba-spotlight-kicker">What our patients say</p>
+              <div className="reviews-track-wrap reviews-track-wrap--inline" aria-label="Auto-moving testimonials">
+                <div className="reviews-track">
+                  <article className="review-mini-card">
+                    <div className="review-mini-stars">★★★★★</div>
+                    <p>
+                      The personalized approach made all the difference. They didn&apos;t rush anything and created a plan
+                      that worked for my skin.
+                    </p>
+                    <div className="review-mini-author">
+                      <span className="avatar a2" aria-hidden="true" />
+                      <div>
+                        <strong>Olivia Chen</strong>
+                        <small>Dermatology Nurse</small>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="review-mini-card">
+                    <div className="review-mini-stars">★★★★★</div>
+                    <p>
+                      My acne finally cleared after years of trying everything. The treatment plan was simple, clear, and
+                      effective.
+                    </p>
+                    <div className="review-mini-author">
+                      <span className="avatar a1" aria-hidden="true" />
+                      <div>
+                        <strong>Sofia Hale</strong>
+                        <small>Aesthetic Clinician</small>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="review-mini-card">
+                    <div className="review-mini-stars">★★★★★</div>
+                    <p>
+                      Professional, clean clinic with advanced tools. I felt informed at every step and saw visible
+                      improvement quickly.
+                    </p>
+                    <div className="review-mini-author">
+                      <span className="avatar a3" aria-hidden="true" />
+                      <div>
+                        <strong>Priya Mehta</strong>
+                        <small>General Practitioner</small>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article className="review-mini-card">
+                    <div className="review-mini-stars">★★★★★</div>
+                    <p>
+                      The personalized approach made all the difference. They didn&apos;t rush anything and created a plan
+                      that worked for my skin.
+                    </p>
+                    <div className="review-mini-author">
+                      <span className="avatar a2" aria-hidden="true" />
+                      <div>
+                        <strong>Olivia Chen</strong>
+                        <small>Dermatology Nurse</small>
+                      </div>
+                    </div>
+                  </article>
+                </div>
               </div>
-              <a
-                className="ba-buy"
-                href="/waitlist"
-                onClick={handleStartAnalysis}
+              <button
+                type="button"
+                className="btn-ghost btn-get-app ba-reviews-get-app"
+                aria-label="Get The App — join the Skin and Care waitlist"
+                onClick={() => {
+                  emitCheckoutFunnelEvent('landing_get_app_open', { source: 'reviews_section' });
+                  setShowGetAppModal(true);
+                }}
               >
-                Buy Vitamin C Serum <span aria-hidden="true">→</span>
-              </a>
+                Get The App
+              </button>
             </div>
           </aside>
         </div>
@@ -1476,7 +1474,7 @@ function Root() {
             className="contact-visual-card"
             href="/waitlist"
             onClick={handleStartAnalysis}
-            aria-label="Open patient portal for general inquiries"
+            aria-label="Open get app waitlist for general inquiries"
           >
             <img src="/images/hero/contact-right-hero.png" alt="General inquiries" />
             <div className="contact-overlay">
@@ -1497,7 +1495,7 @@ function Root() {
               <div className="site-footer-overlay">
                 <div className="site-footer-copy">
                   <p className="site-footer-kicker">SKIN &amp; CARE</p>
-                  <h2>Dermatology care that feels personal.</h2>
+                  <h2>Healthcare care that feels personal.</h2>
                   <p>
                     Scan your face, understand your skin, and get a routine built with dermatologists, not just algorithms.
                   </p>
@@ -1530,14 +1528,8 @@ function Root() {
                 <img src="/images/branding/logo-panda.png" alt="Skin &amp; Care logo" />
                 <span>Skin &amp; Care</span>
               </div>
-              <nav className="site-footer-links" aria-label="Footer navigation">
-                <a href="#products">Products</a>
-                <a href="#scan-results">Scan results</a>
-                <a href="/unified-dashboard/patients/patient-login.html">Patient portal</a>
-                <a href="#contact">Contact</a>
-              </nav>
               <p className="site-footer-meta">
-                © {new Date().getFullYear()} Skin &amp; Care. All rights reserved.
+                © {new Date().getFullYear()} Skin &amp; Care. All rights reserved. New York, New York USA.
               </p>
             </div>
           </div>

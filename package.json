@@ -1,6 +1,7 @@
 {
   "type": "module",
   "scripts": {
+    "dev:one-place": "node scripts/dev-one-place.cjs",
     "perf:lighthouse": "node perf/run-lighthouse.mjs",
     "perf:budgets": "node scripts/check-performance-budgets.cjs",
     "check:landing-routes": "node scripts/check-landing-route-canonicalization.cjs",

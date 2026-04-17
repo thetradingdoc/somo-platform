@@ -1063,6 +1063,19 @@
   font-style: italic;
 }
 
+.arp-verdict-ask-kelly {
+  margin-top: 8px;
+  border: none;
+  background: transparent;
+  color: #3b82f6;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
 .arp-verdict-fallback {
   margin: 10px 0 0;
   font-size: 12px;

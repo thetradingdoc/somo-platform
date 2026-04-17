@@ -214,6 +214,14 @@ function formatVerdictAnswer(answer, fallback = 'Unknown') {
   return _titleCase(v.replace(/_/g, ' '));
 }
 
+function harmfulSeverityLabel(sev) {
+  const v = String(sev || '').trim().toLowerCase();
+  if (v === 'low') return 'Low risk';
+  if (v === 'medium') return 'Moderate risk';
+  if (v === 'high') return 'High risk';
+  return 'Risk unknown';
+}
+
 function verdictBadgeTone(kind, answer) {
   const v = String(answer || '').trim().toLowerCase();
   if (kind === 'good') {
@@ -233,6 +241,23 @@ function verdictBadgeTone(kind, answer) {
     return 'pending';
   }
   return 'pending';
+}
+
+function deterministicGoodForMe(tiles, conflicts) {
+  const list = Array.isArray(conflicts) ? conflicts : [];
+  if (list.length > 0) return `${list.length} routine conflict(s) detected — review before use.`;
+  if (tiles?.key_actives?.status === 'available') return 'No profile conflicts detected from ingredient scan.';
+  return 'Scan complete — add your profile for a personalised fit verdict.';
+}
+
+function deterministicHarmfulLine(watchList) {
+  const list = Array.isArray(watchList) ? watchList : [];
+  if (!list.length) return 'No flagged ingredients found in ingredient scan.';
+  const labels = list
+    .slice(0, 3)
+    .map((w) => String(w?.label || '').trim())
+    .filter(Boolean);
+  return `${list.length} ingredient(s) flagged for review: ${labels.join(', ')}${list.length > 3 ? '…' : ''}.`;
 }
 
 function buildPendingText(reasoningReady) {
@@ -733,11 +758,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     (functionText ? `Supports ${functionText}.` : categoryRoute === 'food' ? 'Food or beverage item from the scanned catalog.' : 'Product summary is still loading.');
   const fallbackGoodSummary =
     verdict?.good_for_me?.summary ||
-    (graphConflicts.length
-      ? 'Potential routine conflicts detected. Review the conflict section below.'
-      : good.length
-        ? `Works well for ${good.slice(0, 2).map((item) => item.label).join(' and ')} signals found in the ingredient line.`
-        : 'No routine conflicts detected from the current deterministic scan.');
+    deterministicGoodForMe(tiles, graphConflicts);
   const fallbackGoodAnswer =
     verdict?.good_for_me?.answer ||
     (graphConflicts.length ? 'caution' : good.length ? 'yes' : 'unknown');
@@ -746,9 +767,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     (watch.length ? 'medium' : product?.nyc_metal_context ? 'low' : 'low');
   const fallbackHarmfulSummary =
     harmfulEvidence ||
-    (watch.length
-      ? 'Some flagged ingredients may matter for sensitive or acne-prone skin.'
-      : 'No immediate high-risk signals detected in the deterministic scan.');
+    deterministicHarmfulLine(watch);
   const fallbackHarmfulFlags =
     harmfulFlags.length
       ? harmfulFlags
@@ -1012,9 +1031,10 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 iconClass="arp-verdict-icon--risk"
                 icon="warning"
                 q="Harmful ingredients / risk"
-                badge={formatVerdictAnswer(fallbackHarmfulAnswer, 'Unknown')}
+                badge={harmfulSeverityLabel(fallbackHarmfulAnswer)}
                 badgeTone={verdictBadgeTone('harmful', fallbackHarmfulAnswer)}
-                summary={fallbackHarmfulSummary}
+                summary={harmfulFlags.length && !harmfulEvidence ? fallbackHarmfulSummary : ''}
+                detail={harmfulEvidence || (!harmfulFlags.length ? deterministicHarmfulLine(watch) : '')}
                 chips={fallbackHarmfulFlags}
                 pending={!harmfulFlags.length ? pendingText : ''}
                 fallback={getReasoningUnavailableCopy(resultSummary, verdict?.harmful)}
@@ -1035,8 +1055,12 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 iconClass="arp-verdict-icon--fx"
                 icon="flag"
                 q="Side effects"
-                summary={fallbackSideEffects}
-                pending={pendingText}
+                summary={sideEffectsLine !== 'Not assessed in this scan.' ? fallbackSideEffects : ''}
+                pending={
+                  sideEffectsLine === 'Not assessed in this scan.'
+                    ? 'Side effect profile not yet assessed for this scan.'
+                    : pendingText
+                }
                 fallback={getReasoningUnavailableCopy(resultSummary, verdict?.side_effects)}
                 reasoning={reasoningPanelFor(verdict?.side_effects)}
               />
@@ -1052,7 +1076,13 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 pending={!alternativesList.length ? pendingText : ''}
                 fallback={getReasoningUnavailableCopy(resultSummary, verdict?.alternatives)}
                 reasoning={reasoningPanelFor(verdict?.alternatives)}
-              />
+              >
+                {!alternativesList.length ? (
+                  <button type="button" className="arp-verdict-ask-kelly" onClick={onAskKelly || onClose}>
+                    Ask Kelly for personalised alternatives
+                  </button>
+                ) : null}
+              </VerdictRow>
               <p className="arp-verdict-disclaimer">{formatDisclaimerLine(resultSummary?.disclaimer)}</p>
             </div>
           </section>

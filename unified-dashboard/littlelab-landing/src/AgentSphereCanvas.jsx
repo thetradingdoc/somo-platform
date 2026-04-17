@@ -4,6 +4,10 @@ import { MagicPlasmaScene } from './MagicPlasmaSphere';
 
 function detectWebglSupport() {
   if (typeof document === 'undefined') return false;
+  // JSDOM does not implement canvas WebGL contexts; avoid noisy test-time errors.
+  if (typeof navigator !== 'undefined' && /\bjsdom\b/i.test(String(navigator.userAgent || ''))) {
+    return false;
+  }
   try {
     const canvas = document.createElement('canvas');
     const gl =

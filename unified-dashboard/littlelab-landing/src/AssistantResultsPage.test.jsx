@@ -316,7 +316,7 @@ describe('AssistantResultsPage', () => {
     expect(screen.getByText(/^Caution$/i)).toBeInTheDocument();
     expect(screen.getByText(/Use caution for young children/i)).toBeInTheDocument();
     expect(screen.getByText(/^Side effects$/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Not assessed in this scan/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Side effect profile not yet assessed for this scan/i)).toBeInTheDocument();
     expect(screen.getByText(/^Alternatives I can use$/i)).toBeInTheDocument();
     expect(screen.getByText(/^1 found$/i)).toBeInTheDocument();
     expect(screen.getByText(/Fragrance-free ceramide moisturizer/i)).toBeInTheDocument();
@@ -348,6 +348,24 @@ describe('AssistantResultsPage', () => {
     expect(screen.getByText(/^What does it do\?$/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Supports oil control/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Deeper analysis running/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Ask Kelly for personalised alternatives/i })).toBeInTheDocument();
+  });
+
+  test('renders side-effects pending copy when not assessed', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            verdict: {
+              side_effects: { summary: 'Not assessed in this scan.' }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(/Side effect profile not yet assessed for this scan/i)).toBeInTheDocument();
   });
 
   test('renders conversion layer prompts when missing_more present', () => {
