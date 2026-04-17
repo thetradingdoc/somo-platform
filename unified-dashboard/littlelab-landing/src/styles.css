@@ -463,23 +463,30 @@ body {
 }
 .hero-ctas--cal {
   margin-top: 32px;
-  justify-content: flex-start;
-  flex-wrap: wrap;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  max-width: 460px;
+  gap: 12px;
+  /* Center the pill column in the hero copy area (middle of the content band on screen) */
+  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
 }
 
-/* Match Cal hero buttons (primary + get app): same box as legacy `.hero-ctas` pill sizing */
+/* Same width column as `.site-footer-copy` (460px); full-width pills like footer CTAs */
 .hero-ctas--cal .btn-cal {
   box-sizing: border-box;
-  flex: 1 1 0;
-  /* Don’t shrink below one label line — equal flex + min-width:0 was wrapping “Start Analysis”. */
-  min-width: min-content;
-  min-height: 56px;
-  padding: 13px 30px;
-  font-size: 1.25rem;
+  width: 100%;
+  flex: none;
+  min-height: 52px;
+  padding: 13px 26px;
+  font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
-  white-space: nowrap;
+  justify-content: center;
 }
 
 .btn-cal {
@@ -765,6 +772,9 @@ button.btn-ghost.btn-get-app {
   }
   .hero-ctas--cal {
     justify-content: flex-start;
+    align-self: center;
+    margin-left: auto;
+    margin-right: auto;
   }
   .subtext--cal {
     margin-left: 0;
@@ -2346,7 +2356,9 @@ button.btn-ghost.btn-get-app {
   background: transparent;
   border-top: 1px solid #e7dccf;
   position: relative;
-  overflow: hidden;
+  /* Allow CTA column + kicker to scroll fully into view (avoid clipping last button) */
+  overflow-x: clip;
+  overflow-y: visible;
 }
 .site-footer::before {
   content: "";
@@ -2369,7 +2381,7 @@ button.btn-ghost.btn-get-app {
 .site-footer-shell {
   width: min(1240px, 96vw);
   margin: 0 auto;
-  padding: 40px 20px 24px;
+  padding: 40px 20px 36px;
   position: relative;
   z-index: 2;
 }
@@ -2383,20 +2395,21 @@ button.btn-ghost.btn-get-app {
 }
 .site-footer-main {
   position: relative;
-  min-height: 260px;
   border-radius: 20px;
-  overflow: hidden;
+  overflow: visible;
   background: transparent;
 }
 .site-footer-overlay {
-  position: absolute;
-  inset: 0;
+  position: relative;
   display: flex;
-  align-items: center;
-  padding: 34px 42px;
+  align-items: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 32px 42px 40px;
 }
 .site-footer-copy {
   max-width: 460px;
+  width: 100%;
 }
 .site-footer-kicker {
   font-size: 0.72rem;
@@ -2404,6 +2417,8 @@ button.btn-ghost.btn-get-app {
   text-transform: uppercase;
   color: #8a5a11;
   font-weight: 700;
+  margin: 0;
+  padding-top: 4px;
 }
 .site-footer-copy h2 {
   margin-top: 10px;
@@ -2424,13 +2439,16 @@ button.btn-ghost.btn-get-app {
 .site-footer-ctas {
   margin-top: 18px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
 }
-.site-footer-ctas .btn-primary,
-.site-footer-ctas .btn-ghost {
-  min-height: 44px;
-  padding-inline: 20px;
+.site-footer-ctas .btn-cal {
+  width: 100%;
+  justify-content: center;
+  min-height: 48px;
+  font-weight: 700;
+  font-size: 1rem;
 }
 .site-footer-image {
   display: none;
@@ -2519,11 +2537,20 @@ button.btn-ghost.btn-get-app {
     padding: 22px 18px 26px;
   }
   .site-footer-overlay {
-    padding: 24px 22px;
+    padding: 28px 22px 36px;
   }
 }
 
 @media (max-width: 640px) {
+  .site-footer-ctas {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .site-footer-ctas .btn-cal {
+    width: 100%;
+    justify-content: center;
+  }
   .site-footer-bottom {
     flex-direction: column;
     align-items: flex-start;
@@ -2894,7 +2921,8 @@ button.btn-ghost.btn-get-app {
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  /* Programmatic auto-scroll uses scrollLeft each frame; `smooth` can fight RAF updates. */
+  scroll-behavior: auto;
 }
 
 .brand-carousel-viewport::-webkit-scrollbar {
@@ -3315,7 +3343,8 @@ button.btn-ghost.btn-get-app {
 @media (max-width: 640px) {
   .solutions {
     border-radius: 18px;
-    padding: 20px 0 20px;
+    /* Extra top padding so “SCAN POPULAR BRANDS” kicker isn’t clipped at scroll edges */
+    padding: 32px 0 20px;
   }
   .solutions-shell {
     width: 92vw;
@@ -4069,14 +4098,24 @@ button.btn-ghost.btn-get-app {
     font-size: clamp(1.92rem, 9.2vw, 3.2rem);
     line-height: 1.06;
   }
-  /* Phone: exactly two lines — first phrase does not break */
+  /* Default mobile hero: allow wrapping so long titles are never clipped */
   .hero h1.hero-title .hero-title-line1 {
     display: block;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .hero h1.hero-title .hero-title-line2 {
     display: block;
     white-space: normal;
+  }
+  /* Cal split hero: always show full headline on narrow viewports (no single-line truncation) */
+  .hero.hero-cal h1.hero-title--cal {
+    max-width: 100%;
+  }
+  .hero.hero-cal h1.hero-title--cal .hero-title-line1 {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
   .subtext {
     margin-top: 18px;
@@ -4090,6 +4129,7 @@ button.btn-ghost.btn-get-app {
     width: 100%;
     min-height: 48px;
     font-size: 1rem;
+    white-space: normal;
   }
   .btn-primary, .btn-ghost {
     width: 100%;

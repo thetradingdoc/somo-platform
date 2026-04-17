@@ -2,7 +2,7 @@
 
 **Version**: 3.0.0  
 **Status**: Production Ready  
-**Last Updated:** April 9, 2026
+**Last Updated:** April 17, 2026
 
 ## Overview
 
@@ -13,6 +13,8 @@ The unified dashboard is the frontend interface for DocLittle, providing web-bas
 ### Skin & Care landing (CRA)
 
 - **`littlelab-landing/`** — React (Create React App) app: Skin & Care marketing + Try Now assistant (Kelly, LiveKit, results flow). Build with `npm run build` inside that folder; static output is served with the rest of the unified dashboard.
+- Hero “Loved by doctors” row: large seal uses `public/images/branding/approvedicon.png`; circular doctor headshot beside the rating uses `public/images/branding/doc-avatar.png` (do not reuse the seal asset there — it reads as a duplicate badge).
+- Hero headline must wrap on small viewports (no `white-space: nowrap` on the Cal hero title); brand carousel auto-scroll uses `requestAnimationFrame` on `.brand-carousel-viewport` with `scroll-behavior: auto` so programmatic scrolling is visible; auto-scroll is disabled when `prefers-reduced-motion: reduce`.
 
 ### Main static pages
 
@@ -89,12 +91,35 @@ const API_BASE_URL = 'http://localhost:4000'; // Development
 
 ## Deployment
 
-### Netlify Deployment
+### Firebase Hosting (Skin & Care landing production)
 
-1. Connect GitHub repository
-2. Set build directory to `unified-dashboard`
-3. Configure redirects in `netlify.toml`
-4. Deploy automatically on push
+`myskinandcare.com` landing is deployed from `unified-dashboard` Firebase config:
+
+```bash
+cd "/Users/ojrichard/Voice Agent/doclittle-platform/unified-dashboard/littlelab-landing"
+npm run build
+
+cd "/Users/ojrichard/Voice Agent/doclittle-platform/unified-dashboard"
+firebase deploy --only hosting
+```
+
+- Firebase project: `doctor-little-c688d` (`.firebaserc`)
+- Hosting root: `littlelab-landing/build` (`firebase.json`)
+- If terminal says _"Not in a Firebase app directory"_, deploy was run from the repo root by mistake.
+
+### Landing checkout maintenance toggle
+
+Use this env var during build to hide checkout entry points on landing (Start Analysis / Ask now / panda assistant button):
+
+```bash
+REACT_APP_CHECKOUT_MAINTENANCE_MODE=1
+```
+
+Set in `littlelab-landing/.env.production` (or CI environment), then rebuild + deploy.
+
+### Merchant warning banner note
+
+The legacy "Checkout links need REACT_APP_MERCHANT_ID..." banner is removed from current landing source. If it appears in production, it indicates stale hosting assets; rebuild `littlelab-landing` and redeploy Firebase hosting from `unified-dashboard`.
 
 ### Local Development
 

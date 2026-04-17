@@ -4,6 +4,8 @@ import AssistantExperience from './AssistantExperience';
 import { normalizeHttpApiBase } from './landingAssistantApi';
 import './skin-care-tokens.css';
 import './styles.css';
+/** Doctor headshot for hero kicker (distinct from approved seal). Served from `public/images/branding/`. */
+const doctorAvatarPng = '/images/branding/doc-avatar.png';
 
 /** Routine-band / marketing bottle art (`public/images` → CRA `build`). New filename avoids stale cache on `routine-bottle.png`. */
 const DEFAULT_ROUTINE_BOTTLE_IMAGE = '/images/products/effaclar-routine-bottle.png';
@@ -164,9 +166,11 @@ function Root() {
         : (isLocalHost ? ['http://localhost:4000'] : [window.location.origin]),
     [configuredApiBase, isLocalHost]
   );
-  const MERCHANT_ID = process.env.REACT_APP_MERCHANT_ID || '';
-  /** Non-localhost hosts require a merchant id so checkout links include provider_id (catalog + quote resolve). */
-  const checkoutBlockedNoMerchant = !isLocalHost && !MERCHANT_ID;
+  // Keep checkout links enabled in prod even when build env misses merchant id.
+  const MERCHANT_ID = process.env.REACT_APP_MERCHANT_ID || process.env.REACT_APP_DEFAULT_MERCHANT_ID || 'provider-1';
+  const checkoutMaintenanceMode = /^(1|true|yes|on)$/i.test(
+    String(process.env.REACT_APP_CHECKOUT_MAINTENANCE_MODE || '').trim()
+  );
 
   const FEATURED_PRODUCT_ORDER = [
     'prod-vitamin-b3-serum-pore-sebum-control',
@@ -506,6 +510,11 @@ function Root() {
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
+  useEffect(() => {
+    if (checkoutMaintenanceMode && showAssistant) {
+      setShowAssistant(false);
+    }
+  }, [checkoutMaintenanceMode, showAssistant]);
   const [solutionsNav, setSolutionsNav] = useState({ atStart: true, atEnd: false });
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showGetAppModal, setShowGetAppModal] = useState(false);
@@ -540,6 +549,7 @@ function Root() {
 
   const handleStartAnalysis = (event) => {
     event.preventDefault();
+    if (checkoutMaintenanceMode) return;
     emitCheckoutFunnelEvent('landing_open_assistant', { source: 'cta' });
     setShowAssistant(true);
   };
@@ -818,15 +828,20 @@ function Root() {
   }, [brandCategoryId, products.length]);
 
   useEffect(() => {
-    const el = solutionsViewportRef.current;
-    if (!el) return undefined;
+    if (typeof window === 'undefined' || !loopingPopularBrands.length) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
     let rafId = 0;
     let stopped = false;
     const step = () => {
       if (stopped) return;
+      const el = solutionsViewportRef.current;
+      if (!el) {
+        rafId = window.requestAnimationFrame(step);
+        return;
+      }
       const resetPoint = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
       if (resetPoint > 0) {
-        el.scrollLeft += 0.24;
+        el.scrollLeft += 0.58;
         if (el.scrollLeft >= resetPoint) el.scrollLeft = 0;
       }
       rafId = window.requestAnimationFrame(step);
@@ -862,12 +877,6 @@ function Root() {
       />
       <a className="skip-link" href="#main-content">Skip to content</a>
       <div className="page page--topbar">
-      {checkoutBlockedNoMerchant ? (
-        <div className="ll-merchant-banner" role="alert">
-          Checkout links need <code>REACT_APP_MERCHANT_ID</code> (your merchant UUID) in the landing build. Localhost is
-          exempt. Without it, the cart icon and ingredient chat entry to checkout stay disabled.
-        </div>
-      ) : null}
       <header className="top-nav">
         <a href="/" className="brand-mark">
           <img className="brand-mark-logo" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
@@ -943,7 +952,7 @@ function Root() {
               </div>
               <p className="kicker kicker--social kicker--cal">
                 <span className="kicker-avatars" aria-hidden="true">
-                  <img src="/unified-dashboard/littlelab-landing/DOC.png" alt="" />
+                  <img src={doctorAvatarPng} alt="" />
                 </span>
                 <span className="kicker-text">
                   Loved by doctors with <span className="kicker-star">⭐</span> 4.9 rating
@@ -957,9 +966,11 @@ function Root() {
               Scan any product barcode to instantly reveal product ingredients and check exactly what&apos;s inside.
             </p>
             <div className="hero-ctas hero-ctas--cal">
-              <a className="btn-cal btn-cal--primary" href="/waitlist" onClick={handleStartAnalysis}>
-                Start Analysis
-              </a>
+              {!checkoutMaintenanceMode ? (
+                <a className="btn-cal btn-cal--primary" href="/waitlist" onClick={handleStartAnalysis}>
+                  Start Analysis
+                </a>
+              ) : null}
               <button
                 type="button"
                 className="btn-cal btn-cal--get-app"
@@ -976,7 +987,7 @@ function Root() {
         </div>
       </section>
 
-      {!showAssistant ? (
+      {!showAssistant && !checkoutMaintenanceMode ? (
         <button
           type="button"
           className="panda-fab"
@@ -1151,9 +1162,11 @@ function Root() {
                 <p>Ask about ingredient fit, frequency, and what to monitor in your first week.</p>
               </details>
             </div>
-            <button className="scan-primary-btn scan-primary-btn--inline" type="button" onClick={handleStartAnalysis}>
-              Ask now
-            </button>
+            {!checkoutMaintenanceMode ? (
+              <button className="scan-primary-btn scan-primary-btn--inline" type="button" onClick={handleStartAnalysis}>
+                Ask now
+              </button>
+            ) : null}
           </aside>
         </div>
       </section>
@@ -1414,7 +1427,7 @@ function Root() {
               </div>
               <button
                 type="button"
-                className="btn-ghost btn-get-app ba-reviews-get-app"
+                className="btn-cal btn-cal--get-app ba-reviews-get-app"
                 aria-label="Get The App — join the Skin and Care waitlist"
                 onClick={() => {
                   emitCheckoutFunnelEvent('landing_get_app_open', { source: 'reviews_section' });
@@ -1495,21 +1508,23 @@ function Root() {
               <div className="site-footer-overlay">
                 <div className="site-footer-copy">
                   <p className="site-footer-kicker">SKIN &amp; CARE</p>
-                  <h2>Healthcare care that feels personal.</h2>
+                  <h2>Healthcare that feels personal.</h2>
                   <p>
-                    Scan your face, understand your skin, and get a routine built with dermatologists, not just algorithms.
+                    Scan any product barcode to instantly reveal product ingredients and check exactly what&apos;s inside.
                   </p>
                   <div className="site-footer-ctas">
-                    <a
-                      className="btn-primary"
-                      href="/waitlist"
-                      onClick={handleStartAnalysis}
-                    >
-                      Start Analysis
-                    </a>
+                    {!checkoutMaintenanceMode ? (
+                      <a
+                        className="btn-cal btn-cal--primary"
+                        href="/waitlist"
+                        onClick={handleStartAnalysis}
+                      >
+                        Start Analysis
+                      </a>
+                    ) : null}
                     <button
                       type="button"
-                      className="btn-ghost btn-get-app"
+                      className="btn-cal btn-cal--get-app"
                       aria-label="Get The App — join the Skin and Care waitlist"
                       onClick={() => {
                         emitCheckoutFunnelEvent('landing_get_app_open', { source: 'footer' });
