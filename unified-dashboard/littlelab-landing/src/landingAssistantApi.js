@@ -325,27 +325,41 @@ export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assi
   }
 }
 
-export function resolveMiddlewareApiBase() {
-  const fromEnv = normalizeHttpApiBase(process.env.REACT_APP_API_BASE || '');
+/**
+ * Pure helper: where to send `/api/public/*` given build env and current location.
+ * Exported for unit tests. Split hosting (static site + API subdomain) must set REACT_APP_API_BASE at build time.
+ *
+ * @param {string} envBase - typically `process.env.REACT_APP_API_BASE`
+ * @param {{ hostname: string, port?: string, origin: string } | null} location - `window.location` subset or null
+ * @returns {string}
+ */
+export function middlewareApiBaseFromLocation(envBase, location) {
+  const fromEnv = normalizeHttpApiBase(envBase || '');
   if (fromEnv) return fromEnv;
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    const h = window.location.hostname;
-    if (h === 'localhost' || h === '127.0.0.1') {
-      const port = String(window.location.port || '');
-      // CRA dev (:3000) and static preview ports have no API; middleware runs on :4000.
-      if (
-        port === '3000' ||
-        port === '3001' ||
-        port === '5199' ||
-        port === '5200' ||
-        port === '4173' ||
-        port === '5000'
-      ) {
-        return h === 'localhost' ? 'http://localhost:4000' : 'http://127.0.0.1:4000';
-      }
-      return window.location.origin;
-    }
+  if (!location?.origin) return '';
+  const h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1') {
+    const port = String(location.port || '');
+    // Middleware default; same-origin when the SPA is served by the API process.
+    if (port === '4000') return location.origin;
+    // Any other dev port (CRA :3000, Vite :5173, previews, etc.) → API on :4000.
+    return h === 'localhost' ? 'http://localhost:4000' : 'http://127.0.0.1:4000';
   }
+  // Production without env: same-origin deploys (middleware + SPA on one host). Split deploys: set REACT_APP_API_BASE.
+  return location.origin;
+}
+
+export function resolveMiddlewareApiBase() {
+  const loc =
+    typeof window !== 'undefined' && window.location
+      ? {
+          hostname: window.location.hostname,
+          port: window.location.port,
+          origin: window.location.origin
+        }
+      : null;
+  const base = middlewareApiBaseFromLocation(process.env.REACT_APP_API_BASE || '', loc);
+  if (base) return base;
   if (process.env.NODE_ENV === 'development') return 'http://localhost:4000';
   return '';
 }

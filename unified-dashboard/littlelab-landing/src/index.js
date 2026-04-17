@@ -726,12 +726,6 @@ function Root() {
   const filteredPopularBrands = useMemo(() => {
     return POPULAR_BRAND_DEFINITIONS.filter((brand) => brand.categories.includes(brandCategoryId));
   }, [brandCategoryId, POPULAR_BRAND_DEFINITIONS]);
-  const loopingPopularBrands = useMemo(() => {
-    if (!filteredPopularBrands.length) return [];
-    return [...filteredPopularBrands, ...filteredPopularBrands];
-  }, [filteredPopularBrands]);
-
-
   const scanSpotlightProduct =
     productCards.find((p) => p.id === VITAMIN_C_PRODUCT_ID) || productCards[0] || null;
   const chatLeadProduct = scanSpotlightProduct || filteredProductCards[0] || productCards[0] || null;
@@ -826,32 +820,6 @@ function Root() {
     const t = window.setTimeout(() => updateSolutionsNav(), 0);
     return () => window.clearTimeout(t);
   }, [brandCategoryId, products.length]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !loopingPopularBrands.length) return undefined;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
-    let rafId = 0;
-    let stopped = false;
-    const step = () => {
-      if (stopped) return;
-      const el = solutionsViewportRef.current;
-      if (!el) {
-        rafId = window.requestAnimationFrame(step);
-        return;
-      }
-      const resetPoint = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
-      if (resetPoint > 0) {
-        el.scrollLeft += 0.58;
-        if (el.scrollLeft >= resetPoint) el.scrollLeft = 0;
-      }
-      rafId = window.requestAnimationFrame(step);
-    };
-    rafId = window.requestAnimationFrame(step);
-    return () => {
-      stopped = true;
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, [brandCategoryId, loopingPopularBrands.length]);
 
   const scrollSolutionsBy = (direction) => {
     const el = solutionsViewportRef.current;
@@ -1274,9 +1242,6 @@ function Root() {
               ))}
             </div>
           </div>
-          <p className="solutions-popular-note">
-            Brands from the latest GCP catalog audit across Skincare, Supplements, HairCare, and BodyCare.
-          </p>
 
           <div className="brand-carousel" aria-label="Popular brand logo carousel">
             <button
@@ -1291,13 +1256,8 @@ function Root() {
 
             <div className="brand-carousel-viewport" ref={solutionsViewportRef} onScroll={updateSolutionsNav}>
               <div className="brand-carousel-track">
-                {loopingPopularBrands.map((brand, idx) => (
-                  <article
-                    key={`${brand.id}-${idx}`}
-                    className="brand-card"
-                    aria-label={idx >= filteredPopularBrands.length ? undefined : brand.name}
-                    aria-hidden={idx >= filteredPopularBrands.length ? 'true' : undefined}
-                  >
+                {filteredPopularBrands.map((brand) => (
+                  <article key={brand.id} className="brand-card" aria-label={brand.name}>
                     <div className="brand-logo-badge">
                       {brand.logoUrl ? (
                         <img

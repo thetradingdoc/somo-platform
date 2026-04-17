@@ -17,8 +17,24 @@ yarn-error.log*
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 middleware-platform/*.db
 merchant-shop/*.db
+
+# Local gcloud CLI cache (often created in-repo by mistake)
+.gcloud-tmp/
+
+# Playwright browser bundles (local only)
+middleware-platform/.playwright-browsers/
+.playwright-browsers/
+
+# Accidental root-level sqlite sidecars (same DB opened from repo root)
+/middleware-dev.db-shm
+/middleware-dev.db-wal
+
+# Random local media drops
+download*.mp4
 
 # Database backups
 backups/

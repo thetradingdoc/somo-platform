@@ -2903,26 +2903,31 @@ button.btn-ghost.btn-get-app {
   letter-spacing: 0.06em;
 }
 
-.solutions-popular-note {
-  margin: 6px 0 14px;
+.brand-carousel {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 0 84px;
-  font-size: 0.84rem;
-  color: #7b7b85;
-  font-weight: 500;
 }
 
-.brand-carousel {
-  margin-top: 10px;
-  position: relative;
-  padding: 0 64px;
+/* Keep nav beside the strip so edge logos are not covered (absolute nav overlapped cards). */
+.brand-carousel .solutions-nav {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  transform: none;
+  flex-shrink: 0;
 }
 
 .brand-carousel-viewport {
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* Programmatic auto-scroll uses scrollLeft each frame; `smooth` can fight RAF updates. */
-  scroll-behavior: auto;
+  scroll-behavior: smooth;
 }
 
 .brand-carousel-viewport::-webkit-scrollbar {
@@ -2965,16 +2970,14 @@ button.btn-ghost.btn-get-app {
 
 @media (max-width: 900px) {
   .brand-carousel {
-    padding: 0 42px;
+    padding: 0 16px;
+    gap: 8px;
   }
   .brand-carousel-track {
     gap: 14px;
   }
   .brand-card {
     width: 168px;
-  }
-  .solutions-popular-note {
-    padding: 0 42px;
   }
 }
 

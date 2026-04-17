@@ -2,8 +2,51 @@ import {
   fetchBarcodeFactsAutodetect,
   fetchBeautyFactsByBarcode,
   fetchFoodFactsByBarcode,
+  middlewareApiBaseFromLocation,
   normalizeHttpApiBase
 } from './landingAssistantApi';
+
+describe('middlewareApiBaseFromLocation', () => {
+  test('env wins over location', () => {
+    expect(
+      middlewareApiBaseFromLocation('https://api.example.com/', {
+        hostname: 'localhost',
+        port: '3000',
+        origin: 'http://localhost:3000'
+      })
+    ).toBe('https://api.example.com');
+  });
+
+  test('localhost Vite :5173 points to middleware :4000', () => {
+    expect(
+      middlewareApiBaseFromLocation('', {
+        hostname: 'localhost',
+        port: '5173',
+        origin: 'http://localhost:5173'
+      })
+    ).toBe('http://localhost:4000');
+  });
+
+  test('localhost :4000 stays same-origin', () => {
+    expect(
+      middlewareApiBaseFromLocation('', {
+        hostname: 'localhost',
+        port: '4000',
+        origin: 'http://localhost:4000'
+      })
+    ).toBe('http://localhost:4000');
+  });
+
+  test('production host without env uses current origin', () => {
+    expect(
+      middlewareApiBaseFromLocation('', {
+        hostname: 'app.example.com',
+        port: '',
+        origin: 'https://app.example.com'
+      })
+    ).toBe('https://app.example.com');
+  });
+});
 
 describe('normalizeHttpApiBase', () => {
   test('rejects ellipsis-only and strips mistaken ellipsis', () => {
