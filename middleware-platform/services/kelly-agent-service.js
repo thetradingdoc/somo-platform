@@ -3345,6 +3345,7 @@ Antworten Sie durchgehend auf Deutsch.`,
     const shouldGate =
       minimumRequiredByPathway.length > 0 &&
       !gateEval.is_minimum_met &&
+      !scanChatMode &&
       !safety?.emergency &&
       gateEval.missing_required.length > 0;
     const nextMissingField = shouldGate ? IntakeRequiredFields.nextRequiredField(pathway, gateEval.state) : null;

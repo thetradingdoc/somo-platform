@@ -16,6 +16,8 @@
     "test:reasoning-regression": "npm run test:reasoning-pipeline && npm run test:food-route",
     "test:reasoning-pre-ramp": "npm run test:reasoning-regression && npm run eval:reasoning:harness --prefix middleware-platform",
     "test:reasoning-release-gates": "npm run test:reasoning-pre-ramp && (test \"${REASONING_RELEASE_SKIP_E2E}\" = \"1\" || npm run test:e2e-chat-scan-gate --prefix middleware-platform)",
+    "verify:reasoning:semantic-quality": "npm run verify:reasoning:semantic-quality --prefix middleware-platform",
+    "verify:reasoning:production-gate": "npm run verify:reasoning:production-gate --prefix middleware-platform",
     "scheduled:reasoning-jobs-reclaim": "npm run scheduled:reasoning-jobs-reclaim --prefix middleware-platform",
     "load:reasoning-queue-smoke": "npm run load:reasoning-queue-smoke --prefix middleware-platform",
     "test:e2e-landing": "cd middleware-platform && npm run test:e2e-landing --",

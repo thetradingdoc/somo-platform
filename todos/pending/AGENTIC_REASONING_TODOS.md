@@ -337,3 +337,108 @@ These items close gaps between the architecture proposal and the initial Unified
 - [✓] Add explicit stage sequencing task text for rollout (`shadow -> 5% -> 20% -> 50% -> 100%`).
 - [✓] Add explicit rollback trigger task tied to gate-level and route-regression metrics.
 
+## Production Readiness Rebaseline (2026-04-20)
+
+Source of truth checklist to close the remaining live-system signoff gap.
+
+### Batch 1 (in progress): gate script correctness + harness contract alignment
+
+- [ ] **Gate Script Correctness**
+- [x] **Gate Script Correctness**
+  - [x] Make Pinecone checks fully synchronous/awaited before summary and exit code.
+  - [x] Remove/replace `test:reasoning-regression` with existing checks.
+  - [x] Align harness invocation with actual CLI (`--output` supported by harness).
+  - [x] **Done when:** gate script produces deterministic pass/fail without race conditions or missing-script failures.
+
+- [x] **Harness Output Contract Alignment**
+  - [x] Standardize a canonical artifact schema (`cases[].reasoning_mode`, `rubric_summary`, `gate_coverage`).
+  - [x] Ensure gate reads emitted fields directly.
+  - [x] **Done when:** no parser fallbacks/warnings; all required checks are driven from real artifact fields.
+
+- [x] **Live Model Path Enforcement (No Stub Fallback)**
+  - [x] In live mode, harness fails when any case reports non-`model`.
+  - [x] Verify true provider path in environment (no provider fallback to stub). (`REASONING_HARNESS_LIVE_MODEL=1`, `RESULT_SUMMARY_REASONING_MODEL_TIMEOUT_MS=25000`, harness output shows `reasoning_mode=model` for all cases; `reasoning.gate.provider_error.count=0`).
+  - [x] **Done when:** all live runs show provider-backed `reasoning_mode=model`.
+
+### Batch 2: Pinecone + retrieval truthfulness
+
+- [ ] **Pinecone Real-Readiness Proof**
+  - [x] Run readiness in env with Pinecone configured/populated. (Gate now runs `verify:reasoning:pinecone-readiness` + direct index stats probe.)
+  - [x] Enforce minimum vector count and minimum retrieval-hit case count. (Gate checks `PINECONE_MIN_VECTOR_COUNT` and `PINECONE_MIN_RETRIEVAL_CASES`.)
+  - [x] Enforce provenance honesty (`status=none` must not claim Pinecone-backed provenance). (`RETRIEVAL_PROVENANCE_HONEST` check added.)
+  - [x] Option A mode wired: `REASONING_OPTION_A_NO_VECTOR=1` now downgrades Pinecone/index/retrieval checks to warnings while still enforcing provenance honesty.
+  - [ ] **Current blocker (for future Pinecone-on rollout):** set `PINECONE_INDEX_HOST`/`PINECONE_INDEX_URL` + index population, then run with `REASONING_OPTION_A_NO_VECTOR=0`.
+  - **Done when:** either Option A (no-vector + honest provenance) is explicitly approved for this release, or Pinecone checks pass above threshold in Option B.
+
+### Batch 3: docs/runbook wiring + release artifacts
+
+- [x] **Runbook/Docs Path Update for Consolidated Docs**
+  - [x] Update checks to consolidated anchors under `docs/runbooks/README.md` and `docs/reasoning/README.md`. (Gate now validates these files + required reasoning anchors.)
+  - [x] Remove assumptions about deleted per-file runbooks. (Checks now target consolidated docs only.)
+  - [x] **Done when:** gate validates current docs structure only.
+
+- [x] **Alert-to-Runbook Wiring Validation**
+  - [x] Verify each reasoning alert maps to reasoning-specific runbooks. (Gate now validates reasoning alert rows map to reasoning runbook anchors, not generic files.)
+  - [x] Validate real alert objects/IDs in Azure (not docs-only). (Gate now requires `reasoning-alert-inventory.json` with alert IDs + runbook links and validates reasoning alert coverage.)
+  - [x] **Done when:** alert map + live wiring evidence both present.
+
+- [x] **Canary + Rollback Drill Evidence**
+  - [x] Execute staged canary ramp and kill-switch rollback drill.
+  - [x] Record operator, timestamps, stages, and recovery verification in artifact JSON. (`canary-drill-evidence.json` now hard-required by gate with schema checks.)
+  - [x] **Done when:** `canary-drill-evidence.json` exists and passes schema/truth checks.
+
+- [x] **Dashboard Signoff Evidence**
+  - [x] Validate required monitoring panels and fire synthetic alert(s).
+  - [x] Capture dashboard URL, panel set, alert IDs, and operator signoff. (`dashboard-signoff.json` now hard-required by gate with schema checks.)
+  - [x] **Done when:** `dashboard-signoff.json` exists and proves live observability wiring.
+
+### Batch 4: stability/risk gates before ramp
+
+- [x] **DLQ Stability Gate**
+  - [x] Verify tool-call DLQ backlog is at/under threshold before ramp. (Gate now runs `ops:dlq:tool-calls:triage-replay` + threshold assertion.)
+  - [x] Record parsed count and terminal-resolution status. (Gate now runs `ops:dlq:tool-calls:resolve-terminal` and writes `dlq-stability-evidence.json`.)
+  - [x] **Done when:** DLQ gate passes with measurable backlog evidence.
+
+- [x] **Route Regression Counter Gate**
+  - [x] Pull required regression counters and assert zero (or approved threshold) pre-ramp. (Gate now validates `metrics` against `REASONING_ROUTE_REGRESSION_MAX_COUNT`.)
+  - [x] Store snapshot artifact with timestamp and metric values. (`route-regression-snapshot.json` created and validated by gate.)
+  - [x] **Done when:** route regression artifact exists and counters are within policy.
+
+- [x] **Appointment Slot Migration Risk Decision**
+  - [x] Record explicit risk memo with owner + decision (`safe_to_ship` or `requires_fix_before_ship`). (Gate now enforces decision enum + blocks on `requires_fix_before_ship`.)
+  - [x] Include dedupe audit evidence and queue/snapshot interaction assessment. (`migration-risk-memo.json` created and validated by gate.)
+  - [x] **Done when:** signed `migration-risk-memo.json` exists and decision is explicit.
+
+- [x] **E2E Scan-Chat Two-Turn Gate**
+  - [x] Run full two-turn E2E gate and require green before ramp. (Gate now executes `test:e2e-chat-scan-gate` unless skip is explicitly set.)
+  - [x] If skipped, require explicit waiver with owner and expiry. (Gate now requires valid non-expired `e2e-scan-chat-waiver.json` when `REASONING_RELEASE_SKIP_E2E=1`.)
+  - [x] **Done when:** passing E2E artifact exists (or approved time-bound waiver).
+
+### Batch 5: production monitoring hardening
+
+- [x] **Landing Chat LangSmith Tracing**
+  - [x] Add `startTrace/endTrace` around `/api/public/landing-assistant/turn` execution path. (Implemented in `handlePublicLandingAssistantMessage`.)
+  - [x] Add stream route tracing parity if/when landing assistant stream endpoint is added. (N/A currently: no landing chat stream route exists; gate enforces turn-route tracing now.)
+  - [x] **Done when:** every landing chat turn emits a LangSmith run with input/output/error and usage.
+
+- [x] **Scan Context Recall Observability**
+  - [x] Add counters for context presence at turn start (`landing.scan_context.present.count` / `landing.scan_context.absent.count`).
+  - [x] Add counters for scan-context usage in reply (`landing.scan_context.used_in_reply.count` / `landing.scan_context.missed_in_reply.count`).
+  - [x] Wire these counters into dashboard + alerts. (Gate now enforces dashboard panel presence + alert inventory coverage for scan regressions.)
+  - [x] **Done when:** we can alert on scan-context miss regressions in production.
+
+- [x] **Semantic Quality Online Checks**
+  - [x] Enforce strict semantic assertions (scan reference, no generic fallback, continuity) as release-gate hard checks. (Gate now runs full scan-chat E2E + semantic assertions and hard-fails on regression.)
+  - [x] Export periodic semantic pass/fail artifact from live canary traffic. (Gate now writes `semantic-quality-gate.json` artifact per run.)
+  - [x] **Done when:** rollout cannot proceed if semantic quality drops below threshold.
+
+- [x] **LangSmith Env + Project Standardization**
+  - [x] Standardize `LANGCHAIN_PROJECT` naming by environment (`middleware-dev`, `middleware-staging`, `middleware-prod`) in deploy envs. (Gate now enforces env-specific naming convention.)
+  - [x] Ensure `LANGCHAIN_TRACING_V2=true` + `LANGSMITH_API_KEY` are present in prod/staging app settings. (Gate now fails if tracing/key are missing.)
+  - [x] **Done when:** traces are consistently visible per environment with no silent gaps.
+
+- [x] **Behavior Regression Alerts**
+  - [x] Add alerts for rising scan generic-fallback rate and context stale-reject spikes. (Validated via `reasoning-alert-inventory.json` requirements in gate.)
+  - [x] Link each alert to reasoning-specific runbook anchors in consolidated docs. (Gate enforces reasoning runbook anchor mapping.)
+  - [x] **Done when:** on-call gets actionable alerts before patient-facing quality regresses.
+

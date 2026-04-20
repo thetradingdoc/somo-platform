@@ -15321,6 +15321,45 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const row = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
   let conversationHistory = Array.isArray(row?.conversation_history) ? row.conversation_history : [];
   let existingFlowState = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
+  const existingShortThread = Array.isArray(existingFlowState?.short_term_thread)
+    ? existingFlowState.short_term_thread
+    : [];
+  const latestBarcodeContextEvent = (() => {
+    for (let i = existingShortThread.length - 1; i >= 0; i -= 1) {
+      const evt = existingShortThread[i];
+      if (String(evt?.type || '') !== 'barcode_product_context') continue;
+      if (evt && typeof evt === 'object') return evt;
+    }
+    return null;
+  })();
+  const hasLandingContextThread = existingShortThread.some((evt) => {
+    const type = String(evt?.type || '');
+    return type === 'barcode_product_context' || type === 'chat_turn_input' || String(evt?.text || '').includes('[Barcode Scan]');
+  });
+  if (req.path === '/api/public/landing-assistant/turn') {
+    Metrics.increment(hasLandingContextThread ? 'landing.scan_context.present.count' : 'landing.scan_context.absent.count', 1);
+  }
+  if (latestBarcodeContextEvent) {
+    scanChatModeActive = true;
+    try {
+      KellyToolExecutor._setSessionMeta(session_id, 'scan_chat_mode', '1');
+    } catch (_) {}
+  }
+  const messageForKelly = (() => {
+    const pd = latestBarcodeContextEvent?.product_data;
+    if (req.path !== '/api/public/landing-assistant/turn' || !pd || typeof pd !== 'object') return trimmedMessage;
+    const productName = String(pd.product_name || pd.name || '').trim();
+    const categoryRoute = String(pd.category_route || pd.route || '').trim();
+    const barcode = String(pd.barcode || pd.code || '').trim();
+    const ingredients = String(pd.ingredients_text || '').trim();
+    const summaryBits = [];
+    if (productName) summaryBits.push(`product_name=${productName}`);
+    if (categoryRoute) summaryBits.push(`category_route=${categoryRoute}`);
+    if (barcode) summaryBits.push(`barcode=${barcode}`);
+    if (ingredients) summaryBits.push(`ingredients_text=${ingredients.slice(0, 220)}`);
+    if (summaryBits.length === 0) return trimmedMessage;
+    return `${trimmedMessage}\n\n[Structured scan context from prior thread event]\n${summaryBits.join('\n')}`;
+  })();
 
   // Fresh chat session only: wipe stale triage/RAG/Kelly rows when there is no orchestrate
   // row yet OR turn_count === 0 (first persisted turn). We intentionally do NOT wipe when
@@ -15341,7 +15380,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   })();
   const explicitSessionReset = meta?.new_session === true || String(meta?.new_session || '').toLowerCase() === 'true';
   const staleSessionReset = !!row && turns >= 1 && inactiveHours >= staleResetHours;
-  const shouldWipeClinicalState = orchestrateEmpty || explicitSessionReset || staleSessionReset;
+  const shouldWipeClinicalState = ((orchestrateEmpty && !hasLandingContextThread) || explicitSessionReset || staleSessionReset);
   if (shouldWipeClinicalState && db?.wipeChatSessionClinicalState) {
     db.wipeChatSessionClinicalState(session_id);
     if (explicitSessionReset || staleSessionReset) {
@@ -15385,7 +15424,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const effectivePreferredLanguage = detectPreferredLanguage();
 
   const result = await KellyAgentService.processTurn({
-    message: trimmedMessage,
+    message: messageForKelly,
     sessionId: session_id,
     channel: 'chat',
     clinicId,
@@ -15424,6 +15463,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const reportRequested = String(KellyToolExecutor._getSessionMeta(session_id, 'report_requested') || '') === '1' || reportIntent;
   const isGuidanceComplete = result?.skincare_assessment_complete === true || result?.report_ready === true;
   const landingThreadHasBarcodeContext = (() => {
+    if (latestBarcodeContextEvent) return true;
     try {
       const threads = row?.flow_state?.short_term_thread;
       if (!Array.isArray(threads)) return false;
@@ -15487,6 +15527,38 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     semanticContract,
     preRoute: preRouteTurn
   });
+  const hasScanContextPayload = !!(latestBarcodeContextEvent && latestBarcodeContextEvent.product_data);
+  const genericFallbackOnScan = (() => {
+    const txt = String(result.reply || '').toLowerCase();
+    if (!txt) return false;
+    return (
+      txt.includes('what symptom or concern should we focus on next') ||
+      txt.includes("i don't see a scanned product") ||
+      txt.includes('what product did you scan') ||
+      txt.includes("i don't see a specific product")
+    );
+  })();
+  if (isLandingRoute && hasScanContextPayload && genericFallbackOnScan) {
+    const pd = latestBarcodeContextEvent.product_data || {};
+    const productName = String(pd.product_name || pd.name || 'this scanned product').trim();
+    const categoryRoute = String(pd.category_route || pd.route || 'product').trim().toLowerCase();
+    const ingredientHint = String(pd.ingredients_text || '').trim();
+    const routeHint =
+      categoryRoute === 'food' || categoryRoute === 'supplement'
+        ? `Based on your ${categoryRoute} scan, `
+        : 'Based on your scanned product, ';
+    const ingredientLine = ingredientHint
+      ? `I can see ingredients: ${ingredientHint.slice(0, 140)}. `
+      : '';
+    result.reply =
+      `${routeHint}for ${productName}, "low risk" usually means low chance of harm for typical use, while "generally safe for children" is a stricter pediatric safety bar. ` +
+      `${ingredientLine}If you want, I can give a short child-safety interpretation specific to this product category.`;
+  }
+  if (isLandingRoute && hasScanContextPayload) {
+    const replyLc = String(result.reply || '').toLowerCase();
+    const scanReferenced = /(barcode|scan|product|ingredient|category route|low risk|generally safe|children)/i.test(replyLc);
+    Metrics.increment(scanReferenced ? 'landing.scan_context.used_in_reply.count' : 'landing.scan_context.missed_in_reply.count', 1);
+  }
   if (plannerDecision && typeof plannerDecision === 'object') {
     flowStateOut.turn_planner = {
       ...plannerDecision,
@@ -15643,7 +15715,39 @@ async function handlePatientTriageMessage(req) {
 
 /** Anonymous Skin & Care landing assistant — same Kelly triage stack as /api/patient/triage/message (rate-limited). */
 async function handlePublicLandingAssistantMessage(req) {
-  return runKellyTriageTurnForHttpRequest(req, { mappedPatientId: null, email: null, portalSessionId: null });
+  const { startTrace, endTrace } = require('./services/langsmith-trace-service');
+  const sessionId = String(req.body?.session_id || '').trim() || null;
+  const traceCtx = await startTrace({
+    name: 'landing_assistant_turn',
+    inputs: {
+      session_id: sessionId,
+      message: String(req.body?.message || ''),
+      category_route: String(req.body?.category_route || req.body?.route || '').trim() || null,
+      scan_chat_mode: String(req.body?.scan_chat_mode || '').trim() || null
+    },
+    metadata: {
+      route: '/api/public/landing-assistant/turn',
+      source: 'landing_page'
+    },
+    tags: ['landing-page', 'chat', 'kelly']
+  });
+  try {
+    const out = await runKellyTriageTurnForHttpRequest(req, { mappedPatientId: null, email: null, portalSessionId: null });
+    await endTrace(traceCtx, {
+      outputs: {
+        success: !!out?.json?.success,
+        status: out?.status || 200,
+        session_id: out?.json?.session_id || sessionId,
+        next_step: out?.json?.next_step || null,
+        scan_chat_mode: String(out?.json?.state?.turn_planner?.flags?.scan_chat_mode || '').trim() || null
+      },
+      usage: out?.json?.llm_usage || null
+    });
+    return out;
+  } catch (e) {
+    await endTrace(traceCtx, { error: e?.message || 'landing_assistant_turn_failed' });
+    throw e;
+  }
 }
 
 // POST /api/patient/checkout-chat/turn — Kelly agent for retail checkout (commerce tools only)

@@ -16,7 +16,10 @@ const ReasoningJobQueue = require('./reasoning-job-queue-service');
 const MODEL_INPUT_CHAR_BUDGET = 2400;
 const DEFAULT_INPUT_TOKEN_RATE_MICROUSD = 300; // $0.0003/token placeholder until provider contract finalizes.
 const DEFAULT_OUTPUT_TOKEN_RATE_MICROUSD = 900; // $0.0009/token placeholder until provider contract finalizes.
-const REASONING_MODEL_TIMEOUT_MS = 8000;
+const REASONING_MODEL_TIMEOUT_MS = Math.max(
+  8000,
+  Number(process.env.RESULT_SUMMARY_REASONING_MODEL_TIMEOUT_MS || 20000)
+);
 const REASONING_MODEL_MAX_TOKENS = 1000;
 let _anthropicClient = null;
 let _modelCallerOverride = null;
@@ -104,11 +107,27 @@ function extractTextBlocks(content = []) {
 function parseJsonObject(rawText) {
   const text = String(rawText || '').trim();
   if (!text) throw new Error('reasoning_model_empty_output');
-  if (text.includes('```')) {
-    throw new Error('reasoning_model_non_json_output:fenced');
+
+  // Common provider behavior: JSON wrapped in markdown fences.
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) {
+    const inner = fenced[1].trim();
+    if (inner.startsWith('{') && inner.endsWith('}')) {
+      return JSON.parse(inner);
+    }
   }
+
   if (!text.startsWith('{') || !text.endsWith('}')) {
-    throw new Error('reasoning_model_non_json_output');
+    // Fallback: recover first JSON object from mixed/plaintext output.
+    const firstOpen = text.indexOf('{');
+    const lastClose = text.lastIndexOf('}');
+    if (firstOpen >= 0 && lastClose > firstOpen) {
+      const candidate = text.slice(firstOpen, lastClose + 1).trim();
+      if (candidate.startsWith('{') && candidate.endsWith('}')) {
+        return JSON.parse(candidate);
+      }
+    }
+    throw new Error('reasoning_model_non_json_output:unrecoverable');
   }
   return JSON.parse(text);
 }
@@ -753,8 +772,10 @@ async function buildReasoningPatch({ snapshot = null, inputHash = null } = {}) {
     if (providerOut && providerOut.rawText) {
       try {
         const parsed = parseJsonObject(providerOut.rawText);
-        validateModelOutputShape(parsed);
+        // Normalize first, then validate so missing optional leaves from provider
+        // are coerced into contract-safe defaults instead of forcing fallback.
         const safeOutput = enforceRouteContractOnModelOutput(parsed, route, isCosmeticRoute);
+        validateModelOutputShape(safeOutput);
         inTokens = Number(providerOut?.usage?.input_tokens || inTokens || estimateTokens(userPrompt));
         outTokens = Number(providerOut?.usage?.output_tokens || estimateTokens(providerOut.rawText));
         const pinecone = await maybeFetchPineconeGrounding([
