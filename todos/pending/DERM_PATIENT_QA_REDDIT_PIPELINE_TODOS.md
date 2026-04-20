@@ -58,7 +58,7 @@ flowchart TB
 
 ## Phase 0 — Align and scope ✅ (see spec)
 
-**Implemented in:** [`docs/architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md`](../docs/architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md)
+**Implemented in:** [`docs/architecture/README.md#derm-patient-qa-phase-0-scope-and-metrics`](../docs/architecture/README.md#derm-patient-qa-phase-0-scope-and-metrics)
 
 - [x] **P0.1** Document the **intent taxonomy** you will implement (minimum viable):
   - [x] Urgent / possible malignancy or severe infection → short answer + in-person/urgent care path
@@ -85,8 +85,8 @@ Reddit-derived JSON is a **map of query behavior**, not ground-truth medicine un
   - [x] Split **natural-language questions** vs **keyword-only** synthetic lines (evaluate separately) — field **`eval_phase1.query_style`**
   - [x] Tag **language** (EN vs mixed) for retrieval testing — **`eval_phase1.language`**
 - [x] **P1.3** Build a **stratified eval slice** (e.g. 50–200 rows): high-risk (changing mole, ulcer, rapid growth), common benign patterns, product/routine, vague titles — **`golden_stratified_slice_v1.json`** (~120 rows) + **`golden_phase1_manifest.json`**
-- [ ] **P1.4** **Clinician spot-check** a sample of `ground_truth` for clinical safety and tone (or mark as “editorial target” only) — **process in** [`Knowledge/eval/CLINICIAN_SPOT_CHECK.md`](../Knowledge/eval/CLINICIAN_SPOT_CHECK.md) *(manual sign-off)*
-- [x] **P1.5** Import **gap reports** (`accuracy_gap_report`, `coverage_gap_report`, `synonym_gap_report`) as **regression baselines** — track specialty mismatch rate, synonym lift, cluster misses — **`Knowledge/eval/baselines/*.json`** + [`baselines/README.md`](../Knowledge/eval/baselines/README.md)
+- [ ] **P1.4** **Clinician spot-check** a sample of `ground_truth` for clinical safety and tone (or mark as “editorial target” only) — **process in** [`Knowledge/eval/CLINICIAN_SPOT_CHECK.md`](../README.md#knowledge-eval-clinician-spot-check) *(manual sign-off)*
+- [x] **P1.5** Import **gap reports** (`accuracy_gap_report`, `coverage_gap_report`, `synonym_gap_report`) as **regression baselines** — track specialty mismatch rate, synonym lift, cluster misses — **`Knowledge/eval/baselines/*.json`** + [`baselines/README.md`](../README.md#knowledge-eval-baselines-readme)
 
 ---
 
@@ -94,7 +94,7 @@ Reddit-derived JSON is a **map of query behavior**, not ground-truth medicine un
 
 Triage **before** heavy retrieval determines trust.
 
-- [x] **P2.1** Specify **inputs**: raw user text, optional structured intake (OPQRST-like slots), optional image caption (if vision path exists) — [`PHASE_2_TRIAGE.md`](../docs/architecture/derm-patient-qa/PHASE_2_TRIAGE.md) + `classifyDermPatientQA` in `middleware-platform/services/derm-patient-qa-triage.js`
+- [x] **P2.1** Specify **inputs**: raw user text, optional structured intake (OPQRST-like slots), optional image caption (if vision path exists) — [`PHASE_2_TRIAGE.md`](../docs/architecture/README.md#derm-patient-qa-phase-2-triage) + `classifyDermPatientQA` in `middleware-platform/services/derm-patient-qa-triage.js`
 - [x] **P2.2** Implement **risk + intent classifier** (start with rules + keywords from `Knowledge/rules/triage-rules.json`, then LLM assist if needed):
   - [x] Map outputs to the Phase 0 taxonomy
   - [x] **Short-circuit** urgent path: minimal retrieval, strong escalation language, no long differential
@@ -108,7 +108,7 @@ Triage **before** heavy retrieval determines trust.
 
 Today’s default RAG path is **code-oriented** (ICD/CPT merge). Patient answers need **passages** (or a parallel education index).
 
-- [x] **P3.1** **Corpus strategy**: curated **derm-first** chunks (guidelines, internal briefs, approved sources); version and ownership — [`Knowledge/corpus/derm-education/manifest.json`](../Knowledge/corpus/derm-education/manifest.json) + [`PHASE_3_CORPUS_AND_INDEX.md`](../docs/architecture/derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md)
+- [x] **P3.1** **Corpus strategy**: curated **derm-first** chunks (guidelines, internal briefs, approved sources); version and ownership — [`Knowledge/corpus/derm-education/manifest.json`](../Knowledge/corpus/derm-education/manifest.json) + [`PHASE_3_CORPUS_AND_INDEX.md`](../docs/architecture/README.md#derm-patient-qa-phase-3-corpus-and-index)
 - [x] **P3.2** **Index contract**: extend Colab **`/retrieve`** (or add **`/retrieve_passages`**) to return **text chunks + source ids + specialty**, not only codes — *or* stand up a **separate** education retrieval service — contract in Phase 3 doc; middleware calls **`POST /retrieve_passages`**
 - [x] **P3.3** **Hybrid retrieval**: dense (Pinecone) + keyword/BM25 + **filters** (pediatric, pregnancy if applicable, derm specialty) — request payload `hybrid` + `filters`; single-query backends merge in `patient-education-client.js`
 - [x] **P3.4** **Query construction**:
@@ -129,13 +129,13 @@ Today’s default RAG path is **code-oriented** (ICD/CPT merge). Patient answers
 - [x] **P4.4** **Image path** (if applicable): explicit “cannot diagnose from image alone”; align caption pipeline with retrieval query — `derm-patient-qa-image.js` + `buildRetrievalFacingText` used in compose/retrieval
 - [x] **P4.5** **Content policy**: block cosmetic SEO spam in corpus; boost guideline-tagged chunks in rerank — [`Knowledge/rules/derm-corpus-content-policy.json`](../Knowledge/rules/derm-corpus-content-policy.json) + `rerankPassagesWithContentPolicy` in `patient-education-passage-rerank.js`
 
-**API:** `POST /api/patient/derm-qa/compose` — **Spec:** [`docs/architecture/derm-patient-qa/PHASE_4_ANSWER_AND_SAFETY.md`](../docs/architecture/derm-patient-qa/PHASE_4_ANSWER_AND_SAFETY.md)
+**API:** `POST /api/patient/derm-qa/compose` — **Spec:** [`docs/architecture/README.md#derm-patient-qa-phase-4-answer-and-safety`](../docs/architecture/README.md#derm-patient-qa-phase-4-answer-and-safety)
 
 ---
 
 ## Phase 5 — Product / API wiring
 
-- [x] **P5.1** Choose **surface**: new route e.g. `POST /api/patient/derm-qa` **or** Step10 graph node **after** triage (see `step10-graph.js`, `invokeStep10`) — **`POST /api/patient/derm-qa`** + **`invokeStep10.inputs.derm_patient_qa`** short-circuit (see [`PHASE_5_PRODUCT_WIRING.md`](../docs/architecture/derm-patient-qa/PHASE_5_PRODUCT_WIRING.md))
+- [x] **P5.1** Choose **surface**: new route e.g. `POST /api/patient/derm-qa` **or** Step10 graph node **after** triage (see `step10-graph.js`, `invokeStep10`) — **`POST /api/patient/derm-qa`** + **`invokeStep10.inputs.derm_patient_qa`** short-circuit (see [`PHASE_5_PRODUCT_WIRING.md`](../docs/architecture/README.md#derm-patient-qa-phase-5-product-wiring))
 - [x] **P5.2** **Auth / session**: same patient session patterns as other patient APIs; rate limits — `apiLimiter`, `requirePatientSession`, `requireCsrfForCookieAuth` on `/api/patient/derm-qa`
 - [x] **P5.3** **Kelly / voice** (optional): tool that calls the same pipeline so voice and chat share behavior — **`run_derm_patient_qa`** when `DERM_EDUCATION_PIPELINE_ENABLED=true` (Kelly tool list + `kelly-tool-executor`)
 - [x] **P5.4** **Feature flag**: `DERM_EDUCATION_PIPELINE_ENABLED` (or similar) for safe rollout — gates HTTP route, Step10 branch, Kelly tool registration; `DERM_QA_SKIP_LLM` for compose-only runs
@@ -208,4 +208,4 @@ The pipeline todos above are **mostly middleware + RAG + eval**. Patient-facing 
 
 ---
 
-*Last updated: Phase 0 spec in `docs/architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md`; Phase 8 UI/UX; RAGAS diagnosis; Reddit/golden eval.*
+*Last updated: Phase 0 spec in `docs/architecture/README.md#derm-patient-qa-phase-0-scope-and-metrics`; Phase 8 UI/UX; RAGAS diagnosis; Reddit/golden eval.*

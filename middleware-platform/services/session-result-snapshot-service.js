@@ -11,6 +11,7 @@ const {
 } = require('./reasoning-map-service');
 const { inferCanonicalIngredientIdsFromText } = require('./skincare-routine-infer');
 const { buildResultSummary, buildScanSummary, applyReasoningPatch } = require('./product-summary-service');
+const ReasoningFsm = require('./reasoning-fsm-service');
 const { pickFirstCatalogImageUrl } = require('./catalog-image-url');
 
 const SCHEMA_VERSION = '1.0';
@@ -22,6 +23,14 @@ class SnapshotConflictError extends Error {
     super(message);
     this.name = 'SnapshotConflictError';
     this.code = 'SNAPSHOT_CONFLICT';
+  }
+}
+
+class ReasoningMergeStaleError extends Error {
+  constructor(message = 'reasoning_merge_stale_lineage') {
+    super(message);
+    this.name = 'ReasoningMergeStaleError';
+    this.code = 'REASONING_MERGE_STALE';
   }
 }
 
@@ -54,6 +63,15 @@ function _parseConcerns(row) {
   const quality = String(row?.quality || '').trim();
   if (!quality) return [];
   return [quality];
+}
+
+function _lastUserMessage(orch) {
+  const hist = Array.isArray(orch?.conversation_history) ? orch.conversation_history : [];
+  for (let i = hist.length - 1; i >= 0; i -= 1) {
+    const role = String(hist[i]?.role || '').toLowerCase();
+    if (role === 'user') return String(hist[i]?.content || '').trim();
+  }
+  return '';
 }
 
 function _classifyPrimaryIntent(text) {
@@ -282,6 +300,96 @@ function _withSemanticContractCompat(snapshot) {
   return out;
 }
 
+function _stableClone(value) {
+  if (Array.isArray(value)) return value.map((v) => _stableClone(v));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  Object.keys(value).sort().forEach((k) => {
+    out[k] = _stableClone(value[k]);
+  });
+  return out;
+}
+
+function _stableHash(value) {
+  return crypto.createHash('sha1').update(JSON.stringify(_stableClone(value))).digest('hex');
+}
+
+function _latestSnapshotVersion(sessionId) {
+  const row = db.prepare(`
+    SELECT snapshot_json
+    FROM session_result_snapshots
+    WHERE session_id = ? AND is_latest = 1
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(sessionId);
+  if (!row?.snapshot_json) return 0;
+  const parsed = _safeJsonParse(row.snapshot_json, {});
+  const n = Number(parsed?.snapshot_version || 0);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+function _buildContextHash({ triage, orch, combinedText, concerns, routeHint }) {
+  return _stableHash({
+    triage_quality: triage?.quality || null,
+    triage_concerns: Array.isArray(concerns) ? concerns : [],
+    product_taxonomy_json: triage?.product_taxonomy_json || null,
+    short_term_thread: Array.isArray(orch?.flow_state?.short_term_thread) ? orch.flow_state.short_term_thread : [],
+    combined_text: combinedText || '',
+    route_hint: routeHint || 'unknown'
+  });
+}
+
+const FSM_AUDIT_MAX_ENTRIES = 48;
+
+function _appendReasoningFsmAudit(snapshot, entry) {
+  if (!snapshot || typeof snapshot !== 'object' || !entry || typeof entry !== 'object') return;
+  const prev = Array.isArray(snapshot.reasoning_fsm_audit) ? snapshot.reasoning_fsm_audit : [];
+  const row = {
+    at: new Date().toISOString(),
+    from_state: String(entry.from_state != null ? entry.from_state : ''),
+    to_state: String(entry.to_state != null ? entry.to_state : ''),
+    actor: String(entry.actor || 'unknown').slice(0, 120),
+    reason: String(entry.reason || '').slice(0, 240),
+    snapshot_version: Number.isFinite(Number(entry.snapshot_version)) ? Number(entry.snapshot_version) : null
+  };
+  snapshot.reasoning_fsm_audit = [...prev, row].slice(-FSM_AUDIT_MAX_ENTRIES);
+}
+
+function _buildBaselineHash(snapshot) {
+  const cloned = JSON.parse(JSON.stringify(snapshot || {}));
+  const scrubVolatile = (value) => {
+    if (Array.isArray(value)) return value.map((v) => scrubVolatile(v));
+    if (!value || typeof value !== 'object') return value;
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (
+        k === 'generated_at' ||
+        k === 'created_at' ||
+        k === 'updated_at' ||
+        k === 'snapshot_version' ||
+        k === 'reasoning_state' ||
+        k === 'reasoning_input_hash' ||
+        k === 'reasoning_generated_at' ||
+        k === 'reasoning_fsm_pending_at' ||
+        k === 'reasoning_fsm_last_transition_at' ||
+        k === 'reasoning_fallback_reason' ||
+        k === 'reasoning_mode' ||
+        k === 'reasoning_version' ||
+        k === 'reasoning_fsm_audit'
+      ) {
+        continue;
+      }
+      out[k] = scrubVolatile(v);
+    }
+    return out;
+  };
+  const stable = scrubVolatile(cloned);
+  if (stable.result_summary && typeof stable.result_summary === 'object') {
+    delete stable.result_summary.generated_at;
+  }
+  return _stableHash(stable);
+}
+
 function _getByPath(target, path) {
   const parts = String(path || '').split('.').filter(Boolean);
   let ref = target;
@@ -344,6 +452,7 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
     : '';
   const combinedText = `${historyText} ${threadText}`.trim();
   const concerns = _parseConcerns(triage || {});
+  const snapshotVersion = _latestSnapshotVersion(sid) + 1;
   const primaryConcern = _pickPrimaryConcern(concerns, combinedText);
   const routineConflicts = _mergeGraphRoutineConflicts(sid, combinedText, _deriveRoutineConflicts(triage || {}, combinedText));
   const intent = _classifyPrimaryIntent(combinedText);
@@ -463,6 +572,7 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
       source: factsSource,
       barcode: obfPd.barcode != null ? String(obfPd.barcode).trim() : mergedBarcode,
       product_name: obfPd.product_name != null ? String(obfPd.product_name).trim() : mergedName,
+      generic_name: obfPd.generic_name != null ? String(obfPd.generic_name).trim() : null,
       image_url: mergedImage,
       ingredients_text: ingText,
       labels: Array.isArray(obfPd.labels) ? obfPd.labels.map((x) => String(x || '').trim()).filter(Boolean) : [],
@@ -487,17 +597,32 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
             catalogSource: factsSource
           });
     try {
-      const { buildNycMetalContext } = require('./nyc-metal-context-service');
-      const nycCtx = buildNycMetalContext({
-        productName: snapshot.scanned_product.product_name,
-        categoriesTags: snapshot.scanned_product.categories_tags,
-        ingredientsText: snapshot.scanned_product.ingredients_text,
-        factsSource: snapshot.scanned_product.source
-      });
-      if (nycCtx) snapshot.scanned_product.nyc_metal_context = nycCtx;
+      // NYC metals enrichment is only applicable to cosmetic/hygiene contexts.
+      const routeForNyc = String(effectiveRoute || '').toLowerCase();
+      if (routeForNyc === 'cosmetic' || routeForNyc === 'hygiene') {
+        const { buildNycMetalContext } = require('./nyc-metal-context-service');
+        const nycCtx = buildNycMetalContext({
+          productName: snapshot.scanned_product.product_name,
+          categoriesTags: snapshot.scanned_product.categories_tags,
+          ingredientsText: snapshot.scanned_product.ingredients_text,
+          factsSource: snapshot.scanned_product.source
+        });
+        if (nycCtx) snapshot.scanned_product.nyc_metal_context = nycCtx;
+      }
     } catch (_) {
       /* optional enrichment */
     }
+    try {
+      const routeForNycGuard = String(effectiveRoute || '').toLowerCase();
+      const hasNyc = !!snapshot?.scanned_product?.nyc_metal_context;
+      if (hasNyc && routeForNycGuard !== 'cosmetic' && routeForNycGuard !== 'hygiene') {
+        Metrics.increment('session_result_snapshot.regression.non_cosmetic.nyc_context_present.count', 1);
+        Metrics.increment(
+          `session_result_snapshot.regression.non_cosmetic.nyc_context_present.route.${routeForNycGuard || 'unknown'}.count`,
+          1
+        );
+      }
+    } catch (_) {}
   }
 
   if (includeResultSummary) {
@@ -522,15 +647,88 @@ function buildSessionResultSnapshot({ sessionId, source = 'assembler_v1' }) {
     } catch (_) {}
   }
 
+  const contextHash = _buildContextHash({
+    triage,
+    orch,
+    combinedText,
+    concerns,
+    routeHint: snapshot?.scanned_product?.category_route || snapshot?.category_route || 'unknown'
+  });
+  snapshot.snapshot_version = snapshotVersion;
+  snapshot.context_hash = contextHash;
+  snapshot.baseline_hash = _buildBaselineHash(snapshot);
+
+  try {
+    const { buildLandingRouteIntentPlan } = require('./landing-route-intent-planner');
+    const lastUser = _lastUserMessage(orch);
+    const explicitRoute = String(
+      snapshot?.scanned_product?.category_route || snapshot?.category_route || ''
+    ).trim();
+    const plan = buildLandingRouteIntentPlan({
+      message: lastUser || combinedText.slice(0, 800),
+      shortTermThread: Array.isArray(orch?.flow_state?.short_term_thread) ? orch.flow_state.short_term_thread : [],
+      explicitRoute
+    });
+    snapshot.unified_context = {
+      schema_version: '1',
+      route_context: plan.route_context,
+      intent_context: plan.intent_context,
+      policy_pack: plan.policy_pack,
+      arbitration: plan.arbitration,
+      flags: plan.flags,
+      scan_ingest: {
+        thread_event_type: 'barcode_product_context',
+        canonical_product_fields: ['scanned_product', 'product', 'scan_summary'],
+        note:
+          'Thread rows are append-only transport; canonical scan fields are normalized on this snapshot.'
+      }
+    };
+  } catch (_) {
+    try {
+      Metrics.increment('session_result_snapshot.unified_context_plan.error.count', 1);
+    } catch (__) {}
+  }
+
+  let reasoningDecision = { shouldEnqueue: false, reason: 'reasoning_disabled', inputHash: null };
+  try {
+    const ReasoningService = require('./result-summary-reasoning-service');
+    reasoningDecision = ReasoningService.shouldEnqueueReasoning({ snapshot });
+  } catch (_) {}
+  snapshot.reasoning_state = reasoningDecision.shouldEnqueue
+    ? 'pending'
+    : (reasoningDecision.reason === 'reasoning_disabled' ? 'disabled' : 'complete');
+  if (reasoningDecision.shouldEnqueue) {
+    snapshot.reasoning_fsm_pending_at = new Date().toISOString();
+  } else {
+    snapshot.reasoning_fsm_pending_at = null;
+  }
+  if (reasoningDecision.reason === 'reasoning_disabled' || !reasoningDecision.shouldEnqueue) {
+    snapshot.reasoning_fallback_reason = null;
+  }
+  if (reasoningDecision?.inputHash) {
+    snapshot.reasoning_input_hash = reasoningDecision.inputHash;
+  }
+
+  try {
+    _appendReasoningFsmAudit(snapshot, {
+      from_state: 'none',
+      to_state: String(snapshot.reasoning_state || 'unknown'),
+      actor: 'snapshot_assembler',
+      reason: 'build_session_result_snapshot',
+      snapshot_version: snapshotVersion
+    });
+  } catch (_) {}
+
   const snapshotId = _persistSnapshot({ sessionId: sid, snapshot, source });
   try {
     const ReasoningService = require('./result-summary-reasoning-service');
-    const next = ReasoningService.shouldEnqueueReasoning({ snapshot });
-    if (next.shouldEnqueue) {
+    if (reasoningDecision.shouldEnqueue) {
       ReasoningService.enqueueReasoningJob({
         sessionId: sid,
         snapshotId,
-        inputHash: next.inputHash
+        snapshotVersion,
+        contextHash,
+        inputHash: reasoningDecision.inputHash
       });
     }
   } catch (_) {
@@ -610,6 +808,7 @@ function applySessionResultEdit({
   });
 
   const out = run();
+  if (out?.skipped) return out;
   try {
     Metrics.increment('session_result_snapshot.edit.count', 1);
     const latestReasoningStatus = String(out?.snapshot?.result_summary?.reasoning?.status || '');
@@ -624,7 +823,8 @@ function applySessionResultReasoningPatch({
   sessionId,
   reasoningPatch,
   expectedSnapshotId = null,
-  inputHash = null
+  inputHash = null,
+  mergeLineage = null
 }) {
   const sid = String(sessionId || '').trim();
   if (!sid) throw new Error('sessionId required');
@@ -640,18 +840,141 @@ function applySessionResultReasoningPatch({
       }
     }
     const latestSnapshot = latestRow.snapshot || {};
+    const mergeActive = mergeLineage && typeof mergeLineage === 'object';
+    if (mergeActive) {
+      const wantVer = Number(mergeLineage.snapshotVersion ?? mergeLineage.snapshot_version);
+      const wantCtx = String(mergeLineage.contextHash ?? mergeLineage.context_hash ?? '').trim();
+      const liveVer = Number(latestSnapshot.snapshot_version || 0);
+      const liveCtx = String(latestSnapshot.context_hash || '').trim();
+      if (!Number.isFinite(wantVer) || wantVer < 1 || liveVer !== wantVer || liveCtx !== wantCtx) {
+        throw new ReasoningMergeStaleError(
+          `reasoning_merge_stale_lineage:live=${liveVer}/${liveCtx.slice(0, 16)} want=${wantVer}/${wantCtx.slice(0, 16)}`
+        );
+      }
+    }
+    const pbaRaw =
+      reasoningPatch?.patch_built_at != null ? String(reasoningPatch.patch_built_at).trim() : '';
+    const pba = pbaRaw ? Date.parse(pbaRaw) : NaN;
+    const lgaRaw = latestSnapshot?.generated_at != null ? String(latestSnapshot.generated_at).trim() : '';
+    const lga = lgaRaw ? Date.parse(lgaRaw) : NaN;
+    if (Number.isFinite(pba) && Number.isFinite(lga) && lga > pba + 750) {
+      try {
+        Metrics.increment('reasoning.fsm.transition.rejected_stale_patch.count', 1);
+      } catch (_) {}
+      throw new ReasoningMergeStaleError(
+        `reasoning_patch_predates_newer_snapshot:patch=${pbaRaw.slice(0, 24)} live=${lgaRaw.slice(0, 24)}`
+      );
+    }
+
+    const latestReasoning = latestSnapshot?.result_summary?.reasoning || {};
+    const latestHash = String(latestReasoning?.reasoning_input_hash || '').trim();
+    const normalizedHash = String(inputHash || reasoningPatch?.reasoning_input_hash || '').trim();
+    const latestStatus = String(latestReasoning?.status || '').trim().toLowerCase();
+    const settled = latestStatus === 'applied' || latestStatus === 'deferred' || latestStatus === 'disabled';
+    // Idempotency guard: do not create duplicate snapshots for the same reasoning tuple.
+    if (normalizedHash && settled && latestHash && latestHash === normalizedHash) {
+      try {
+        Metrics.increment('session_result_snapshot.reasoning_patch.idempotent_skip.count', 1);
+      } catch (_) {}
+      return { snapshot_id: latestRow.snapshot_id, snapshot: latestSnapshot, skipped: true };
+    }
+    const prevFsmState = String(latestSnapshot.reasoning_state || 'unknown').toLowerCase();
+    const pendingSince = latestSnapshot.reasoning_fsm_pending_at || null;
     const nextSnapshot = JSON.parse(JSON.stringify(latestSnapshot));
     nextSnapshot.generated_at = new Date().toISOString();
+    const dbMaxVer = _latestSnapshotVersion(sid);
+    const jsonVer = Number(latestSnapshot.snapshot_version || 0);
+    const baseVer = Math.max(Number.isFinite(jsonVer) && jsonVer > 0 ? jsonVer : 0, dbMaxVer);
+    nextSnapshot.snapshot_version = baseVer + 1;
+    if (!nextSnapshot.context_hash) {
+      nextSnapshot.context_hash = _stableHash({
+        session_id: sid,
+        snapshot_id: latestRow.snapshot_id,
+        snapshot_version: nextSnapshot.snapshot_version
+      });
+    }
+    if (!nextSnapshot.baseline_hash) {
+      nextSnapshot.baseline_hash = _buildBaselineHash(nextSnapshot);
+    }
     nextSnapshot.result_summary = applyReasoningPatch(nextSnapshot.result_summary || {}, reasoningPatch, {
       enabled: true,
       inputHash,
       sessionId: sid
     });
+    const rs = String(nextSnapshot.result_summary?.reasoning?.status || '').toLowerCase();
+    const rm = String(nextSnapshot.result_summary?.reasoning?.reasoning_mode || '').toLowerCase();
+    const fsmResult = ReasoningFsm.computePostPatchSnapshotState({
+      prevState: prevFsmState,
+      reasoningStatus: rs,
+      reasoningMode: rm,
+      providerErrorClass: reasoningPatch?.reasoning_provider_error_class || null
+    });
+    const nextFsmState = fsmResult.state;
+    const chk = ReasoningFsm.canTransition(prevFsmState, nextFsmState);
+    if (!chk.allowed) {
+      try {
+        Metrics.increment('reasoning.fsm.transition.rejected.count', 1);
+      } catch (_) {}
+      throw new Error(`reasoning_fsm_invalid_transition:${chk.reason}`);
+    }
+    ReasoningFsm.recordTransition({
+      fromState: prevFsmState,
+      toState: nextFsmState,
+      pendingSinceIso: pendingSince
+    });
+    try {
+      _appendReasoningFsmAudit(nextSnapshot, {
+        from_state: prevFsmState,
+        to_state: nextFsmState,
+        actor: 'reasoning_patch_worker',
+        reason: 'apply_session_result_reasoning_patch',
+        snapshot_version: nextSnapshot.snapshot_version
+      });
+    } catch (_) {}
+    nextSnapshot.reasoning_state = nextFsmState;
+    nextSnapshot.reasoning_fallback_reason =
+      nextFsmState === 'fallback' ? fsmResult.fallback_reason : null;
+    if (nextFsmState !== 'pending') {
+      nextSnapshot.reasoning_fsm_pending_at = null;
+      nextSnapshot.reasoning_fsm_last_transition_at = new Date().toISOString();
+    }
+    const rmFinal = String(nextSnapshot.result_summary?.reasoning?.reasoning_mode || '').trim() || null;
+    const rvFinal =
+      String(reasoningPatch?.reasoning_version || nextSnapshot.result_summary?.reasoning?.reasoning_version || '')
+        .trim() || null;
+    const rihFinal = String(
+      normalizedHash ||
+        nextSnapshot.result_summary?.reasoning?.reasoning_input_hash ||
+        nextSnapshot.reasoning_input_hash ||
+        ''
+    ).trim() || null;
+    nextSnapshot.reasoning_mode = rmFinal;
+    nextSnapshot.reasoning_version = rvFinal;
+    nextSnapshot.reasoning_input_hash = rihFinal;
     const nextSnapshotId = _persistSnapshot({ sessionId: sid, snapshot: nextSnapshot, source: 'reasoning_patch' });
-    return { snapshot_id: nextSnapshotId, snapshot: nextSnapshot };
+    return {
+      snapshot_id: nextSnapshotId,
+      snapshot: nextSnapshot,
+      skipped: false,
+      merge_lineage_ok: !!mergeActive
+    };
   });
 
-  const out = run();
+  let out;
+  try {
+    out = run();
+  } catch (err) {
+    if (err instanceof SnapshotConflictError) {
+      try {
+        Metrics.increment('reasoning.merge.conflict_reject.count', 1);
+      } catch (_) {}
+    } else if (err instanceof ReasoningMergeStaleError) {
+      try {
+        Metrics.increment('reasoning.merge.stale_reject.count', 1);
+      } catch (_) {}
+    }
+    throw err;
+  }
   try {
     Metrics.increment('session_result_snapshot.reasoning_patch.count', 1);
     const status = String(out?.snapshot?.result_summary?.reasoning?.status || 'unknown');
@@ -664,11 +987,16 @@ function applySessionResultReasoningPatch({
     Metrics.increment(`result_summary.reasoning.status.${status}.count`, 1);
     Metrics.increment(`result_summary.reasoning.status.${status}.route.${route}.count`, 1);
     Metrics.increment('result_summary.reasoning.generated.count', 1);
+    const mode = String(out?.snapshot?.result_summary?.reasoning?.reasoning_mode || 'deterministic_fallback').toLowerCase();
+    Metrics.increment(`reasoning.mode.${mode}.count`, 1);
     if (status === 'applied') Metrics.increment('result_summary.reasoning.accepted.count', 1);
     const altCount = Array.isArray(out?.snapshot?.result_summary?.verdict?.alternatives?.candidates)
       ? out.snapshot.result_summary.verdict.alternatives.candidates.length
       : 0;
     if (altCount > 0) Metrics.increment('result_summary.reasoning.alternatives_suggested.count', altCount);
+    if (!out?.skipped && mergeLineage && typeof mergeLineage === 'object') {
+      Metrics.increment('reasoning.merge.merge_success.count', 1);
+    }
   } catch (_) {}
   return out;
 }
@@ -676,6 +1004,7 @@ function applySessionResultReasoningPatch({
 module.exports = {
   SCHEMA_VERSION,
   SnapshotConflictError,
+  ReasoningMergeStaleError,
   buildSessionResultSnapshot,
   getLatestSessionResultSnapshot,
   applySessionResultEdit,

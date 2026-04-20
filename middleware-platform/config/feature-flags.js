@@ -16,6 +16,12 @@ const flags = {
   AGENT_REASONING_MAP_V1: process.env.AGENT_REASONING_MAP_V1 === 'true',
   // Scan/result-summary reasoning augmentation: keep off for deterministic-only mode unless explicitly enabled.
   RESULT_SUMMARY_REASONING_V1: process.env.RESULT_SUMMARY_REASONING_V1 === 'true',
+  // Real model path for result-summary reasoning (separate from async patch scaffold flag).
+  RESULT_SUMMARY_REASONING_MODEL_V1: process.env.RESULT_SUMMARY_REASONING_MODEL_V1 === 'true',
+  // Shadow: worker builds patches and completes jobs but does not merge into session snapshots (no UI promotion).
+  RESULT_SUMMARY_REASONING_SHADOW_V1: process.env.RESULT_SUMMARY_REASONING_SHADOW_V1 === 'true',
+  // Emergency kill switch for model provider calls; deterministic/stub continues to run.
+  RESULT_SUMMARY_REASONING_PROVIDER_KILL_SWITCH: process.env.RESULT_SUMMARY_REASONING_PROVIDER_KILL_SWITCH === 'true',
   // Route-scoped semantic gate for reasoning merge. Default ON; set to 'false' for rollback.
   RESULT_SUMMARY_SEMANTIC_GUARD_V1: process.env.RESULT_SUMMARY_SEMANTIC_GUARD_V1 !== 'false',
   // Shadow mode: record semantic reject metrics even when semantic guard is disabled.

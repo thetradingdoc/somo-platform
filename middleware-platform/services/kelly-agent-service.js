@@ -216,6 +216,14 @@ function _defersStep1SkinTypeClarifier(message) {
   return false;
 }
 
+function _looksLikeScanConversation(message) {
+  const t = String(message || '').trim().toLowerCase();
+  if (!t) return false;
+  return /\b(scan|scanned|barcode|ingredients?|food scan|supplement|open food facts|category route|low risk|generally safe|good for children|child[- ]?safety|additive|dye)\b/.test(
+    t
+  );
+}
+
 function _extractExplicitSkinType(text) {
   const t = String(text || '').toLowerCase();
   if (/\bnot\s+oily\b/.test(t) && /\b(dry|tight|flaky)\b/.test(t)) return 'dry';
@@ -2153,7 +2161,9 @@ Antworten Sie durchgehend auf Deutsch.`,
       checkoutPolicy = null,
       turnAuthority = null,
       onStreamDelta = null,
-      onToolStatus = null
+      onToolStatus = null,
+      scanChatMode: scanChatModeParam = false,
+      plannerDecision: plannerDecisionParam = null
     } = params;
 
     _kellyDebugTurn('turn_start', {
@@ -2219,6 +2229,29 @@ Antworten Sie durchgehend auf Deutsch.`,
 
     // Optional passive capture: persist taxonomy profile if a barcode appears in user text.
     await _tryCaptureProductTaxonomyFromMessage({ sessionId, message });
+
+    const plannerDecision = plannerDecisionParam && typeof plannerDecisionParam === 'object'
+      ? plannerDecisionParam
+      : null;
+    const plannerRoute = String(plannerDecision?.route_context?.route || '').trim().toLowerCase();
+    const plannerBypassSkincareClarifier = !!plannerDecision?.flags?.should_bypass_skincare_clarifier ||
+      plannerRoute === 'food' ||
+      plannerRoute === 'supplement';
+    let scanChatMode = !!scanChatModeParam || plannerBypassSkincareClarifier;
+    if (!scanChatMode) {
+      const metaScanMode = String(KellyToolExecutor._getSessionMeta(sessionId, 'scan_chat_mode') || '')
+        .trim()
+        .toLowerCase();
+      scanChatMode = metaScanMode === '1' || metaScanMode === 'true';
+    }
+    if (!scanChatMode && _looksLikeScanConversation(message)) {
+      scanChatMode = true;
+    }
+    if (scanChatMode) {
+      try {
+        KellyToolExecutor._setSessionMeta(sessionId, 'scan_chat_mode', '1');
+      } catch (_) {}
+    }
 
     if (commerceCheckout && commerceCheckout.productId && commerceCheckout.providerId) {
       if (!clinicId) {
@@ -3109,6 +3142,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       preferredLanguage,
       sessionId,
       message,
+      scanChatMode,
       kellyScriptHint,
       orchestration,
       routineIntakeSummaryMarkdown,
@@ -3369,7 +3403,9 @@ Antworten Sie durchgehend auf Deutsch.`,
     if (
       skinTypeResult &&
       (skinTypeResult.value === 'unknown' || skinTypeResult.confidence === 'low') &&
-      !_defersStep1SkinTypeClarifier(message)
+      !_defersStep1SkinTypeClarifier(message) &&
+      !scanChatMode &&
+      !plannerBypassSkincareClarifier
     ) {
       const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
         ? history[history.length - 1].content
@@ -3395,7 +3431,9 @@ Antworten Sie durchgehend auf Deutsch.`,
       skinTypeResult &&
       skinTypeResult.status === 'tentative' &&
       skinTypeResult.needs_confirmation &&
-      !_defersStep1SkinTypeClarifier(message)
+      !_defersStep1SkinTypeClarifier(message) &&
+      !scanChatMode &&
+      !plannerBypassSkincareClarifier
     ) {
       const lastAssistant = String((history[history.length - 1] && history[history.length - 1].role === 'assistant'
         ? history[history.length - 1].content
@@ -3575,8 +3613,10 @@ Antworten Sie durchgehend auf Deutsch.`,
       // Unified output guardrails pass (policy + safety suppression).
       reply = ClinicalRecommendationPolicy.applyOutputGuardrails(reply, {
         safetyStatus: safety?.status || 'green',
-        routineSkincare: orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE
+        routineSkincare: !scanChatMode && (
+          orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE
           || orchestration?.phase === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP
+        )
       });
       try {
         const sec = JSON.parse(String(KellyToolExecutor._getSessionMeta(sessionId, 'step1_secondary_signals_json') || '{}'));
@@ -5301,8 +5341,10 @@ Antworten Sie durchgehend auf Deutsch.`,
             if (!v.ok) {
               const ph = context.orchestration?.phase;
               const routineSkincare =
-                ph === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
-                ph === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP;
+                !context.scanChatMode && (
+                  ph === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_INTAKE ||
+                  ph === KellyOrchestratorPhase.KELLY_ORCHESTRATOR_PHASE.ROUTINE_FOLLOWUP
+                );
               reply = ClinicalRecommendationPolicy.fallbackReply(v, { routineSkincare });
             }
           } catch (_) {}

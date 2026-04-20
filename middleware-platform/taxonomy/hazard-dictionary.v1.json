@@ -1,0 +1,50 @@
+[
+  {
+    "key": "fragrance",
+    "label": "Fragrance allergens",
+    "severity": "moderate",
+    "routes_applicable": ["cosmetic", "hygiene"]
+  },
+  {
+    "key": "limonene",
+    "label": "Limonene fragrance allergen",
+    "severity": "moderate",
+    "routes_applicable": ["cosmetic", "hygiene"]
+  },
+  {
+    "key": "linalool",
+    "label": "Linalool fragrance allergen",
+    "severity": "moderate",
+    "routes_applicable": ["cosmetic", "hygiene"]
+  },
+  {
+    "key": "phenoxyethanol",
+    "label": "Phenoxyethanol preservative",
+    "severity": "moderate",
+    "routes_applicable": ["cosmetic", "hygiene"]
+  },
+  {
+    "key": "red 40",
+    "label": "Artificial dye Red 40",
+    "severity": "moderate",
+    "routes_applicable": ["food", "supplement"]
+  },
+  {
+    "key": "blue 1",
+    "label": "Artificial dye Blue 1",
+    "severity": "moderate",
+    "routes_applicable": ["food", "supplement"]
+  },
+  {
+    "key": "yellow 5",
+    "label": "Artificial dye Yellow 5",
+    "severity": "moderate",
+    "routes_applicable": ["food", "supplement"]
+  },
+  {
+    "key": "yellow 6",
+    "label": "Artificial dye Yellow 6",
+    "severity": "moderate",
+    "routes_applicable": ["food", "supplement"]
+  }
+]

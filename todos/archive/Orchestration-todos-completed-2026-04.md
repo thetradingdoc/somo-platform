@@ -54,7 +54,7 @@ All former `[x]` items under: schema/contracts, emitter/performance, persistence
 
 ### Review backlog — completed sections
 
-- Architecture & onboarding (`docs/middleware-platform/ARCHITECTURE.md`, `CONTRIBUTING.md`).
+- Architecture & onboarding (`docs/middleware-platform/README.md#architecture`, `CONTRIBUTING.md`).
 - Patient checkout UI splits, Playwright post-pay lock, phone E164 alignment.
 - Backend/data backfill and `getCustomerByPhone` multi-candidate.
 - Tests & CI (security gate, Playwright install docs).

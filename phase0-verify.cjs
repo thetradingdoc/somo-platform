@@ -23,6 +23,9 @@ const https = require('https');
 // ─── Config ──────────────────────────────────────────────────────────────────
 const BASE_URL    = process.env.BASE_URL    || 'http://localhost:4000';
 const ROOT        = process.env.PROJECT_ROOT || path.join(__dirname, 'middleware-platform');
+/** Consolidated middleware docs (repo root), replaces former `docs/middleware-platform/*.md` tree */
+const MW_DOCS_README = path.join(ROOT, '..', 'docs', 'middleware-platform', 'README.md');
+const REPO_DOCS_RUNBOOKS_MP = path.join(ROOT, '..', 'docs', 'runbooks', 'middleware-platform');
 const TODOS_SRC   = process.env.TODOS_SRC   || path.join(__dirname, 'todos/pending/PHASE0_SECURITY_FINANCIAL_INTEGRITY_TODOS.md');
 const TODOS_ARCH  = process.env.TODOS_ARCH  || path.join(__dirname, 'todos/archived');
 const ARGS        = process.argv.slice(2);
@@ -165,9 +168,8 @@ function runSection1() {
   check(1, 'Anti-sybil wired to payment processing path',
     () => fileContains(p('server.js'), 'ANTI_SYBIL_BLOCKED'));
 
-  check(1, 'Fraud response playbook published',
-    () => exists(p('docs/FRAUD_RESPONSE_PLAYBOOK.md')) ||
-          exists(path.join(ROOT, '..', 'docs/middleware-platform/FRAUD_RESPONSE_PLAYBOOK.md')));
+  check(1, 'Fraud response playbook published (consolidated middleware README)',
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Fraud Response Playbook'));
 }
 
 // ─── SECTION 2: Financial Integrity & Reconciliation ─────────────────────────
@@ -317,7 +319,7 @@ function runSection3() {
     () => fileContains(p('routes/payment-ops.js'), 'exception-owners'));
 
   check(3, 'Customer-facing payment error taxonomy doc exists',
-    () => exists(p('docs/PAYMENT_ERRORS_AND_SUPPORT_RUNBOOK.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Payment errors'));
 }
 
 // ─── SECTION 4: Reliability & Operations Discipline ──────────────────────────
@@ -325,11 +327,11 @@ function runSection4() {
   console.log(`\n${BOLD}§4 Reliability & Operations Discipline${RESET}`);
 
   check(4, 'SLO/SLI documentation exists',
-    () => exists(p('docs/PAYMENT_SLOS_SLIS.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'SLOs'));
 
   check(4, 'SLO targets cover payment API + webhook + reconciliation',
-    () => fileContains(p('docs/PAYMENT_SLOS_SLIS.md'), 'webhook') &&
-          fileContains(p('docs/PAYMENT_SLOS_SLIS.md'), 'reconciliation'));
+    () => fileContains(MW_DOCS_README, 'webhook') &&
+          fileContains(MW_DOCS_README, 'reconciliation'));
 
   check(4, 'Payment reliability monitor service exists',
     () => exists(p('services/payment-reliability-monitor.js')));
@@ -352,31 +354,31 @@ function runSection4() {
           fileContains(p('server.js'), 'payment-reliability-monitor'));
 
   check(4, 'On-call and escalation policy doc exists',
-    () => exists(p('docs/ONCALL_AND_ESCALATION.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'On-call'));
 
   check(4, 'Processor outage runbook exists',
-    () => exists(p('docs/runbooks/RUNBOOK_PROCESSOR_OUTAGE.md')));
+    () => exists(path.join(REPO_DOCS_RUNBOOKS_MP, 'RUNBOOK_PROCESSOR_OUTAGE.md')));
 
   check(4, 'Replay attack runbook exists',
-    () => exists(p('docs/runbooks/RUNBOOK_REPLAY_ATTACK_ATTEMPT.md')));
+    () => exists(path.join(REPO_DOCS_RUNBOOKS_MP, 'RUNBOOK_REPLAY_ATTACK_ATTEMPT.md')));
 
   check(4, 'Reconciliation drift runbook exists',
-    () => exists(p('docs/runbooks/RUNBOOK_RECONCILIATION_DRIFT.md')));
+    () => exists(path.join(REPO_DOCS_RUNBOOKS_MP, 'RUNBOOK_RECONCILIATION_DRIFT.md')));
 
   check(4, 'Stripe webhook failures runbook exists',
-    () => exists(p('docs/runbooks/RUNBOOK_STRIPE_WEBHOOK_FAILURES.md')));
+    () => exists(path.join(REPO_DOCS_RUNBOOKS_MP, 'RUNBOOK_STRIPE_WEBHOOK_FAILURES.md')));
 
   check(4, 'Incident response protocol doc exists',
-    () => exists(p('docs/INCIDENT_RESPONSE.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Incident response'));
 
   check(4, 'Incident response has severity model',
-    () => fileContains(p('docs/INCIDENT_RESPONSE.md'), /sev(erity)?[ -]?[12]/i));
+    () => fileContains(MW_DOCS_README, /sev(erity)?[ -]?[12]/i));
 
   check(4, 'Postmortem template exists',
-    () => exists(p('docs/POSTMORTEM_TEMPLATE.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Postmortem'));
 
   check(4, 'Postmortem template has remediation tracking section',
-    () => fileContains(p('docs/POSTMORTEM_TEMPLATE.md'), /remediation|action item/i));
+    () => fileContains(MW_DOCS_README, /remediation|action item/i));
 }
 
 // ─── SECTION 5: Data Privacy, Governance & Auditability ─────────────────────
@@ -476,8 +478,7 @@ function runSection6() {
           !fileContains(p('server.js'), /console\.log.*CIRCLE_API_KEY/i));
 
   check(6, 'Wallet recovery procedures documented',
-    () => exists(p('docs/WALLET_KEY_CUSTODY.md')) ||
-          grepDir(p('docs'), /recovery|custody/i, '.md'));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Wallet key custody'));
 }
 
 // ─── SECTION 7: Impact Ledger & Public Trust ─────────────────────────────────
@@ -559,7 +560,7 @@ function runSection9() {
     () => fileContains(p('services/financial-integrity-service.js'), 'listExceptionQueue'));
 
   check(9, 'Incident response doc with severity model present',
-    () => exists(p('docs/INCIDENT_RESPONSE.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Incident response'));
 
   check(9, 'Privacy controls — PHI-scoped session auth enforced',
     () => fileContains(p('server.js'), 'requirePatientSession') &&
@@ -569,7 +570,7 @@ function runSection9() {
     () => grepDir(p(''), 'insertAuditEvent'));
 
   check(9, 'Postmortem template in place',
-    () => exists(p('docs/POSTMORTEM_TEMPLATE.md')));
+    () => exists(MW_DOCS_README) && fileContains(MW_DOCS_README, 'Postmortem'));
 }
 
 // ─── Live HTTP smoke tests (optional, non-blocking) ──────────────────────────

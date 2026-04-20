@@ -1,7 +1,7 @@
 /**
  * Video Consult Routes
  * Receives events from LiveKit Python agents (transcript, vision_frame, end_session).
- * See docs/architecture/VIDEO_CONSULT_ENV.md for env vars.
+ * See docs/architecture/README.md#care-delivery-video-consult for env vars.
  */
 
 const express = require('express');
@@ -122,7 +122,7 @@ function validateLiveKitEnv() {
   const key = process.env.LIVEKIT_API_KEY;
   const secret = process.env.LIVEKIT_API_SECRET;
   if (!url || !key || !secret) {
-    console.warn('⚠️  [video-consult] LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET not set. Video rooms will fail. See VIDEO_CONSULT_ENV.md');
+    console.warn('⚠️  [video-consult] LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET not set. Video rooms will fail. See docs/architecture/README.md#care-delivery-video-consult');
     return false;
   }
   try {

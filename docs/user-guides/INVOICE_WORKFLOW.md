@@ -145,7 +145,7 @@ On the **Invoices** page, you can:
 ## Support
 
 For issues or questions:
-1. Check the API documentation: `/docs/api/INVOICE_API.md`
+1. Check the API documentation: `/docs/api/README.md#invoice-api`
 2. Review error messages in browser console
 3. Contact support with invoice number and error details
 

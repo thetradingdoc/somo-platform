@@ -18,7 +18,7 @@
 
 ## Architecture overview
 
-- **High-level map:** [`docs/middleware-platform/ARCHITECTURE.md`](docs/middleware-platform/ARCHITECTURE.md) (middleware vs `unified-dashboard`, checkout flow, CI pointers).
+- **High-level map:** [`docs/middleware-platform/README.md#architecture`](docs/middleware-platform/README.md#architecture) (middleware vs `unified-dashboard`, checkout flow, CI pointers; consolidated middleware docs).
 
 ## Commands to run before opening a PR
 
@@ -43,13 +43,13 @@ Optional: `cd patient-app && npm run lint` (not all CI jobs run Expo lint yet).
 ## Documentation
 
 - Canonical docs live under **`docs/`** (`docs/README.md` index).
-- Kelly / LLM debug flags: **`docs/development/KELLY_ENV_AND_DEBUG.md`**.
-- CI vs deploy expectations: **`docs/deployment/CI_AND_DEPLOY_SOURCE_OF_TRUTH.md`**.
-- Agentic checkout (which file owns what): **`docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md`**.
-- `server.js` growth policy: **`docs/development/SERVER_JS_REFACTOR_POLICY.md`**.
-- Quarterly doc/CI hygiene: **`docs/development/PERIODIC_MAINTENANCE.md`**.
+- Kelly / LLM debug flags: **`docs/development/README.md#kelly-env-and-debug`**.
+- CI vs deploy expectations: **`docs/deployment/README.md#ci-and-deploy-source-of-truth`**.
+- Agentic checkout (which file owns what): **`docs/architecture/README.md#commerce-agentic-checkout-file-map`**.
+- `server.js` growth policy: **`docs/development/README.md#server-js-refactor-policy`**.
+- Quarterly doc/CI hygiene: **`docs/development/README.md#periodic-maintenance`**.
 - Secret scanning expectations: **`docs/security/SECRET_SCANNING.md`**.
-- Future structured logging: **`docs/development/STRUCTURED_LOGGING_FUTURE.md`**.
+- Future structured logging: **`docs/development/README.md#structured-logging-future`**.
 
 ## API contract
 

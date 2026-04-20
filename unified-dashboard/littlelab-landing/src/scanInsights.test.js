@@ -5,7 +5,9 @@
 
 import {
   buildFollowupMessageWithPinnedContext,
+  buildMergedReasoningContextBlock,
   buildPinnedContextText,
+  shouldAttachMergedReasoningContext,
   compareProducts,
   deriveCategoryRoute,
   deriveIngredientFlags,
@@ -145,6 +147,29 @@ describe('deriveIngredientFlags', () => {
     expect(flags.hasPalmOil).toBe(false);
     expect(flags.hasSweeteners).toBe(false);
     expect(flags.hasFragrance).toBe(false);
+    expect(flags.applicableRoute).toBe('cosmetic_or_unknown');
+  });
+
+  test('food route gates cosmetic-only fragrance/palm signals', () => {
+    const flags = deriveIngredientFlags(
+      { ingredients_text: 'water, fragrance, palm oil, sucralose' },
+      'food'
+    );
+    expect(flags.hasIngredients).toBe(true);
+    expect(flags.hasFragrance).toBe(false);
+    expect(flags.hasPalmOil).toBe(false);
+    expect(flags.hasSweeteners).toBe(true);
+    expect(flags.applicableRoute).toBe('non_cosmetic');
+  });
+
+  test('cosmetic route keeps fragrance/palm signals enabled', () => {
+    const flags = deriveIngredientFlags(
+      { ingredients_text: 'water, fragrance, palm oil' },
+      'cosmetic'
+    );
+    expect(flags.hasFragrance).toBe(true);
+    expect(flags.hasPalmOil).toBe(true);
+    expect(flags.applicableRoute).toBe('cosmetic_or_unknown');
   });
 });
 
@@ -231,6 +256,22 @@ describe('serializeObfProductForThread', () => {
   test('falls back to image_front_url when image_url is absent', () => {
     const p = { ...richProduct, image_url: undefined, image_front_url: 'https://example.com/front.jpg' };
     expect(serializeObfProductForThread(p).image_url).toBe('https://example.com/front.jpg');
+  });
+
+  test('normalizes protocol-relative image_front_url to https', () => {
+    const p = {
+      ...richProduct,
+      image_url: undefined,
+      image_front_url: '//static.openfoodfacts.org/images/products/test/front.jpg'
+    };
+    expect(serializeObfProductForThread(p).image_url).toBe(
+      'https://static.openfoodfacts.org/images/products/test/front.jpg'
+    );
+  });
+
+  test('includes generic_name when present', () => {
+    const result = serializeObfProductForThread({ ...richProduct, generic_name: '  Blemish serum  ' });
+    expect(result.generic_name).toBe('Blemish serum');
   });
 
   test('falls back to image_ingredients_url when front fields are absent', () => {
@@ -464,5 +505,77 @@ describe('buildFollowupMessageWithPinnedContext', () => {
   test('combined output is separated by a blank line', () => {
     const out = buildFollowupMessageWithPinnedContext('Question', scanResult, true);
     expect(out).toContain('Question\n\n[Pinned Product Context]');
+  });
+
+  test('appends merged model block when session snapshot is complete+model', () => {
+    const sessionSnap = {
+      reasoning_state: 'complete',
+      scanned_product: { barcode: '1234567890123' },
+      result_summary: {
+        reasoning: { reasoning_mode: 'model', status: 'applied' },
+        verdict: { good_for_me: { summary: 'Merged guidance line.' } }
+      }
+    };
+    const out = buildFollowupMessageWithPinnedContext('Question', scanResult, true, sessionSnap);
+    expect(out).toContain('Merged guidance line.');
+  });
+
+  test('appends pending scan note when snapshot barcode matches pinned scan', () => {
+    const sessionSnap = {
+      reasoning_state: 'pending',
+      scanned_product: { barcode: '1234567890123' },
+      result_summary: { reasoning: { reasoning_mode: 'model', status: 'pending' } }
+    };
+    const out = buildFollowupMessageWithPinnedContext('Question', scanResult, true, sessionSnap);
+    expect(out).toMatch(/still finishing/i);
+  });
+});
+
+describe('merged reasoning context helpers', () => {
+  test('shouldAttachMergedReasoningContext is true only for complete model applied', () => {
+    expect(
+      shouldAttachMergedReasoningContext({
+        reasoning_state: 'complete',
+        result_summary: { reasoning: { reasoning_mode: 'model', status: 'applied' } }
+      })
+    ).toBe(true);
+    expect(
+      shouldAttachMergedReasoningContext({
+        reasoning_state: 'pending',
+        result_summary: { reasoning: { reasoning_mode: 'model', status: 'applied' } }
+      })
+    ).toBe(false);
+    expect(
+      shouldAttachMergedReasoningContext({
+        reasoning_state: 'complete',
+        result_summary: { reasoning: { reasoning_mode: 'stub', status: 'applied' } }
+      })
+    ).toBe(false);
+  });
+
+  test('shouldAttachMergedReasoningContext is false when snapshot barcode mismatches pinned scan', () => {
+    expect(
+      shouldAttachMergedReasoningContext(
+        {
+          reasoning_state: 'complete',
+          scanned_product: { barcode: '9999999999999' },
+          result_summary: { reasoning: { reasoning_mode: 'model', status: 'applied' } }
+        },
+        { barcode: '1234567890123' }
+      )
+    ).toBe(false);
+  });
+
+  test('buildMergedReasoningContextBlock includes verdict snippets', () => {
+    const block = buildMergedReasoningContextBlock({
+      result_summary: {
+        verdict: {
+          good_for_me: { summary: 'Good line.' },
+          harmful: { top_evidence: 'Risk line.' }
+        }
+      }
+    });
+    expect(block).toContain('Good line.');
+    expect(block).toContain('Risk line.');
   });
 });

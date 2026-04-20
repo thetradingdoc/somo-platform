@@ -97,6 +97,16 @@ function classifyIngredients(text) {
   return { good, watch };
 }
 
+function sanitizeIngredientText(raw) {
+  return String(raw || '')
+    .replace(
+      /<span[^>]*class=(?:"|')allergen(?:"|')[^>]*>([^<]*)<\/span>/gi,
+      (_, name) => String(name || '').toUpperCase()
+    )
+    .replace(/<[^>]+>/g, '')
+    .trim();
+}
+
 function catalogSourceLabel(source) {
   const s = String(source || '').trim();
   if (s === 'open_food_facts') return 'Open Food Facts';
@@ -113,10 +123,57 @@ function categoryRoutePresentation(routeRaw, catalogSource) {
     else if (s === 'open_beauty_facts') r = 'cosmetic';
   }
   if (r === 'food' || r === 'beverage') return { label: 'Food & beverage', mod: 'food' };
-  if (r === 'cosmetic' || r === 'skincare' || r === 'personal_care') return { label: 'Skincare & cosmetic', mod: 'cosmetic' };
+  if (r === 'cosmetic' || r === 'skincare' || r === 'personal_care') return { label: 'Cosmetic', mod: 'cosmetic' };
   if (r === 'supplement') return { label: 'Supplement', mod: 'supplement' };
   if (!r || r === 'unknown') return { label: 'Category unknown', mod: 'unknown' };
   return { label: r.replace(/_/g, ' '), mod: 'other' };
+}
+
+/** Snapshot may store route confidence as 0–1 (server) or band strings (API). */
+function routeConfidenceLabelFromSnapshot(routeScore) {
+  if (routeScore == null || routeScore === '') return null;
+  if (typeof routeScore === 'string') {
+    const v = routeScore.toLowerCase().trim();
+    if (v === 'high') return 'High confidence';
+    if (v === 'medium') return 'Medium confidence';
+    if (v === 'low') return 'Low confidence';
+    return null;
+  }
+  const n = Number(routeScore);
+  if (!Number.isFinite(n)) return null;
+  if (n >= 0.75) return 'High confidence';
+  if (n >= 0.5) return 'Medium confidence';
+  return 'Low confidence';
+}
+
+function heroMetaConfidenceMod(snapshot, globalConfidencePct) {
+  const raw = snapshot?.scanned_product?.category_route_confidence ?? snapshot?.route_confidence;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw >= 0.75 ? 'high' : raw >= 0.5 ? 'mid' : 'low';
+  }
+  if (typeof raw === 'string') {
+    const v = raw.toLowerCase();
+    if (v === 'high') return 'high';
+    if (v === 'medium') return 'mid';
+    if (v === 'low') return 'low';
+  }
+  return globalConfidencePct >= 75 ? 'high' : globalConfidencePct >= 50 ? 'mid' : 'low';
+}
+
+/** When category route is resolved, show taxonomy-based confidence instead of global % + catalog name. */
+function taxonomyHeroMetaLine(snapshot, categoryRoute, globalConfidencePct) {
+  const route = String(categoryRoute || '').toLowerCase().trim();
+  if (!route || route === 'unknown') return null;
+  const raw = snapshot?.scanned_product?.category_route_confidence ?? snapshot?.route_confidence;
+  const fromRoute = routeConfidenceLabelFromSnapshot(raw);
+  const confLabel =
+    fromRoute ||
+    (globalConfidencePct >= 75
+      ? 'High confidence'
+      : globalConfidencePct >= 50
+        ? 'Medium confidence'
+        : 'Low confidence');
+  return `${confLabel} · taxonomy map`;
 }
 
 const INGREDIENT_LIST_MAX_CHARS = 3200;
@@ -126,6 +183,7 @@ const TILE_REASON_COPY = {
   missing_ingredients: 'No ingredient line in catalog',
   not_applicable_cosmetic_actives: 'Not applicable — food/beverage (no cosmetic “actives” here)',
   not_applicable_cosmetic_function: 'Not applicable — food/beverage (skincare function)',
+  not_applicable_skin_type_for_food: 'Not applicable — food/beverage (skin type)',
   category_unknown: 'Category unclear',
   no_profile_context: 'Needs profile context',
   no_scoring_pipeline: 'Safety score not available yet',
@@ -168,15 +226,6 @@ function formatTileBody(tile) {
   const code = tile.reason_unavailable;
   if (!code) return 'Unavailable';
   return TILE_REASON_COPY[code] || String(code).replace(/_/g, ' ');
-}
-
-/** Render primary line for `result_summary.verdict.alternatives` (structured). */
-function formatAlternativesVerdictLine(alt) {
-  if (!alt) return 'Ask Agent for safer alternatives';
-  if (alt.status === 'available' && Array.isArray(alt.candidates) && alt.candidates.length > 0) {
-    return alt.candidates.join(' • ');
-  }
-  return 'Ask Agent for safer alternatives';
 }
 
 function shouldShowAlternativesCta(alt) {
@@ -264,6 +313,16 @@ function buildPendingText(reasoningReady) {
   return reasoningReady ? null : 'Deeper analysis running - results will update shortly';
 }
 
+/** Snapshot top-level `reasoning_state` wins; infer from `result_summary.reasoning` when absent (legacy rows). */
+function resolveReasoningStateFromSnapshot(snapshot) {
+  const top = String(snapshot?.reasoning_state || '').trim().toLowerCase();
+  if (top === 'pending' || top === 'complete' || top === 'fallback' || top === 'disabled') return top;
+  const st = String(snapshot?.result_summary?.reasoning?.status || '').trim().toLowerCase();
+  if (st === 'pending') return 'pending';
+  if (st === 'disabled') return 'disabled';
+  return 'complete';
+}
+
 function normalizeEvidenceFlags(harmful) {
   const flags = Array.isArray(harmful?.flags) ? harmful.flags : [];
   return flags
@@ -294,24 +353,6 @@ function formatReasoningEvidenceRef(ref) {
     .map((part) => part.replace(/[_-]/g, ' '))
     .map((part) => _titleCase(part))
     .join(' - ');
-}
-
-function getReasoningUnavailableCopy(resultSummary, field) {
-  const top = resultSummary?.reasoning || {};
-  const reason = String(field?.reason_unavailable || '').trim();
-  if (reason === 'unsupported_for_route' || String(field?.status || '') === 'unsupported_for_route') {
-    return 'Reasoning skipped for this category route - deterministic guidance is shown instead.';
-  }
-  if (reason.startsWith('not_applicable')) {
-    return 'This field is not applicable for the current product category route.';
-  }
-  if (reason === 'reasoning_low_confidence') {
-    return 'Reasoning unavailable - confidence was too low, so deterministic guidance is shown instead.';
-  }
-  if (String(top?.enabled) === 'false' || String(top?.status || '') === 'disabled') {
-    return 'Reasoning is disabled for this scan - deterministic guidance is shown instead.';
-  }
-  return '';
 }
 
 function verdictChipTone(label) {
@@ -395,6 +436,7 @@ function TileArticle({ title, tile, iconVariant = 'gray', layout = 'card' }) {
   if (layout === 'safety') {
     const statusKey = String(t.status || 'unavailable');
     const deferred = statusKey === 'deferred' || statusKey === 'unavailable';
+    const comingSoon = deferred;
     return (
       <article className={`arp-safety-tile arp-tile--${String(t.status || 'unavailable')}`}>
         <div className={`arp-tile-icon-mark arp-tile-icon--${iconVariant}`} aria-hidden />
@@ -402,10 +444,12 @@ function TileArticle({ title, tile, iconVariant = 'gray', layout = 'card' }) {
           <p className="arp-safety-tile-label">Safety score</p>
           <p className="arp-safety-tile-value">{body}</p>
           {meta ? <p className="arp-tile-meta">{meta}</p> : null}
-          <div className="arp-safety-bar-wrap" aria-hidden={!deferred}>
-            <div className={`arp-safety-bar-fill ${deferred ? 'arp-safety-bar-fill--pending' : ''}`} />
-          </div>
-          {deferred ? <p className="arp-safety-pending-hint">Score pending — pipeline not enabled for this scan</p> : null}
+          {!comingSoon ? (
+            <div className="arp-safety-bar-wrap" aria-hidden={!deferred}>
+              <div className="arp-safety-bar-fill" />
+            </div>
+          ) : null}
+          {comingSoon ? <p className="arp-safety-pending-hint">Coming soon — safety score pipeline is not enabled for this scan</p> : null}
         </div>
       </article>
     );
@@ -438,7 +482,6 @@ function VerdictRow({
   footer = '',
   pending = '',
   reasoning = null,
-  fallback = '',
   children = null
 }) {
   return (
@@ -472,7 +515,6 @@ function VerdictRow({
           ) : null}
           {footer ? <p className="arp-verdict-footer">{footer}</p> : null}
           {pending ? <p className="arp-verdict-pending">{pending}</p> : null}
-          {fallback ? <p className="arp-verdict-fallback">{fallback}</p> : null}
           {reasoning ? (
             <div className="arp-reasoning-panel" aria-label="Why this answer">
               <div className="arp-reasoning-head">
@@ -671,23 +713,32 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
   const productName = (sp?.product_name || sp?.name || pd?.product_name || pd?.name || product.product_name || product.name || '').trim();
   const productImage =
     pickFirstProductImageUrl(sp) || pickFirstProductImageUrl(pd) || pickFirstProductImageUrl(product) || null;
-  const ingredientsText = product.ingredients_text || '';
+  const ingredientsText = sanitizeIngredientText(product.ingredients_text || '');
   const factsSource = product.source || snapshot?.scanned_product?.source || null;
   const rawConflicts = useMemo(() => mergeScanAndRoutineConflicts(product, snapshot), [product, snapshot]);
   const graphConflicts = useMemo(() => normalizeConflictRows(rawConflicts), [rawConflicts]);
   const confidencePct = Math.round((snapshot?.confidence?.global ?? 0.62) * 100);
   const hasProduct = !!productName;
   const notFound = String(snapshot?.scanned_product?.lookup_status || '') === 'not_found';
+  const displayBarcode = String(sp?.barcode || pd?.barcode || product?.barcode || '').trim();
   const scanSummary = snapshot?.scan_summary || null;
   const resultSummary = snapshot?.result_summary || null;
   const legacyPreContract = !!resultSummary?.legacy_pre_contract;
   const tiles = summaryV1Enabled ? (resultSummary?.tiles || scanSummary?.tiles || null) : null;
   const verdict = summaryV1Enabled ? (resultSummary?.verdict || null) : null;
   const missingMore = Array.isArray(resultSummary?.missing_more) ? resultSummary.missing_more : [];
+  const categoryRoute = String(
+    snapshot?.scanned_product?.category_route || snapshot?.category_route || ''
+  ).toLowerCase();
+  const isCosmeticContext = categoryRoute === 'cosmetic' || categoryRoute === 'hygiene';
+  const isFoodContext = categoryRoute === 'food' || categoryRoute === 'supplement';
 
   const handleHeaderBack = onBack || onClose;
 
-  const { good, watch } = useMemo(() => classifyIngredients(ingredientsText), [ingredientsText]);
+  const { good, watch } = useMemo(
+    () => (isCosmeticContext ? classifyIngredients(ingredientsText) : { good: [], watch: [] }),
+    [ingredientsText, isCosmeticContext]
+  );
 
   const hasData = good.length > 0 || watch.length > 0 || graphConflicts.length > 0;
   const sourceLine = catalogSourceLabel(factsSource);
@@ -715,20 +766,21 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     ? String(tiles?.formulation?.value || '')
     : null;
   const altBlock = verdict?.alternatives;
-  const alternativesLine = formatAlternativesVerdictLine(altBlock);
+  const altSource = String(altBlock?.source || '').trim().toLowerCase();
+  const isReasoningAlternatives = altSource === 'reasoning';
   const showAlternatives =
     shouldShowAlternativesCta(altBlock) &&
-    String(altBlock?.source || '') === 'reasoning' &&
-    Number(altBlock?.reasoning?.confidence || 0) >= 0.76;
+    (!isReasoningAlternatives || Number(altBlock?.reasoning?.confidence || 0) >= 0.76);
   const whatItDoes = verdict?.product_overview?.what_it_does || (functionText ? `Supports ${functionText}.` : 'Deterministic product summary.');
+  const productTagline = String(sp?.generic_name || pd?.generic_name || product?.generic_name || '').trim();
+  const heroSubText = productTagline || whatItDoes;
   const goodForMeAnswer = verdict?.good_for_me?.answer || 'unknown';
   const harmfulAnswer = verdict?.harmful?.severity || 'unknown';
   const childrenAnswer = verdict?.children_safe?.answer || 'insufficient_data';
   const childrenSafeSummary = verdict?.children_safe?.summary || verdict?.children_safe?.text || null;
   const sideEffectsLine = verdict ? sideEffectsDisplayText(verdict) : 'Not assessed in this scan.';
-  const categoryRoute = String(
-    snapshot?.scanned_product?.category_route || snapshot?.category_route || ''
-  ).toLowerCase();
+  const heroTaxonomyMetaLine = taxonomyHeroMetaLine(snapshot, categoryRoute, confidencePct);
+  const heroMetaConfMod = heroMetaConfidenceMod(snapshot, confidencePct);
   const categoryPresentation = useMemo(
     () =>
       categoryRoutePresentation(
@@ -737,6 +789,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
       ),
     [snapshot?.scanned_product?.category_route, snapshot?.category_route, factsSource]
   );
+  const isCosmeticPresentation = categoryPresentation.mod === 'cosmetic';
   const showCompactHeader = !notFound && (hasProduct || !!ingredientsText);
   const navScreenTitle = useMemo(() => {
     const m = categoryPresentation.mod;
@@ -746,9 +799,18 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     if (m === 'supplement') return 'Supplement scan';
     return 'Scan results';
   }, [categoryPresentation.mod]);
+  const tileSectionHeading = useMemo(() => {
+    if (categoryPresentation.mod === 'cosmetic') return 'Ingredients & Formulation';
+    if (categoryPresentation.mod === 'food' || categoryPresentation.mod === 'supplement') return 'Ingredients';
+    return 'Product composition';
+  }, [categoryPresentation.mod]);
 
-  const reasoningReady = !!verdict;
-  const pendingText = buildPendingText(reasoningReady);
+  const reasoningStateUi = resolveReasoningStateFromSnapshot(snapshot);
+  const reasoningReady = reasoningStateUi !== 'pending';
+  const pendingText =
+    reasoningStateUi === 'pending' || reasoningStateUi === 'fallback'
+      ? null
+      : buildPendingText(!!verdict);
   const harmfulFlags = normalizeEvidenceFlags(verdict?.harmful);
   const harmfulEvidence = String(verdict?.harmful?.top_evidence || verdict?.harmful?.summary || '').trim();
   const alternativesList = normalizeAlternativesList(verdict?.alternatives);
@@ -777,7 +839,11 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
         ].slice(0, 4);
   const fallbackChildrenAnswer =
     verdict?.children_safe?.answer ||
-    (keyActiveTag || /retinol|acid|benzoyl peroxide/i.test(ingredientsText) ? 'caution' : 'insufficient_data');
+    (
+      isCosmeticContext && (keyActiveTag || /retinol|acid|benzoyl peroxide/i.test(ingredientsText))
+        ? 'caution'
+        : 'insufficient_data'
+    );
   const fallbackChildrenSummary =
     childrenSafeSummary ||
     (fallbackChildrenAnswer === 'caution'
@@ -791,9 +857,36 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
         : 'Not assessed in this scan.';
   const fallbackAlternativesFooter =
     alternativesList.length
-      ? 'Or ask Kelly for personalised alternatives based on your routine.'
-      : 'Ask Kelly for personalised alternatives based on your routine.';
+      ? (isFoodContext
+          ? 'Or ask Kelly for personalised food or supplement alternatives.'
+          : 'Or ask Kelly for personalised alternatives based on your routine.')
+      : (isFoodContext
+          ? 'Ask Kelly for personalised food or supplement alternatives.'
+          : 'Ask Kelly for personalised alternatives based on your routine.');
+  const unresolvedFoodSignals = isFoodContext
+    ? [
+        String(tiles?.formulation?.confidence || '').toLowerCase() === 'low',
+        String(tiles?.safety_score?.status || '').toLowerCase() !== 'available',
+        sideEffectsLine === 'Not assessed in this scan.'
+      ].filter(Boolean).length
+    : 0;
+  const routeTrustState = isFoodContext
+    ? (unresolvedFoodSignals >= 2 ? 'deterministic_limited' : 'deterministic')
+    : 'standard';
+  const routeTrustSummary = isFoodContext
+    ? (
+        routeTrustState === 'deterministic_limited'
+          ? 'Food route is using deterministic additive/dye checks for this scan; nutrition and safety scoring are not fully enabled yet.'
+          : 'Food route is using deterministic additive/dye checks for this scan.'
+      )
+    : null;
+  const showSafetyScoreTile = !(
+    (categoryRoute === 'food' || categoryRoute === 'supplement') &&
+    String(tiles?.safety_score?.reason_unavailable || '') === 'no_scoring_pipeline'
+  );
   const resultReasoning = resultSummary?.reasoning || null;
+  const reasoningMode = String(resultReasoning?.reasoning_mode || '').trim().toLowerCase();
+  const showModelReasoningPanel = reasoningMode === 'model' && reasoningStateUi === 'complete';
   const reasoningConfidenceLabel = (n) => {
     const x = Number(n || 0);
     if (!Number.isFinite(x) || x <= 0) return '';
@@ -802,6 +895,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
     return 'Low confidence';
   };
   const reasoningPanelFor = (field) => {
+    if (!showModelReasoningPanel) return null;
     if (!field || String(field?.source || '') !== 'reasoning') return null;
     const refs = Array.isArray(field?.reasoning?.reasoning_evidence_refs)
       ? field.reasoning.reasoning_evidence_refs.map(formatReasoningEvidenceRef).filter(Boolean)
@@ -810,11 +904,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
         : [];
     return {
       confidenceLabel: reasoningConfidenceLabel(field?.reasoning?.confidence),
-      summary:
-        `Reasoning model ${String(field?.reasoning?.reasoning_model || resultReasoning?.reasoning_model || 'unknown')} ${
-          String(field?.reasoning?.reasoning_version || resultReasoning?.reasoning_version || '').trim() || ''
-        }`
-          .trim(),
+      summary: 'AI-assisted analysis',
       evidenceRefs: refs.slice(0, 4)
     };
   };
@@ -845,11 +935,9 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
             ) : null}
             <div className="arp-product-text">
               <span className="arp-product-name">{hasProduct ? productName : 'Scanned product'}</span>
-              <span
-                className={`arp-confidence conf-${confidencePct >= 75 ? 'high' : confidencePct >= 50 ? 'mid' : 'low'}`}
-              >
+              <span className={`arp-confidence conf-${heroMetaConfMod}`}>
                 <span className="arp-conf-dot" />
-                Confidence {confidencePct}%
+                {heroTaxonomyMetaLine || `Confidence ${confidencePct}%`}
               </span>
             </div>
           </div>
@@ -866,15 +954,103 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
       </header>
 
       <main className="arp-body">
-        {notFound ? (
-          <div className="arp-empty arp-empty--banner" role="status">
-            <p className="arp-empty-title">Not in catalog</p>
-            <p className="arp-empty-sub">
-              This barcode did not match Open Beauty Facts or Open Food Facts. Try another scan or add ingredients
-              manually, then ask the Agent in chat.
-            </p>
-          </div>
-        ) : null}
+        <section className="arp-hero-card" aria-label="Hero summary card">
+          {notFound ? (
+            <>
+              <div className="arp-hero-media arp-hero-media--stage">
+                <div className="arp-hero-image arp-hero-image--fallback" aria-hidden="true">
+                  <svg className="arp-hero-placeholder-icon" width="64" height="64" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span className="arp-hero-placeholder-label">No product photo</span>
+                </div>
+              </div>
+              <div className="arp-hero-content">
+                <span className="arp-category-pill arp-category-pill--unknown">Not in catalog</span>
+                <h1 className="arp-hero-title">No match for this barcode</h1>
+                <p className="arp-hero-sub">
+                  {displayBarcode
+                    ? `We could not find ${displayBarcode} in Open Beauty Facts or Open Food Facts. Try another scan or paste ingredients in chat.`
+                    : 'Try another scan or paste ingredients in chat.'}
+                </p>
+                <div className="arp-hero-meta">
+                  <span className="arp-confidence conf-mid">
+                    <span className="arp-conf-dot" />
+                    Catalog lookup
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="arp-hero-media arp-hero-media--stage">
+                {productImage ? (
+                  <img className="arp-hero-image" src={productImage} alt={productName || 'Product'} />
+                ) : (
+                  <div className="arp-hero-image arp-hero-image--fallback" aria-hidden="true">
+                    <svg className="arp-hero-placeholder-icon" width="64" height="64" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span className="arp-hero-placeholder-label">No product photo</span>
+                  </div>
+                )}
+                <div className="arp-floating-tags">
+                  {keyActiveTag ? (
+                    <span className="arp-tag-pill arp-tag-pill--hero">
+                      <span className="arp-tag-dot arp-tag-dot--green" aria-hidden="true" />
+                      {keyActiveTag}
+                    </span>
+                  ) : null}
+                  {formulationTag ? (
+                    <span className="arp-tag-pill arp-tag-pill--hero">
+                      <span className="arp-tag-dot arp-tag-dot--blue" aria-hidden="true" />
+                      {formulationTag}
+                    </span>
+                  ) : null}
+                  {tiles?.safety_score?.status === 'deferred' ? (
+                    <span className="arp-tag-pill arp-tag-pill--hero">
+                      <span className="arp-tag-dot arp-tag-dot--amber" aria-hidden="true" />
+                      Safety score coming soon
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="arp-hero-content">
+                <span className={`arp-category-pill arp-category-pill--${categoryPresentation.mod}`}>
+                  {categoryPresentation.label}
+                </span>
+                <h1 className="arp-hero-title">{hasProduct ? productName : 'Scanned product'}</h1>
+                <p className="arp-hero-sub">{heroSubText}</p>
+                <div className="arp-hero-meta">
+                  <span className={`arp-confidence conf-${heroMetaConfMod}`}>
+                    <span className="arp-conf-dot" />
+                    {heroTaxonomyMetaLine || `Confidence ${confidencePct}%`}
+                  </span>
+                  {!heroTaxonomyMetaLine && sourceLine ? (
+                    <>
+                      <span className="arp-hero-meta-sep" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="arp-hero-taxonomy">{sourceLine}</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          )}
+        </section>
 
         {!ingredientsText && !hasProduct && !notFound ? (
           <div className="arp-empty">
@@ -902,113 +1078,90 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
           </div>
         ) : null}
 
-        {!notFound ? (
-          <section className="arp-hero-card" aria-label="Hero summary card">
-            <div className="arp-hero-media arp-hero-media--stage">
-              {productImage ? (
-                <img className="arp-hero-image" src={productImage} alt={productName || 'Product'} />
-              ) : (
-                <div className="arp-hero-image arp-hero-image--fallback" aria-hidden="true">
-                  <svg className="arp-hero-placeholder-icon" width="64" height="64" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <span className="arp-hero-placeholder-label">No product photo</span>
-                </div>
-              )}
-              <div className="arp-floating-tags">
-                {keyActiveTag ? (
-                  <span className="arp-tag-pill arp-tag-pill--hero">
-                    <span className="arp-tag-dot arp-tag-dot--green" aria-hidden="true" />
-                    {keyActiveTag}
-                  </span>
-                ) : null}
-                {formulationTag ? (
-                  <span className="arp-tag-pill arp-tag-pill--hero">
-                    <span className="arp-tag-dot arp-tag-dot--blue" aria-hidden="true" />
-                    {formulationTag}
-                  </span>
-                ) : null}
-                {tiles?.safety_score?.status === 'deferred' ? (
-                  <span className="arp-tag-pill arp-tag-pill--hero">
-                    <span className="arp-tag-dot arp-tag-dot--amber" aria-hidden="true" />
-                    Safety score pending
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <div className="arp-hero-content">
-              <span className={`arp-category-pill arp-category-pill--${categoryPresentation.mod}`}>
-                {categoryPresentation.label}
-              </span>
-              <h1 className="arp-hero-title">{hasProduct ? productName : 'Scanned product'}</h1>
-              <p className="arp-hero-sub">{whatItDoes}</p>
-              <div className="arp-hero-meta">
-                <span className={`arp-confidence conf-${confidencePct >= 75 ? 'high' : confidencePct >= 50 ? 'mid' : 'low'}`}>
-                  <span className="arp-conf-dot" />
-                  Confidence {confidencePct}%
-                </span>
-                {sourceLine ? (
-                  <>
-                    <span className="arp-hero-meta-sep" aria-hidden="true">
-                      ·
-                    </span>
-                    <span className="arp-hero-taxonomy">{sourceLine}</span>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          </section>
-        ) : null}
-
         {tiles ? (
-          <section className="arp-section" aria-label="Structured summary tiles">
+          <section
+            className="arp-section"
+            aria-label="Structured summary tiles"
+            style={isFoodContext ? { order: 2 } : undefined}
+          >
             <h2 className="arp-section-heading">
               <span className="arp-heading-icon icon-ref">◫</span>
-              Ingredients & Formulation
+              {tileSectionHeading}
             </h2>
-            <div className="arp-tile-grid arp-tile-grid--quad">
-              {[
-                ['key_actives', 'Key Actives'],
-                ['function', 'Function'],
-                ['skin_type', 'Skin Type'],
-                ['formulation', 'Formulation']
-              ].map(([k, label]) => (
+            {isCosmeticContext ? (
+              <div className="arp-tile-grid arp-tile-grid--quad">
+                {[
+                  ['key_actives', 'Key Actives'],
+                  ['function', 'Function'],
+                  ['skin_type', 'Skin Type'],
+                  ['formulation', 'Formulation']
+                ].map(([k, label]) => (
+                  <TileArticle
+                    key={k}
+                    title={label}
+                    tile={tiles?.[k]}
+                    iconVariant={TILE_ICON_VARIANT[k] || 'gray'}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="arp-non-cosmetic-tile-summary">
+                <p className="arp-ingredient-note arp-ingredient-note--muted">
+                  Cosmetic analysis tiles are not applicable for this product category.
+                </p>
+                {tiles?.formulation ? (
+                  <TileArticle
+                    title="Formulation"
+                    tile={tiles?.formulation}
+                    iconVariant={TILE_ICON_VARIANT.formulation || 'amber'}
+                  />
+                ) : null}
+              </div>
+            )}
+            {showSafetyScoreTile ? (
+              <div className="arp-safety-row">
                 <TileArticle
-                  key={k}
-                  title={label}
-                  tile={tiles?.[k]}
-                  iconVariant={TILE_ICON_VARIANT[k] || 'gray'}
+                  title="Safety score"
+                  tile={tiles?.safety_score}
+                  iconVariant={TILE_ICON_VARIANT.safety_score}
+                  layout="safety"
                 />
-              ))}
-            </div>
-            <div className="arp-safety-row">
-              <TileArticle
-                title="Safety score"
-                tile={tiles?.safety_score}
-                iconVariant={TILE_ICON_VARIANT.safety_score}
-                layout="safety"
-              />
-            </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
-        <section className="arp-section" aria-label="Decision answers">
+        <section
+          className="arp-section"
+          aria-label="Decision answers"
+          style={isFoodContext ? { order: 1 } : undefined}
+        >
             <h2 className="arp-section-heading">
               <span className="arp-heading-icon icon-warn">?</span>
               Decision answers
             </h2>
+            {reasoningStateUi === 'pending' || reasoningStateUi === 'fallback' ? (
+              <div
+                className="arp-reasoning-global-banner"
+                data-testid="arp-reasoning-state-banner"
+                data-reasoning-state={reasoningStateUi}
+                role="status"
+                aria-live="polite"
+              >
+                {reasoningStateUi === 'pending'
+                  ? 'Deeper analysis is running in the background. Verdict rows stay put; wording may refine when ready (no refresh needed).'
+                  : 'Model reasoning stayed in a safe fallback for this scan. Answers below use catalogue facts and deterministic checks only.'}
+              </div>
+            ) : null}
+            {routeTrustSummary ? (
+              <p className="arp-ingredient-note arp-ingredient-note--muted">{routeTrustSummary}</p>
+            ) : null}
             {legacyPreContract ? (
               <p className="arp-ingredient-note arp-ingredient-note--muted">
                 Legacy session detected. Route-safe contract defaults were applied for compatibility.
               </p>
             ) : null}
-            <div className="arp-verdict-block">
+            <div className="arp-verdict-block arp-verdict-block--stable">
               <VerdictRow
                 iconClass="arp-verdict-icon--neutral"
                 icon="info"
@@ -1024,7 +1177,6 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 summary={fallbackGoodSummary}
                 detail={!reasoningReady && graphConflicts.length === 0 ? 'Using deterministic scan signals until deeper reasoning is available.' : ''}
                 pending={pendingText}
-                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.good_for_me)}
                 reasoning={reasoningPanelFor(verdict?.good_for_me)}
               />
               <VerdictRow
@@ -1037,7 +1189,6 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 detail={harmfulEvidence || (!harmfulFlags.length ? deterministicHarmfulLine(watch) : '')}
                 chips={fallbackHarmfulFlags}
                 pending={!harmfulFlags.length ? pendingText : ''}
-                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.harmful)}
                 reasoning={reasoningPanelFor(verdict?.harmful)}
               />
               <VerdictRow
@@ -1048,7 +1199,6 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 badgeTone={verdictBadgeTone('children', fallbackChildrenAnswer)}
                 summary={fallbackChildrenSummary}
                 pending={pendingText}
-                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.children_safe)}
                 reasoning={reasoningPanelFor(verdict?.children_safe)}
               />
               <VerdictRow
@@ -1061,7 +1211,6 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                     ? 'Side effect profile not yet assessed for this scan.'
                     : pendingText
                 }
-                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.side_effects)}
                 reasoning={reasoningPanelFor(verdict?.side_effects)}
               />
               <VerdictRow
@@ -1070,19 +1219,16 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
                 q="Alternatives I can use"
                 badge={alternativesList.length ? `${alternativesList.length} found` : null}
                 badgeTone="alt"
-                summary={!alternativesList.length ? alternativesLine : ''}
+                summary={!alternativesList.length
+                  ? (isFoodContext
+                      ? 'Ask Kelly for personalised food or supplement alternatives.'
+                      : 'Ask Kelly for personalised alternatives based on your routine.')
+                  : ''}
                 listItems={alternativesList}
-                footer={fallbackAlternativesFooter}
+                footer={alternativesList.length ? fallbackAlternativesFooter : ''}
                 pending={!alternativesList.length ? pendingText : ''}
-                fallback={getReasoningUnavailableCopy(resultSummary, verdict?.alternatives)}
                 reasoning={reasoningPanelFor(verdict?.alternatives)}
-              >
-                {!alternativesList.length ? (
-                  <button type="button" className="arp-verdict-ask-kelly" onClick={onAskKelly || onClose}>
-                    Ask Kelly for personalised alternatives
-                  </button>
-                ) : null}
-              </VerdictRow>
+              />
               <p className="arp-verdict-disclaimer">{formatDisclaimerLine(resultSummary?.disclaimer)}</p>
             </div>
           </section>
@@ -1159,7 +1305,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
           </section>
         ) : null}
 
-        {good.length > 0 ? (
+        {isCosmeticPresentation && good.length > 0 ? (
           <section className="arp-section">
             <h2 className="arp-section-heading">
               <span className="arp-heading-icon icon-good">✓</span>
@@ -1176,7 +1322,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
           </section>
         ) : null}
 
-        {watch.length > 0 ? (
+        {isCosmeticPresentation && watch.length > 0 ? (
           <section className="arp-section">
             <h2 className="arp-section-heading">
               <span className="arp-heading-icon icon-warn">⚠</span>
@@ -1193,7 +1339,7 @@ export default function AssistantResultsPage({ snapshot, onClose, onAskKelly, on
           </section>
         ) : null}
 
-        {product?.nyc_metal_context ? (
+        {isCosmeticPresentation && product?.nyc_metal_context ? (
           <section className="arp-section arp-section--nyc" aria-label="NYC Health Department reference metal tests">
             <h2 className="arp-section-heading">
               <span className="arp-heading-icon icon-ref">i</span>

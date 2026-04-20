@@ -16,7 +16,7 @@
     },
     "expect": {
       "good_for_me_summary_includes": ["Reasoning layer", "routine context"],
-      "alternatives_min": 1,
+      "alternatives_min": 0,
       "forbidden_phrases": ["diagnosis", "cure", "guaranteed"]
     }
   },

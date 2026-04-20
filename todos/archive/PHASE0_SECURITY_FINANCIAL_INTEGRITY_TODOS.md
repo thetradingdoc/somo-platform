@@ -26,7 +26,7 @@ Implemented in code and verified:
   - `fraud_review_queue` persistence,
   - admin assignment/resolution endpoints,
   - SLA breach monitor with counters and warning logs.
-- Fraud response playbook published (`docs/middleware-platform/FRAUD_RESPONSE_PLAYBOOK.md`).
+- Fraud response playbook published (`docs/middleware-platform/README.md#fraud-response-playbook`).
 
 ## Status Legend
 

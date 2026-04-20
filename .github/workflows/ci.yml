@@ -39,6 +39,11 @@ jobs:
       - name: Install dependencies
         working-directory: ./middleware-platform
         run: npm ci
+
+      - name: Install and build littlelab-landing (reasoning scan-chat gate)
+        if: matrix.node-version == '20.x'
+        working-directory: ./unified-dashboard/littlelab-landing
+        run: npm ci && npm run build
       
       - name: Run linter (if configured)
         working-directory: ./middleware-platform
@@ -64,6 +69,13 @@ jobs:
       - name: Run Jest tests (middleware-platform)
         working-directory: ./middleware-platform
         run: npm test
+
+      - name: Run reasoning regression guard suites
+        run: npm run test:reasoning-regression
+
+      - name: Reasoning eval harness (pre-ramp gate)
+        working-directory: ./middleware-platform
+        run: npm run eval:reasoning:harness
 
       - name: Category representative guard baseline flow
         working-directory: ./middleware-platform
@@ -156,8 +168,22 @@ jobs:
           if [ -d "cypress" ]; then
             npx cypress run
           else
-            echo "No middleware-platform/cypress directory — browser E2E skipped (see docs/deployment/CI_AND_DEPLOY_SOURCE_OF_TRUTH.md)"
+            echo "No middleware-platform/cypress directory — browser E2E skipped (see docs/deployment/README.md#ci-and-deploy-source-of-truth)"
           fi
+
+      - name: Reasoning scan-chat gate (Playwright)
+        if: matrix.node-version == '20.x'
+        working-directory: ./middleware-platform
+        env:
+          UI_BASE_URL: http://127.0.0.1:5199
+          MIDDLEWARE_API_BASE: http://127.0.0.1:4000
+        run: |
+          node scripts/serve-cra-build.cjs "../unified-dashboard/littlelab-landing/build" 5199 &
+          echo $! > /tmp/landing_static_pid
+          sleep 2
+          npx playwright install chromium
+          node scripts/playwright-chat-scan-two-turn-gate.cjs
+          kill "$(cat /tmp/landing_static_pid)" 2>/dev/null || true
 
       - name: Stop API server
         if: always()

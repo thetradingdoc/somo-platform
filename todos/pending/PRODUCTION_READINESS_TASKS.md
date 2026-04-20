@@ -2,7 +2,7 @@
 
 **Purpose:** Single checklist of tasks to make the DocLittle platform production-ready for real patients (book → pay → join telemedicine). Includes Azure setup and compliance.
 
-**Related:** [ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md](../docs/architecture/overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md), [MASTER_TODO_FULL.md](../docs/development/MASTER_TODO_FULL.md), [VIDEO_CONSULT.md](../docs/architecture/care-delivery/VIDEO_CONSULT.md), [DEPLOYMENT_GUIDE.md](../docs/deployment/guides/DEPLOYMENT_GUIDE.md).
+**Related:** [ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md](../docs/architecture/README.md#overview-architecture-overview-and-colab-rag), [MASTER_TODO_FULL.md](../docs/development/README.md#master-todo-full), [VIDEO_CONSULT.md](../docs/architecture/README.md#care-delivery-video-consult), [DEPLOYMENT_GUIDE.md](../docs/deployment/README.md#guides-deployment-guide).
 
 ---
 
@@ -32,8 +32,8 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 | A1 | Deploy app to Azure App Service | Use `./scripts/deploy-to-azure.sh`; app name `doclittle`, resource group `doclittle` |
 | A2 | Configure root domain | Run `./scripts/add-root-domain.sh` or add `doclittle.site` in Azure Portal |
 | A3 | DNS (IONOS or registrar) | A record for `doclittle.site` → Azure App Service outbound IP or ALIAS to `doclittle.azurewebsites.net` |
-| A4 | SSL for root domain | `az webapp config ssl create` then `ssl bind` for `doclittle.site` (see [QUICK_DEPLOYMENT_GUIDE.md](../docs/deployment/guides/basic/QUICK_DEPLOYMENT_GUIDE.md)) |
-| A5 | Tenant subdomains SSL | Azure managed certs = root only. Use [TENANT_AND_DNS_SETUP.md](../docs/deployment/dns/TENANT_AND_DNS_SETUP.md): Cloudflare (recommended) or wildcard cert |
+| A4 | SSL for root domain | `az webapp config ssl create` then `ssl bind` for `doclittle.site` (see [QUICK_DEPLOYMENT_GUIDE.md](../docs/deployment/README.md#guides-basic-quick-deployment-guide)) |
+| A5 | Tenant subdomains SSL | Azure managed certs = root only. Use [TENANT_AND_DNS_SETUP.md](../docs/deployment/README.md#dns-tenant-and-dns-setup): Cloudflare (recommended) or wildcard cert |
 
 ### 1.2 Azure Domain Service (Tenant Subdomains)
 
@@ -47,7 +47,7 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 
 | # | Task | Status / Notes |
 |---|------|----------------|
-| A9 | Create Communication Services + Email Service | See [docs/azure/README.md](../docs/azure/README.md): `doclittle-communication`, `doclittle-email`, `doclittle-rg` |
+| A9 | Create Communication Services + Email Service | See [docs/azure/README.md#readme](../docs/azure/README.md#readme): `doclittle-communication`, `doclittle-email`, `doclittle-rg` |
 | A10 | Verify domain & sender | Add MX/TXT/CNAME in IONOS; verify `doclittle.site` and `DoNotReply@doclittle.site` |
 | A11 | App settings | `AZURE_COMMUNICATION_CONNECTION_STRING`, `AZURE_EMAIL_SENDER=DoNotReply@doclittle.site` |
 
@@ -75,10 +75,10 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 
 | # | Task | Status / Notes |
 |---|------|----------------|
-| S4 | HIPAA access logging | Populate `hipaa_access_log` for patient/FHIR access, payment events; 7-year retention (see [DATA_RETENTION_POLICY.md](../docs/compliance/DATA_RETENTION_POLICY.md)) |
+| S4 | HIPAA access logging | Populate `hipaa_access_log` for patient/FHIR access, payment events; 7-year retention (see [DATA_RETENTION_POLICY.md](../docs/compliance/README.md#data-retention-policy)) |
 | S5 | PII redaction | Use `utils/pii-redactor.js`; redact before storage/logging where appropriate |
 | S6 | Transcript encryption (P2) | Optional: `TRANSCRIPT_ENCRYPTION_KEY`; encrypt transcript content at rest |
-| S7 | BAA acknowledgment | Set `BAA_ACKNOWLEDGED=true` when BHAs in place (LiveKit, Deepgram/OpenAI, etc.); see [VIDEO_CONSULT.md](../docs/architecture/care-delivery/VIDEO_CONSULT.md) |
+| S7 | BAA acknowledgment | Set `BAA_ACKNOWLEDGED=true` when BHAs in place (LiveKit, Deepgram/OpenAI, etc.); see [VIDEO_CONSULT.md](../docs/architecture/README.md#care-delivery-video-consult) |
 
 ### 2.3 Secrets & Config
 
@@ -108,9 +108,9 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 | # | Task | Status / Notes |
 |---|------|----------------|
 | V5 | Env for video | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`; `VIDEO_CONSULT_AGENT_SECRET`, `VIDEO_CONSULT_MAX_FRAMES_PER_SESSION`, `VIDEO_CONSULT_MAX_COST_PER_SESSION` |
-| V6 | Agent-events endpoint | `POST /api/video-consult/agent-events` (transcript, vision_frame, end_session); LangGraph → FHIR (see [VIDEO_CONSULT.md](../docs/architecture/care-delivery/VIDEO_CONSULT.md)) |
+| V6 | Agent-events endpoint | `POST /api/video-consult/agent-events` (transcript, vision_frame, end_session); LangGraph → FHIR (see [VIDEO_CONSULT.md](../docs/architecture/README.md#care-delivery-video-consult)) |
 | V7 | Optional: Colab case report | If you want "transcribe + labs + images → case report": integrate Colab pipeline output into `fhir_diagnostic_reports` (separate project) |
-| V8 | LangGraph multi-instance | For multiple app instances: set `LANGGRAPH_USE_POSTGRES=true` and Postgres checkpointer so video-consult state is shared (see [VIDEO_CONSULT.md](../docs/architecture/care-delivery/VIDEO_CONSULT.md)) |
+| V8 | LangGraph multi-instance | For multiple app instances: set `LANGGRAPH_USE_POSTGRES=true` and Postgres checkpointer so video-consult state is shared (see [VIDEO_CONSULT.md](../docs/architecture/README.md#care-delivery-video-consult)) |
 
 ---
 
@@ -153,7 +153,7 @@ These exist in the codebase; confirm they are enabled and correctly configured i
 | M2 | Structured logging | JSON logs; no raw PHI in logs; use Azure Log Analytics or App Insights |
 | M3 | Application Insights (optional) | Enable `@azure/monitor-opentelemetry`; set `APPLICATIONINSIGHTS_CONNECTION_STRING` |
 | M4 | Alerts | Critical: API 5xx rate, payment/Stripe failures, RAG/LangGraph failures; optional: DLQ backlog (`DLQ_TOOL_CALLS_ALERT_THRESHOLD`) |
-| M5 | Retention & cleanup | Run `scripts/cleanup-retention.js` on schedule; align with [DATA_RETENTION_POLICY.md](../docs/compliance/DATA_RETENTION_POLICY.md) |
+| M5 | Retention & cleanup | Run `scripts/cleanup-retention.js` on schedule; align with [DATA_RETENTION_POLICY.md](../docs/compliance/README.md#data-retention-policy) |
 | M6 | Video consult cleanup | Run `scripts/cleanup-video-consult-data.js` if using video; respect retention |
 | M7 | Feature flags | Feature flags for: new matching vs legacy, new pricing vs hardcode, deposit-hold vs capture; rollback path (MASTER_TODO 67) |
 | M8 | E2E test | At least one E2E: voice book → (match) → payment → LiveKit join (or schedule → checkout → confirm) (MASTER_TODO 68) |
@@ -203,7 +203,7 @@ Set these in **Azure App Service → Configuration → Application settings** (o
 1. **Subscription & CLI:** `az login`; create/select resource group (e.g. `doclittle`).
 2. **App Service:** Deploy with `./scripts/deploy-to-azure.sh` (or GitHub Actions).
 3. **Domain:** Add hostname `doclittle.site`; configure DNS; create and bind SSL cert.
-4. **Email:** Create Communication Services + Email Service; verify domain and sender; set env vars (see [docs/azure/README.md](../docs/azure/README.md)).
+4. **Email:** Create Communication Services + Email Service; verify domain and sender; set env vars (see [docs/azure/README.md#readme](../docs/azure/README.md#readme)).
 5. **Database:** Deploy Postgres (e.g. Bicep); set `POSTGRES_URL`.
 6. **App settings:** Set all required env vars (no secrets in code).
 7. **Tenant subdomains:** Configure `*.doclittle.site` (Cloudflare or wildcard); set Azure domain env vars for new tenants.
@@ -220,7 +220,7 @@ Set these in **Azure App Service → Configuration → Application settings** (o
 - **Voice & payments:** Pricing from DB, checkout → payment → confirm; emergency egress and triage safeguards.
 - **Operations:** Health checks, logging, retention cleanup, and critical alerts in place.
 
-For full product backlog (matching, providers, PHQ-9, SOAP, etc.), see [MASTER_TODO_FULL.md](../docs/development/MASTER_TODO_FULL.md).
+For full product backlog (matching, providers, PHQ-9, SOAP, etc.), see [MASTER_TODO_FULL.md](../docs/development/README.md#master-todo-full).
 
 ---
 

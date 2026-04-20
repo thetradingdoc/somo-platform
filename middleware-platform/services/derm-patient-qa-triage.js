@@ -1,7 +1,7 @@
 /**
  * Derm patient Q&A — Phase 2 triage (intent + retrieval policy + scheduling alignment).
  *
- * Spec: docs/architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md
+ * Spec: docs/architecture/README.md#derm-patient-qa-phase-0-scope-and-metrics
  * Rules: Knowledge/rules/derm-patient-qa-intent-rules.json (+ global triage-service)
  */
 

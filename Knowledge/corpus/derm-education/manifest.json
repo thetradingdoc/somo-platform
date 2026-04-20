@@ -14,5 +14,5 @@
     "internal": ["clinician-reviewed briefs only when tagged reviewed=true"],
     "excluded": ["user-generated forums", "unsourced social"]
   },
-  "index_contract": "POST /retrieve_passages — see docs/architecture/derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md"
+  "index_contract": "POST /retrieve_passages — see docs/architecture/README.md#derm-patient-qa-phase-3-corpus-and-index"
 }

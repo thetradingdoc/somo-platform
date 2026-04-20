@@ -2,6 +2,7 @@ import {
   fetchBarcodeFactsAutodetect,
   fetchBeautyFactsByBarcode,
   fetchFoodFactsByBarcode,
+  incrementLandingVoiceMetric,
   middlewareApiBaseFromLocation,
   normalizeHttpApiBase
 } from './landingAssistantApi';
@@ -111,6 +112,36 @@ describe('fetchBarcodeFactsAutodetect', () => {
     expect(out.resolvedCatalog).toBe('off');
     expect(out.facts?.product?.product_name).toBe('La Croix');
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('incrementLandingVoiceMetric', () => {
+  const origFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = origFetch;
+  });
+
+  test('sends accepted payload contract for voice-metrics endpoint', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true })
+    });
+    await incrementLandingVoiceMetric({
+      apiBase: 'http://localhost:4000',
+      sessionId: 'sess_123',
+      metricName: 'scan.category_route.client_fallback_used',
+      value: 1
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [_url, req] = global.fetch.mock.calls[0];
+    const body = JSON.parse(req.body);
+    expect(body).toEqual({
+      session_id: 'sess_123',
+      metric_name: 'scan.category_route.client_fallback_used',
+      value: 1
+    });
   });
 });
 

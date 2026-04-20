@@ -11,9 +11,9 @@
   "precedence": [
     "non_food",
     "supplement",
-    "food",
-    "hygiene",
     "cosmetic",
+    "hygiene",
+    "food",
     "unknown"
   ],
   "tag_to_route": {
@@ -171,6 +171,11 @@
           "pattern": "\\bretinol|adapalene|benzoyl peroxide|salicylic acid\\b",
           "route": "non_food",
           "rule_id": "ingredient_drug_adjacent"
+        },
+        {
+          "pattern": "\\bniacinamide|zinc pca|hyaluronic acid|sodium hyaluronate|ceramide|peptide\\b",
+          "route": "cosmetic",
+          "rule_id": "ingredient_topical_actives"
         },
         {
           "pattern": "\\bfragrance|parfum|perfume\\b",

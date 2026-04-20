@@ -208,6 +208,7 @@ describe('AssistantResultsPage', () => {
       <AssistantResultsPage
         snapshot={makeSnapshot({
           scanned_product: {
+            category_route: 'cosmetic',
             product_name: 'Serum',
             ingredients_text: 'Aqua, Niacinamide, Glycerin'
           }
@@ -225,6 +226,7 @@ describe('AssistantResultsPage', () => {
       <AssistantResultsPage
         snapshot={makeSnapshot({
           scanned_product: {
+            category_route: 'cosmetic',
             product_name: 'Turmeric Powder',
             ingredients_text: 'turmeric',
             nyc_metal_context: {
@@ -260,6 +262,10 @@ describe('AssistantResultsPage', () => {
     render(
       <AssistantResultsPage
         snapshot={makeSnapshot({
+          scanned_product: {
+            category_route: 'cosmetic',
+            ingredients_text: 'Aqua, Niacinamide 10%'
+          },
           scan_summary: {
             tiles: {
               key_actives: { status: 'available', source: 'deterministic', confidence: 'medium', value: [{ display: 'Niacinamide 10%' }] },
@@ -348,7 +354,7 @@ describe('AssistantResultsPage', () => {
     expect(screen.getByText(/^What does it do\?$/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Supports oil control/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Deeper analysis running/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: /Ask Kelly for personalised alternatives/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Ask Agent$/i })).toBeInTheDocument();
   });
 
   test('renders side-effects pending copy when not assessed', () => {
@@ -386,6 +392,40 @@ describe('AssistantResultsPage', () => {
     expect(screen.getByText(/Unlock personal-fit mode/i)).toBeInTheDocument();
   });
 
+  test('food route uses Ingredients heading and hides cosmetic-only NYC panel', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          scanned_product: {
+            source: 'open_food_facts',
+            category_route: 'food',
+            product_name: 'Fruit Snack',
+            ingredients_text: 'Fruit puree, sugar, red 40',
+            nyc_metal_context: {
+              source: 'nyc_health_dept_consumer_metal_tests',
+              match_tier: 'none',
+              disclaimer: 'mock',
+              summary: 'mock',
+              metals: [],
+              sample_rows: []
+            }
+          },
+          scan_summary: {
+            tiles: {
+              key_actives: { status: 'unavailable', reason_unavailable: 'not_applicable_cosmetic_actives' },
+              function: { status: 'unavailable', reason_unavailable: 'not_applicable_cosmetic_function' },
+              skin_type: { status: 'unavailable', reason_unavailable: 'not_applicable_skin_type_for_food' }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(/^Ingredients$/i)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /NYC Health Department reference metal tests/i })).not.toBeInTheDocument();
+  });
+
   test('handles invalid/missing tile fields without crashing', () => {
     render(
       <AssistantResultsPage
@@ -397,6 +437,29 @@ describe('AssistantResultsPage', () => {
       />
     );
     expect(screen.getByRole('region', { name: /Structured summary tiles/i })).toBeInTheDocument();
+  });
+
+  test('shows safety score as coming soon without pending progress framing', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            tiles: {
+              safety_score: {
+                status: 'deferred',
+                source: 'none',
+                reason_unavailable: 'reasoning_disabled'
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(/Safety score coming soon/i)).toBeInTheDocument();
+    expect(screen.getByText(/Coming soon — safety score pipeline is not enabled for this scan/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Score pending/i)).not.toBeInTheDocument();
   });
 
   test('shows See alternatives when verdict alternatives are available', () => {
@@ -423,7 +486,7 @@ describe('AssistantResultsPage', () => {
     expect(screen.getByRole('button', { name: /See alternatives/i })).toBeInTheDocument();
   });
 
-  test('does not show See alternatives for deterministic-only alternatives', () => {
+  test('shows See alternatives for deterministic-only alternatives when available', () => {
     render(
       <AssistantResultsPage
         snapshot={makeSnapshot({
@@ -442,7 +505,7 @@ describe('AssistantResultsPage', () => {
         onAskKelly={noop}
       />
     );
-    expect(screen.queryByRole('button', { name: /See alternatives/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /See alternatives/i })).toBeInTheDocument();
   });
 
   test('surfaces reasoning provenance in a why-this-answer panel', () => {
@@ -452,6 +515,7 @@ describe('AssistantResultsPage', () => {
           result_summary: {
             reasoning: {
               enabled: true,
+              reasoning_mode: 'model',
               reasoning_model: 'reasoning-stub',
               reasoning_version: 'v1',
               reasoning_evidence_refs: ['pinecone:ingredient:niacinamide']
@@ -476,8 +540,60 @@ describe('AssistantResultsPage', () => {
       />
     );
     expect(screen.getByText(/Why this answer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reasoning model reasoning-stub v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI-assisted analysis/i)).toBeInTheDocument();
     expect(screen.getByText(/Pinecone - Ingredient - Niacinamide/i)).toBeInTheDocument();
+  });
+
+  test('does not show AI reasoning panel when reasoning mode is absent', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            reasoning: {
+              enabled: true,
+              reasoning_model: 'legacy-model',
+              reasoning_version: 'v0'
+            },
+            verdict: {
+              good_for_me: {
+                source: 'reasoning',
+                answer: 'yes',
+                summary: 'Legacy reasoning summary.',
+                reasoning: {
+                  confidence: 0.95,
+                  reasoning_evidence_refs: ['legacy:ref']
+                }
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.queryByText(/Why this answer/i)).not.toBeInTheDocument();
+  });
+
+  test('renders legacy payloads without reasoning metadata', () => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            verdict: {
+              good_for_me: {
+                source: 'deterministic',
+                answer: 'unknown',
+                summary: 'Legacy deterministic summary.'
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByRole('region', { name: /Decision answers/i })).toBeInTheDocument();
+    expect(screen.getByText(/Legacy deterministic summary/i)).toBeInTheDocument();
   });
 
   test('shows reasoning unavailable fallback when confidence is too low', () => {
@@ -498,7 +614,8 @@ describe('AssistantResultsPage', () => {
         onAskKelly={noop}
       />
     );
-    expect(screen.getByText(/confidence was too low/i)).toBeInTheDocument();
+    expect(screen.queryByText(/confidence was too low/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/No flagged ingredients found in ingredient scan/i)).toBeInTheDocument();
   });
 
   test('shows route-safe fallback when reasoning is unsupported for route', () => {
@@ -521,6 +638,31 @@ describe('AssistantResultsPage', () => {
         onAskKelly={noop}
       />
     );
-    expect(screen.getByText(/Reasoning skipped for this category route/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Reasoning skipped for this category route/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Deterministic fallback summary/i)).toBeInTheDocument();
+  });
+
+  test.each([
+    { answer: 'safe', expected: /Generally safe/i },
+    { answer: 'caution', expected: /^Caution$/i },
+    { answer: 'insufficient_data', expected: /Need more data/i }
+  ])('children_safe answer contract value "$answer" renders supported badge copy', ({ answer, expected }) => {
+    render(
+      <AssistantResultsPage
+        snapshot={makeSnapshot({
+          result_summary: {
+            verdict: {
+              children_safe: {
+                answer,
+                summary: 'Contract guard test'
+              }
+            }
+          }
+        })}
+        onClose={noop}
+        onAskKelly={noop}
+      />
+    );
+    expect(screen.getByText(expected)).toBeInTheDocument();
   });
 });

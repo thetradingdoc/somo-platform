@@ -57,6 +57,6 @@ Documentation for the Retell AI voice agent (Kelly) integration.
 
 ## 🔗 Related Documentation
 
-- [Medical Coding Runbook](../architecture/voice-agent/RUNBOOK.md) - Imports, evaluation, tools
-- [Tool Schemas](../architecture/voice-agent/TOOL_SCHEMAS.md) - suggest_codes_from_symptoms, extract_medical_text, etc.
-- [Voice Agent Todo & Status](../architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md) - Integration roadmap
+- [Medical Coding Runbook](../architecture/README.md#voice-agent-runbook) - Imports, evaluation, tools
+- [Tool Schemas](../architecture/README.md#voice-agent-tool-schemas) - suggest_codes_from_symptoms, extract_medical_text, etc.
+- [Voice Agent Todo & Status](../architecture/README.md#voice-agent-voice-agent-todo-and-status) - Integration roadmap

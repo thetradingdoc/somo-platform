@@ -4,8 +4,8 @@
  * Voice HTTP triage parity: shared guardrails for `/voice/appointments/*`, `/voice/insurance/collect`, etc.
  * Extracted from server.js (impl-1) — edit here only to avoid drift.
  *
- * @see docs/architecture/BOOKING_CHECKOUT_ARCHITECTURE_ANALYSIS.md §6
- * @see docs/middleware-platform/VOICE_TRIAGE_PARITY.md (repo root)
+ * @see docs/architecture/README.md#commerce-agentic-checkout-file-map (booking/checkout gates)
+ * @see docs/middleware-platform/README.md#voice-triage-parity (repo root)
  */
 
 const KellyToolExecutor = require('./kelly-tool-executor');

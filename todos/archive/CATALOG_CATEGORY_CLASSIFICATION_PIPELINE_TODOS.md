@@ -59,11 +59,11 @@ Implemented and verified in first batch:
 
 ## 0) Baseline and data discovery (P0)
 
-- [x] [✅ Done][P0] **Inventory sources** — Confirmed and documented in `docs/products/CATEGORY_CLASSIFICATION_BASELINE.md`: `products_obf_index`, `products_off_index`, landing OBF→OFF API merge path, and canonical fields (`categories_tags_json`, `categories_hierarchy_json`).
-- [x] [✅ Done][P0] **Define “Unclassified”** — Locked v1 definition in `docs/products/CATEGORY_CLASSIFICATION_BASELINE.md` (`category_route = unknown` or missing route payload; plus tracked `unknown_by_legacy_rules`).
-- [x] [✅ Done][P0] **Histogram Step 1 candidates** — Generated top unknown `categories_tags` from GCS OBF baseline and documented top 20 tags in `docs/products/CATEGORY_CLASSIFICATION_BASELINE.md`.
+- [x] [✅ Done][P0] **Inventory sources** — Confirmed and documented in `docs/products/README.md#category-classification-baseline`: `products_obf_index`, `products_off_index`, landing OBF→OFF API merge path, and canonical fields (`categories_tags_json`, `categories_hierarchy_json`).
+- [x] [✅ Done][P0] **Define “Unclassified”** — Locked v1 definition in `docs/products/README.md#category-classification-baseline` (`category_route = unknown` or missing route payload; plus tracked `unknown_by_legacy_rules`).
+- [x] [✅ Done][P0] **Histogram Step 1 candidates** — Generated top unknown `categories_tags` from GCS OBF baseline and documented top 20 tags in `docs/products/README.md#category-classification-baseline`.
 - [x] [✅ Done][P0] **Histogram gaps** — Captured `missing_categories_tags=38,990` and parser quality metrics (`parse_failed`) via `scripts/audit-catalog-index-stats.cjs`.
-- [x] [✅ Done][P0] **Set targets** — Added v1 targets in `docs/products/CATEGORY_CLASSIFICATION_BASELINE.md` (≥50% unknown reduction target, <10% residual target).
+- [x] [✅ Done][P0] **Set targets** — Added v1 targets in `docs/products/README.md#category-classification-baseline` (≥50% unknown reduction target, <10% residual target).
 
 ### 0a) Data quality guardrails (P0)
 
@@ -129,15 +129,15 @@ Implemented and verified in first batch:
 
 **Goal:** Only for rows still `unknown` (or low-confidence) after Step 1–2.
 
-- [x] [✅ Done][P1] **Define queue eligibility** — Implemented in resolver contract and policy doc (`docs/products/CATEGORY_REVIEW_AND_MODEL_POLICY.md`): queue when `route=unknown`, `confidence=low`, or `review_eligible=true`.
+- [x] [✅ Done][P1] **Define queue eligibility** — Implemented in resolver contract and policy doc (`docs/products/README.md#category-review-and-model-policy`): queue when `route=unknown`, `confidence=low`, or `review_eligible=true`.
 - [x] [✅ Done][P1] **Human queue (minimum viable)** — Implemented CSV export workflow via `scripts/export-category-review-queue.cjs` and npm script `catalog:review-queue:export`.
-- [x] [✅ Done][P1] **Optional ML v1** — Defined acceptance and auto-apply thresholds in `docs/products/CATEGORY_REVIEW_AND_MODEL_POLICY.md` (>=0.90 auto-apply).
-- [x] [✅ Done][P1] **LLM policy (if used)** — Documented bounded policy in `docs/products/CATEGORY_REVIEW_AND_MODEL_POLICY.md` (structured output, temp 0, prompt/model logging, cost cap).
+- [x] [✅ Done][P1] **Optional ML v1** — Defined acceptance and auto-apply thresholds in `docs/products/README.md#category-review-and-model-policy` (>=0.90 auto-apply).
+- [x] [✅ Done][P1] **LLM policy (if used)** — Documented bounded policy in `docs/products/README.md#category-review-and-model-policy` (structured output, temp 0, prompt/model logging, cost cap).
 - [x] [✅ Done][P1] **Feedback loop** — Defined reviewer-correction to deterministic-map update loop in policy doc.
 
 ### 3.5) Reviewer operations (P1)
 
-- [x] [✅ Done][P1] Define reviewer rubric with adjudication rules for disputed labels (`docs/products/CATEGORY_REVIEW_AND_MODEL_POLICY.md`).
+- [x] [✅ Done][P1] Define reviewer rubric with adjudication rules for disputed labels (`docs/products/README.md#category-review-and-model-policy`).
 - [x] [✅ Done][P1] Add inter-rater agreement sampling (weekly) to detect label drift (defined with target in policy doc).
 - [x] [✅ Done][P1] Define SLA/backlog cap policy (max queue age/cap + escalation) in policy doc.
 
@@ -153,7 +153,7 @@ Implemented and verified in first batch:
 
 - [x] [✅ Done][P0] **Shared logic** — Middleware resolver (`services/category-route-resolver.js`) is the source of truth; landing scan now prefers server route contract to avoid client/server drift.
 - [x] [✅ Done][P0] **API contract** — Barcode APIs now return route metadata: `category_route`, `category_route_source`, `category_route_confidence`, `category_route_rule_id`, `category_route_fallback`.
-- [x] [✅ Done][P0] **Backfill strategy** — Selected and documented lazy recompute on read (see `docs/products/CATEGORY_ROUTE_INTEGRATION_AND_GOVERNANCE.md`).
+- [x] [✅ Done][P0] **Backfill strategy** — Selected and documented lazy recompute on read (see `docs/products/README.md#category-route-integration-and-governance`).
 - [x] [✅ Done][P0] **Backward compatibility** — Preserved unknown fallback and client-side derive fallback path in landing.
 
 ### 4.5) Observability and release controls (P0)
@@ -167,7 +167,7 @@ Implemented and verified in first batch:
 
 ## 5) Quality, safety, and governance (P1)
 
-- [x] [✅ Done][P1] **Spot-check protocol** — Defined release sampling protocol in `docs/products/CATEGORY_ROUTE_INTEGRATION_AND_GOVERNANCE.md`.
+- [x] [✅ Done][P1] **Spot-check protocol** — Defined release sampling protocol in `docs/products/README.md#category-route-integration-and-governance`.
 - [x] [✅ Done][P1] **Regression suite** — Added unit suite + golden fixture gate (`__tests__/category-route-resolver.test.js`, `tests/fixtures/category-route-golden.json`, `scripts/category-route-golden-diff.cjs`).
 - [x] [✅ Done][P1] **Documentation** — Added integration/governance doc + review/model policy + baseline references.
 - [x] [✅ Done][P1] **Privacy** — Documented field-level privacy boundary (catalog fields only, no patient identifiers) in governance doc.
@@ -183,7 +183,7 @@ Implemented and verified in first batch:
 
 ### 6.5) Rollback and ownership (P0)
 
-- [x] [✅ Done][P0] Add rollback procedure to previous map version (documented in `docs/products/CATEGORY_ROUTE_ROLLOUT_RUNBOOK.md` and validated with rollout check flow).
+- [x] [✅ Done][P0] Add rollback procedure to previous map version (documented in `docs/products/README.md#category-route-rollout-runbook` and validated with rollout check flow).
 - [x] [✅ Done][P0] Add shadow mode (compute-only) and canary rollout stage before full exposure (implemented env-controlled rollout in API + runbook).
 - [x] [✅ Done][P0] Assign taxonomy route DRI and weekly review cadence for map/rule updates (defined in rollout runbook ownership section).
 
@@ -236,7 +236,7 @@ Implemented and verified in first batch:
 ### Phase 2B) Backlog triage lanes (P0)
 
 - [x] [✅ Done][P0] Add triage columns to backlog (`triage_class`, `proposed_action`, `proposed_route`, `owner`, `status`, `batch_id`) via `scripts/category-backlog-triage-template.cjs`.
-- [x] [✅ Done][P0] Classify each tag into one lane only (enforced policy in `docs/products/CATEGORY_PHASE2_IMPLEMENTATION_GUIDE.md`):
+- [x] [✅ Done][P0] Classify each tag into one lane only (enforced policy in `docs/products/README.md#category-phase2-implementation-guide`):
   - `real_category` -> taxonomy map
   - `alias_translation` -> alias/normalization table
   - `meta_noise` -> suppression list
@@ -267,7 +267,7 @@ Implemented and verified in first batch:
 ### Phase 2F) Ownership and auditability (P0)
 
 - [x] [✅ Done][P0] Assign owner for each batch (`batch_id`, DRI, reviewer) in triage workflow + changelog template.
-- [x] [✅ Done][P0] Require changelog per batch (`tags_added`, `aliases_added`, `suppressed_tags`, rationale, metrics delta) via `docs/products/CATEGORY_PHASE2_BATCH_CHANGELOG_TEMPLATE.md`.
+- [x] [✅ Done][P0] Require changelog per batch (`tags_added`, `aliases_added`, `suppressed_tags`, rationale, metrics delta) via `docs/products/README.md#category-phase2-batch-changelog-template`.
 - [x] [✅ Done][P0] Require release note entry linking map version to batch changelog and regression evidence (documented in Phase 2 guide).
 
 ### Phase 2G) Staging, canary, and post-deploy evidence (P0)
@@ -291,7 +291,7 @@ Implemented and verified in first batch:
 
 ### Phase 3B) Lock and unify API contract + enum names (P0)
 
-- [x] [✅ Done][P0] Resolve the naming mismatch between accepted policy fields (`category_route_top`, etc.) and live payload fields (`category_route`, etc.); choose one canonical contract (`docs/products/CATEGORY_ROUTE_API_CONTRACT.md`).
+- [x] [✅ Done][P0] Resolve the naming mismatch between accepted policy fields (`category_route_top`, etc.) and live payload fields (`category_route`, etc.); choose one canonical contract (`docs/products/README.md#category-route-api-contract`).
 - [x] [✅ Done][P0] Resolve enum mismatch (`beauty` vs `cosmetic`) and publish a migration decision (alias strategy, deprecation window, and analytics mapping) in contract doc.
 - [x] [✅ Done][P0] Update middleware response schema docs and landing consumption docs to the final locked contract.
 - [x] [✅ Done][P0] Add compatibility tests to prevent reintroduction of mixed field names across OBF/OFF endpoints (`__tests__/category-route-api-contract.test.js`).
@@ -313,7 +313,7 @@ Implemented and verified in first batch:
 ### Phase 3E) Data completeness lane (root-cause reduction) (P0)
 
 - [x] [✅ Done][P0] Build a dedicated backlog export for unknowns missing both `product_name` and `ingredients_text` (highest blocker cohort) (`scripts/category-missing-both-backlog-export.cjs`).
-- [x] [✅ Done][P0] Add enrichment playbook: source re-fetch policy, OFF fallback policy, OCR/manual ingestion policy, and dedupe rules (`docs/products/CATEGORY_DATA_COMPLETENESS_PLAYBOOK.md`).
+- [x] [✅ Done][P0] Add enrichment playbook: source re-fetch policy, OFF fallback policy, OCR/manual ingestion policy, and dedupe rules (`docs/products/README.md#category-data-completeness-playbook`).
 - [x] [✅ Done][P0] Define KPIs for this lane: `% unknown missing both`, `% unknown with ingredients`, and weekly delta targets (`scripts/category-data-completeness-kpi.cjs`).
 - [x] [✅ Done][P0] Block “problem solved” claim until missing-both cohort is below agreed threshold (documented in playbook exit criteria).
 
@@ -390,7 +390,7 @@ Implemented and verified in first batch:
 #### 4.1F) Scan results conversion redesign (P0, new)
 
 - [x] [✅ Done][P0] Add Playwright evidence note + artifact links for current-state scan UX audit (`results_visible` pass, low-emphasis results strip, hero image reliability issue).  
-  Evidence: `docs/testing/SCAN_RESULTS_UI_AUDIT_EVIDENCE.md`
+  Evidence: `docs/testing/README.md#scan-results-ui-audit-evidence`
 - [x] [✅ Done][P0] Replace low-emphasis results strip with premium “decision cockpit” layout (mobile-first) and ensure visual hierarchy is above marketing content.
 - [x] [✅ Done][P0] Add top hero summary card with: product image, product name, category, one-line “what it does,” confidence pill, source badge, floating quick tags.
 - [x] [✅ Done][P0] Redesign structured center tiles with icon-rich cards for: Key Actives, Function, Skin Type Fit, Formulation, Safety Score (deferred state allowed, no fabricated score).

@@ -2,7 +2,7 @@
 
 **Purpose:** Backlog for moving the Step 10 (`process_patient` L1→L6) reasoning flow into production-grade agent infrastructure: **guardrails + retrieval**, **LangGraph** as the orchestration layer, **LangSmith** for observability, plus **product surfaces** (recommendations, optional provider match).
 
-**Related:** `step10` (reference pipeline), `pending/Orchestration-todos.md`, `docs/middleware-platform/LANGGRAPH_LANGSMITH.md`, `middleware-platform/services/kelly-agent-service.js`, `middleware-platform/services/kelly-tool-executor.js`.
+**Related:** `step10` (reference pipeline), `pending/Orchestration-todos.md`, `docs/middleware-platform/README.md#langgraph-langsmith`, `middleware-platform/services/kelly-agent-service.js`, `middleware-platform/services/kelly-tool-executor.js`.
 
 ---
 

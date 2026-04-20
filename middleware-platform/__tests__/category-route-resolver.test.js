@@ -21,6 +21,15 @@ describe('category-route-resolver', () => {
     expect(out.confidence_band).toBe('medium');
   });
 
+  test('prefers cosmetic over food when OFF tags conflict (dual-labelled personal care)', () => {
+    const out = resolveCategoryRoute({
+      source: 'open_food_facts',
+      categories_tags: ['en:cosmetics', 'en:beverages']
+    });
+    expect(out.route).toBe('cosmetic');
+    expect(out.conflict).toBe(true);
+  });
+
   test('returns unknown for no matches', () => {
     const out = resolveCategoryRoute({
       source: 'open_beauty_facts',

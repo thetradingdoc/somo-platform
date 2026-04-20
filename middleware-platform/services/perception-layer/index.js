@@ -2,7 +2,7 @@
  * Layer 1: Multimodal Perception
  *
  * Transforms raw clinical inputs into structured perceptual state.
- * See docs/architecture/intelligence-layer/LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md
+ * See docs/architecture/README.md#intelligence-layer-layer1-perception-implementation-guide
  *
  * Set PERCEPTION_GRAPH_ENABLED=true to use the LangGraph DAG (Vision + Text + ClinicalBERT → Fusion).
  */

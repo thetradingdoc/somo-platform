@@ -19,7 +19,7 @@ function processDlqMetrics() {
     if (size > 0) {
       console.log(`📋 Tool call DLQ: ${size} failed call(s) pending review`);
       if (size >= ALERT_THRESHOLD) {
-        console.warn(`⚠️  Tool call DLQ threshold exceeded (${size} >= ${ALERT_THRESHOLD}). See docs/runbooks/ERROR_RATE_SPIKE.md`);
+        console.warn(`⚠️  Tool call DLQ threshold exceeded (${size} >= ${ALERT_THRESHOLD}). See docs/runbooks/README.md#error-rate-spike`);
         try {
           const Metrics = require('./metrics');
           Metrics.increment('dlq_tool_calls_alert');

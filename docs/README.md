@@ -1,9 +1,9 @@
 # DocLittle Platform Documentation
 
-**Last Updated:** April 9, 2026
+**Last Updated:** April 19, 2026
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
-> **Overlapping topics (Kelly vs voice vs checkout):** start with **[meta/CANONICAL_DOC_MAP.md](./meta/CANONICAL_DOC_MAP.md)** so you do not maintain the same story in two places.
+> **Overlapping topics (Kelly vs voice vs checkout):** start with **[meta/CANONICAL_DOC_MAP.md](./meta/README.md#canonical-doc-map)** so you do not maintain the same story in two places.
 
 ### Documentation placement policy (April 2026)
 
@@ -15,178 +15,134 @@
 ### For new developers
 
 1. Read **root [`CONTRIBUTING.md`](../CONTRIBUTING.md)** — PR checklist and commands that mirror CI.
-2. Follow **[Setup Guide](./setup/getting-started/SETUP.md)** and copy env files from `middleware-platform/.env.example` / `patient-app/.env.example`.
-3. Kelly LLM env and debug flags: **[KELLY_ENV_AND_DEBUG.md](./development/KELLY_ENV_AND_DEBUG.md)**.
-4. What CI actually runs vs deploy: **[CI_AND_DEPLOY_SOURCE_OF_TRUTH.md](./deployment/CI_AND_DEPLOY_SOURCE_OF_TRUTH.md)**.
-5. Code layout: **[CODE_STRUCTURE.md](./development/guides/CODE_STRUCTURE.md)**.
-6. Staging-only product checks (quote parity, chat → pay): **[STAGING_PRODUCT_VERIFICATION.md](./testing/STAGING_PRODUCT_VERIFICATION.md)**.
-7. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/decisions/README.md)**.
-8. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md)**.
-9. `server.js` policy: **[SERVER_JS_REFACTOR_POLICY.md](./development/SERVER_JS_REFACTOR_POLICY.md)**.
-10. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/PERIODIC_MAINTENANCE.md)**.
+2. Follow **[Setup Guide](./setup/README.md#getting-started-setup)** and copy env files from `middleware-platform/.env.example` / `patient-app/.env.example`.
+3. Kelly LLM env and debug flags: **[KELLY_ENV_AND_DEBUG.md](./development/README.md#kelly-env-and-debug)**.
+4. What CI actually runs vs deploy: **[CI_AND_DEPLOY_SOURCE_OF_TRUTH.md](./deployment/README.md#ci-and-deploy-source-of-truth)**.
+5. Code layout: **[CODE_STRUCTURE.md](./development/README.md#guides-code-structure)**.
+6. Staging-only product checks (quote parity, chat → pay): **[STAGING_PRODUCT_VERIFICATION.md](./testing/README.md#staging-product-verification)**.
+7. Architecture decisions (ADRs): **[architecture/decisions/README.md](./architecture/README.md#decisions-readme)**.
+8. Agentic checkout file map: **[AGENTIC_CHECKOUT_FILE_MAP.md](./architecture/README.md#commerce-agentic-checkout-file-map)**.
+9. `server.js` policy: **[SERVER_JS_REFACTOR_POLICY.md](./development/README.md#server-js-refactor-policy)**.
+10. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/README.md#periodic-maintenance)**.
 11. Secret scanning expectations: **[SECRET_SCANNING.md](./security/SECRET_SCANNING.md)**.
-12. Browser E2E status: **[E2E_STATUS.md](./testing/E2E_STATUS.md)**.
+12. Browser E2E status: **[E2E_STATUS.md](./testing/README.md#e2e-status)**.
 
 ---
 
 ## 📊 Documentation Audit (April 9, 2026)
 
 - **Total .md files (repo, excluding `node_modules` / `.venv`):** ~249 — run `find . -name '*.md' -not -path '*/node_modules/*'` for current count. Historical note: 142 was cited after Phases 1–5 consolidation.
-- **Consolidation plan:** [meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md)
-- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and [archived](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md); active gap work: [meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md).)
+- **Consolidation plan:** [meta/DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md](./meta/README.md#documentation-audit-and-consolidation-plan)
+- **Phase 1 & 2 applied:** Empty file + placeholder folders removed. (Legacy `PATIENT_BOOKING_AND_TRIAGE_GAPS.md` was removed; triage phased roadmap is **complete** and [archived](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md); active gap work: [meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md](./meta/README.md#gap-analysis-richer-triage-and-records).)
 
 ---
 
 ## 📚 Quick Navigation
 
 ### 🚀 Getting Started
-- **[Setup Guide](./setup/getting-started/SETUP.md)** - Initial platform setup
-- **[Deployment Guide](./deployment/guides/DEPLOYMENT_GUIDE.md)** - Production deployment
-- **[API Documentation](./api/API_DOCUMENTATION.md)** - API reference
+- **[Setup Guide](./setup/README.md#getting-started-setup)** - Initial platform setup
+- **[Deployment Guide](./deployment/README.md#guides-deployment-guide)** - Production deployment
+- **[API Documentation](./api/README.md#api-documentation)** - API reference
 
 ### 📖 Core Documentation
 
 #### Architecture
-- **[Architecture decisions (ADRs)](./architecture/decisions/README.md)** — SQLite, Kelly LLM, agentic checkout surfaces
-- **[Agentic checkout file map](./architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md)** — web, RN, API ownership
-- **[Platform Vision](./architecture/vision/VISION.md)** - Platform goals and roadmap
-- **[Healthcare Assessment](./architecture/healthcare/HEALTHCARE_ASSESSMENT.md)** - Healthcare platform analysis
-- **[Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)** - Payment system design
-- **[Financial Layer](./architecture/financial/FINANCIAL_LAYER_ARCHITECTURE.md)** - Insurance, claims, EOB, Tiba
-- **[Multi-Tenant Architecture](./architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md)** - Multi-tenant design
-- **[Database Schema](./architecture/database/DATABASE_SCHEMA_APPROACH.md)** - Database design
+- **[Architecture decisions (ADRs)](./architecture/README.md#decisions-readme)** — SQLite, Kelly LLM, agentic checkout surfaces
+- **[Agentic checkout file map](./architecture/README.md#commerce-agentic-checkout-file-map)** — web, RN, API ownership
+- **[Platform Vision](./architecture/README.md#vision-vision)** - Platform goals and roadmap
+- **[Healthcare Assessment](./architecture/README.md#healthcare-healthcare-assessment)** - Healthcare platform analysis
+- **[Payment Architecture](./architecture/README.md#payments-payment-architecture)** - Payment system design
+- **[Financial Layer](./architecture/README.md#financial-financial-layer-architecture)** - Insurance, claims, EOB, Tiba
+- **[Multi-Tenant Architecture](./architecture/README.md#multi-tenant-multi-tenant-voice-agent)** - Multi-tenant design
+- **[Database Schema](./architecture/README.md#database-database-schema-approach)** - Database design
 
 #### Development
-- **[Invoice Billing System](./development/invoice-billing/IMPLEMENTATION_SUMMARY.md)** - Invoice system implementation
-- **[Code Reviews](./development/code-reviews/CODE_REVIEW_AND_CLEANUP.md)** - Code review findings
-- **[Improvement Plan](./development/IMPROVEMENT_PLAN.md)** - Codebase improvements
-- **[Code Structure](./development/guides/CODE_STRUCTURE.md)** - Code organization
-- **[Reliability Guide](./development/guides/RELIABILITY.md)** - Reliability patterns
-- **[Template Variables](./development/templates.md)** - Automation email/SMS template variables
-- **[GitHub Tasks](./development/GITHUB_TASKS.md)** - Repo structure, branch hygiene
-- **[Master TODO](./development/MASTER_TODO_FULL.md)** - Full platform roadmap
+- **[Invoice Billing System](./development/README.md#invoice-billing-implementation-summary)** - Invoice system implementation
+- **[Code Reviews](./development/README.md#code-reviews-code-review-and-cleanup)** - Code review findings
+- **[Improvement Plan](./development/README.md#improvement-plan)** - Codebase improvements
+- **[Code Structure](./development/README.md#guides-code-structure)** - Code organization
+- **[Reliability Guide](./development/README.md#guides-reliability)** - Reliability patterns
+- **[Template Variables](./development/README.md#templates)** - Automation email/SMS template variables
+- **[GitHub Tasks](./development/README.md#github-tasks)** - Repo structure, branch hygiene
+- **[Master TODO](./development/README.md#master-todo-full)** - Full platform roadmap
 
 #### Admin Portal
-- **[Admin Portal Structure](./admin-portal/ADMIN_PORTAL_STRUCTURE.md)** - Admin dashboard structure and URLs
-- **[Admin Portal Testing](./admin-portal/ADMIN_PORTAL_TESTING.md)** - Testing guide
+- **[Admin Portal Structure](./admin-portal/README.md#admin-portal-structure)** - Admin dashboard structure and URLs
+- **[Admin Portal Testing](./admin-portal/README.md#admin-portal-testing)** - Testing guide
 
 #### API & Integrations
-- **[API Reference](./api/API_DOCUMENTATION.md)** - Complete API documentation
-- **[Invoice API](./api/INVOICE_API.md)** - Invoice endpoints
-- **[Stedi Integration](./integrations/stedi/api/STEDI_API_ENDPOINTS.md)** - Stedi API
-- **[UHC FHIR Integration](./integrations/uhc/fhir/UHC_FHIR_SERVICE_USAGE.md)** - UHC FHIR
-- **[Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING.md)** - Stripe cards
+- **[API Reference](./api/README.md#api-documentation)** - Complete API documentation
+- **[Invoice API](./api/README.md#invoice-api)** - Invoice endpoints
+- **[Stedi Integration](./integrations/README.md#stedi-api-stedi-api-endpoints)** - Stedi API
+- **[UHC FHIR Integration](./integrations/README.md#uhc-fhir-uhc-fhir-service-usage)** - UHC FHIR
+- **[Stripe Issuing](./integrations/README.md#stripe-issuing-stripe-issuing)** - Stripe cards
 
 #### Setup & Configuration
-- **[Main Setup](./setup/getting-started/SETUP.md)** - Platform setup
-- **[Stripe Issuing Setup](./integrations/stripe/issuing/STRIPE_ISSUING.md)** - Stripe configuration
-- **[Google OAuth](./setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md)** - Google Calendar OAuth
-- **[Azure Configuration](./azure/AZURE_AUTOMATION.md)** - Azure setup
+- **[Main Setup](./setup/README.md#getting-started-setup)** - Platform setup
+- **[Stripe Issuing Setup](./integrations/README.md#stripe-issuing-stripe-issuing)** - Stripe configuration
+- **[Google OAuth](./setup/README.md#google-google-oauth-complete-guide)** - Google Calendar OAuth
+- **[Azure Configuration](./azure/README.md#azure-automation)** - Azure setup
 
 #### Deployment
-- **[Deployment Guide](./deployment/guides/DEPLOYMENT_GUIDE.md)** - Main deployment guide
-- **[Azure Deployment](./deployment/guides/basic/QUICK_DEPLOYMENT_GUIDE.md)** - Quick Azure deploy
-- **[DNS Configuration](./deployment/dns/ionos/IONOS_DNS_SETUP.md)** - DNS setup
-- **[SSL Setup](./deployment/dns/ssl/DOCLITTLE_SITE_SSL_SETUP.md)** - SSL certificates
-- **[Security](./deployment/security/PRODUCTION_DEPLOYMENT_API_KEYS.md)** - Security setup
-- **[Database Migration](./deployment/database/POSTGRES_MIGRATION.md)** - Postgres migration
+- **[Deployment Guide](./deployment/README.md#guides-deployment-guide)** - Main deployment guide
+- **[Azure Deployment](./deployment/README.md#guides-basic-quick-deployment-guide)** - Quick Azure deploy
+- **[DNS Configuration](./deployment/README.md#dns-ionos-ionos-dns-setup)** - DNS setup
+- **[SSL Setup](./deployment/README.md#dns-ssl-doclittle-site-ssl-setup)** - SSL certificates
+- **[Security](./deployment/README.md#security-production-deployment-api-keys)** - Security setup
+- **[Database Migration](./deployment/README.md#database-postgres-migration)** - Postgres migration
 
 #### User Guides
 - **[Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)** - Invoice generation workflow
-- **[Clinic Onboarding](./onboarding/CLINIC_ONBOARDING_CHECKLIST.md)** - Clinic setup
+- **[Clinic Onboarding](./onboarding/README.md#clinic-onboarding-checklist)** - Clinic setup
 
 #### Patient booking, triage & agentic commerce
-- **[Richer Triage & Records](./meta/GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md)** — Schema, records Q&A
-- **[Public agentic checkout](./architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md)** — Landing → quote → pay, Kelly tools, APIs
+- **[Richer Triage & Records](./meta/README.md#gap-analysis-richer-triage-and-records)** — Schema, records Q&A
+- **[Public agentic checkout](./architecture/README.md#commerce-public-agentic-checkout)** — Landing → quote → pay, Kelly tools, APIs
 - **[Triage phased todos (archived, all complete)](../todos/archive/TRIAGE_CONSOLIDATED_PHASED_TODOS.md)** — Historical phased roadmap
 - **[Agentic checkout backlog / status](../todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md)** — Backend audit + open items (read status at top). Frontend UI spec (complete): [archive](../todos/archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md).
 
 #### Voice Agent, Video Consult & Medical Coding
-- **[Hybrid Architecture Overview](./architecture/overview/HYBRID_ARCHITECTURE_OVERVIEW.md)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
-- **[Video Consult](./architecture/care-delivery/VIDEO_CONSULT.md)** - LiveKit video: flow, env, runbook
-- **[Landing Try now & LiveKit](./architecture/experience/LANDING_TRY_NOW_LIVEKIT.md)** - Skin & Care landing camera-first UI, `try-landing-*` rooms, Kelly vs LiveKit
+- **[Hybrid Architecture Overview](./architecture/README.md#overview-hybrid-architecture-overview)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
+- **[Video Consult](./architecture/README.md#care-delivery-video-consult)** - LiveKit video: flow, env, runbook
+- **[Landing Try now & LiveKit](./architecture/README.md#experience-landing-try-now-livekit)** - Skin & Care landing camera-first UI, `try-landing-*` rooms, Kelly vs LiveKit
 - **[Voice Agent Config](./voice-agent/README.md)** - Voice agent setup
-- **[Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)** - Imports, evaluation, tools, configure-retell
-- **[Tool Schemas](./architecture/voice-agent/TOOL_SCHEMAS.md)** - Retell functions (suggest_codes_from_symptoms, extract_medical_text, etc.)
-- **[LangGraph & LangSmith](./middleware-platform/LANGGRAPH_LANGSMITH.md)** - Tracing, what’s monitored, scripts
+- **[Medical Coding Runbook](./architecture/README.md#voice-agent-runbook)** - Imports, evaluation, tools, configure-retell
+- **[Tool Schemas](./architecture/README.md#voice-agent-tool-schemas)** - Retell functions (suggest_codes_from_symptoms, extract_medical_text, etc.)
+- **[LangGraph & LangSmith](./middleware-platform/README.md#langgraph-langsmith)** — Tracing, what’s monitored, scripts (consolidated middleware docs)
 
 ---
 
 ## 📁 Documentation Structure
 
+Most **top-level** folders under `docs/` use a **single** `README.md` (former per-topic `.md` files are merged with a table of contents and anchors). **Exceptions:** `middleware-platform/` and `reasoning/` were consolidated earlier; `voice-agent/` keeps `README.md` plus `prompts/*.md` for Retell/runtime loaders; `user-guides/` may keep small standalone guides.
+
 ```
 docs/
-├── README.md                          # This file
-│
-├── api/                               # API Documentation
-│   ├── API_DOCUMENTATION.md          # Main API reference
-│   └── INVOICE_API.md                # Invoice API endpoints
-│
-├── architecture/                      # System Architecture
-│   ├── vision/                       # Platform vision
-│   ├── healthcare/                   # Healthcare analysis
-│   ├── financial/                    # Insurance, claims, Tiba
-│   ├── ai/                           # LangChain/LangGraph
-│   ├── media/                        # Media layer
-│   ├── middleware/                   # Brain/context improvements
-│   ├── maintenance/                  # Architecture issues/fixes
-│   ├── database/                     # Database design
-│   ├── multi-tenant/                 # Multi-tenant architecture
-│   ├── payments/                     # Payment architecture
-│   └── voice-agent/                  # Voice agent architecture
-│
-├── development/                       # Development Guides
-│   ├── invoice-billing/              # Invoice system docs
-│   ├── code-reviews/                 # Code review findings
-│   ├── guides/                       # Development guides
-│   ├── templates.md                  # Automation template variables
-│   ├── IMPROVEMENT_PLAN.md           # Improvement roadmap
-│   ├── GITHUB_TASKS.md               # Repo hygiene tasks
-│   ├── MASTER_TODO_FULL.md           # Full platform roadmap
-│   └── (TECH_LEAD_CLEANUP archived → archive/TECH_LEAD_CLEANUP.md)
-│
-├── admin-portal/                      # Admin Portal
-│   ├── ADMIN_PORTAL_STRUCTURE.md     # Structure and URLs
-│   ├── ADMIN_PORTAL_TESTING.md       # Testing guide
-│   └── (ADMIN_PORTAL_FIXES_COMPLETE archived → archive/)
-│
-├── deployment/                        # Deployment Guides
-│   ├── guides/                       # Deployment guides (incl. DEPLOYMENT_GUIDE.md)
-│   ├── azure/                        # Azure-specific setup
-│   ├── database/                     # Database deployment
-│   ├── dns/                          # DNS configuration
-│   └── security/                     # Security setup
-│
-├── setup/                            # Setup & Configuration
-│   ├── getting-started/              # Main setup guide (SETUP.md)
-│   ├── stripe/                       # Stripe Issuing setup
-│   └── google/                       # Google OAuth setup
-│
-├── integrations/                      # Third-Party Integrations
-│   ├── stedi/                        # Stedi integration
-│   ├── stripe/                       # Stripe integration
-│   └── uhc/                          # UHC integration
-│
-├── user-guides/                       # User Documentation
-│   └── INVOICE_WORKFLOW.md           # Invoice workflow
-│
-├── voice-agent/                       # Voice Agent
-│   └── prompts/                      # Agent prompts
-│
-├── onboarding/                        # Onboarding
-│   └── CLINIC_ONBOARDING_CHECKLIST.md
-│
-├── azure/                            # Azure-Specific
-│   └── AZURE_AUTOMATION.md
-│
-├── middleware-platform/              # Backend service: Kelly, Skin & Care, checkout runbooks, Retell, security checklists (see README in that folder)
-│   ├── README.md                    # Index of all middleware-specific docs
-│   ├── kelly-phase-prompt-architecture.md
-│   ├── architecture-kelly-payment.md
-│   └── … (runbooks, Retell, Step10, standards — not all listed here)
-│
-└── archive/                          # Archived Files
-    └── azure-debug-scripts/          # Old debug scripts
+├── README.md                    # This hub
+├── admin-portal/README.md
+├── api/README.md
+├── architecture/README.md       # largest: all former subfolders merged
+├── archive/README.md
+├── azure/README.md
+├── compliance/README.md
+├── configuration/README.md
+├── deployment/README.md
+├── development/README.md
+├── email/README.md
+├── integrations/README.md
+├── meta/README.md
+├── middleware-platform/README.md
+├── onboarding/README.md
+├── products/README.md
+├── reasoning/README.md
+├── repo-migrated/README.md
+├── runbooks/README.md
+├── setup/README.md
+├── testing/README.md
+├── user-guides/                 # e.g. INVOICE_WORKFLOW.md
+├── voice-agent/                 # README + prompts/ (runtime)
+├── _consolidated_path_redirects.json   # old path → README#anchor (for link updates)
+└── …                            # security, geolocation, knowledge-base, etc. as present
 ```
 
 ---
@@ -195,15 +151,15 @@ docs/
 
 ### I want to...
 - **Find all documentation** → This README (docs is the source of truth)
-- **Deploy the platform** → [Deployment Guide](./deployment/guides/DEPLOYMENT_GUIDE.md)
-- **Set up Stripe** → [Stripe Issuing Guide](./integrations/stripe/issuing/STRIPE_ISSUING.md)
-- **Configure Google Calendar** → [Google OAuth Guide](./setup/google/GOOGLE_OAUTH_COMPLETE_GUIDE.md)
-- **Understand the architecture** → [Architecture Overview](./architecture/vision/VISION.md)
-- **Use the API** → [API Documentation](./api/API_DOCUMENTATION.md)
+- **Deploy the platform** → [Deployment Guide](./deployment/README.md#guides-deployment-guide)
+- **Set up Stripe** → [Stripe Issuing Guide](./integrations/README.md#stripe-issuing-stripe-issuing)
+- **Configure Google Calendar** → [Google OAuth Guide](./setup/README.md#google-google-oauth-complete-guide)
+- **Understand the architecture** → [Architecture Overview](./architecture/README.md#vision-vision)
+- **Use the API** → [API Documentation](./api/README.md#api-documentation)
 - **Generate invoices** → [Invoice Workflow](./user-guides/INVOICE_WORKFLOW.md)
-- **Set up Azure** → [Azure Automation](./azure/AZURE_AUTOMATION.md)
-- **Configure DNS** → [DNS Configuration](./deployment/dns/ionos/IONOS_DNS_SETUP.md)
-- **Work on the Admin Portal** → [Admin Portal docs](./admin-portal/README.md)
+- **Set up Azure** → [Azure Automation](./azure/README.md#azure-automation)
+- **Configure DNS** → [DNS Configuration](./deployment/README.md#dns-ionos-ionos-dns-setup)
+- **Work on the Admin Portal** → [Admin Portal docs](./admin-portal/README.md#readme)
 
 ---
 
@@ -232,27 +188,27 @@ docs/
 ## 🔍 Search by Topic
 
 ### Payments
-- [Payment Architecture](./architecture/payments/PAYMENT_ARCHITECTURE.md)
-- [Stripe Issuing](./integrations/stripe/issuing/STRIPE_ISSUING.md)
-- [Invoice System](./development/invoice-billing/IMPLEMENTATION_SUMMARY.md)
+- [Payment Architecture](./architecture/README.md#payments-payment-architecture)
+- [Stripe Issuing](./integrations/README.md#stripe-issuing-stripe-issuing)
+- [Invoice System](./development/README.md#invoice-billing-implementation-summary)
 
 ### Multi-Tenancy
-- [Multi-Tenant Architecture](./architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md)
-- [Tenant & DNS Setup](./deployment/dns/TENANT_AND_DNS_SETUP.md)
-- [Automated Domain Setup](./deployment/azure/AUTOMATED_TENANT_DOMAIN_SETUP.md)
+- [Multi-Tenant Architecture](./architecture/README.md#multi-tenant-multi-tenant-voice-agent)
+- [Tenant & DNS Setup](./deployment/README.md#dns-tenant-and-dns-setup)
+- [Automated Domain Setup](./deployment/README.md#azure-automated-tenant-domain-setup)
 
 ### Healthcare
-- [Healthcare Assessment](./architecture/healthcare/HEALTHCARE_ASSESSMENT.md)
-- [UHC FHIR Integration](./integrations/uhc/fhir/UHC_FHIR_SERVICE_USAGE.md)
-- [Stedi Integration](./integrations/stedi/api/STEDI_API_ENDPOINTS.md)
+- [Healthcare Assessment](./architecture/README.md#healthcare-healthcare-assessment)
+- [UHC FHIR Integration](./integrations/README.md#uhc-fhir-uhc-fhir-service-usage)
+- [Stedi Integration](./integrations/README.md#stedi-api-stedi-api-endpoints)
 
 ### Voice Agent & Medical Coding
 - [Voice Agent Config](./voice-agent/README.md)
-- [Video Consult](./architecture/care-delivery/VIDEO_CONSULT.md)
-- [Landing Try now & LiveKit](./architecture/experience/LANDING_TRY_NOW_LIVEKIT.md)
-- [Medical Coding Runbook](./architecture/voice-agent/RUNBOOK.md)
-- [Retell Configuration](./middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md)
-- [Voice Agent Todo & Status](./architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)
+- [Video Consult](./architecture/README.md#care-delivery-video-consult)
+- [Landing Try now & LiveKit](./architecture/README.md#experience-landing-try-now-livekit)
+- [Medical Coding Runbook](./architecture/README.md#voice-agent-runbook)
+- [Retell Configuration](./middleware-platform/README.md#retell-config-quick-reference)
+- [Voice Agent Todo & Status](./architecture/README.md#voice-agent-voice-agent-todo-and-status)
 
 ---
 
@@ -269,7 +225,7 @@ docs/
 
 ## 🧹 Cleanup record
 
-One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./archive/TECH_LEAD_CLEANUP.md)** for details.
+One-time consolidation (Feb 2026): Video Consult and LangSmith docs merged; indexes updated. See **[TECH_LEAD_CLEANUP.md](./archive/README.md#tech-lead-cleanup)** for details.
 
 ---
 

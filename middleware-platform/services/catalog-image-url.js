@@ -17,16 +17,26 @@ const CATALOG_IMAGE_KEYS = [
   'image_packaging_small_url'
 ];
 
+/** OFF/OBF sometimes return protocol-relative URLs (`//static.openfoodfacts.org/...`). */
+function normalizeCatalogImageUrl(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  if (s.startsWith('//')) return `https:${s}`;
+  return null;
+}
+
 function pickFirstCatalogImageUrl(obj) {
   if (!obj || typeof obj !== 'object') return null;
   for (const k of CATALOG_IMAGE_KEYS) {
-    const s = String(obj[k] ?? '').trim();
-    if (s && /^https?:\/\//i.test(s)) return s;
+    const normalized = normalizeCatalogImageUrl(obj[k]);
+    if (normalized) return normalized;
   }
   return null;
 }
 
 module.exports = {
   CATALOG_IMAGE_KEYS,
+  normalizeCatalogImageUrl,
   pickFirstCatalogImageUrl
 };

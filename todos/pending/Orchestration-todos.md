@@ -27,8 +27,8 @@ Why this matters for checkout:
 
 - [ ] End-to-end replay of reported user transcripts (QA).
 - [ ] Landing ↔ checkout parity: keep `e2e/landing-cta-entry-flows.spec.cjs` in sync with `littlelab-landing` query params.
-- [ ] Periodically re-read [`PREDEPLOY_SECURITY_CHECKLIST.md`](../docs/middleware-platform/PREDEPLOY_SECURITY_CHECKLIST.md) + [`PAYMENT_DATA_INCIDENT_PLAYBOOK.md`](../docs/middleware-platform/PAYMENT_DATA_INCIDENT_PLAYBOOK.md); extend redaction for new checkout fields.
+- [ ] Periodically re-read [`Predeploy security checklist`](../docs/middleware-platform/README.md#predeploy-security-checklist) + [`Payment data incident playbook`](../docs/middleware-platform/README.md#payment-data-incident-playbook) in `docs/middleware-platform/README.md`; extend redaction for new checkout fields.
 
 ### Technical debt
 
-- [ ] Long-term `server.js` route split — follow [`SERVER_JS_REFACTOR_POLICY.md`](../docs/development/SERVER_JS_REFACTOR_POLICY.md) if the team scopes it.
+- [ ] Long-term `server.js` route split — follow [`SERVER_JS_REFACTOR_POLICY.md`](../docs/development/README.md#server-js-refactor-policy) if the team scopes it.

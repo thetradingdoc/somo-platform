@@ -1,7 +1,7 @@
 # Pending todo lists
 
 These are the currently pending workstreams to track next.  
-Completed checklists are archived in [`../archive/`](../archive/README.md).
+Completed checklists are archived in [`../archive/`](../archive/README.md#readme).
 
 | Pending file (current location) | Focus |
 |---|---|
@@ -13,6 +13,7 @@ Completed checklists are archived in [`../archive/`](../archive/README.md).
 | `../pending/Orchestration-todos.md` | Orchestration QA/parity/debt items |
 | `../pending/Step10-LangChain-LangGraph-LangSmith-todos.md` | Step10 LangChain/LangGraph/LangSmith work |
 | `../pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md` | Derm QA Reddit pipeline pending work |
+| `../pending/AGENTIC_REASONING_TODOS.md` | Agentic reasoning production blockers and rollout |
 
 ## Notes
 

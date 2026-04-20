@@ -144,6 +144,9 @@ function classifyFoodOrSupplementFormulation(ingredientsText) {
   const firstFew = parseIngredients(ingredientsText).slice(0, 5).map((x) => x.toLowerCase());
   if (!firstFew.length) return null;
   const joined = firstFew.join(' ');
+  if (firstFew.length === 1 && /\b(100%|juice|water|milk|tea|coffee)\b/.test(firstFew[0] || '')) {
+    return { label: 'Single-ingredient beverage', confidence: 'medium' };
+  }
   if (/\b(aqua|water)\b/.test(firstFew[0] || '')) return { label: 'Liquid (water first)', confidence: 'low' };
   if (/\b(oil|fat|butter|cream|milk)\b/.test(joined)) return { label: 'Fat / oil-containing', confidence: 'low' };
   return { label: 'Mixed food / beverage', confidence: 'low' };
@@ -204,7 +207,13 @@ function summarizeRoutineConflictFlags(routineConflicts = []) {
     .filter(Boolean);
 }
 
-function summarizeWatchFlagsFromIngredients(ingredientsText = '') {
+function isCosmeticRoute(categoryRoute = 'unknown') {
+  const route = String(categoryRoute || '').toLowerCase().trim();
+  return route === 'cosmetic' || route === 'hygiene';
+}
+
+function summarizeWatchFlagsFromIngredients(ingredientsText = '', categoryRoute = 'unknown') {
+  if (!isCosmeticRoute(categoryRoute)) return [];
   const t = String(ingredientsText || '').toLowerCase();
   const out = [];
   if (/\bphenoxyethanol\b/.test(t)) out.push('Phenoxyethanol preservative');
@@ -214,6 +223,55 @@ function summarizeWatchFlagsFromIngredients(ingredientsText = '') {
     out.push('High-activity exfoliant or retinoid present');
   }
   return out.slice(0, 4);
+}
+
+function detectConcernDyes(ingredientsText = '') {
+  const t = String(ingredientsText || '').toLowerCase();
+  const palette = [
+    { key: /\bred\s*40\b/, label: 'Red 40' },
+    { key: /\bblue\s*1\b/, label: 'Blue 1' },
+    { key: /\byellow\s*5\b/, label: 'Yellow 5' },
+    { key: /\byellow\s*6\b/, label: 'Yellow 6' },
+    { key: /\bred\s*3\b/, label: 'Red 3' }
+  ];
+  return palette.filter((entry) => entry.key.test(t)).map((entry) => entry.label);
+}
+
+function summarizeFoodWatchFlagsFromIngredients(ingredientsText = '', categoryRoute = 'unknown') {
+  const route = String(categoryRoute || '').toLowerCase().trim();
+  if (route !== 'food' && route !== 'supplement') return [];
+  const dyes = detectConcernDyes(ingredientsText);
+  return dyes.length ? [`Artificial dye additives detected (${dyes.slice(0, 3).join(', ')})`] : [];
+}
+
+function buildChildrenSafeVerdict({ ingredientsText = '', harmfulSeverity = 'low', categoryRoute = 'unknown' }) {
+  const route = String(categoryRoute || '').toLowerCase().trim();
+  if (harmfulSeverity === 'high') {
+    return {
+      answer: 'caution',
+      summary: 'Potential irritant/conflict signals detected. Use caution for children.',
+      pending: false
+    };
+  }
+  if (route === 'food' || route === 'supplement') {
+    const concernDyes = detectConcernDyes(ingredientsText);
+    return concernDyes.length
+      ? {
+          answer: 'caution',
+          summary: `Contains artificial dyes (${concernDyes.slice(0, 3).join(', ')}) that may concern some caregivers.`,
+          pending: false
+        }
+      : {
+          answer: 'safe',
+          summary: 'No strong child-safety signal from current deterministic additive/dye checks.',
+          pending: false
+        };
+  }
+  return {
+    answer: 'insufficient_data',
+    summary: 'No pediatric safety data available in the current deterministic catalog read.',
+    pending: true
+  };
 }
 
 function buildDeterministicSideEffects({
@@ -244,6 +302,42 @@ function buildDeterministicSideEffects({
     return 'Generally well tolerated from current deterministic checks.';
   }
   return 'Not assessed in this scan.';
+}
+
+function defaultAlternativesFooter(categoryRoute = 'unknown', withCandidates = false) {
+  const route = String(categoryRoute || '').toLowerCase().trim();
+  const foodLike = route === 'food' || route === 'supplement';
+  if (foodLike) {
+    return withCandidates
+      ? 'Or ask Kelly for personalised food or supplement alternatives.'
+      : 'Ask Kelly for personalised food or supplement alternatives.';
+  }
+  return withCandidates
+    ? 'Or ask Kelly for personalised alternatives based on your routine.'
+    : 'Ask Kelly for personalised alternatives based on your routine.';
+}
+
+function recordRouteRegressionSignals(summary = {}, categoryRoute = 'unknown') {
+  const route = String(categoryRoute || '').toLowerCase().trim();
+  const nonCosmetic = route === 'food' || route === 'supplement' || route === 'non_food';
+  if (!nonCosmetic) return;
+  try {
+    const harmfulFlags = Array.isArray(summary?.verdict?.harmful?.flags) ? summary.verdict.harmful.flags : [];
+    const harmfulJoined = harmfulFlags.join(' ').toLowerCase();
+    if (/\bretinoid|exfoliant|phenoxyethanol|fragrance allergens?\b/.test(harmfulJoined)) {
+      Metrics.increment('result_summary.regression.non_cosmetic.cosmetic_harmful_copy.count', 1);
+      Metrics.increment(`result_summary.regression.non_cosmetic.cosmetic_harmful_copy.route.${route}.count`, 1);
+    }
+    if (String(summary?.tiles?.key_actives?.status || '') === 'available') {
+      Metrics.increment('result_summary.regression.non_cosmetic.key_actives_available.count', 1);
+      Metrics.increment(`result_summary.regression.non_cosmetic.key_actives_available.route.${route}.count`, 1);
+    }
+    const missingMore = Array.isArray(summary?.missing_more) ? summary.missing_more.join(' ').toLowerCase() : '';
+    if (missingMore.includes('pediatric profile')) {
+      Metrics.increment('result_summary.regression.non_cosmetic.pediatric_upsell_copy.count', 1);
+      Metrics.increment(`result_summary.regression.non_cosmetic.pediatric_upsell_copy.route.${route}.count`, 1);
+    }
+  } catch (_) {}
 }
 
 function _clone(value) {
@@ -300,6 +394,20 @@ function hasForbiddenVocabulary(contract, candidate) {
   return blocked.some((term) => lower.includes(String(term || '').toLowerCase()));
 }
 
+function failsReasoningSafetyGate(value) {
+  const blob = Array.isArray(value) ? value.join(' ') : String(value || '');
+  if (!blob.trim()) return false;
+  const lower = blob.toLowerCase();
+  if (/\bprescrib(?:e|es|ed|ing)\b/.test(lower)) return true;
+  if (/\b100%\s+(effective|safe|cure)\b/.test(lower)) return true;
+  return false;
+}
+
+function emitReasoningGateMetric(metricName, route) {
+  Metrics.increment(metricName, 1);
+  Metrics.increment(`${metricName}.route.${route}.count`, 1);
+}
+
 function getRouteMinConfidence(route, fieldPath) {
   const r = String(route || 'default').toLowerCase();
   const routeMap = REASONING_MIN_CONFIDENCE_BY_ROUTE[r] || {};
@@ -313,10 +421,22 @@ function getRouteMinEvidence(route, fieldPath) {
   return Number(routeMap[fieldPath] ?? dflt[fieldPath] ?? 0);
 }
 
-function buildReasoningMeta({ enabled = false, status = 'disabled', patch = null, inputHash = null } = {}) {
-  return {
+function buildReasoningMeta({
+  enabled = false,
+  status = 'disabled',
+  patch = null,
+  inputHash = null,
+  gateDecision = null
+} = {}) {
+  const mode = String(patch?.reasoning_mode || '').trim().toLowerCase();
+  const normalizedMode =
+    mode === 'model' || mode === 'stub' || mode === 'deterministic_fallback'
+      ? mode
+      : (enabled ? 'deterministic_fallback' : 'deterministic_fallback');
+  const meta = {
     enabled: !!enabled,
     status,
+    reasoning_mode: normalizedMode,
     allowed_upgrade_fields: REASONING_ALLOWED_UPGRADE_FIELDS,
     min_confidence_by_field: { ...REASONING_MIN_CONFIDENCE },
     reasoning_model: patch?.reasoning_model || null,
@@ -326,6 +446,10 @@ function buildReasoningMeta({ enabled = false, status = 'disabled', patch = null
     reasoning_input_hash: patch?.reasoning_input_hash || inputHash || null,
     guardrails: ['no_diagnosis_language', 'no_medical_advice', 'confidence_gate_per_field']
   };
+  if (gateDecision && typeof gateDecision === 'object') {
+    meta.reasoning_gate_decision = gateDecision;
+  }
+  return meta;
 }
 
 function applyReasoningPatch(resultSummary, patch = null, options = {}) {
@@ -348,32 +472,41 @@ function applyReasoningPatch(resultSummary, patch = null, options = {}) {
     return out;
   }
   if (!patch || typeof patch !== 'object') {
-    out.reasoning = buildReasoningMeta({ enabled: true, status: 'pending', patch: null, inputHash });
+    out.reasoning = buildReasoningMeta({
+      enabled: true,
+      status: 'pending',
+      patch: { reasoning_mode: 'deterministic_fallback' },
+      inputHash
+    });
     return out;
   }
 
   const evidenceRefs = Array.isArray(patch.reasoning_evidence_refs) ? patch.reasoning_evidence_refs : [];
+  const patchContractVersion = String(patch?.semantic_contract_version || '').trim() || null;
+  const liveContractVersion = String(semanticContract?.semantic_contract_version || SEMANTIC_CONTRACT_VERSION);
+  const schemaGateOk = !(patchContractVersion && patchContractVersion !== liveContractVersion);
+  const gateFailures = [];
+
+  if (!schemaGateOk) {
+    emitReasoningGateMetric('reasoning.gate.schema.fail.count', route);
+    gateFailures.push({
+      gate: 'schema',
+      field: null,
+      reason: 'semantic_contract_version_mismatch',
+      patch_contract_version: patchContractVersion,
+      live_contract_version: liveContractVersion
+    });
+  }
+
   let appliedCount = 0;
   for (const fieldPath of REASONING_ALLOWED_UPGRADE_FIELDS) {
     const candidate = _getByPath(patch, fieldPath);
     if (candidate == null || candidate === '') continue;
-    const patchContractVersion = String(patch?.semantic_contract_version || '').trim() || null;
-    const liveContractVersion = String(semanticContract?.semantic_contract_version || SEMANTIC_CONTRACT_VERSION);
-    if (patchContractVersion && patchContractVersion !== liveContractVersion) {
+
+    if (!schemaGateOk) {
       continue;
     }
-    const conf = Number(_getByPath(patch, `${fieldPath}_confidence`) || _getByPath(patch, `${fieldPath}_score`) || 0);
-    const minConf = getRouteMinConfidence(route, fieldPath);
-    if (!Number.isFinite(conf) || conf < minConf) {
-      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
-      const container = _getByPath(out, containerPath);
-      if (container && typeof container === 'object') {
-        container.status = 'deferred';
-        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
-        container.reason_unavailable = 'reasoning_low_confidence';
-      }
-      continue;
-    }
+
     const fieldBlocked = !isFieldAllowedByContract(semanticContract, fieldPath);
     if (fieldBlocked && semanticGuardShadow) emitSemanticMetric('reasoning.semantic_reject.count', fieldPath);
     if (fieldBlocked && semanticGuardEnabled) {
@@ -385,6 +518,8 @@ function applyReasoningPatch(resultSummary, patch = null, options = {}) {
         container.reason_unavailable = 'unsupported_for_route';
       }
       emitSemanticMetric('reasoning.unsupported_for_route.count', fieldPath);
+      emitReasoningGateMetric('reasoning.gate.semantic_contract.fail.count', route);
+      gateFailures.push({ gate: 'semantic_contract', field: fieldPath, reason: 'field_not_allowed_for_route' });
       SemanticRejectAudit.logSemanticReject({
         sessionId,
         route,
@@ -395,6 +530,22 @@ function applyReasoningPatch(resultSummary, patch = null, options = {}) {
       });
       continue;
     }
+
+    const conf = Number(_getByPath(patch, `${fieldPath}_confidence`) || _getByPath(patch, `${fieldPath}_score`) || 0);
+    const minConf = getRouteMinConfidence(route, fieldPath);
+    if (!Number.isFinite(conf) || conf < minConf) {
+      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+      const container = _getByPath(out, containerPath);
+      if (container && typeof container === 'object') {
+        container.status = 'deferred';
+        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
+        container.reason_unavailable = 'reasoning_low_confidence';
+      }
+      emitReasoningGateMetric('reasoning.gate.confidence.defer.count', route);
+      gateFailures.push({ gate: 'confidence', field: fieldPath, reason: 'reasoning_low_confidence' });
+      continue;
+    }
+
     const safeValue =
       typeof candidate === 'string'
         ? sanitizeReasoningText(candidate)
@@ -412,6 +563,8 @@ function applyReasoningPatch(resultSummary, patch = null, options = {}) {
         container.reason_unavailable = 'unsupported_for_route';
       }
       emitSemanticMetric('reasoning.unsupported_for_route.count', fieldPath);
+      emitReasoningGateMetric('reasoning.gate.semantic_contract.fail.count', route);
+      gateFailures.push({ gate: 'semantic_contract', field: fieldPath, reason: 'forbidden_vocab_for_route' });
       SemanticRejectAudit.logSemanticReject({
         sessionId,
         route,
@@ -422,6 +575,7 @@ function applyReasoningPatch(resultSummary, patch = null, options = {}) {
       });
       continue;
     }
+
     const claimProv = patch?.reasoning_claim_provenance && typeof patch.reasoning_claim_provenance === 'object'
       ? patch.reasoning_claim_provenance[fieldPath] || []
       : [];
@@ -434,32 +588,66 @@ function applyReasoningPatch(resultSummary, patch = null, options = {}) {
         container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
         container.reason_unavailable = 'reasoning_insufficient_evidence';
       }
+      emitReasoningGateMetric('reasoning.gate.confidence.defer.count', route);
+      gateFailures.push({ gate: 'confidence', field: fieldPath, reason: 'reasoning_insufficient_evidence' });
       continue;
     }
+
+    if (failsReasoningSafetyGate(safeValue)) {
+      const containerPath = fieldPath.split('.').slice(0, -1).join('.');
+      const container = _getByPath(out, containerPath);
+      if (container && typeof container === 'object') {
+        container.status = 'deferred';
+        container.source = container.source === 'deterministic' ? 'deterministic' : 'none';
+        container.reason_unavailable = 'reasoning_safety_gate';
+      }
+      emitReasoningGateMetric('reasoning.gate.safety.fail.count', route);
+      gateFailures.push({ gate: 'safety', field: fieldPath, reason: 'post_sanitize_safety_reject' });
+      continue;
+    }
+
     _setByPath(out, fieldPath, safeValue);
     const containerPath = fieldPath.split('.').slice(0, -1).join('.');
     const container = _getByPath(out, containerPath);
     if (container && typeof container === 'object') {
+      container.status = 'available';
+      if (Object.prototype.hasOwnProperty.call(container, 'pending')) container.pending = false;
+      if (Object.prototype.hasOwnProperty.call(container, 'reason_unavailable')) container.reason_unavailable = null;
       container.source = 'reasoning';
-      const claimProv = patch?.reasoning_claim_provenance && typeof patch.reasoning_claim_provenance === 'object'
+      if (fieldPath === 'verdict.alternatives.candidates' && Array.isArray(safeValue)) {
+        container.count = safeValue.length;
+      }
+      const claimProvApply = patch?.reasoning_claim_provenance && typeof patch.reasoning_claim_provenance === 'object'
         ? patch.reasoning_claim_provenance[fieldPath] || []
         : [];
       container.reasoning = {
         confidence: conf,
+        reasoning_mode: String(patch?.reasoning_mode || '').trim().toLowerCase() || 'deterministic_fallback',
         reasoning_model: patch.reasoning_model || null,
         reasoning_version: patch.reasoning_version || null,
         reasoning_evidence_refs: evidenceRefs,
-        claim_provenance: Array.isArray(claimProv) ? claimProv : []
+        claim_provenance: Array.isArray(claimProvApply) ? claimProvApply : []
       };
     }
     appliedCount += 1;
   }
 
+  const gateDecision = {
+    version: 1,
+    gate_order: ['schema', 'semantic_contract', 'confidence', 'safety'],
+    evaluated_at: new Date().toISOString(),
+    route,
+    schema_ok: schemaGateOk,
+    first_failure: gateFailures[0] || null,
+    failures: gateFailures.slice(0, 50)
+  };
+
   out.reasoning = buildReasoningMeta({
     enabled: true,
     status: appliedCount > 0 ? 'applied' : 'deferred',
     patch,
-    inputHash
+    inputHash,
+    gateDecision
   });
   return out;
 }
@@ -578,12 +766,15 @@ function buildScanSummary({
     categoryRoute === 'cosmetic' || categoryRoute === 'hygiene'
       ? buildCosmeticDeterministicTiles({ ingredientsText, categoryRoute })
       : buildNonCosmeticDeterministicTiles({ ingredientsText, categoryRoute });
+  const skinTypeReason = isCosmeticRoute(categoryRoute)
+    ? 'no_profile_context'
+    : 'not_applicable_skin_type_for_food';
 
   const tiles = {
     key_actives: deterministicTiles.keyActivesTile,
     formulation: deterministicTiles.formulationTile,
     function: deterministicTiles.functionTile,
-    skin_type: mkTile({ status: 'deferred', source: 'none', reason: 'no_profile_context' }),
+    skin_type: mkTile({ status: 'deferred', source: 'none', reason: skinTypeReason }),
     safety_score: mkTile({ status: 'deferred', source: 'none', reason: 'no_scoring_pipeline' })
   };
   return {
@@ -615,6 +806,7 @@ function buildResultSummary({
   const keyActives = Array.isArray(baseTiles?.key_actives?.value) ? baseTiles.key_actives.value : [];
   const activeLabels = keyActives.map((x) => String(x?.display || x?.name || '').trim()).filter(Boolean);
   const ingredientsText = String(product?.ingredients_text || '');
+  const route = String(categoryRoute || '').toLowerCase().trim();
   const harmfulSeverity =
     routineConflicts.some((c) => String(c?.severity || '').toLowerCase() === 'high')
       ? 'high'
@@ -633,21 +825,50 @@ function buildResultSummary({
     : null;
   const harmfulFlags = [
     ...summarizeRoutineConflictFlags(routineConflicts),
-    ...summarizeWatchFlagsFromIngredients(ingredientsText)
+    ...summarizeWatchFlagsFromIngredients(ingredientsText, route),
+    ...summarizeFoodWatchFlagsFromIngredients(ingredientsText, route)
   ].slice(0, 4);
+  const childrenSafe = buildChildrenSafeVerdict({
+    ingredientsText,
+    harmfulSeverity,
+    categoryRoute: route
+  });
+  const skinTypeTile =
+    hasProfileContext
+      ? mkTile({ status: 'available', source: 'graph', confidence: 'low', value: ['combination'] })
+      : mkTile({
+          status: 'deferred',
+          source: 'none',
+          reason: isCosmeticRoute(route)
+            ? 'no_profile_context'
+          : 'not_applicable_skin_type_for_food'
+        });
   const deterministicAlternatives = buildDeterministicAlternatives({ categoryRoute, functionTags });
   const alternativesWithMeta =
     deterministicAlternatives.status === 'available'
       ? {
           ...deterministicAlternatives,
           count: Array.isArray(deterministicAlternatives.candidates) ? deterministicAlternatives.candidates.length : 0,
-          footer: 'Or ask Kelly for personalised alternatives based on your routine.'
+          footer: defaultAlternativesFooter(route, true)
         }
       : {
           ...deterministicAlternatives,
           count: 0,
-          footer: 'Ask Kelly for personalised alternatives based on your routine.'
+          footer: defaultAlternativesFooter(route, false)
         };
+  const routeForUpsell = String(categoryRoute || '').toLowerCase().trim();
+  const missingMore =
+    routeForUpsell === 'food' || routeForUpsell === 'supplement'
+      ? [
+          'Unlock route-aware guidance tailored to food and supplement products.',
+          'Get clearer child-safety context with additive and dye-sensitive checks.',
+          'Compare safer alternatives in one tap.'
+        ]
+      : [
+          'Unlock personal-fit mode for age, sensitivity, and routine conflicts.',
+          'Enable pediatric profile for stronger child-safety confidence.',
+          'Compare against safer alternatives in one tap.'
+        ];
   const summary = {
     schema_version: SCHEMA_VERSION,
     semantic_contract_version: SEMANTIC_CONTRACT_VERSION,
@@ -656,9 +877,7 @@ function buildResultSummary({
     disclaimer: 'informational_only',
     tiles: {
       ...baseTiles,
-      skin_type: hasProfileContext
-        ? mkTile({ status: 'available', source: 'graph', confidence: 'low', value: ['combination'] })
-        : mkTile({ status: 'deferred', source: 'none', reason: 'no_profile_context' })
+      skin_type: skinTypeTile
     },
     verdict: {
       product_overview: {
@@ -683,7 +902,13 @@ function buildResultSummary({
         confidence: routineConflicts.length ? 'medium' : 'low',
         severity: harmfulSeverity,
         flags: harmfulFlags,
-        top_evidence: routineConflicts[0]?.summary || 'All flagged ingredients are within concern thresholds from current deterministic checks.',
+        top_evidence: routineConflicts[0]?.summary || (
+          harmfulFlags.length
+            ? 'Flagged ingredients are within concern thresholds from current deterministic checks.'
+            : (route === 'food' || route === 'supplement')
+              ? 'No additive or dye flags were detected in the current deterministic checks.'
+              : 'No flagged ingredients were detected in the current deterministic checks.'
+        ),
         summary:
           harmfulSeverity === 'high'
             ? 'Conflict or irritant signals were detected from deterministic checks.'
@@ -696,14 +921,9 @@ function buildResultSummary({
         status: 'available',
         source: 'deterministic',
         confidence: harmfulSeverity === 'high' ? 'medium' : 'low',
-        answer: harmfulSeverity === 'high' ? 'caution' : (categoryRoute === 'food' ? 'safe' : 'insufficient_data'),
-        summary:
-          harmfulSeverity === 'high'
-            ? 'Potential irritant/conflict signals detected. Use caution for children.'
-            : categoryRoute === 'food'
-              ? 'No strong child-safety signal from current deterministic checks.'
-              : 'No pediatric safety data available in the current deterministic catalog read.',
-        pending: categoryRoute !== 'food' && harmfulSeverity !== 'high',
+        answer: childrenSafe.answer,
+        summary: childrenSafe.summary,
+        pending: childrenSafe.pending,
         reason_unavailable: null
       },
       side_effects: {
@@ -714,12 +934,9 @@ function buildResultSummary({
       },
       alternatives: alternativesWithMeta
     },
-    missing_more: [
-      'Unlock personal-fit mode for age, sensitivity, and routine conflicts.',
-      'Enable pediatric profile for stronger child-safety confidence.',
-      'Compare against safer alternatives in one tap.'
-    ]
+    missing_more: missingMore
   };
+  recordRouteRegressionSignals(summary, route);
   return applyReasoningPatch(summary, reasoningPatch, { enabled: reasoningEnabled });
 }
 

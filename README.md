@@ -8,7 +8,7 @@
 
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
 
-> **Architecture notes:** [ADRs](docs/architecture/decisions/README.md) · [Agentic checkout file map](docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md) · [`server.js` policy](docs/development/SERVER_JS_REFACTOR_POLICY.md)
+> **Architecture notes:** [ADRs](docs/architecture/README.md#decisions-readme) · [Agentic checkout file map](docs/architecture/README.md#commerce-agentic-checkout-file-map) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
 
 ---
 
@@ -71,7 +71,7 @@ doclittle-platform/
 └── README.md                # This file
 ```
 
-**Agentic commerce (chat → quote → pay):** see [docs/architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md](docs/architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md) and [todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (status note at top).
+**Agentic commerce (chat → quote → pay):** see [docs/architecture/README.md#commerce-public-agentic-checkout](docs/architecture/README.md#commerce-public-agentic-checkout) and [todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md](todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md) (status note at top).
 
 ---
 
@@ -611,10 +611,10 @@ curl "http://localhost:4000/api/patient/benefits?memberId=CIGNA901234&patientNam
 All documentation has been organized in the [`docs/`](./docs/) folder:
 
 ### Quick Links
-- **Setup Guides**: [Setup](./docs/setup/getting-started/SETUP.md), [Stripe Issuing](./docs/setup/stripe/STRIPE_ISSUING_COMPLETE_GUIDE.md)
-- **Architecture**: [Vision](./docs/architecture/vision/VISION.md), [Payment Architecture](./docs/architecture/payments/PAYMENT_ARCHITECTURE.md)
-- **API**: [API Documentation](./docs/api/API_DOCUMENTATION.md)
-- **Deployment**: [Security](./docs/deployment/security/SECURITY_IMPROVEMENTS.md), [Backup Strategy](./docs/deployment/guides/BACKUP_STRATEGY.md)
+- **Setup Guides**: [Setup](./docs/setup/README.md#getting-started-setup), [Stripe Issuing](./docs/setup/stripe/STRIPE_ISSUING_COMPLETE_GUIDE.md)
+- **Architecture**: [Vision](./docs/architecture/README.md#vision-vision), [Payment Architecture](./docs/architecture/README.md#payments-payment-architecture)
+- **API**: [API Documentation](./docs/api/README.md#api-documentation)
+- **Deployment**: [Security](./docs/deployment/README.md#security-security-improvements), [Backup Strategy](./docs/deployment/README.md#guides-backup-strategy)
 - **Voice Agent**: [Kelly's Prompt](./docs/voice-agent/prompts/kelly-voice-agent-prompt.md)
 
 See [`docs/README.md`](./docs/README.md) for a complete index of all documentation.
@@ -633,7 +633,7 @@ For issues and questions:
 1. Check the troubleshooting section
 2. Review API endpoint documentation in [`docs/api/`](./docs/api/)
 3. Check server logs for error details
-4. Verify environment variables are configured correctly (see [`docs/setup/getting-started/SETUP.md`](./docs/setup/getting-started/SETUP.md))
+4. Verify environment variables are configured correctly (see [`docs/setup/README.md#getting-started-setup`](./docs/setup/README.md#getting-started-setup))
 
 ---
 

@@ -1,0 +1,825 @@
+{
+  "archived_at": "2026-04-18T01:15:30.110Z",
+  "archived_count": 117,
+  "archived": [
+    {
+      "id": "dlq_4cfcd5eda33a028c3d118c13",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775148946366",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 19:30:34"
+    },
+    {
+      "id": "dlq_249d98d6083e1437f5ef410b",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775142362102",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 19:30:34"
+    },
+    {
+      "id": "dlq_76af89ee46ff64aae67a30aa",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775142315879",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 19:30:34"
+    },
+    {
+      "id": "dlq_5329a23479b913007ee10f8f",
+      "call_id": "checkout_backfill_kelly_conv_ui_1775148919757",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 19:30:34"
+    },
+    {
+      "id": "dlq_57046cc4f943fa2e5bf1f0ec",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775142182722",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:34:19"
+    },
+    {
+      "id": "dlq_28aabff4b6e04f6f66bbebe8",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775141931617",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:34:19"
+    },
+    {
+      "id": "dlq_5e0336f5b2c146099d7e8e02",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775141661668",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:25:03"
+    },
+    {
+      "id": "dlq_7a78063e85a0233b02d68e1b",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775141128384",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:25:03"
+    },
+    {
+      "id": "dlq_466cbd625de6c5728ab38274",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775140849251",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:25:03"
+    },
+    {
+      "id": "dlq_7f8eb042b761f81156aec8a8",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775140733223",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:25:03"
+    },
+    {
+      "id": "dlq_78b9737b456cdcbe766a2a2d",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775140629027",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:07:48"
+    },
+    {
+      "id": "dlq_787c36081f732cfc35eed540",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775140497851",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:07:48"
+    },
+    {
+      "id": "dlq_4082a4a44cfe642583f2c8ec",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775140187422",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:07:48"
+    },
+    {
+      "id": "dlq_25fab56afcc8bf46c4af3537",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775140097222",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:07:48"
+    },
+    {
+      "id": "dlq_9c034de6bad2288868405c8c",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775139765281",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 15:07:48"
+    },
+    {
+      "id": "dlq_e1a6fcfaefe8a610d8d126b1",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775098043831",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 13:42:56"
+    },
+    {
+      "id": "dlq_97e15ec7b3fea3aa154424f7",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775097994783",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 13:42:56"
+    },
+    {
+      "id": "dlq_529689e46b9cbe178e821668",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775097929738",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 13:42:56"
+    },
+    {
+      "id": "dlq_64a50556607d7742f294c4b6",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775097844857",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 13:42:56"
+    },
+    {
+      "id": "dlq_0c0a1a4f9add7a84f2a5b37c",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775097754838",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 13:42:56"
+    },
+    {
+      "id": "dlq_417342324aa66b53ba939736",
+      "call_id": "checkout_backfill_e6491e7a-a09c-4455-a4cb-45a216666a0d",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 13:42:56"
+    },
+    {
+      "id": "dlq_6dc8361fe4d431b0d1a9f75e",
+      "call_id": "checkout_backfill_83db860a-c5a8-4a52-ad8e-d3ab3a006aaa",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 02:42:27"
+    },
+    {
+      "id": "dlq_e5d1134ccf592ca48b8c986e",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775091208368",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 01:36:30"
+    },
+    {
+      "id": "dlq_334f9589e934b5433c72a139",
+      "call_id": "checkout_backfill_3789357f-c915-4824-a996-734580da4dce",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-02 01:36:30"
+    },
+    {
+      "id": "dlq_3eb079f9540a36a4bc31958f",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775076868591",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_3b72e3e62850e44a62ba789e",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775076563805",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_6c25c4b27089f8b7df4d35aa",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775076464482",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_005b603a7fa16d5ca632b8db",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775076387864",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_1d1c5133337875af5123cc80",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775076340175",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_f32841da3166c1d493da4318",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775076219867",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_e6e3b9215a77c3e5362a7891",
+      "call_id": "checkout_backfill_ui_agent_payment_rail_1775075971501",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_01cb448c9cbf78f66a45f285",
+      "call_id": "checkout_backfill_stripe_e2e_c6f6f3c7",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_2feac6122fa7a41fce9d07b1",
+      "call_id": "checkout_backfill_pw_parity_1775075332548",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_9784ee1a5f0370728cc90fd0",
+      "call_id": "checkout_backfill_pw_parity_1775075181545",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_2b886570e8ed3dcd91776e4e",
+      "call_id": "checkout_backfill_pw_parity_1775075067007",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_b831234fb8d6170120a69b37",
+      "call_id": "checkout_backfill_pw_parity_1775074891663",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_f10c829c7c933c4315715bed",
+      "call_id": "checkout_backfill_pw_parity_1775074742361",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_4af27fd3b522e91100bf0b8f",
+      "call_id": "checkout_backfill_pw_parity_1775074411858",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_ae50fdffd0cf6724275a7948",
+      "call_id": "checkout_backfill_pw_parity_1775074132305",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_796c78dd24fd8e62296b6c67",
+      "call_id": "checkout_backfill_pw_parity_1775074092226",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_f135ad318b5a8fa4aa8b99c6",
+      "call_id": "checkout_backfill_pw_parity_1775073996168",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_e565fc72a94f0b78b2897196",
+      "call_id": "checkout_backfill_pw_parity_1775073890868",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_9749743387ecb8bfb98321bd",
+      "call_id": "checkout_backfill_pw_parity_1775073617465",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_1a7570685e84e30bd09354c1",
+      "call_id": "checkout_backfill_pw_parity_1775073341540",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_d802f59429f03481c56ce23c",
+      "call_id": "checkout_backfill_backend_gate_rewind_f32a45fc",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_a51dcd2d9075b4f46b0d9960",
+      "call_id": "checkout_backfill_backend_gate_rewind_ea0f8815",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_aebaa61c438f34366537336f",
+      "call_id": "checkout_backfill_backend_gate_rewind_a2f0334e",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_b36c1049c263da9a87127cbc",
+      "call_id": "checkout_backfill_backend_gate_rewind_82daa809",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_cd57db6c44724e2372e22db6",
+      "call_id": "checkout_backfill_backend_gate_rewind_19d7c23d",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_31bb8b9e7db12a4c204b8be1",
+      "call_id": "checkout_backfill_backend_gate_rewind_08ab14f0",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_5a7e6e725e21b5b78e50ba6f",
+      "call_id": "checkout_backfill_backend_gate_resume_f3c3debd",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_7f2c67692a9e9975e6e15137",
+      "call_id": "checkout_backfill_backend_gate_resume_dc547694",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_0f8c18877ecd6df9972ce7cd",
+      "call_id": "checkout_backfill_backend_gate_resume_bc489c7c",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_f717691e9b6a8b190a163785",
+      "call_id": "checkout_backfill_backend_gate_resume_bc13cc32",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_3677046ecb82914115e47aac",
+      "call_id": "checkout_backfill_backend_gate_resume_8f4fdc75",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_50572512cd0f059e41d5da21",
+      "call_id": "checkout_backfill_backend_gate_resume_72e83fa5",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_bada98121e452eb52ec65790",
+      "call_id": "checkout_backfill_backend_gate_prepared_f4c32a4f",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_cb9b700526c2deb6b65099f5",
+      "call_id": "checkout_backfill_backend_gate_prepared_e229ccc7",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_45638a1ad019a5a021fb04d5",
+      "call_id": "checkout_backfill_backend_gate_prepared_checkout_eb1e2a0f",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_8f5e18f460bac066870cc923",
+      "call_id": "checkout_backfill_backend_gate_prepared_checkout_e0161daf",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_f5e2b3970c23697b37f18a59",
+      "call_id": "checkout_backfill_backend_gate_prepared_checkout_a4d71dce",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_a067fe04219bb2ff86ea0af0",
+      "call_id": "checkout_backfill_backend_gate_prepared_checkout_45969879",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_6846e91cc51bf7ad862258f2",
+      "call_id": "checkout_backfill_backend_gate_prepared_checkout_3d2172ad",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_1b3ce3ff3715384fae498f08",
+      "call_id": "checkout_backfill_backend_gate_prepared_aad531f2",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_0ffda9b6e33f18e975dfc60d",
+      "call_id": "checkout_backfill_backend_gate_prepared_8a926e3f",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_304caec8b4c372f052030972",
+      "call_id": "checkout_backfill_backend_gate_prepared_59ff6b19",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_93eccfb3c114b7161b694230",
+      "call_id": "checkout_backfill_backend_gate_learn_e9f3f710",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_a81c4e253544ba1bfff649a0",
+      "call_id": "checkout_backfill_backend_gate_learn_cb45759a",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_cf6cd4fabd808a3cdee58943",
+      "call_id": "checkout_backfill_backend_gate_learn_b3b2efb4",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_d4f941427aa8951cc2f4518b",
+      "call_id": "checkout_backfill_backend_gate_learn_60e70228",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_fe2e143b905b92d60715cc7c",
+      "call_id": "checkout_backfill_backend_gate_learn_51c3b290",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_42f6792683917f73dc965626",
+      "call_id": "checkout_backfill_backend_gate_learn_068d371c",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_11a230235a83bd5fb9b1c3a2",
+      "call_id": "checkout_backfill_backend_gate_det_sse_5db532e2",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 21:38:16"
+    },
+    {
+      "id": "dlq_dd32cd0f879a5e84a2fa694c",
+      "call_id": "checkout_backfill_backend_gate_rewind_e4558e94",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 19:38:40"
+    },
+    {
+      "id": "dlq_7f04a17740401a9f175536d4",
+      "call_id": "checkout_backfill_backend_gate_resume_e12164e9",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 19:38:40"
+    },
+    {
+      "id": "dlq_033a0753b86ffd8b46f36744",
+      "call_id": "checkout_backfill_backend_gate_prepared_ef01dad8",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 19:38:40"
+    },
+    {
+      "id": "dlq_9fd7ffbd2d094eaf4a29bc2b",
+      "call_id": "checkout_backfill_backend_gate_prepared_38d0cf59",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 19:38:40"
+    },
+    {
+      "id": "dlq_0442cf007b713f800ba82158",
+      "call_id": "checkout_backfill_backend_gate_learn_541fb040",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 19:38:40"
+    },
+    {
+      "id": "dlq_0f90ab533d7623bbfb2050f7",
+      "call_id": "checkout_backfill_pw_parity_1775058790899",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 17:06:19"
+    },
+    {
+      "id": "dlq_4601da12773708c533c4ddb4",
+      "call_id": "checkout_backfill_pw_parity_1775058196647",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 17:06:19"
+    },
+    {
+      "id": "dlq_5aa519645f0d1ee655abe8cc",
+      "call_id": "checkout_backfill_pw_parity_1775058076679",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 17:06:19"
+    },
+    {
+      "id": "dlq_072b9c4b8d47c11ff327c907",
+      "call_id": "checkout_backfill_pw_parity_1775057013857",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:56:19"
+    },
+    {
+      "id": "dlq_2a8cc46f7e3c0405bd91d7b5",
+      "call_id": "checkout_backfill_pw_parity_1775056206164",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:46:15"
+    },
+    {
+      "id": "dlq_69d164bad640a257cfcbcd72",
+      "call_id": "checkout_backfill_pw_parity_1775056125616",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:46:15"
+    },
+    {
+      "id": "dlq_f3e74792f269ff5540a3889e",
+      "call_id": "checkout_backfill_pw_parity_1775056042863",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:46:15"
+    },
+    {
+      "id": "dlq_439b595c6d904184254a4ff7",
+      "call_id": "checkout_backfill_pw_parity_1775055968712",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:46:15"
+    },
+    {
+      "id": "dlq_57b66962c5004bf8b1eeb8ee",
+      "call_id": "checkout_backfill_pw_parity_1775054642565",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:16:32"
+    },
+    {
+      "id": "dlq_65d21bdb83bf588498d43f4a",
+      "call_id": "checkout_backfill_pw_parity_1775054534186",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_6249ada4e193d18633db37af",
+      "call_id": "checkout_backfill_pw_parity_1775054468646",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_e6e755abfeb1699df786f043",
+      "call_id": "checkout_backfill_pw_parity_1775054387605",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_045d599cb183e78a9be085f5",
+      "call_id": "checkout_backfill_pw_parity_1775054318220",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_2affac2a553500f207f293fd",
+      "call_id": "checkout_backfill_pw_parity_1775054261931",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_711b59cd4984d8245b1ec6b7",
+      "call_id": "checkout_backfill_pw_parity_1775054164467",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_0e670b46c387d099ebaf7518",
+      "call_id": "checkout_backfill_pw_parity_1775054064917",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_78491a4eda228b7af6e462aa",
+      "call_id": "checkout_backfill_pw_parity_1775053729126",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_8bd41aca51570696e9a7de60",
+      "call_id": "checkout_backfill_fdfbfab1-b494-4384-9499-8a74ceb4d959",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_bc573ebd00c5d33809fde438",
+      "call_id": "checkout_backfill_backend_gate_rewind_a42442a9",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_73dffabc1dca4901c10cdedf",
+      "call_id": "checkout_backfill_backend_gate_rewind_35feff52",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_38893028874fd55c126acc01",
+      "call_id": "checkout_backfill_backend_gate_prepared_5dada6cb",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_cbf9616e0d5ddf81db1a9a9f",
+      "call_id": "checkout_backfill_backend_gate_prepared_47932775",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 15:12:53"
+    },
+    {
+      "id": "dlq_ce811253cec9577de0ef30c1",
+      "call_id": "checkout_backfill_stripe_e2e_8d74c1d7",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_4e0db0beed1fcdbe3233bb34",
+      "call_id": "checkout_backfill_railfix_1775002043876",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_487f253082f2d86239187aca",
+      "call_id": "checkout_backfill_pw_parity_1775008481521",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_78a12eae8e2e1145e1f6c342",
+      "call_id": "checkout_backfill_pw_parity_1775008362708",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_e9e32a5fbe5557cfcceeb346",
+      "call_id": "checkout_backfill_pw_parity_1775007990537",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_70d2f8bc5f2c9fef96033c64",
+      "call_id": "checkout_backfill_pw_parity_1775007816094",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_8647a716e42bea609331431c",
+      "call_id": "checkout_backfill_pw_parity_1775007732997",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_dad57cbb96886d2227066b5a",
+      "call_id": "checkout_backfill_pw_parity_1775007618838",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_8b783a429ca5c9b8cbd43574",
+      "call_id": "checkout_backfill_93c2b1d8-c524-4a80-ba17-09fa5c2635d8",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 14:08:22"
+    },
+    {
+      "id": "dlq_ad7f67321df0fd283adccd79",
+      "call_id": "checkout_backfill_uxreg_bb5fc939",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 00:06:35"
+    },
+    {
+      "id": "dlq_c6729d56444ef132a1dd6c4a",
+      "call_id": "checkout_backfill_uxreg_b3f08173",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 00:06:35"
+    },
+    {
+      "id": "dlq_2ebba7a0800df88c74edb80f",
+      "call_id": "checkout_backfill_uxreg_3dd3ea7c",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 00:06:35"
+    },
+    {
+      "id": "dlq_68fa7788e7db7e9efd29ed62",
+      "call_id": "checkout_backfill_handoff_1774991912717",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 00:06:35"
+    },
+    {
+      "id": "dlq_023f4006b4740b1d10345088",
+      "call_id": "checkout_backfill_a785779b-189f-4d8a-b0a3-1c8e1dec5530",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-04-01 00:06:35"
+    },
+    {
+      "id": "dlq_56590ab13937ebf30cac12a5",
+      "call_id": "checkout_backfill_kelly_checkout_1d1bdb72",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-03-31 21:02:29"
+    },
+    {
+      "id": "dlq_7acfe953dfc738e4758c1df7",
+      "call_id": "checkout_backfill_landing_parity_969b76e6",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-03-31 20:19:32"
+    },
+    {
+      "id": "dlq_abf6a20b108c589a96ac042f",
+      "call_id": "checkout_backfill_landing_parity_06b352b8",
+      "function_name": "checkout_backfill_reconciliation",
+      "error_message": "legacy_stuck_checkout_prepared_session_recovered",
+      "created_at": "2026-03-31 20:19:32"
+    }
+  ]
+}

@@ -29,6 +29,7 @@ describe('product-summary-service', () => {
     });
     expect(out.tiles.key_actives.reason_unavailable).toBe('not_applicable_cosmetic_actives');
     expect(out.tiles.function.reason_unavailable).toBe('not_applicable_cosmetic_function');
+    expect(out.tiles.skin_type.reason_unavailable).toBe('not_applicable_skin_type_for_food');
     expect(out.tiles.formulation.status).toBe('available');
     expect(String(out.tiles.formulation.value)).toMatch(/liquid/i);
   });
@@ -60,12 +61,31 @@ describe('product-summary-service', () => {
     expect(result.verdict.side_effects.summary).toBe('Not assessed in this scan.');
   });
 
+  test('food route uses route-aware missing_more copy', () => {
+    const result = buildResultSummary({
+      scanSummary: buildScanSummary({
+        product: { ingredients_text: 'water, sugar, red 40' },
+        categoryRoute: 'food'
+      }),
+      product: { ingredients_text: 'water, sugar, red 40' },
+      hasProfileContext: false,
+      routineConflicts: [],
+      categoryRoute: 'food',
+      reasoningEnabled: false
+    });
+    expect(result.missing_more.join(' ')).toMatch(/food|supplement|additive|dye|alternatives/i);
+    expect(result.missing_more.join(' ')).not.toMatch(/pediatric profile/i);
+  });
+
   test('builds semantic contract by route', () => {
     const cosmetic = buildSemanticContract('cosmetic');
     const food = buildSemanticContract('food');
     expect(cosmetic.verdict_framing).toBe('cosmetic');
     expect(cosmetic.valid_fields).toContain('tiles.key_actives');
+    expect(cosmetic.valid_fields).toContain('verdict.alternatives');
     expect(food.verdict_framing).toBe('catalog_context');
+    expect(food.valid_fields).toContain('verdict.alternatives.footer');
+    expect(food.valid_fields).not.toContain('verdict.alternatives');
     expect(food.forbidden_vocab).toContain('tone_evening');
   });
 
@@ -182,6 +202,51 @@ describe('product-summary-service', () => {
     expect(out.reasoning.status).toBe('deferred');
   });
 
+  test('enforces confidence gates across verdict field families', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'Water, Niacinamide' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'Water, Niacinamide' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    const out = applyReasoningPatch(base, {
+      verdict: {
+        good_for_me: {
+          summary: 'low confidence summary',
+          summary_confidence: 0.1,
+          detail: 'low confidence detail',
+          detail_confidence: 0.1
+        },
+        harmful: {
+          flags: ['speculative flag'],
+          flags_confidence: 0.1,
+          summary: 'speculative harmful summary',
+          summary_confidence: 0.1
+        },
+        children_safe: {
+          summary: 'speculative children guidance',
+          summary_confidence: 0.1
+        },
+        side_effects: {
+          summary: 'speculative side effects',
+          summary_confidence: 0.1
+        },
+        alternatives: {
+          candidates: ['speculative alternative'],
+          candidates_confidence: 0.1
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.good_for_me.reason_unavailable).toBe('reasoning_low_confidence');
+    expect(out.verdict.harmful.reason_unavailable).toBe('reasoning_low_confidence');
+    expect(out.verdict.children_safe.reason_unavailable).toBe('reasoning_low_confidence');
+    expect(out.verdict.side_effects.reason_unavailable).toBe('reasoning_low_confidence');
+    expect(out.verdict.alternatives.reason_unavailable).toBe('reasoning_low_confidence');
+    expect(out.reasoning.status).toBe('deferred');
+  });
+
   test('rejects route-invalid reasoning field updates with unsupported_for_route and keeps deterministic baseline', () => {
     const base = buildResultSummary({
       scanSummary: buildScanSummary({ product: { ingredients_text: 'water, sugar, niacinamide' }, categoryRoute: 'food' }),
@@ -205,6 +270,86 @@ describe('product-summary-service', () => {
     expect(out.verdict.good_for_me.status).toBe('unsupported_for_route');
     expect(out.verdict.good_for_me.reason_unavailable).toBe('unsupported_for_route');
     expect(out.verdict.good_for_me.summary).toBe(before);
+  });
+
+  test('applies reasoning alternatives on cosmetic route when confidence and evidence pass', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'water, butylene glycol' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'water, butylene glycol' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    const out = applyReasoningPatch(base, {
+      reasoning_model: 'test-model',
+      reasoning_version: 'v1',
+      reasoning_claim_provenance: {
+        'verdict.alternatives.candidates': [
+          { source: 'model_reasoning:direct', doc_id_ref: 'model:1', evidence_snippet_key: 'alternatives' }
+        ]
+      },
+      verdict: {
+        alternatives: {
+          candidates: ['Fragrance-free ceramide moisturizer'],
+          candidates_confidence: 0.9
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.alternatives.source).toBe('reasoning');
+    expect(out.verdict.alternatives.status).toBe('available');
+    expect(out.verdict.alternatives.candidates).toContain('Fragrance-free ceramide moisturizer');
+  });
+
+  test('defers reasoning alternatives on cosmetic route when evidence is missing', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'water, butylene glycol' }, categoryRoute: 'cosmetic' }),
+      product: { ingredients_text: 'water, butylene glycol' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'cosmetic',
+      reasoningEnabled: false
+    });
+    const out = applyReasoningPatch(base, {
+      reasoning_model: 'test-model',
+      reasoning_version: 'v1',
+      verdict: {
+        alternatives: {
+          candidates: ['Fragrance-free ceramide moisturizer'],
+          candidates_confidence: 0.9
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.alternatives.reason_unavailable).toBe('reasoning_insufficient_evidence');
+    expect(out.verdict.alternatives.source).not.toBe('reasoning');
+  });
+
+  test('rejects reasoning alternatives on food route even when confidence and evidence are present', () => {
+    const base = buildResultSummary({
+      scanSummary: buildScanSummary({ product: { ingredients_text: 'water, sugar' }, categoryRoute: 'food' }),
+      product: { ingredients_text: 'water, sugar' },
+      hasProfileContext: true,
+      routineConflicts: [],
+      categoryRoute: 'food',
+      reasoningEnabled: false
+    });
+    const out = applyReasoningPatch(base, {
+      reasoning_model: 'test-model',
+      reasoning_version: 'v1',
+      reasoning_claim_provenance: {
+        'verdict.alternatives.candidates': [
+          { source: 'model_reasoning:direct', doc_id_ref: 'model:1', evidence_snippet_key: 'alternatives' }
+        ]
+      },
+      verdict: {
+        alternatives: {
+          candidates: ['Snack replacement'],
+          candidates_confidence: 0.95
+        }
+      }
+    }, { enabled: true });
+    expect(out.verdict.alternatives.status).toBe('unsupported_for_route');
+    expect(out.verdict.alternatives.reason_unavailable).toBe('unsupported_for_route');
   });
 
   test('ignores reasoning patch built against stale semantic contract version', () => {

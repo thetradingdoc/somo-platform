@@ -98,10 +98,32 @@ async function pineconeQuery(vector, opts = {}) {
   }));
 }
 
+async function pineconeDescribeIndexStats(opts = {}) {
+  const base = pineconeBaseUrl();
+  const headers = pineconeHeaders();
+  if (!base || !headers) throw new Error('Pinecone not configured');
+  const ns = opts.namespace != null ? String(opts.namespace) : pineconeNamespace();
+  const body = {
+    ...(ns ? { namespace: ns } : {}),
+    ...(opts.filter && typeof opts.filter === 'object' ? { filter: opts.filter } : {}),
+  };
+  const res = await fetch(`${base}/describe_index_stats`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Pinecone describe_index_stats ${res.status}: ${t.slice(0, 300)}`);
+  }
+  return await res.json();
+}
+
 module.exports = {
   pineconeBaseUrl,
   isPineconeConfigured,
   pineconeUpsert,
   pineconeQuery,
+  pineconeDescribeIndexStats,
   pineconeNamespace,
 };

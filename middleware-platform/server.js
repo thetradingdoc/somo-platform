@@ -31,7 +31,7 @@ if (isProd) {
     process.env.REQUIRE_TRIAGE_FOR_VOICE === '1' || process.env.REQUIRE_TRIAGE_FOR_VOICE === 'true';
   if (!rtfv) {
     console.warn(
-      '⚠️  PRODUCTION: REQUIRE_TRIAGE_FOR_VOICE is not enabled. Voice /voice/... routes may skip DB triage when session_id/call_id is omitted. Set REQUIRE_TRIAGE_FOR_VOICE=1 (see docs/middleware-platform/VOICE_TRIAGE_PARITY.md).'
+      '⚠️  PRODUCTION: REQUIRE_TRIAGE_FOR_VOICE is not enabled. Voice /voice/... routes may skip DB triage when session_id/call_id is omitted. Set REQUIRE_TRIAGE_FOR_VOICE=1 (see docs/middleware-platform/README.md#voice-triage-parity).'
     );
   }
 }
@@ -633,8 +633,8 @@ function legacyAppointmentsApiDisabled(res) {
       available_slots: 'GET /api/patient/booking/available-slots or POST /voice/appointments/available-slots',
       reschedule: 'PUT /api/patient/appointments/:id/reschedule (patient session) or POST /voice/appointments/reschedule'
     },
-    documentation: 'docs/architecture/BOOKING_CHECKOUT_ARCHITECTURE_ANALYSIS.md §6.5',
-    runbook: 'docs/middleware-platform/VOICE_TRIAGE_PARITY.md',
+    documentation: 'docs/architecture/README.md#commerce-agentic-checkout-file-map (booking/checkout ownership)',
+    runbook: 'docs/middleware-platform/README.md#voice-triage-parity',
     hint: 'Set LEGACY_APPOINTMENTS_API_DISABLED=0 only for a short migration window.'
   });
   return true;
@@ -15191,6 +15191,43 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
   const meta = req.body?.meta || {};
   let session_id = (req.body?.session_id || state.session_id || '').toString().trim() || null;
   if (!session_id) session_id = require('uuid').v4();
+  const preRow = db?.getOrchestrateSessionBySessionId?.(session_id) || null;
+  const preThread = Array.isArray(preRow?.flow_state?.short_term_thread)
+    ? preRow.flow_state.short_term_thread
+    : [];
+  const incomingTurnSeq = Number(req.body?.turn_seq || 0);
+  const explicitScanMode = String(req.body?.scan_chat_mode || '').trim().toLowerCase() === 'true';
+  let plannerDecision = null;
+  let scanChatModeActive = false;
+  if (req.path === '/api/public/landing-assistant/turn') {
+    try {
+      const { buildLandingRouteIntentPlan } = require('./services/landing-route-intent-planner');
+      plannerDecision = buildLandingRouteIntentPlan({
+        message: trimmedMessage,
+        shortTermThread: preThread,
+        explicitRoute: req.body?.category_route || req.body?.route || ''
+      });
+      const routeMetric = String(plannerDecision?.route_context?.route || 'unknown').trim().toLowerCase() || 'unknown';
+      const intentMetric = String(plannerDecision?.intent_context?.intent || 'general_question').trim().toLowerCase() || 'general_question';
+      const policyMetric = String(plannerDecision?.policy_pack || 'default_policy').trim().toLowerCase() || 'default_policy';
+      Metrics.increment(`planner.route.${routeMetric}`, 1);
+      Metrics.increment(`planner.intent.${intentMetric}`, 1);
+      Metrics.increment(`planner.policy_pack.${policyMetric}`, 1);
+      scanChatModeActive = !!plannerDecision?.flags?.scan_chat_mode;
+    } catch (_) {}
+    if (explicitScanMode) scanChatModeActive = true;
+  }
+  try {
+    const existingScanMode = String(KellyToolExecutor._getSessionMeta(session_id, 'scan_chat_mode') || '')
+      .trim()
+      .toLowerCase();
+    if (existingScanMode === '1' || existingScanMode === 'true') {
+      scanChatModeActive = true;
+    }
+    if (scanChatModeActive) {
+      KellyToolExecutor._setSessionMeta(session_id, 'scan_chat_mode', '1');
+    }
+  } catch (_) {}
   if (req.path === '/api/public/landing-assistant/turn') {
     try {
       const existingTriage = db.getTriageSession ? db.getTriageSession(session_id) : null;
@@ -15208,7 +15245,6 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
       console.warn('[landing-assistant] triage bootstrap skipped:', e.message);
     }
   }
-  const incomingTurnSeq = Number(req.body?.turn_seq || 0);
   if (Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0) {
     const latestSeq = Number(KellyToolExecutor._getSessionMeta(session_id, 'web_voice_latest_turn_seq') || 0);
     const gate = shouldSkipLandingTurnSeq(incomingTurnSeq, latestSeq);
@@ -15224,6 +15260,29 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
           request_id: req.id
         }
       };
+    }
+  }
+
+  if (req.path === '/api/public/landing-assistant/turn') {
+    try {
+      const { appendLandingContextEvent } = require('./services/landing-context-ingest-service');
+      appendLandingContextEvent({
+        sessionId: session_id,
+        eventType: 'chat_turn_input',
+        text: trimmedMessage,
+        actor: 'user',
+        source: 'turn_api',
+        metadata: {
+          request_id: req.id,
+          path: req.path
+        },
+        idempotencyKey:
+          String(req.body?.idempotency_key || req.get('x-idempotency-key') || '').trim() ||
+          (Number.isFinite(incomingTurnSeq) && incomingTurnSeq > 0 ? `turn_seq:${incomingTurnSeq}` : `req:${req.id}`),
+        expectedContextVersion: req.body?.context_version
+      });
+    } catch (e) {
+      console.warn('[landing-assistant] context-ingest (turn) skipped:', e.message);
     }
   }
 
@@ -15302,7 +15361,7 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
         ? 'routine_intake'
         : '';
     const flow = rawFlow || flowFromFlag;
-    if (KellyOrchestratorPhase.kellyFlowActivatesRoutineIntake(flow)) {
+    if (KellyOrchestratorPhase.kellyFlowActivatesRoutineIntake(flow) && !scanChatModeActive) {
       KellyToolExecutor._setSessionMeta(session_id, 'routine_intake_active', '1');
     }
   } catch (e) {
@@ -15334,7 +15393,9 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     patientName: null,
     patientEmail: email,
     portalSessionId,
-    preferredLanguage: effectivePreferredLanguage || null
+    preferredLanguage: effectivePreferredLanguage || null,
+    scanChatMode: scanChatModeActive,
+    plannerDecision
   });
   if (req.path === '/api/public/landing-assistant/turn') {
     result.reply = await translateReplyIfNeeded(result.reply, effectivePreferredLanguage);
@@ -15426,6 +15487,19 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     semanticContract,
     preRoute: preRouteTurn
   });
+  if (plannerDecision && typeof plannerDecision === 'object') {
+    flowStateOut.turn_planner = {
+      ...plannerDecision,
+      planned_at: nowIso
+    };
+    shortThread.push({
+      type: 'turn_planner_decision',
+      at: nowIso,
+      route: plannerDecision?.route_context?.route || 'unknown',
+      intent: plannerDecision?.intent_context?.intent || 'general_question',
+      policy_pack: plannerDecision?.policy_pack || 'default_policy'
+    });
+  }
   flowStateOut.short_term_thread = shortThread.slice(-20);
   if (isLikelyVoiceStyle) {
     const replyText = String(result.reply || '');
@@ -17187,6 +17261,9 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
     const { fetchBeautyFactsByBarcode } = require('./services/open-beauty-facts-service');
     const db = require('./database');
     const barcode = String(req.params?.barcode || '').trim();
+    try {
+      console.log(`[beautyfacts] lookup barcode=${barcode} request_id=${req.id || ''}`);
+    } catch (_) {}
     if (String(req.query?.simulate || '').trim() === 'timeout') {
       return res.status(502).json({
         success: false,
@@ -17381,6 +17458,9 @@ app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
     const { fetchFoodFactsByBarcode, ingredientsTextFromTags } = require('./services/open-food-facts-service');
     const db = require('./database');
     const barcode = String(req.params?.barcode || '').trim();
+    try {
+      console.log(`[foodfacts] lookup barcode=${barcode} request_id=${req.id || ''}`);
+    } catch (_) {}
     if (String(req.query?.simulate || '').trim() === 'timeout') {
       return res.status(502).json({
         success: false,
@@ -17652,35 +17732,39 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
     const rawPd = req.body?.product_data;
     const productData =
       rawPd != null && typeof rawPd === 'object' && !Array.isArray(rawPd) ? rawPd : null;
-    const row = db?.getOrchestrateSessionBySessionId?.(sessionId) || null;
-    const currentFlow = row?.flow_state && typeof row.flow_state === 'object' ? row.flow_state : {};
-    const thread = Array.isArray(currentFlow.short_term_thread) ? currentFlow.short_term_thread : [];
-    const nextThread = [
-      ...thread,
-      {
-        type,
-        text,
-        file_name: req.body?.file_name || null,
-        mime_type: req.body?.mime_type || null,
-        product_data: productData,
-        actor: 'user',
-        created_at: new Date().toISOString()
-      }
-    ].slice(-60);
-    if (db?.upsertOrchestrateSession) {
-      db.upsertOrchestrateSession({
-        session_id: sessionId,
-        channel: row?.channel || 'chat',
-        patient_id: row?.patient_id || null,
-        portal_session_id: row?.portal_session_id || null,
-        clinic_id: row?.clinic_id || null,
-        conversation_history: Array.isArray(row?.conversation_history) ? row.conversation_history : [],
-        flow_state: { ...currentFlow, short_term_thread: nextThread },
-        turn_count: Number(row?.turn_count || 0),
-        preferred_language: row?.preferred_language || 'en'
+    const { appendLandingContextEvent } = require('./services/landing-context-ingest-service');
+    const write = appendLandingContextEvent({
+      sessionId,
+      eventType: type,
+      text,
+      fileName: req.body?.file_name || null,
+      mimeType: req.body?.mime_type || null,
+      productData,
+      actor: 'user',
+      source: String(req.body?.source || 'thread_event').trim() || 'thread_event',
+      metadata: {
+        request_id: req.id,
+        path: req.path
+      },
+      idempotencyKey: String(req.body?.idempotency_key || req.get('x-idempotency-key') || '').trim(),
+      expectedContextVersion: req.body?.context_version
+    });
+    if (write?.stale_reject) {
+      return res.status(409).json({
+        success: false,
+        error: 'stale_context_version',
+        context_version: write.context_version,
+        request_id: req.id
       });
     }
     if (type === 'barcode_product_context') {
+      try {
+        const bc =
+          productData && (productData.barcode || productData.code || productData.normalized?.barcode);
+        console.log(
+          `[landing-assistant] thread-event barcode_product_context session=${String(sessionId).slice(0, 12)}… barcode=${bc || '(none)'}`
+        );
+      } catch (_) {}
       try {
         const SnapshotService = require('./services/session-result-snapshot-service');
         SnapshotService.buildSessionResultSnapshot({ sessionId, source: 'barcode_scan_thread_event' });
@@ -17688,7 +17772,13 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
         console.warn('[landing-assistant] thread-event snapshot:', snapErr?.message || snapErr);
       }
     }
-    return res.json({ success: true, session_id: sessionId, short_term_thread_count: nextThread.length });
+    return res.json({
+      success: true,
+      session_id: sessionId,
+      duplicate: !!write?.duplicate,
+      context_version: write?.context_version,
+      short_term_thread_count: write?.short_term_thread_count
+    });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message, request_id: req.id });
   }
@@ -17696,11 +17786,11 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
 
 app.post('/api/public/landing-assistant/voice-metrics/inc', apiLimiter, express.json(), async (req, res) => {
   try {
+    const { isAllowedLandingVoiceMetricName } = require('./services/landing-voice-metrics-contract');
     const sessionId = String(req.body?.session_id || '').trim();
     const metricName = String(req.body?.metric_name || '').trim();
     const value = Math.max(1, Number(req.body?.value || 1));
-    const allowed = new Set(['voice.interruption', 'voice.stt_fatal', 'voice.timeline']);
-    if (!sessionId || !metricName || !allowed.has(metricName)) {
+    if (!sessionId || !metricName || !isAllowedLandingVoiceMetricName(metricName)) {
       return res.status(400).json({ success: false, error: 'Invalid session_id or metric_name', request_id: req.id });
     }
     if (metricName === 'voice.timeline') {

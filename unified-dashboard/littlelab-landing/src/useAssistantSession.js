@@ -224,6 +224,16 @@ function normalizeBarcodeInput(value) {
   return String(value || '').replace(/[^\d]/g, '');
 }
 
+function sanitizeCatalogIngredientText(raw) {
+  return String(raw || '')
+    .replace(
+      /<span[^>]*class=(?:"|')allergen(?:"|')[^>]*>([^<]*)<\/span>/gi,
+      (_, name) => String(name || '').toUpperCase()
+    )
+    .replace(/<[^>]+>/g, '')
+    .trim();
+}
+
 /**
  * Shared assistant state for voice page + chat page (same session_id and message list).
  */
@@ -272,6 +282,10 @@ export function useAssistantSession() {
   }, []);
 
   const sessionIdRef = useRef(null);
+  const resultSnapshotRef = useRef(null);
+  useEffect(() => {
+    resultSnapshotRef.current = resultSnapshot;
+  }, [resultSnapshot]);
   const abortRef = useRef(null);
   const voiceKickoffAbortRef = useRef(null);
   const voiceControllerRef = useRef(null);
@@ -491,7 +505,7 @@ export function useAssistantSession() {
       if (scanResult?.product && scanResult?.barcode && lastPinnedBarcodeRef.current !== scanResult.barcode) {
         const sid = sessionIdRef.current || getOrCreateLandingSessionId();
         sessionIdRef.current = sid;
-        const pinText = buildPinnedContextText(scanResult);
+        const pinText = buildPinnedContextText(scanResult, resultSnapshotRef.current);
         await publishLandingThreadEvent({
           apiBase,
           sessionId: sid,
@@ -527,7 +541,7 @@ export function useAssistantSession() {
             categoryRouteRuleId: routeFallback ? null : (facts?.category_route_rule_id || null),
             categoryRouteFallback: routeFallback ? null : (facts?.category_route_fallback || null),
             scanSummary: facts?.scan_summary || null,
-            ingredientFlags: deriveIngredientFlags(p),
+            ingredientFlags: deriveIngredientFlags(p, categoryRoute),
             sparseData: isSparseProductData(p)
           };
           if (categoryRoute === 'unknown') {
@@ -542,7 +556,12 @@ export function useAssistantSession() {
           const imgUrlChat = String(pickFirstProductImageUrl(p) || '').trim();
           const productLine = `[Barcode Scan] ${p.product_name || 'Product found'} (${p.barcode || cleanVoice})`;
           const imageLine = imgUrlChat ? `Product image: ${imgUrlChat}` : '';
-          const ingredientLine = p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '';
+          const cleanIngredients = sanitizeCatalogIngredientText(p.ingredients_text);
+          const productForThread = {
+            ...p,
+            ingredients_text: cleanIngredients || p.ingredients_text || null
+          };
+          const ingredientLine = cleanIngredients ? `Ingredients: ${cleanIngredients.slice(0, 900)}` : '';
           const labelsLine = Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '';
           const allergensLine =
             Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : '';
@@ -554,7 +573,7 @@ export function useAssistantSession() {
             sessionId: sid,
             eventType: 'barcode_product_context',
             text: payloadText,
-            productData: serializeObfProductForThread(p, facts?.data_source || null, {
+            productData: serializeObfProductForThread(productForThread, facts?.data_source || null, {
               categoryRoute: nextScan.categoryRoute,
               categoryRouteSource: nextScan.categoryRouteSource,
               categoryRouteConfidence: nextScan.categoryRouteConfidence,
@@ -595,6 +614,12 @@ export function useAssistantSession() {
       const ac = new AbortController();
       abortRef.current = ac;
       setSending(true);
+      let sendingReleased = false;
+      const releaseSending = () => {
+        if (sendingReleased) return;
+        sendingReleased = true;
+        setSending(false);
+      };
       const holdTimer = window.setTimeout(async () => {
         if (!voiceSessionActiveRef.current || !ac || ac.signal.aborted) return;
         const holdText = QUICK_HOLD_BY_LANG[turnLanguage] || QUICK_HOLD_BY_LANG.en;
@@ -614,7 +639,12 @@ export function useAssistantSession() {
           stt_final_at: Number(sttFinalAt) || null,
           turn_request_sent_at: Date.now()
         };
-        const turnMessage = buildFollowupMessageWithPinnedContext(t, scanForTurn, pinReadyForTurn);
+        const turnMessage = buildFollowupMessageWithPinnedContext(
+          t,
+          scanForTurn,
+          pinReadyForTurn,
+          resultSnapshotRef.current
+        );
         const data = await sendLandingAssistantTurn({
           apiBase,
           message: turnMessage,
@@ -637,6 +667,9 @@ export function useAssistantSession() {
         }
         const reply = (data.reply && String(data.reply).trim()) || copyForLang(turnLanguage).genericFallback;
         pushEntityEvents(extractEntityEvents(reply));
+        // Unlock chat composer as soon as turn response arrives;
+        // keep TTS running independently so users can continue typing.
+        releaseSending();
         if (data?.session_result_snapshot) {
           setResultSnapshot(data.session_result_snapshot);
         } else if (data?.next_step === 'skincare_report') {
@@ -719,6 +752,7 @@ export function useAssistantSession() {
         return data;
       } catch (e) {
         if (e.name === 'AbortError') return;
+        releaseSending();
         const msg =
           e.message ||
           'I am having trouble connecting right now. Please try again in a moment.';
@@ -727,7 +761,7 @@ export function useAssistantSession() {
         return null;
       } finally {
         window.clearTimeout(holdTimer);
-        setSending(false);
+        releaseSending();
         abortRef.current = null;
         await resumeVoiceListeningIfNeeded();
       }
@@ -770,6 +804,7 @@ export function useAssistantSession() {
           barcode: clean,
           source: 'ocr_label_photo'
         };
+        const categoryRoute = deriveCategoryRoute(product.categories_tags || []);
         setScanResult({
           barcode: clean,
           product,
@@ -777,13 +812,13 @@ export function useAssistantSession() {
           resolvedCatalog: null,
           quality: buildScanQuality(product),
           recoveryRequired: false,
-          categoryRoute: deriveCategoryRoute(product.categories_tags || []),
+          categoryRoute,
           categoryRouteSource: 'legacy_client_derive',
           categoryRouteConfidence: null,
           categoryRouteRuleId: null,
           categoryRouteFallback: null,
           scanSummary: null,
-          ingredientFlags: deriveIngredientFlags(product),
+          ingredientFlags: deriveIngredientFlags(product, categoryRoute),
           sparseData: isSparseProductData(product)
         });
       };
@@ -816,7 +851,7 @@ export function useAssistantSession() {
           categoryRouteRuleId: routeFallback ? null : (facts?.category_route_rule_id || null),
           categoryRouteFallback: routeFallback ? null : (facts?.category_route_fallback || null),
           scanSummary: facts?.scan_summary || null,
-          ingredientFlags: deriveIngredientFlags(p),
+          ingredientFlags: deriveIngredientFlags(p, categoryRoute),
           sparseData: isSparseProductData(p)
         };
         if (categoryRoute === 'unknown') {
@@ -830,10 +865,15 @@ export function useAssistantSession() {
         }
         setScanResult(nextScan);
         const imgUrl = String(pickFirstProductImageUrl(p) || '').trim();
+        const cleanIngredients = sanitizeCatalogIngredientText(p.ingredients_text);
+        const productForThread = {
+          ...p,
+          ingredients_text: cleanIngredients || p.ingredients_text || null
+        };
         const contextText = [
           `[Barcode Scan] ${productName} (${p.barcode || clean})`,
           imgUrl ? `Product image: ${imgUrl}` : '',
-          p.ingredients_text ? `Ingredients: ${String(p.ingredients_text).slice(0, 900)}` : '',
+          cleanIngredients ? `Ingredients: ${cleanIngredients.slice(0, 900)}` : '',
           Array.isArray(p.labels) && p.labels.length ? `Labels: ${p.labels.slice(0, 12).join(', ')}` : '',
           Array.isArray(p.allergens) && p.allergens.length ? `Allergens: ${p.allergens.slice(0, 12).join(', ')}` : '',
           `Category Route: ${nextScan.categoryRoute}`,
@@ -849,7 +889,7 @@ export function useAssistantSession() {
           sessionId: sid,
           eventType: 'barcode_product_context',
           text: contextText,
-          productData: serializeObfProductForThread(p, nextScan.dataSource, {
+          productData: serializeObfProductForThread(productForThread, nextScan.dataSource, {
             categoryRoute: nextScan.categoryRoute,
             categoryRouteSource: nextScan.categoryRouteSource,
             categoryRouteConfidence: nextScan.categoryRouteConfidence,

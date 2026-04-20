@@ -66,6 +66,10 @@ function normalizeProduct(payload = {}) {
     states_tags: toTagList(p.states_tags),
     // Upstream field; not a documented fixed enum in official API docs — pass through only, do not branch on assumed values.
     product_type: p.product_type != null && p.product_type !== '' ? String(p.product_type) : null,
+    generic_name:
+      [p.generic_name, p.generic_name_en, p.abbreviated_product_name]
+        .map((x) => (x != null ? String(x).trim() : ''))
+        .find(Boolean) || null,
     image_url: pickFirstCatalogImageUrl(p) || null,
     product_url: p.url || null
   };

@@ -26,7 +26,7 @@
   - **Hesitant:** reassuring, no pressure; FAQ-friendly.
   - **Ready-to-buy:** direct, single clear next step (ties to **conversion moments** below).
   — *First-time vs returning via `sysFirstTimeHtml` / `sysReturningHtml` + calm error string; hesitant/ready-to-buy nuance also belongs in agent prompts (see backend doc).*
-- [x] Document strings in one place (JSON or `copy/checkout-kelly.md`) so web + app stay aligned. — *Canonical: [`unified-dashboard/copy/checkout-kelly.json`](../unified-dashboard/copy/checkout-kelly.json); human notes: [`unified-dashboard/copy/checkout-kelly.md`](../unified-dashboard/copy/checkout-kelly.md); `checkout-chat.html` loads JSON when served and falls back to inlined `DEFAULT_KELLY_COPY`.*
+- [x] Document strings in one place (JSON or `copy/checkout-kelly.md`) so web + app stay aligned. — *Canonical: [`unified-dashboard/copy/checkout-kelly.json`](../unified-dashboard/copy/checkout-kelly.json); human notes: [`unified-dashboard/copy/checkout-kelly.md`](../README.md#unified-dashboard-copy-checkout-kelly); `checkout-chat.html` loads JSON when served and falls back to inlined `DEFAULT_KELLY_COPY`.*
 
 ---
 
@@ -151,7 +151,7 @@ Reference **width 375px**, ~800px scroll; **desktop** scales width, same vertica
 
 - [x] WCAG AA on amber-on-white; focus rings. — *Amber `#ffa51f` on buttons with dark text; `:focus-visible` rings on main controls in `checkout-chat.html`.*
 - [x] `aria-live` for price + messages. — *Existing `#productPrice` / `#chatLog`; RN price `accessibilityLiveRegion`.*
-- [x] **375px and 320px** smoke tests. — *Checklist: [`docs/testing/AGENTIC_CHECKOUT_A11Y_SMOKE.md`](../docs/testing/AGENTIC_CHECKOUT_A11Y_SMOKE.md).*
+- [x] **375px and 320px** smoke tests. — *Checklist: [`docs/testing/README.md#agentic-checkout-a11y-smoke`](../docs/testing/README.md#agentic-checkout-a11y-smoke).*
 - [x] `prefers-reduced-motion`. — *Web: reduce shimmer / typing / quote pulse in `checkout-chat.html`.*
 
 ---
@@ -165,7 +165,7 @@ Reference **width 375px**, ~800px scroll; **desktop** scales width, same vertica
 
 ## P9 — Design system hygiene
 
-- [x] Canonical asset paths + env vars documented. — *[`docs/architecture/experience/SKIN_CARE_TOKENS_AND_ASSETS.md`](../docs/architecture/experience/SKIN_CARE_TOKENS_AND_ASSETS.md).*
+- [x] Canonical asset paths + env vars documented. — *[`docs/architecture/README.md#experience-skin-care-tokens-and-assets`](../docs/architecture/README.md#experience-skin-care-tokens-and-assets).*
 - [x] `skin-care-tokens.css` import rule for new Skin & Care surfaces. — *Same doc + comment header in `skin-care-tokens.css`.*
 
 ---

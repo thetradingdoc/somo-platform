@@ -2,9 +2,9 @@
 
 **Last Updated:** April 13, 2026
 
-This folder holds todo indexes and active checklists. **Pending** tracking is centralized in [`pending/README.md`](./pending/README.md). **Fully completed** lists are in [`archive/`](./archive/README.md).
+This folder holds todo indexes and active checklists. **Pending** tracking is centralized in [`pending/README.md`](./pending/README.md). **Fully completed** lists are in [`archive/`](./archive/README.md#readme).
 
-**Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/meta/CANONICAL_DOC_MAP.md`](../docs/meta/CANONICAL_DOC_MAP.md).
+**Convention:** Add new operational checklists here and list them below. For overlap with architecture docs, see [`docs/meta/README.md#canonical-doc-map`](../docs/meta/README.md#canonical-doc-map).
 
 ## Pending
 
@@ -25,12 +25,12 @@ See [`pending/README.md`](./pending/README.md) for the current pending backlog l
 
 ## Archived (completed history)
 
-See [`archive/README.md`](./archive/README.md) — includes triage phased roadmap (all complete), agentic checkout **frontend** spec (all complete), orchestration completed checklist extract, and the completed landing-consolidation set.
+See [`archive/README.md`](./archive/README.md#readme) — includes triage phased roadmap (all complete), agentic checkout **frontend** spec (all complete), orchestration completed checklist extract, and the completed landing-consolidation set.
 
 ## Related in `docs/`
 
-- [PATIENT_ARCHITECTURE.md](../docs/architecture/patients/PATIENT_ARCHITECTURE.md)
-- [VOICE_AGENT_TODO_AND_STATUS.md](../docs/architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md)
-- [MASTER_TODO_FULL.md](../docs/development/MASTER_TODO_FULL.md)
+- [PATIENT_ARCHITECTURE.md](../docs/architecture/README.md#patients-patient-architecture)
+- [VOICE_AGENT_TODO_AND_STATUS.md](../docs/architecture/README.md#voice-agent-voice-agent-todo-and-status)
+- [MASTER_TODO_FULL.md](../docs/development/README.md#master-todo-full)
 
 Add new todo documents to this folder and update the **Active** table above.

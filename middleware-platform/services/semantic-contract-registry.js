@@ -11,8 +11,7 @@ const BASE = {
     'verdict.good_for_me',
     'verdict.harmful',
     'verdict.children_safe',
-    'verdict.side_effects',
-    'verdict.alternatives'
+    'verdict.side_effects'
   ],
   forbidden_vocab: [],
   verdict_framing: 'catalog_context'
@@ -23,18 +22,18 @@ const REGISTRY = {
     ...BASE,
     route: 'cosmetic',
     verdict_framing: 'cosmetic',
-    valid_fields: [...BASE.valid_fields, 'tiles.key_actives', 'tiles.function', 'tiles.formulation']
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives', 'tiles.key_actives', 'tiles.function', 'tiles.formulation']
   },
   hygiene: {
     ...BASE,
     route: 'hygiene',
     verdict_framing: 'cosmetic',
-    valid_fields: [...BASE.valid_fields, 'tiles.key_actives', 'tiles.function', 'tiles.formulation']
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives', 'tiles.key_actives', 'tiles.function', 'tiles.formulation']
   },
   food: {
     ...BASE,
     route: 'food',
-    valid_fields: [...BASE.valid_fields, 'tiles.formulation'],
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives.footer', 'tiles.formulation'],
     forbidden_vocab: [
       'tone_evening',
       'anti_aging',
@@ -48,7 +47,7 @@ const REGISTRY = {
   supplement: {
     ...BASE,
     route: 'supplement',
-    valid_fields: [...BASE.valid_fields, 'tiles.formulation'],
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives.footer', 'tiles.formulation'],
     forbidden_vocab: [
       'tone_evening',
       'anti_aging',
@@ -62,7 +61,7 @@ const REGISTRY = {
   meds: {
     ...BASE,
     route: 'meds',
-    valid_fields: [...BASE.valid_fields, 'tiles.formulation'],
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives.footer', 'tiles.formulation'],
     forbidden_vocab: [
       'tone_evening',
       'anti_aging',
@@ -76,7 +75,7 @@ const REGISTRY = {
   non_food: {
     ...BASE,
     route: 'non_food',
-    valid_fields: [...BASE.valid_fields, 'tiles.formulation'],
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives.footer', 'tiles.formulation'],
     forbidden_vocab: [
       'tone_evening',
       'anti_aging',
@@ -90,7 +89,7 @@ const REGISTRY = {
   unknown: {
     ...BASE,
     route: 'unknown',
-    valid_fields: [...BASE.valid_fields, 'tiles.formulation'],
+    valid_fields: [...BASE.valid_fields, 'verdict.alternatives.footer', 'tiles.formulation'],
     forbidden_vocab: ['tone_evening', 'anti_aging', 'barrier_support', 'blemish_control', 'oil_balance']
   }
 };
