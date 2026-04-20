@@ -89,33 +89,38 @@ async function runOne(tc) {
     reasoningEnabled: false
   });
   process.env.RESULT_SUMMARY_REASONING_MODEL_V1 = 'true';
-  ReasoningService.__setModelCallerForTests(async () => ({
-    model: 'eval-model',
-    version: 'eval-model-v1',
-    rawText: JSON.stringify({
-      verdict: {
-        good_for_me: { summary: 'Eval summary', detail: 'Eval detail', summary_confidence: 0.9, detail_confidence: 0.9 },
-        harmful: {
-          flags: tc.route === 'cosmetic' ? ['Fragrance allergens present'] : [],
-          top_evidence: tc.route === 'cosmetic' ? 'Phenoxyethanol and fragrance detected.' : 'No elevated food risk beyond deterministic.',
-          summary: tc.route === 'cosmetic' ? 'Potential irritation risk.' : 'No immediate high-risk signal.',
-          flags_confidence: 0.9,
-          top_evidence_confidence: 0.9,
-          summary_confidence: 0.9
+  const useLiveModel = process.env.REASONING_HARNESS_LIVE_MODEL === '1' || process.env.REASONING_HARNESS_LIVE_MODEL === 'true';
+  if (!useLiveModel) {
+    ReasoningService.__setModelCallerForTests(async () => ({
+      model: 'eval-model',
+      version: 'eval-model-v1',
+      rawText: JSON.stringify({
+        verdict: {
+          good_for_me: { summary: 'Eval summary', detail: 'Eval detail', summary_confidence: 0.9, detail_confidence: 0.9 },
+          harmful: {
+            flags: tc.route === 'cosmetic' ? ['Fragrance allergens present'] : [],
+            top_evidence: tc.route === 'cosmetic' ? 'Phenoxyethanol and fragrance detected.' : 'No elevated food risk beyond deterministic.',
+            summary: tc.route === 'cosmetic' ? 'Potential irritation risk.' : 'No immediate high-risk signal.',
+            flags_confidence: 0.9,
+            top_evidence_confidence: 0.9,
+            summary_confidence: 0.9
+          },
+          children_safe: { summary: 'Child guidance', summary_confidence: 0.9 },
+          side_effects: { summary: 'Side effects eval', summary_confidence: 0.9 },
+          alternatives: {
+            candidates: tc.route === 'cosmetic' ? ['Fragrance-free ceramide moisturizer'] : ['Should be suppressed'],
+            footer: 'Eval alternatives',
+            candidates_confidence: 0.9
+          }
         },
-        children_safe: { summary: 'Child guidance', summary_confidence: 0.9 },
-        side_effects: { summary: 'Side effects eval', summary_confidence: 0.9 },
-        alternatives: {
-          candidates: tc.route === 'cosmetic' ? ['Fragrance-free ceramide moisturizer'] : ['Should be suppressed'],
-          footer: 'Eval alternatives',
-          candidates_confidence: 0.9
-        }
-      },
-      reasoning_confidence_global: 0.9,
-      reasoning_evidence_summary: 'Eval evidence summary'
-    }),
-    usage: { input_tokens: 120, output_tokens: 80 }
-  }));
+        reasoning_confidence_global: 0.9,
+        reasoning_evidence_summary: 'Eval evidence summary'
+      }),
+      usage: { input_tokens: 120, output_tokens: 80 }
+    }));
+  } else {
+    ReasoningService.__setModelCallerForTests(null);
+  }
   const patch = await ReasoningService.buildReasoningPatch({
     snapshot: {
       scanned_product: { ...tc.product, category_route: tc.route },
@@ -155,6 +160,7 @@ async function main() {
     success: true,
     generated_at: new Date().toISOString(),
     elapsed_ms: Date.now() - started,
+    harness_mode: (process.env.REASONING_HARNESS_LIVE_MODEL === '1' || process.env.REASONING_HARNESS_LIVE_MODEL === 'true') ? 'live_model' : 'stub_model',
     case_count: rows.length,
     aggregate,
     cases: rows

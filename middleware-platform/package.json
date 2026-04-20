@@ -124,6 +124,7 @@
         "ops:reasoning:jobs:inspect": "node ./scripts/reasoning-jobs-inspect.cjs",
         "ops:reasoning:jobs:cancel": "node ./scripts/reasoning-jobs-cancel.cjs",
         "ops:reasoning:jobs:replay": "node ./scripts/reasoning-jobs-replay.cjs",
+        "ops:appointments:slot-duplicates:detect": "node ./scripts/detect-appointment-slot-duplicates.cjs",
         "verify:obf:rate-limit": "node ./scripts/verify-beautyfacts-rate-limit.cjs",
         "verify:obf:delta-outage-live-fallback": "node ./scripts/verify-delta-outage-live-fallback.cjs",
         "verify:obf:delta-freshness-sla": "node ./scripts/verify-delta-freshness-sla.cjs",
