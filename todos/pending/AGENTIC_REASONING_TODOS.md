@@ -442,3 +442,26 @@ Source of truth checklist to close the remaining live-system signoff gap.
   - [x] Link each alert to reasoning-specific runbook anchors in consolidated docs. (Gate enforces reasoning runbook anchor mapping.)
   - [x] **Done when:** on-call gets actionable alerts before patient-facing quality regresses.
 
+### Batch 6: production edge routing + deploy confidence
+
+- [x] **Edge Routing Fix for `myskinandcare.com`**
+  - [x] Add deployable edge routing configs in-repo (`infra/edge-routing/cloudflare/myskin-api-proxy/*`, `infra/edge-routing/nginx/myskinandcare.com.conf`).
+  - [x] Switch release expectation to split-domain mode (`myskinandcare.com` UI + `api.myskinandcare.com` API) while same-domain proxy remains optional.
+  - [x] Confirm `https://api.myskinandcare.com/health` returns JSON from Cloud Run-mapped API origin.
+  - [x] **Done when:** production traffic uses stable split-domain routing and same-domain proxy checks are skipped by policy.
+
+- [x] **Frontend API Base Hardening**
+  - [x] Set production landing API base to target API subdomain (`REACT_APP_API_BASE=https://api.myskinandcare.com`).
+  - [x] Rebuild/redeploy landing frontend with updated env while forcing prod override in deploy command (prevents `.env.local` localhost override).
+  - [x] **Done when:** prod bundle points to intended backend and chat turn requests reach middleware.
+
+- [x] **Automated Prod Routing Smoke**
+  - [x] Add script `verify:prod:routing-smoke` (middleware + root aliases) to validate UI/API JSON behavior.
+  - [x] Run smoke in CI/deploy pipeline and block ramp on failure. (Added `Production routing readiness smoke` step in `.github/workflows/ci.yml` deploy job.)
+  - [x] **Done when:** routing regressions are caught before production traffic impact.
+
+- [x] **Post-Routing Full Prod E2E**
+  - [x] Run full Playwright prod smoke (`scan -> chat -> conversation -> guardrails`) on `myskinandcare.com` with split-domain API base (`https://api.myskinandcare.com`).
+  - [x] Capture transcript artifact and semantic verdict for release signoff tooling. (Added `verify:prod:full-e2e-signoff` script; emits `prod-full-scan-chat-e2e-signoff.json` + `prod-full-scan-chat-semantic-signoff.json`.)
+  - [x] **Done when:** prod full-flow semantic check passes and release checklist is green.
+

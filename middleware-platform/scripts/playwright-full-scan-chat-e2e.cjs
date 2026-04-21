@@ -11,9 +11,45 @@ const TURN_TIMEOUT_MS = Math.min(
   180000,
   Math.max(60000, Number(process.env.CHAT_TURN_TIMEOUT_MS || 120000) || 120000)
 );
+const TURN_URL_RE = /\/landing-assistant\/turn\b/i;
 
 async function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function safeClick(locator) {
+  try {
+    await locator.click({ force: true, timeout: 15000 });
+    return;
+  } catch (_) {}
+  try {
+    await locator.scrollIntoViewIfNeeded({ timeout: 10000 });
+  } catch (_) {}
+  try {
+    await locator.dispatchEvent('click');
+    return;
+  } catch (_) {}
+  await locator.click({ force: true, timeout: 15000 });
+}
+
+function isLandingTurnResponse(res) {
+  try {
+    return (
+      res.request().method() === 'POST' &&
+      TURN_URL_RE.test(res.url()) &&
+      res.status() < 500
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function isLandingTurnRequestFailure(req) {
+  try {
+    return req.method() === 'POST' && TURN_URL_RE.test(req.url());
+  } catch (_) {
+    return false;
+  }
 }
 
 async function sendTurnAndWaitForReply(page, text) {
@@ -37,15 +73,21 @@ async function sendTurnAndWaitForReply(page, text) {
     }
   }
   if (!sent) throw new Error('chat composer never became enabled for sending');
-  const turnPromise = page.waitForResponse(
-    (r) =>
-      r.request().method() === 'POST' &&
-      /\/api\/public\/landing-assistant\/turn\b/.test(r.url()) &&
-      r.status() < 500,
-    { timeout: TURN_TIMEOUT_MS }
-  );
+  const turnPromise = page.waitForResponse(isLandingTurnResponse, { timeout: TURN_TIMEOUT_MS });
+  const failedPromise = page.waitForEvent('requestfailed', {
+    predicate: isLandingTurnRequestFailure,
+    timeout: TURN_TIMEOUT_MS
+  });
   await chatRoot.getByRole('button', { name: 'Send' }).click();
-  const res = await turnPromise;
+  const winner = await Promise.race([
+    turnPromise.then((res) => ({ type: 'response', res })),
+    failedPromise.then((req) => ({ type: 'requestfailed', req }))
+  ]);
+  if (winner.type === 'requestfailed') {
+    const failureText = winner.req.failure()?.errorText || 'unknown_network_error';
+    throw new Error(`turn request failed before response: ${winner.req.url()} (${failureText})`);
+  }
+  const res = winner.res;
   const body = await res.json().catch(() => ({}));
   if (res.status() >= 400 || body.success === false) {
     throw new Error(`turn failed: HTTP ${res.status()} ${body.error || body.message || ''}`);
@@ -84,15 +126,21 @@ async function sendTurnAwaitResponseOnly(page, text) {
     }
   }
   if (!sent) throw new Error('chat composer never became enabled for sending');
-  const turnPromise = page.waitForResponse(
-    (r) =>
-      r.request().method() === 'POST' &&
-      /\/api\/public\/landing-assistant\/turn\b/.test(r.url()) &&
-      r.status() < 500,
-    { timeout: TURN_TIMEOUT_MS }
-  );
+  const turnPromise = page.waitForResponse(isLandingTurnResponse, { timeout: TURN_TIMEOUT_MS });
+  const failedPromise = page.waitForEvent('requestfailed', {
+    predicate: isLandingTurnRequestFailure,
+    timeout: TURN_TIMEOUT_MS
+  });
   await chatRoot.getByRole('button', { name: 'Send' }).click();
-  const res = await turnPromise;
+  const winner = await Promise.race([
+    turnPromise.then((res) => ({ type: 'response', res })),
+    failedPromise.then((req) => ({ type: 'requestfailed', req }))
+  ]);
+  if (winner.type === 'requestfailed') {
+    const failureText = winner.req.failure()?.errorText || 'unknown_network_error';
+    throw new Error(`turn request failed before response: ${winner.req.url()} (${failureText})`);
+  }
+  const res = winner.res;
   const body = await res.json().catch(() => ({}));
   if (res.status() >= 400 || body.success === false) {
     throw new Error(`turn failed: HTTP ${res.status()} ${body.error || body.message || ''}`);
@@ -148,7 +196,7 @@ async function run() {
     const voiceShell = page.getByRole('dialog', { name: /Skin and Care assistant/i });
     const allow = voiceShell.getByRole('button', { name: /allow camera/i });
     await allow.waitFor({ state: 'visible', timeout: 30000 });
-    await allow.click({ force: true });
+    await safeClick(allow);
     await wait(1200);
 
     const videoState = await page.evaluate(() => {
@@ -165,12 +213,12 @@ async function run() {
 
     const scanBtn = voiceShell.getByRole('button', { name: /^scan$/i });
     await scanBtn.waitFor({ state: 'visible', timeout: 15000 });
-    await scanBtn.click({ force: true });
+    await safeClick(scanBtn);
     out.scan_mode_enabled = true;
 
     const openChat = voiceShell.getByRole('button', { name: 'Open chat' });
     await openChat.waitFor({ state: 'visible', timeout: 15000 });
-    await openChat.click({ force: true });
+    await safeClick(openChat);
 
     const chatShell = page.getByRole('dialog', { name: /Skin and Care assistant — chat/i });
     await chatShell.waitFor({ state: 'visible', timeout: 30000 });
@@ -184,7 +232,7 @@ async function run() {
     if (/#assistant\/results/i.test(hashAfterScanTurn)) {
       const askKelly = page.getByRole('button', { name: /Ask Kelly/i });
       if (await askKelly.isVisible().catch(() => false)) {
-        await askKelly.click({ force: true });
+        await safeClick(askKelly);
         await page.waitForURL(/#assistant\/chat/i, { timeout: 30000 });
       } else {
         await page.goto(`${UI_BASE_URL}/#assistant/chat`, { waitUntil: 'domcontentloaded' });

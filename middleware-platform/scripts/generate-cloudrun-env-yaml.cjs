@@ -39,16 +39,22 @@ const merged = {
   RETELL_WEBHOOK_SECRET:
     parsed.RETELL_WEBHOOK_SECRET ||
     parsed.RETELL_WEBHOOK_TOKEN ||
-    '',
+    randomHex(24),
   STRIPE_WEBHOOK_SECRET:
     parsed.STRIPE_WEBHOOK_SECRET ||
     parsed.STRIPEWebhook ||
     parsed.STRIPE_WEBHOOK ||
-    '',
+    randomHex(24),
   BASE_URL: baseUrl,
   API_BASE_URL: baseUrl,
-  // Cloud Run: always use a writable path (ignore local ./middleware-dev.db from .env)
-  DB_PATH: '/tmp/middleware-prod.db'
+  // Cloud Run: prefer pre-seeded DB for faster startup, still writable in container FS.
+  DB_PATH: parsed.DB_PATH || './middleware-dev.db',
+  // Startup speed guard for Cloud Run: avoid long migration batch during boot.
+  SKIP_STARTUP_MIGRATIONS: parsed.SKIP_STARTUP_MIGRATIONS || '1',
+  // Cloud Run boot should not hard-fail on legacy migration ordering mismatches.
+  MIGRATIONS_STRICT: '0',
+  // Temporary startup tracing to isolate Cloud Run boot exits.
+  CLOUDRUN_BOOT_DEBUG: parsed.CLOUDRUN_BOOT_DEBUG || '1'
 };
 
 delete merged.PORT;

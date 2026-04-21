@@ -135,7 +135,48 @@
   font-size: 0.9rem;
   color: var(--brand-gray, #64748b);
   line-height: 1.55;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+}
+
+.ax-lk-invite-checklist {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.ax-lk-invite-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #374151;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.ax-lk-invite-step {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  font-weight: 700;
+  font-size: 0.72rem;
+}
+
+.ax-lk-invite-footnote {
+  margin: 0 0 10px;
+  color: #6b7280;
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
 .ax-lk-invite-cta {

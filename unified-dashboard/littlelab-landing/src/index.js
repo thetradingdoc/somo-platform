@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AssistantExperience from './AssistantExperience';
-import { normalizeHttpApiBase } from './landingAssistantApi';
+import { middlewareApiBaseFromLocation, normalizeHttpApiBase } from './landingAssistantApi';
 import './skin-care-tokens.css';
 import './styles.css';
 /** Doctor headshot for hero kicker (distinct from approved seal). Served from `public/images/branding/`. */
@@ -157,15 +157,21 @@ function GetAppWaitlistOverlay({ open, onClose, apiBaseCandidates }) {
 
 function Root() {
   const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
-  const configuredApiBase = normalizeHttpApiBase(process.env.REACT_APP_API_BASE || '');
   // Stable reference so catalog-loading effect does not re-fire on every render.
-  const API_BASE_CANDIDATES = useMemo(
-    () =>
-      configuredApiBase
-        ? [configuredApiBase]
-        : (isLocalHost ? ['http://localhost:4000'] : [window.location.origin]),
-    [configuredApiBase, isLocalHost]
-  );
+  const API_BASE_CANDIDATES = useMemo(() => {
+    const loc =
+      typeof window !== 'undefined' && window.location
+        ? {
+            hostname: window.location.hostname,
+            port: window.location.port,
+            origin: window.location.origin
+          }
+        : null;
+    const base = middlewareApiBaseFromLocation(process.env.REACT_APP_API_BASE || '', loc);
+    if (base) return [base];
+    if (isLocalHost) return ['http://localhost:4000'];
+    return loc?.origin ? [loc.origin] : [];
+  }, [isLocalHost]);
   // Keep checkout links enabled in prod even when build env misses merchant id.
   const MERCHANT_ID = process.env.REACT_APP_MERCHANT_ID || process.env.REACT_APP_DEFAULT_MERCHANT_ID || 'provider-1';
   const checkoutMaintenanceMode = /^(1|true|yes|on)$/i.test(

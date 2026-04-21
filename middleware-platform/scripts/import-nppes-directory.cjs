@@ -19,8 +19,11 @@
  *   node scripts/import-nppes-directory.cjs /path/to/file.csv --state=NY --limit=5000
  *
  * Stream from zip without extracting the ~11GB CSV:
- *   unzip -p data/nppes/NPPES_Data_Dissemination_March_2026_V2.zip npidata_pfile_20050523-20260308.csv | \\
+ *   unzip -p data/payor-sources/nppes/NPPES_Data_Dissemination_March_2026_V2.zip npidata_pfile_....csv | \\
  *     node scripts/import-nppes-directory.cjs --stdin
+ *
+ * Canonical layout: put dissemination under data/payor-sources/nppes/ (see payor-data-sources.cjs), or set
+ * NPPES_NPIDATA_CSV / NPPES_DISSEMINATION_DIR. With no path argument, the importer resolves npidata_pfile_*.csv automatically.
  *
  * Download: https://download.cms.gov/nppes/NPI_Files.html
  */
@@ -34,6 +37,7 @@ const { parse } = require('csv-parse');
 process.chdir(path.join(__dirname, '..'));
 
 const db = require('../database');
+const { findPreferredNppesCsvPath, getPayorDataSourcesRoot } = require('./payor-data-sources.cjs');
 const sqlite = db.db || db;
 // database.js sets WAL + busy_timeout; reinforce for standalone runs after other tools touched the file
 try {
@@ -60,16 +64,31 @@ function arg(name, def = null) {
 }
 
 const useStdin = process.argv.includes('--stdin');
-const csvPath = process.argv.find(
+const csvPathArg = process.argv.find(
   (a) => !a.startsWith('-') && a !== '--stdin' && a.endsWith('.csv')
 );
 const filterState = (arg('state', '') || '').trim().toUpperCase() || null;
 const maxRows = parseInt(arg('limit', '0'), 10) || 0;
 
+let csvPath = csvPathArg;
+if (!useStdin) {
+  if (!csvPath || !fs.existsSync(csvPath)) {
+    const envCsv = String(process.env.NPPES_NPIDATA_CSV || '').trim();
+    if (envCsv) {
+      csvPath = path.isAbsolute(envCsv) ? envCsv : path.join(process.cwd(), envCsv);
+    }
+  }
+  if (!csvPath || !fs.existsSync(csvPath)) {
+    csvPath = findPreferredNppesCsvPath();
+  }
+}
+
 if (!useStdin && (!csvPath || !fs.existsSync(csvPath))) {
   console.error(
     'Usage: node scripts/import-nppes-directory.cjs /path/to/npidata_pfile_*.csv [--state=NY] [--limit=N]\n' +
-      '   or: unzip -p archive.zip npidata_pfile_*.csv | node scripts/import-nppes-directory.cjs --stdin [--state=NY] [--limit=N]'
+      '   or: unzip -p archive.zip npidata_pfile_*.csv | node scripts/import-nppes-directory.cjs --stdin [--state=NY] [--limit=N]\n' +
+      `   or: place NPPES under ${getPayorDataSourcesRoot()}/nppes/… and re-run with no path, or set NPPES_NPIDATA_CSV / NPPES_DISSEMINATION_DIR.\n` +
+      '   Link an existing folder: node scripts/link-payor-nppes-dissemination.cjs /path/to/NPPES_Data_Dissemination_*_V2'
   );
   process.exit(1);
 }

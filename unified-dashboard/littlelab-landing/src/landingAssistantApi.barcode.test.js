@@ -47,6 +47,26 @@ describe('middlewareApiBaseFromLocation', () => {
       })
     ).toBe('https://app.example.com');
   });
+
+  test('myskinandcare.com without env uses split-domain API host', () => {
+    expect(
+      middlewareApiBaseFromLocation('', {
+        hostname: 'myskinandcare.com',
+        port: '',
+        origin: 'https://myskinandcare.com'
+      })
+    ).toBe('https://api.myskinandcare.com');
+  });
+
+  test('www.myskinandcare.com without env uses split-domain API host', () => {
+    expect(
+      middlewareApiBaseFromLocation('', {
+        hostname: 'www.myskinandcare.com',
+        port: '',
+        origin: 'https://www.myskinandcare.com'
+      })
+    ).toBe('https://api.myskinandcare.com');
+  });
 });
 
 describe('normalizeHttpApiBase', () => {

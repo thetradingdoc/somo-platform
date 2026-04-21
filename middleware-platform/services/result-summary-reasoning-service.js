@@ -675,9 +675,9 @@ async function buildReasoningPatch({ snapshot = null, inputHash = null } = {}) {
   });
 
   if (isCosmeticRoute) {
-    if (/\bfragrance|parfum|limonene|linalool\b/.test(ingredientsText)) flags.push('Fragrance allergens present');
-    else flags.push('No fragrance allergens detected');
-    if (/\bphenoxyethanol\b/.test(ingredientsText)) flags.push('Phenoxyethanol preservative');
+  if (/\bfragrance|parfum|limonene|linalool\b/.test(ingredientsText)) flags.push('Fragrance allergens present');
+  else flags.push('No fragrance allergens detected');
+  if (/\bphenoxyethanol\b/.test(ingredientsText)) flags.push('Phenoxyethanol preservative');
   }
   if (sp?.nyc_metal_context) flags.unshift('NYC metals reference reviewed');
 
@@ -854,7 +854,7 @@ async function buildReasoningPatch({ snapshot = null, inputHash = null } = {}) {
             { source: 'hazard_dictionary', executed: true },
             { source: 'ingredient_semantic_index', executed: !!pinecone?.used && !pinecone?.failed }
           ],
-          reasoning_claim_provenance: claimProvenance,
+    reasoning_claim_provenance: claimProvenance,
           reasoning_evidence_refs: [`route_context:${route}`, 'model_reasoning:direct', ...hazardRefs, ...pineconeRefs],
           verdict: {
             good_for_me: {
@@ -949,35 +949,35 @@ async function buildReasoningPatch({ snapshot = null, inputHash = null } = {}) {
       provenance_sources_available: [{ source: 'model_reasoning:direct', executed: false }],
       reasoning_claim_provenance: claimProvenance,
       reasoning_evidence_refs: [`route_context:${route}`],
-      verdict: {
-        good_for_me: {
+    verdict: {
+      good_for_me: {
           summary: enforceOutputSafety(routeCopy.goodForMeSummary),
           detail: enforceOutputSafety(routeCopy.goodForMeDetail),
-          summary_confidence: hasProfileContext ? 0.82 : 0.3,
-          detail_confidence: hasProfileContext ? 0.8 : 0.3
-        },
-        harmful: {
-          flags,
+        summary_confidence: hasProfileContext ? 0.82 : 0.3,
+        detail_confidence: hasProfileContext ? 0.8 : 0.3
+      },
+      harmful: {
+        flags,
           top_evidence: enforceOutputSafety(flags.length
-            ? 'Reasoning checked ingredient-line safety cues and routine conflict context for the strongest supporting signal.'
+          ? 'Reasoning checked ingredient-line safety cues and routine conflict context for the strongest supporting signal.'
             : 'Not enough evidence to add reasoning-only flags.'),
           summary: enforceOutputSafety(flags.length ? 'Reasoning adds ingredient-level context to the deterministic risk read.' : ''),
-          flags_confidence: flags.length ? 0.84 : 0.2,
-          top_evidence_confidence: flags.length ? 0.81 : 0.2,
-          summary_confidence: flags.length ? 0.79 : 0.2
-        },
-        children_safe: {
+        flags_confidence: flags.length ? 0.84 : 0.2,
+        top_evidence_confidence: flags.length ? 0.81 : 0.2,
+        summary_confidence: flags.length ? 0.79 : 0.2
+      },
+      children_safe: {
           summary: enforceOutputSafety(routeCopy.childrenSafeSummary),
-          summary_confidence: framing === 'cosmetic' && /\bniacinamide\b/.test(ingredientsText) ? 0.82 : 0.55
-        },
-        side_effects: {
+        summary_confidence: framing === 'cosmetic' && /\bniacinamide\b/.test(ingredientsText) ? 0.82 : 0.55
+      },
+      side_effects: {
           summary: enforceOutputSafety(routeCopy.sideEffectsSummary),
-          summary_confidence:
-            framing === 'cosmetic'
-              ? (/\bniacinamide\b/.test(ingredientsText) ? 0.83 : 0.55)
-              : Number(routeCopy.sideEffectsConfidence || 0.82)
-        },
-        alternatives: {
+        summary_confidence:
+          framing === 'cosmetic'
+            ? (/\bniacinamide\b/.test(ingredientsText) ? 0.83 : 0.55)
+            : Number(routeCopy.sideEffectsConfidence || 0.82)
+      },
+      alternatives: {
           candidates: [],
           footer: enforceOutputSafety(routeCopy.alternativesFooter),
           candidates_confidence: 0.2,

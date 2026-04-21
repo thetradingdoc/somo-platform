@@ -1,0 +1,78 @@
+{
+  "success": false,
+  "generated_at": "2026-04-20T14:52:12.333Z",
+  "elapsed_ms": 7,
+  "harness_mode": "live_model",
+  "case_count": 2,
+  "aggregate": {
+    "deterministic": {
+      "route_safety": 3,
+      "harm_precision": 1,
+      "child_safety": 2
+    },
+    "model": {
+      "route_safety": 3,
+      "harm_precision": 1,
+      "child_safety": 2
+    }
+  },
+  "rubric_summary": {
+    "route_safety": 1,
+    "harm_precision": 1,
+    "child_safety": 1
+  },
+  "gate_coverage": {
+    "reasoning.gate.schema.fail.count": 0,
+    "reasoning.gate.semantic_contract.fail.count": 0,
+    "reasoning.gate.confidence.defer.count": 0,
+    "reasoning.gate.safety.fail.count": 0,
+    "reasoning.gate.provider_error.count": 2
+  },
+  "cases": [
+    {
+      "id": "food-dyes-welch",
+      "route": "food",
+      "deterministic_score": {
+        "route_safety": 2,
+        "harm_precision": 0,
+        "child_safety": 1,
+        "notes": []
+      },
+      "model_score": {
+        "route_safety": 2,
+        "harm_precision": 0,
+        "child_safety": 1,
+        "notes": []
+      },
+      "model_reasoning_mode": "deterministic_fallback",
+      "reasoning_mode": "deterministic_fallback",
+      "reasoning_retrieval": {
+        "status": "none"
+      },
+      "reasoning_claim_provenance": {}
+    },
+    {
+      "id": "cosmetic-niacinamide",
+      "route": "cosmetic",
+      "deterministic_score": {
+        "route_safety": 1,
+        "harm_precision": 1,
+        "child_safety": 1,
+        "notes": []
+      },
+      "model_score": {
+        "route_safety": 1,
+        "harm_precision": 1,
+        "child_safety": 1,
+        "notes": []
+      },
+      "model_reasoning_mode": "deterministic_fallback",
+      "reasoning_mode": "deterministic_fallback",
+      "reasoning_retrieval": {
+        "status": "none"
+      },
+      "reasoning_claim_provenance": {}
+    }
+  ],
+  "error": "live_model requested but 2/2 cases were non-model"
+}

@@ -38,10 +38,27 @@ export default function LiveKitPanel({
           {permissionHint ? <span className="ax-lk-live-msg">{permissionHint}</span> : null}
         </div>
         <div className="ax-lk-invite-card">
-          <p className="ax-lk-invite-title">Your camera preview</p>
+          <p className="ax-lk-invite-title">Before you start</p>
           <p className="ax-lk-invite-copy">
-            We&apos;ll use your camera for this try-on experience. The glowing orb is your Skin &amp; Care guide. You
-            can turn the camera off anytime.
+            To get real scan results, turn on camera access and scan your product barcode. This flow won&apos;t work from
+            chat-only text.
+          </p>
+          <ul className="ax-lk-invite-checklist" aria-label="How to use scan mode">
+            <li className="ax-lk-invite-item">
+              <span className="ax-lk-invite-step">1</span>
+              <span>Tap <strong>Allow camera &amp; start</strong>.</span>
+            </li>
+            <li className="ax-lk-invite-item">
+              <span className="ax-lk-invite-step">2</span>
+              <span>Point camera at product barcode in good light.</span>
+            </li>
+            <li className="ax-lk-invite-item">
+              <span className="ax-lk-invite-step">3</span>
+              <span>Tap <strong>Scan</strong>, then ask Kelly follow-up questions.</span>
+            </li>
+          </ul>
+          <p className="ax-lk-invite-footnote">
+            You can disable camera any time after the session starts.
           </p>
           <button
             type="button"

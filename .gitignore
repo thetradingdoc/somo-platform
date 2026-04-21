@@ -97,6 +97,10 @@ temp/
 middleware-platform/test-results/
 middleware-platform/uploads/
 
+# Payor / NPPES bulk inputs (symlinks + data; keep README.md tracked)
+middleware-platform/data/payor-sources/*
+!middleware-platform/data/payor-sources/README.md
+
 # Local scratch (do not commit)
 /step0.md
 /step1b

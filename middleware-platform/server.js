@@ -10,6 +10,15 @@ try {
   console.warn('⚠️  dotenv not found - skipping .env loading (Azure App Settings will be used instead)');
 }
 
+const bootDebug = ['1', 'true', 'yes'].includes(String(process.env.CLOUDRUN_BOOT_DEBUG || '').toLowerCase());
+function bootLog(msg) {
+  if (!bootDebug) return;
+  try {
+    console.error(`[boot] ${new Date().toISOString()} ${msg}`);
+  } catch (_) {}
+}
+bootLog(`server.js loaded pid=${process.pid} node=${process.version}`);
+
 // SECURITY: Validate environment variables on startup
 const { validateAndExitIfInvalid } = require('./utils/env-validator');
 validateAndExitIfInvalid();
@@ -124,6 +133,10 @@ const ToolCallDlqWorker = require('./services/tool-call-dlq-worker');
 const EhrSyncJobWorker = require('./services/ehr-sync-job-worker');
 const InsuranceService = require('./services/insurance-service');
 const PayerCacheService = require('./services/payer-cache-service');
+const { resolvePayerSearchResult } = require('./services/payor-resolution-utils');
+const PayorRegistryResolverService = require('./services/payor-registry-resolver-service');
+const { resolveProviderPayorNetworkPrecheck } = require('./services/provider-network-precheck-service');
+const { listProviderSearchResults } = require('./services/provider-search-service');
 const Metrics = require('./services/metrics');
 const { adaptIncomingEvent } = require('./services/channel-adapter');
 const ProviderService = require('./services/provider-service');
@@ -155,6 +168,36 @@ function isUnifiedChannelAdapterEnabled() {
 
 function isUnifiedChannelAdapterShadowEnabled() {
   const v = String(process.env.UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function isPayorCanonicalResolverEnabled() {
+  const v = String(process.env.PAYOR_CANONICAL_RESOLVER_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function isPayorCanonicalResolverShadowEnabled() {
+  const v = String(process.env.PAYOR_CANONICAL_RESOLVER_SHADOW || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function resolveRuntimePayor(args = {}) {
+  return PayorRegistryResolverService.resolvePayor({
+    payerText: args.payer_name || args.payerName || null,
+    payerId: args.payer_id || args.payerId || null,
+    npi: args.npi || args.payer_npi || null,
+    ein: args.ein || args.payer_ein || null,
+    stateHint: args.state || args.state_hint || null
+  });
+}
+
+function isProviderNetworkPrecheckEnabled() {
+  const v = String(process.env.PROVIDER_NETWORK_PRECHECK_ENABLED || '').toLowerCase().trim();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function isProviderNetworkPrecheckShadowEnabled() {
+  const v = String(process.env.PROVIDER_NETWORK_PRECHECK_SHADOW || '').toLowerCase().trim();
   return v === '1' || v === 'true' || v === 'yes';
 }
 
@@ -301,6 +344,7 @@ function decodeState(state) {
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+bootLog(`express initialized; PORT=${PORT}`);
 
 // ============================================
 // SMART-on-FHIR discovery + OAuth2 (minimal)
@@ -8567,12 +8611,57 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
 
     const args = req.body.args || req.body;
 
+    const resolverEnabled = isPayorCanonicalResolverEnabled();
+    const resolverShadow = isPayorCanonicalResolverShadowEnabled();
+    const hasResolvablePayerInput = !!(args.payer_id || args.payer_name);
+
     // Required fields
-    if (!args.member_id || !args.payer_id) {
+    if (!args.member_id || !hasResolvablePayerInput) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: member_id, payer_id'
+        error: 'Missing required fields: member_id and one of payer_id or payer_name'
       });
+    }
+
+    let resolverOutcome = null;
+    if (resolverEnabled || resolverShadow) {
+      try {
+        resolverOutcome = resolveRuntimePayor(args);
+      } catch (e) {
+        console.warn('⚠️  Runtime payor resolver failed in eligibility path:', e.message);
+      }
+    }
+    if (resolverShadow && resolverOutcome) {
+      console.log('[payor-resolver:shadow][eligibility]', {
+        resolved: resolverOutcome.resolved,
+        source: resolverOutcome.resolution_source,
+        entity_id: resolverOutcome?.canonical_entity?.id || null,
+        routed_payer_id: resolverOutcome?.routing?.payer_id || null
+      });
+    }
+    if (resolverEnabled) {
+      if (resolverOutcome?.resolved) {
+        args.payer_id = resolverOutcome.routing.payer_id || args.payer_id;
+      } else if (!args.payer_id) {
+        // Safe degraded fallback: return manual review requirement when no canonical mapping exists.
+        return res.status(409).json({
+          success: false,
+          manual_review: true,
+          error: 'No canonical payor match found for eligibility request',
+          resolver: { enabled: true, resolved: false }
+        });
+      }
+    }
+
+    const networkPrecheckEnabled = isProviderNetworkPrecheckEnabled();
+    const networkPrecheckShadow = isProviderNetworkPrecheckShadowEnabled();
+    let networkPrecheck = null;
+    if (networkPrecheckEnabled || networkPrecheckShadow) {
+      try {
+        networkPrecheck = resolveProviderPayorNetworkPrecheck({ args, resolverOutcome });
+      } catch (e) {
+        console.warn('⚠️  Provider network precheck failed in eligibility path:', e.message);
+      }
     }
 
     // Get patient info if patient_id is provided
@@ -8635,6 +8724,27 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
 
     const result = await InsuranceService.checkEligibility(eligibilityData);
 
+    if (resolverEnabled || resolverShadow) {
+      result.payor_resolution = {
+        enabled: resolverEnabled,
+        shadow: resolverShadow,
+        resolved: Boolean(resolverOutcome?.resolved),
+        source: resolverOutcome?.resolution_source || 'none',
+        canonical_entity_id: resolverOutcome?.canonical_entity?.id || null,
+        canonical_name: resolverOutcome?.canonical_entity?.canonical_name || null,
+        routed_payer_id: resolverOutcome?.routing?.payer_id || args.payer_id || null
+      };
+    }
+    if (networkPrecheckEnabled || networkPrecheckShadow) {
+      result.provider_network_precheck = {
+        enabled: networkPrecheckEnabled,
+        shadow: networkPrecheckShadow,
+        decision: networkPrecheck?.decision || 'unknown',
+        reason: networkPrecheck?.reason || 'precheck_unavailable',
+        trace: networkPrecheck?.trace || {}
+      };
+    }
+
     res.json(result);
   } catch (error) {
     console.error('❌ Error checking eligibility:', error);
@@ -8656,12 +8766,55 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
 
     const args = req.body.args || req.body;
 
+    const resolverEnabled = isPayorCanonicalResolverEnabled();
+    const resolverShadow = isPayorCanonicalResolverShadowEnabled();
+    const hasResolvablePayerInput = !!(args.payer_id || args.payer_name);
+
     // Required fields
-    if (!args.appointment_id || !args.member_id || !args.payer_id || !args.total_amount) {
+    if (!args.appointment_id || !args.member_id || !hasResolvablePayerInput || !args.total_amount) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: appointment_id, member_id, payer_id, total_amount'
+        error: 'Missing required fields: appointment_id, member_id, total_amount, and one of payer_id or payer_name'
       });
+    }
+
+    let resolverOutcome = null;
+    if (resolverEnabled || resolverShadow) {
+      try {
+        resolverOutcome = resolveRuntimePayor(args);
+      } catch (e) {
+        console.warn('⚠️  Runtime payor resolver failed in claim path:', e.message);
+      }
+    }
+    if (resolverShadow && resolverOutcome) {
+      console.log('[payor-resolver:shadow][submit-claim]', {
+        resolved: resolverOutcome.resolved,
+        source: resolverOutcome.resolution_source,
+        entity_id: resolverOutcome?.canonical_entity?.id || null,
+        routed_payer_id: resolverOutcome?.routing?.payer_id || null
+      });
+    }
+    if (resolverEnabled) {
+      if (resolverOutcome?.resolved) {
+        args.payer_id = resolverOutcome.routing.payer_id || args.payer_id;
+      } else if (!args.payer_id) {
+        return res.status(409).json({
+          success: false,
+          manual_review: true,
+          error: 'No canonical payor match found for claim submission',
+          resolver: { enabled: true, resolved: false }
+        });
+      }
+    }
+    const networkPrecheckEnabled = isProviderNetworkPrecheckEnabled();
+    const networkPrecheckShadow = isProviderNetworkPrecheckShadowEnabled();
+    let networkPrecheck = null;
+    if (networkPrecheckEnabled || networkPrecheckShadow) {
+      try {
+        networkPrecheck = resolveProviderPayorNetworkPrecheck({ args, resolverOutcome });
+      } catch (e) {
+        console.warn('⚠️  Provider network precheck failed in claim path:', e.message);
+      }
     }
 
     // Get appointment details
@@ -8734,6 +8887,27 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
     };
 
     const result = await InsuranceService.submitClaim(claimData);
+
+    if (resolverEnabled || resolverShadow) {
+      result.payor_resolution = {
+        enabled: resolverEnabled,
+        shadow: resolverShadow,
+        resolved: Boolean(resolverOutcome?.resolved),
+        source: resolverOutcome?.resolution_source || 'none',
+        canonical_entity_id: resolverOutcome?.canonical_entity?.id || null,
+        canonical_name: resolverOutcome?.canonical_entity?.canonical_name || null,
+        routed_payer_id: resolverOutcome?.routing?.payer_id || args.payer_id || null
+      };
+    }
+    if (networkPrecheckEnabled || networkPrecheckShadow) {
+      result.provider_network_precheck = {
+        enabled: networkPrecheckEnabled,
+        shadow: networkPrecheckShadow,
+        decision: networkPrecheck?.decision || 'unknown',
+        reason: networkPrecheck?.reason || 'precheck_unavailable',
+        trace: networkPrecheck?.trace || {}
+      };
+    }
 
     if (result.success && db.completeIdempotentResult) {
       db.completeIdempotentResult(idempotencyKey, claimOpType, result);
@@ -12147,6 +12321,70 @@ app.get('/api/admin/patient-merge-events', async (req, res) => {
   }
 });
 
+// Payor review queue (Step 7)
+app.post('/api/admin/payor-review-queue/sync', express.json(), async (req, res) => {
+  try {
+    const policyVersion = req.body?.policy_version || null;
+    const limit = Math.max(1, Math.min(Number(req.body?.limit || 1000), 10000));
+    const inserted = db.enqueuePayorReviewQueueFromDecisions({
+      policyVersion,
+      decisions: ['merge_review_flag', 'review_candidate'],
+      limit
+    });
+    return res.json({ success: true, inserted, policy_version: policyVersion });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/admin/payor-review-queue', async (req, res) => {
+  try {
+    const status = req.query?.status || 'pending';
+    const limit = Math.max(1, Math.min(Number(req.query?.limit || 100), 500));
+    const offset = Math.max(0, Number(req.query?.offset || 0));
+    const items = db.listPayorReviewQueue({ status, limit, offset });
+    return res.json({ success: true, status, count: items.length, items });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/admin/payor-review-queue/:queueId', async (req, res) => {
+  try {
+    const queueId = req.params.queueId;
+    if (!queueId) return res.status(400).json({ success: false, error: 'queueId required' });
+    const item = db.getPayorReviewQueueDetails(queueId);
+    if (!item) return res.status(404).json({ success: false, error: 'queue item not found' });
+    return res.json({ success: true, item });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/admin/payor-review-queue/:queueId/decision', express.json(), async (req, res) => {
+  try {
+    const queueId = req.params.queueId;
+    const action = String(req.body?.action || '').trim();
+    const rationale = req.body?.rationale || null;
+    const reviewer =
+      req.adminSession?.email ||
+      req.admin?.email ||
+      req.body?.reviewer ||
+      'admin';
+    if (!queueId) return res.status(400).json({ success: false, error: 'queueId required' });
+    if (!action) return res.status(400).json({ success: false, error: 'action required' });
+    const reviewDecisionId = db.submitPayorReviewDecision({
+      queueId,
+      reviewer,
+      action,
+      rationale
+    });
+    return res.json({ success: true, queue_id: queueId, review_decision_id: reviewDecisionId });
+  } catch (e) {
+    return res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/admin/patient-merge-events/:id/review', async (req, res) => {
   try {
     const id = req.params.id;
@@ -12375,6 +12613,25 @@ app.get('/api/patient/insurance', async (req, res) => {
   }
 });
 
+// Provider registry specialty search with pagination.
+app.get('/api/provider-registry/search', apiLimiter, async (req, res) => {
+  try {
+    const out = listProviderSearchResults({
+      taxonomyCode: req.query?.taxonomy_code || req.query?.taxonomy || null,
+      latitude: req.query?.lat || null,
+      longitude: req.query?.lon || null,
+      radiusMiles: req.query?.radius_miles || req.query?.radius || null,
+      payorEntityId: req.query?.payor_entity_id || null,
+      page: req.query?.page || 1,
+      pageSize: req.query?.page_size || 25
+    });
+    return res.json({ success: true, ...out });
+  } catch (error) {
+    console.error('Error searching provider registry:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Patient: Update insurance (onboarding)
 app.put('/api/patient/insurance', apiLimiter, express.json(), async (req, res) => {
   try {
@@ -12413,11 +12670,42 @@ app.put('/api/patient/insurance', apiLimiter, express.json(), async (req, res) =
 
     // Resolve payer_id if missing
     let finalPayerId = payer_id || null;
+    if (!finalPayerId && payer_name && isPayorCanonicalResolverEnabled()) {
+      try {
+        const canonical = resolveRuntimePayor({ payer_name });
+        if (canonical?.resolved && canonical?.routing?.payer_id) {
+          finalPayerId = canonical.routing.payer_id;
+        }
+      } catch (e) {
+        console.warn('⚠️  Canonical payor resolver failed during insurance update:', e.message);
+      }
+    }
     if (!finalPayerId && payer_name && PayerCacheService && PayerCacheService.searchPayer) {
       try {
         const payerMatch = await PayerCacheService.searchPayer(payer_name);
-        if (payerMatch && payerMatch.payer_id) {
-          finalPayerId = payerMatch.payer_id;
+        const resolution = resolvePayerSearchResult(payerMatch);
+        if (resolution.status === 'single') {
+          finalPayerId = resolution.payer_id;
+        } else if (resolution.status === 'ambiguous') {
+          return res.status(409).json({
+            success: false,
+            error: 'Multiple payer matches found. Please provide payer_id or select a specific payer.',
+            ambiguous_payer: true,
+            requires_payer_confirmation: true,
+            suggestions: resolution.suggestions
+          });
+        } else if (resolution.status === 'none') {
+          return res.status(404).json({
+            success: false,
+            error: `Payer "${payer_name}" not found. Please provide a valid payer_name or payer_id.`,
+            no_payer_match: true,
+            suggestions: []
+          });
+        } else {
+          return res.status(502).json({
+            success: false,
+            error: resolution.error || 'Unable to resolve payer by name'
+          });
         }
       } catch (e) {
         console.warn('⚠️  Failed to search payer by name:', e.message);
@@ -21800,7 +22088,9 @@ app.use(errorHandler);
 
 // Azure App Service requires binding to 0.0.0.0, not localhost
 const HOST = process.env.WEBSITE_SITE_NAME ? '0.0.0.0' : '0.0.0.0';
+bootLog(`calling app.listen host=${HOST} port=${PORT}`);
 const server = app.listen(PORT, HOST, () => {
+  bootLog('app.listen callback reached');
   console.log('\n' + '='.repeat(60));
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));

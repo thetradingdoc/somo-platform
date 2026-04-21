@@ -327,7 +327,9 @@ export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assi
 
 /**
  * Pure helper: where to send `/api/public/*` given build env and current location.
- * Exported for unit tests. Split hosting (static site + API subdomain) must set REACT_APP_API_BASE at build time.
+ * Exported for unit tests. Prefer `REACT_APP_API_BASE` at build time for split hosting.
+ * When env is unset on known Skin & Care production UI hosts, defaults to `https://api.myskinandcare.com`
+ * so Firebase Hosting (no `/api` proxy) does not send API traffic to the SPA origin.
  *
  * @param {string} envBase - typically `process.env.REACT_APP_API_BASE`
  * @param {{ hostname: string, port?: string, origin: string } | null} location - `window.location` subset or null
@@ -345,7 +347,11 @@ export function middlewareApiBaseFromLocation(envBase, location) {
     // Any other dev port (CRA :3000, Vite :5173, previews, etc.) → API on :4000.
     return h === 'localhost' ? 'http://localhost:4000' : 'http://127.0.0.1:4000';
   }
-  // Production without env: same-origin deploys (middleware + SPA on one host). Split deploys: set REACT_APP_API_BASE.
+  const hl = String(h || '').toLowerCase();
+  if (hl === 'myskinandcare.com' || hl === 'www.myskinandcare.com') {
+    return 'https://api.myskinandcare.com';
+  }
+  // Production without env: same-origin deploys (middleware + SPA on one host).
   return location.origin;
 }
 

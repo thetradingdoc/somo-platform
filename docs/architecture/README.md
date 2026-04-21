@@ -2005,11 +2005,13 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 ## 2. UX flow (voice page)
 
-1. **Invite** — Copy explains camera + orb; primary CTA **Allow camera & start**.
+1. **Invite** — **Before you start** card (`LiveKitPanel`): camera + barcode scan are required for real scan results; primary CTA **Allow camera & start** (not chat-only).
 2. **Browser permission** — `getUserMedia` (camera + mic) for immediate full-screen **mirrored** preview.
-3. **Session** — Full-screen `<video>`; **orb** in a small PiP (bottom-right); header floats over video; controls in a bottom gradient strip.
+3. **Session** — Full-screen `<video>`; **orb** in a small PiP (bottom-right); header floats over video; bottom toolbar: **Scan**, **Voice (beta)** (mic; no wake word), **Upload**, **Video on/off**.
 4. **LiveKit** — If `REACT_APP_API_BASE` points at middleware with `LIVEKIT_*` set, **`POST /api/livekit/token`** runs and the client connects with **`livekit-client`**. Preview tracks are **stopped only after** LiveKit’s camera track is attached (avoids a black flash).
 5. **Without API base** — Local preview only; pill shows **Preview** and copy notes demo mode.
+
+**Production API origin:** the public landing build uses split-domain routing — set `REACT_APP_API_BASE` to the middleware host (e.g. `https://api.myskinandcare.com`), not the Firebase Hosting UI origin. See [EDGE_ROUTING_CONFIGS.md](../deployment/EDGE_ROUTING_CONFIGS.md).
 
 ---
 
@@ -2031,7 +2033,7 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 | Variable | Where | Role |
 |----------|--------|------|
-| `REACT_APP_API_BASE` | CRA build | Middleware origin for Kelly **and** `/api/livekit/token` (e.g. `http://localhost:4000`). |
+| `REACT_APP_API_BASE` | CRA build | Middleware origin for Kelly **and** `/api/livekit/token`. Local e.g. `http://localhost:4000`; production split-domain e.g. `https://api.myskinandcare.com`. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Middleware `.env` | Issuing JWTs; see [VIDEO_CONSULT.md §3](./README.md#care-delivery-video-consult). |
 | CSP | Static host | If you add `Content-Security-Policy`, allow `connect-src` to `wss://*.livekit.cloud` (see middleware `security.js` for API pages). |
 

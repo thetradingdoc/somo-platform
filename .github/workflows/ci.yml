@@ -300,6 +300,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: middleware-platform/package-lock.json
+
+      - name: Install middleware dependencies
+        working-directory: ./middleware-platform
+        run: npm ci
+
+      - name: Production routing readiness smoke
+        env:
+          UI_BASE_URL: https://myskinandcare.com
+          MIDDLEWARE_API_BASE: ${{ vars.PROD_API_BASE || 'https://web-production-a783d.up.railway.app' }}
+        run: npm run verify:prod:routing-smoke --prefix middleware-platform
       
       - name: Deploy to Railway
         run: |

@@ -197,7 +197,10 @@ export default function AssistantVoicePage({
         {!inSessionStage ? (
           <>
             <section className="axv-welcome" aria-label="Welcome to Kelly">
-              <p className="axv-welcome-hint">Say <strong>“Hi Kelly”</strong> once the call starts to wake me up instantly.</p>
+              <p className="axv-welcome-hint">
+                Tap <strong>Allow camera &amp; start</strong>, then use <strong>Scan</strong> and <strong>Voice (beta)</strong>.
+                No wake word is required.
+              </p>
               <div className="axv-sphere-wrap axv-sphere-wrap--welcome">
                 <AgentSphereCanvas
                   className="axv-canvas"
@@ -247,7 +250,7 @@ export default function AssistantVoicePage({
                 disabled={sending}
               >
                 <MicrophoneIcon className="ax-heroicon" aria-hidden />
-                <span>Talk</span>
+                <span>Voice (beta)</span>
               </button>
               <button type="button" className="axv-liquid-btn" onClick={onOpenUpload}>
                 <PhotoIcon className="ax-heroicon" aria-hidden />

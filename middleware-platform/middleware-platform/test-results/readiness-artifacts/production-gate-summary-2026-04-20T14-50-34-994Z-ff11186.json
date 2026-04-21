@@ -1,0 +1,154 @@
+{
+  "run_at": "2026-04-20T14:52:12.341Z",
+  "git_sha": "ff11186",
+  "failed": true,
+  "results": [
+    {
+      "status": "FAIL",
+      "id": "ENV_PROVIDER_KEY",
+      "detail": "Set ANTHROPIC_API_KEY or OPENAI_API_KEY."
+    },
+    {
+      "status": "PASS",
+      "id": "ENV_REASONING_HARNESS_ARTIFACT_DIR",
+      "detail": "./middleware-platform/test-results/readiness-artifacts"
+    },
+    {
+      "status": "PASS",
+      "id": "ENV_LIVE_MODEL_REQUIRED"
+    },
+    {
+      "status": "PASS",
+      "id": "LANGSMITH_TRACING_ENABLED"
+    },
+    {
+      "status": "FAIL",
+      "id": "LANGSMITH_API_KEY_PRESENT",
+      "detail": "Set LANGSMITH_API_KEY (or AP_Langchain)."
+    },
+    {
+      "status": "PASS",
+      "id": "LANGSMITH_PROJECT_NAMING",
+      "detail": "middleware-dev"
+    },
+    {
+      "status": "PASS",
+      "id": "FLAG_STATE_CHECK"
+    },
+    {
+      "status": "PASS",
+      "id": "REASONING_GUARDRAILS"
+    },
+    {
+      "status": "PASS",
+      "id": "REASONING_MAP_TEST"
+    },
+    {
+      "status": "WARN",
+      "id": "PINECONE_OPTION_A_MODE",
+      "detail": "Vector/Pinecone checks downgraded in Option A no-vector mode."
+    },
+    {
+      "status": "PASS",
+      "id": "RUNBOOKS_README_EXISTS"
+    },
+    {
+      "status": "PASS",
+      "id": "REASONING_README_EXISTS"
+    },
+    {
+      "status": "PASS",
+      "id": "RUNBOOKS_CONSOLIDATED_ANCHORS"
+    },
+    {
+      "status": "PASS",
+      "id": "REASONING_README_ROLLOUT_GATE_REF"
+    },
+    {
+      "status": "PASS",
+      "id": "ALERT_REASONING_GATE_METRICS_MAPPED"
+    },
+    {
+      "status": "PASS",
+      "id": "ALERT_TO_REASONING_RUNBOOK_MAPPING"
+    },
+    {
+      "status": "FAIL",
+      "id": "CANARY_DRILL_EVIDENCE",
+      "detail": "Missing artifact: /Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/canary-drill-evidence.json"
+    },
+    {
+      "status": "FAIL",
+      "id": "DASHBOARD_SIGNOFF",
+      "detail": "Missing artifact: /Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/dashboard-signoff.json"
+    },
+    {
+      "status": "FAIL",
+      "id": "ALERT_INVENTORY_EVIDENCE",
+      "detail": "Missing artifact: /Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/reasoning-alert-inventory.json"
+    },
+    {
+      "status": "PASS",
+      "id": "DLQ_TRIAGE_REPLAY"
+    },
+    {
+      "status": "PASS",
+      "id": "DLQ_RESOLVE_TERMINAL"
+    },
+    {
+      "status": "PASS",
+      "id": "DLQ_BACKLOG_THRESHOLD",
+      "detail": "stable_size=0 (max=50)"
+    },
+    {
+      "status": "PASS",
+      "id": "DLQ_TERMINAL_RESOLUTION_STATUS",
+      "detail": "archived=0"
+    },
+    {
+      "status": "PASS",
+      "id": "DLQ_STABILITY_ARTIFACT_WRITTEN",
+      "detail": "/Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/dlq-stability-evidence.json"
+    },
+    {
+      "status": "FAIL",
+      "id": "ROUTE_REGRESSION_SNAPSHOT",
+      "detail": "Missing artifact: /Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/route-regression-snapshot.json"
+    },
+    {
+      "status": "FAIL",
+      "id": "MIGRATION_RISK_MEMO",
+      "detail": "Missing artifact: /Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/migration-risk-memo.json"
+    },
+    {
+      "status": "PASS",
+      "id": "E2E_SCAN_CHAT_TWO_TURN_GATE"
+    },
+    {
+      "status": "PASS",
+      "id": "E2E_FULL_SCAN_CHAT_GATE"
+    },
+    {
+      "status": "PASS",
+      "id": "SEMANTIC_SCAN_REFERENCE"
+    },
+    {
+      "status": "PASS",
+      "id": "SEMANTIC_NO_GENERIC_FALLBACK"
+    },
+    {
+      "status": "PASS",
+      "id": "SEMANTIC_TURN_CONTINUITY"
+    },
+    {
+      "status": "PASS",
+      "id": "SEMANTIC_QUALITY_ARTIFACT",
+      "detail": "/Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/semantic-quality-gate.json"
+    },
+    {
+      "status": "FAIL",
+      "id": "HARNESS_RUN",
+      "detail": "> middleware-platform@3.0.0 eval:reasoning:harness\n> node ./scripts/run-reasoning-eval-harness.cjs --output /Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/middleware-platform/test-results/readiness-artifacts/reasoning-eval-2026-04-20T14-50-34-994Z-ff11186.json\n\n📁 Database path: /Users/ojrichard/middleware-dev.db (environment: development)\n🌍 Environment: development | Production: false | Staging: true\n✅ Migration complete: Google Calendar columns ensured on users\n✅ Migratio"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "captured_at": "2026-04-20T14:50:37.768Z",
+  "threshold_max_backlog": 50,
+  "triage": {
+    "success": true,
+    "before_size": 0,
+    "after_size": 0,
+    "stable_size": 0,
+    "below_threshold": true,
+    "retry_safe": 0,
+    "replay_attempts": 0,
+    "replay_success": 0,
+    "replay_success_rate": 1,
+    "incident_note": "/Users/ojrichard/Voice Agent/doclittle-platform/docs/runbooks/DLQ_TOOL_CALLS_INCIDENT_NOTE.md"
+  },
+  "terminal_resolution": {
+    "success": true,
+    "before_size": 0,
+    "terminal_identified": 0,
+    "archived_count": 0,
+    "after_size": 0,
+    "below_threshold": true,
+    "archive_file": "/Users/ojrichard/Voice Agent/doclittle-platform/docs/runbooks/DLQ_TOOL_CALLS_TERMINAL_ARCHIVE_1776696637758.json",
+    "sample_terminal_ids": []
+  }
+}

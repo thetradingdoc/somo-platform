@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 const { hashApiKey } = require('./utils/api-keys');
 
 const usePostgres = !!process.env.POSTGRES_URL;
@@ -161,6 +162,11 @@ db.isStaging = isStaging;
 db.getEnvironment = () => env;
 
 console.log(`🌍 Environment: ${env} | Production: ${isProduction()} | Staging: ${isStaging()}`);
+
+/** Payor/CLI scripts set SKIP_STARTUP_MIGRATIONS=1 to skip the large inline migration batch; also suppresses early per-table "migration complete" noise. */
+const SKIP_STARTUP_MIGRATIONS = ['1', 'true', 'yes'].includes(
+  String(process.env.SKIP_STARTUP_MIGRATIONS || '').toLowerCase().trim()
+);
 
 // Disable foreign key constraints during migrations (they can cause issues with ALTER TABLE)
 db.pragma('foreign_keys = OFF');
@@ -1604,7 +1610,9 @@ try {
   const usersInfo = db.prepare(`PRAGMA table_info(users)`).all();
   const addColumnIfMissing = (columnName, sql) => {
     if (!usersInfo.some(c => c.name === columnName)) {
-      console.log(`📦 Adding ${columnName} column to users table...`);
+      if (!SKIP_STARTUP_MIGRATIONS) {
+        console.log(`📦 Adding ${columnName} column to users table...`);
+      }
       db.exec(sql);
     }
   };
@@ -1621,7 +1629,9 @@ try {
   addColumnIfMissing('google_calendar_sync_at', `ALTER TABLE users ADD COLUMN google_calendar_sync_at DATETIME;`);
   addColumnIfMissing('google_calendar_last_error', `ALTER TABLE users ADD COLUMN google_calendar_last_error TEXT;`);
 
-  console.log('✅ Migration complete: Google Calendar columns ensured on users');
+  if (!SKIP_STARTUP_MIGRATIONS) {
+    console.log('✅ Migration complete: Google Calendar columns ensured on users');
+  }
 } catch (migrationError) {
   console.warn('⚠️  Users Google Calendar migration failed:', migrationError.message);
 }
@@ -2097,6 +2107,37 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS payor_ingest_batches (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_url TEXT,
+    file_name TEXT,
+    file_checksum TEXT,
+    gcs_uri TEXT,
+    file_size_bytes INTEGER,
+    started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME,
+    record_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'running',
+    error_summary TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS payor_source_records (
+    id TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_record_id TEXT,
+    raw_name TEXT,
+    raw_payer_id TEXT,
+    raw_npi TEXT,
+    raw_ein TEXT,
+    raw_state_hint TEXT,
+    payload_json TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (batch_id) REFERENCES payor_ingest_batches(id)
+  );
+
   CREATE TABLE IF NOT EXISTS patient_insurance (
     id TEXT PRIMARY KEY,
     patient_id TEXT NOT NULL,
@@ -2122,6 +2163,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_insurance_claims_idem ON insurance_claims(idempotency_key);
   CREATE INDEX IF NOT EXISTS idx_insurance_payers_payer_id ON insurance_payers(payer_id);
   CREATE INDEX IF NOT EXISTS idx_insurance_payers_name ON insurance_payers(payer_name);
+  CREATE INDEX IF NOT EXISTS idx_payor_ingest_batches_source ON payor_ingest_batches(source);
+  CREATE INDEX IF NOT EXISTS idx_payor_ingest_batches_checksum ON payor_ingest_batches(file_checksum);
+  CREATE INDEX IF NOT EXISTS idx_payor_ingest_batches_gcs_uri ON payor_ingest_batches(gcs_uri);
+  CREATE INDEX IF NOT EXISTS idx_payor_source_records_batch ON payor_source_records(batch_id);
+  CREATE INDEX IF NOT EXISTS idx_payor_source_records_source_rec ON payor_source_records(source, source_record_id);
+  CREATE INDEX IF NOT EXISTS idx_payor_source_records_raw_payer_id ON payor_source_records(raw_payer_id);
+  CREATE INDEX IF NOT EXISTS idx_payor_source_records_raw_npi ON payor_source_records(raw_npi);
   CREATE INDEX IF NOT EXISTS idx_patient_insurance_patient_id ON patient_insurance(patient_id);
   CREATE INDEX IF NOT EXISTS idx_patient_insurance_payer_id ON patient_insurance(payer_id);
   CREATE INDEX IF NOT EXISTS idx_patient_insurance_member_id ON patient_insurance(member_id);
@@ -4847,7 +4895,502 @@ function migrateFinalAssessmentArtifacts() {
   }
 }
 
-// Run migrations on startup
+// Migration: payor raw ingest tables for entity-resolution Step 1.
+function migratePayorRawIngestTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_ingest_batches (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        source_url TEXT,
+        file_name TEXT,
+        file_checksum TEXT,
+        gcs_uri TEXT,
+        file_size_bytes INTEGER,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME,
+        record_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'running',
+        error_summary TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_ingest_batches_source ON payor_ingest_batches(source);
+      CREATE INDEX IF NOT EXISTS idx_payor_ingest_batches_checksum ON payor_ingest_batches(file_checksum);
+      CREATE INDEX IF NOT EXISTS idx_payor_ingest_batches_gcs_uri ON payor_ingest_batches(gcs_uri);
+
+      CREATE TABLE IF NOT EXISTS payor_source_records (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_record_id TEXT,
+        raw_name TEXT,
+        raw_payer_id TEXT,
+        raw_npi TEXT,
+        raw_ein TEXT,
+        raw_state_hint TEXT,
+        payload_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (batch_id) REFERENCES payor_ingest_batches(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_source_records_batch ON payor_source_records(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_source_records_source_rec ON payor_source_records(source, source_record_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_source_records_raw_payer_id ON payor_source_records(raw_payer_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_source_records_raw_npi ON payor_source_records(raw_npi);
+    `);
+    const batchCols = new Set(db.prepare(`PRAGMA table_info(payor_ingest_batches)`).all().map((c) => c.name));
+    if (!batchCols.has('source_url')) {
+      db.exec(`ALTER TABLE payor_ingest_batches ADD COLUMN source_url TEXT;`);
+    }
+    if (!batchCols.has('gcs_uri')) {
+      db.exec(`ALTER TABLE payor_ingest_batches ADD COLUMN gcs_uri TEXT;`);
+    }
+    if (!batchCols.has('file_size_bytes')) {
+      db.exec(`ALTER TABLE payor_ingest_batches ADD COLUMN file_size_bytes INTEGER;`);
+    }
+    console.log('✅ Migration complete: payor raw ingest tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor raw ingest migration failed:', e.message);
+  }
+}
+
+// Migration: payor normalization tables for entity-resolution Step 2.
+function migratePayorNormalizationTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_abbreviation_dictionary (
+        abbr TEXT PRIMARY KEY,
+        expanded_form TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        source TEXT DEFAULT 'seed',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_abbr_active ON payor_abbreviation_dictionary(active);
+
+      CREATE TABLE IF NOT EXISTS payor_stopwords (
+        word TEXT PRIMARY KEY,
+        active INTEGER DEFAULT 1,
+        source TEXT DEFAULT 'seed',
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_stopwords_active ON payor_stopwords(active);
+
+      CREATE TABLE IF NOT EXISTS payor_normalized_records (
+        id TEXT PRIMARY KEY,
+        source_record_id TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        normalized_name TEXT NOT NULL,
+        normalized_tokens_json TEXT,
+        canonical_tokens_json TEXT,
+        stripped_state TEXT,
+        soundex_key TEXT,
+        prefix_key TEXT,
+        normalization_version TEXT DEFAULT 'v1',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (source_record_id) REFERENCES payor_source_records(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_norm_source ON payor_normalized_records(source);
+      CREATE INDEX IF NOT EXISTS idx_payor_norm_name ON payor_normalized_records(normalized_name);
+      CREATE INDEX IF NOT EXISTS idx_payor_norm_soundex ON payor_normalized_records(soundex_key);
+      CREATE INDEX IF NOT EXISTS idx_payor_norm_prefix ON payor_normalized_records(prefix_key);
+      CREATE INDEX IF NOT EXISTS idx_payor_norm_version ON payor_normalized_records(normalization_version);
+    `);
+    console.log('✅ Migration complete: payor normalization tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor normalization migration failed:', e.message);
+  }
+}
+
+// Migration: payor blocking tables for entity-resolution Step 3.
+function migratePayorBlockingTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_match_candidates (
+        id TEXT PRIMARY KEY,
+        left_normalized_id TEXT NOT NULL,
+        right_normalized_id TEXT NOT NULL,
+        block_key_type TEXT NOT NULL,
+        block_key_value TEXT NOT NULL,
+        batch_id TEXT NOT NULL,
+        hard_match INTEGER DEFAULT 0,
+        short_circuit_reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (left_normalized_id) REFERENCES payor_normalized_records(id),
+        FOREIGN KEY (right_normalized_id) REFERENCES payor_normalized_records(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payor_match_candidates_pair_key
+        ON payor_match_candidates(left_normalized_id, right_normalized_id, block_key_type, block_key_value, batch_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_batch ON payor_match_candidates(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_key_type ON payor_match_candidates(block_key_type);
+      CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_left ON payor_match_candidates(left_normalized_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_right ON payor_match_candidates(right_normalized_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_match_candidates_hard ON payor_match_candidates(hard_match);
+    `);
+    console.log('✅ Migration complete: payor blocking tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor blocking migration failed:', e.message);
+  }
+}
+
+// Migration: payor fuzzy similarity score table for entity-resolution Step 4.
+function migratePayorSimilarityTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_similarity_scores (
+        id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL UNIQUE,
+        jaro_winkler REAL,
+        token_sort_ratio REAL,
+        token_set_ratio REAL,
+        scorer_version TEXT DEFAULT 'v1',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (candidate_id) REFERENCES payor_match_candidates(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_similarity_candidate ON payor_similarity_scores(candidate_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_similarity_version ON payor_similarity_scores(scorer_version);
+    `);
+    console.log('✅ Migration complete: payor similarity tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor similarity migration failed:', e.message);
+  }
+}
+
+// Migration: payor composite resolution decisions + policy metadata for Step 5.
+function migratePayorResolutionTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_resolution_policies (
+        version TEXT PRIMARY KEY,
+        policy_json TEXT NOT NULL,
+        active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_resolution_policies_active ON payor_resolution_policies(active);
+
+      CREATE TABLE IF NOT EXISTS payor_resolution_decisions (
+        id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL UNIQUE,
+        final_score REAL NOT NULL,
+        decision TEXT NOT NULL,
+        reason_codes_json TEXT,
+        policy_version TEXT NOT NULL,
+        auto_resolved INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (candidate_id) REFERENCES payor_match_candidates(id),
+        FOREIGN KEY (policy_version) REFERENCES payor_resolution_policies(version)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_resolution_decisions_policy ON payor_resolution_decisions(policy_version);
+      CREATE INDEX IF NOT EXISTS idx_payor_resolution_decisions_decision ON payor_resolution_decisions(decision);
+    `);
+    console.log('✅ Migration complete: payor resolution tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor resolution migration failed:', e.message);
+  }
+}
+
+// Migration: payor canonical entity model tables for Step 6.
+function migratePayorCanonicalTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_canonical_entities (
+        id TEXT PRIMARY KEY,
+        canonical_name TEXT NOT NULL,
+        canonical_payer_id TEXT,
+        canonical_npi TEXT,
+        canonical_ein TEXT,
+        state_scope TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_canonical_name ON payor_canonical_entities(canonical_name);
+      CREATE INDEX IF NOT EXISTS idx_payor_canonical_payer_id ON payor_canonical_entities(canonical_payer_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_canonical_npi ON payor_canonical_entities(canonical_npi);
+
+      CREATE TABLE IF NOT EXISTS payor_entity_aliases (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        alias_normalized TEXT NOT NULL,
+        source TEXT,
+        confidence REAL DEFAULT 1.0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES payor_canonical_entities(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_alias_entity ON payor_entity_aliases(entity_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_alias_lookup ON payor_entity_aliases(alias_normalized);
+
+      CREATE TABLE IF NOT EXISTS payor_entity_links (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT NOT NULL,
+        source_record_id TEXT NOT NULL,
+        decision_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entity_id) REFERENCES payor_canonical_entities(id),
+        FOREIGN KEY (source_record_id) REFERENCES payor_source_records(id),
+        FOREIGN KEY (decision_id) REFERENCES payor_resolution_decisions(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payor_entity_links_record ON payor_entity_links(source_record_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_entity_links_entity ON payor_entity_links(entity_id);
+
+      CREATE TABLE IF NOT EXISTS payor_entity_relationships (
+        id TEXT PRIMARY KEY,
+        parent_entity_id TEXT NOT NULL,
+        child_entity_id TEXT NOT NULL,
+        relationship_type TEXT NOT NULL,
+        confidence REAL DEFAULT 1.0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (parent_entity_id) REFERENCES payor_canonical_entities(id),
+        FOREIGN KEY (child_entity_id) REFERENCES payor_canonical_entities(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payor_entity_relationship ON payor_entity_relationships(parent_entity_id, child_entity_id, relationship_type);
+    `);
+    console.log('✅ Migration complete: payor canonical tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor canonical migration failed:', e.message);
+  }
+}
+
+// Migration: payor review queue + reviewer actions for Step 7.
+function migratePayorReviewTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS payor_review_queue (
+        id TEXT PRIMARY KEY,
+        decision_id TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        priority INTEGER DEFAULT 3,
+        assigned_to TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (decision_id) REFERENCES payor_resolution_decisions(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_payor_review_queue_decision ON payor_review_queue(decision_id);
+      CREATE INDEX IF NOT EXISTS idx_payor_review_queue_status ON payor_review_queue(status, priority, created_at);
+
+      CREATE TABLE IF NOT EXISTS payor_review_decisions (
+        id TEXT PRIMARY KEY,
+        queue_id TEXT NOT NULL,
+        reviewer TEXT NOT NULL,
+        action TEXT NOT NULL,
+        rationale TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (queue_id) REFERENCES payor_review_queue(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_review_decisions_queue ON payor_review_decisions(queue_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS payor_review_feedback_outcomes (
+        id TEXT PRIMARY KEY,
+        review_decision_id TEXT NOT NULL UNIQUE,
+        queue_id TEXT NOT NULL,
+        resolution_decision_id TEXT NOT NULL,
+        policy_version TEXT,
+        model_decision TEXT,
+        reviewer_action TEXT NOT NULL,
+        reviewer TEXT,
+        rationale TEXT,
+        agreement INTEGER DEFAULT 0,
+        override INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (review_decision_id) REFERENCES payor_review_decisions(id),
+        FOREIGN KEY (queue_id) REFERENCES payor_review_queue(id),
+        FOREIGN KEY (resolution_decision_id) REFERENCES payor_resolution_decisions(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_feedback_policy ON payor_review_feedback_outcomes(policy_version, created_at);
+      CREATE INDEX IF NOT EXISTS idx_payor_feedback_reviewer ON payor_review_feedback_outcomes(reviewer, created_at);
+
+      CREATE TABLE IF NOT EXISTS payor_audit_log (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        decision_id TEXT,
+        queue_id TEXT,
+        policy_version TEXT,
+        payload_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (decision_id) REFERENCES payor_resolution_decisions(id),
+        FOREIGN KEY (queue_id) REFERENCES payor_review_queue(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_payor_audit_event_type ON payor_audit_log(event_type, created_at);
+      CREATE INDEX IF NOT EXISTS idx_payor_audit_decision ON payor_audit_log(decision_id, created_at);
+    `);
+    console.log('✅ Migration complete: payor review queue tables ensured');
+  } catch (e) {
+    console.warn('⚠️  payor review queue migration failed:', e.message);
+  }
+}
+
+// Migration: provider registry core tables (Section 12 batch 1).
+function migrateProviderRegistryCoreTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS provider_registry_entities (
+        id TEXT PRIMARY KEY,
+        canonical_npi TEXT UNIQUE,
+        first_name TEXT,
+        middle_name TEXT,
+        last_name TEXT,
+        organization_name TEXT,
+        provider_type TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_provider_registry_npi ON provider_registry_entities(canonical_npi);
+      CREATE INDEX IF NOT EXISTS idx_provider_registry_org_name ON provider_registry_entities(organization_name);
+      CREATE INDEX IF NOT EXISTS idx_provider_registry_last_name ON provider_registry_entities(last_name);
+
+      CREATE TABLE IF NOT EXISTS provider_registry_source_links (
+        id TEXT PRIMARY KEY,
+        provider_entity_id TEXT NOT NULL,
+        source_record_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        provenance_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (provider_entity_id) REFERENCES provider_registry_entities(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_registry_source_link
+        ON provider_registry_source_links(provider_entity_id, source, source_record_id);
+      CREATE INDEX IF NOT EXISTS idx_provider_registry_source_link_source
+        ON provider_registry_source_links(source, source_record_id);
+
+      CREATE TABLE IF NOT EXISTS provider_registry_aliases (
+        id TEXT PRIMARY KEY,
+        provider_entity_id TEXT NOT NULL,
+        alias TEXT NOT NULL,
+        alias_normalized TEXT NOT NULL,
+        confidence REAL DEFAULT 1.0,
+        source TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (provider_entity_id) REFERENCES provider_registry_entities(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_alias_normalized
+        ON provider_registry_aliases(provider_entity_id, alias_normalized);
+      CREATE INDEX IF NOT EXISTS idx_provider_alias_lookup ON provider_registry_aliases(alias_normalized);
+
+      CREATE TABLE IF NOT EXISTS provider_taxonomy_links (
+        id TEXT PRIMARY KEY,
+        provider_entity_id TEXT NOT NULL,
+        nucc_code TEXT NOT NULL,
+        taxonomy_group TEXT,
+        primary_flag INTEGER DEFAULT 0,
+        source TEXT,
+        confidence REAL DEFAULT 1.0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (provider_entity_id) REFERENCES provider_registry_entities(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_taxonomy_link
+        ON provider_taxonomy_links(provider_entity_id, nucc_code, source);
+      CREATE INDEX IF NOT EXISTS idx_provider_taxonomy_code ON provider_taxonomy_links(nucc_code);
+
+      CREATE TABLE IF NOT EXISTS provider_network_source_records (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        source_record_id TEXT NOT NULL,
+        provider_npi TEXT,
+        payer_hint TEXT,
+        network_name TEXT,
+        network_status TEXT,
+        effective_start_date TEXT,
+        effective_end_date TEXT,
+        payload_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_network_source_record
+        ON provider_network_source_records(source, source_record_id);
+      CREATE INDEX IF NOT EXISTS idx_provider_network_source_npi
+        ON provider_network_source_records(provider_npi);
+
+      CREATE TABLE IF NOT EXISTS provider_payer_networks (
+        id TEXT PRIMARY KEY,
+        provider_entity_id TEXT NOT NULL,
+        payor_entity_id TEXT NOT NULL,
+        network_status TEXT NOT NULL,
+        effective_start_date TEXT,
+        effective_end_date TEXT,
+        confidence REAL DEFAULT 1.0,
+        source TEXT,
+        provenance_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (provider_entity_id) REFERENCES provider_registry_entities(id),
+        FOREIGN KEY (payor_entity_id) REFERENCES payor_canonical_entities(id)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_payer_network
+        ON provider_payer_networks(provider_entity_id, payor_entity_id, network_status, COALESCE(effective_start_date, ''), COALESCE(effective_end_date, ''), COALESCE(source, ''));
+      CREATE INDEX IF NOT EXISTS idx_provider_payer_network_provider
+        ON provider_payer_networks(provider_entity_id, network_status);
+      CREATE INDEX IF NOT EXISTS idx_provider_payer_network_payor
+        ON provider_payer_networks(payor_entity_id, network_status);
+
+      CREATE TABLE IF NOT EXISTS provider_credentialing_profiles (
+        id TEXT PRIMARY KEY,
+        provider_entity_id TEXT NOT NULL UNIQUE,
+        profile_status TEXT DEFAULT 'incomplete',
+        completeness_score REAL DEFAULT 0,
+        verification_metadata_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (provider_entity_id) REFERENCES provider_registry_entities(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_provider_credentialing_profiles_status
+        ON provider_credentialing_profiles(profile_status, completeness_score);
+
+      CREATE TABLE IF NOT EXISTS credentialing_artifact_catalog (
+        artifact_code TEXT PRIMARY KEY,
+        artifact_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        required_flag INTEGER DEFAULT 1,
+        verification_method TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_credentialing_artifact_category
+        ON credentialing_artifact_catalog(category, required_flag);
+
+      CREATE TABLE IF NOT EXISTS provider_credentialing_artifacts (
+        id TEXT PRIMARY KEY,
+        provider_entity_id TEXT NOT NULL,
+        artifact_code TEXT NOT NULL,
+        artifact_status TEXT DEFAULT 'missing',
+        verified_at DATETIME,
+        expiration_date TEXT,
+        source TEXT,
+        verification_metadata_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (provider_entity_id) REFERENCES provider_registry_entities(id),
+        FOREIGN KEY (artifact_code) REFERENCES credentialing_artifact_catalog(artifact_code)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_credentialing_artifact
+        ON provider_credentialing_artifacts(provider_entity_id, artifact_code);
+      CREATE INDEX IF NOT EXISTS idx_provider_credentialing_artifact_status
+        ON provider_credentialing_artifacts(artifact_status, artifact_code);
+
+      CREATE TABLE IF NOT EXISTS provider_enrollment_field_mappings (
+        id TEXT PRIMARY KEY,
+        enrollment_field TEXT NOT NULL,
+        source_table TEXT NOT NULL,
+        source_field TEXT NOT NULL,
+        transform_hint TEXT,
+        required_flag INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_provider_enrollment_field_mapping
+        ON provider_enrollment_field_mappings(enrollment_field, source_table, source_field);
+    `);
+    console.log('✅ Migration complete: provider registry core tables ensured');
+  } catch (e) {
+    console.warn('⚠️  provider registry core migration failed:', e.message);
+  }
+}
+
+// Run migrations on startup (optionally skipped in constrained boot environments)
+// SKIP_STARTUP_MIGRATIONS is defined near the top of this file (after env helpers).
+if (SKIP_STARTUP_MIGRATIONS) {
+  console.warn('⚠️  SKIP_STARTUP_MIGRATIONS enabled: skipping startup migration batch');
+} else {
 migrateInsuranceClaimsTable();
 migrateFHIRPatientsWalletAddress();
 migratePatientPortalSessionsEmail();
@@ -4902,6 +5445,15 @@ migrateBackfillSessionStateFromTriage(); // Initialize canonical state from tria
 migrateCosmeticKnowledgeTables(); // OBF/CosIng + cosmetic restrictions
 migrateCasePatternsStore(); // De-identified case pattern retrieval store
 migrateFinalAssessmentArtifacts(); // Case summary + billing packs + decision logs
+  migratePayorRawIngestTables(); // Payor ER Step 1 raw ingest storage
+  migratePayorNormalizationTables(); // Payor ER Step 2 normalization storage
+  migratePayorBlockingTables(); // Payor ER Step 3 candidate blocking storage
+  migratePayorSimilarityTables(); // Payor ER Step 4 fuzzy similarity score storage
+  migratePayorResolutionTables(); // Payor ER Step 5 composite decisions + policy metadata
+  migratePayorCanonicalTables(); // Payor ER Step 6 canonical entities + aliases + links
+  migratePayorReviewTables(); // Payor ER Step 7 review queue + reviewer outcomes
+  migrateProviderRegistryCoreTables(); // Provider registry Section 12 batch 1 core tables
+}
 
 /**
  * Migration: Enterprise Master Patient Index (EMPI)
@@ -5362,7 +5914,11 @@ function runMigrations() {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   // mvp-76: optional backup-before-migrate (prod)
   try {
-    const strict = (process.env.MIGRATIONS_STRICT === '1' || process.env.MIGRATIONS_STRICT === 'true') || isProdEnv;
+    const strictEnvRaw = String(process.env.MIGRATIONS_STRICT || '').toLowerCase().trim();
+    const strict =
+      strictEnvRaw
+        ? (strictEnvRaw === '1' || strictEnvRaw === 'true' || strictEnvRaw === 'yes')
+        : isProdEnv;
     const wantBackup = (process.env.BACKUP_BEFORE_MIGRATE === '1' || process.env.BACKUP_BEFORE_MIGRATE === 'true') && isProdEnv;
     if (wantBackup && fs.existsSync(dbPath)) {
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -12199,6 +12755,888 @@ module.exports = {
   },
 
   // ============================================
+  // PAYOR RAW INGEST (Entity Resolution Step 1)
+  // ============================================
+
+  createPayorIngestBatch(batch) {
+    const stmt = db.prepare(`
+      INSERT INTO payor_ingest_batches (
+        id, source, source_url, file_name, file_checksum, gcs_uri, file_size_bytes,
+        started_at, completed_at, record_count, status, error_summary, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      batch.id,
+      batch.source,
+      batch.source_url || null,
+      batch.file_name || null,
+      batch.file_checksum || null,
+      batch.gcs_uri || null,
+      batch.file_size_bytes || null,
+      batch.started_at || new Date().toISOString(),
+      batch.completed_at || null,
+      batch.record_count || 0,
+      batch.status || 'running',
+      batch.error_summary || null,
+      batch.created_at || new Date().toISOString()
+    );
+  },
+
+  completePayorIngestBatch(batchId, updates = {}) {
+    const stmt = db.prepare(`
+      UPDATE payor_ingest_batches
+      SET completed_at = ?,
+          record_count = ?,
+          status = ?,
+          error_summary = ?,
+          gcs_uri = COALESCE(?, gcs_uri),
+          file_size_bytes = COALESCE(?, file_size_bytes)
+      WHERE id = ?
+    `);
+    return stmt.run(
+      updates.completed_at || new Date().toISOString(),
+      updates.record_count || 0,
+      updates.status || 'completed',
+      updates.error_summary || null,
+      updates.gcs_uri || null,
+      updates.file_size_bytes || null,
+      batchId
+    );
+  },
+
+  getPayorIngestBatchBySourceChecksum(source, fileChecksum) {
+    const stmt = db.prepare(`
+      SELECT * FROM payor_ingest_batches
+      WHERE source = ? AND file_checksum = ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    return stmt.get(source, fileChecksum);
+  },
+
+  insertPayorSourceRecord(record) {
+    const stmt = db.prepare(`
+      INSERT INTO payor_source_records (
+        id, batch_id, source, source_record_id, raw_name, raw_payer_id,
+        raw_npi, raw_ein, raw_state_hint, payload_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    return stmt.run(
+      record.id,
+      record.batch_id,
+      record.source,
+      record.source_record_id || null,
+      record.raw_name || null,
+      record.raw_payer_id || null,
+      record.raw_npi || null,
+      record.raw_ein || null,
+      record.raw_state_hint || null,
+      typeof record.payload_json === 'string'
+        ? record.payload_json
+        : JSON.stringify(record.payload_json || {}),
+      record.created_at || new Date().toISOString()
+    );
+  },
+
+  // ============================================
+  // PAYOR NORMALIZATION (Entity Resolution Step 2)
+  // ============================================
+
+  bulkUpsertPayorAbbreviations(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_abbreviation_dictionary (abbr, expanded_form, active, source, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(abbr) DO UPDATE SET
+        expanded_form = excluded.expanded_form,
+        active = excluded.active,
+        source = excluded.source,
+        updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((rows) => {
+      for (const row of rows) {
+        const abbr = String(row.abbr || '').trim().toLowerCase();
+        const expanded = String(row.expanded_form || '').trim().toLowerCase();
+        if (!abbr || !expanded) continue;
+        stmt.run(
+          abbr,
+          expanded,
+          row.active === 0 ? 0 : 1,
+          row.source || 'seed',
+          new Date().toISOString()
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  getActivePayorAbbreviations() {
+    return db.prepare(`
+      SELECT abbr, expanded_form, source, updated_at
+      FROM payor_abbreviation_dictionary
+      WHERE active = 1
+      ORDER BY abbr ASC
+    `).all();
+  },
+
+  bulkUpsertPayorStopwords(words = [], source = 'seed') {
+    if (!Array.isArray(words) || words.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_stopwords (word, active, source, updated_at)
+      VALUES (?, 1, ?, ?)
+      ON CONFLICT(word) DO UPDATE SET
+        active = 1,
+        source = excluded.source,
+        updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((items) => {
+      for (const raw of items) {
+        const word = String(raw || '').trim().toLowerCase();
+        if (!word) continue;
+        stmt.run(word, source || 'seed', new Date().toISOString());
+      }
+    });
+    tx(words);
+    return words.length;
+  },
+
+  getActivePayorStopwords() {
+    return db.prepare(`
+      SELECT word, source, updated_at
+      FROM payor_stopwords
+      WHERE active = 1
+      ORDER BY word ASC
+    `).all();
+  },
+
+  getPayorSourceRecordsForNormalization({ source = null, limit = 5000, offset = 0 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 5000, 50000));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    if (source) {
+      return db.prepare(`
+        SELECT id, source, source_record_id, raw_name, raw_payer_id, raw_npi, raw_ein, raw_state_hint, payload_json, created_at
+        FROM payor_source_records
+        WHERE source = ?
+        ORDER BY datetime(created_at) DESC, id ASC
+        LIMIT ? OFFSET ?
+      `).all(source, cappedLimit, safeOffset);
+    }
+    return db.prepare(`
+      SELECT id, source, source_record_id, raw_name, raw_payer_id, raw_npi, raw_ein, raw_state_hint, payload_json, created_at
+      FROM payor_source_records
+      ORDER BY datetime(created_at) DESC, id ASC
+      LIMIT ? OFFSET ?
+    `).all(cappedLimit, safeOffset);
+  },
+
+  upsertPayorNormalizedRecords(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_normalized_records (
+        id, source_record_id, source, normalized_name, normalized_tokens_json, canonical_tokens_json,
+        stripped_state, soundex_key, prefix_key, normalization_version, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_record_id) DO UPDATE SET
+        source = excluded.source,
+        normalized_name = excluded.normalized_name,
+        normalized_tokens_json = excluded.normalized_tokens_json,
+        canonical_tokens_json = excluded.canonical_tokens_json,
+        stripped_state = excluded.stripped_state,
+        soundex_key = excluded.soundex_key,
+        prefix_key = excluded.prefix_key,
+        normalization_version = excluded.normalization_version,
+        updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        const now = new Date().toISOString();
+        stmt.run(
+          r.id,
+          r.source_record_id,
+          r.source,
+          r.normalized_name,
+          typeof r.normalized_tokens_json === 'string' ? r.normalized_tokens_json : JSON.stringify(r.normalized_tokens_json || []),
+          typeof r.canonical_tokens_json === 'string' ? r.canonical_tokens_json : JSON.stringify(r.canonical_tokens_json || []),
+          r.stripped_state || null,
+          r.soundex_key || null,
+          r.prefix_key || null,
+          r.normalization_version || 'v1',
+          r.created_at || now,
+          now
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  getPayorCandidatesForScoring({ batchId = null, limit = 50000, offset = 0 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 50000, 200000));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    if (batchId) {
+      return db.prepare(`
+        SELECT
+          c.id AS candidate_id,
+          c.batch_id,
+          c.block_key_type,
+          c.hard_match,
+          l.id AS left_normalized_id,
+          l.source AS left_source,
+          l.normalized_name AS left_normalized_name,
+          r.id AS right_normalized_id,
+          r.source AS right_source,
+          r.normalized_name AS right_normalized_name
+        FROM payor_match_candidates c
+        JOIN payor_normalized_records l ON l.id = c.left_normalized_id
+        JOIN payor_normalized_records r ON r.id = c.right_normalized_id
+        WHERE c.batch_id = ?
+        ORDER BY c.created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(batchId, cappedLimit, safeOffset);
+    }
+    return db.prepare(`
+      SELECT
+        c.id AS candidate_id,
+        c.batch_id,
+        c.block_key_type,
+        c.hard_match,
+        l.id AS left_normalized_id,
+        l.source AS left_source,
+        l.normalized_name AS left_normalized_name,
+        r.id AS right_normalized_id,
+        r.source AS right_source,
+        r.normalized_name AS right_normalized_name
+      FROM payor_match_candidates c
+      JOIN payor_normalized_records l ON l.id = c.left_normalized_id
+      JOIN payor_normalized_records r ON r.id = c.right_normalized_id
+      ORDER BY c.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(cappedLimit, safeOffset);
+  },
+
+  upsertPayorSimilarityScores(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_similarity_scores (
+        id, candidate_id, jaro_winkler, token_sort_ratio, token_set_ratio, scorer_version, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(candidate_id) DO UPDATE SET
+        jaro_winkler = excluded.jaro_winkler,
+        token_sort_ratio = excluded.token_sort_ratio,
+        token_set_ratio = excluded.token_set_ratio,
+        scorer_version = excluded.scorer_version,
+        updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        const now = new Date().toISOString();
+        stmt.run(
+          r.id,
+          r.candidate_id,
+          r.jaro_winkler,
+          r.token_sort_ratio,
+          r.token_set_ratio,
+          r.scorer_version || 'v1',
+          r.created_at || now,
+          now
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  upsertPayorResolutionPolicy(policy) {
+    const stmt = db.prepare(`
+      INSERT INTO payor_resolution_policies (version, policy_json, active, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(version) DO UPDATE SET
+        policy_json = excluded.policy_json,
+        active = excluded.active,
+        updated_at = excluded.updated_at
+    `);
+    const now = new Date().toISOString();
+    return stmt.run(
+      policy.version,
+      typeof policy.policy_json === 'string' ? policy.policy_json : JSON.stringify(policy.policy_json || {}),
+      policy.active === 0 ? 0 : 1,
+      now,
+      now
+    );
+  },
+
+  activatePayorResolutionPolicy(version) {
+    const tx = db.transaction((v) => {
+      db.prepare(`UPDATE payor_resolution_policies SET active = 0 WHERE version <> ?`).run(v);
+      db.prepare(`UPDATE payor_resolution_policies SET active = 1, updated_at = ? WHERE version = ?`).run(new Date().toISOString(), v);
+    });
+    tx(version);
+    return true;
+  },
+
+  getActivePayorResolutionPolicy() {
+    return db.prepare(`
+      SELECT version, policy_json, active, created_at, updated_at
+      FROM payor_resolution_policies
+      WHERE active = 1
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get();
+  },
+
+  getPayorCandidatesWithScores({ batchId = null, scorerVersion = null, limit = 50000, offset = 0 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 50000, 200000));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    const scoreVersionClause = scorerVersion ? 'AND s.scorer_version = ?' : '';
+    if (batchId) {
+      const args = scorerVersion ? [batchId, scorerVersion, cappedLimit, safeOffset] : [batchId, cappedLimit, safeOffset];
+      return db.prepare(`
+        SELECT
+          c.id AS candidate_id,
+          c.batch_id,
+          c.block_key_type,
+          c.hard_match,
+          l.normalized_name AS left_normalized_name,
+          l.stripped_state AS left_state,
+          r.normalized_name AS right_normalized_name,
+          r.stripped_state AS right_state,
+          ls.raw_payer_id AS left_raw_payer_id,
+          rs.raw_payer_id AS right_raw_payer_id,
+          ls.raw_npi AS left_raw_npi,
+          rs.raw_npi AS right_raw_npi,
+          s.jaro_winkler,
+          s.token_sort_ratio,
+          s.token_set_ratio,
+          s.scorer_version
+        FROM payor_match_candidates c
+        JOIN payor_normalized_records l ON l.id = c.left_normalized_id
+        JOIN payor_normalized_records r ON r.id = c.right_normalized_id
+        JOIN payor_source_records ls ON ls.id = l.source_record_id
+        JOIN payor_source_records rs ON rs.id = r.source_record_id
+        LEFT JOIN payor_similarity_scores s ON s.candidate_id = c.id
+        WHERE c.batch_id = ?
+          ${scoreVersionClause}
+        ORDER BY c.created_at DESC
+        LIMIT ? OFFSET ?
+      `).all(...args);
+    }
+    const args = scorerVersion ? [scorerVersion, cappedLimit, safeOffset] : [cappedLimit, safeOffset];
+    return db.prepare(`
+      SELECT
+        c.id AS candidate_id,
+        c.batch_id,
+        c.block_key_type,
+        c.hard_match,
+        l.normalized_name AS left_normalized_name,
+        l.stripped_state AS left_state,
+        r.normalized_name AS right_normalized_name,
+        r.stripped_state AS right_state,
+        ls.raw_payer_id AS left_raw_payer_id,
+        rs.raw_payer_id AS right_raw_payer_id,
+        ls.raw_npi AS left_raw_npi,
+        rs.raw_npi AS right_raw_npi,
+        s.jaro_winkler,
+        s.token_sort_ratio,
+        s.token_set_ratio,
+        s.scorer_version
+      FROM payor_match_candidates c
+      JOIN payor_normalized_records l ON l.id = c.left_normalized_id
+      JOIN payor_normalized_records r ON r.id = c.right_normalized_id
+      JOIN payor_source_records ls ON ls.id = l.source_record_id
+      JOIN payor_source_records rs ON rs.id = r.source_record_id
+      LEFT JOIN payor_similarity_scores s ON s.candidate_id = c.id
+      WHERE 1=1
+        ${scoreVersionClause}
+      ORDER BY c.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...args);
+  },
+
+  upsertPayorResolutionDecisions(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_resolution_decisions (
+        id, candidate_id, final_score, decision, reason_codes_json, policy_version, auto_resolved, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(candidate_id) DO UPDATE SET
+        final_score = excluded.final_score,
+        decision = excluded.decision,
+        reason_codes_json = excluded.reason_codes_json,
+        policy_version = excluded.policy_version,
+        auto_resolved = excluded.auto_resolved,
+        updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        const now = new Date().toISOString();
+        stmt.run(
+          r.id,
+          r.candidate_id,
+          r.final_score,
+          r.decision,
+          typeof r.reason_codes_json === 'string' ? r.reason_codes_json : JSON.stringify(r.reason_codes_json || []),
+          r.policy_version,
+          r.auto_resolved ? 1 : 0,
+          r.created_at || now,
+          now
+        );
+        try {
+          const persisted = db.prepare(`
+            SELECT id
+            FROM payor_resolution_decisions
+            WHERE candidate_id = ?
+            LIMIT 1
+          `).get(r.candidate_id);
+          db.prepare(`
+            INSERT INTO payor_audit_log (
+              id, event_type, decision_id, policy_version, payload_json, created_at
+            ) VALUES (?, 'resolution_decision_upserted', ?, ?, ?, ?)
+          `).run(
+            `payor_audit_${uuidv4()}`,
+            persisted?.id || null,
+            r.policy_version || null,
+            JSON.stringify({
+              candidate_id: r.candidate_id,
+              final_score: r.final_score,
+              decision: r.decision,
+              reason_codes: typeof r.reason_codes_json === 'string'
+                ? r.reason_codes_json
+                : JSON.stringify(r.reason_codes_json || []),
+              auto_resolved: Boolean(r.auto_resolved)
+            }),
+            now
+          );
+        } catch (_) {}
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  getPayorResolutionRowsForCanonicalization({ policyVersion = null, limit = 50000, offset = 0 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 50000, 200000));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    const policyClause = policyVersion ? 'AND d.policy_version = ?' : '';
+    const args = policyVersion ? [policyVersion, cappedLimit, safeOffset] : [cappedLimit, safeOffset];
+    return db.prepare(`
+      SELECT
+        d.id AS decision_id,
+        d.decision,
+        d.final_score,
+        d.policy_version,
+        d.candidate_id,
+        mc.left_normalized_id,
+        mc.right_normalized_id,
+        l.source_record_id AS left_source_record_id,
+        r.source_record_id AS right_source_record_id,
+        ls.source AS left_source,
+        rs.source AS right_source,
+        ls.raw_name AS left_raw_name,
+        rs.raw_name AS right_raw_name,
+        ls.raw_payer_id AS left_raw_payer_id,
+        rs.raw_payer_id AS right_raw_payer_id,
+        ls.raw_npi AS left_raw_npi,
+        rs.raw_npi AS right_raw_npi,
+        ls.raw_ein AS left_raw_ein,
+        rs.raw_ein AS right_raw_ein,
+        ls.raw_state_hint AS left_state_hint,
+        rs.raw_state_hint AS right_state_hint
+      FROM payor_resolution_decisions d
+      JOIN payor_match_candidates mc ON mc.id = d.candidate_id
+      JOIN payor_normalized_records l ON l.id = mc.left_normalized_id
+      JOIN payor_normalized_records r ON r.id = mc.right_normalized_id
+      JOIN payor_source_records ls ON ls.id = l.source_record_id
+      JOIN payor_source_records rs ON rs.id = r.source_record_id
+      WHERE d.decision IN ('auto_merge', 'merge_review_flag')
+        ${policyClause}
+      ORDER BY d.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...args);
+  },
+
+  upsertPayorCanonicalEntities(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_canonical_entities (
+        id, canonical_name, canonical_payer_id, canonical_npi, canonical_ein, state_scope, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        canonical_name = excluded.canonical_name,
+        canonical_payer_id = excluded.canonical_payer_id,
+        canonical_npi = excluded.canonical_npi,
+        canonical_ein = excluded.canonical_ein,
+        state_scope = excluded.state_scope,
+        status = excluded.status,
+        updated_at = excluded.updated_at
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        const now = new Date().toISOString();
+        stmt.run(
+          r.id,
+          r.canonical_name,
+          r.canonical_payer_id || null,
+          r.canonical_npi || null,
+          r.canonical_ein || null,
+          r.state_scope || null,
+          r.status || 'active',
+          r.created_at || now,
+          now
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  upsertPayorEntityAliases(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_entity_aliases (
+        id, entity_id, alias, alias_normalized, source, confidence, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        entity_id = excluded.entity_id,
+        alias = excluded.alias,
+        alias_normalized = excluded.alias_normalized,
+        source = excluded.source,
+        confidence = excluded.confidence
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        stmt.run(
+          r.id,
+          r.entity_id,
+          r.alias,
+          r.alias_normalized,
+          r.source || null,
+          r.confidence == null ? 1.0 : r.confidence,
+          r.created_at || new Date().toISOString()
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  upsertPayorEntityLinks(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_entity_links (
+        id, entity_id, source_record_id, decision_id, created_at
+      ) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(source_record_id) DO UPDATE SET
+        entity_id = excluded.entity_id,
+        decision_id = excluded.decision_id
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        stmt.run(
+          r.id,
+          r.entity_id,
+          r.source_record_id,
+          r.decision_id || null,
+          r.created_at || new Date().toISOString()
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  upsertPayorEntityRelationships(items = []) {
+    if (!Array.isArray(items) || items.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_entity_relationships (
+        id, parent_entity_id, child_entity_id, relationship_type, confidence, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(parent_entity_id, child_entity_id, relationship_type) DO UPDATE SET
+        confidence = excluded.confidence
+    `);
+    const tx = db.transaction((rows) => {
+      for (const r of rows) {
+        stmt.run(
+          r.id,
+          r.parent_entity_id,
+          r.child_entity_id,
+          r.relationship_type,
+          r.confidence == null ? 1.0 : r.confidence,
+          r.created_at || new Date().toISOString()
+        );
+      }
+    });
+    tx(items);
+    return items.length;
+  },
+
+  backfillCanonicalFromInsurancePayers(limit = 5000) {
+    const rows = db.prepare(`
+      SELECT payer_id, payer_name, aliases
+      FROM insurance_payers
+      WHERE is_active = 1
+      ORDER BY rowid DESC
+      LIMIT ?
+    `).all(limit);
+    return rows;
+  },
+
+  enqueuePayorReviewQueueFromDecisions({
+    policyVersion = null,
+    decisions = ['merge_review_flag', 'review_candidate'],
+    limit = 1000
+  } = {}) {
+    const inClause = decisions.map(() => '?').join(', ');
+    const wherePolicy = policyVersion ? 'AND d.policy_version = ?' : '';
+    const args = [...decisions];
+    if (policyVersion) args.push(policyVersion);
+    args.push(Math.max(1, Number(limit) || 1000));
+    const rows = db.prepare(`
+      SELECT d.id AS decision_id, d.decision
+      FROM payor_resolution_decisions d
+      LEFT JOIN payor_review_queue q ON q.decision_id = d.id
+      WHERE d.decision IN (${inClause})
+        ${wherePolicy}
+        AND q.id IS NULL
+      ORDER BY d.final_score DESC, d.created_at DESC
+      LIMIT ?
+    `).all(...args);
+    if (rows.length === 0) return 0;
+    const stmt = db.prepare(`
+      INSERT INTO payor_review_queue (
+        id, decision_id, status, priority, assigned_to, created_at, updated_at
+      ) VALUES (?, ?, 'pending', ?, NULL, ?, ?)
+    `);
+    const tx = db.transaction((items) => {
+      const now = new Date().toISOString();
+      for (const row of items) {
+        const priority = row.decision === 'merge_review_flag' ? 1 : 3;
+        stmt.run(`payor_rq_${uuidv4()}`, row.decision_id, priority, now, now);
+      }
+    });
+    tx(rows);
+    return rows.length;
+  },
+
+  listPayorReviewQueue({ status = 'pending', limit = 100, offset = 0 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 100, 500));
+    const safeOffset = Math.max(0, Number(offset) || 0);
+    const statusClause = status && status !== 'all' ? 'WHERE q.status = ?' : '';
+    const args = status && status !== 'all' ? [status, cappedLimit, safeOffset] : [cappedLimit, safeOffset];
+    return db.prepare(`
+      SELECT
+        q.id,
+        q.decision_id,
+        q.status,
+        q.priority,
+        q.assigned_to,
+        q.created_at,
+        q.updated_at,
+        d.decision AS model_decision,
+        d.final_score,
+        d.policy_version
+      FROM payor_review_queue q
+      JOIN payor_resolution_decisions d ON d.id = q.decision_id
+      ${statusClause}
+      ORDER BY q.priority ASC, q.created_at ASC
+      LIMIT ? OFFSET ?
+    `).all(...args);
+  },
+
+  getPayorReviewQueueDetails(queueId) {
+    if (!queueId) return null;
+    return db.prepare(`
+      SELECT
+        q.id AS queue_id,
+        q.status,
+        q.priority,
+        q.assigned_to,
+        q.created_at AS queue_created_at,
+        q.updated_at AS queue_updated_at,
+        d.id AS decision_id,
+        d.decision AS model_decision,
+        d.final_score,
+        d.reason_codes_json,
+        d.policy_version,
+        c.id AS candidate_id,
+        c.block_key_type,
+        c.block_key_value,
+        ls.id AS left_source_record_id,
+        ls.source AS left_source,
+        ls.source_record_id AS left_source_external_id,
+        ls.raw_name AS left_raw_name,
+        ls.raw_payer_id AS left_raw_payer_id,
+        ls.raw_npi AS left_raw_npi,
+        ls.raw_ein AS left_raw_ein,
+        ls.raw_state_hint AS left_raw_state_hint,
+        rs.id AS right_source_record_id,
+        rs.source AS right_source,
+        rs.source_record_id AS right_source_external_id,
+        rs.raw_name AS right_raw_name,
+        rs.raw_payer_id AS right_raw_payer_id,
+        rs.raw_npi AS right_raw_npi,
+        rs.raw_ein AS right_raw_ein,
+        rs.raw_state_hint AS right_raw_state_hint,
+        s.jaro_winkler,
+        s.token_sort_ratio,
+        s.token_set_ratio
+      FROM payor_review_queue q
+      JOIN payor_resolution_decisions d ON d.id = q.decision_id
+      JOIN payor_match_candidates c ON c.id = d.candidate_id
+      JOIN payor_normalized_records ln ON ln.id = c.left_normalized_id
+      JOIN payor_normalized_records rn ON rn.id = c.right_normalized_id
+      JOIN payor_source_records ls ON ls.id = ln.source_record_id
+      JOIN payor_source_records rs ON rs.id = rn.source_record_id
+      LEFT JOIN payor_similarity_scores s ON s.candidate_id = c.id
+      WHERE q.id = ?
+      LIMIT 1
+    `).get(queueId);
+  },
+
+  submitPayorReviewDecision({
+    queueId,
+    reviewer,
+    action,
+    rationale = null
+  }) {
+    if (!queueId || !reviewer || !action) return null;
+    const validActions = new Set(['merge', 'separate', 'related_subsidiary']);
+    if (!validActions.has(action)) {
+      throw new Error(`Invalid review action: ${action}`);
+    }
+    const now = new Date().toISOString();
+    const decisionId = `payor_rqd_${uuidv4()}`;
+    const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO payor_review_decisions (
+          id, queue_id, reviewer, action, rationale, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(decisionId, queueId, reviewer, action, rationale, now);
+      db.prepare(`
+        UPDATE payor_review_queue
+        SET status = 'resolved',
+            assigned_to = COALESCE(assigned_to, ?),
+            updated_at = ?
+        WHERE id = ?
+      `).run(reviewer, now, queueId);
+      db.prepare(`
+        INSERT INTO payor_audit_log (
+          id, event_type, queue_id, payload_json, created_at
+        ) VALUES (?, 'reviewer_action_submitted', ?, ?, ?)
+      `).run(
+        `payor_audit_${uuidv4()}`,
+        queueId,
+        JSON.stringify({ reviewer, action, rationale: rationale || null }),
+        now
+      );
+    });
+    tx();
+    return decisionId;
+  },
+
+  listPayorReviewDecisions({ since = null, limit = 1000 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 1000, 10000));
+    const where = since ? 'WHERE rd.created_at >= ?' : '';
+    const args = since ? [since, cappedLimit] : [cappedLimit];
+    return db.prepare(`
+      SELECT
+        rd.id,
+        rd.queue_id,
+        rd.reviewer,
+        rd.action,
+        rd.rationale,
+        rd.created_at,
+        q.decision_id,
+        d.decision AS model_decision,
+        d.final_score,
+        d.policy_version
+      FROM payor_review_decisions rd
+      JOIN payor_review_queue q ON q.id = rd.queue_id
+      JOIN payor_resolution_decisions d ON d.id = q.decision_id
+      ${where}
+      ORDER BY rd.created_at DESC
+      LIMIT ?
+    `).all(...args);
+  },
+
+  promotePayorReviewedOutcomesToFeedback({ policyVersion = null, limit = 5000 } = {}) {
+    const cappedLimit = Math.max(1, Math.min(Number(limit) || 5000, 20000));
+    const policyClause = policyVersion ? 'AND d.policy_version = ?' : '';
+    const args = policyVersion ? [policyVersion, cappedLimit] : [cappedLimit];
+    const rows = db.prepare(`
+      SELECT
+        rd.id AS review_decision_id,
+        rd.queue_id,
+        rd.reviewer,
+        rd.action AS reviewer_action,
+        rd.rationale,
+        rd.created_at,
+        q.decision_id AS resolution_decision_id,
+        d.policy_version,
+        d.decision AS model_decision
+      FROM payor_review_decisions rd
+      JOIN payor_review_queue q ON q.id = rd.queue_id
+      JOIN payor_resolution_decisions d ON d.id = q.decision_id
+      LEFT JOIN payor_review_feedback_outcomes fo ON fo.review_decision_id = rd.id
+      WHERE fo.id IS NULL
+        ${policyClause}
+      ORDER BY rd.created_at DESC
+      LIMIT ?
+    `).all(...args);
+    if (rows.length === 0) return 0;
+
+    function isAgreement(modelDecision, reviewerAction) {
+      if (reviewerAction === 'merge') return modelDecision === 'merge_review_flag' || modelDecision === 'auto_merge';
+      if (reviewerAction === 'separate') return modelDecision === 'distinct';
+      if (reviewerAction === 'related_subsidiary') return modelDecision === 'review_candidate';
+      return false;
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO payor_review_feedback_outcomes (
+        id, review_decision_id, queue_id, resolution_decision_id, policy_version,
+        model_decision, reviewer_action, reviewer, rationale, agreement, override, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const tx = db.transaction((items) => {
+      for (const row of items) {
+        const agree = isAgreement(row.model_decision, row.reviewer_action) ? 1 : 0;
+        stmt.run(
+          `payor_fb_${uuidv4()}`,
+          row.review_decision_id,
+          row.queue_id,
+          row.resolution_decision_id,
+          row.policy_version || null,
+          row.model_decision || null,
+          row.reviewer_action,
+          row.reviewer || null,
+          row.rationale || null,
+          agree,
+          agree ? 0 : 1,
+          row.created_at || new Date().toISOString()
+        );
+      }
+    });
+    tx(rows);
+    return rows.length;
+  },
+
+  getPayorFeedbackMetrics({ policyVersion = null } = {}) {
+    const where = policyVersion ? 'WHERE policy_version = ?' : '';
+    const args = policyVersion ? [policyVersion] : [];
+    return db.prepare(`
+      SELECT
+        COUNT(*) AS total_reviews,
+        SUM(CASE WHEN agreement = 1 THEN 1 ELSE 0 END) AS agreement_count,
+        SUM(CASE WHEN override = 1 THEN 1 ELSE 0 END) AS override_count,
+        ROUND(AVG(CASE WHEN agreement = 1 THEN 1.0 ELSE 0.0 END), 6) AS agreement_rate,
+        ROUND(AVG(CASE WHEN override = 1 THEN 1.0 ELSE 0.0 END), 6) AS override_rate
+      FROM payor_review_feedback_outcomes
+      ${where}
+    `).get(...args);
+  },
+
+  // ============================================
   // PATIENT INSURANCE
   // ============================================
 
@@ -18251,3 +19689,6 @@ module.exports.getComplianceSignoff = function getComplianceSignoff(signoffKey) 
     return null;
   }
 };
+
+/** Absolute path to the SQLite file used by this process (same resolution as startup log). */
+module.exports.sqliteDatabasePath = dbPath;

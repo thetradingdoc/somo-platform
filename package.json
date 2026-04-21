@@ -18,12 +18,14 @@
     "test:reasoning-release-gates": "npm run test:reasoning-pre-ramp && (test \"${REASONING_RELEASE_SKIP_E2E}\" = \"1\" || npm run test:e2e-chat-scan-gate --prefix middleware-platform)",
     "verify:reasoning:semantic-quality": "npm run verify:reasoning:semantic-quality --prefix middleware-platform",
     "verify:reasoning:production-gate": "npm run verify:reasoning:production-gate --prefix middleware-platform",
+    "verify:prod:routing-smoke": "npm run verify:prod:routing-smoke --prefix middleware-platform",
+    "verify:prod:full-e2e-signoff": "npm run verify:prod:full-e2e-signoff --prefix middleware-platform",
     "scheduled:reasoning-jobs-reclaim": "npm run scheduled:reasoning-jobs-reclaim --prefix middleware-platform",
     "load:reasoning-queue-smoke": "npm run load:reasoning-queue-smoke --prefix middleware-platform",
     "test:e2e-landing": "cd middleware-platform && npm run test:e2e-landing --",
     "test:e2e-landing:quick": "cd middleware-platform && npm run test:e2e-landing:quick --",
     "test:e2e-results-snapshot-batch": "npm run test:e2e-results-snapshot-batch --prefix middleware-platform",
-    "deploy:landing-hosting": "npm run build --prefix unified-dashboard/littlelab-landing && cd unified-dashboard && npx firebase-tools deploy --only hosting"
+    "deploy:landing-hosting": "REACT_APP_API_BASE=${REACT_APP_API_BASE:-https://api.myskinandcare.com} npm run build --prefix unified-dashboard/littlelab-landing && cd unified-dashboard && npx firebase-tools deploy --only hosting"
   },
   "devDependencies": {
     "firebase-tools": "^13.35.1",

@@ -42,7 +42,7 @@ function voiceProps(overrides = {}) {
 test('scanner controls expose accessible names and order', async () => {
   const { container } = render(<AssistantVoicePage {...voiceProps()} />);
   expect(screen.getByRole('button', { name: /scan/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /talk/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /voice \(beta\)/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /upload/i })).toBeInTheDocument();
   const results = await axe(container);
   expect(results).toHaveNoViolations();
