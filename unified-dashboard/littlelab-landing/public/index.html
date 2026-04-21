@@ -6,10 +6,11 @@
     <meta name="theme-color" content="#ffa51f" />
     <!-- LiveKit: if you add CSP meta, allow connect-src to wss://*.livekit.cloud (see middleware security.js). -->
     <!-- Root-relative paths: work with CRA build and when middleware serves `public/` without substituting %PUBLIC_URL% (literal %PUBLIC breaks Express path decoding). -->
-    <!-- Favicons: raster PNGs derived from `logo-panda.png` (center crop + resize) so the panda reads at 16–32px. Avoid generic SVG marks that rasterize as ambiguous letters in Chrome. -->
+    <!-- Favicons: tight center-crop of `logo-panda.png` then 48/32/16 so the panda fills more of the tab pixel grid (Chrome still draws ~16px; larger sources scale down sharper). -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="shortcut icon" href="/favicon-32x32.png" type="image/png" />
+    <link rel="shortcut icon" href="/favicon-48x48.png" type="image/png" />
     <link rel="apple-touch-icon" href="/images/branding/logo-panda.png" />
     <title>Skin &amp; Care | Clinically Backed Skincare Guidance</title>
     <meta
