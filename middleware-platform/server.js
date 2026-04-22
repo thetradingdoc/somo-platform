@@ -1670,6 +1670,19 @@ app.use('/videos', express.static(getLittleLabBuildPath('videos'), {
   maxAge: '1d'
 }));
 
+// CRA emits favicon PNGs (and a few root files) next to build/index.html — serve them on :4000 so tab icons match prod when `GET /` uses the build.
+function sendLittleLabRootBuildFile(fileName, res) {
+  const fs = require('fs');
+  const fromBuild = getLittleLabBuildPath(fileName);
+  if (fs.existsSync(fromBuild)) return res.sendFile(fromBuild);
+  const fromPublic = getUnifiedDashboardPath('littlelab-landing', 'public', fileName);
+  if (fs.existsSync(fromPublic)) return res.sendFile(fromPublic);
+  res.status(404).end();
+}
+['favicon-16x16.png', 'favicon-32x32.png', 'favicon-48x48.png', 'favicon-64x64.png'].forEach((name) => {
+  app.get(`/${name}`, (req, res) => sendLittleLabRootBuildFile(name, res));
+});
+
 // Serve unified-dashboard HTML pages
 app.get(['/landing', '/landing.html'], (req, res) => {
   const utmSource = req.query?.utm_source || '';
@@ -2241,12 +2254,24 @@ app.get('/wallet', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'customer', 'wallet.html'));
 });
 
-// Favicon route (prevent 404 errors)
+// Favicon: browsers still request /favicon.ico — serve the same panda mark as littlelab-landing (build, else public).
 app.get('/favicon.ico', (req, res) => {
-  // Return a simple SVG favicon as data URI
+  const fs = require('fs');
+  const fromBuild = getLittleLabBuildPath('favicon-32x32.png');
+  if (fs.existsSync(fromBuild)) {
+    res.type('image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(fromBuild);
+  }
+  const fromPublic = getUnifiedDashboardPath('littlelab-landing', 'public', 'favicon-32x32.png');
+  if (fs.existsSync(fromPublic)) {
+    res.type('image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(fromPublic);
+  }
   const svgFavicon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚕️</text></svg>';
   res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
   res.send(svgFavicon);
 });
 
