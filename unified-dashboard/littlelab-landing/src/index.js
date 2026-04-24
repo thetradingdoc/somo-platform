@@ -157,6 +157,7 @@ function GetAppWaitlistOverlay({ open, onClose, apiBaseCandidates }) {
 
 function Root() {
   const isLocalHost = typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname);
+  const localPatientAuthHref = '/patients/patient-login.html';
   // Stable reference so catalog-loading effect does not re-fire on every render.
   const API_BASE_CANDIDATES = useMemo(() => {
     const loc =
@@ -562,6 +563,10 @@ function Root() {
   const handleOpenGetApp = (event, source = 'nav') => {
     if (event?.preventDefault) event.preventDefault();
     emitCheckoutFunnelEvent('landing_get_app_open', { source });
+    if (isLocalHost && typeof window !== 'undefined') {
+      window.location.href = localPatientAuthHref;
+      return;
+    }
     setShowGetAppModal(true);
   };
 
@@ -861,7 +866,7 @@ function Root() {
           <a href="#scan-results">Skin Diagnosis</a>
           <a href="#before-after">New</a>
           <a href="#patient-reviews">Bestsellers</a>
-          <a href="/waitlist" onClick={(e) => handleOpenGetApp(e, 'top_nav_menu')}>App</a>
+          <a href={isLocalHost ? localPatientAuthHref : '/waitlist'} onClick={(e) => handleOpenGetApp(e, 'top_nav_menu')}>App</a>
         </nav>
         <div className="nav-actions">
           <button
@@ -886,7 +891,7 @@ function Root() {
           <a href="#before-after" onClick={() => setShowMobileMenu(false)}>New</a>
           <a href="#patient-reviews" onClick={() => setShowMobileMenu(false)}>Bestsellers</a>
           <a
-            href="/waitlist"
+            href={isLocalHost ? localPatientAuthHref : '/waitlist'}
             onClick={(e) => {
               setShowMobileMenu(false);
               handleOpenGetApp(e, 'mobile_nav_menu');
@@ -948,10 +953,9 @@ function Root() {
               <button
                 type="button"
                 className="btn-cal btn-cal--get-app"
-                aria-label="Get The App — join the Skin and Care waitlist"
+                aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Skin and Care waitlist'}
                 onClick={() => {
-                  emitCheckoutFunnelEvent('landing_get_app_open', { source: 'hero' });
-                  setShowGetAppModal(true);
+                  handleOpenGetApp(null, 'hero');
                 }}
               >
                 Get The App
@@ -1394,10 +1398,9 @@ function Root() {
               <button
                 type="button"
                 className="btn-cal btn-cal--get-app ba-reviews-get-app"
-                aria-label="Get The App — join the Skin and Care waitlist"
+                aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Skin and Care waitlist'}
                 onClick={() => {
-                  emitCheckoutFunnelEvent('landing_get_app_open', { source: 'reviews_section' });
-                  setShowGetAppModal(true);
+                  handleOpenGetApp(null, 'reviews_section');
                 }}
               >
                 Get The App
@@ -1491,10 +1494,9 @@ function Root() {
                     <button
                       type="button"
                       className="btn-cal btn-cal--get-app"
-                      aria-label="Get The App — join the Skin and Care waitlist"
+                      aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Skin and Care waitlist'}
                       onClick={() => {
-                        emitCheckoutFunnelEvent('landing_get_app_open', { source: 'footer' });
-                        setShowGetAppModal(true);
+                        handleOpenGetApp(null, 'footer');
                       }}
                     >
                       Get The App

@@ -5,6 +5,7 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { JournalTokens } from '@/constants/journalTokens';
 import { DEMO_CHECKOUT_PRODUCT_ID, DEMO_PROVIDER_ID, getApiReachabilityIssue } from '@/config';
 import { Fonts } from '@/constants/theme';
 
@@ -93,7 +94,7 @@ const styles = StyleSheet.create({
     fontSize: 14
   },
   cta: {
-    backgroundColor: '#1e40af',
+    backgroundColor: JournalTokens.color.brandBlue,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',

@@ -31,6 +31,17 @@ function _stripParenthetical(s) {
   return String(s || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
 }
 
+function _cleanForLookup(s) {
+  return String(s || '')
+    .replace(/&quot;?/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/["'*]+/g, ' ')
+    .replace(/[.,;:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function _norm(s) {
   return String(s || '')
     .trim()
@@ -90,8 +101,11 @@ function parseInciText(inciText) {
   const raw = String(inciText || '');
   if (!raw.trim()) return [];
   return raw
-    .split(/[,;\n]+/)
+    // Split on commas/semicolons/newlines but keep comma groups inside parenthesis.
+    .split(/,(?![^(]*\))|[;\n]+/)
     .map((s) => s.trim())
+    .map((s) => s.replace(/[\d.]+\s*%/g, '').trim())
+    .map((s) => s.replace(/\s+/g, ' '))
     .filter(Boolean);
 }
 
@@ -103,6 +117,7 @@ function resolveInciToken(rawToken, deps) {
   const d = deps || {};
   const raw = String(rawToken || '').trim();
   const tokenNorm = _norm(raw);
+  const tokenClean = _norm(_cleanForLookup(raw));
 
   const getCosing =
     typeof d.getCosingIngredientByInci === 'function' ? d.getCosingIngredientByInci : () => null;
@@ -117,38 +132,26 @@ function resolveInciToken(rawToken, deps) {
     return _result(raw, tokenNorm, tokenNorm, null, 'noise', 0);
   }
 
-  let direct = getCosing(tokenNorm);
-  if (direct === undefined) direct = null;
-  if (direct && direct.inci_name) {
-    const key = _norm(direct.inci_name);
-    return _result(raw, key, key, `cosing:${key}`, 'exact', 1);
-  }
+  const lookupTokens = Array.from(new Set([
+    tokenNorm,
+    _stripParenthetical(tokenNorm),
+    tokenClean,
+    _stripParenthetical(tokenClean)
+  ].filter(Boolean)));
 
-  const stripped = _stripParenthetical(tokenNorm);
-  if (stripped && stripped !== tokenNorm) {
-    let directStripped = getCosing(stripped);
-    if (directStripped === undefined) directStripped = null;
-    if (directStripped && directStripped.inci_name) {
-      const key = _norm(directStripped.inci_name);
+  for (const t of lookupTokens) {
+    let direct = getCosing(t);
+    if (direct === undefined) direct = null;
+    if (direct && direct.inci_name) {
+      const key = _norm(direct.inci_name);
       return _result(raw, key, key, `cosing:${key}`, 'exact', 1);
     }
-    let aliasStripped = getAlias(stripped);
-    if (aliasStripped === undefined) aliasStripped = null;
-    if (aliasStripped) {
-      const canon = _norm(aliasStripped);
-      let cosingViaAlias = getCosing(canon);
-      if (cosingViaAlias === undefined) cosingViaAlias = null;
-      if (cosingViaAlias && cosingViaAlias.inci_name) {
-        const key = _norm(cosingViaAlias.inci_name);
-        return _result(raw, key, key, `cosing:${key}`, 'alias', 0.95);
-      }
-      return _result(raw, canon, canon, `cosing:${canon}`, 'alias_unverified', 0.6);
-    }
   }
 
-  let viaAlias = getAlias(tokenNorm);
-  if (viaAlias === undefined) viaAlias = null;
-  if (viaAlias) {
+  for (const t of lookupTokens) {
+    let viaAlias = getAlias(t);
+    if (viaAlias === undefined) viaAlias = null;
+    if (!viaAlias) continue;
     const canon = _norm(viaAlias);
     let cosingRow = getCosing(canon);
     if (cosingRow === undefined) cosingRow = null;

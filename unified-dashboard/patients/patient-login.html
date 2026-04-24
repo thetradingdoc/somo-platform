@@ -4,71 +4,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#314DB6">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>Consult Patient Portal</title>
+    <title>S&C Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloock&display=swap');
         :root {
-            --primary: #1e40af;
-            --primary-dark: #1e3a8a;
-            --primary-light: #3b82f6;
+            --primary: #314DB6;
+            --primary-dark: #314DB6;
+            --primary-light: #314DB6;
+            --text-ink: #131826;
+            --text-muted: #5f6b82;
+            --line-soft: #d9dfeb;
         }
 
         body {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            background: linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 28px 16px;
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .auth-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 480px;
+            background: #ffffff;
+            border-radius: 26px;
+            border: 1px solid #e7ebf4;
+            box-shadow: 0 18px 45px rgba(21, 36, 88, 0.09);
+            max-width: 640px;
             width: 100%;
             overflow: hidden;
         }
 
         .auth-header {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-            padding: 36px;
-            text-align: center;
-            color: white;
+            background: #ffffff;
+            padding: 24px 28px 16px;
+            color: var(--text-ink);
+            border-bottom: 1px solid #edf1f8;
+            position: relative;
         }
 
         .auth-body {
-            padding: 40px;
+            padding: 28px 28px 34px;
         }
 
-        .logo-brand {
-            font-size: 32px;
-            margin-bottom: 8px;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        .auth-back {
+            position: absolute;
+            right: 20px;
+            top: 18px;
+            border: 1px solid #dbe3f2;
+            background: #ffffff;
+            color: #2f3d63;
+            border-radius: 999px;
+            min-height: 38px;
+            padding: 0 14px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            cursor: pointer;
         }
 
-        .logo-subtitle {
-            opacity: 0.9;
-            font-size: 14px;
+        .auth-back:hover {
+            background: #f5f8ff;
+            border-color: #c7d3eb;
+        }
+
+        .brand-row {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .brand-logo {
+            width: 76px;
+            height: 76px;
+            min-width: 76px;
+            min-height: 76px;
+            flex-shrink: 0;
+            object-fit: contain;
+            display: block;
+            background: transparent;
+            transform: translateY(0);
         }
 
         .portal-title {
-            margin: 8px 0 0 0;
-            font-size: 22px;
-            font-weight: 800;
+            margin: 0;
+            font-size: 2.85rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1;
+            font-family: 'Gloock', Georgia, 'Times New Roman', serif;
         }
 
         .portal-sub {
-            margin: 6px 0 0 0;
-            font-size: 13px;
-            opacity: 0.92;
+            margin: 10px 0 0 46px;
+            font-size: 18px;
+            color: var(--text-muted);
         }
 
         .step {
@@ -80,17 +116,19 @@
         }
 
         .step-title {
-            font-size: 22px;
+            font-size: 48px;
             font-weight: 800;
-            margin: 0 0 8px 0;
-            color: var(--gray-900);
+            margin: 0 0 12px 0;
+            color: var(--text-ink);
             text-align: center;
+            letter-spacing: -0.02em;
+            font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
         }
 
         .step-description {
-            color: var(--gray-600);
-            margin: 0 0 18px 0;
-            font-size: 14px;
+            color: #4b5870;
+            margin: 0 0 22px 0;
+            font-size: 18px;
             text-align: center;
             line-height: 1.5;
         }
@@ -101,43 +139,46 @@
 
         .form-label {
             display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: var(--gray-900);
-            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: var(--text-ink);
+            font-size: 16px;
         }
 
         .form-input {
             width: 100%;
-            padding: 12px 16px;
-            border: 2px solid var(--gray-300);
-            border-radius: 8px;
-            font-size: 16px;
+            padding: 14px 16px;
+            border: 2px solid #c6d0df;
+            border-radius: 12px;
+            font-size: 17px;
             transition: all 0.2s;
         }
 
         .form-input:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+            box-shadow: 0 0 0 3px rgba(49, 77, 182, 0.12);
         }
 
         .btn-primary {
             width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            padding: 16px;
+            background: linear-gradient(135deg, #2f48aa 0%, #3d5ed3 100%);
             color: white;
             border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 14px;
+            font-size: 37px;
+            line-height: 1;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s;
+            font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+            letter-spacing: 0.01em;
         }
 
         .btn-primary:hover {
             transform: translateY(-1px);
-            box-shadow: 0 8px 20px rgba(30, 64, 175, 0.25);
+            box-shadow: 0 8px 20px rgba(49, 77, 182, 0.28);
         }
 
         .btn-primary:disabled {
@@ -159,7 +200,7 @@
 
         .btn-secondary:hover {
             background: #eef2ff;
-            border-color: rgba(30, 64, 175, 0.35);
+            border-color: rgba(49, 77, 182, 0.35);
         }
 
         .code-input {
@@ -181,7 +222,7 @@
         .code-digit:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.1);
+            box-shadow: 0 0 0 3px rgba(49, 77, 182, 0.12);
         }
 
         .message {
@@ -211,8 +252,93 @@
 
         .loading {
             text-align: center;
-            padding: 20px;
-            color: var(--gray-600);
+            padding: 26px;
+            color: var(--text-muted);
+        }
+
+        .loading-spinner {
+            width: 80px;
+            height: 80px;
+            border-radius: 999px;
+            border: 6px solid #e4eaff;
+            border-top-color: var(--primary);
+            margin: 0 auto 14px auto;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-brand {
+            font-size: 22px;
+            font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 6px;
+        }
+
+        .auth-mode {
+            display: flex;
+            gap: 6px;
+            width: fit-content;
+            margin: 0 auto 18px auto;
+            background: #eef1f9;
+            border: 1px solid #dde3f2;
+            border-radius: 999px;
+            padding: 4px;
+        }
+
+        .auth-mode-btn {
+            border: none;
+            background: transparent;
+            color: #5f6b82;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            border-radius: 999px;
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .auth-mode-btn.active {
+            background: #ffffff;
+            color: var(--text-ink);
+            box-shadow: 0 2px 8px rgba(21, 36, 88, 0.12);
+        }
+
+        .sc-orb {
+            position: fixed;
+            left: 18px;
+            bottom: 18px;
+            width: 62px;
+            height: 62px;
+            border-radius: 999px;
+            border: 1px solid #e3e8f4;
+            background: #ffffff;
+            box-shadow: 0 8px 18px rgba(19, 24, 38, 0.12);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            z-index: 40;
+        }
+
+        .sc-orb__spin {
+            font-family: 'Gloock', Georgia, 'Times New Roman', serif;
+            font-size: 22px;
+            color: #161d31;
+            line-height: 1;
+            display: inline-block;
+            transform-origin: center;
+            animation: scOrbSpin 5s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes scOrbSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
 
         .resend-link {
@@ -238,7 +364,7 @@
             }
 
             .auth-header {
-                padding: 28px 20px;
+                padding: 18px 18px 14px;
             }
 
             .auth-body {
@@ -246,7 +372,7 @@
             }
 
             .step-title {
-                font-size: 20px;
+                font-size: 42px;
             }
 
             .code-digit {
@@ -258,24 +384,61 @@
             .code-input {
                 gap: 6px;
             }
+
+            .portal-title {
+                font-size: 2.2rem;
+            }
+
+            .portal-sub {
+                font-size: 16px;
+            }
+
+            .btn-primary {
+                font-size: 32px;
+            }
         }
 
         @media (max-width: 480px) {
             .auth-header {
-                padding: 24px 16px;
+                padding: 16px 14px 12px;
             }
             .auth-body {
                 padding: 20px 16px;
             }
 
             .step-title {
-                font-size: 18px;
+                font-size: 36px;
             }
 
             .code-digit {
                 width: 40px;
                 height: 52px;
                 font-size: 18px;
+            }
+
+            .portal-title {
+                font-size: 1.6rem;
+            }
+
+            .portal-sub {
+                margin-left: 0;
+                font-size: 15px;
+            }
+
+            .brand-row {
+                justify-content: flex-start;
+            }
+
+            .btn-primary {
+                font-size: 28px;
+            }
+
+            .auth-back {
+                right: 12px;
+                top: 12px;
+                min-height: 34px;
+                padding: 0 12px;
+                font-size: 12px;
             }
         }
     </style>
@@ -284,9 +447,13 @@
 <body>
     <div class="auth-container">
         <div class="auth-header">
-            <div class="logo-brand">Consʌlt</div>
-            <div class="portal-title">Patient Portal</div>
-            <div class="portal-sub">Secure email code access</div>
+            <button type="button" class="auth-back" onclick="window.location.href='/'" aria-label="Back to landing page">
+                Back
+            </button>
+            <div class="brand-row">
+                <img class="brand-logo" src="/images/branding/logo-panda.png" alt="Skin and Care panda logo" />
+                <div class="portal-title">Skin &amp; Care</div>
+            </div>
         </div>
         <div class="auth-body">
 
@@ -295,10 +462,9 @@
             <h2 class="step-title" id="authTitle">Sign in</h2>
             <p class="step-description" id="authDescription">Enter your email to receive a secure 6-digit code.</p>
 
-            <div style="margin:-8px 0 18px 0; text-align:center;">
-                <button type="button" id="toggleIntentBtn" class="btn-secondary" style="margin-top:0; width:auto; padding:8px 12px;">
-                    New here? Create account
-                </button>
+            <div class="auth-mode" role="tablist" aria-label="Authentication mode">
+                <button type="button" class="auth-mode-btn active" id="intentSigninBtn" data-intent="signin" role="tab" aria-selected="true">Log In</button>
+                <button type="button" class="auth-mode-btn" id="intentSignupBtn" data-intent="signup" role="tab" aria-selected="false">Sign Up</button>
             </div>
 
             <div id="emailMessage"></div>
@@ -346,12 +512,16 @@
         <!-- Step 3: Loading -->
         <div class="step" id="stepLoading">
             <div class="loading">
-                <div style="font-size: 48px; margin-bottom: 16px;">⏳</div>
+                <div class="loading-spinner" aria-hidden="true"></div>
+                <div class="loading-brand">S&amp;C</div>
                 <div>Signing you in...</div>
             </div>
         </div>
         </div>
     </div>
+    <a class="sc-orb" href="/" aria-label="Back to Skin and Care home">
+        <span class="sc-orb__spin" aria-hidden="true">S&amp;C</span>
+    </a>
 
     <script>
         const API_BASE = window.API_BASE || 'http://localhost:4000';
@@ -477,9 +647,8 @@
 
                     showStep('stepLoading');
 
-                    // If required onboarding fields are missing, route to onboarding
-                    const needsOnboarding = (data.created_patient === true) || (data.onboarding_complete === false);
-                    window.location.href = needsOnboarding ? 'onboarding.html' : 'appointments.html';
+                    // Product requirement: always land on Home after login.
+                    window.location.replace('patient-dashboard.html');
                 } else {
                     showMessage('codeMessage', data.error || 'Invalid verification code', 'error');
                     // Clear code inputs
@@ -531,6 +700,8 @@
 
         // Check if already logged in
         window.addEventListener('DOMContentLoaded', () => {
+            const navEntry = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null;
+            const isHistoryTraversal = navEntry && navEntry.type === 'back_forward';
             // Show session expired message when redirected after invalid session
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('expired') === '1') {
@@ -542,20 +713,21 @@
             // default intent
             setAuthIntent('signin');
 
-            const toggle = document.getElementById('toggleIntentBtn');
-            toggle.addEventListener('click', () => {
-                const next = (window.__patientAuthIntent === 'signin') ? 'signup' : 'signin';
-                setAuthIntent(next);
+            document.querySelectorAll('.auth-mode-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    setAuthIntent(btn.dataset.intent || 'signin');
+                });
             });
 
             const existingSession = localStorage.getItem('patient_session_id');
-            if (existingSession) {
-                // Validate session
-                fetch(`${API_BASE}/api/patient/appointments`, { headers: { 'ngrok-skip-browser-warning': 'true', 'x-session-id': existingSession } })
+            if (existingSession && !isHistoryTraversal) {
+                // Validate session and gate by onboarding completion.
+                fetch(`${API_BASE}/api/patient/intake`, { headers: { 'ngrok-skip-browser-warning': 'true', 'x-session-id': existingSession } })
                     .then(r => r.json())
                     .then(data => {
                         if (data.success) {
-                            window.location.href = 'appointments.html';
+                            // Product requirement: always land on Home after login/session restore.
+                            window.location.replace('patient-dashboard.html');
                         } else {
                             localStorage.removeItem('patient_session_id');
                         }
@@ -570,16 +742,23 @@
             window.__patientAuthIntent = intent === 'signup' ? 'signup' : 'signin';
             const title = document.getElementById('authTitle');
             const desc = document.getElementById('authDescription');
-            const toggle = document.getElementById('toggleIntentBtn');
+            const signInBtn = document.getElementById('intentSigninBtn');
+            const signUpBtn = document.getElementById('intentSignupBtn');
 
             if (window.__patientAuthIntent === 'signup') {
                 title.textContent = 'Create account';
                 desc.textContent = 'Enter your email to create your patient account. We’ll send a secure 6-digit code.';
-                toggle.textContent = 'Already have an account? Sign in';
+                signInBtn.classList.remove('active');
+                signInBtn.setAttribute('aria-selected', 'false');
+                signUpBtn.classList.add('active');
+                signUpBtn.setAttribute('aria-selected', 'true');
             } else {
                 title.textContent = 'Sign in';
                 desc.textContent = 'Enter your email to receive a secure 6-digit code.';
-                toggle.textContent = 'New here? Create account';
+                signUpBtn.classList.remove('active');
+                signUpBtn.setAttribute('aria-selected', 'false');
+                signInBtn.classList.add('active');
+                signInBtn.setAttribute('aria-selected', 'true');
             }
         }
     </script>

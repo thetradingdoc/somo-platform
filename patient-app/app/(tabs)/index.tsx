@@ -17,6 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL, DEMO_PATIENT_EMAIL, getApiReachabilityIssue } from '@/config';
+import { JournalTokens } from '@/constants/journalTokens';
 
 const API_BASE = API_BASE_URL;
 const API_REACHABILITY = getApiReachabilityIssue();
@@ -260,7 +261,7 @@ export default function HomeScreen() {
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
-    backgroundColor: disabled ? '#d1d5db' : primary ? '#0d9488' : '#6b7280',
+    backgroundColor: disabled ? '#d1d5db' : primary ? JournalTokens.color.brandBlue : '#6b7280',
     alignItems: 'center' as const,
   });
 
@@ -272,10 +273,10 @@ export default function HomeScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <ThemedView style={{ flex: 1, paddingHorizontal: HORIZONTAL_PADDING, paddingBottom: 24 }}>
           <ThemedText type="title" style={{ marginTop: 8, marginBottom: 8 }}>
-            DocLittle
+            S&C
           </ThemedText>
           <ThemedText style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>
-            Patient Portal
+            Skin & Care
           </ThemedText>
 
           {API_REACHABILITY ? (
@@ -414,8 +415,8 @@ export default function HomeScreen() {
                           marginBottom: 12,
                           borderRadius: 16,
                           borderWidth: 2,
-                          borderColor: isSelected ? '#0d9488' : video ? '#0f766e' : '#e5e7eb',
-                          backgroundColor: isSelected ? (video ? '#ccfbf1' : '#f0fdfa') : (video ? '#ecfdf5' : '#f9fafb'),
+                          borderColor: isSelected ? JournalTokens.color.brandBlue : video ? '#0f766e' : '#e5e7eb',
+                          backgroundColor: isSelected ? (video ? '#E8ECFA' : '#F2F5FD') : (video ? '#ecfdf5' : '#f9fafb'),
                         }}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <View style={{ flex: 1 }}>

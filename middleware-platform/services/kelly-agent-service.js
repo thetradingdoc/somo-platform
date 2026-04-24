@@ -267,6 +267,40 @@ function _composeCapturedSummaryFromState(state) {
   return `So far, ${bits.join(', ')}. I can keep refining this with one more detail if needed.`;
 }
 
+function _buildIngredientGroundingBlock(scanGrounding) {
+  const g = scanGrounding && typeof scanGrounding === 'object' ? scanGrounding : null;
+  if (!g) return '';
+  const summary = g.ingredient_summary && typeof g.ingredient_summary === 'object'
+    ? g.ingredient_summary
+    : null;
+  const meta = g.grounding_metadata && typeof g.grounding_metadata === 'object'
+    ? g.grounding_metadata
+    : {};
+  if (!summary) return '';
+  const flagged = Array.isArray(summary.flagged_ingredients) ? summary.flagged_ingredients : [];
+  const confidence = summary.confidence_distribution && typeof summary.confidence_distribution === 'object'
+    ? summary.confidence_distribution
+    : {};
+  const unresolved = Number(confidence.low_or_unresolved || 0);
+  const total = Number(summary.total_ingredients || 0);
+  const lowConfidence = meta.low_confidence === true || (total > 0 && (unresolved / total) > 0.3);
+  const flaggedText = flagged.length
+    ? flagged.slice(0, 6).map((f) => `${f.name || 'ingredient'} (${f.reason || 'flag'})`).join(', ')
+    : 'none';
+  return [
+    '## Structured ingredient context (authoritative)',
+    '- If this section exists, use it as the source of truth.',
+    '- Do NOT re-parse raw `ingredients_text`.',
+    `- Total ingredients: ${total}; resolved: ${Number(summary.resolved_count || 0)}.`,
+    `- Confidence distribution: ${JSON.stringify(confidence)}.`,
+    `- Flagged ingredients: ${flaggedText}.`,
+    `- Enrichment version: ${String(meta.enrichment_version || 'unknown')}.`,
+    lowConfidence
+      ? '- Deterministic fallback: acknowledge low-confidence enrichment and ask for label photo/manual ingredient text before strong claims.'
+      : '- Deterministic fallback: if user asks safety/efficacy, cite flagged ingredients and confidence distribution in answer.'
+  ].join('\n');
+}
+
 function _hashTurnText(text) {
   const s = String(text || '').trim().toLowerCase();
   let h = 0;
@@ -2163,7 +2197,8 @@ Antworten Sie durchgehend auf Deutsch.`,
       onStreamDelta = null,
       onToolStatus = null,
       scanChatMode: scanChatModeParam = false,
-      plannerDecision: plannerDecisionParam = null
+      plannerDecision: plannerDecisionParam = null,
+      scanGrounding: scanGroundingParam = null
     } = params;
 
     _kellyDebugTurn('turn_start', {
@@ -3143,6 +3178,7 @@ Antworten Sie durchgehend auf Deutsch.`,
       sessionId,
       message,
       scanChatMode,
+      scanGrounding: scanGroundingParam,
       kellyScriptHint,
       orchestration,
       routineIntakeSummaryMarkdown,
@@ -5193,6 +5229,10 @@ Antworten Sie durchgehend auf Deutsch.`,
     const collected = useCommerceTools ? null : _extractCollectedBookingInfo(history);
     if (collected) {
       systemContent += `\n\n## BOOKING STATE (from conversation)\nYou have collected: name="${collected.name}", email="${collected.email}", phone="${collected.phone}". Call schedule_appointment NOW with these values. Do NOT ask for name, email, or phone again.\n`;
+    }
+    if (!useCommerceTools && context.scanGrounding) {
+      const groundingBlock = _buildIngredientGroundingBlock(context.scanGrounding);
+      if (groundingBlock) systemContent += `\n\n${groundingBlock}\n`;
     }
 
     let messages = [

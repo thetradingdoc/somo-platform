@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1e40af">
   <link rel="manifest" href="../manifest.webmanifest">
-  <title>My Records - Consult</title>
+  <title>Products - Skin &amp; Care Patient Portal</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <script src="../assets/js/config.js" defer></script>
   <style>
@@ -32,18 +32,37 @@
       border-bottom: 1px solid var(--gray-200);
     }
     .sidebar-logo {
-      font-size: 32px;
-      line-height: 1;
-      letter-spacing: -2px;
-      color: #1d4ed8;
-      margin-bottom: 4px;
-      font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 2px;
+      color: #131a2e;
+      text-decoration: none;
+    }
+    .sidebar-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1e3a8a;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      animation: sidebarSpin 6s linear infinite;
+    }
+    @keyframes sidebarSpin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
     .sidebar-subtitle {
       font-size: 12px;
       color: var(--gray-500);
-      margin-top: 4px;
+      margin-top: 2px;
+      margin-left: 0;
     }
     .sidebar-nav {
       padding: 16px;
@@ -137,17 +156,17 @@
     }
     .main-content {
       margin-left: 260px;
-      padding: 32px;
+      padding: var(--patient-space-5);
       flex: 1;
     }
-    .page-header { margin-bottom: 32px; margin-top: 24px; }
+    .page-header { margin-bottom: var(--patient-space-5); margin-top: var(--patient-space-4); }
     .page-title {
-      font-size: 32px;
+      font-size: var(--patient-title-size);
       font-weight: 700;
       color: var(--gray-900);
-      margin-bottom: 8px;
+      margin-bottom: var(--patient-space-1);
     }
-    .page-subtitle { font-size: 16px; color: var(--gray-600); }
+    .page-subtitle { font-size: var(--patient-subtitle-size); color: var(--gray-600); }
     .dashboard-card {
       background: white;
       border-radius: 12px;
@@ -281,6 +300,120 @@
       border-radius: 10px;
       padding: 12px;
     }
+    .shelf-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .shelf-card {
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 120px;
+    }
+    .shelf-card-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .shelf-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      letter-spacing: -0.02em;
+    }
+    .shelf-card-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--gray-900);
+      line-height: 1.25;
+    }
+    .shelf-card-meta {
+      font-size: 12px;
+      color: var(--gray-600);
+      line-height: 1.45;
+    }
+    .shelf-status-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .shelf-status-stock { background: #eef2ff; color: #312e81; border: 1px solid #c7d2fe; }
+    .shelf-status-opened { background: #ecfdf5; color: #14532d; border: 1px solid #bbf7d0; }
+    .shelf-status-finished { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .shelf-card-actions {
+      margin-top: auto;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .shelf-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      z-index: 4000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .shelf-modal.open { display: flex; }
+    .shelf-modal-card {
+      width: min(440px, 100%);
+      background: #fff;
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .shelf-modal-card h3 {
+      margin: 0 0 12px 0;
+      font-size: 18px;
+      color: var(--gray-900);
+    }
+    .shelf-form-row {
+      margin-bottom: 12px;
+    }
+    .shelf-form-row label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--gray-700);
+      margin-bottom: 4px;
+    }
+    .shelf-form-row input,
+    .shelf-form-row select,
+    .shelf-form-row textarea {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--gray-300);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+    }
+    .shelf-form-row textarea { min-height: 72px; resize: vertical; }
+    .shelf-modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
     .preview-modal {
       position: fixed;
       inset: 0;
@@ -349,6 +482,477 @@
       border-radius: 8px;
       margin-bottom: 24px;
     }
+    .records-legacy {
+      display: none !important;
+    }
+    .products-shell-header {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--patient-card-radius);
+      padding: var(--patient-space-3);
+      margin-bottom: var(--patient-space-3);
+    }
+    .products-shell-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .products-shell-title {
+      font-size: 38px;
+      font-weight: 700;
+      color: var(--gray-900);
+    }
+    .products-scan-btn {
+      background: #3333bb;
+      color: #fff;
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      min-height: 38px;
+    }
+    .products-scan-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 118px;
+      z-index: 2100;
+      border: 0;
+      border-radius: 999px;
+      background: #3333bb;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 14px;
+      box-shadow: 0 10px 20px rgba(51, 51, 187, 0.28);
+      cursor: pointer;
+      min-height: 40px;
+    }
+    .products-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .products-tab {
+      border: 0;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      color: var(--gray-600);
+      font-size: 16px;
+      font-weight: 700;
+      padding: 10px 6px;
+      cursor: pointer;
+    }
+    .products-tab.active {
+      color: #3333bb;
+      border-bottom-color: #3333bb;
+    }
+    .products-pane {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .products-pane.active {
+      display: flex;
+    }
+    .products-search {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 14px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 52px;
+    }
+    .products-search input {
+      border: 0;
+      width: 100%;
+      min-height: 48px;
+      font-size: 16px;
+      color: var(--gray-800);
+      background: transparent;
+      outline: none;
+    }
+    .products-search-dropdown {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 4px);
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+      z-index: 30;
+      overflow: hidden;
+      display: none;
+    }
+    .products-search-dropdown.open { display: block; }
+    .products-search-option {
+      width: 100%;
+      border: 0;
+      background: #fff;
+      text-align: left;
+      padding: 9px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .products-search-option:hover { background: #f8fafc; }
+    .products-chip-row {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .products-chip {
+      border: 1px solid var(--gray-200);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--gray-600);
+      font-size: var(--patient-chip-size);
+      font-weight: 600;
+      padding: 10px 16px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .products-chip.active {
+      background: #eeeeff;
+      border-color: #3333bb;
+      color: #3333bb;
+    }
+    .products-section-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      padding: 0 2px;
+    }
+    .products-lists {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .products-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .products-list-item .icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      margin-right: 8px;
+      background: #eef2ff;
+      color: #3333bb;
+      flex: 0 0 auto;
+    }
+    .products-list-item:last-child { border-bottom: none; }
+    .products-list-item strong {
+      font-size: 18px;
+      color: var(--gray-900);
+      font-weight: 600;
+    }
+    .products-list-item span {
+      font-size: 14px;
+      color: var(--gray-500);
+    }
+    .products-recent {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .products-recent-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .products-recent-card h4 {
+      font-size: 13px;
+      color: var(--gray-900);
+      margin: 0;
+      font-weight: 600;
+    }
+    .products-recent-card p {
+      margin: 2px 0 0 0;
+      font-size: 11px;
+      color: var(--gray-500);
+    }
+    .products-status {
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .products-status.ok { background: #eaf3de; color: #3b6d11; }
+    .products-status.warn { background: #faeeda; color: #854f0b; }
+    .products-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .products-info-stat {
+      background: #f8fafc;
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .products-info-stat .k {
+      font-size: 10px;
+      color: var(--gray-500);
+      margin-bottom: 2px;
+    }
+    .products-info-stat .v {
+      font-size: 18px;
+      font-weight: 700;
+      color: #185fa5;
+    }
+    .products-ingredients {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .products-ingredients-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .products-ingredients-head strong { font-size: 12px; }
+    .products-ingredients-head span { font-size: 10px; color: var(--gray-500); }
+    .products-ingredient-row {
+      display: grid;
+      grid-template-columns: 16px 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--gray-100);
+      font-size: 12px;
+    }
+    .products-ingredient-row:last-child { border-bottom: none; }
+    .products-ingredient-dot {
+      width: 8px; height: 8px; border-radius: 999px;
+    }
+    .products-ingredient-dot.safe { background: #639922; }
+    .products-ingredient-dot.caution { background: #ba7517; }
+    .products-ingredient-dot.flagged { background: #e24b4a; }
+    .products-ingredient-dot.unknown { background: #888780; }
+    .products-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--gray-600);
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .products-scan-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .products-catalog {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .products-catalog-item {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+    }
+    .products-catalog-item .left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .products-catalog-item .avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 10px;
+      background: #f1f5f9;
+      color: #334155;
+      font-size: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+    }
+    .products-catalog-item h4 {
+      margin: 0;
+      font-size: 16px;
+      color: var(--gray-900);
+      font-weight: 600;
+    }
+    .products-catalog-item p {
+      margin: 2px 0 0 0;
+      font-size: 13px;
+      color: var(--gray-500);
+    }
+    .products-empty {
+      background: #fff;
+      border: 1px dashed var(--gray-300);
+      border-radius: 14px;
+      padding: 14px 16px;
+      color: var(--gray-600);
+      font-size: 16px;
+    }
+    .products-scan-item {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      align-items: center;
+      gap: 10px;
+    }
+    .products-scan-item .time {
+      font-size: 10px;
+      color: var(--gray-500);
+      text-align: right;
+    }
+    .products-scan-item .name {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-900);
+      margin: 0;
+    }
+    .products-scan-item .meta {
+      font-size: 10px;
+      color: var(--gray-500);
+      margin: 2px 0 0 0;
+    }
+    .products-status.pending { background: #faeeda; color: #854f0b; }
+    .products-learn-card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .products-learn-card .tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      color: #185fa5;
+      background: #e6f1fb;
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-bottom: 6px;
+    }
+    .products-learn-card h4 {
+      font-size: 13px;
+      margin: 0 0 4px 0;
+      color: var(--gray-900);
+      font-weight: 600;
+    }
+    .products-learn-card p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--gray-600);
+      line-height: 1.45;
+    }
+    .products-learn-chat {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: 12px;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .products-learn-chat-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .products-learn-chat-head h4 {
+      margin: 0;
+      font-size: 15px;
+      color: var(--gray-900);
+      font-weight: 700;
+    }
+    .products-learn-chat-head .tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      color: #185fa5;
+      background: #e6f1fb;
+      border-radius: 999px;
+      padding: 2px 8px;
+    }
+    .products-chat-bubble {
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #f8fafc;
+      color: #1f2937;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .products-chat-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .products-chat-input-row input {
+      flex: 1;
+      min-height: 40px;
+      border: 1px solid #d1d5db;
+      border-radius: 999px;
+      padding: 0 12px;
+      font-size: 13px;
+      color: #6b7280;
+      background: #fff;
+    }
+    .products-chat-input-row button {
+      min-height: 40px;
+      min-width: 40px;
+      border: 0;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1e3a8a;
+      font-weight: 700;
+      cursor: not-allowed;
+    }
+    .products-chat-todos {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      color: #475569;
+    }
     .mobile-menu-toggle {
       display: none;
       position: fixed;
@@ -390,6 +994,13 @@
       .main-content { margin-left: 0; padding: 16px; padding-top: 80px; }
       .records-toolbar { align-items: stretch; }
       .upload-input { max-width: 100%; }
+      .products-shell-title { font-size: 30px; }
+      .products-tab { font-size: 14px; padding: 10px 4px; }
+      .products-search input { font-size: 15px; }
+      .products-list-item strong { font-size: 16px; }
+      .products-list-item span { font-size: 13px; }
+      .products-catalog-item h4 { font-size: 15px; }
+      .products-catalog-item p { font-size: 12px; }
     }
   </style>
 </head>
@@ -399,77 +1010,154 @@
   <div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
+        <a href="/" class="sidebar-logo">
+          <span class="sidebar-mark" aria-hidden="true">S&C</span>
+        </a>
         <div class="sidebar-subtitle sidebar-subtitle-portal">Patient Portal</div>
       </div>
       <nav class="sidebar-nav">
         <a href="patient-dashboard.html" class="nav-item">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Dashboard</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Home</span>
+        </a>
+        <a href="schedule.html" class="nav-item">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Calendar</span>
         </a>
         <!-- Benefits/Claims removed from telehealth MVP -->
-        <a href="wallet.html" class="nav-item">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span><span>Wallet</span>
-        </a>
         <a href="appointments.html" class="nav-item">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Appointments</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Routine</span>
         </a>
         <a href="my-records.html" class="nav-item active">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>My Records</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>Products</span>
+        </a>
+        <a href="wallet.html" class="nav-item">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span><span>Wallet</span>
+        </a>
+        <a href="profile.html" class="nav-item">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span><span>Profile</span>
         </a>
       </nav>
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="userAvatar">P</div>
-          <div class="user-details">
-            <div class="user-name" id="userName">Patient</div>
-            <div class="user-role">Patient Account</div>
-          </div>
-          <button class="logout-btn" onclick="logout()" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path></svg></button>
-        </div>
-      </div>
     </aside>
 
     <main class="main-content">
-      <div class="page-header">
-        <h1 class="page-title">My Records</h1>
-        <p class="page-subtitle">Your visit summaries and uploaded documents in one place.</p>
-      </div>
-
       <div id="errorMessage" class="error-message" style="display:none;"></div>
+      <div id="portalHealthBanner" class="error-message" style="display:none;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;"></div>
 
-      <div class="dashboard-card" style="margin-bottom: 24px;">
-        <div class="records-toolbar">
+      <section class="products-shell-header">
+        <div class="products-shell-top">
+          <h1 class="products-shell-title">Products</h1>
+        </div>
+        <div class="products-tabs" role="tablist" aria-label="Products tabs">
+          <button id="productsTabShelf" class="products-tab active" type="button" role="tab" aria-selected="true">My Shelf</button>
+          <button id="productsTabInfo" class="products-tab" type="button" role="tab" aria-selected="false">Info</button>
+          <button id="productsTabScans" class="products-tab" type="button" role="tab" aria-selected="false">Saved Scans</button>
+          <button id="productsTabLearn" class="products-tab" type="button" role="tab" aria-selected="false">Learn</button>
+        </div>
+      </section>
+
+      <section id="productsPaneShelf" class="products-pane active">
+        <div class="products-search" style="position:relative;">
+          <span style="font-size:14px;color:#6b7280;">⌕</span>
+          <input id="productsSearchInput" type="text" placeholder="Search your shelf..." autocomplete="off" />
+          <div id="productsSearchDropdown" class="products-search-dropdown"></div>
+        </div>
+        <div class="products-chip-row">
+          <button class="products-chip active" type="button" data-filter="all">All</button>
+          <button class="products-chip" type="button" data-filter="favorites">Favorites</button>
+          <button class="products-chip" type="button" data-filter="to_test">To Test</button>
+          <button class="products-chip" type="button" data-filter="flagged">Flagged</button>
+        </div>
+        <div class="products-section-label">Lists</div>
+        <div id="productsLists" class="products-lists"></div>
+        <div class="products-section-label">Products</div>
+        <div id="productsCatalogResults" class="products-catalog"></div>
+      </section>
+
+      <section id="productsPaneInfo" class="products-pane">
+        <article class="products-recent-card">
           <div>
-            <h2 class="card-title" style="margin-bottom:6px;">Records center</h2>
-            <p class="helper-text" style="margin:0;">Source of truth for what your care team and your visits have produced.</p>
+            <h4 id="infoProductName">Select a product</h4>
+            <p id="infoProductMeta">Brand · Category</p>
           </div>
-          <button id="refreshBtn" class="btn btn-secondary" type="button">Refresh</button>
+          <span id="infoQualityBadge" class="products-status pending">No data</span>
+        </article>
+        <div class="products-info-grid">
+          <article class="products-info-stat"><div class="k">Ingredients</div><div id="infoIngredientsCount" class="v">0</div></article>
+          <article class="products-info-stat"><div class="k">Resolved</div><div id="infoResolvedValue" class="v">0</div></article>
+          <article class="products-info-stat"><div class="k">Flagged</div><div id="infoFlaggedValue" class="v">0</div></article>
+          <article class="products-info-stat"><div class="k">Fragrance allergens</div><div id="infoAllergenValue" class="v">0</div></article>
         </div>
-        <div class="records-stats">
-          <span class="stat-pill" id="totalReportsPill">Visit summaries: 0</span>
-          <span class="stat-pill" id="totalDocsPill">Documents: 0</span>
-          <span class="stat-pill" id="lastUpdatedPill">Last updated: -</span>
+        <div class="products-ingredients">
+          <div class="products-ingredients-head"><strong>Ingredients</strong><span id="infoResolvedCount">0 of 0 resolved</span></div>
+          <div id="infoConfidenceBadge" class="products-status pending" style="align-self:flex-start;margin:0 0 8px;">Low confidence</div>
+          <div id="infoConfidenceDisclaimer" class="products-empty" style="display:none;">Ingredient interpretation is incomplete for this product.</div>
+          <div class="products-search" style="border-radius:0;border-left:0;border-right:0;border-top:0;">
+            <span style="font-size:14px;color:#6b7280;">⌕</span>
+            <input id="infoSearchInput" type="text" placeholder="Search ingredients on this product..." autocomplete="off" />
+          </div>
+          <div id="productsIngredientsRows"></div>
         </div>
-        <div class="upload-controls">
-          <input id="uploadInput" class="upload-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
-          <button id="uploadBtn" class="btn btn-primary" type="button">Upload documents</button>
+        <div class="products-legend">
+          <span><span class="products-ingredient-dot safe"></span> Safe</span>
+          <span><span class="products-ingredient-dot caution"></span> Caution</span>
+          <span><span class="products-ingredient-dot flagged"></span> Flagged</span>
+          <span><span class="products-ingredient-dot unknown"></span> Unknown</span>
         </div>
-        <p class="helper-text">Accepted types: PDF, JPEG, PNG. Max file size depends on clinic policy. Upload up to 30 files per batch; if you have more, run a second upload.</p>
-      </div>
+      </section>
 
-      <div class="dashboard-card" style="margin-bottom: 24px;">
-        <h2 class="card-title">Case reports</h2>
-        <div id="recordsList" class="record-list">Loading...</div>
-      </div>
+      <section id="productsPaneScans" class="products-pane">
+        <div class="products-section-label">Today</div>
+        <div id="productsScansToday" class="products-scan-timeline"></div>
+        <div class="products-section-label">Yesterday</div>
+        <div id="productsScansYesterday" class="products-scan-timeline"></div>
+      </section>
 
-      <div class="dashboard-card">
-        <h2 class="card-title">Uploaded documents</h2>
-        <p style="font-size: 13px; color: var(--gray-600); margin-bottom: 12px;">
-          These are documents you or your clinic have uploaded for your care (e.g. insurance cards, prior reports).
-        </p>
-        <div id="docsList" class="record-list">Loading...</div>
-      </div>
+      <section id="productsPaneLearn" class="products-pane"></section>
     </main>
   </div>
+  <button id="productsScanFab" type="button" class="products-scan-fab">⊞ Scan</button>
+  <div id="shelfEditModal" class="shelf-modal" aria-hidden="true">
+    <div class="shelf-modal-card" role="dialog" aria-modal="true" aria-labelledby="shelfEditTitle">
+      <h3 id="shelfEditTitle">Edit shelf item</h3>
+      <input type="hidden" id="shelfEditId" />
+      <div class="shelf-form-row">
+        <label for="shelfEditStatus">Status</label>
+        <select id="shelfEditStatus">
+          <option value="stock">In stock (unopened)</option>
+          <option value="opened">Opened / in use</option>
+          <option value="finished">Finished</option>
+        </select>
+      </div>
+      <div class="shelf-form-row">
+        <label for="shelfEditOpened">Opened on (optional)</label>
+        <input type="date" id="shelfEditOpened" />
+      </div>
+      <div class="shelf-form-row">
+        <label for="shelfEditExpiry">Expiry or best-before (optional)</label>
+        <input type="date" id="shelfEditExpiry" />
+      </div>
+      <div class="shelf-form-row">
+        <label for="shelfEditPao">PAO: months after opening (optional)</label>
+        <input type="number" id="shelfEditPao" min="0" max="120" step="1" placeholder="e.g. 12" />
+      </div>
+      <div class="shelf-form-row">
+        <label for="shelfEditPrice">Price paid (USD, optional)</label>
+        <input type="number" id="shelfEditPrice" min="0" step="0.01" placeholder="e.g. 24.99" />
+      </div>
+      <div class="shelf-form-row">
+        <label for="shelfEditIngredients">Key ingredients (optional)</label>
+        <textarea id="shelfEditIngredients" placeholder="e.g. niacinamide 5%, hyaluronic acid"></textarea>
+      </div>
+      <div class="shelf-form-row">
+        <label for="shelfEditColor">Badge color (optional, #hex or hsl)</label>
+        <input type="text" id="shelfEditColor" placeholder="#314DB6 or hsl(220, 50%, 40%)" />
+      </div>
+      <div class="shelf-modal-actions">
+        <button type="button" class="btn btn-secondary" id="shelfEditCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="shelfEditSave">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="imagePreviewModal" class="preview-modal" aria-hidden="true">
     <div class="preview-card" role="dialog" aria-modal="true" aria-label="Image preview">
       <div class="preview-head">
@@ -484,252 +1172,612 @@
 
   <script type="module">
     import { patientApi } from '../assets/js/patient-api.js';
-    import { mountBottomTabs } from '../assets/js/patient-shell.js';
+    import { getPatientFeatureFlags, mountBottomTabs, showToast } from '../assets/js/patient-shell.js';
 
-    function toLocalDate(iso) {
-      if (!iso) return '-';
-      const dt = new Date(iso);
-      if (Number.isNaN(dt.getTime())) return '-';
-      return dt.toLocaleString();
-    }
-
-    function normalizeFileName(name) {
-      const raw = String(name || 'Document');
-      if (!/[ÃÂâ]/.test(raw)) return raw;
-      try {
-        const bytes = Uint8Array.from(raw.split('').map(c => c.charCodeAt(0) & 0xff));
-        const repaired = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim();
-        return repaired || raw;
-      } catch (_) {
-        return raw;
-      }
-    }
-
-    function statusClass(status) {
-      const s = String(status || '').toLowerCase();
-      if (s === 'current') return 'badge-current';
-      if (s === 'final' || s === 'completed') return 'badge-final';
-      return 'badge-unknown';
-    }
-    function isImageType(mime) {
-      return String(mime || '').toLowerCase().startsWith('image/');
-    }
-    function encounterFromRef(ref) {
-      const val = ref && ref.context && Array.isArray(ref.context.encounter) && ref.context.encounter[0] && ref.context.encounter[0].reference
-        ? String(ref.context.encounter[0].reference)
-        : '';
-      return val.replace(/^Encounter\//, '') || null;
+    function escQ(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
       mountBottomTabs();
+
       const errorEl = document.getElementById('errorMessage');
-      const listEl = document.getElementById('recordsList');
-      const docsEl = document.getElementById('docsList');
-      const uploadInput = document.getElementById('uploadInput');
-      const uploadBtn = document.getElementById('uploadBtn');
-      const refreshBtn = document.getElementById('refreshBtn');
-      const totalReportsPill = document.getElementById('totalReportsPill');
-      const totalDocsPill = document.getElementById('totalDocsPill');
-      const lastUpdatedPill = document.getElementById('lastUpdatedPill');
-      const imagePreviewModal = document.getElementById('imagePreviewModal');
-      const previewImage = document.getElementById('previewImage');
-      const previewTitle = document.getElementById('previewTitle');
-      const closePreviewBtn = document.getElementById('closePreviewBtn');
+      const healthBannerEl = document.getElementById('portalHealthBanner');
+      const tabs = {
+        shelf: document.getElementById('productsTabShelf'),
+        info: document.getElementById('productsTabInfo'),
+        scans: document.getElementById('productsTabScans'),
+        learn: document.getElementById('productsTabLearn')
+      };
+      const panes = {
+        shelf: document.getElementById('productsPaneShelf'),
+        info: document.getElementById('productsPaneInfo'),
+        scans: document.getElementById('productsPaneScans'),
+        learn: document.getElementById('productsPaneLearn')
+      };
+      const scansTodayEl = document.getElementById('productsScansToday');
+      const scansYesterdayEl = document.getElementById('productsScansYesterday');
+      const infoProductNameEl = document.getElementById('infoProductName');
+      const infoProductMetaEl = document.getElementById('infoProductMeta');
+      const infoQualityBadgeEl = document.getElementById('infoQualityBadge');
+      const infoIngredientsCountEl = document.getElementById('infoIngredientsCount');
+      const infoResolvedValueEl = document.getElementById('infoResolvedValue');
+      const infoFlaggedValueEl = document.getElementById('infoFlaggedValue');
+      const infoAllergenValueEl = document.getElementById('infoAllergenValue');
+      const infoResolvedCountEl = document.getElementById('infoResolvedCount');
+      const infoConfidenceBadgeEl = document.getElementById('infoConfidenceBadge');
+      const infoConfidenceDisclaimerEl = document.getElementById('infoConfidenceDisclaimer');
+      const infoRowsEl = document.getElementById('productsIngredientsRows');
+      const scanFab = document.getElementById('productsScanFab');
+      const searchInput = document.getElementById('productsSearchInput');
+      const searchDropdown = document.getElementById('productsSearchDropdown');
+      const listsEl = document.getElementById('productsLists');
+      const catalogResultsEl = document.getElementById('productsCatalogResults');
+      const learnPaneEl = document.getElementById('productsPaneLearn');
+      const chipButtons = Array.from(document.querySelectorAll('.products-chip[data-filter]'));
+      const infoSearchInput = document.getElementById('infoSearchInput');
 
-      let recordsState = [];
-      let docsState = [];
-      let activePreviewDataUrl = null;
+      let productsCatalog = [];
+      let savedScans = [];
+      let productLists = [];
+      let selectedProductId = null;
+      let selectedFilter = 'all';
+      let searchQuery = '';
+      let catalogSearchSeq = 0;
+      let catalogSearchTimer = null;
+      let infoIngredientRows = [];
+      let infoIngredientQuery = '';
+      let infoEmptyStateReason = 'No enriched ingredient rows yet. Scan or select a product to analyze ingredients.';
+      let patientFeatures = { wallet_enabled: false, chat_enabled: false };
 
-      function closePreview() {
-        imagePreviewModal.classList.remove('open');
-        imagePreviewModal.setAttribute('aria-hidden', 'true');
-        previewImage.removeAttribute('src');
-        previewTitle.textContent = 'Preview';
-        activePreviewDataUrl = null;
-      }
-
-      function renderSummary() {
-        totalReportsPill.textContent = `Visit summaries: ${recordsState.length}`;
-        totalDocsPill.textContent = `Documents: ${docsState.length}`;
-        lastUpdatedPill.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-      }
-
-      function renderRecords() {
-        if (!recordsState.length) {
-          listEl.innerHTML = '<div class="muted-empty">No visit summaries are available yet. Once a visit is completed, your summary appears here.</div>';
+      function setInfoQualityBadge(state) {
+        if (!infoQualityBadgeEl) return;
+        const next = String(state || 'no_data');
+        infoQualityBadgeEl.className = 'products-status';
+        if (next === 'clean') {
+          infoQualityBadgeEl.classList.add('ok');
+          infoQualityBadgeEl.textContent = 'Clean';
           return;
         }
-        listEl.innerHTML = recordsState.map((rec) => `
-          <article class="record-item">
-            <div class="record-item-head">
-              <div class="record-item-title">Visit summary</div>
-              <span class="badge ${statusClass(rec.status)}">${String(rec.status || 'unknown').toUpperCase()}</span>
-            </div>
-            <div class="record-item-meta">Created: ${toLocalDate(rec.created_at)}</div>
-            <div class="record-item-meta">${rec.encounter_id ? `Linked appointment: ${rec.encounter_id}` : 'Linked appointment: pending linkage'}</div>
-            <div class="record-item-summary">${(rec.summary || 'No summary text available yet.').toString()}</div>
-          </article>
-        `).join('');
-      }
-
-      function renderDocuments() {
-        if (!docsState.length) {
-          docsEl.innerHTML = '<div class="muted-empty">No documents uploaded yet. You can upload a report, lab PDF, or image above.</div>';
+        if (next === 'caution') {
+          infoQualityBadgeEl.classList.add('warn');
+          infoQualityBadgeEl.textContent = 'Caution';
           return;
         }
-        docsEl.innerHTML = docsState.map((d) => {
-          const name = normalizeFileName(d.file_name || 'Document');
+        infoQualityBadgeEl.classList.add('pending');
+        infoQualityBadgeEl.textContent = 'No data';
+      }
+
+      function setConfidenceTier(total, resolved) {
+        const safeTotal = Number(total || 0);
+        const safeResolved = Number(resolved || 0);
+        const ratio = safeTotal > 0 ? (safeResolved / safeTotal) : 0;
+        let tier = 'Low';
+        if (ratio >= 0.85) tier = 'High';
+        else if (ratio >= 0.5) tier = 'Partial';
+        if (infoConfidenceBadgeEl) {
+          infoConfidenceBadgeEl.className = 'products-status';
+          if (tier === 'High') infoConfidenceBadgeEl.classList.add('ok');
+          else if (tier === 'Partial') infoConfidenceBadgeEl.classList.add('warn');
+          else infoConfidenceBadgeEl.classList.add('pending');
+          infoConfidenceBadgeEl.textContent = `${tier} confidence`;
+        }
+        const unresolvedRatio = safeTotal > 0 ? ((safeTotal - safeResolved) / safeTotal) : 1;
+        if (infoConfidenceDisclaimerEl) {
+          infoConfidenceDisclaimerEl.style.display = unresolvedRatio >= 0.5 ? 'block' : 'none';
+        }
+        return tier;
+      }
+
+      function switchProductsTab(next) {
+        Object.entries(tabs).forEach(([k, el]) => {
+          const active = k === next;
+          el.classList.toggle('active', active);
+          el.setAttribute('aria-selected', String(active));
+        });
+        Object.entries(panes).forEach(([k, el]) => {
+          el.classList.toggle('active', k === next);
+        });
+      }
+
+      Object.entries(tabs).forEach(([k, el]) => el.addEventListener('click', () => switchProductsTab(k)));
+
+      function parseDateKey(isoString) {
+        const d = isoString ? new Date(isoString) : null;
+        if (!d || Number.isNaN(d.getTime())) return '';
+        return d.toISOString().slice(0, 10);
+      }
+
+      function statusClassForIngredient(row) {
+        if (!row || !row.inci_name) return 'unknown';
+        if (Number(row.is_eu_restricted) === 1 || Number(row.is_endocrine_dis) === 1) return 'flagged';
+        if (Number(row.is_allergen) === 1) return 'caution';
+        return 'safe';
+      }
+
+      function renderIngredientRows(rows) {
+        const allRows = Array.isArray(rows) ? rows : [];
+        const q = infoIngredientQuery.trim().toLowerCase();
+        const filteredRows = q
+          ? allRows.filter((r) => {
+              const name = String(r?.inci_name || r?.raw_text || '').toLowerCase();
+              const role = Array.isArray(r?.role) ? r.role.join(' ').toLowerCase() : '';
+              return name.includes(q) || role.includes(q);
+            })
+          : allRows;
+        if (!filteredRows.length) {
+          return `<div class="products-empty">${escQ(infoEmptyStateReason)}</div>`;
+        }
+        return filteredRows.map((r, idx) => {
+          const role = Array.isArray(r.role) && r.role.length ? r.role[0] : 'Unknown';
+          const status = statusClassForIngredient(r);
           return `
-            <article class="record-item">
-              <div class="record-item-head">
-                <div class="record-item-title">${name}</div>
-                <span class="badge ${statusClass(d.status)}">${String(d.status || 'available').toUpperCase()}</span>
-              </div>
-              <div class="record-item-meta">Uploaded: ${toLocalDate(d.created_at)}</div>
-              <div class="record-item-meta">${d.encounter_id ? `Linked appointment: ${d.encounter_id}` : 'Uploaded outside a specific appointment'}</div>
-              <div class="doc-actions">
-                ${isImageType(d.file_type) ? `<button type="button" class="btn btn-secondary" onclick="window.previewPatientDocument('${String(d.id || '').replace(/'/g, "\\'")}')">Preview</button>` : ''}
-                <button type="button" class="btn btn-secondary" onclick="window.downloadPatientDocument('${String(d.id || '').replace(/'/g, "\\'")}')">Download</button>
-              </div>
-            </article>
+            <div class="products-ingredient-row">
+              <span>${idx + 1}</span>
+              <span>${escQ(r.inci_name || r.raw_text || 'Unknown')}</span>
+              <span style="font-size:11px;color:#6b7280;">${escQ(role)}</span>
+              <span class="products-ingredient-dot ${status}"></span>
+            </div>
           `;
         }).join('');
       }
 
-      async function loadRecords() {
-        const body = await patientApi.request('/api/patient/my-records', { method: 'GET' });
-        if (!body.success) throw new Error(body.error || 'Failed to load records.');
-        recordsState = body.records || [];
+      function selectProduct(productId) {
+        if (!productId) return;
+        selectedProductId = productId;
+        switchProductsTab('info');
+        loadProductInfo(productId);
       }
 
-      async function loadDocuments() {
-        const body2 = await patientApi.request('/api/patient/documents', { method: 'GET' });
-        if (!body2.success) throw new Error(body2.error || 'Unable to load documents.');
-        const refs = Array.isArray(body2.documentReferences) ? body2.documentReferences : [];
-        const refsById = new Map(refs.map((r) => [r.id, r]));
-        docsState = (body2.documents || []).map((doc) => {
-          const ref = refsById.get(doc.id) || {};
-          const att = ref && Array.isArray(ref.content) && ref.content[0] && ref.content[0].attachment ? ref.content[0].attachment : {};
-          return {
-            ...doc,
-            file_type: doc.file_type || att.contentType || null,
-            encounter_id: encounterFromRef(ref),
-            binary_url: (doc.fhir && doc.fhir.binary_url) || att.url || null
-          };
+      function renderCatalog() {
+        if (!catalogResultsEl) return;
+        const q = searchQuery.trim().toLowerCase();
+        const filtered = productsCatalog.filter((p) => {
+          const pid = String(p?.id || '').toLowerCase();
+          const name = String(p?.product_name || '').toLowerCase();
+          const brands = String(p?.brands || '').toLowerCase();
+          const passesQuery = !q || pid.includes(q) || name.includes(q) || brands.includes(q);
+          if (!passesQuery) return false;
+          if (!q && !p?.has_ingredient_data) return false;
+          if (q) return true; // search should not disappear under empty list chips
+          if (selectedFilter === 'flagged') {
+            return Array.isArray(p.ingredients_analysis_tags) && p.ingredients_analysis_tags.length > 0;
+          }
+          if (selectedFilter === 'favorites' || selectedFilter === 'to_test') {
+            const list = productLists.find((l) => String(l.list_type || '').toLowerCase() === selectedFilter);
+            const refs = new Set((list?.items || []).map((it) => String(it.product_ref || '').toLowerCase()));
+            return refs.has(String(p.id || '').toLowerCase());
+          }
+          return true;
+        });
+        if (!filtered.length) {
+          catalogResultsEl.innerHTML = `<div class="products-empty">No products found for this filter yet.</div>`;
+          return;
+        }
+        catalogResultsEl.innerHTML = filtered.slice(0, 40).map((p) => `
+          <article class="products-catalog-item" data-product-id="${escQ(p.id)}">
+            <div class="left">
+              <span class="avatar" aria-hidden="true">${p.catalog === 'off' ? '🍽️' : '🧴'}</span>
+              <div>
+                <h4>${escQ(p.product_name || p.id)}</h4>
+                <p>${escQ(p.brands || p.catalog || '')}</p>
+              </div>
+            </div>
+            <span style="font-size:11px;color:#6b7280;">${p?.has_ingredient_data ? 'Info ›' : 'No ingredient data'}</span>
+          </article>
+        `).join('');
+        catalogResultsEl.querySelectorAll('[data-product-id]').forEach((el) => {
+          el.addEventListener('click', () => selectProduct(el.getAttribute('data-product-id')));
         });
       }
 
-      async function loadAll() {
-        errorEl.style.display = 'none';
+      function renderSearchDropdown() {
+        if (!searchDropdown) return;
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) {
+          searchDropdown.classList.remove('open');
+          searchDropdown.innerHTML = '';
+          return;
+        }
+        const matches = productsCatalog
+          .filter((p) => {
+            const pid = String(p?.id || '').toLowerCase();
+            const name = String(p?.product_name || '').toLowerCase();
+            const brands = String(p?.brands || '').toLowerCase();
+            return pid.includes(q) || name.includes(q) || brands.includes(q);
+          })
+          .slice(0, 8);
+        if (!matches.length) {
+          searchDropdown.classList.add('open');
+          searchDropdown.innerHTML = `<div class="products-empty" style="border:0;border-radius:0;">No matching products.</div>`;
+          return;
+        }
+        searchDropdown.classList.add('open');
+        searchDropdown.innerHTML = matches.sort((a, b) => Number(b?.has_ingredient_data || 0) - Number(a?.has_ingredient_data || 0)).map((p) => `
+          <button type="button" class="products-search-option" data-product-id="${escQ(p.id)}">
+            <span>${escQ(p.product_name || p.id)}</span>
+            <span style="font-size:11px;color:#6b7280;">${escQ(p.brands || p.catalog || '')}${p?.has_ingredient_data ? '' : ' · no ingredient data'}</span>
+          </button>
+        `).join('');
+        searchDropdown.querySelectorAll('[data-product-id]').forEach((el) => {
+          el.addEventListener('click', () => {
+            const pid = el.getAttribute('data-product-id');
+            searchDropdown.classList.remove('open');
+            searchDropdown.innerHTML = '';
+            selectProduct(pid);
+          });
+        });
+      }
+
+      function renderLists() {
+        if (!listsEl) return;
+        if (!productLists.length) {
+          listsEl.innerHTML = `
+            <div class="products-list-item"><div style="display:flex;align-items:center;"><span class="icon">♥</span><strong>Favorites</strong></div><span>0 products ›</span></div>
+            <div class="products-list-item"><div style="display:flex;align-items:center;"><span class="icon">🧪</span><strong>To Test</strong></div><span>0 products ›</span></div>
+            <div class="products-list-item"><div style="display:flex;align-items:center;"><span class="icon">⚠</span><strong>Flagged</strong></div><span>0 products ›</span></div>
+          `;
+          return;
+        }
+        const favorite = productLists.find((l) => String(l.list_type || '').toLowerCase() === 'favorites');
+        const toTest = productLists.find((l) => String(l.list_type || '').toLowerCase() === 'to_test');
+        const flaggedCount = productsCatalog.filter((p) => Array.isArray(p.ingredients_analysis_tags) && p.ingredients_analysis_tags.length > 0).length;
+        listsEl.innerHTML = `
+          <div class="products-list-item"><div style="display:flex;align-items:center;"><span class="icon">♥</span><strong>Favorites</strong></div><span>${(favorite?.items || []).length} products ›</span></div>
+          <div class="products-list-item"><div style="display:flex;align-items:center;"><span class="icon">🧪</span><strong>To Test</strong></div><span>${(toTest?.items || []).length} products ›</span></div>
+          <div class="products-list-item"><div style="display:flex;align-items:center;"><span class="icon">⚠</span><strong>Flagged</strong></div><span>${flaggedCount} products ›</span></div>
+        `;
+      }
+
+      function renderSavedScansTimeline() {
+        const today = new Date().toISOString().slice(0, 10);
+        const yesterday = (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 1);
+          return d.toISOString().slice(0, 10);
+        })();
+        const todayRows = savedScans.filter((s) => parseDateKey(s.scanned_at) === today);
+        const yesterdayRows = savedScans.filter((s) => parseDateKey(s.scanned_at) === yesterday);
+        scansTodayEl.innerHTML = todayRows.length ? todayRows.map((s) => `
+          <article class="products-scan-item">
+            <div class="time">${escQ(new Date(s.scanned_at || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</div>
+            <div>
+              <p class="name">${escQ(s?.product?.product_name || s?.product?.name || `Unnamed product · ${s.barcode || ''}`)}</p>
+              <p class="meta">${escQ(s?.product?.brands || s?.barcode || 'Saved scan')}</p>
+            </div>
+            <span class="products-status pending">Saved</span>
+          </article>
+        `).join('') : `<article class="products-scan-item"><div class="time">—</div><div><p class="name">No scans today</p><p class="meta">Use Scan to add products.</p></div><span class="products-status pending">Pending</span></article>`;
+        scansYesterdayEl.innerHTML = yesterdayRows.length ? yesterdayRows.map((s) => `
+          <article class="products-scan-item">
+            <div class="time">${escQ(new Date(s.scanned_at || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</div>
+            <div>
+              <p class="name">${escQ(s?.product?.product_name || s?.product?.name || `Unnamed product · ${s.barcode || ''}`)}</p>
+              <p class="meta">${escQ(s?.product?.brands || s?.barcode || 'Saved scan')}</p>
+            </div>
+            <span class="products-status pending">Saved</span>
+          </article>
+        `).join('') : `<article class="products-scan-item"><div class="time">—</div><div><p class="name">No scans yesterday</p><p class="meta">Saved scans will appear here.</p></div><span class="products-status pending">Pending</span></article>`;
+      }
+
+      function renderLearn() {
+        if (!learnPaneEl) return;
+        if (!learnPaneEl.dataset.items) {
+          learnPaneEl.innerHTML = `
+            <article class="products-learn-chat">
+              <div class="products-learn-chat-head">
+                <h4>Kelly chat connection</h4>
+                <span class="tag">educ-1</span>
+              </div>
+              <div class="products-chat-bubble">Hi, I’m Kelly. This is where product Q&A chat will run once connected.</div>
+              ${patientFeatures.chat_enabled ? `<div class="products-chat-input-row"><input type="text" value="Type to ask Kelly about this product..." disabled /><button type="button" disabled>→</button></div>` : ''}
+              <ul class="products-chat-todos">
+                <li>Data source quality: catalog entries are raw source imports; ingredient cards are enriched outputs.</li>
+                <li>Connect to <code>/api/patient/triage/message</code> for conversation turns.</li>
+                <li>Persist per-patient chat session context for follow-up questions.</li>
+                <li>Inject selected product + ingredient summary into each turn.</li>
+                <li>Enable attachment flow for product label/photo uploads.</li>
+                <li>Add safety/medical disclaimer + emergency escalation guardrails.</li>
+              </ul>
+            </article>
+            <div class="products-empty">No additional learning entries available yet.</div>`;
+          return;
+        }
+        const items = JSON.parse(learnPaneEl.dataset.items || '[]');
+        if (!items.length) {
+          learnPaneEl.innerHTML = `
+            <article class="products-learn-chat">
+              <div class="products-learn-chat-head">
+                <h4>Kelly chat connection</h4>
+                <span class="tag">educ-1</span>
+              </div>
+              <div class="products-chat-bubble">Hi, I’m Kelly. This is where product Q&A chat will run once connected.</div>
+              <ul class="products-chat-todos">
+                <li>Data source quality: catalog entries are raw source imports; ingredient cards are enriched outputs.</li>
+                <li>Connect to `/api/patient/triage/message` for conversation turns.</li>
+                <li>Persist per-patient chat session context for follow-up questions.</li>
+                <li>Inject selected product + ingredient summary into each turn.</li>
+                <li>Enable attachment flow for product label/photo uploads.</li>
+                <li>Add safety/medical disclaimer + emergency escalation guardrails.</li>
+              </ul>
+            </article>
+            <div class="products-empty">No additional learning entries available yet.</div>`;
+          return;
+        }
+        const remaining = items.filter((it) => String(it.id || '').toLowerCase() !== 'educ-1');
+        const chatCard = `
+          <article class="products-learn-chat">
+            <div class="products-learn-chat-head">
+              <h4>Kelly chat connection</h4>
+              <span class="tag">educ-1</span>
+            </div>
+            <div class="products-chat-bubble">Hi, I’m Kelly. This is where product Q&A chat will run once connected.</div>
+            ${patientFeatures.chat_enabled ? `<div class="products-chat-input-row"><input type="text" value="Type to ask Kelly about this product..." disabled /><button type="button" disabled>→</button></div>` : ''}
+            <ul class="products-chat-todos">
+              <li>Data source quality: catalog entries are raw source imports; ingredient cards are enriched outputs.</li>
+              <li>Connect to <code>/api/patient/triage/message</code> for conversation turns.</li>
+              <li>Persist per-patient chat session context for follow-up questions.</li>
+              <li>Inject selected product + ingredient summary into each turn.</li>
+              <li>Enable attachment flow for product label/photo uploads.</li>
+              <li>Add safety/medical disclaimer + emergency escalation guardrails.</li>
+            </ul>
+          </article>`;
+        learnPaneEl.innerHTML = chatCard + remaining.map((it) => `
+          <article class="products-learn-card">
+            <span class="tag">${escQ(it.id || 'Learn')}</span>
+            <h4>${escQ(it.title || 'Untitled')}</h4>
+            <p>${escQ(it.body || '')}</p>
+          </article>
+        `).join('');
+      }
+
+      async function loadProductInfo(productId) {
+        if (!productId) return;
+        const data = await patientApi.request(`/api/patient/products/${encodeURIComponent(productId)}/info`, { method: 'GET' });
+        if (!data?.success) {
+          if (String(data?.error || '').toLowerCase().includes('endpoint not found') || String(data?.error || '').includes('404')) {
+            const product = productsCatalog.find((p) => String(p.id) === String(productId)) || {};
+            infoProductNameEl.textContent = product.product_name || product.id || 'Unknown product';
+            infoProductMetaEl.textContent = `${product.brands || product.catalog || '—'} · ${product.barcode || '—'}`;
+            infoIngredientsCountEl.textContent = '0';
+            infoResolvedValueEl.textContent = '0';
+            infoFlaggedValueEl.textContent = '0';
+            infoAllergenValueEl.textContent = '0';
+            infoResolvedCountEl.textContent = '0 of 0 resolved';
+            setConfidenceTier(0, 0);
+            infoIngredientRows = [];
+            infoEmptyStateReason = 'No ingredient data is available for this product in the source catalog yet.';
+            setInfoQualityBadge('no_data');
+            infoRowsEl.innerHTML = renderIngredientRows(infoIngredientRows);
+            return;
+          }
+          throw new Error(data?.error || 'Failed to load product info');
+        }
+        const product = data.product || {};
+        const info = data.info || {};
+        const enriched = Array.isArray(info.ingredients_enriched) ? info.ingredients_enriched : [];
+        infoIngredientRows = enriched;
+        const summary = info.ingredient_summary || {};
+        infoProductNameEl.textContent = product.product_name || product.id || 'Unknown product';
+        infoProductMetaEl.textContent = `${product.brands || product.catalog || '—'} · ${product.barcode || '—'}`;
+        infoIngredientsCountEl.textContent = String(summary.total_ingredients || 0);
+        infoResolvedValueEl.textContent = String(summary.resolved_count || 0);
+        infoFlaggedValueEl.textContent = String((summary.flagged_ingredients || []).length || 0);
+        infoAllergenValueEl.textContent = summary.has_fragrance_allergens ? '1' : '0';
+        infoResolvedCountEl.textContent = `${summary.resolved_count || 0} of ${summary.total_ingredients || 0} resolved`;
+        const total = Number(summary.total_ingredients || 0);
+        const resolved = Number(summary.resolved_count || 0);
+        const flagged = Number((summary.flagged_ingredients || []).length || 0);
+        const tier = setConfidenceTier(total, resolved);
+        if (total <= 0) {
+          infoEmptyStateReason = product.ingredients_text
+            ? 'Ingredient text exists, but this product has not been enriched yet.'
+            : 'No ingredient data is available for this product in the source catalog yet.';
+          setInfoQualityBadge('no_data');
+        } else if (tier === 'Low') {
+          infoEmptyStateReason = 'No ingredient rows match your ingredient search.';
+          setInfoQualityBadge('no_data');
+        } else if (flagged > 0 || summary.has_fragrance_allergens) {
+          infoEmptyStateReason = 'No ingredient rows match your ingredient search.';
+          setInfoQualityBadge('caution');
+        } else {
+          infoEmptyStateReason = 'No ingredient rows match your ingredient search.';
+          setInfoQualityBadge('clean');
+        }
+        infoRowsEl.innerHTML = renderIngredientRows(infoIngredientRows);
+      }
+
+      async function performScanFlow() {
+        const barcodeInput = window.prompt('Enter barcode (8-14 digits) to scan');
+        if (!barcodeInput) return;
+        const barcode = String(barcodeInput).replace(/[^\d]/g, '');
+        if (!/^\d{8,14}$/.test(barcode)) {
+          showToast('Enter a valid barcode (8-14 digits).', 'warning');
+          return;
+        }
+        let lookup = await patientApi.request(`/api/public/beautyfacts/${encodeURIComponent(barcode)}`, { method: 'GET' });
+        if (!lookup?.success) {
+          lookup = await patientApi.request(`/api/public/foodfacts/${encodeURIComponent(barcode)}`, { method: 'GET' });
+        }
+        if (!lookup?.success || !lookup?.product) {
+          showToast('Product scan failed. Please try another barcode.', 'error');
+          switchProductsTab('scans');
+          return;
+        }
+        const catalog = String((lookup.product.source || '').includes('food') ? 'off' : 'obf').toLowerCase();
+        const productId = `${catalog}:${lookup.barcode || barcode}`;
+        selectedProductId = productId;
+        showToast('Product scanned and loaded.', 'success');
+        await Promise.all([loadSavedScans(), loadCatalog()]);
+        renderCatalog();
+        renderSavedScansTimeline();
+        await loadProductInfo(productId);
+        switchProductsTab('info');
+      }
+
+      async function loadCatalogHealthBanner() {
+        if (!healthBannerEl) return;
         try {
-          await Promise.all([loadRecords(), loadDocuments()]);
-          renderRecords();
-          renderDocuments();
-          renderSummary();
-        } catch (e) {
-          errorEl.textContent = e.message || 'Failed to load records.';
-          errorEl.style.display = 'block';
-          if (!recordsState.length) {
-            listEl.innerHTML = '<div class="muted-empty">Unable to load visit summaries right now.</div>';
+          const data = await patientApi.request('/api/patient/health/catalog', { method: 'GET' });
+          if (!data || !data.success || data.catalog_ok) {
+            healthBannerEl.style.display = 'none';
+            return;
           }
-          if (!docsState.length) {
-            docsEl.innerHTML = '<div class="muted-empty">Unable to load documents right now.</div>';
-          }
+          healthBannerEl.textContent = data.message || 'Product search indexes may be unavailable.';
+          healthBannerEl.style.display = 'block';
+        } catch (_) {
+          healthBannerEl.style.display = 'none';
         }
       }
 
-      window.downloadPatientDocument = async function downloadPatientDocument(docId) {
-        if (!docId) return;
-        const result = await patientApi.request(`/api/patient/documents/${encodeURIComponent(docId)}/download`, { method: 'GET' });
-        if (!result.success || !result.url) {
-          errorEl.textContent = result.error || 'Unable to generate download link.';
-          errorEl.style.display = 'block';
+      async function loadCatalog() {
+        const q = searchQuery ? `?q=${encodeURIComponent(searchQuery)}&limit=50` : '?limit=50';
+        const data = await patientApi.request(`/api/patient/products/catalog${q}`, { method: 'GET' });
+        if (data?.success) {
+          productsCatalog = Array.isArray(data.products) ? data.products : [];
           return;
         }
-        window.open(result.url, '_blank', 'noopener,noreferrer');
-      };
-
-      window.previewPatientDocument = async function previewPatientDocument(docId) {
-        const doc = docsState.find((d) => d.id === docId);
-        if (!doc) return;
-        if (!isImageType(doc.file_type)) {
-          errorEl.textContent = 'Preview is currently supported for image files only.';
-          errorEl.style.display = 'block';
+        if (String(data?.error || '').toLowerCase().includes('endpoint not found') || String(data?.error || '').includes('404')) {
+          const fallbackShelf = await patientApi.request('/api/patient/shelf/products', { method: 'GET' });
+          const shelfRows = Array.isArray(fallbackShelf?.products) ? fallbackShelf.products : [];
+          productsCatalog = shelfRows.map((r) => ({
+            id: `obf:${r.catalog_product_id || r.shelf_product_id || r.id || ''}`.replace(/^obf:obf:/, 'obf:'),
+            catalog: 'obf',
+            barcode: r.barcode || null,
+            product_name: r.product_name || null,
+            brands: r.product_brand || null,
+            has_ingredient_data: Boolean((r.ingredients_text || '').trim()),
+            ingredients_analysis_tags: []
+          })).filter((r) => r.id && !r.id.endsWith(':'));
           return;
         }
-        try {
-          errorEl.style.display = 'none';
-          const signed = await patientApi.request(`/api/patient/documents/${encodeURIComponent(docId)}/download`, { method: 'GET' });
-          if (!signed.success || !signed.url) throw new Error(signed.error || 'Unable to get preview URL.');
-          const resp = await fetch(signed.url, { method: 'GET', headers: { 'ngrok-skip-browser-warning': 'true' } });
-          if (!resp.ok) throw new Error('Preview download failed.');
-          const blob = await resp.blob();
-          const dataUrl = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(new Error('Preview conversion failed.'));
-            reader.readAsDataURL(blob);
-          });
-          activePreviewDataUrl = String(dataUrl || '');
-          previewImage.src = activePreviewDataUrl;
-          previewTitle.textContent = normalizeFileName(doc.file_name || 'Image preview');
-          imagePreviewModal.classList.add('open');
-          imagePreviewModal.setAttribute('aria-hidden', 'false');
-        } catch (e) {
-          errorEl.textContent = e.message || 'Unable to preview this file right now.';
-          errorEl.style.display = 'block';
-        }
-      };
+        throw new Error(data?.error || 'Failed to load products catalog');
+      }
 
-      closePreviewBtn.addEventListener('click', closePreview);
-      imagePreviewModal.addEventListener('click', (e) => {
-        if (e.target === imagePreviewModal) closePreview();
-      });
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && imagePreviewModal.classList.contains('open')) closePreview();
-      });
-
-      uploadBtn.addEventListener('click', async () => {
-        const files = uploadInput.files ? Array.from(uploadInput.files) : [];
-        if (!files.length) {
-          errorEl.textContent = 'Choose at least one file before uploading.';
-          errorEl.style.display = 'block';
+      async function loadSavedScans() {
+        const data = await patientApi.request('/api/patient/products/saved-scans?limit=100', { method: 'GET' });
+        if (data?.success) {
+          savedScans = Array.isArray(data.scans) ? data.scans : [];
           return;
         }
+        if (String(data?.error || '').toLowerCase().includes('endpoint not found') || String(data?.error || '').includes('404')) {
+          savedScans = [];
+          return;
+        }
+        throw new Error(data?.error || 'Failed to load saved scans');
+      }
+
+      async function loadLists() {
+        const data = await patientApi.request('/api/patient/products/lists', { method: 'GET' });
+        if (data?.success) {
+          productLists = Array.isArray(data.lists) ? data.lists : [];
+          return;
+        }
+        if (String(data?.error || '').toLowerCase().includes('endpoint not found') || String(data?.error || '').includes('404')) {
+          productLists = [];
+          return;
+        }
+        throw new Error(data?.error || 'Failed to load product lists');
+      }
+
+      async function loadInformations() {
+        const data = await patientApi.request('/api/patient/products/informations', { method: 'GET' });
+        let items = [];
+        if (data?.success) {
+          items = Array.isArray(data.items) ? data.items : [];
+        } else if (!(String(data?.error || '').toLowerCase().includes('endpoint not found') || String(data?.error || '').includes('404'))) {
+          throw new Error(data?.error || 'Failed to load learning items');
+        }
+        learnPaneEl.dataset.items = JSON.stringify(items);
+      }
+
+      async function loadProductsUI() {
         errorEl.style.display = 'none';
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = 'Uploading...';
         try {
-          const formData = new FormData();
-          for (const f of files) formData.append('files', f);
-          const idemKey = `records-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const up = await patientApi.request('/api/patient/documents', {
-            method: 'POST',
-            headers: { 'idempotency-key': idemKey },
-            body: formData
-          });
-          if (!up.success) {
-            if (up.error_code === 'LIMIT_FILE_COUNT') {
-              const mf = up.max_files || 30;
-              throw new Error(`Too many files selected. Upload up to ${mf} files per batch, then run another batch.`);
-            }
-            throw new Error(up.error || 'Upload failed.');
+          await Promise.all([
+            loadCatalog(),
+            loadSavedScans(),
+            loadLists(),
+            loadInformations()
+          ]);
+          renderLists();
+          renderCatalog();
+          renderSavedScansTimeline();
+          renderLearn();
+          if (productsCatalog[0]?.id) {
+            selectedProductId = productsCatalog[0].id;
+            await loadProductInfo(selectedProductId);
+          } else {
+            infoProductNameEl.textContent = 'No product selected';
+            infoProductMetaEl.textContent = 'Scan or search a product to load insights';
+            infoIngredientsCountEl.textContent = '0';
+            infoResolvedValueEl.textContent = '0';
+            infoFlaggedValueEl.textContent = '0';
+            infoAllergenValueEl.textContent = '0';
+            infoResolvedCountEl.textContent = '0 of 0 resolved';
+            setConfidenceTier(0, 0);
+            setInfoQualityBadge('no_data');
+            infoEmptyStateReason = 'Scan or search a product to load ingredient insights.';
+            infoRowsEl.innerHTML = renderIngredientRows([]);
           }
-          uploadInput.value = '';
-          await loadAll();
+          await loadCatalogHealthBanner();
         } catch (e) {
-          errorEl.textContent = e.message || 'Upload failed. Please try again.';
+          errorEl.textContent = e.message || 'Failed to load products.';
           errorEl.style.display = 'block';
-        } finally {
-          uploadBtn.disabled = false;
-          uploadBtn.textContent = 'Upload documents';
+          renderLists();
+          renderCatalog();
+          renderSavedScansTimeline();
+          renderLearn();
+          infoRowsEl.innerHTML = renderIngredientRows([]);
         }
+      }
+
+      chipButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          chipButtons.forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedFilter = String(btn.dataset.filter || 'all');
+          renderCatalog();
+        });
       });
+      searchInput?.addEventListener('input', async () => {
+        const seq = ++catalogSearchSeq;
+        searchQuery = String(searchInput.value || '');
+        // Render immediate local matches, then refresh from query-indexed API.
+        renderCatalog();
+        renderSearchDropdown();
+        if (catalogSearchTimer) clearTimeout(catalogSearchTimer);
+        catalogSearchTimer = setTimeout(async () => {
+          try {
+            await loadCatalog();
+            if (seq !== catalogSearchSeq) return;
+          } catch (_) {
+            if (seq !== catalogSearchSeq) return;
+          }
+          renderCatalog();
+          renderSearchDropdown();
+        }, 180);
+      });
+      searchInput?.addEventListener('focus', renderSearchDropdown);
+      document.addEventListener('click', (evt) => {
+        if (!searchDropdown || !searchInput) return;
+        const t = evt.target;
+        if (t === searchInput || searchDropdown.contains(t)) return;
+        searchDropdown.classList.remove('open');
+      });
+      infoSearchInput?.addEventListener('input', () => {
+        infoIngredientQuery = String(infoSearchInput.value || '');
+        infoRowsEl.innerHTML = renderIngredientRows(infoIngredientRows);
+      });
+      scanFab?.addEventListener('click', performScanFlow);
 
-      refreshBtn.addEventListener('click', loadAll);
-
-      await loadAll();
+      patientFeatures = await getPatientFeatureFlags();
+      await loadProductsUI();
     });
 
     function toggleMobileMenu() {
@@ -745,18 +1793,6 @@
       window.location.href = 'patient-login.html';
     }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    try {
-      const userInfo = document.querySelector('.sidebar-footer .user-info');
-      if (userInfo) {
-        userInfo.style.cursor = 'pointer';
-        userInfo.addEventListener('click', (e) => {
-          if (e.target && e.target.closest && e.target.closest('.logout-btn')) return;
-          window.location.href = 'profile.html';
-        });
-      }
-    } catch (_) {}
-  });
   </script>
 </body>
 </html>

@@ -12,19 +12,19 @@
     body { background:#f7fafc; min-height:100vh; }
     .layout { display:flex; min-height:100vh; }
     .sidebar { width:260px; background:#fff; box-shadow:2px 0 10px rgba(0,0,0,0.05); position:fixed; height:100vh; overflow:auto; }
-    .main-content { margin-left:260px; padding:32px; flex:1; max-width:900px; }
+    .main-content { margin-left:260px; padding:var(--patient-space-5); flex:1; max-width:900px; }
     .page-header { margin-bottom:24px; }
-    .page-title { font-size:28px; font-weight:700; margin:0 0 6px 0; }
-    .page-subtitle { font-size:14px; color:var(--gray-600); max-width:560px; }
-    .card { background:#fff; border-radius:12px; padding:24px; box-shadow:var(--shadow-md); }
+    .page-title { font-size:var(--patient-title-size); font-weight:700; margin:0 0 8px 0; }
+    .page-subtitle { font-size:var(--patient-subtitle-size); color:var(--gray-600); max-width:560px; }
+    .card { background:#fff; border-radius:var(--patient-card-radius); padding:var(--patient-space-4); box-shadow:var(--shadow-md); }
     .choice-row { display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
     .choice-card { flex:1 1 260px; border-radius:16px; border:1px solid var(--gray-200); padding:18px 20px; cursor:pointer; text-decoration:none; color:inherit; transition: box-shadow .15s, transform .15s, border-color .15s; }
     .choice-card:hover { box-shadow:0 10px 30px rgba(15,23,42,0.18); border-color:#1e40af; transform:translateY(-1px); }
-    .choice-title { font-size:16px; font-weight:700; margin-bottom:4px; }
-    .choice-sub { font-size:13px; color:var(--gray-600); margin-bottom:10px; }
-    .chip { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:11px; font-weight:600; margin-right:6px; }
-    .btn-cta { display:inline-flex; align-items:center; justify-content:center; padding:10px 18px; border-radius:10px; background:#1e40af; color:#fff; font-size:14px; font-weight:700; margin-top:8px; }
-    .badge { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--gray-500); }
+    .choice-title { font-size:var(--patient-row-title-size); font-weight:700; margin-bottom:4px; }
+    .choice-sub { font-size:var(--patient-row-meta-size); color:var(--gray-600); margin-bottom:10px; }
+    .chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#eff6ff; color:#1d4ed8; font-size:var(--patient-chip-size); font-weight:600; margin-right:6px; }
+    .btn-cta { display:inline-flex; align-items:center; justify-content:center; padding:10px 18px; border-radius:10px; background:#1e40af; color:#fff; font-size:var(--patient-row-title-size); font-weight:700; margin-top:8px; }
+    .badge { font-size:var(--patient-section-label-size); text-transform:uppercase; letter-spacing:.08em; color:var(--gray-500); }
     .alert { border-radius:10px; padding:10px 12px; font-size:12px; margin-bottom:12px; display:none; }
     .alert-warning { background:#fffbeb; color:#92400e; border:1px solid #fed7aa; }
     .alert-info { background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; }
@@ -32,16 +32,10 @@
     .btn-sm { padding:6px 10px; border-radius:8px; border:none; font-size:12px; font-weight:600; cursor:pointer; }
     /* Match sidebar typography/styles across portal pages */
     .sidebar-header { padding:24px; border-bottom:1px solid var(--gray-200); }
-    .sidebar-logo {
-      font-size:32px;
-      line-height:1;
-      letter-spacing:-2px;
-      color:#2d3748;
-      margin-bottom:4px;
-      font-family:'Open Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-      font-weight:800;
-    }
-    .sidebar-subtitle { font-size:12px; color:var(--gray-500); margin-top:4px; }
+    .sidebar-logo { display:inline-flex; align-items:center; gap:7px; margin-bottom:2px; color:#131a2e; text-decoration:none; }
+    .sidebar-mark { width:42px; height:42px; border-radius:999px; background:#dbeafe; color:#1e3a8a; font-weight:800; font-size:11px; letter-spacing:0.02em; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; animation:sidebarSpin 6s linear infinite; }
+    @keyframes sidebarSpin { from { transform:rotate(0deg);} to { transform:rotate(360deg);} }
+    .sidebar-subtitle { font-size:12px; color:var(--gray-500); margin-top:2px; margin-left:0; }
     .sidebar-nav { padding:16px; }
     .nav-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; color:var(--gray-700); font-weight:500; cursor:pointer; transition:all .2s; margin-bottom:4px; text-decoration:none; }
     .nav-item:hover { background:var(--gray-50); color:#1e40af; }
@@ -108,32 +102,31 @@
   <div class="layout">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
+        <a href="/" class="sidebar-logo">
+          <span class="sidebar-mark" aria-hidden="true">S&C</span>
+        </a>
         <div class="sidebar-subtitle">Patient Portal</div>
       </div>
       <nav class="sidebar-nav">
         <a href="patient-dashboard.html" class="nav-item">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Dashboard</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Home</span>
         </a>
-        <a href="wallet.html" class="nav-item">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span><span>Wallet</span>
+        <a href="schedule.html" class="nav-item">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Calendar</span>
         </a>
         <a href="appointments.html" class="nav-item active">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Appointments</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Routine</span>
         </a>
         <a href="my-records.html" class="nav-item">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>My Records</span>
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>Products</span>
+        </a>
+        <a href="wallet.html" class="nav-item">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span><span>Wallet</span>
+        </a>
+        <a href="profile.html" class="nav-item">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span><span>Profile</span>
         </a>
       </nav>
-      <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="user-avatar" id="userAvatar">P</div>
-          <div class="user-details">
-            <div class="user-name" id="userName">Patient</div>
-            <div class="user-role">Patient Account</div>
-          </div>
-          <button class="logout-btn" onclick="logout()" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path></svg></button>
-        </div>
-      </div>
     </aside>
 
     <main class="main-content">
@@ -172,7 +165,7 @@
   </div>
 
   <script type="module">
-    import { mountBottomTabs } from '../assets/js/patient-shell.js';
+    import { getPatientFeatureFlags, mountBottomTabs } from '../assets/js/patient-shell.js';
 
     const API_BASE = window.API_BASE || 'http://localhost:4000';
 
@@ -275,10 +268,11 @@
         });
 
         if (unpaid.length > 0) {
-          showWarning('You have a visit waiting for payment. Please complete payment before booking a new one.', [
-            { label: 'Go to Wallet', onClick: () => window.location.href = 'wallet.html' },
-            { label: 'View appointments', onClick: () => goToAppointmentsFresh() }
-          ]);
+          const actions = [{ label: 'View appointments', onClick: () => goToAppointmentsFresh() }];
+          if (window.__patientFeatures?.wallet_enabled) {
+            actions.unshift({ label: 'Go to Wallet', onClick: () => window.location.href = 'wallet.html' });
+          }
+          showWarning('You have a visit waiting for payment. Please complete payment before booking a new one.', actions);
         } else if (upcoming.length > 0) {
           const next = upcoming[0];
           const label = (next.datetime_display || `${next.date || ''} ${next.time || ''}`).trim();
@@ -291,8 +285,14 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('DOMContentLoaded', async () => {
       mountBottomTabs();
+      const features = await getPatientFeatureFlags();
+      window.__patientFeatures = features;
+      if (!features.chat_enabled) {
+        const guidedChoice = document.getElementById('guidedChoice');
+        if (guidedChoice) guidedChoice.style.display = 'none';
+      }
       const sid = localStorage.getItem('patient_session_id') || '';
       if (!sid) {
         window.location.href = 'patient-login.html';

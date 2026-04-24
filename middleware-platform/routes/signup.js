@@ -15,6 +15,11 @@ const { v4: uuidv4 } = require('uuid');
 const { authLimiter: rateLimiter, lenientAuthLimiter } = require('../middleware/rate-limiter');
 const { generateSimplePassword } = require('../utils/password-generator');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
+const {
+  ensureClaimSessionTables,
+  claimLandingSessionToCustomer,
+  listCustomerProducts
+} = require('../services/landing-session-claim-service');
 
 // Load bcryptjs for password hashing
 let bcrypt;
@@ -2981,6 +2986,65 @@ router.post('/customers/signout', rateLimiter, async (req, res) => {
       success: true,
       message: 'Signed out successfully'
     });
+  }
+});
+
+/**
+ * POST /api/customer/landing/claim-session
+ * Claim anonymous landing scan session into authenticated customer shelf.
+ */
+router.post('/customer/landing/claim-session', rateLimiter, requireCustomerAuth, express.json(), async (req, res) => {
+  try {
+    ensureClaimSessionTables();
+    const landingSessionId = String(req.body?.landing_session_id || '').trim();
+    if (!landingSessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'landing_session_id required'
+      });
+    }
+
+    const ipHash = crypto
+      .createHash('sha256')
+      .update(String(req.ip || '') + '|' + String(req.headers['x-forwarded-for'] || ''))
+      .digest('hex')
+      .slice(0, 24);
+    const out = claimLandingSessionToCustomer({
+      customerId: req.customer?.id,
+      merchantId: req.customer?.merchant_id || null,
+      landingSessionId,
+      ipHash,
+      userAgent: String(req.headers['user-agent'] || '').slice(0, 240)
+    });
+    if (!out.success) {
+      return res.status(Number(out.status) || 400).json({ success: false, error: out.error || 'claim_failed' });
+    }
+    return res.json(out);
+  } catch (error) {
+    console.error('❌ Claim session error:', error);
+    return res.status(500).json({ success: false, error: 'claim_session_failed', message: error.message });
+  }
+});
+
+/**
+ * GET /api/customer/products
+ * Minimal claimed scan shelf list for authenticated customer.
+ */
+router.get('/customer/products', rateLimiter, requireCustomerAuth, async (req, res) => {
+  try {
+    ensureClaimSessionTables();
+    const products = listCustomerProducts({
+      customerId: req.customer?.id,
+      limit: req.query?.limit
+    });
+    return res.json({
+      success: true,
+      count: products.length,
+      products
+    });
+  } catch (error) {
+    console.error('❌ Customer products list error:', error);
+    return res.status(500).json({ success: false, error: 'customer_products_list_failed', message: error.message });
   }
 });
 

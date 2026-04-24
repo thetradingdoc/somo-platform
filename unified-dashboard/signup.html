@@ -829,7 +829,46 @@
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.message || data.error || 'Verification failed');
-        codeSuccess.textContent = 'Email verified! Redirecting...';
+        let claimedProductsPreview = '';
+
+        // If user scanned on landing pre-auth, claim that anonymous session now.
+        try {
+          const landingSessionId = sessionStorage.getItem('littlelab_landing_assistant_sid') || '';
+          if (landingSessionId) {
+            const claimRes = await fetch(`${SIGNUP_API_BASE}/api/customer/landing/claim-session`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ landing_session_id: landingSessionId })
+            });
+            const claimData = await claimRes.json().catch(() => ({}));
+            if (claimRes.ok && claimData.success) {
+              sessionStorage.removeItem('littlelab_landing_assistant_sid');
+              try {
+                const shelfRes = await fetch(`${SIGNUP_API_BASE}/api/customer/products?limit=3`, {
+                  method: 'GET',
+                  credentials: 'include'
+                });
+                const shelfData = await shelfRes.json().catch(() => ({}));
+                if (shelfRes.ok && shelfData.success && Array.isArray(shelfData.products) && shelfData.products.length) {
+                  const names = shelfData.products
+                    .map((p) => p?.product?.product_name || p?.product?.name || p?.barcode)
+                    .filter(Boolean)
+                    .slice(0, 3);
+                  if (names.length) {
+                    claimedProductsPreview = ` Claimed: ${names.join(', ')}.`;
+                  }
+                }
+              } catch (_) {}
+            } else if (claimRes.status === 400 || claimRes.status === 403 || claimRes.status === 404) {
+              // Invalid/foreign/expired session ids should not be retried forever.
+              sessionStorage.removeItem('littlelab_landing_assistant_sid');
+            }
+          }
+        } catch (_) {
+          // Non-blocking: user can still continue signup even if claim fails.
+        }
+        codeSuccess.textContent = `Email verified! Redirecting...${claimedProductsPreview}`;
         codeSuccess.classList.remove('hidden');
 
         // Production-simple flow: always proceed to terms, then clinic dashboard.

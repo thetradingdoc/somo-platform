@@ -121,21 +121,13 @@
         <div class="sidebar-subtitle">Patient Portal</div>
       </div>
       <nav class="sidebar-nav">
-        <a href="patient-dashboard.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Dashboard</span></a>
-        <a href="wallet.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span><span>Wallet</span></a>
-        <a href="appointments.html" class="nav-item active"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Appointments</span></a>
-        <a href="my-records.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>My Records</span></a>
+        <a href="patient-dashboard.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Home</span></a>
+        <a href="schedule.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Calendar</span></a>
+        <a href="appointments.html" class="nav-item active"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Routine</span></a>
+        <a href="my-records.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>Products</span></a>
+        <a href="wallet.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span><span>Wallet</span></a>
+        <a href="profile.html" class="nav-item"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span><span>Profile</span></a>
       </nav>
-      <div class="sidebar-footer">
-        <div class="user-info" id="userInfo">
-          <div class="user-avatar" id="userAvatar">P</div>
-          <div class="user-details">
-            <div class="user-name" id="userName">Patient</div>
-            <div class="user-role">Patient Account</div>
-          </div>
-          <button class="logout-btn" id="logoutBtn" title="Logout" aria-label="Logout"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path></svg></button>
-        </div>
-      </div>
     </aside>
 
     <main class="main">
@@ -183,9 +175,13 @@
   </div>
 
   <script type="module">
-    import { mountBottomTabs } from '../assets/js/patient-shell.js';
-    document.addEventListener('DOMContentLoaded', () => {
+    import { getPatientFeatureFlags, mountBottomTabs } from '../assets/js/patient-shell.js';
+    document.addEventListener('DOMContentLoaded', async () => {
       mountBottomTabs();
+      const features = await getPatientFeatureFlags();
+      if (!features.chat_enabled) {
+        window.location.href = 'book.html?chat=disabled';
+      }
     });
   </script>
 
@@ -346,17 +342,6 @@
       if (sidebar) sidebar.classList.toggle('mobile-open');
       if (overlay) overlay.classList.toggle('active');
     }
-
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      localStorage.removeItem('patient_session_id');
-      localStorage.removeItem('patient_email');
-      localStorage.removeItem('patient_phone');
-      window.location.href = 'patient-login.html';
-    });
-    document.getElementById('userInfo').addEventListener('click', (e) => {
-      if (e.target && e.target.id === 'logoutBtn') return;
-      window.location.href = 'profile.html';
-    });
 
     sendBtn.addEventListener('click', () => sendMessage(input.value));
     input.addEventListener('keydown', (e) => {

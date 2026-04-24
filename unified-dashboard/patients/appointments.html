@@ -4,52 +4,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#1e40af">
+    <meta name="theme-color" content="#314DB6">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>My Appointments - Consult Patient Portal</title>
+    <title>Routine - Skin &amp; Care Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
-            --primary: #1e40af;
-            --primary-dark: #1e3a8a;
-            --primary-light: #3b82f6;
+            --primary: #314DB6;
+            --primary-dark: #2a409a;
+            --primary-light: #5b77de;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
 
         .layout {
             display: flex;
             min-height: 100vh;
-            background: #f7fafc;
+            background: linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%);
         }
 
         .sidebar {
             width: 260px;
             background: white;
-            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05);
+            border-right: 1px solid #e7ebf4;
+            box-shadow: 2px 0 14px rgba(21, 36, 88, 0.05);
             position: fixed;
             height: 100vh;
             overflow-y: auto;
         }
 
         .sidebar-header {
-            padding: 24px;
+            padding: 18px 16px;
             border-bottom: 1px solid var(--gray-200);
         }
 
         .sidebar-logo {
-            font-size: 32px;
-            line-height: 1;
-            letter-spacing: -2px;
-            color: #2d3748;
-            margin-bottom: 4px;
-            font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 2px;
+            color: #131a2e;
+            text-decoration: none;
+        }
+
+        .sidebar-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            background: #dbeafe;
+            color: #1e3a8a;
+            font-weight: 800;
+            font-size: 11px;
+            letter-spacing: 0.02em;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            animation: sidebarSpin 6s linear infinite;
+        }
+
+        @keyframes sidebarSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
 
         .sidebar-subtitle {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--gray-500);
-            margin-top: 4px;
+            margin-top: 2px;
+            margin-left: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
         }
 
         .sidebar-nav {
@@ -76,7 +104,7 @@
         }
 
         .nav-item.active {
-            background: var(--primary);
+            background: linear-gradient(135deg, #2f48aa 0%, #3d5ed3 100%);
             color: white;
         }
 
@@ -166,24 +194,26 @@
 
         .main-content {
             margin-left: 260px;
-            padding: 32px;
+            padding: var(--patient-space-5);
             flex: 1;
         }
 
         .page-header {
-            margin-bottom: 32px;
-            margin-top: 24px;
+            margin-bottom: var(--patient-space-5);
+            margin-top: var(--patient-space-4);
         }
 
         .page-title {
-            font-size: 32px;
+            font-size: var(--patient-title-size);
             font-weight: 700;
             color: var(--gray-900);
-            margin-bottom: 8px;
+            margin-bottom: var(--patient-space-1);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            letter-spacing: -0.01em;
         }
 
         .page-subtitle {
-            font-size: 16px;
+            font-size: var(--patient-subtitle-size);
             color: var(--gray-600);
         }
 
@@ -286,6 +316,412 @@
             gap: 8px;
             margin-bottom: 14px;
         }
+        .routine-builder {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--patient-card-radius);
+            padding: var(--patient-space-3);
+            margin-bottom: var(--patient-space-3);
+            box-shadow: var(--shadow-sm);
+        }
+        .routine-builder h3 {
+            margin: 0 0 6px 0;
+            font-size: 20px;
+            color: var(--gray-900);
+        }
+        .routine-builder p {
+            margin: 0 0 12px 0;
+            color: var(--gray-600);
+            font-size: var(--patient-row-meta-size);
+        }
+        .routine-builder-empty {
+            border: 1px dashed #bfdbfe;
+            background: #eff6ff;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        .routine-template-controls {
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            background: #f8fafc;
+            padding: 12px;
+            margin-bottom: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+        .routine-template-controls .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .routine-template-controls label {
+            font-size: var(--patient-section-label-size);
+            font-weight: 700;
+            color: var(--gray-700);
+        }
+        .routine-template-controls input,
+        .routine-template-controls select {
+            min-height: 36px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 0 10px;
+            font-size: var(--patient-row-meta-size);
+            background: #fff;
+        }
+        .routine-repeat-days {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            grid-column: 1 / -1;
+        }
+        .routine-repeat-days .day-chip {
+            border: 1px solid var(--gray-300);
+            border-radius: 999px;
+            padding: 6px 12px;
+            font-size: var(--patient-chip-size);
+            background: #fff;
+            cursor: pointer;
+            user-select: none;
+        }
+        .routine-repeat-days .day-chip input {
+            display: none;
+        }
+        .routine-repeat-days .day-chip.active {
+            border-color: var(--primary);
+            background: #eff6ff;
+            color: var(--primary-dark);
+            font-weight: 700;
+        }
+        .routine-products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .routine-product-item {
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            background: #fff;
+        }
+        .routine-product-item .meta {
+            font-size: 12px;
+            color: var(--gray-600);
+            margin-top: 4px;
+            line-height: 1.35;
+        }
+        .product-inv-badge {
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            letter-spacing: -0.03em;
+        }
+        .routine-builder-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .routine-active-card {
+            border: 1px solid var(--gray-200);
+            border-radius: 14px;
+            padding: 16px;
+            background: #fafbff;
+        }
+        .routine-active-card .routine-active-lead {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: var(--gray-700);
+        }
+        .routine-create-wizard {
+            border: 1px solid #e7ebf4;
+            border-radius: 16px;
+            padding: 18px 18px 16px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+        }
+        .routine-wizard-progress {
+            list-style: none;
+            margin: 0 0 18px 0;
+            padding: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            counter-reset: wz;
+        }
+        .routine-wizard-progress li {
+            counter-increment: wz;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--gray-500);
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--gray-200);
+            background: #fff;
+        }
+        .routine-wizard-progress li::before {
+            content: counter(wz) ". ";
+            font-weight: 800;
+            color: var(--gray-400);
+        }
+        .routine-wizard-progress li.active {
+            color: var(--primary);
+            border-color: #c7d2fe;
+            background: #eef2ff;
+        }
+        .routine-wizard-progress li.done {
+            color: var(--gray-700);
+            border-color: #d1fae5;
+            background: #ecfdf5;
+        }
+        .routine-wizard-panel {
+            margin-bottom: 16px;
+        }
+        .routine-wizard-panel[hidden] {
+            display: none !important;
+        }
+        .routine-wizard-panel h4 {
+            margin: 0 0 6px 0;
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+        .routine-wizard-panel .wz-hint {
+            margin: 0 0 12px 0;
+            font-size: 13px;
+            color: var(--gray-600);
+            line-height: 1.45;
+        }
+        .routine-wizard-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding-top: 8px;
+            border-top: 1px solid var(--gray-200);
+        }
+        .routine-wizard-nav .btn {
+            min-width: 120px;
+        }
+        .routine-am-pm-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            background: #fff;
+            margin-bottom: 8px;
+        }
+        .routine-am-pm-row .wz-prod {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-900);
+            min-width: 0;
+        }
+        .routine-am-pm-row select {
+            min-height: 38px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 0 10px;
+            font-size: 13px;
+            background: #fff;
+            max-width: 160px;
+        }
+        .routine-wizard-review {
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 12px 14px;
+            background: #fff;
+            font-size: 13px;
+            color: var(--gray-800);
+            line-height: 1.5;
+        }
+        .routine-wizard-review ul {
+            margin: 8px 0 0 0;
+            padding-left: 18px;
+        }
+        .routine-template-preview {
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 12px;
+            background: #fafafa;
+        }
+        .routine-template-list {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--gray-700);
+            font-size: 13px;
+        }
+        .routine-daily-journal {
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: var(--shadow-sm);
+        }
+        .routine-daily-journal h3 {
+            margin: 0 0 6px 0;
+            font-size: 18px;
+            color: var(--gray-900);
+        }
+        .routine-daily-journal .journal-sub {
+            margin: 0 0 12px 0;
+            color: var(--gray-600);
+            font-size: 13px;
+        }
+        .journal-date-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .journal-date-row label {
+            font-size: var(--patient-section-label-size);
+            font-weight: 700;
+            color: var(--gray-700);
+            display: block;
+            margin-bottom: 4px;
+        }
+        .form-label-compact {
+            display: block;
+            margin-bottom: 6px;
+            font-size: var(--patient-section-label-size);
+            font-weight: 700;
+            color: var(--gray-700);
+        }
+        .journal-label-wrap {
+            margin-bottom: 10px;
+        }
+        .journal-field-label {
+            font-size: var(--patient-section-label-size);
+            font-weight: 700;
+            color: var(--gray-700);
+            display: block;
+            margin-bottom: 4px;
+        }
+        .journal-date-row input[type="date"] {
+            min-height: 36px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 0 10px;
+            font-size: 14px;
+        }
+        .journal-slot {
+            margin-bottom: 12px;
+        }
+        .journal-slot h4 {
+            margin: 0 0 6px 0;
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--gray-800);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .journal-slot-note {
+            margin: 0 0 6px;
+            font-size: var(--patient-row-meta-size);
+            color: var(--gray-600);
+        }
+        .journal-item-time {
+            font-size: var(--patient-section-label-size);
+            color: #64748b;
+        }
+        .journal-checklist {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .journal-checklist li {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 13px;
+            color: var(--gray-800);
+        }
+        .journal-checklist li:last-child {
+            border-bottom: none;
+        }
+        .journal-skin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .journal-skin-grid label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--gray-700);
+            display: block;
+            margin-bottom: 4px;
+        }
+        .journal-skin-grid select,
+        .journal-notes {
+            width: 100%;
+            min-height: 36px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+        .journal-notes {
+            min-height: 72px;
+            resize: vertical;
+        }
+        .journal-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-top: 12px;
+        }
+        .journal-media-list {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--gray-300);
+        }
+        .journal-media-list h4 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--gray-800);
+        }
+        .journal-media-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+            color: var(--gray-700);
+            margin-bottom: 6px;
+        }
+        .journal-muted {
+            font-size: 13px;
+            color: var(--gray-600);
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 10px;
+        }
         .booking-cta-rail {
             display: flex;
             align-items: center;
@@ -328,7 +764,7 @@
             color: var(--gray-700);
             border-radius: 999px;
             padding: 8px 14px;
-            font-size: 13px;
+            font-size: var(--patient-chip-size);
             font-weight: 600;
             cursor: pointer;
         }
@@ -342,14 +778,14 @@
         .today-panel {
             background: white;
             border: 1px solid var(--gray-200);
-            border-radius: 12px;
-            padding: 16px;
+            border-radius: var(--patient-card-radius);
+            padding: var(--patient-space-3);
             box-shadow: var(--shadow-sm);
-            margin-bottom: 16px;
+            margin-bottom: var(--patient-space-3);
         }
 
         .today-title {
-            font-size: 12px;
+            font-size: var(--patient-section-label-size);
             text-transform: uppercase;
             letter-spacing: 0.08em;
             color: var(--gray-500);
@@ -417,6 +853,26 @@
             border-radius: 12px;
             font-size: 12px;
             font-weight: 600;
+        }
+        .appointment-hint {
+            margin-top: 8px;
+            color: var(--gray-500);
+            font-size: var(--patient-row-meta-size);
+        }
+        .appointment-pay-note {
+            margin-top: 10px;
+            color: var(--gray-600);
+            font-size: var(--patient-row-title-size);
+        }
+        .appointment-tz-note {
+            font-size: var(--patient-row-meta-size);
+            color: var(--gray-500);
+            margin-top: 4px;
+        }
+        .appointment-date-group-title {
+            margin: 14px 2px 10px;
+            color: var(--gray-600);
+            font-weight: 800;
         }
 
         .status-scheduled {
@@ -592,86 +1048,202 @@
     <div class="layout">
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
+                <a href="/" class="sidebar-logo">
+                    <span class="sidebar-mark" aria-hidden="true">S&C</span>
+                </a>
                 <div class="sidebar-subtitle">Patient Portal</div>
             </div>
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span>
-                    <span>Dashboard</span>
+                    <span>Home</span>
                 </a>
-                <a href="wallet.html" class="nav-item">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><path d="M16 15h3"/></svg></span>
-                    <span>Wallet</span>
+                <a href="schedule.html" class="nav-item">
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
+                    <span>Calendar</span>
                 </a>
                 <a href="appointments.html" class="nav-item active">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
-                    <span>Appointments</span>
+                    <span>Routine</span>
                 </a>
                 <a href="my-records.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>
-                    <span>My Records</span>
+                    <span>Products</span>
+                </a>
+                <a href="wallet.html" class="nav-item">
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span>
+                    <span>Wallet</span>
+                </a>
+                <a href="profile.html" class="nav-item">
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg></span>
+                    <span>Profile</span>
                 </a>
             </nav>
-            <div class="sidebar-footer">
-                <div class="user-info">
-                    <div class="user-avatar" id="userAvatar">P</div>
-                    <div class="user-details">
-                        <div class="user-name" id="userName">Patient</div>
-                        <div class="user-role">Patient Account</div>
-                    </div>
-                    <button class="logout-btn" onclick="logout()" title="Logout" aria-label="Logout">
-                        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M10 17l5-5-5-5"></path>
-                            <path d="M15 12H3"></path>
-                            <path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
         </aside>
 
         <main class="main-content">
                 <div class="page-header">
-                <h1 class="page-title">My Appointments</h1>
-                <p class="page-subtitle">Today first, then your visit history</p>
+                <h1 class="page-title">Routine</h1>
+                <p class="page-subtitle">Track what to use now, what is next, and past routine activity.</p>
             </div>
-            <div class="appointment-filters" id="appointmentFilters" role="tablist" aria-label="Appointment filters">
-                <button class="filter-chip active" data-filter="upcoming" role="tab" aria-selected="true">Upcoming</button>
-                <button class="filter-chip" data-filter="today" role="tab" aria-selected="false">Today</button>
-                <button class="filter-chip" data-filter="past" role="tab" aria-selected="false">Past</button>
-                <button class="filter-chip" data-filter="payment_due" role="tab" aria-selected="false">Payment due</button>
-                <button class="filter-chip" data-filter="all" role="tab" aria-selected="false">All</button>
-            </div>
-            <section class="booking-cta-rail" aria-label="Book a new appointment">
-                <div class="booking-cta-copy">Need a new visit? Pick a date on the calendar, or start a guided chat to book with our care agent.</div>
-                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-                <a href="schedule.html" class="btn btn-secondary book-chat-btn">
-                    <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                    <span>Pick from calendar</span>
-                </a>
-                <a href="book.html" class="btn btn-primary book-chat-btn">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M8 10h8M8 14h5"></path>
-                        <path d="M21 12a8.5 8.5 0 0 1-8.5 8.5H6l-3 3v-6.5A8.5 8.5 0 1 1 21 12Z"></path>
-                    </svg>
-                    <span>Book with chat agent</span>
-                </a>
+            <section class="routine-builder" aria-label="Routine builder">
+                <h3 id="routineBuilderHeading">Routine</h3>
+                <p id="routineBuilderLead">Set up once, then log each day in the journal below.</p>
+
+                <div id="routineActiveCard" class="routine-active-card" style="display:none;">
+                    <p class="routine-active-lead">You are all set. Check off steps and add notes whenever you like.</p>
+                    <div id="routineTemplatePreview" class="routine-template-preview" style="display:block;">
+                        <strong id="routineTemplateTitle">Your routine</strong>
+                        <ol id="routineTemplateItems" class="routine-template-list"></ol>
+                    </div>
+                    <div class="routine-builder-actions" style="margin-top:12px;">
+                        <a href="my-records.html" class="btn btn-secondary">Manage products</a>
+                        <a href="patient-dashboard.html" class="btn btn-secondary">Home</a>
+                    </div>
+                </div>
+
+                <div id="routineCreateWizard" class="routine-create-wizard" style="display:none;">
+                    <ol class="routine-wizard-progress" id="routineWizardProgress" aria-label="Routine setup steps">
+                        <li data-wz-step="1" class="active">Name</li>
+                        <li data-wz-step="2">Products</li>
+                        <li data-wz-step="3">Morning &amp; night</li>
+                        <li data-wz-step="4">Duration</li>
+                        <li data-wz-step="5">Review</li>
+                    </ol>
+
+                    <div class="routine-wizard-panel" data-wz-panel="1">
+                        <h4>Name your routine</h4>
+                        <p class="wz-hint">Choose a short name you will recognize on your home screen.</p>
+                        <label class="form-label form-label-compact" for="routineWizardName">Routine name</label>
+                        <input type="text" id="routineWizardName" class="form-input" maxlength="80" placeholder="e.g. Everyday care" autocomplete="off" />
+                    </div>
+
+                    <div class="routine-wizard-panel" data-wz-panel="2" hidden>
+                        <h4>Choose products</h4>
+                        <p class="wz-hint">We use your shelf. Need more? Add them under Products first, then come back.</p>
+                        <div id="routineBuilderEmpty" class="routine-builder-empty" style="display:none;">
+                            Nothing on your shelf yet. Add a product, then refresh this page.
+                        </div>
+                        <div id="routineProductsGrid" class="routine-products-grid"></div>
+                        <p class="wz-hint" style="margin-top:10px;"><a href="my-records.html" style="color:var(--primary);font-weight:600;">Open Products</a> to add items to your shelf.</p>
+                    </div>
+
+                    <div class="routine-wizard-panel" data-wz-panel="3" hidden>
+                        <h4>When do you use each one?</h4>
+                        <p class="wz-hint">Morning, evening, or both—this shapes your daily checklist.</p>
+                        <div id="wizardAmPmMount"></div>
+                    </div>
+
+                    <div class="routine-wizard-panel" data-wz-panel="4" hidden>
+                        <h4>How long should this plan run?</h4>
+                        <p class="wz-hint">Pick a start date, how many days to track, and how often you want reminders.</p>
+                        <div class="routine-template-controls" id="routineTemplateControls" style="margin-bottom:0;">
+                            <div class="control-group">
+                                <label for="routineStartDateInput">Start date</label>
+                                <input id="routineStartDateInput" type="date" />
+                            </div>
+                            <div class="control-group">
+                                <label for="routineDurationDaysInput">Number of days</label>
+                                <input id="routineDurationDaysInput" type="number" min="1" max="365" value="28" />
+                            </div>
+                            <div class="control-group">
+                                <label for="routineRepeatCadenceInput">Repeat</label>
+                                <select id="routineRepeatCadenceInput" aria-label="Repeat cadence">
+                                    <option value="daily">Every day</option>
+                                    <option value="selected_days">Certain days only</option>
+                                </select>
+                            </div>
+                            <div class="routine-repeat-days" id="routineRepeatDaysWrap" style="display:none;">
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="mon" />Mon</label>
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="tue" />Tue</label>
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="wed" />Wed</label>
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="thu" />Thu</label>
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="fri" />Fri</label>
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="sat" />Sat</label>
+                                <label class="day-chip"><input type="checkbox" data-repeat-day="sun" />Sun</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="routine-wizard-panel" data-wz-panel="5" hidden>
+                        <h4>Review and save</h4>
+                        <p class="wz-hint">Take a quick look, then save. You can still edit your journal day by day.</p>
+                        <div id="wizardReviewMount" class="routine-wizard-review"></div>
+                    </div>
+
+                    <div class="routine-wizard-nav">
+                        <button type="button" class="btn btn-secondary" id="routineWizardBack" disabled>Back</button>
+                        <button type="button" class="btn btn-primary" id="routineWizardNext">Next</button>
+                    </div>
                 </div>
             </section>
-            <section class="today-panel" id="todayPanel" aria-live="polite"></section>
-            <div id="messageContainer"></div>
-            <div id="appointmentsContainer" class="appointments-list">
-            <div class="empty-state">
-                <div class="empty-state-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <path d="M5 3v4a5 5 0 0 0 10 0V3"></path>
-                        <path d="M15 15a4 4 0 1 0 8 0 4 4 0 0 0-8 0z"></path>
-                        <path d="M15 15H9a5 5 0 0 1-5-5"></path>
-                    </svg>
+            <section class="routine-daily-journal" id="dailyJournalSection" aria-label="Daily routine journal">
+                <h3>Daily journal</h3>
+                <p class="journal-sub">Check off AM/PM steps, note how your skin feels, save updates anytime. Add a picture of the day after you save (or we save for you when you attach a photo).</p>
+                <div id="dailyJournalNoTemplate" class="journal-muted" style="display:none;">
+                    Finish creating your routine above to unlock daily logging.
                 </div>
-                <p>Loading appointments...</p>
-            </div>
-        </div>
+                <div id="dailyJournalBody" style="display:none;">
+                    <div class="journal-date-row">
+                        <div>
+                            <label for="journalDateInput">Date</label>
+                            <input type="date" id="journalDateInput" />
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="journalReloadBtn">Reload day</button>
+                    </div>
+                    <div id="journalChecklistMount"></div>
+                    <div class="journal-skin-grid">
+                        <div>
+                            <label for="skinRedness">Redness</label>
+                            <select id="skinRedness">
+                                <option value="">—</option>
+                                <option value="none">None</option>
+                                <option value="mild">Mild</option>
+                                <option value="moderate">Moderate</option>
+                                <option value="strong">Strong</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="skinOiliness">Oiliness</label>
+                            <select id="skinOiliness">
+                                <option value="">—</option>
+                                <option value="dry">Dry</option>
+                                <option value="balanced">Balanced</option>
+                                <option value="oily">Oily</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="skinBreakouts">Breakouts</label>
+                            <select id="skinBreakouts">
+                                <option value="">—</option>
+                                <option value="none">None</option>
+                                <option value="few">Few</option>
+                                <option value="many">Many</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="journal-label-wrap">
+                        <label for="skinDetail" class="journal-field-label">Skin notes (optional)</label>
+                        <textarea id="skinDetail" class="journal-notes" rows="2" placeholder="Texture, stinging, new product reactions…"></textarea>
+                    </div>
+                    <div class="journal-label-wrap">
+                        <label for="journalNotes" class="journal-field-label">Day notes</label>
+                        <textarea id="journalNotes" class="journal-notes" rows="2" placeholder="Anything else about today…"></textarea>
+                    </div>
+                    <div class="journal-actions">
+                        <button type="button" class="btn btn-primary" id="journalSaveBtn">Save day</button>
+                        <input type="file" id="journalPhotoInput" accept="image/jpeg,image/jpg,image/png" style="display:none;" />
+                        <button type="button" class="btn btn-secondary" id="journalPhotoBtn">Add picture of the day</button>
+                    </div>
+                    <div class="journal-media-list" id="journalMediaMount" style="display:none;">
+                        <h4>Pictures for this day</h4>
+                        <div id="journalMediaList"></div>
+                    </div>
+                </div>
+            </section>
+            <div id="routineLoadBanner" class="error-message" style="display:none;"></div>
+            <div id="portalHealthBanner" class="error-message" style="display:none;background:#fffbeb;color:#92400e;border:1px solid #fcd34d;"></div>
+            <div id="messageContainer"></div>
         </main>
     </div>
 
@@ -729,17 +1301,686 @@
 
     <script type="module">
         import { patientApi } from '../assets/js/patient-api.js';
-        import { mountBottomTabs, showToast } from '../assets/js/patient-shell.js';
+        import { getPatientFeatureFlags, mountBottomTabs, showToast } from '../assets/js/patient-shell.js';
 
         const API_BASE = window.API_BASE || 'http://localhost:4000';
         let currentFilter = 'upcoming';
         let lastAppointments = [];
+        let routineBuilderState = {
+            shelfProducts: [],
+            template: null
+        };
+        let dailyJournalState = {
+            templateItems: [],
+            dailyEntry: null,
+            lastSavedDailyEntryId: null
+        };
+        let patientFeatures = { wallet_enabled: false, chat_enabled: false };
+        let routineWizardStep = 1;
+        let wizardNavBound = false;
 
-        document.addEventListener('DOMContentLoaded', () => {
+        async function loadPortalCatalogHealthBanner() {
+            const el = document.getElementById('portalHealthBanner');
+            if (!el) return;
+            try {
+                const data = await patientApi.request('/api/patient/health/catalog', { method: 'GET' });
+                if (!data || !data.success || data.catalog_ok) {
+                    el.style.display = 'none';
+                    return;
+                }
+                el.textContent = data.message || 'Product search indexes may be unavailable.';
+                el.style.display = 'block';
+            } catch (_) {
+                el.style.display = 'none';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
             mountBottomTabs();
-            setupFilters();
-            loadAppointments();
-            startAutoRefresh();
+            patientFeatures = await getPatientFeatureFlags();
+            initDailyJournal();
+            await initRoutineBuilder();
+            await loadPortalCatalogHealthBanner();
+        });
+
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function initialsFromProductName(name) {
+            const s = String(name || '').trim();
+            if (!s) return '?';
+            const parts = s.split(/\s+/).filter(Boolean);
+            const a = (parts[0][0] || '?').toUpperCase();
+            const b = parts.length > 1 ? (parts[1][0] || '').toUpperCase() : String(parts[0][1] || '').toUpperCase();
+            const out = (a + b).replace(/[^A-Z0-9]/g, '');
+            return out.slice(0, 2) || 'P';
+        }
+
+        function hslFromSeed(seed) {
+            const s = String(seed || 'x');
+            let h = 0;
+            for (let i = 0; i < s.length; i += 1) {
+                h = (h * 31 + s.charCodeAt(i)) >>> 0;
+            }
+            return `hsl(${h % 360}, 48%, 40%)`;
+        }
+
+        function safeCssColor(c, fallbackSeed) {
+            const s = String(c || '').trim();
+            if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s)) return s;
+            if (/^hsla?\(/i.test(s) && s.length < 90 && !/[;<>]/.test(s)) return s;
+            return hslFromSeed(fallbackSeed || s || 'x');
+        }
+
+        function shelfProductBadgeHtml(p, idx) {
+            const inits = esc(p.badge_initials || initialsFromProductName(p.product_name));
+            const seed = String(p.shelf_product_id || idx) + String(p.product_name || '');
+            const col = safeCssColor(p.badge_color, seed);
+            return `<span class="product-inv-badge" style="background:${col}" title="">${inits}</span>`;
+        }
+
+        function logItemBadgeHtml(it) {
+            const inits = esc(initialsFromProductName(it.product_name));
+            const seed = String(it.id || '') + String(it.product_name || '');
+            const col = safeCssColor(null, seed);
+            return `<span class="product-inv-badge" style="background:${col}" title="">${inits}</span>`;
+        }
+
+        function friendlyUsageLabel(u) {
+            const x = String(u || '').toLowerCase().trim();
+            if (x === 'evening' || x === 'pm' || x === 'night') return 'Evening';
+            if (x === 'both') return 'Morning & evening';
+            if (x === 'weekly') return 'Weekly';
+            if (x === 'morning' || x === 'am') return 'Morning';
+            return 'Morning';
+        }
+
+        function defaultUsageSlotFromShelf(usage_time) {
+            const u = String(usage_time || '').toLowerCase().trim();
+            if (u === 'evening' || u === 'pm' || u === 'night') return 'evening';
+            if (u === 'both') return 'both';
+            return 'morning';
+        }
+
+        function updateWizardUi() {
+            document.querySelectorAll('[data-wz-panel]').forEach((el) => {
+                const n = Number(el.getAttribute('data-wz-panel'));
+                if (n === routineWizardStep) el.removeAttribute('hidden');
+                else el.setAttribute('hidden', '');
+            });
+            document.querySelectorAll('#routineWizardProgress [data-wz-step]').forEach((el) => {
+                const n = Number(el.getAttribute('data-wz-step'));
+                el.classList.remove('active', 'done');
+                if (n === routineWizardStep) el.classList.add('active');
+                else if (n < routineWizardStep) el.classList.add('done');
+            });
+            const back = document.getElementById('routineWizardBack');
+            const next = document.getElementById('routineWizardNext');
+            if (back) back.disabled = routineWizardStep <= 1;
+            if (next) next.textContent = routineWizardStep >= 5 ? 'Save routine' : 'Next';
+        }
+
+        function validateWizardStep(step) {
+            if (step === 1) {
+                const name = (document.getElementById('routineWizardName')?.value || '').trim();
+                if (!name) return 'Add a short name for your routine.';
+            }
+            if (step === 2) {
+                const checks = document.querySelectorAll('input[data-routine-product]:checked');
+                if (!checks.length) return 'Pick at least one product.';
+            }
+            if (step === 4) {
+                const cadence = document.getElementById('routineRepeatCadenceInput')?.value || 'daily';
+                const selectedDays = Array.from(document.querySelectorAll('input[data-repeat-day]:checked'))
+                    .map((el) => String(el.getAttribute('data-repeat-day') || '').trim())
+                    .filter(Boolean);
+                if (cadence === 'selected_days' && !selectedDays.length) return 'Choose one or more days, or switch to every day.';
+            }
+            if (step === 5) {
+                const checks = document.querySelectorAll('input[data-routine-product]:checked');
+                if (!checks.length) return 'Select at least one product before saving.';
+            }
+            return '';
+        }
+
+        function buildWizardAmPmMount() {
+            const mount = document.getElementById('wizardAmPmMount');
+            if (!mount) return;
+            const checks = Array.from(document.querySelectorAll('input[data-routine-product]:checked'));
+            mount.innerHTML = checks.map((c) => {
+                const idx = Number(c.getAttribute('data-routine-product'));
+                const p = routineBuilderState.shelfProducts[idx] || {};
+                const def = defaultUsageSlotFromShelf(p.usage_time);
+                const nm = esc(p.product_name || 'Product');
+                const br = p.product_brand ? ` <span style="font-weight:500;color:var(--gray-600)">• ${esc(p.product_brand)}</span>` : '';
+                return `
+                    <div class="routine-am-pm-row">
+                        <span class="wz-prod">${nm}${br}</span>
+                        <select data-wizard-usage-idx="${idx}" aria-label="When to use this product">
+                            <option value="morning" ${def === 'morning' ? 'selected' : ''}>Morning</option>
+                            <option value="evening" ${def === 'evening' ? 'selected' : ''}>Evening</option>
+                            <option value="both" ${def === 'both' ? 'selected' : ''}>Both</option>
+                        </select>
+                    </div>`;
+            }).join('');
+        }
+
+        function renderWizardReview() {
+            const mount = document.getElementById('wizardReviewMount');
+            if (!mount) return;
+            const name = (document.getElementById('routineWizardName')?.value || '').trim() || 'My routine';
+            const checks = Array.from(document.querySelectorAll('input[data-routine-product]:checked'));
+            const rows = checks.map((c) => {
+                const idx = Number(c.getAttribute('data-routine-product'));
+                const p = routineBuilderState.shelfProducts[idx] || {};
+                const sel = document.querySelector(`select[data-wizard-usage-idx="${idx}"]`);
+                const slot = sel ? String(sel.value || 'morning') : defaultUsageSlotFromShelf(p.usage_time);
+                const label = slot === 'evening' ? 'Evening' : slot === 'both' ? 'Morning & evening' : 'Morning';
+                return `<li><strong>${esc(p.product_name || 'Product')}</strong> — ${label}</li>`;
+            }).join('');
+            const start = document.getElementById('routineStartDateInput')?.value || '';
+            const dur = document.getElementById('routineDurationDaysInput')?.value || '28';
+            const cadence = document.getElementById('routineRepeatCadenceInput')?.value === 'selected_days' ? 'On selected weekdays' : 'Every day';
+            const dayLabels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+            const picked = Array.from(document.querySelectorAll('input[data-repeat-day]:checked'))
+                .map((el) => dayLabels[String(el.getAttribute('data-repeat-day') || '')] || '')
+                .filter(Boolean);
+            const dayLine = (document.getElementById('routineRepeatCadenceInput')?.value === 'selected_days' && picked.length)
+                ? `<div style="margin-top:6px;">Days: <strong>${esc(picked.join(', '))}</strong></div>`
+                : '';
+            mount.innerHTML = `
+                <div><strong>${esc(name)}</strong></div>
+                <div style="margin-top:8px;">Starts <strong>${esc(start)}</strong>, runs <strong>${esc(dur)}</strong> days · ${esc(cadence)}</div>
+                ${dayLine}
+                <ul>${rows}</ul>
+            `;
+        }
+
+        function handleWizardBack() {
+            if (routineWizardStep <= 1) return;
+            routineWizardStep -= 1;
+            updateWizardUi();
+        }
+
+        async function handleWizardNext() {
+            const err = validateWizardStep(routineWizardStep);
+            if (err) {
+                showToast(err, 'error');
+                return;
+            }
+            if (routineWizardStep === 5) {
+                await submitRoutineWizard();
+                return;
+            }
+            if (routineWizardStep === 2) buildWizardAmPmMount();
+            if (routineWizardStep === 4) renderWizardReview();
+            routineWizardStep += 1;
+            updateWizardUi();
+        }
+
+        async function submitRoutineWizard() {
+            const today = new Date().toISOString().slice(0, 10);
+            const name = (document.getElementById('routineWizardName')?.value || '').trim() || 'My routine';
+            const checks = Array.from(document.querySelectorAll('input[data-routine-product]:checked'));
+            if (!checks.length) {
+                showToast('Select at least one product.', 'error');
+                return;
+            }
+            const selectedItems = checks.map((c, order) => {
+                const idx = Number(c.getAttribute('data-routine-product'));
+                const p = routineBuilderState.shelfProducts[idx] || {};
+                const sel = document.querySelector(`select[data-wizard-usage-idx="${idx}"]`);
+                const slot = sel ? String(sel.value || 'morning') : defaultUsageSlotFromShelf(p.usage_time);
+                const usage_time = slot === 'evening' ? 'evening' : slot === 'both' ? 'both' : 'morning';
+                return {
+                    source_type: 'shelf',
+                    source_ref_id: p.shelf_product_id || null,
+                    product_name: p.product_name || `Routine item ${order + 1}`,
+                    product_brand: p.product_brand || null,
+                    usage_time,
+                    frequency_rule: p.frequency_rule || 'daily',
+                    days_of_week: Array.isArray(p.days_of_week) ? p.days_of_week : [],
+                    goal: p.goal || 'Maintain routine consistency',
+                    step_order: order + 1
+                };
+            });
+            const cadence = document.getElementById('routineRepeatCadenceInput')?.value || 'daily';
+            const selectedDays = Array.from(document.querySelectorAll('input[data-repeat-day]:checked'))
+                .map((el) => String(el.getAttribute('data-repeat-day') || '').trim())
+                .filter(Boolean);
+            if (cadence === 'selected_days' && !selectedDays.length) {
+                showToast('Pick at least one day when using certain days only.', 'error');
+                return;
+            }
+            const created = await patientApi.request('/api/patient/routine/template', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name,
+                    start_date: document.getElementById('routineStartDateInput')?.value || today,
+                    duration_days: Number(document.getElementById('routineDurationDaysInput')?.value || 28),
+                    repeat_cadence: cadence,
+                    repeat_days_of_week: cadence === 'selected_days' ? selectedDays : [],
+                    items: selectedItems
+                })
+            });
+            if (!created || !created.success) {
+                throw new Error(created?.error || 'Failed to save routine.');
+            }
+            showToast('Routine saved. Scroll down to log today.', 'success');
+            routineWizardStep = 1;
+            await initRoutineBuilder();
+        }
+
+        function ensureWizardNav() {
+            if (wizardNavBound) return;
+            wizardNavBound = true;
+            document.getElementById('routineWizardNext')?.addEventListener('click', async () => {
+                try {
+                    await handleWizardNext();
+                } catch (e) {
+                    showToast(e.message || 'Something went wrong', 'error');
+                }
+            });
+            document.getElementById('routineWizardBack')?.addEventListener('click', () => handleWizardBack());
+        }
+
+        function renderRoutineBuilder() {
+            const grid = document.getElementById('routineProductsGrid');
+            const empty = document.getElementById('routineBuilderEmpty');
+            const preview = document.getElementById('routineTemplatePreview');
+            const title = document.getElementById('routineTemplateTitle');
+            const itemsEl = document.getElementById('routineTemplateItems');
+            const activeCard = document.getElementById('routineActiveCard');
+            const wizard = document.getElementById('routineCreateWizard');
+            const heading = document.getElementById('routineBuilderHeading');
+            const lead = document.getElementById('routineBuilderLead');
+            if (!grid || !empty || !preview || !title || !itemsEl || !activeCard || !wizard || !heading || !lead) return;
+            const hasTemplate = !!routineBuilderState.template;
+            const products = Array.isArray(routineBuilderState.shelfProducts) ? routineBuilderState.shelfProducts : [];
+
+            if (hasTemplate) {
+                heading.textContent = 'Your routine';
+                lead.textContent = 'Here is what you are following. Log each day in the journal below.';
+                wizard.style.display = 'none';
+                activeCard.style.display = 'block';
+                empty.style.display = 'none';
+                grid.innerHTML = '';
+                preview.style.display = 'block';
+                title.textContent = routineBuilderState.template.name || 'Your routine';
+                const templateItems = Array.isArray(routineBuilderState.template.items) ? routineBuilderState.template.items : [];
+                const repeatCadence = routineBuilderState.template.repeat_cadence === 'selected_days' ? 'Certain days' : 'Every day';
+                const repeatDays = Array.isArray(routineBuilderState.template.repeat_days_of_week)
+                    ? routineBuilderState.template.repeat_days_of_week.join(', ')
+                    : '';
+                const scheduleMeta = `
+                    <li><strong>Starts:</strong> ${esc(routineBuilderState.template.start_date || 'Today')}</li>
+                    <li><strong>Length:</strong> ${esc(routineBuilderState.template.duration_days || 28)} days</li>
+                    <li><strong>Repeat:</strong> ${esc(repeatCadence)}${repeatDays ? ` (${esc(repeatDays)})` : ''}</li>
+                `;
+                itemsEl.innerHTML = scheduleMeta + (templateItems.length
+                    ? templateItems.map((it) => `<li>${esc(it.product_name || 'Routine item')} — ${esc(friendlyUsageLabel(it.usage_time))}</li>`).join('')
+                    : '<li>No steps yet.</li>');
+                return;
+            }
+
+            heading.textContent = 'Create your routine';
+            lead.textContent = 'Five quick steps: name, products, morning or night, how long to run it, then save.';
+            activeCard.style.display = 'none';
+            wizard.style.display = 'block';
+            empty.style.display = products.length ? 'none' : 'block';
+            grid.innerHTML = products.length
+                ? products.map((p, idx) => `
+                    <label class="routine-product-item">
+                        <input type="checkbox" data-routine-product="${idx}" />
+                        <div style="display:flex;gap:10px;align-items:flex-start;min-width:0;">
+                            ${shelfProductBadgeHtml(p, idx)}
+                            <div style="min-width:0;">
+                                <div><strong>${esc(p.product_name || 'Product')}</strong>${p.product_brand ? ` • ${esc(p.product_brand)}` : ''}</div>
+                                <div class="meta">Shelf · ${esc(friendlyUsageLabel(p.usage_time))} · ${esc(p.goal || 'General care')}</div>
+                            </div>
+                        </div>
+                    </label>
+                `).join('')
+                : '<div class="routine-product-item"><div>No shelf products yet. Add some under Products, then refresh.</div></div>';
+
+            const nm = document.getElementById('routineWizardName');
+            if (nm && !String(nm.value || '').trim()) nm.value = 'My routine';
+            updateWizardUi();
+        }
+
+        function syncRepeatDayChipState() {
+            document.querySelectorAll('#routineRepeatDaysWrap .day-chip').forEach((chip) => {
+                const input = chip.querySelector('input[data-repeat-day]');
+                chip.classList.toggle('active', !!input?.checked);
+            });
+        }
+
+        function applyCadenceVisibility() {
+            const cadence = document.getElementById('routineRepeatCadenceInput')?.value || 'daily';
+            const wrap = document.getElementById('routineRepeatDaysWrap');
+            if (!wrap) return;
+            wrap.style.display = cadence === 'selected_days' ? 'flex' : 'none';
+            syncRepeatDayChipState();
+        }
+
+        async function initRoutineBuilder() {
+            try {
+                const rb = document.getElementById('routineLoadBanner');
+                if (rb) {
+                    rb.style.display = 'none';
+                    rb.textContent = '';
+                }
+                const response = await patientApi.request('/api/patient/routine/template', { method: 'GET' });
+                if (!response || !response.success) throw new Error(response?.error || 'Unable to load routine template data.');
+                routineBuilderState.shelfProducts = Array.isArray(response.shelf_products) ? response.shelf_products : [];
+                routineBuilderState.template = response.template || null;
+                const today = new Date().toISOString().slice(0, 10);
+                const startDateInput = document.getElementById('routineStartDateInput');
+                const durationInput = document.getElementById('routineDurationDaysInput');
+                const cadenceInput = document.getElementById('routineRepeatCadenceInput');
+                if (startDateInput) startDateInput.value = response?.template?.start_date || today;
+                if (durationInput) durationInput.value = response?.template?.duration_days || 28;
+                if (cadenceInput) cadenceInput.value = response?.template?.repeat_cadence || 'daily';
+                const selectedDays = Array.isArray(response?.template?.repeat_days_of_week) ? response.template.repeat_days_of_week : [];
+                document.querySelectorAll('input[data-repeat-day]').forEach((input) => {
+                    input.checked = selectedDays.includes(String(input.getAttribute('data-repeat-day') || ''));
+                });
+                applyCadenceVisibility();
+                if (!routineBuilderState.template) {
+                    routineWizardStep = 1;
+                }
+                renderRoutineBuilder();
+                ensureWizardNav();
+                await loadDailyJournal();
+            } catch (e) {
+                const mc = document.getElementById('messageContainer');
+                const rb = document.getElementById('routineLoadBanner');
+                if (rb) {
+                    rb.textContent = e.message || 'Failed to load routine builder.';
+                    rb.style.display = 'block';
+                }
+                if (mc) {
+                    mc.innerHTML = `<div class="error-message">${esc(e.message || 'Failed to load routine builder.')}</div>`;
+                }
+            }
+        }
+
+        function normalizeUsageTime(u) {
+            return String(u || '').toLowerCase().trim();
+        }
+
+        function bucketJournalItem(it) {
+            const u = normalizeUsageTime(it.usage_time);
+            if (u === 'evening' || u === 'pm' || u === 'night') return 'pm';
+            if (u === 'weekly') return 'weekly';
+            if (u === 'both') return 'both';
+            if (u === 'morning' || u === 'am') return 'am';
+            return 'am';
+        }
+
+        function parseSkinReport(raw) {
+            if (!raw) return {};
+            const s = String(raw).trim();
+            if (!s) return {};
+            try {
+                const o = JSON.parse(s);
+                if (o && typeof o === 'object') return o;
+            } catch (_) {}
+            return { legacy_text: s };
+        }
+
+        function applySkinReportToForm(obj) {
+            const r = document.getElementById('skinRedness');
+            const o = document.getElementById('skinOiliness');
+            const b = document.getElementById('skinBreakouts');
+            const d = document.getElementById('skinDetail');
+            if (!r || !o || !b || !d) return;
+            if (obj.legacy_text) {
+                d.value = String(obj.legacy_text);
+                r.value = '';
+                o.value = '';
+                b.value = '';
+                return;
+            }
+            r.value = obj.redness || '';
+            o.value = obj.oiliness || '';
+            b.value = obj.breakouts || '';
+            d.value = obj.detail || '';
+        }
+
+        function buildSkinReportJson() {
+            const redness = document.getElementById('skinRedness')?.value || '';
+            const oiliness = document.getElementById('skinOiliness')?.value || '';
+            const breakouts = document.getElementById('skinBreakouts')?.value || '';
+            const detail = (document.getElementById('skinDetail')?.value || '').trim();
+            return JSON.stringify({
+                version: 1,
+                redness: redness || null,
+                oiliness: oiliness || null,
+                breakouts: breakouts || null,
+                detail: detail || null
+            });
+        }
+
+        function collectItemLogsFromDom() {
+            const items = dailyJournalState.templateItems || [];
+            return items.map((it) => {
+                const id = String(it.id || '');
+                const input = Array.from(document.querySelectorAll('input[data-journal-item]')).find(
+                    (el) => String(el.getAttribute('data-journal-item') || '') === id
+                );
+                const checked = input ? !!input.checked : false;
+                return { template_item_id: id, completed: checked ? 1 : 0, notes: null };
+            });
+        }
+
+        function renderJournalChecklists() {
+            const mount = document.getElementById('journalChecklistMount');
+            if (!mount) return;
+            const items = dailyJournalState.templateItems || [];
+            const logByItem = new Map();
+            (dailyJournalState.dailyEntry?.item_logs || []).forEach((l) => {
+                if (l.template_item_id) logByItem.set(String(l.template_item_id), l);
+            });
+
+            const am = [];
+            const pm = [];
+            const weekly = [];
+            const both = [];
+            items.forEach((it) => {
+                const b = bucketJournalItem(it);
+                if (b === 'pm') pm.push(it);
+                else if (b === 'weekly') weekly.push(it);
+                else if (b === 'both') both.push(it);
+                else am.push(it);
+            });
+
+            function row(it) {
+                const lid = String(it.id || '');
+                const log = logByItem.get(lid);
+                const checked = log && (Number(log.completed) === 1 || log.completed === true);
+                return `<li><label style="display:flex;gap:10px;cursor:pointer;width:100%;align-items:flex-start;"><input type="checkbox" data-journal-item="${esc(lid)}" ${checked ? 'checked' : ''} />${logItemBadgeHtml(it)}<span><strong>${esc(it.product_name || 'Step')}</strong> <span class="meta journal-item-time">${esc(it.usage_time || '')}</span></span></label></li>`;
+            }
+
+            const blocks = [];
+            if (am.length) blocks.push(`<div class="journal-slot"><h4>Morning</h4><ul class="journal-checklist">${am.map(row).join('')}</ul></div>`);
+            if (both.length) {
+                blocks.push(
+                    `<div class="journal-slot"><h4>Morning &amp; evening</h4><p class="meta journal-slot-note">One check counts for the whole day.</p><ul class="journal-checklist">${both.map(row).join('')}</ul></div>`
+                );
+            }
+            if (pm.length) blocks.push(`<div class="journal-slot"><h4>Evening</h4><ul class="journal-checklist">${pm.map(row).join('')}</ul></div>`);
+            if (weekly.length) blocks.push(`<div class="journal-slot"><h4>Weekly / other</h4><ul class="journal-checklist">${weekly.map(row).join('')}</ul></div>`);
+            mount.innerHTML = blocks.length ? blocks.join('') : '<p class="journal-muted">No steps in your template yet.</p>';
+        }
+
+        function renderJournalMedia() {
+            const wrap = document.getElementById('journalMediaMount');
+            const list = document.getElementById('journalMediaList');
+            if (!wrap || !list) return;
+            const media = dailyJournalState.dailyEntry?.media || [];
+            if (!media.length) {
+                wrap.style.display = 'none';
+                list.innerHTML = '';
+                return;
+            }
+            wrap.style.display = 'block';
+            list.innerHTML = media
+                .map((m) => {
+                    const docId = m.patient_document_id ? String(m.patient_document_id) : '';
+                    const url = m.media_url ? String(m.media_url) : '';
+                    if (docId) {
+                        return `<div class="journal-media-row">Picture <button type="button" class="btn btn-secondary btn-sm" data-media-doc="${esc(docId)}">Open</button></div>`;
+                    }
+                    if (url) {
+                        return `<div class="journal-media-row">Linked image <a class="btn btn-secondary btn-sm" href="${esc(url)}" target="_blank" rel="noopener">Open</a></div>`;
+                    }
+                    return `<div class="journal-media-row">Attachment</div>`;
+                })
+                .join('');
+            list.querySelectorAll('button[data-media-doc]').forEach((btn) => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.getAttribute('data-media-doc');
+                    const r = await patientApi.request(`/api/patient/documents/${encodeURIComponent(id)}/download`, { method: 'GET' });
+                    if (r.success && r.url) window.open(r.url, '_blank', 'noopener,noreferrer');
+                    else showToast(r.error || 'Could not open photo', 'error');
+                });
+            });
+        }
+
+        async function loadDailyJournal() {
+            const noTpl = document.getElementById('dailyJournalNoTemplate');
+            const body = document.getElementById('dailyJournalBody');
+            const dateInput = document.getElementById('journalDateInput');
+            if (!noTpl || !body || !dateInput) return;
+
+            if (!routineBuilderState.template || !Array.isArray(routineBuilderState.template.items) || !routineBuilderState.template.items.length) {
+                noTpl.style.display = 'block';
+                body.style.display = 'none';
+                dailyJournalState.templateItems = [];
+                dailyJournalState.dailyEntry = null;
+                return;
+            }
+
+            noTpl.style.display = 'none';
+            body.style.display = 'block';
+            if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+
+            const date = dateInput.value;
+            dailyJournalState.templateItems = routineBuilderState.template.items.slice();
+
+            const daily = await patientApi.request(`/api/patient/routine/daily?date=${encodeURIComponent(date)}`, { method: 'GET' });
+            if (!daily || !daily.success) {
+                showToast(daily?.error || 'Could not load this day', 'error');
+                return;
+            }
+            dailyJournalState.dailyEntry = daily.daily_entry || null;
+            if (dailyJournalState.dailyEntry?.id) {
+                dailyJournalState.lastSavedDailyEntryId = dailyJournalState.dailyEntry.id;
+            }
+
+            renderJournalChecklists();
+            applySkinReportToForm(parseSkinReport(dailyJournalState.dailyEntry?.skin_report));
+            const notesEl = document.getElementById('journalNotes');
+            if (notesEl) notesEl.value = dailyJournalState.dailyEntry?.notes || '';
+            renderJournalMedia();
+        }
+
+        async function persistDailyJournal() {
+            const dateInput = document.getElementById('journalDateInput');
+            const date = dateInput?.value || new Date().toISOString().slice(0, 10);
+            const payload = {
+                entry_date: date,
+                skin_report: buildSkinReportJson(),
+                notes: (document.getElementById('journalNotes')?.value || '').trim() || null,
+                item_logs: collectItemLogsFromDom()
+            };
+            const r = await patientApi.request('/api/patient/routine/daily', { method: 'POST', body: JSON.stringify(payload) });
+            if (!r || !r.success) throw new Error(r?.error || 'Save failed');
+            dailyJournalState.lastSavedDailyEntryId = r.daily_entry_id || dailyJournalState.lastSavedDailyEntryId;
+            return r.daily_entry_id;
+        }
+
+        async function attachJournalPhoto(file) {
+            if (!dailyJournalState.templateItems.length) {
+                throw new Error('Create a routine template first.');
+            }
+            await persistDailyJournal();
+            await loadDailyJournal();
+            const dailyId = dailyJournalState.dailyEntry?.id || dailyJournalState.lastSavedDailyEntryId;
+            if (!dailyId) throw new Error('Could not create daily entry.');
+
+            const formData = new FormData();
+            formData.append('files', file);
+            const idem = `journal-photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const up = await patientApi.request('/api/patient/documents', {
+                method: 'POST',
+                headers: { 'idempotency-key': idem },
+                body: formData
+            });
+            if (!up || !up.success) throw new Error(up?.error || 'Upload failed');
+            const docIds = Array.isArray(up.document_ids) ? up.document_ids : [];
+            if (!docIds.length) throw new Error('No document returned from upload.');
+
+            for (const docId of docIds) {
+                const link = await patientApi.request(`/api/patient/routine/daily/${encodeURIComponent(dailyId)}/media-link`, {
+                    method: 'POST',
+                    body: JSON.stringify({ patient_document_id: docId, media_type: 'image' })
+                });
+                if (!link || !link.success) throw new Error(link?.error || 'Could not link photo to this day.');
+            }
+            await loadDailyJournal();
+        }
+
+        function initDailyJournal() {
+            const dateInput = document.getElementById('journalDateInput');
+            const reload = document.getElementById('journalReloadBtn');
+            const save = document.getElementById('journalSaveBtn');
+            const photoBtn = document.getElementById('journalPhotoBtn');
+            const photoInput = document.getElementById('journalPhotoInput');
+
+            dateInput?.addEventListener('change', () => {
+                void loadDailyJournal();
+            });
+            reload?.addEventListener('click', () => {
+                void loadDailyJournal();
+            });
+            save?.addEventListener('click', async () => {
+                try {
+                    await persistDailyJournal();
+                    await loadDailyJournal();
+                    showToast('Day saved.', 'success');
+                } catch (e) {
+                    showToast(e.message || 'Save failed', 'error');
+                }
+            });
+            photoBtn?.addEventListener('click', () => photoInput?.click());
+            photoInput?.addEventListener('change', async (ev) => {
+                const f = ev.target.files && ev.target.files[0];
+                ev.target.value = '';
+                if (!f) return;
+                try {
+                    await attachJournalPhoto(f);
+                    showToast('Picture added for this day.', 'success');
+                } catch (e) {
+                    showToast(e.message || 'Photo failed', 'error');
+                }
+            });
+        }
+
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.id === 'routineRepeatCadenceInput') {
+                applyCadenceVisibility();
+            }
+            if (e.target && e.target.matches && e.target.matches('input[data-repeat-day]')) {
+                syncRepeatDayChipState();
+            }
         });
 
         function parseMs(iso) {
@@ -880,7 +2121,7 @@
                 : '';
             const payState = (todayOrNext.payment_status || '').toLowerCase();
             const needsPayment = !!todayOrNext.payment_link && (payState === 'unpaid' || payState === 'pending' || payState === '');
-            const payBtn = needsPayment ? `<a href="${todayOrNext.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
+            const payBtn = (patientFeatures.wallet_enabled && needsPayment) ? `<a href="${todayOrNext.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
             const room = todayOrNext.video_room || `appt-${todayOrNext.id}`;
             const joinUrl = `video-call.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent('Patient')}`;
             const gate = joinWindowGate(todayOrNext);
@@ -889,12 +2130,15 @@
                 ? `<button class="btn btn-secondary btn-sm" disabled style="opacity:.6;cursor:not-allowed;">Join video</button>`
                 : `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
             const joinHint = (!gate.allowed && gate.reason)
-                ? `<div style="margin-top:8px;color:var(--gray-500);font-size:12px;">${escHtml(gate.reason)}</div>`
+                ? `<div class="appointment-hint">${escHtml(gate.reason)}</div>`
                 : '';
-            const whyPay = needsPayment
-                ? `<div style="margin-top:10px;color:var(--gray-600);font-size:13px;">
+            const whyPay = (patientFeatures.wallet_enabled && needsPayment)
+                ? `<div class="appointment-pay-note">
                      <strong>Why am I paying?</strong> This visit has an outstanding balance. Paying generates a receipt and confirms your payment.
                    </div>`
+                : '';
+            const billingPaused = (!patientFeatures.wallet_enabled && needsPayment)
+                ? `<div class="appointment-pay-note"><strong>Billing is paused during monitoring month.</strong></div>`
                 : '';
             const rescheduleBtn = todayOrNext.can_reschedule
                 ? `<button class="btn btn-secondary btn-sm" onclick="openRescheduleModal('${todayOrNext.id}', '${todayOrNext.date}', '${todayOrNext.time}')">Reschedule</button>`
@@ -909,10 +2153,11 @@
                         <div class="appointment-type">${todayOrNext.appointment_type || 'Consultation'}</div>
                         ${provLine}
                         <div class="appointment-datetime">${todayOrNext.datetime_display || `${todayOrNext.date || ''} ${todayOrNext.time || ''}`}</div>
-                        <div class="appointment-tz-note" style="font-size:12px;color:var(--gray-500);margin-top:4px;">Times in ${escHtml(todayOrNext.timezone || 'America/New_York')}</div>
+                        <div class="appointment-tz-note">Times in ${escHtml(todayOrNext.timezone || 'America/New_York')}</div>
                         <span class="appointment-status ${badge.cls}">${badge.label}</span>
                         ${joinHint}
                         ${whyPay}
+                        ${billingPaused}
                     </div>
                     <div class="appointment-actions" style="flex-wrap:wrap;justify-content:flex-end;">
                         ${joinBtn}
@@ -1006,13 +2251,13 @@
             });
 
             container.innerHTML = Array.from(groups.entries()).map(([dateLabel, list]) => {
-                const header = `<div style="margin:14px 2px 10px;color:var(--gray-600);font-weight:800;">${dateLabel}</div>`;
+                const header = `<div class="appointment-date-group-title">${dateLabel}</div>`;
                 const cards = list.map(apt => {
                 const badge = statusBadge(apt);
                 const provHtml = apt.provider ? `<div class="appointment-provider">${escHtml(apt.provider)}</div>` : '';
                 const payState = (apt.payment_status || '').toLowerCase();
                 const needsPayment = !!apt.payment_link && (payState === 'unpaid' || payState === 'pending' || payState === '');
-                const payBtn = needsPayment ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
+                const payBtn = (patientFeatures.wallet_enabled && needsPayment) ? `<a href="${apt.payment_link}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Pay now</a>` : '';
                 const room = apt.video_room || `appt-${apt.id}`;
                 const joinUrl = `video-call.html?room=${encodeURIComponent(room)}&name=${encodeURIComponent('Patient')}`;
                 const gate = joinWindowGate(apt);
@@ -1021,12 +2266,15 @@
                     ? `<button class="btn btn-secondary btn-sm" disabled style="opacity:.6;cursor:not-allowed;">Join video</button>`
                     : `<a href="${joinUrl}" class="btn btn-secondary btn-sm" target="_blank" rel="noopener">Join video</a>`;
                 const joinHint = (!gate.allowed && gate.reason)
-                    ? `<div style="margin-top:8px;color:var(--gray-500);font-size:12px;">${escHtml(gate.reason)}</div>`
+                    ? `<div class="appointment-hint">${escHtml(gate.reason)}</div>`
                     : '';
-                const whyPay = needsPayment
-                    ? `<div style="margin-top:10px;color:var(--gray-600);font-size:13px;">
+                const whyPay = (patientFeatures.wallet_enabled && needsPayment)
+                    ? `<div class="appointment-pay-note">
                          <strong>Why am I paying?</strong> This visit has an outstanding balance. Paying generates a receipt and confirms your payment.
                        </div>`
+                    : '';
+                const billingPaused = (!patientFeatures.wallet_enabled && needsPayment)
+                    ? `<div class="appointment-pay-note"><strong>Billing is paused during monitoring month.</strong></div>`
                     : '';
                 return `
                     <div class="appointment-card">
@@ -1035,10 +2283,11 @@
                                 <div class="appointment-type">${apt.appointment_type || 'Consultation'}</div>
                                 ${provHtml}
                                 <div class="appointment-datetime">${apt.datetime_display || apt.date + ' at ' + apt.time}</div>
-                                <div class="appointment-tz-note" style="font-size:12px;color:var(--gray-500);margin-top:4px;">Times in ${escHtml(apt.timezone || 'America/New_York')}</div>
+                                <div class="appointment-tz-note">Times in ${escHtml(apt.timezone || 'America/New_York')}</div>
                                 <span class="appointment-status ${badge.cls}">${badge.label}</span>
                                 ${joinHint}
                                 ${whyPay}
+                                ${billingPaused}
                             </div>
                             <div class="appointment-actions">
                                 ${joinBtn}

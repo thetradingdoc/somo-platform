@@ -142,6 +142,10 @@ const { adaptIncomingEvent } = require('./services/channel-adapter');
 const ProviderService = require('./services/provider-service');
 const PatientPortalService = require('./services/patient-portal-service');
 const PatientIntakeService = require('./services/patient-intake-service');
+const IngredientEnrichmentService = require('./services/ingredient-enrichment-service');
+const {
+  upsertCustomerProductScan
+} = require('./services/landing-session-claim-service');
 const EHRAggregatorService = require('./services/ehr-aggregator-service');
 const EHRSyncService = require('./services/ehr-sync-service');
 const EpicAdapter = require('./services/epic-adapter');
@@ -804,11 +808,17 @@ app.get('/api/patient/intake', (req, res, next) => apiLimiter(req, res, next), r
         city_place_id: ''
       };
     const status = PatientIntakeService.onboardingStatusFromCanonical(canonical);
+    const step3 = getPatientStep3Status({ sessionId: req.patientSessionId, patientId: patientId || null });
+    const onboarding_complete = !!status.onboarding_complete && !!step3.completed;
     return res.json({
       success: true,
       patient_id: patientId || null,
       intake: canonical,
-      ...status
+      ...status,
+      onboarding_complete,
+      onboarding_profile_complete: !!status.onboarding_complete,
+      onboarding_step3_complete: !!step3.completed,
+      onboarding_step3_reason: step3.reason || null
     });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
@@ -879,6 +889,486 @@ app.get('/api/patient/identity', (req, res, next) => apiLimiter(req, res, next),
   }
 });
 
+// ============================================
+// Customer catalog search (Step3 onboarding)
+// ============================================
+const customerCatalogSearchMetrics = {
+  total: 0,
+  success: 0,
+  failed: 0,
+  no_results: 0,
+  fallback_index_unavailable: 0,
+  catalog_selected: 0,
+  custom_fallback: 0,
+  latency_ms_sum: 0,
+  top_miss_queries: new Map()
+};
+
+function safeParseJsonArray(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function suggestCategoryFromRecord(record = {}) {
+  const name = String(record.product_name || record.name || '').toLowerCase();
+  const tags = [
+    ...safeParseJsonArray(record.categories_tags_json),
+    ...safeParseJsonArray(record.categories_hierarchy_json)
+  ]
+    .map((x) => String(x || '').toLowerCase())
+    .join(' ');
+  const hay = `${name} ${tags}`;
+  if (/retinol|retinal/.test(hay)) return 'retinol';
+  if (/sunscreen|spf|sun[-\s]?care/.test(hay)) return 'sunscreen';
+  if (/cleanser|face[-\s]?wash|gel[-\s]?cleanser/.test(hay)) return 'cleanser';
+  if (/toner|mist/.test(hay)) return 'toner_mist';
+  if (/vitamin c|ascorbic/.test(hay)) return 'vitamin_c';
+  if (/eye/.test(hay)) return 'eye_cream';
+  if (/moistur/.test(hay)) return 'moisturizer';
+  if (/serum/.test(hay)) return 'hydrating_serum';
+  return 'other';
+}
+
+function confidenceForQuery(name = '', brand = '', q = '') {
+  const n = String(name || '').toLowerCase();
+  const b = String(brand || '').toLowerCase();
+  const query = String(q || '').toLowerCase().trim();
+  if (!query) return 0.5;
+  if (n === query) return 0.98;
+  if (n.startsWith(query)) return 0.93;
+  if (n.includes(query)) return 0.87;
+  if (b && b.includes(query)) return 0.8;
+  return 0.62;
+}
+
+function dbTableExists(name) {
+  try {
+    const row = db.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`).get(name);
+    return !!row;
+  } catch (_) {
+    return false;
+  }
+}
+
+function normalizeCatalogRows(rows = [], source) {
+  return rows
+    .map((r) => {
+      const productName = String(r.product_name || r.name || '').trim();
+      if (!productName) return null;
+      const brand = String(r.brand || r.brands || '').trim() || null;
+      const barcode = r.code ? String(r.code) : null;
+      const defaultCategory = suggestCategoryFromRecord(r);
+      return {
+        catalog_product_id: `${source}:${barcode || r.id || r.source_product_id || productName.toLowerCase().replace(/\s+/g, '-')}`,
+        source,
+        barcode,
+        name: productName,
+        brand,
+        image_url: r.image_url || null,
+        category_suggestions: [defaultCategory],
+        default_category: defaultCategory,
+        match_confidence: 0.75,
+        is_custom: false
+      };
+    })
+    .filter(Boolean);
+}
+
+function tryEnrichCustomStep3Products(sessionId) {
+  try {
+    const pending = db.db.prepare(`
+      SELECT id, custom_product_name, custom_brand
+      FROM patient_onboarding_step3_products
+      WHERE session_id = ? AND selection_mode = 'custom' AND custom_pending_enrichment = 1
+    `).all(sessionId);
+    if (!pending.length) return { processed: 0, merged: 0 };
+
+    const pickCatalogMatch = (name, brand) => {
+      const q = `%${String(name || '').toLowerCase()}%`;
+      if (dbTableExists('products_catalog')) {
+        const row = db.db.prepare(`
+          SELECT id, product_name, brand
+          FROM products_catalog
+          WHERE lower(COALESCE(product_name,'')) LIKE ?
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `).get(q);
+        if (row?.id) return { catalog_product_id: `catalog:${row.id}` };
+      }
+      if (dbTableExists('products_obf_index')) {
+        const row = db.db.prepare(`
+          SELECT code, product_name, brands
+          FROM products_obf_index
+          WHERE lower(COALESCE(product_name,'')) LIKE ?
+             OR lower(COALESCE(brands,'')) LIKE ?
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `).get(q, `%${String(brand || '').toLowerCase()}%`);
+        if (row?.code) return { catalog_product_id: `obf:${row.code}` };
+      }
+      if (dbTableExists('products_off_index')) {
+        const row = db.db.prepare(`
+          SELECT code, product_name, brands
+          FROM products_off_index
+          WHERE lower(COALESCE(product_name,'')) LIKE ?
+             OR lower(COALESCE(brands,'')) LIKE ?
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `).get(q, `%${String(brand || '').toLowerCase()}%`);
+        if (row?.code) return { catalog_product_id: `off:${row.code}` };
+      }
+      return null;
+    };
+
+    let merged = 0;
+    for (const row of pending) {
+      const match = pickCatalogMatch(row.custom_product_name, row.custom_brand);
+      if (!match) continue;
+      db.db.prepare(`
+        UPDATE patient_onboarding_step3_products
+        SET selection_mode = 'catalog',
+            catalog_product_id = ?,
+            custom_pending_enrichment = 0,
+            fallback_reason = 'enriched_match',
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(match.catalog_product_id, row.id);
+      merged += 1;
+    }
+
+    // Dedupe after merge by keeping the newest row per signature
+    const dedupeRows = db.db.prepare(`
+      SELECT id, selection_mode, catalog_product_id, custom_product_name, usage_time, goal, updated_at, created_at
+      FROM patient_onboarding_step3_products
+      WHERE session_id = ?
+      ORDER BY datetime(updated_at) DESC, datetime(created_at) DESC
+    `).all(sessionId);
+    const keep = new Set();
+    const remove = [];
+    dedupeRows.forEach((r) => {
+      const key = `${r.selection_mode}|${r.catalog_product_id || r.custom_product_name || ''}|${r.usage_time || ''}|${r.goal || ''}`;
+      if (keep.has(key)) {
+        remove.push(r.id);
+      } else {
+        keep.add(key);
+      }
+    });
+    if (remove.length) {
+      const del = db.db.prepare(`DELETE FROM patient_onboarding_step3_products WHERE id = ?`);
+      for (const id of remove) del.run(id);
+    }
+
+    db.db.prepare(`
+      UPDATE patient_onboarding_enrichment_queue
+      SET status = CASE WHEN ? > 0 THEN 'merged' ELSE 'no_match' END,
+          attempts = attempts + 1,
+          updated_at = datetime('now')
+      WHERE session_id = ? AND status = 'pending'
+    `).run(merged, sessionId);
+    return { processed: pending.length, merged };
+  } catch (_) {
+    return { processed: 0, merged: 0 };
+  }
+}
+
+app.get('/api/customer/catalog/search', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  const started = Date.now();
+  customerCatalogSearchMetrics.total += 1;
+  try {
+    const q = String(req.query?.q || '').trim();
+    const limit = Math.max(1, Math.min(20, Number(req.query?.limit) || 8));
+    if (q.length < 2) {
+      return res.status(400).json({ success: false, error_code: 'INVALID_QUERY', message: 'Query must be at least 2 characters.' });
+    }
+    const hasProductsCatalog = dbTableExists('products_catalog');
+    const hasObf = dbTableExists('products_obf_index');
+    const hasOff = dbTableExists('products_off_index');
+    if (!hasProductsCatalog && !hasObf && !hasOff) {
+      customerCatalogSearchMetrics.fallback_index_unavailable += 1;
+      return res.json({
+        success: true,
+        query: q,
+        results: [],
+        fallback: { reason: 'index_unavailable' },
+        pagination: { next_cursor: null, has_more: false }
+      });
+    }
+
+    const queryNorm = `%${q.toLowerCase()}%`;
+    let rows = [];
+    if (hasProductsCatalog) {
+      const catalogRows = db.db.prepare(`
+        SELECT id, source, source_product_id, brand, product_name, normalized_name, metadata_json
+        FROM products_catalog
+        WHERE lower(COALESCE(product_name,'')) LIKE ?
+           OR lower(COALESCE(brand,'')) LIKE ?
+           OR lower(COALESCE(normalized_name,'')) LIKE ?
+        ORDER BY updated_at DESC
+        LIMIT ?
+      `).all(queryNorm, queryNorm, queryNorm, limit * 2);
+      rows = rows.concat(normalizeCatalogRows(catalogRows, 'catalog'));
+    }
+    if (hasObf) {
+      const obfRows = db.db.prepare(`
+        SELECT code, product_name, brands, categories_tags_json, categories_hierarchy_json, image_url
+        FROM products_obf_index
+        WHERE lower(COALESCE(product_name,'')) LIKE ?
+           OR lower(COALESCE(brands,'')) LIKE ?
+        ORDER BY updated_at DESC
+        LIMIT ?
+      `).all(queryNorm, queryNorm, limit * 2);
+      rows = rows.concat(normalizeCatalogRows(obfRows, 'obf'));
+    }
+    if (hasOff) {
+      const offRows = db.db.prepare(`
+        SELECT code, product_name, brands, categories_tags_json, categories_hierarchy_json, image_url
+        FROM products_off_index
+        WHERE lower(COALESCE(product_name,'')) LIKE ?
+           OR lower(COALESCE(brands,'')) LIKE ?
+        ORDER BY updated_at DESC
+        LIMIT ?
+      `).all(queryNorm, queryNorm, limit * 2);
+      rows = rows.concat(normalizeCatalogRows(offRows, 'off'));
+    }
+
+    const dedup = new Map();
+    for (const r of rows) {
+      const key = `${String(r.name || '').toLowerCase()}|${String(r.brand || '').toLowerCase()}`;
+      if (!dedup.has(key)) dedup.set(key, r);
+    }
+    const results = Array.from(dedup.values())
+      .map((r) => ({
+        ...r,
+        match_confidence: confidenceForQuery(r.name, r.brand, q)
+      }))
+      .sort((a, b) => b.match_confidence - a.match_confidence)
+      .slice(0, limit);
+
+    if (!results.length) {
+      customerCatalogSearchMetrics.no_results += 1;
+      const k = q.toLowerCase();
+      customerCatalogSearchMetrics.top_miss_queries.set(k, (customerCatalogSearchMetrics.top_miss_queries.get(k) || 0) + 1);
+    }
+    customerCatalogSearchMetrics.success += 1;
+    customerCatalogSearchMetrics.latency_ms_sum += Date.now() - started;
+    return res.json({
+      success: true,
+      query: q,
+      results,
+      pagination: { next_cursor: null, has_more: false }
+    });
+  } catch (e) {
+    customerCatalogSearchMetrics.failed += 1;
+    customerCatalogSearchMetrics.latency_ms_sum += Date.now() - started;
+    return res.status(500).json({ success: false, error_code: 'SERVER_ERROR', message: e.message });
+  }
+});
+
+app.get('/api/customer/catalog/search/metrics', (req, res) => {
+  const topMiss = Array.from(customerCatalogSearchMetrics.top_miss_queries.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([query, count]) => ({ query, count }));
+  const avgLatency = customerCatalogSearchMetrics.total
+    ? Math.round(customerCatalogSearchMetrics.latency_ms_sum / customerCatalogSearchMetrics.total)
+    : 0;
+  return res.json({
+    success: true,
+    metrics: {
+      ...customerCatalogSearchMetrics,
+      top_miss_queries: topMiss,
+      avg_latency_ms: avgLatency
+    }
+  });
+});
+
+app.post('/api/customer/onboarding/step3', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const products = Array.isArray(body.products) ? body.products : [];
+    const skipStep3 = !!body.skip_step3;
+    if (!skipStep3 && products.length === 0) {
+      return res.status(400).json({ success: false, error_code: 'PRODUCTS_REQUIRED', message: 'Add at least one product or skip step 3.' });
+    }
+
+    db.db.exec(`
+      CREATE TABLE IF NOT EXISTS patient_onboarding_step3_products (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        patient_id TEXT,
+        selection_mode TEXT NOT NULL,
+        catalog_product_id TEXT,
+        custom_product_name TEXT,
+        custom_brand TEXT,
+        custom_pending_enrichment INTEGER DEFAULT 0,
+        fallback_reason TEXT,
+        category TEXT NOT NULL,
+        usage_time TEXT NOT NULL,
+        frequency_rule TEXT,
+        days_of_week_json TEXT,
+        goal TEXT NOT NULL,
+        flags_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_step3_products_session ON patient_onboarding_step3_products(session_id);
+      CREATE TABLE IF NOT EXISTS patient_onboarding_step3_state (
+        session_id TEXT PRIMARY KEY,
+        patient_id TEXT,
+        onboarding_version TEXT,
+        step3_completed INTEGER DEFAULT 0,
+        reason TEXT,
+        products_saved INTEGER DEFAULT 0,
+        custom_pending_enrichment INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS patient_onboarding_enrichment_queue (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        patient_id TEXT,
+        custom_product_name TEXT NOT NULL,
+        custom_brand TEXT,
+        status TEXT DEFAULT 'pending',
+        attempts INTEGER DEFAULT 0,
+        metadata_json TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    db.db.prepare(`DELETE FROM patient_onboarding_step3_products WHERE session_id = ?`).run(sessionId);
+
+    const runInsert = db.db.prepare(`
+      INSERT INTO patient_onboarding_step3_products (
+        id, session_id, patient_id, selection_mode, catalog_product_id, custom_product_name, custom_brand,
+        custom_pending_enrichment, fallback_reason, category, usage_time, frequency_rule, days_of_week_json, goal, flags_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const queueInsert = db.db.prepare(`
+      INSERT INTO patient_onboarding_enrichment_queue (
+        id, session_id, patient_id, custom_product_name, custom_brand, status, metadata_json
+      ) VALUES (?, ?, ?, ?, ?, 'pending', ?)
+    `);
+
+    let customPending = 0;
+    const now = Date.now();
+    const seenDedup = new Set();
+    products.forEach((p, idx) => {
+      const selectionMode = String(p.selection_mode || '').trim();
+      const category = String(p.category || '').trim();
+      const usageTime = String(p.usage_time || '').trim();
+      const goal = String(p.goal || '').trim();
+      if (!category || !usageTime || !goal) throw new Error(`Product ${idx + 1} missing required fields (category/usage_time/goal).`);
+      if (selectionMode !== 'catalog' && selectionMode !== 'custom') throw new Error(`Product ${idx + 1} has invalid selection_mode.`);
+
+      const flags = p.flags && typeof p.flags === 'object' ? p.flags : {};
+      const days = Array.isArray(p.days_of_week) ? p.days_of_week : [];
+      const frequencyRule = p.frequency_rule ? String(p.frequency_rule) : null;
+
+      let catalogProductId = null;
+      let customName = null;
+      let customBrand = null;
+      let customPendingEnrichment = 0;
+      let fallbackReason = null;
+
+      if (selectionMode === 'catalog') {
+        catalogProductId = String(p.catalog_product_id || '').trim();
+        if (!catalogProductId) throw new Error(`Product ${idx + 1} requires catalog_product_id for catalog mode.`);
+      } else {
+        customName = String(p.custom_product?.name || '').trim();
+        customBrand = String(p.custom_product?.brand || '').trim() || null;
+        if (!customName) throw new Error(`Product ${idx + 1} requires custom product name for custom mode.`);
+        customPendingEnrichment = 1;
+        customPending += 1;
+        fallbackReason = String(p.fallback_reason || 'user_override');
+      }
+
+      const dedupKey = `${selectionMode}|${catalogProductId || customName}|${usageTime}|${goal}`;
+      if (seenDedup.has(dedupKey)) return;
+      seenDedup.add(dedupKey);
+
+      const id = `step3prod_${now}_${idx}_${Math.random().toString(36).slice(2, 8)}`;
+      runInsert.run(
+        id,
+        sessionId,
+        patientId || null,
+        selectionMode,
+        catalogProductId,
+        customName,
+        customBrand,
+        customPendingEnrichment,
+        fallbackReason,
+        category,
+        usageTime,
+        frequencyRule,
+        JSON.stringify(days),
+        goal,
+        JSON.stringify(flags)
+      );
+
+      if (customPendingEnrichment) {
+        customerCatalogSearchMetrics.custom_fallback += 1;
+        queueInsert.run(
+          `enrich_${id}`,
+          sessionId,
+          patientId || null,
+          customName,
+          customBrand,
+          JSON.stringify({ fallback_reason: fallbackReason })
+        );
+      } else {
+        customerCatalogSearchMetrics.catalog_selected += 1;
+      }
+    });
+
+    db.db.prepare(`
+      INSERT INTO patient_onboarding_step3_state (
+        session_id, patient_id, onboarding_version, step3_completed, reason, products_saved, custom_pending_enrichment, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(session_id) DO UPDATE SET
+        patient_id = excluded.patient_id,
+        onboarding_version = excluded.onboarding_version,
+        step3_completed = excluded.step3_completed,
+        reason = excluded.reason,
+        products_saved = excluded.products_saved,
+        custom_pending_enrichment = excluded.custom_pending_enrichment,
+        updated_at = datetime('now')
+    `).run(
+      sessionId,
+      patientId || null,
+      String(body.onboarding_version || 'journal_v1'),
+      1,
+      skipStep3 ? 'explicit_skip' : 'products_added',
+      skipStep3 ? 0 : seenDedup.size,
+      customPending
+    );
+
+    // Fire-and-forget enrichment and merge pass for custom products.
+    setTimeout(() => {
+      tryEnrichCustomStep3Products(sessionId);
+    }, 0);
+
+    return res.json({
+      success: true,
+      step3: {
+        completed: true,
+        reason: skipStep3 ? 'explicit_skip' : 'products_added',
+        products_saved: skipStep3 ? 0 : seenDedup.size,
+        custom_pending_enrichment: customPending
+      },
+      next_route: '/patients/patient-dashboard.html'
+    });
+  } catch (e) {
+    return res.status(400).json({ success: false, error_code: 'VALIDATION_ERROR', message: e.message });
+  }
+});
+
 // Geo helper for city autocomplete (web onboarding)
 // Uses Google Places if configured, otherwise falls back to a minimal in-process list.
 app.get('/api/geo/city-autocomplete', (req, res, next) => apiLimiter(req, res, next), async (req, res) => {
@@ -941,6 +1431,1484 @@ function resolvePatientIdFromSession(sessionValidation) {
     return { patientId: sessionValidation?.patient_id || null, patientRow: null };
   }
 }
+
+app.get('/api/patient/features', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, (req, res) => {
+  return res.json({
+    success: true,
+    features: {
+      wallet_enabled: isPatientWalletEnabled(),
+      chat_enabled: isPatientChatEnabled()
+    }
+  });
+});
+
+function getPatientStep3Status({ sessionId = null, patientId = null } = {}) {
+  try {
+    const tableRow = db.db.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE type='table' AND name='patient_onboarding_step3_state'
+      LIMIT 1
+    `).get();
+    if (!tableRow) return { completed: false, reason: null };
+
+    let row = null;
+    if (patientId) {
+      row = db.db.prepare(`
+        SELECT step3_completed, reason, updated_at
+        FROM patient_onboarding_step3_state
+        WHERE patient_id = ?
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 1
+      `).get(patientId);
+    }
+    if (!row && sessionId) {
+      row = db.db.prepare(`
+        SELECT step3_completed, reason, updated_at
+        FROM patient_onboarding_step3_state
+        WHERE session_id = ?
+        LIMIT 1
+      `).get(sessionId);
+    }
+    if (!row) return { completed: false, reason: null };
+    const completed = Number(row.step3_completed) === 1;
+    const reason = (row.reason || '').toString().trim() || null;
+    const explicitSkip = reason === 'explicit_skip';
+    return { completed: completed || explicitSkip, reason };
+  } catch (_) {
+    return { completed: false, reason: null };
+  }
+}
+
+function ensureRoutineTables() {
+  db.db.exec(`
+    CREATE TABLE IF NOT EXISTS patient_routine_templates (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      patient_id TEXT,
+      name TEXT NOT NULL,
+      start_date TEXT,
+      duration_days INTEGER DEFAULT 28,
+      repeat_cadence TEXT DEFAULT 'daily',
+      repeat_days_of_week_json TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_templates_session ON patient_routine_templates(session_id);
+    CREATE INDEX IF NOT EXISTS idx_routine_templates_patient ON patient_routine_templates(patient_id);
+
+    CREATE TABLE IF NOT EXISTS patient_routine_template_items (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      source_type TEXT DEFAULT 'shelf',
+      source_ref_id TEXT,
+      product_name TEXT NOT NULL,
+      product_brand TEXT,
+      usage_time TEXT,
+      frequency_rule TEXT,
+      days_of_week_json TEXT,
+      goal TEXT,
+      step_order INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_items_template ON patient_routine_template_items(template_id);
+
+    CREATE TABLE IF NOT EXISTS patient_routine_daily_entries (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      patient_id TEXT,
+      entry_date TEXT NOT NULL,
+      skin_report TEXT,
+      notes TEXT,
+      completion_score INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(template_id, entry_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_daily_template_date ON patient_routine_daily_entries(template_id, entry_date);
+    CREATE INDEX IF NOT EXISTS idx_routine_daily_session_date ON patient_routine_daily_entries(session_id, entry_date);
+
+    CREATE TABLE IF NOT EXISTS patient_routine_daily_item_logs (
+      id TEXT PRIMARY KEY,
+      daily_entry_id TEXT NOT NULL,
+      template_item_id TEXT,
+      completed INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_daily_logs_entry ON patient_routine_daily_item_logs(daily_entry_id);
+
+    CREATE TABLE IF NOT EXISTS patient_routine_daily_media (
+      id TEXT PRIMARY KEY,
+      daily_entry_id TEXT NOT NULL,
+      media_type TEXT DEFAULT 'image',
+      patient_document_id TEXT,
+      media_url TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_routine_daily_media_entry ON patient_routine_daily_media(daily_entry_id);
+  `);
+  try {
+    db.db.prepare(`ALTER TABLE patient_routine_templates ADD COLUMN start_date TEXT`).run();
+  } catch (_) {}
+  try {
+    db.db.prepare(`ALTER TABLE patient_routine_templates ADD COLUMN duration_days INTEGER DEFAULT 28`).run();
+  } catch (_) {}
+  try {
+    db.db.prepare(`ALTER TABLE patient_routine_templates ADD COLUMN repeat_cadence TEXT DEFAULT 'daily'`).run();
+  } catch (_) {}
+  try {
+    db.db.prepare(`ALTER TABLE patient_routine_templates ADD COLUMN repeat_days_of_week_json TEXT`).run();
+  } catch (_) {}
+}
+
+function ensureProductsPhase2Tables() {
+  db.db.exec(`
+    CREATE TABLE IF NOT EXISTS patient_product_lists (
+      id TEXT PRIMARY KEY,
+      owner_type TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      list_type TEXT NOT NULL,
+      list_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(owner_type, owner_id, list_type, list_name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_patient_product_lists_owner
+      ON patient_product_lists(owner_type, owner_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS patient_product_list_items (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      product_ref TEXT NOT NULL,
+      note TEXT,
+      concern_tags_json TEXT,
+      source_scan_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(list_id, product_ref)
+    );
+    CREATE INDEX IF NOT EXISTS idx_patient_product_list_items_list
+      ON patient_product_list_items(list_id, updated_at DESC);
+  `);
+}
+
+function ensurePatientPortalEventsTable() {
+  db.db.exec(`
+    CREATE TABLE IF NOT EXISTS patient_portal_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      patient_id TEXT,
+      event_name TEXT NOT NULL,
+      metadata_json TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_portal_events_session ON patient_portal_events(session_id);
+    CREATE INDEX IF NOT EXISTS idx_portal_events_name ON patient_portal_events(event_name);
+  `);
+}
+
+function recordPatientPortalEvent(req, eventName, metadata = {}) {
+  try {
+    ensurePatientPortalEventsTable();
+    const name = String(eventName || '').trim();
+    if (!name) return;
+    const sessionId = req.patientSessionId;
+    if (!sessionId) return;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    let metaStr = '{}';
+    try {
+      metaStr = JSON.stringify(metadata && typeof metadata === 'object' ? metadata : {});
+    } catch (_) {
+      metaStr = '{}';
+    }
+    if (metaStr.length > 4000) metaStr = `${metaStr.slice(0, 3997)}...`;
+    const id = `ppe_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    db.db.prepare(`
+      INSERT INTO patient_portal_events (id, session_id, patient_id, event_name, metadata_json, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `).run(id, sessionId, patientId || null, name, metaStr);
+  } catch (_) {}
+}
+
+function parseBooleanFlag(value, fallback = false) {
+  if (value == null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function isPatientWalletEnabled() {
+  return parseBooleanFlag(process.env.FEATURE_PATIENT_WALLET_ENABLED, false);
+}
+
+function isPatientChatEnabled() {
+  return parseBooleanFlag(process.env.FEATURE_PATIENT_CHAT_ENABLED, false);
+}
+
+function blockWalletWhenDisabled(req, res, next) {
+  if (isPatientWalletEnabled()) return next();
+  recordPatientPortalEvent(req, 'wallet_access_blocked', {
+    path: req.path || null,
+    method: req.method || null
+  });
+  return res.status(503).json({
+    success: false,
+    error: 'Wallet is temporarily disabled'
+  });
+}
+
+function blockChatWhenDisabled(req, res, next) {
+  if (isPatientChatEnabled()) return next();
+  recordPatientPortalEvent(req, 'chat_access_blocked', {
+    path: req.path || null,
+    method: req.method || null
+  });
+  return res.status(503).json({
+    success: false,
+    error: 'Chat is temporarily disabled'
+  });
+}
+
+function isIsoDateOnly(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+}
+
+function localDateFromIso(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function isoFromLocalDate(d) {
+  if (!d || Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function weekdayKeyForIsoLocal(iso) {
+  const d = localDateFromIso(iso);
+  if (!d) return 'mon';
+  return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][d.getDay()];
+}
+
+function enumerateIsoDates(startIso, endIso) {
+  const out = [];
+  const start = localDateFromIso(startIso);
+  const end = localDateFromIso(endIso);
+  if (!start || !end || start > end) return out;
+  const cur = new Date(start.getTime());
+  while (cur <= end) {
+    out.push(isoFromLocalDate(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function issuePatientDocumentDownloadUrl(req, patientId, docId) {
+  try {
+    if (!db.createPatientDocumentDownloadToken) return null;
+    const ttlSeconds = parseInt(process.env.PATIENT_DOCUMENT_SIGNED_URL_TTL_SECONDS || '300', 10);
+    const token = crypto.randomBytes(24).toString('hex');
+    const expiresAtIso = new Date(Date.now() + Math.max(30, ttlSeconds) * 1000).toISOString();
+    const created = db.createPatientDocumentDownloadToken({
+      token,
+      doc_id: docId,
+      patient_id: patientId,
+      expires_at: expiresAtIso
+    });
+    if (!created || !created.success) return null;
+    return `${req.protocol}://${req.get('host')}/api/patient/documents/download/${token}`;
+  } catch (_) {
+    return null;
+  }
+}
+
+function ensurePatientShelfInventoryColumns() {
+  const addCol = (sql) => {
+    try {
+      db.db.prepare(sql).run();
+    } catch (_) {}
+  };
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN opened_date TEXT');
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN expiry_date TEXT');
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN pao_months INTEGER');
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN inventory_status TEXT DEFAULT \'stock\'');
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN price_usd REAL');
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN key_ingredients TEXT');
+  addCol('ALTER TABLE patient_onboarding_step3_products ADD COLUMN display_color TEXT');
+}
+
+function computeProductInitials(productName) {
+  const s = String(productName || '').trim();
+  if (!s) return '?';
+  const parts = s.split(/\s+/).filter(Boolean);
+  const a = (parts[0][0] || '?').toUpperCase();
+  const b = parts.length > 1 ? (parts[1][0] || '').toUpperCase() : String(parts[0][1] || '').toUpperCase();
+  const out = (a + b).replace(/[^A-Z0-9]/g, '');
+  return out.slice(0, 2) || 'P';
+}
+
+function computeShelfBadgeColor(seed) {
+  const s = String(seed || 'x');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  const hue = h % 360;
+  return `hsl(${hue}, 48%, 40%)`;
+}
+
+function formatShelfProductApiRow(r) {
+  const product_name = r.selection_mode === 'catalog'
+    ? String(r.catalog_product_id || '').trim() || 'Catalog product'
+    : String(r.custom_product_name || '').trim();
+  const product_brand = r.custom_brand || null;
+  const dc = r.display_color ? String(r.display_color).trim() : '';
+  const colorOk = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(dc) || /^hsl\(/i.test(dc);
+  const badge_color = colorOk ? dc : computeShelfBadgeColor(String(r.id || '') + product_name);
+  return {
+    shelf_product_id: r.id,
+    product_name,
+    product_brand,
+    category: r.category || null,
+    usage_time: r.usage_time || null,
+    frequency_rule: r.frequency_rule || null,
+    days_of_week: safeParseJsonArray(r.days_of_week_json),
+    goal: r.goal || null,
+    opened_date: r.opened_date || null,
+    expiry_date: r.expiry_date || null,
+    pao_months: r.pao_months != null && r.pao_months !== '' ? Number(r.pao_months) : null,
+    inventory_status: String(r.inventory_status || 'stock').toLowerCase(),
+    price_usd: r.price_usd != null && r.price_usd !== '' ? Number(r.price_usd) : null,
+    key_ingredients: r.key_ingredients || null,
+    display_color: dc || null,
+    badge_initials: computeProductInitials(product_name),
+    badge_color
+  };
+}
+
+function loadPatientShelfProductRows(sessionId) {
+  return db.db.prepare(`
+      SELECT id, selection_mode, catalog_product_id, custom_product_name, custom_brand, category, usage_time,
+        frequency_rule, days_of_week_json, goal, opened_date, expiry_date, pao_months, inventory_status,
+        price_usd, key_ingredients, display_color, updated_at
+      FROM patient_onboarding_step3_products
+      WHERE session_id = ?
+      ORDER BY datetime(updated_at) DESC
+    `).all(sessionId);
+}
+
+app.get('/api/patient/shelf/products', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    ensurePatientShelfInventoryColumns();
+    const sessionId = req.patientSessionId;
+    const rows = loadPatientShelfProductRows(sessionId);
+    const products = rows.map((r) => formatShelfProductApiRow(r));
+    return res.json({ success: true, products });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.patch('/api/patient/shelf/products/:productId', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    ensurePatientShelfInventoryColumns();
+    const sessionId = req.patientSessionId;
+    const productId = String(req.params.productId || '').trim();
+    if (!productId) return res.status(400).json({ success: false, error: 'product id required' });
+    const row = db.db.prepare(`SELECT id FROM patient_onboarding_step3_products WHERE id = ? AND session_id = ?`).get(productId, sessionId);
+    if (!row) return res.status(404).json({ success: false, error: 'Product not found' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const updates = [];
+    const params = [];
+
+    if (Object.prototype.hasOwnProperty.call(body, 'opened_date')) {
+      const v = body.opened_date == null || body.opened_date === '' ? null : String(body.opened_date).trim();
+      if (v && !isIsoDateOnly(v)) return res.status(400).json({ success: false, error: 'opened_date must be YYYY-MM-DD' });
+      updates.push('opened_date = ?');
+      params.push(v);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'expiry_date')) {
+      const v = body.expiry_date == null || body.expiry_date === '' ? null : String(body.expiry_date).trim();
+      if (v && !isIsoDateOnly(v)) return res.status(400).json({ success: false, error: 'expiry_date must be YYYY-MM-DD' });
+      updates.push('expiry_date = ?');
+      params.push(v);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'pao_months')) {
+      const n = body.pao_months == null || body.pao_months === '' ? null : Number(body.pao_months);
+      if (n != null && (!Number.isFinite(n) || n < 0 || n > 120)) {
+        return res.status(400).json({ success: false, error: 'pao_months must be between 0 and 120' });
+      }
+      updates.push('pao_months = ?');
+      params.push(n);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'inventory_status')) {
+      const st = String(body.inventory_status || '').trim().toLowerCase();
+      if (!['stock', 'opened', 'finished'].includes(st)) {
+        return res.status(400).json({ success: false, error: 'inventory_status must be stock, opened, or finished' });
+      }
+      updates.push('inventory_status = ?');
+      params.push(st);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'price_usd')) {
+      const p = body.price_usd == null || body.price_usd === '' ? null : Number(body.price_usd);
+      if (p != null && (!Number.isFinite(p) || p < 0)) {
+        return res.status(400).json({ success: false, error: 'price_usd must be a non-negative number' });
+      }
+      updates.push('price_usd = ?');
+      params.push(p);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'key_ingredients')) {
+      const k = body.key_ingredients == null ? null : String(body.key_ingredients).trim().slice(0, 2000);
+      updates.push('key_ingredients = ?');
+      params.push(k);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'display_color')) {
+      const dc = body.display_color == null || body.display_color === '' ? null : String(body.display_color).trim();
+      if (dc && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(dc) && !/^hsl\(/i.test(dc)) {
+        return res.status(400).json({ success: false, error: 'display_color must be #hex or hsl(...)' });
+      }
+      updates.push('display_color = ?');
+      params.push(dc);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ success: false, error: 'No valid fields to update' });
+    }
+    updates.push('updated_at = datetime(\'now\')');
+    params.push(productId, sessionId);
+    db.db.prepare(`UPDATE patient_onboarding_step3_products SET ${updates.join(', ')} WHERE id = ? AND session_id = ?`).run(...params);
+    const fresh = db.db.prepare(`
+      SELECT id, selection_mode, catalog_product_id, custom_product_name, custom_brand, category, usage_time,
+        frequency_rule, days_of_week_json, goal, opened_date, expiry_date, pao_months, inventory_status,
+        price_usd, key_ingredients, display_color, updated_at
+      FROM patient_onboarding_step3_products WHERE id = ? AND session_id = ?
+    `).get(productId, sessionId);
+    return res.json({ success: true, product: formatShelfProductApiRow(fresh) });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+function parseJsonSafe(value, fallback = []) {
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return parsed != null ? parsed : fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function parseProductRef(productRef) {
+  const raw = String(productRef || '').trim();
+  const m = raw.match(/^(obf|off):(.+)$/i);
+  if (!m) return null;
+  return { catalog: m[1].toLowerCase(), code: String(m[2] || '').trim() };
+}
+
+function getIndexedProductByRef(productRef) {
+  const ref = parseProductRef(productRef);
+  if (!ref || !ref.code) return null;
+  const row = ref.catalog === 'off'
+    ? db.getOffIndexProductByCode(ref.code)
+    : db.getObfIndexProductByCode(ref.code);
+  if (!row) return null;
+  return {
+    id: `${ref.catalog}:${row.code}`,
+    catalog: ref.catalog,
+    barcode: row.code,
+    product_name: row.product_name || null,
+    brands: row.brands || null,
+    image_url: row.image_url || null,
+    ingredients_text: row.ingredients_text || null,
+    ingredients_tags: Array.isArray(row.ingredients_tags) ? row.ingredients_tags : [],
+    ingredients_analysis_tags: Array.isArray(row.ingredients_analysis_tags) ? row.ingredients_analysis_tags : [],
+    categories_tags: Array.isArray(row.categories_tags) ? row.categories_tags : [],
+    categories_hierarchy: Array.isArray(row.categories_hierarchy) ? row.categories_hierarchy : []
+  };
+}
+
+function mergePatientProductListsIfNeeded(patientId, sessionId) {
+  if (!patientId || !sessionId) return;
+  ensureProductsPhase2Tables();
+  const sessionLists = db.db.prepare(`
+    SELECT id, list_type, list_name
+    FROM patient_product_lists
+    WHERE owner_type = 'session' AND owner_id = ?
+  `).all(sessionId);
+  const findPatientList = db.db.prepare(`
+    SELECT id FROM patient_product_lists
+    WHERE owner_type = 'patient' AND owner_id = ? AND list_type = ? AND list_name = ?
+    LIMIT 1
+  `);
+  const insertPatientList = db.db.prepare(`
+    INSERT INTO patient_product_lists (id, owner_type, owner_id, list_type, list_name, created_at, updated_at)
+    VALUES (?, 'patient', ?, ?, ?, datetime('now'), datetime('now'))
+  `);
+  const listItems = db.db.prepare(`
+    SELECT product_ref, note, concern_tags_json, source_scan_id
+    FROM patient_product_list_items
+    WHERE list_id = ?
+  `);
+  const upsertItem = db.db.prepare(`
+    INSERT INTO patient_product_list_items (
+      id, list_id, product_ref, note, concern_tags_json, source_scan_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(list_id, product_ref) DO UPDATE SET
+      note = COALESCE(excluded.note, patient_product_list_items.note),
+      concern_tags_json = COALESCE(excluded.concern_tags_json, patient_product_list_items.concern_tags_json),
+      source_scan_id = COALESCE(excluded.source_scan_id, patient_product_list_items.source_scan_id),
+      updated_at = datetime('now')
+  `);
+  const deleteSessionListItems = db.db.prepare(`DELETE FROM patient_product_list_items WHERE list_id = ?`);
+  const deleteSessionList = db.db.prepare(`DELETE FROM patient_product_lists WHERE id = ?`);
+
+  const tx = db.db.transaction(() => {
+    for (const sList of sessionLists) {
+      let patientList = findPatientList.get(patientId, sList.list_type, sList.list_name);
+      if (!patientList) {
+        const createdId = `ppl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        insertPatientList.run(createdId, patientId, sList.list_type, sList.list_name);
+        patientList = { id: createdId };
+      }
+      const items = listItems.all(sList.id);
+      for (const it of items) {
+        upsertItem.run(
+          `ppli_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          patientList.id,
+          it.product_ref,
+          it.note || null,
+          it.concern_tags_json || null,
+          it.source_scan_id || null
+        );
+      }
+      deleteSessionListItems.run(sList.id);
+      deleteSessionList.run(sList.id);
+    }
+  });
+  tx();
+}
+
+function listCatalogFromIndex({ q, catalog, limit, offset }) {
+  const lim = Math.max(1, Math.min(50, Number(limit) || 20));
+  const off = Math.max(0, Number(offset) || 0);
+  const query = String(q || '').trim().toLowerCase();
+  const withQ = query ? `WHERE lower(COALESCE(product_name,'')) LIKE ? OR lower(COALESCE(brands,'')) LIKE ?` : '';
+  const params = query ? [`%${query}%`, `%${query}%`, lim, off] : [lim, off];
+  const sqlObf = `
+    SELECT 'obf' AS catalog, code, product_name, brands, image_url, ingredients_text,
+           categories_tags_json, ingredients_tags_json, ingredients_analysis_tags_json, updated_at,
+           CASE WHEN trim(COALESCE(ingredients_text,'')) <> '' THEN 1 ELSE 0 END AS has_ingredient_text
+    FROM products_obf_index
+    ${withQ}
+    ORDER BY has_ingredient_text DESC, datetime(updated_at) DESC
+    LIMIT ? OFFSET ?
+  `;
+  const sqlOff = `
+    SELECT 'off' AS catalog, code, product_name, brands, image_url, ingredients_text,
+           categories_tags_json, ingredients_tags_json, ingredients_analysis_tags_json, updated_at,
+           CASE WHEN trim(COALESCE(ingredients_text,'')) <> '' THEN 1 ELSE 0 END AS has_ingredient_text
+    FROM products_off_index
+    ${withQ}
+    ORDER BY has_ingredient_text DESC, datetime(updated_at) DESC
+    LIMIT ? OFFSET ?
+  `;
+  let rows = [];
+  try {
+    if (catalog === 'obf') rows = db.db.prepare(sqlObf).all(...params);
+    else if (catalog === 'off') rows = db.db.prepare(sqlOff).all(...params);
+    else {
+      rows = [
+        ...db.db.prepare(sqlObf).all(...params),
+        ...db.db.prepare(sqlOff).all(...params)
+      ].sort((a, b) => {
+        const ia = Number(a?.has_ingredient_text || 0);
+        const ib = Number(b?.has_ingredient_text || 0);
+        if (ib !== ia) return ib - ia;
+        return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+      }).slice(0, lim);
+    }
+  } catch (_) {
+    rows = [];
+  }
+  return rows.map((r) => ({
+    id: `${r.catalog}:${r.code}`,
+    catalog: r.catalog,
+    barcode: r.code,
+    product_name: r.product_name || null,
+    brands: r.brands || null,
+    image_url: r.image_url || null,
+    ingredients_text: r.ingredients_text || null,
+    has_ingredient_data: Number(r.has_ingredient_text || 0) === 1,
+    categories_tags: parseJsonSafe(r.categories_tags_json, []),
+    ingredients_tags: parseJsonSafe(r.ingredients_tags_json, []),
+    ingredients_analysis_tags: parseJsonSafe(r.ingredients_analysis_tags_json, [])
+  }));
+}
+
+app.get('/api/patient/products/catalog', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const q = String(req.query?.q || '').trim();
+    const catalog = String(req.query?.catalog || 'all').trim().toLowerCase();
+    const products = listCatalogFromIndex({
+      q,
+      catalog: ['obf', 'off', 'all'].includes(catalog) ? catalog : 'all',
+      limit: req.query?.limit,
+      offset: req.query?.offset
+    });
+    return res.json({ success: true, products });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/products/:id/info', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const product = getIndexedProductByRef(req.params?.id);
+    if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+    const enriched = IngredientEnrichmentService.getEnrichedIngredients(product.id);
+    const ingredient_summary = IngredientEnrichmentService.deriveIngredientSummary(enriched);
+    return res.json({
+      success: true,
+      product,
+      info: {
+        ingredients_enriched: enriched,
+        ingredient_summary
+      }
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/products/saved-scans', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    let rows = [];
+    try {
+      rows = db.db.prepare(`
+        SELECT id, customer_id, barcode, product_json, source_session_id, scanned_at, updated_at
+        FROM customer_products
+        WHERE source_session_id = ? OR customer_id = ?
+        ORDER BY datetime(scanned_at) DESC, datetime(updated_at) DESC
+        LIMIT ?
+      `).all(sessionId || '', patientId || '', Math.max(1, Math.min(200, Number(req.query?.limit) || 50)));
+    } catch (_) {
+      rows = [];
+    }
+    const scans = rows.map((r) => {
+      const product = (() => {
+        try { return JSON.parse(r.product_json || '{}'); } catch (_) { return {}; }
+      })();
+      return {
+        id: r.id,
+        barcode: r.barcode,
+        scanned_at: r.scanned_at || r.updated_at,
+        product
+      };
+    });
+    return res.json({ success: true, scans });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/products/informations', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const items = [
+      { id: 'educ-1', title: 'How product scoring works', body: 'Scores blend ingredient role, concern tags, and concentration-order heuristics.' },
+      { id: 'educ-2', title: 'Why some ingredients are unresolved', body: 'Unresolved tokens are queued for alias expansion and reviewed during weekly enrichment updates.' },
+      { id: 'educ-3', title: 'How to use Similar', body: 'Similar matches are ranked by category overlap, ingredient overlap, and concern-tag compatibility.' }
+    ];
+    return res.json({ success: true, items });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/products/:id/similar', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    const source = getIndexedProductByRef(req.params?.id);
+    if (!source) return res.status(404).json({ success: false, error: 'Product not found' });
+    const catalog = source.catalog;
+    const sourceCats = new Set(source.categories_tags || []);
+    const sourceIng = new Set(source.ingredients_tags || []);
+    const sourceConcerns = new Set(source.ingredients_analysis_tags || []);
+    const rows = listCatalogFromIndex({
+      q: '',
+      catalog,
+      limit: 120,
+      offset: 0
+    }).filter((p) => p.id !== source.id);
+
+    const scoreRows = rows.map((p) => {
+      const pCats = new Set(p.categories_tags || []);
+      const pIng = new Set(p.ingredients_tags || []);
+      const pConcerns = new Set(p.ingredients_analysis_tags || []);
+      const overlap = (a, b) => {
+        if (!a.size || !b.size) return 0;
+        let n = 0;
+        for (const x of a) if (b.has(x)) n += 1;
+        return n / Math.max(a.size, b.size);
+      };
+      const categoryScore = overlap(sourceCats, pCats);
+      const ingredientScore = overlap(sourceIng, pIng);
+      const concernScore = overlap(sourceConcerns, pConcerns);
+      const similarity_score = (0.5 * categoryScore) + (0.35 * ingredientScore) + (0.15 * concernScore);
+      return {
+        ...p,
+        similarity_score: Math.round(similarity_score * 1000) / 1000,
+        score_breakdown: {
+          category_overlap: Math.round(categoryScore * 1000) / 1000,
+          ingredient_overlap: Math.round(ingredientScore * 1000) / 1000,
+          concern_tag_overlap: Math.round(concernScore * 1000) / 1000
+        }
+      };
+    }).sort((a, b) => b.similarity_score - a.similarity_score);
+
+    return res.json({
+      success: true,
+      source_product_id: source.id,
+      contract: 'category + ingredient overlap + concern tags',
+      similar: scoreRows.slice(0, Math.max(1, Math.min(30, Number(req.query?.limit) || 12)))
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/products/lists', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    ensureProductsPhase2Tables();
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    mergePatientProductListsIfNeeded(patientId, sessionId);
+    const ownerType = patientId ? 'patient' : 'session';
+    const ownerId = patientId || sessionId;
+    const rows = db.db.prepare(`
+      SELECT id, list_type, list_name, created_at, updated_at
+      FROM patient_product_lists
+      WHERE owner_type = ? AND owner_id = ?
+      ORDER BY datetime(updated_at) DESC
+    `).all(ownerType, ownerId);
+    const itemRows = db.db.prepare(`
+      SELECT list_id, product_ref, note, concern_tags_json, source_scan_id, updated_at
+      FROM patient_product_list_items
+      WHERE list_id IN (${rows.map(() => '?').join(',') || "''"})
+      ORDER BY datetime(updated_at) DESC
+    `).all(...rows.map((r) => r.id));
+    const byList = new Map();
+    for (const it of itemRows) {
+      if (!byList.has(it.list_id)) byList.set(it.list_id, []);
+      byList.get(it.list_id).push({
+        product_ref: it.product_ref,
+        note: it.note || null,
+        concern_tags: parseJsonSafe(it.concern_tags_json, []),
+        source_scan_id: it.source_scan_id || null
+      });
+    }
+    const lists = rows.map((r) => ({ ...r, items: byList.get(r.id) || [] }));
+    return res.json({ success: true, lists });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/products/lists', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    ensureProductsPhase2Tables();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const listType = String(body.list_type || '').trim().toLowerCase();
+    const allowed = new Set(['favorites', 'to_test', 'custom']);
+    if (!allowed.has(listType)) return res.status(400).json({ success: false, error: 'Invalid list_type' });
+    const listName = String(body.list_name || (listType === 'custom' ? '' : listType)).trim();
+    if (!listName) return res.status(400).json({ success: false, error: 'list_name required' });
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    mergePatientProductListsIfNeeded(patientId, sessionId);
+    const ownerType = patientId ? 'patient' : 'session';
+    const ownerId = patientId || sessionId;
+    const existing = db.db.prepare(`
+      SELECT id FROM patient_product_lists
+      WHERE owner_type = ? AND owner_id = ? AND list_type = ? AND list_name = ?
+      LIMIT 1
+    `).get(ownerType, ownerId, listType, listName);
+    if (existing) return res.json({ success: true, list_id: existing.id, created: false });
+    const id = `ppl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    db.db.prepare(`
+      INSERT INTO patient_product_lists (id, owner_type, owner_id, list_type, list_name, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(id, ownerType, ownerId, listType, listName);
+    return res.json({ success: true, list_id: id, created: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/products/lists/:listId/items', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    ensureProductsPhase2Tables();
+    const listId = String(req.params?.listId || '').trim();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const productRef = String(body.product_ref || '').trim();
+    if (!listId || !parseProductRef(productRef)) {
+      return res.status(400).json({ success: false, error: 'listId and product_ref (obf:<barcode>|off:<barcode>) are required' });
+    }
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    mergePatientProductListsIfNeeded(patientId, sessionId);
+    const ownerType = patientId ? 'patient' : 'session';
+    const ownerId = patientId || sessionId;
+    const list = db.db.prepare(`
+      SELECT id FROM patient_product_lists
+      WHERE id = ? AND owner_type = ? AND owner_id = ?
+      LIMIT 1
+    `).get(listId, ownerType, ownerId);
+    if (!list) return res.status(404).json({ success: false, error: 'List not found' });
+    db.db.prepare(`
+      INSERT INTO patient_product_list_items (
+        id, list_id, product_ref, note, concern_tags_json, source_scan_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(list_id, product_ref) DO UPDATE SET
+        note = COALESCE(excluded.note, patient_product_list_items.note),
+        concern_tags_json = COALESCE(excluded.concern_tags_json, patient_product_list_items.concern_tags_json),
+        source_scan_id = COALESCE(excluded.source_scan_id, patient_product_list_items.source_scan_id),
+        updated_at = datetime('now')
+    `).run(
+      `ppli_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      listId,
+      productRef,
+      body.note ? String(body.note).slice(0, 800) : null,
+      JSON.stringify(Array.isArray(body.concern_tags) ? body.concern_tags : []),
+      body.source_scan_id ? String(body.source_scan_id) : null
+    );
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/routine/template', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    ensurePatientShelfInventoryColumns();
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const baseParams = patientId ? [patientId, sessionId] : [sessionId];
+    const whereSql = patientId
+      ? `WHERE (patient_id = ? OR session_id = ?) AND is_active = 1`
+      : `WHERE session_id = ? AND is_active = 1`;
+    const template = db.db.prepare(`
+      SELECT id, name, start_date, duration_days, repeat_cadence, repeat_days_of_week_json, is_active, created_at, updated_at
+      FROM patient_routine_templates
+      ${whereSql}
+      ORDER BY datetime(updated_at) DESC
+      LIMIT 1
+    `).get(...baseParams) || null;
+
+    const items = template
+      ? db.db.prepare(`
+          SELECT id, source_type, source_ref_id, product_name, product_brand, usage_time, frequency_rule, days_of_week_json, goal, step_order, is_active
+          FROM patient_routine_template_items
+          WHERE template_id = ? AND is_active = 1
+          ORDER BY step_order ASC, datetime(created_at) ASC
+        `).all(template.id).map((r) => ({
+          ...r,
+          days_of_week: safeParseJsonArray(r.days_of_week_json)
+        }))
+      : [];
+
+    const shelfProducts = loadPatientShelfProductRows(sessionId).map((r) => formatShelfProductApiRow(r));
+
+    return res.json({
+      success: true,
+      has_template: !!template,
+      template: template ? {
+        ...template,
+        duration_days: Number(template.duration_days) > 0 ? Number(template.duration_days) : 28,
+        repeat_cadence: String(template.repeat_cadence || 'daily').toLowerCase() === 'selected_days' ? 'selected_days' : 'daily',
+        repeat_days_of_week: safeParseJsonArray(template.repeat_days_of_week_json),
+        items
+      } : null,
+      shelf_products: shelfProducts
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/routine/template', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const name = String(body.name || 'My Routine').trim();
+    const items = Array.isArray(body.items) ? body.items : [];
+    const startDate = String(body.start_date || '').trim();
+    const durationDaysRaw = Number(body.duration_days);
+    const durationDays = Number.isFinite(durationDaysRaw) ? Math.max(1, Math.min(365, Math.round(durationDaysRaw))) : 28;
+    const repeatCadence = String(body.repeat_cadence || 'daily').trim().toLowerCase() === 'selected_days'
+      ? 'selected_days'
+      : 'daily';
+    const repeatDaysOfWeek = Array.isArray(body.repeat_days_of_week)
+      ? body.repeat_days_of_week.map((d) => String(d || '').trim().toLowerCase()).filter((d) => ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].includes(d))
+      : [];
+    if (startDate && !isIsoDateOnly(startDate)) {
+      return res.status(400).json({ success: false, error_code: 'INVALID_START_DATE', error: 'start_date must be YYYY-MM-DD.' });
+    }
+    if (repeatCadence === 'selected_days' && repeatDaysOfWeek.length === 0) {
+      return res.status(400).json({ success: false, error_code: 'REPEAT_DAYS_REQUIRED', error: 'Choose at least one repeat day.' });
+    }
+    if (!items.length) {
+      return res.status(400).json({ success: false, error_code: 'ITEMS_REQUIRED', error: 'Add at least one routine item.' });
+    }
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const templateId = `rtpl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    db.db.prepare(`UPDATE patient_routine_templates SET is_active = 0, updated_at = datetime('now') WHERE session_id = ?`).run(sessionId);
+    db.db.prepare(`
+      INSERT INTO patient_routine_templates (
+        id, session_id, patient_id, name, start_date, duration_days, repeat_cadence, repeat_days_of_week_json, is_active, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+    `).run(
+      templateId,
+      sessionId,
+      patientId || null,
+      name,
+      startDate || new Date().toISOString().slice(0, 10),
+      durationDays,
+      repeatCadence,
+      JSON.stringify(repeatDaysOfWeek)
+    );
+
+    const insertItem = db.db.prepare(`
+      INSERT INTO patient_routine_template_items (
+        id, template_id, source_type, source_ref_id, product_name, product_brand, usage_time, frequency_rule, days_of_week_json, goal, step_order, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))
+    `);
+    items.forEach((it, idx) => {
+      const productName = String(it.product_name || '').trim();
+      if (!productName) throw new Error(`Routine item ${idx + 1} is missing product_name.`);
+      insertItem.run(
+        `rti_${templateId}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        templateId,
+        String(it.source_type || 'shelf'),
+        it.source_ref_id ? String(it.source_ref_id) : null,
+        productName,
+        it.product_brand ? String(it.product_brand) : null,
+        it.usage_time ? String(it.usage_time) : null,
+        it.frequency_rule ? String(it.frequency_rule) : null,
+        JSON.stringify(Array.isArray(it.days_of_week) ? it.days_of_week : []),
+        it.goal ? String(it.goal) : null,
+        Number.isFinite(Number(it.step_order)) ? Number(it.step_order) : idx + 1
+      );
+    });
+
+    recordPatientPortalEvent(req, 'template_created', { template_id: templateId, items_saved: items.length });
+    return res.json({
+      success: true,
+      template_id: templateId,
+      items_saved: items.length,
+      schedule: {
+        start_date: startDate || new Date().toISOString().slice(0, 10),
+        duration_days: durationDays,
+        repeat_cadence: repeatCadence,
+        repeat_days_of_week: repeatDaysOfWeek
+      }
+    });
+  } catch (e) {
+    return res.status(400).json({ success: false, error_code: 'VALIDATION_ERROR', error: e.message });
+  }
+});
+
+app.get('/api/patient/routine/daily', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const date = String(req.query?.date || '').trim();
+    const targetDate = isIsoDateOnly(date) ? date : new Date().toISOString().slice(0, 10);
+    const whereSql = patientId
+      ? `WHERE (t.patient_id = ? OR t.session_id = ?) AND t.is_active = 1`
+      : `WHERE t.session_id = ? AND t.is_active = 1`;
+    const tParams = patientId ? [patientId, sessionId] : [sessionId];
+    const template = db.db.prepare(`
+      SELECT t.id, t.name
+      FROM patient_routine_templates t
+      ${whereSql}
+      ORDER BY datetime(t.updated_at) DESC
+      LIMIT 1
+    `).get(...tParams);
+    if (!template) return res.json({ success: true, has_template: false, daily_entry: null });
+
+    const dailyEntry = db.db.prepare(`
+      SELECT id, entry_date, skin_report, notes, completion_score, created_at, updated_at
+      FROM patient_routine_daily_entries
+      WHERE template_id = ? AND entry_date = ?
+      LIMIT 1
+    `).get(template.id, targetDate) || null;
+    const itemLogs = dailyEntry
+      ? db.db.prepare(`
+          SELECT id, template_item_id, completed, notes
+          FROM patient_routine_daily_item_logs
+          WHERE daily_entry_id = ?
+          ORDER BY datetime(created_at) ASC
+        `).all(dailyEntry.id)
+      : [];
+    const media = dailyEntry
+      ? db.db.prepare(`
+          SELECT id, media_type, patient_document_id, media_url, created_at
+          FROM patient_routine_daily_media
+          WHERE daily_entry_id = ?
+          ORDER BY datetime(created_at) DESC
+        `).all(dailyEntry.id)
+      : [];
+
+    return res.json({
+      success: true,
+      has_template: true,
+      template: { id: template.id, name: template.name },
+      daily_entry: dailyEntry ? { ...dailyEntry, item_logs: itemLogs, media } : null
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/patient/routine/daily', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const entryDate = String(body.entry_date || '').trim();
+    if (!isIsoDateOnly(entryDate)) {
+      return res.status(400).json({ success: false, error_code: 'INVALID_DATE', error: 'entry_date must be YYYY-MM-DD.' });
+    }
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const whereSql = patientId
+      ? `WHERE (patient_id = ? OR session_id = ?) AND is_active = 1`
+      : `WHERE session_id = ? AND is_active = 1`;
+    const tParams = patientId ? [patientId, sessionId] : [sessionId];
+    const template = db.db.prepare(`
+      SELECT id FROM patient_routine_templates
+      ${whereSql}
+      ORDER BY datetime(updated_at) DESC
+      LIMIT 1
+    `).get(...tParams);
+    if (!template) {
+      return res.status(400).json({ success: false, error_code: 'NO_TEMPLATE', error: 'Create a routine template first.' });
+    }
+
+    const logs = Array.isArray(body.item_logs) ? body.item_logs : [];
+    const completionCount = logs.filter((l) => Number(l.completed) === 1 || l.completed === true).length;
+    const completionScore = logs.length ? Math.round((completionCount / logs.length) * 100) : 0;
+    const existing = db.db.prepare(`
+      SELECT id FROM patient_routine_daily_entries
+      WHERE template_id = ? AND entry_date = ?
+      LIMIT 1
+    `).get(template.id, entryDate);
+    const dailyEntryId = existing?.id || `rde_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    if (existing) {
+      db.db.prepare(`
+        UPDATE patient_routine_daily_entries
+        SET skin_report = ?, notes = ?, completion_score = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(
+        body.skin_report ? String(body.skin_report) : null,
+        body.notes ? String(body.notes) : null,
+        completionScore,
+        dailyEntryId
+      );
+      db.db.prepare(`DELETE FROM patient_routine_daily_item_logs WHERE daily_entry_id = ?`).run(dailyEntryId);
+    } else {
+      db.db.prepare(`
+        INSERT INTO patient_routine_daily_entries (
+          id, template_id, session_id, patient_id, entry_date, skin_report, notes, completion_score, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(
+        dailyEntryId,
+        template.id,
+        sessionId,
+        patientId || null,
+        entryDate,
+        body.skin_report ? String(body.skin_report) : null,
+        body.notes ? String(body.notes) : null,
+        completionScore
+      );
+    }
+
+    const insertLog = db.db.prepare(`
+      INSERT INTO patient_routine_daily_item_logs (id, daily_entry_id, template_item_id, completed, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `);
+    logs.forEach((log, idx) => {
+      insertLog.run(
+        `rdl_${dailyEntryId}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        dailyEntryId,
+        log.template_item_id ? String(log.template_item_id) : null,
+        (Number(log.completed) === 1 || log.completed === true) ? 1 : 0,
+        log.notes ? String(log.notes) : null
+      );
+    });
+
+    recordPatientPortalEvent(req, 'daily_log_saved', { daily_entry_id: dailyEntryId, entry_date: entryDate, completion_score: completionScore });
+    if (completionScore >= 100) {
+      recordPatientPortalEvent(req, 'routine_completed_day', { daily_entry_id: dailyEntryId, entry_date: entryDate });
+    }
+    return res.json({ success: true, daily_entry_id: dailyEntryId, completion_score: completionScore });
+  } catch (e) {
+    return res.status(400).json({ success: false, error_code: 'VALIDATION_ERROR', error: e.message });
+  }
+});
+
+app.post('/api/patient/routine/daily/:id/media-link', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    const dailyEntryId = String(req.params?.id || '').trim();
+    if (!dailyEntryId) return res.status(400).json({ success: false, error: 'daily entry id is required' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const mediaType = String(body.media_type || 'image').trim();
+    const patientDocumentId = body.patient_document_id ? String(body.patient_document_id).trim() : null;
+    const mediaUrl = body.media_url ? String(body.media_url).trim() : null;
+    if (!patientDocumentId && !mediaUrl) {
+      return res.status(400).json({ success: false, error_code: 'MEDIA_REQUIRED', error: 'patient_document_id or media_url is required.' });
+    }
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const entry = db.db.prepare(`SELECT id, patient_id, session_id FROM patient_routine_daily_entries WHERE id = ? LIMIT 1`).get(dailyEntryId);
+    if (!entry) return res.status(404).json({ success: false, error: 'Daily entry not found.' });
+    const sessionId = String(req.patientSessionId || '');
+    const ownsEntry = patientId
+      ? (String(entry.patient_id || '') === String(patientId) || String(entry.session_id || '') === sessionId)
+      : String(entry.session_id || '') === sessionId;
+    if (!ownsEntry) {
+      recordPatientPortalEvent(req, 'daily_media_link_forbidden', { daily_entry_id: dailyEntryId });
+      return res.status(403).json({ success: false, error: 'Not allowed to modify this daily entry.' });
+    }
+
+    const mediaId = `rdm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    db.db.prepare(`
+      INSERT INTO patient_routine_daily_media (id, daily_entry_id, media_type, patient_document_id, media_url, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `).run(mediaId, dailyEntryId, mediaType, patientDocumentId, mediaUrl);
+    recordPatientPortalEvent(req, 'picture_of_day_linked', { daily_entry_id: dailyEntryId, media_id: mediaId });
+    return res.json({ success: true, media_id: mediaId });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/journal/calendar-range', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const startRaw = String(req.query?.start || '').trim();
+    const endRaw = String(req.query?.end || '').trim();
+    const tz = String(req.query?.timezone || '').trim() || 'UTC';
+
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const defaultStart = isoFromLocalDate(currentMonthStart);
+    const defaultEnd = isoFromLocalDate(new Date(now.getFullYear(), now.getMonth() + 2, 0));
+    const startIso = isIsoDateOnly(startRaw) ? startRaw : defaultStart;
+    const endIso = isIsoDateOnly(endRaw) ? endRaw : defaultEnd;
+    const startDate = localDateFromIso(startIso);
+    const endDate = localDateFromIso(endIso);
+    if (!startDate || !endDate || startDate > endDate) {
+      return res.status(400).json({ success: false, error_code: 'INVALID_RANGE', error: 'start/end must be valid YYYY-MM-DD and start <= end.' });
+    }
+    const spanDays = Math.floor((endDate.getTime() - startDate.getTime()) / 86400000) + 1;
+    if (spanDays > 186) {
+      return res.status(400).json({ success: false, error_code: 'RANGE_TOO_LARGE', error: 'Range cannot exceed 186 days.' });
+    }
+
+    const whereSql = patientId
+      ? `WHERE (patient_id = ? OR session_id = ?) AND is_active = 1`
+      : `WHERE session_id = ? AND is_active = 1`;
+    const tParams = patientId ? [patientId, sessionId] : [sessionId];
+    const template = db.db.prepare(`
+      SELECT id, name, start_date, duration_days, repeat_cadence, repeat_days_of_week_json
+      FROM patient_routine_templates
+      ${whereSql}
+      ORDER BY datetime(updated_at) DESC
+      LIMIT 1
+    `).get(...tParams);
+    if (!template) {
+      return res.json({
+        success: true,
+        model_version: 1,
+        timezone: tz,
+        has_template: false,
+        template: null,
+        range: { start: startIso, end: endIso, days: spanDays },
+        days: []
+      });
+    }
+
+    const entries = db.db.prepare(`
+      SELECT id, entry_date, completion_score
+      FROM patient_routine_daily_entries
+      WHERE template_id = ? AND entry_date BETWEEN ? AND ?
+      ORDER BY entry_date ASC
+    `).all(template.id, startIso, endIso);
+    const entryByDate = new Map(entries.map((e) => [e.entry_date, e]));
+    const mediaRows = db.db.prepare(`
+      SELECT e.entry_date, m.patient_document_id, m.media_url, m.created_at
+      FROM patient_routine_daily_media m
+      JOIN patient_routine_daily_entries e ON e.id = m.daily_entry_id
+      WHERE e.template_id = ? AND e.entry_date BETWEEN ? AND ?
+      ORDER BY e.entry_date ASC, datetime(m.created_at) DESC
+    `).all(template.id, startIso, endIso);
+    const mediaByDate = new Map();
+    for (const m of mediaRows) {
+      if (!m || !m.entry_date || mediaByDate.has(m.entry_date)) continue;
+      mediaByDate.set(m.entry_date, m);
+    }
+
+    const cadence = String(template.repeat_cadence || 'daily').toLowerCase() === 'selected_days' ? 'selected_days' : 'daily';
+    const selectedDays = new Set(safeParseJsonArray(template.repeat_days_of_week_json).map((d) => String(d || '').toLowerCase()));
+    const tplStart = localDateFromIso(String(template.start_date || '').trim() || startIso);
+    const tplDuration = Math.max(1, Math.min(365, Number(template.duration_days) || 28));
+    const tplEnd = new Date(tplStart.getTime());
+    tplEnd.setDate(tplEnd.getDate() + tplDuration - 1);
+
+    const days = enumerateIsoDates(startIso, endIso).map((iso) => {
+      const d = localDateFromIso(iso);
+      const inWindow = !!d && d >= tplStart && d <= tplEnd;
+      const isRoutineDay = inWindow && (cadence === 'daily' || selectedDays.has(weekdayKeyForIsoLocal(iso)));
+      const e = entryByDate.get(iso);
+      const m = mediaByDate.get(iso);
+      const patientDocumentId = m && m.patient_document_id ? String(m.patient_document_id) : null;
+      const thumbnailUrl = m && m.media_url
+        ? String(m.media_url)
+        : (patientId && patientDocumentId ? issuePatientDocumentDownloadUrl(req, patientId, patientDocumentId) : null);
+      return {
+        date: iso,
+        is_routine_day: !!isRoutineDay,
+        has_entry: !!e,
+        completion_score: e ? Math.max(0, Math.min(100, Number(e.completion_score) || 0)) : 0,
+        has_media: !!m,
+        thumbnail_url: thumbnailUrl || null,
+        patient_document_id: patientDocumentId,
+        media_url: m && m.media_url ? String(m.media_url) : null
+      };
+    });
+
+    return res.json({
+      success: true,
+      model_version: 1,
+      timezone: tz,
+      has_template: true,
+      template: {
+        id: template.id,
+        name: template.name,
+        start_date: template.start_date,
+        duration_days: tplDuration,
+        repeat_cadence: cadence,
+        repeat_days_of_week: Array.from(selectedDays)
+      },
+      range: { start: startIso, end: endIso, days: spanDays },
+      days
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error_code: 'SERVER_ERROR', error: e.message });
+  }
+});
+
+app.post('/api/patient/analytics/event', (req, res, next) => apiLimiter(req, res, next), express.json(), requirePatientSession, (req, res) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const event = String(body.event || '').trim();
+    const allowedClient = new Set(['home_summary_viewed']);
+    if (!allowedClient.has(event)) {
+      return res.status(400).json({ success: false, error_code: 'INVALID_EVENT', error: 'Unsupported analytics event.' });
+    }
+    let metadata = body.metadata;
+    if (metadata != null && typeof metadata !== 'object') metadata = {};
+    recordPatientPortalEvent(req, event, metadata || {});
+    return res.json({ success: true });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/health/catalog', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, (req, res) => {
+  try {
+    const hasProductsCatalog = dbTableExists('products_catalog');
+    const hasObf = dbTableExists('products_obf_index');
+    const hasOff = dbTableExists('products_off_index');
+    const catalog_ok = Boolean(hasProductsCatalog || hasObf || hasOff);
+    return res.json({
+      success: true,
+      catalog_ok,
+      indexes: {
+        products_catalog: hasProductsCatalog,
+        products_obf_index: hasObf,
+        products_off_index: hasOff
+      },
+      message: catalog_ok
+        ? null
+        : 'Product lookup indexes are not available on this server. Barcode and name search may be limited until indexes are installed.'
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/patient/home/progress-summary', (req, res, next) => apiLimiter(req, res, next), requirePatientSession, async (req, res) => {
+  try {
+    ensureRoutineTables();
+    const sessionId = req.patientSessionId;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const whereSql = patientId
+      ? `WHERE (patient_id = ? OR session_id = ?) AND is_active = 1`
+      : `WHERE session_id = ? AND is_active = 1`;
+    const params = patientId ? [patientId, sessionId] : [sessionId];
+    const template = db.db.prepare(`
+      SELECT id, name FROM patient_routine_templates
+      ${whereSql}
+      ORDER BY datetime(updated_at) DESC
+      LIMIT 1
+    `).get(...params);
+    if (!template) {
+      return res.json({
+        success: true,
+        has_template: false,
+        summary: {
+          adherence_pct: 0,
+          upcoming_checkins: 0,
+          product_uses_logged: 0,
+          in_progress: 0,
+          upcoming: 0,
+          total_tasks: 0
+        },
+        cards: []
+      });
+    }
+    const items = db.db.prepare(`
+      SELECT id, product_name, usage_time, goal, step_order
+      FROM patient_routine_template_items
+      WHERE template_id = ? AND is_active = 1
+      ORDER BY step_order ASC, datetime(created_at) ASC
+    `).all(template.id);
+    const now = new Date();
+    const end = new Date(now);
+    end.setDate(end.getDate() + 6);
+    const startIso = now.toISOString().slice(0, 10);
+    const endIso = end.toISOString().slice(0, 10);
+    const weekEntries = db.db.prepare(`
+      SELECT id, entry_date, completion_score
+      FROM patient_routine_daily_entries
+      WHERE template_id = ? AND entry_date BETWEEN ? AND ?
+      ORDER BY entry_date ASC
+    `).all(template.id, startIso, endIso);
+    const entryByDate = new Map(weekEntries.map((r) => [r.entry_date, r]));
+    const enumerateDates = (fromIso, toIso) => {
+      const out = [];
+      let d = new Date(`${fromIso}T12:00:00.000Z`);
+      const endD = new Date(`${toIso}T12:00:00.000Z`);
+      while (d <= endD) {
+        out.push(d.toISOString().slice(0, 10));
+        d = new Date(d.getTime());
+        d.setUTCDate(d.getUTCDate() + 1);
+      }
+      return out;
+    };
+    const weekDates = enumerateDates(startIso, endIso);
+    const nDays = weekDates.length || 7;
+    const scoreFor = (iso) => {
+      const row = entryByDate.get(iso);
+      return row ? Math.max(0, Math.min(100, Number(row.completion_score) || 0)) : 0;
+    };
+    const adherencePct = nDays
+      ? Math.round(weekDates.reduce((acc, iso) => acc + scoreFor(iso), 0) / nDays)
+      : 0;
+    let upcomingCheckins = 0;
+    for (const iso of weekDates) {
+      const row = entryByDate.get(iso);
+      if (!row || scoreFor(iso) < 100) upcomingCheckins += 1;
+    }
+    const futureDates = weekDates.slice(1);
+    let upcoming = 0;
+    for (const iso of futureDates) {
+      const row = entryByDate.get(iso);
+      if (!row || scoreFor(iso) < 100) upcoming += 1;
+    }
+    const completedItemLogs = db.db.prepare(`
+        SELECT COUNT(*) AS n
+        FROM patient_routine_daily_item_logs l
+        INNER JOIN patient_routine_daily_entries e ON e.id = l.daily_entry_id
+        WHERE e.template_id = ? AND e.entry_date BETWEEN ? AND ? AND (l.completed = 1 OR l.completed = true)
+      `).get(template.id, startIso, endIso);
+    const todayIso = weekDates[0] || startIso;
+    const todayEntry = entryByDate.get(todayIso);
+    let inProgress = 0;
+    if (!items.length) {
+      inProgress = 0;
+    } else if (!todayEntry) {
+      inProgress = items.length;
+    } else {
+      const logsToday = db.db.prepare(`
+          SELECT template_item_id, completed
+          FROM patient_routine_daily_item_logs
+          WHERE daily_entry_id = ?
+        `).all(todayEntry.id);
+      const done = new Set(
+        logsToday
+          .filter((l) => Number(l.completed) === 1 || l.completed === true)
+          .map((l) => l.template_item_id)
+      );
+      inProgress = items.filter((it) => !done.has(it.id)).length;
+    }
+    const itemDays = db.db.prepare(`
+        SELECT l.template_item_id AS id, COUNT(DISTINCT e.entry_date) AS days_done
+        FROM patient_routine_daily_item_logs l
+        INNER JOIN patient_routine_daily_entries e ON e.id = l.daily_entry_id
+        WHERE e.template_id = ? AND e.entry_date BETWEEN ? AND ? AND (l.completed = 1 OR l.completed = true)
+        GROUP BY l.template_item_id
+      `).all(template.id, startIso, endIso);
+    const daysByItem = new Map(itemDays.map((r) => [r.id, Number(r.days_done) || 0]));
+    const cards = items.slice(0, 6).map((it, idx) => {
+      const daysDone = daysByItem.get(it.id) || 0;
+      const progress_pct = nDays ? Math.round(Math.min(100, (daysDone / nDays) * 100)) : 0;
+      return {
+        id: it.id,
+        title: it.product_name || `Routine Step ${idx + 1}`,
+        subtitle: it.goal || it.usage_time || 'Routine task',
+        date_label: 'Last 7 days',
+        progress_pct
+      };
+    });
+    return res.json({
+      success: true,
+      has_template: true,
+      template: { id: template.id, name: template.name },
+      summary: {
+        adherence_pct: adherencePct,
+        upcoming_checkins: upcomingCheckins,
+        product_uses_logged: Number(completedItemLogs.n) || 0,
+        in_progress: inProgress,
+        upcoming,
+        total_tasks: items.length
+      },
+      cards
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+});
 
 function buildDocumentReferenceFromPatientDocRow(row, req) {
   const patientId = row.patient_id;
@@ -1716,6 +3684,10 @@ app.get('/waitlist', (req, res) => {
   const hostname = getHostname(req);
   if (hostname === 'api.doclittle.site' || hostname === 'api.doclittle.azurewebsites.net') {
     return res.status(404).json({ error: 'Not found on API subdomain' });
+  }
+  // Local dev bridge: landing "Get The App" should continue into patient auth.
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return res.redirect(302, '/patients/patient-login.html');
   }
   return res.sendFile(getUnifiedDashboardPath('waitlist.html'));
 });
@@ -9815,14 +11787,16 @@ app.get('/api/patient/hsa-wallet/config', (req, res) => {
  * Patient Wallet - Deposit money (test/sandbox)
  * POST /api/patient/wallet/deposit
  */
-app.post('/api/patient/wallet/deposit', async (req, res) => {
+app.post('/api/patient/wallet/deposit', apiLimiter, requirePatientSession, blockWalletWhenDisabled, async (req, res) => {
   try {
-    const { patientId, amount, method } = req.body;
+    const { patientId: sessionPatientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const { amount, method } = req.body || {};
+    const patientId = sessionPatientId;
 
     if (!patientId || !amount || amount <= 0) {
       return res.status(400).json({
         success: false,
-        error: 'patientId and amount (positive number) are required'
+        error: 'Authenticated patient and amount (positive number) are required'
       });
     }
 
@@ -9871,7 +11845,6 @@ app.post('/api/patient/wallet/deposit', async (req, res) => {
       // Get merchant_id from tenant context if available
       const merchantId = req.tenant?.merchant?.id ||
         req.tenant?.clinic?.merchant_id ||
-        req.body?.merchant_id ||
         null;
 
       const walletResult = await CircleService.getOrCreatePatientWallet(fhirPatientId, {
@@ -9890,8 +11863,7 @@ app.post('/api/patient/wallet/deposit', async (req, res) => {
 
       // Update patientId to use FHIR resource_id for consistency
       if (fhirPatientId !== patientId) {
-        console.log(`🔄 Updated patientId from ${patientId} to FHIR resource_id ${fhirPatientId}`);
-        patientId = fhirPatientId;
+        console.log(`🔄 Wallet used FHIR Patient resource_id ${fhirPatientId} for ${patientId}`);
       }
     }
 
@@ -10357,14 +12329,15 @@ app.post('/api/patient/wallet/deposit', async (req, res) => {
  * Patient Wallet - Get transaction history
  * GET /api/patient/wallet/transactions
  */
-app.get('/api/patient/wallet/transactions', async (req, res) => {
+app.get('/api/patient/wallet/transactions', apiLimiter, requirePatientSession, blockWalletWhenDisabled, async (req, res) => {
   try {
-    const { patientId, filter = 'all' } = req.query;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const { filter = 'all' } = req.query;
 
     if (!patientId) {
       return res.status(400).json({
         success: false,
-        error: 'patientId is required'
+        error: 'Authenticated patient is required'
       });
     }
 
@@ -10493,14 +12466,15 @@ app.get('/api/patient/wallet/transactions', async (req, res) => {
  * Patient Wallet - Pay claim using wallet balance
  * POST /api/patient/wallet/pay-claim
  */
-app.post('/api/patient/wallet/pay-claim', async (req, res) => {
+app.post('/api/patient/wallet/pay-claim', apiLimiter, requirePatientSession, blockWalletWhenDisabled, async (req, res) => {
   try {
-    const { claimId, patientId } = req.body;
+    const { patientId } = resolvePatientIdFromSession(req.patientSession || {});
+    const { claimId } = req.body || {};
 
     if (!claimId || !patientId) {
       return res.status(400).json({
         success: false,
-        error: 'claimId and patientId are required'
+        error: 'claimId and authenticated patient are required'
       });
     }
 
@@ -10510,6 +12484,12 @@ app.post('/api/patient/wallet/pay-claim', async (req, res) => {
       return res.status(404).json({
         success: false,
         error: 'Claim not found'
+      });
+    }
+    if (claim.patient_id && String(claim.patient_id) !== String(patientId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Not allowed to pay this claim'
       });
     }
 
@@ -14254,7 +16234,8 @@ app.post('/api/patient/verify/confirm', botGuard, authLimiter, otpConfirmLimiter
       });
       issueCsrfCookie(res);
       // Determine onboarding completeness to drive web redirect
-      let onboarding_complete = false;
+      let onboarding_profile_complete = false;
+      let onboarding_step3_complete = false;
       let missing_fields = ['first_name', 'last_name', 'dob', 'phone', 'country', 'city'];
       try {
         const row = (result.patient_id && db.getFHIRPatient) ? db.getFHIRPatient(result.patient_id) : null;
@@ -14264,16 +16245,22 @@ app.post('/api/patient/verify/confirm', botGuard, authLimiter, otpConfirmLimiter
         if (resource && PatientIntakeService?.canonicalFromPatientResource) {
           const canonical = PatientIntakeService.canonicalFromPatientResource(resource);
           const status = PatientIntakeService.onboardingStatusFromCanonical(canonical);
-          onboarding_complete = !!status.onboarding_complete;
+          onboarding_profile_complete = !!status.onboarding_complete;
           missing_fields = status.missing_fields || missing_fields;
         }
       } catch (_) {}
+      const step3 = getPatientStep3Status({ sessionId: result.session_id, patientId: result.patient_id || null });
+      onboarding_step3_complete = !!step3.completed;
+      const onboarding_complete = onboarding_profile_complete && onboarding_step3_complete;
       res.json({
         success: true,
         session_id: result.session_id,
         patient_id: result.patient_id,
         email: result.email,
         created_patient: !!result.created_patient,
+        onboarding_profile_complete,
+        onboarding_step3_complete,
+        onboarding_step3_reason: step3.reason || null,
         onboarding_complete,
         missing_fields
       });
@@ -15664,12 +17651,23 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     const productName = String(pd.product_name || pd.name || '').trim();
     const categoryRoute = String(pd.category_route || pd.route || '').trim();
     const barcode = String(pd.barcode || pd.code || '').trim();
-    const ingredients = String(pd.ingredients_text || '').trim();
     const summaryBits = [];
     if (productName) summaryBits.push(`product_name=${productName}`);
     if (categoryRoute) summaryBits.push(`category_route=${categoryRoute}`);
     if (barcode) summaryBits.push(`barcode=${barcode}`);
-    if (ingredients) summaryBits.push(`ingredients_text=${ingredients.slice(0, 220)}`);
+    const ingredientSummary = pd.ingredient_summary && typeof pd.ingredient_summary === 'object'
+      ? pd.ingredient_summary
+      : null;
+    const groundingMeta = pd.grounding_metadata && typeof pd.grounding_metadata === 'object'
+      ? pd.grounding_metadata
+      : null;
+    if (ingredientSummary) {
+      summaryBits.push(`ingredient_summary=${JSON.stringify(ingredientSummary)}`);
+      if (groundingMeta) summaryBits.push(`grounding_metadata=${JSON.stringify(groundingMeta)}`);
+    } else {
+      const ingredients = String(pd.ingredients_text || '').trim();
+      if (ingredients) summaryBits.push(`ingredients_text=${ingredients.slice(0, 220)}`);
+    }
     if (summaryBits.length === 0) return trimmedMessage;
     return `${trimmedMessage}\n\n[Structured scan context from prior thread event]\n${summaryBits.join('\n')}`;
   })();
@@ -15747,7 +17745,8 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     portalSessionId,
     preferredLanguage: effectivePreferredLanguage || null,
     scanChatMode: scanChatModeActive,
-    plannerDecision
+    plannerDecision,
+    scanGrounding: latestBarcodeContextEvent?.product_data || null
   });
   if (req.path === '/api/public/landing-assistant/turn') {
     result.reply = await translateReplyIfNeeded(result.reply, effectivePreferredLanguage);
@@ -15866,6 +17865,26 @@ async function runKellyTriageTurnForHttpRequest(req, { mappedPatientId, email, p
     result.reply =
       `${routeHint}for ${productName}, "low risk" usually means low chance of harm for typical use, while "generally safe for children" is a stricter pediatric safety bar. ` +
       `${ingredientLine}If you want, I can give a short child-safety interpretation specific to this product category.`;
+  }
+  if (isLandingRoute && hasScanContextPayload) {
+    const pd = latestBarcodeContextEvent.product_data || {};
+    const lowConfidence =
+      pd?.grounding_metadata?.low_confidence === true ||
+      (() => {
+        const total = Number(pd?.ingredient_summary?.total_ingredients || 0);
+        const unresolved = Number(pd?.ingredient_summary?.confidence_distribution?.low_or_unresolved || 0);
+        return total > 0 && (unresolved / total) > 0.3;
+      })();
+    if (lowConfidence) {
+      const replyLc = String(result.reply || '').toLowerCase();
+      const hasFallbackHint =
+        replyLc.includes('low confidence') ||
+        replyLc.includes('manual ingredient') ||
+        replyLc.includes('label photo');
+      if (!hasFallbackHint) {
+        result.reply = `${String(result.reply || '').trim()} I have low-confidence ingredient matching for this scan, so please upload a clear label photo or paste the ingredient list to confirm before any strong safety recommendation.`.trim();
+      }
+    }
   }
   if (isLandingRoute && hasScanContextPayload) {
     const replyLc = String(result.reply || '').toLowerCase();
@@ -17476,7 +19495,7 @@ app.post(
 );
 
 // POST /api/patient/orchestrate — Alias for triage/message (deprecated: use triage/message) (P-1: CSRF)
-app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
+app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, blockChatWhenDisabled, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const out = await handlePatientTriageMessage(req);
@@ -17486,7 +19505,7 @@ app.post('/api/patient/orchestrate', apiLimiter, requirePatientSession, requireC
   }
 });
 
-app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
+app.post('/api/patient/triage/message', apiLimiter, requirePatientSession, blockChatWhenDisabled, requireCsrfForCookieAuth, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
     await rotatePatientSessionIfNeeded(req, res);
     const out = await handlePatientTriageMessage(req);
@@ -17801,6 +19820,28 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
       categoryRouteRuleId: categoryEval?.active?.rule_id || null,
       catalogSource: out?.normalized?.source || 'open_beauty_facts'
     });
+    const enrichmentProductId = `obf:${out.normalized?.barcode || barcode}`;
+    const ingredientsEnriched = IngredientEnrichmentService.getEnrichedIngredients(enrichmentProductId);
+    const ingredientSummary = IngredientEnrichmentService.deriveIngredientSummary(ingredientsEnriched);
+    const lowConfidence = (() => {
+      const total = Number(ingredientSummary?.total_ingredients || 0);
+      const unresolved = Number(ingredientSummary?.confidence_distribution?.low_or_unresolved || 0);
+      return total > 0 && (unresolved / total) > 0.3;
+    })();
+    const groundingMetadata = {
+      enrichment_version:
+        ingredientsEnriched.find((i) => i && i.enrichment_version)?.enrichment_version || null,
+      source_fields: [
+        'products_obf_index.ingredients_text',
+        'products_obf_index.ingredients_tags_json',
+        'products_obf_index.ingredients_analysis_tags_json',
+        'product_ingredients',
+        'cosing_ingredients'
+      ],
+      confidence_distribution: ingredientSummary?.confidence_distribution || {},
+      low_confidence: lowConfidence,
+      fallback_mode: lowConfidence ? 'ask_for_label_or_manual_ingredients' : 'structured_enrichment'
+    };
     try {
       const tileEntries = Object.entries(scanSummary?.tiles || {});
       tileEntries.forEach(([tile, data]) => {
@@ -17825,6 +19866,9 @@ app.get('/api/public/beautyfacts/:barcode', apiLimiter, async (req, res) => {
       ...buildCategoryRoutePayload(categoryEval),
       ...(includeScanSummary ? { scan_summary: scanSummary } : {}),
       ingredient_flags: ingredientFlags,
+      ingredients_enriched: ingredientsEnriched,
+      ingredient_summary: ingredientSummary,
+      grounding_metadata: groundingMetadata,
       sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
       data_source: dataSource,
       ...(persisted ? { taxonomy: persisted } : {}),
@@ -17967,6 +20011,28 @@ app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
       categoryRouteRuleId: categoryEval?.active?.rule_id || null,
       catalogSource: out?.normalized?.source || 'open_food_facts'
     });
+    const enrichmentProductId = `off:${out.normalized?.barcode || barcode}`;
+    const ingredientsEnriched = IngredientEnrichmentService.getEnrichedIngredients(enrichmentProductId);
+    const ingredientSummary = IngredientEnrichmentService.deriveIngredientSummary(ingredientsEnriched);
+    const lowConfidence = (() => {
+      const total = Number(ingredientSummary?.total_ingredients || 0);
+      const unresolved = Number(ingredientSummary?.confidence_distribution?.low_or_unresolved || 0);
+      return total > 0 && (unresolved / total) > 0.3;
+    })();
+    const groundingMetadata = {
+      enrichment_version:
+        ingredientsEnriched.find((i) => i && i.enrichment_version)?.enrichment_version || null,
+      source_fields: [
+        'products_off_index.ingredients_text',
+        'products_off_index.ingredients_tags_json',
+        'products_off_index.ingredients_analysis_tags_json',
+        'product_ingredients',
+        'cosing_ingredients'
+      ],
+      confidence_distribution: ingredientSummary?.confidence_distribution || {},
+      low_confidence: lowConfidence,
+      fallback_mode: lowConfidence ? 'ask_for_label_or_manual_ingredients' : 'structured_enrichment'
+    };
     try {
       const tileEntries = Object.entries(scanSummary?.tiles || {});
       tileEntries.forEach(([tile, data]) => {
@@ -17991,6 +20057,9 @@ app.get('/api/public/foodfacts/:barcode', apiLimiter, async (req, res) => {
       ...buildCategoryRoutePayload(categoryEval),
       ...(includeScanSummary ? { scan_summary: scanSummary } : {}),
       ingredient_flags: ingredientFlags,
+      ingredients_enriched: ingredientsEnriched,
+      ingredient_summary: ingredientSummary,
+      grounding_metadata: groundingMetadata,
       sparse_data: scanQuality.missing.includes('ingredients') || scanQuality.missing.includes('categories'),
       data_source: dataSource,
       request_id: req.id
@@ -18187,6 +20256,25 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
         SnapshotService.buildSessionResultSnapshot({ sessionId, source: 'barcode_scan_thread_event' });
       } catch (snapErr) {
         console.warn('[landing-assistant] thread-event snapshot:', snapErr?.message || snapErr);
+      }
+      try {
+        const customerSessionId = req.cookies?.customer_session;
+        if (customerSessionId) {
+          const customerSession = db.getCustomerSession && db.getCustomerSession(customerSessionId);
+          const customer = customerSession?.customer_id ? db.getCustomer(customerSession.customer_id) : null;
+          if (customer?.id && customer?.email_verified) {
+            upsertCustomerProductScan({
+              customerId: customer.id,
+              merchantId: customer.merchant_id || null,
+              landingSessionId: sessionId,
+              barcode: productData?.barcode || productData?.code || productData?.normalized?.barcode,
+              product: productData,
+              scannedAt: new Date().toISOString()
+            });
+          }
+        }
+      } catch (claimErr) {
+        console.warn('[landing-assistant] thread-event customer_products upsert:', claimErr?.message || claimErr);
       }
     }
     return res.json({
@@ -18771,7 +20859,7 @@ app.post('/api/public/checkout-chat/payment-session/refresh', apiLimiter, expres
 });
 
 // GET /api/patient/triage/history — Fetch conversation history for resume (orch-5)
-app.get('/api/patient/triage/history', apiLimiter, requirePatientSession, async (req, res) => {
+app.get('/api/patient/triage/history', apiLimiter, requirePatientSession, blockChatWhenDisabled, async (req, res) => {
   try {
     const session_id = (req.query.session_id || '').toString().trim();
     if (!session_id) return res.json({ success: true, history: [], state: null });

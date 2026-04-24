@@ -3,28 +3,79 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#1e40af" />
+  <meta name="theme-color" content="#314DB6" />
   <link rel="manifest" href="../manifest.webmanifest" />
-  <title>Onboarding - Consʌlt Patient Portal</title>
+  <title>Onboarding - Skin &amp; Care Patient Portal</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="../assets/js/config.js" defer></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Gloock&display=swap');
     body {
-      background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+      background: linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%);
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 20px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
     .card {
       background: white;
-      border-radius: 16px;
+      border-radius: 26px;
+      border: 1px solid #e7ebf4;
+      box-shadow: 0 18px 45px rgba(21, 36, 88, 0.09);
       padding: 24px;
-      max-width: 520px;
+      max-width: 720px;
       width: 100%;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+    .brand-head {
+      position: relative;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #edf1f8;
+      margin-bottom: 18px;
+    }
+    .brand-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .brand-logo {
+      width: 76px;
+      height: 76px;
+      min-width: 76px;
+      min-height: 76px;
+      object-fit: contain;
+      flex-shrink: 0;
+      display: block;
+    }
+    .brand-wordmark {
+      font-family: 'Gloock', Georgia, 'Times New Roman', serif;
+      font-size: 2.85rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      color: #121a30;
+      margin: 0;
+    }
+    .back-btn {
+      position: absolute;
+      right: 0;
+      top: 10px;
+      border: 1px solid #dbe3f2;
+      background: #ffffff;
+      color: #2f3d63;
+      border-radius: 999px;
+      min-height: 38px;
+      padding: 0 14px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .back-btn:hover {
+      background: #f5f8ff;
+      border-color: #c7d3eb;
     }
     .steps {
       display: flex;
@@ -39,13 +90,25 @@
       padding: 6px 8px;
       border-radius: 999px;
       text-align: center;
-      background: #e5e7eb;
-      color: #4b5563;
+      background: #eef1f8;
+      color: #5e6c84;
       font-weight: 600;
     }
     .step-pill.active {
-      background: #1e40af;
+      background: #314DB6;
       color: white;
+    }
+    .onboarding-title {
+      margin: 0 0 8px 0;
+      font-size: 3rem;
+      font-family: 'Gloock', Georgia, 'Times New Roman', serif;
+      line-height: 1.05;
+      color: #121a30;
+    }
+    .onboarding-sub {
+      margin: 0 0 16px 0;
+      font-size: 1.15rem;
+      color: #4b5870;
     }
     .form-group {
       margin-bottom: 16px;
@@ -65,7 +128,7 @@
     }
     .form-input:focus, .form-select:focus {
       outline: none;
-      border-color: #1e40af;
+      border-color: #314DB6;
       box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
     }
     .btn-row {
@@ -83,9 +146,18 @@
       cursor: pointer;
     }
     .btn-primary {
-      background: #1e40af;
+      background: linear-gradient(135deg, #2f48aa 0%, #3d5ed3 100%);
       color: white;
       flex: 1;
+    }
+    .btn-save-product {
+      background: #dfe4f6;
+      color: #2f3fa4;
+      border: 1px solid #b7c4f7;
+      flex: 1;
+    }
+    .btn-save-product:hover {
+      background: #d4dbf4;
     }
     .btn-secondary {
       background: #e5e7eb;
@@ -108,21 +180,44 @@
       border: 1px solid #bbf7d0;
     }
     .hidden { display: none; }
+    @media (max-width: 768px) {
+      .brand-wordmark { font-size: 2.2rem; }
+      .onboarding-title { font-size: 2.35rem; }
+      .back-btn { top: 8px; }
+    }
+    @media (max-width: 480px) {
+      .card { padding: 18px; border-radius: 20px; }
+      .brand-logo { width: 56px; height: 56px; min-width: 56px; min-height: 56px; }
+      .brand-wordmark { font-size: 1.6rem; }
+      .onboarding-title { font-size: 1.9rem; }
+      .onboarding-sub { font-size: 1rem; }
+      .back-btn {
+        min-height: 34px;
+        padding: 0 12px;
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <div style="text-align:center; margin-bottom: 12px;">
-      <div style="font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; letter-spacing: -2px; font-size: 44px; color: #1e40af; line-height: 1;">Consʌlt</div>
+    <div class="brand-head">
+      <button type="button" class="back-btn" id="topBackBtn" aria-label="Back to sign in">
+        Back
+      </button>
+      <div class="brand-row">
+        <img class="brand-logo" src="/images/branding/logo-panda.png" alt="Skin and Care panda logo" />
+        <h1 class="brand-wordmark">Skin &amp; Care</h1>
+      </div>
     </div>
     <div class="steps">
       <div class="step-pill active" id="step-pill-1">1. Your details</div>
       <div class="step-pill" id="step-pill-2">2. Insurance</div>
-      <div class="step-pill" id="step-pill-3">3. Documents</div>
+      <div class="step-pill" id="step-pill-3">3. Your routine</div>
     </div>
-    <h2 style="margin: 0 0 8px 0; font-size: 22px;">Finish setting up your account</h2>
-    <p style="margin: 0 0 16px 0; font-size: 14px; color: #4b5563;">
-      We use this information to link your visits, insurance, and records securely.
+    <h2 class="onboarding-title">Finish setting up your account</h2>
+    <p class="onboarding-sub">
+      Add your current routine so we can generate clear daily checklists and weekly progress summaries.
     </p>
 
     <div id="msg" class="message hidden"></div>
@@ -359,7 +454,7 @@
     <!-- Step 2: Insurance -->
     <div id="step-2" class="hidden">
       <div style="padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; margin-bottom: 14px; font-size: 13px; color: #374151;">
-        Insurance is optional right now. We’re cash-only for this MVP.
+        Insurance is optional for now. You can skip this step and continue, then complete it later in More > Wallet.
       </div>
       <div class="form-group">
         <label class="form-label">Insurance company</label>
@@ -375,33 +470,100 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-secondary" id="backToProfileBtn">Back</button>
-        <button class="btn btn-secondary" id="skipInsuranceBtn" type="button">Skip for now</button>
+        <button class="btn btn-secondary" id="skipInsuranceBtn" type="button">Skip and continue</button>
         <button class="btn btn-primary" id="saveInsuranceBtn">Save &amp; continue</button>
       </div>
     </div>
 
-    <!-- Step 3: Documents -->
+    <!-- Step 3: Routine Baseline -->
     <div id="step-3" class="hidden">
-      <p style="font-size: 14px; color: #4b5563; margin-bottom: 12px;">
-        Upload a photo of your insurance card or any important records you want us to have before your visit.
-      </p>
-      <div id="connectRecordsBox" style="display:none; margin-bottom: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb;">
-        <div style="font-weight: 800; margin-bottom: 6px;">Connect my records</div>
-        <div style="color:#4b5563; font-size: 13px; line-height: 1.35;">
-          You can connect your records later. We’ll ask you to confirm your identity before importing anything.
+      <div style="padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; margin-bottom: 14px; font-size: 13px; color: #374151;">
+        Build your baseline routine. Add at least one product now, or skip and add products later from Routine.
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        <button class="btn btn-secondary" id="describeDirectBtn" type="button">Add manually</button>
+      </div>
+
+      <div id="manualProductSheet" style="display:none; margin-bottom:12px; padding:12px; border:1px solid #e5e7eb; border-radius:12px; background:#f9fafb;">
+        <div style="font-weight: 800; margin-bottom: 8px;">Product setup</div>
+        <div style="font-size:13px; color:#4b5563; margin-bottom: 10px;">Set what this product is for and when you use it.</div>
+        <div class="form-group">
+          <label class="form-label">Find product</label>
+          <input id="catalogSearchInput" class="form-input" placeholder="Search by name or brand" autocomplete="off" />
+          <div id="catalogSearchResults" style="display:none; margin-top:6px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; max-height:180px; overflow-y:auto;"></div>
+          <button id="customFallbackBtn" type="button" class="btn btn-secondary" style="margin-top:8px;">Can’t find your product? Add custom</button>
         </div>
-        <div style="display:flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
-          <button class="btn btn-secondary" id="connectRecordsBtn" type="button">Connect my records</button>
-          <button class="btn btn-secondary" id="connectRecordsWhyBtn" type="button">Why do we ask?</button>
+        <div class="form-group">
+          <label class="form-label">Selected product</label>
+          <input id="manualProductNameInput" class="form-input" placeholder="Pick from catalog search above" readonly />
+          <input id="manualProductBrandInput" class="form-input" placeholder="Brand (auto-filled)" readonly style="margin-top:8px;" />
+          <div id="customModePill" style="display:none; margin-top:8px; font-size:12px; color:#6b7280;">Custom mode enabled: this entry will be enriched in the background.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          <select id="manualCategoryInput" class="form-input">
+            <option value="">Select category</option>
+            <option value="cleanser">Cleanser</option>
+            <option value="toner_mist">Toner / Mist</option>
+            <option value="vitamin_c">Vitamin C Serum</option>
+            <option value="retinol">Retinol</option>
+            <option value="exfoliant_acid">Exfoliant / Acid</option>
+            <option value="hydrating_serum">Hydrating Serum</option>
+            <option value="moisturizer">Moisturizer</option>
+            <option value="sunscreen">Sunscreen</option>
+            <option value="eye_cream">Eye Cream</option>
+            <option value="lip_treatment">Lip Treatment</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Time</label>
+            <select id="manualTimeInput" class="form-input">
+              <option value="morning">Morning</option>
+              <option value="evening">Evening</option>
+              <option value="both">Both</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Goal</label>
+            <select id="manualGoalInput" class="form-input">
+              <option value="">Select goal</option>
+              <option value="acne">Acne</option>
+              <option value="anti_aging">Anti-aging</option>
+              <option value="dark_spots">Dark spots</option>
+              <option value="hydration">Hydration</option>
+              <option value="redness">Redness</option>
+              <option value="texture">Texture</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Safety checks for this product (optional)</label>
+          <div style="font-size:12px; color:#6b7280; margin: 2px 0 8px 0;">
+            Tell us if this product tends to irritate your skin or if pregnancy/breastfeeding safety should be applied.
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; color:#374151; font-size:13px;">
+            <label><input type="checkbox" class="product-flag" value="fragrance" /> I am sensitive to fragrance in this product</label>
+            <label><input type="checkbox" class="product-flag" value="essential_oils" /> I react to essential oils</label>
+            <label><input type="checkbox" class="product-flag" value="acids" /> I react to acids/exfoliants</label>
+            <label><input type="checkbox" class="product-flag" value="retinoids" /> I react to retinoids</label>
+            <label><input type="checkbox" id="manualPregnancySafeInput" /> I am pregnant or breastfeeding</label>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:4px;">
+          <button class="btn btn-secondary" id="cancelManualAddBtn" type="button">Cancel</button>
+          <button class="btn btn-save-product" id="saveManualAddBtn" type="button">Add to list</button>
         </div>
       </div>
-      <div class="form-group">
-        <input id="docInput" type="file" multiple />
-      </div>
-      <div id="docList" style="font-size: 13px; margin-bottom: 12px;"></div>
+
+      <div id="routineChecklist" style="font-size:13px; margin-bottom:10px; color:#374151;"></div>
+      <div id="routineList" style="font-size:13px; margin-bottom:12px; color:#374151;">No products added yet. Add one now to personalize your routine, or continue and add later.</div>
       <div class="btn-row">
         <button class="btn btn-secondary" id="backToInsuranceBtn">Back</button>
-        <button class="btn btn-primary" id="finishBtn">Finish</button>
+        <button class="btn btn-primary" id="finishBtn">Start tracking</button>
       </div>
     </div>
   </div>
@@ -413,6 +575,12 @@
       'ngrok-skip-browser-warning': 'true'
     };
     let sessionId = localStorage.getItem('patient_session_id') || null;
+    let step3Products = [];
+    let catalogSearchTimer = null;
+    let catalogSearchRequestId = 0;
+    let selectedCatalogProduct = null;
+    let customModeEnabled = false;
+    let customFallbackReason = null;
 
     function setStep(step) {
       for (let i = 1; i <= 3; i++) {
@@ -554,7 +722,7 @@
       // Insurance is optional (cash-only MVP). If nothing provided, just continue.
       if (!payer_name && !member_id && !plan_name) {
         setStep(3);
-        loadDocuments();
+        loadRoutineStep3();
         return;
       }
       try {
@@ -572,83 +740,309 @@
           return;
         }
         setStep(3);
-        loadDocuments();
+        loadRoutineStep3();
       } catch (e) {
         showMsg('Network error while saving insurance.', 'error');
       }
     }
 
-    async function loadDocuments() {
-      if (!sessionId) return;
-      try {
-        const res = await fetch(`${API_BASE}/api/patient/documents`, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true',
-            'x-session-id': sessionId
-          }
+    function routineStorageKey() {
+      return `patient_step3_routine_${sessionId || 'anon'}`;
+    }
+
+    function renderRoutineList() {
+      const list = document.getElementById('routineList');
+      const checklist = document.getElementById('routineChecklist');
+      if (!step3Products.length) {
+        list.textContent = 'No products added yet. Add a product now or continue and add later.';
+        if (checklist) checklist.textContent = '';
+        return;
+      }
+      if (checklist) {
+        checklist.innerHTML = `<div style="font-weight:700; margin-bottom:6px;">Saved products</div>${step3Products
+          .map((p, idx) => `<label style="display:block; margin:0 0 4px 0;"><input type="checkbox" checked disabled /> ${p.name || `Product ${idx + 1}`}</label>`)
+          .join('')}`;
+      }
+      list.innerHTML = step3Products
+        .map((p, idx) => {
+          const source = p.source === 'scan' ? 'scan' : p.source === 'photo' ? 'photo' : 'manual';
+          const labelGoal = p.goal ? p.goal.replace(/_/g, ' ') : 'no goal set';
+          const flagSummary = Array.isArray(p.flags) && p.flags.length ? ` · flags: ${p.flags.join(', ')}` : '';
+          const pregSummary = p.pregnancy_safe_mode ? ' · preg-safe mode' : '';
+          const selectionSummary = p.selection_mode === 'custom' ? ' · custom (pending enrichment)' : ' · catalog';
+          return `<div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px;">
+            <div>
+              <div style="font-weight:700;">${p.name}</div>
+              <div style="font-size:12px; color:#6b7280;">${p.category || 'uncategorized'} · ${p.time || 'unscheduled'} · goal: ${labelGoal} · ${source}${selectionSummary}${flagSummary}${pregSummary}</div>
+            </div>
+            <button type="button" class="btn btn-secondary" data-remove-product="${idx}" style="padding:6px 10px;">Remove</button>
+          </div>`;
+        })
+        .join('');
+      list.querySelectorAll('[data-remove-product]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.getAttribute('data-remove-product'));
+          if (Number.isNaN(idx)) return;
+          step3Products.splice(idx, 1);
+          persistRoutineDraft();
+          renderRoutineList();
         });
-        const data = await res.json();
-        if (!data.success) return;
-        const list = document.getElementById('docList');
-        if (!data.documents || data.documents.length === 0) {
-          list.textContent = 'No documents uploaded yet.';
-          return;
-        }
-        list.innerHTML = data.documents
-          .map(
-            (d) =>
-              `<div>📄 ${d.file_name} <span style="color:#6b7280;font-size:12px;">(${new Date(
-                d.created_at
-              ).toLocaleDateString()})</span></div>`
-          )
-          .join('');
-      } catch (e) {
-        // ignore
+      });
+    }
+
+    function persistRoutineDraft() {
+      const payload = {
+        products: step3Products,
+        profile: {},
+        updated_at: new Date().toISOString()
+      };
+      try {
+        localStorage.setItem(routineStorageKey(), JSON.stringify(payload));
+      } catch (_) {}
+      return payload;
+    }
+
+    function loadRoutineStep3() {
+      const sheet = document.getElementById('manualProductSheet');
+      if (sheet) sheet.style.display = 'none';
+      step3Products = [];
+      try {
+        const saved = JSON.parse(localStorage.getItem(routineStorageKey()) || '{}');
+        if (saved && Array.isArray(saved.products)) step3Products = saved.products;
+      } catch (_) {}
+      renderRoutineList();
+    }
+
+    function openManualSheet(prefill) {
+      const sheet = document.getElementById('manualProductSheet');
+      if (!sheet) return;
+      sheet.style.display = 'block';
+      selectedCatalogProduct = null;
+      customModeEnabled = false;
+      customFallbackReason = null;
+      document.getElementById('catalogSearchInput').value = prefill?.name || '';
+      document.getElementById('manualProductNameInput').value = prefill?.name || '';
+      document.getElementById('manualProductBrandInput').value = prefill?.brand || '';
+      document.getElementById('manualCategoryInput').value = prefill?.category || '';
+      document.getElementById('manualTimeInput').value = prefill?.time || 'morning';
+      document.getElementById('manualGoalInput').value = prefill?.goal || '';
+      setCustomMode(false, null);
+      document.querySelectorAll('.product-flag').forEach((cb) => {
+        cb.checked = Array.isArray(prefill?.flags) && prefill.flags.includes(cb.value);
+      });
+      document.getElementById('manualPregnancySafeInput').checked = !!prefill?.pregnancy_safe_mode;
+    }
+
+    function setCustomMode(enabled, fallbackReason = null) {
+      customModeEnabled = !!enabled;
+      customFallbackReason = fallbackReason;
+      const pill = document.getElementById('customModePill');
+      if (pill) pill.style.display = customModeEnabled ? 'block' : 'none';
+      if (customModeEnabled) {
+        selectedCatalogProduct = null;
+        document.getElementById('manualProductNameInput').readOnly = false;
+        document.getElementById('manualProductBrandInput').readOnly = false;
+        document.getElementById('manualProductNameInput').placeholder = 'e.g. Retinol Serum';
+      } else {
+        document.getElementById('manualProductNameInput').readOnly = true;
+        document.getElementById('manualProductBrandInput').readOnly = true;
+        document.getElementById('manualProductNameInput').placeholder = 'Pick from catalog search above';
       }
     }
 
-    async function uploadDocuments() {
-      const input = document.getElementById('docInput');
-      if (!input.files || input.files.length === 0) {
-        // Nothing to upload; treat as success
-        window.location.href = 'patient-dashboard.html';
+    function renderCatalogSearchResults(items = []) {
+      const box = document.getElementById('catalogSearchResults');
+      if (!box) return;
+      box.innerHTML = '';
+      if (!items.length) {
+        box.style.display = 'none';
         return;
       }
-      const formData = new FormData();
-      Array.from(input.files).forEach((file) => formData.append('files', file));
+      items.forEach((item) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.style.display = 'block';
+        row.style.width = '100%';
+        row.style.textAlign = 'left';
+        row.style.border = 'none';
+        row.style.background = '#fff';
+        row.style.padding = '10px 12px';
+        row.style.cursor = 'pointer';
+        row.style.borderBottom = '1px solid #f3f4f6';
+        row.innerHTML = `<div style="font-weight:700; color:#111827;">${item.name}</div><div style="font-size:12px; color:#6b7280;">${item.brand || 'Unknown brand'} · ${item.default_category || 'other'}</div>`;
+        row.addEventListener('click', () => {
+          selectedCatalogProduct = item;
+          setCustomMode(false, null);
+          document.getElementById('manualProductNameInput').value = item.name || '';
+          document.getElementById('manualProductBrandInput').value = item.brand || '';
+          document.getElementById('manualCategoryInput').value = item.default_category || '';
+          document.getElementById('catalogSearchResults').style.display = 'none';
+        });
+        box.appendChild(row);
+      });
+      box.style.display = 'block';
+    }
+
+    async function runCatalogSearch() {
+      const input = document.getElementById('catalogSearchInput');
+      if (!input) return;
+      const q = input.value.trim();
+      if (q.length < 2) {
+        renderCatalogSearchResults([]);
+        return;
+      }
+      const requestId = ++catalogSearchRequestId;
       try {
-        const res = await fetch(`${API_BASE}/api/patient/documents`, {
+        const res = await fetch(`${API_BASE}/api/customer/catalog/search?q=${encodeURIComponent(q)}&limit=8`, {
+          headers: {
+            ...API_HEADERS,
+            'x-session-id': sessionId
+          }
+        });
+        const data = await res.json();
+        if (requestId !== catalogSearchRequestId) return;
+        if (!data.success) return;
+        const items = Array.isArray(data.results) ? data.results : [];
+        renderCatalogSearchResults(items);
+        if (items.length === 0) {
+          setCustomMode(true, data?.fallback?.reason || 'no_results');
+        }
+      } catch (_) {
+        setCustomMode(true, 'index_unavailable');
+      }
+    }
+
+    async function saveRoutineAndContinue({ skip = false } = {}) {
+      const payload = persistRoutineDraft();
+      const hasProducts = Array.isArray(payload.products) && payload.products.length > 0;
+      const resolvedSkip = skip || !hasProducts;
+      try {
+        const res = await fetch(`${API_BASE}/api/customer/onboarding/step3`, {
           method: 'POST',
           headers: {
-            'ngrok-skip-browser-warning': 'true',
+            ...API_HEADERS,
             'x-session-id': sessionId
           },
-          body: formData
+          body: JSON.stringify({
+            onboarding_version: 'journal_v1',
+            skip_step3: resolvedSkip,
+            products: resolvedSkip ? [] : step3Products.map((p) => ({
+              selection_mode: p.selection_mode,
+              catalog_product_id: p.catalog_product_id || null,
+              custom_product: p.selection_mode === 'custom' ? { name: p.name, brand: p.brand || null } : null,
+              fallback_reason: p.fallback_reason || null,
+              category: p.category,
+              usage_time: p.time,
+              goal: p.goal,
+              frequency_rule: p.frequency_rule || null,
+              days_of_week: Array.isArray(p.days_of_week) ? p.days_of_week : [],
+              flags: {
+                sensitivity_flags: Array.isArray(p.flags) ? p.flags : [],
+                pregnancy_safe_mode: !!p.pregnancy_safe_mode
+              }
+            }))
+          })
         });
         const data = await res.json();
         if (!data.success) {
-          if (data.error_code === 'LIMIT_FILE_COUNT') {
-            showMsg(`Too many files selected. Upload up to ${data.max_files || 30} files per batch.`, 'error');
-          } else {
-            showMsg(data.error || 'Unable to upload documents.', 'error');
-          }
+          showMsg(data.message || data.error || 'Unable to save routine setup.', 'error');
           return;
         }
-        window.location.href = 'patient-dashboard.html';
       } catch (e) {
-        showMsg('Network error while uploading documents.', 'error');
+        showMsg('Network error while saving routine.', 'error');
+        return;
       }
+      if (resolvedSkip) showMsg('You can add products later from your routine screen.', 'success');
+      window.location.href = 'patient-dashboard.html';
     }
 
     document.getElementById('saveProfileBtn').addEventListener('click', saveProfile);
     document.getElementById('saveInsuranceBtn').addEventListener('click', saveInsurance);
+    document.getElementById('topBackBtn').addEventListener('click', () => {
+      try {
+        const ref = document.referrer || '';
+        const sameOriginRef = ref && ref.startsWith(window.location.origin);
+        if (window.history.length > 1 && sameOriginRef) {
+          window.history.back();
+          return;
+        }
+      } catch (_) {
+        // ignore and use fallback route
+      }
+      // Fallback must be relative so it works in all hosting prefixes.
+      window.location.href = 'patient-login.html';
+    });
     document.getElementById('backToProfileBtn').addEventListener('click', () => setStep(1));
     document.getElementById('skipInsuranceBtn').addEventListener('click', () => {
       setStep(3);
-      loadDocuments();
+      loadRoutineStep3();
+      showMsg('Insurance skipped for now. You can complete it later in More > Wallet.', 'success');
     });
     document.getElementById('backToInsuranceBtn').addEventListener('click', () => setStep(2));
-    document.getElementById('finishBtn').addEventListener('click', uploadDocuments);
+    document.getElementById('finishBtn').addEventListener('click', () => saveRoutineAndContinue({ skip: false }));
+
+    document.getElementById('describeDirectBtn').addEventListener('click', () => openManualSheet({ source: 'manual' }));
+    document.getElementById('customFallbackBtn').addEventListener('click', () => {
+      setCustomMode(true, 'user_override');
+      document.getElementById('manualProductNameInput').focus();
+    });
+    document.getElementById('catalogSearchInput').addEventListener('input', () => {
+      if (catalogSearchTimer) window.clearTimeout(catalogSearchTimer);
+      catalogSearchTimer = window.setTimeout(runCatalogSearch, 220);
+    });
+    document.getElementById('cancelManualAddBtn').addEventListener('click', () => {
+      document.getElementById('manualProductSheet').style.display = 'none';
+    });
+    document.getElementById('saveManualAddBtn').addEventListener('click', () => {
+      const name = document.getElementById('manualProductNameInput').value.trim();
+      const brand = document.getElementById('manualProductBrandInput').value.trim();
+      const category = document.getElementById('manualCategoryInput').value.trim();
+      const time = document.getElementById('manualTimeInput').value.trim();
+      const goal = document.getElementById('manualGoalInput').value.trim();
+      const flags = Array.from(document.querySelectorAll('.product-flag:checked')).map((n) => n.value);
+      const pregnancy_safe_mode = !!document.getElementById('manualPregnancySafeInput').checked;
+      if (!name) {
+        showMsg('Product name is required.', 'error');
+        return;
+      }
+      if (!goal) {
+        showMsg('Set a goal for this product.', 'error');
+        return;
+      }
+      if (!category) {
+        showMsg('Set a category for this product.', 'error');
+        return;
+      }
+      if (!time) {
+        showMsg('Set usage time for this product.', 'error');
+        return;
+      }
+      if (!customModeEnabled && !selectedCatalogProduct) {
+        showMsg('Select a product from the catalog, or use custom fallback.', 'error');
+        return;
+      }
+      step3Products.push({
+        name,
+        brand: brand || null,
+        category,
+        time,
+        goal,
+        flags,
+        pregnancy_safe_mode,
+        selection_mode: customModeEnabled ? 'custom' : 'catalog',
+        catalog_product_id: customModeEnabled ? null : (selectedCatalogProduct?.catalog_product_id || null),
+        custom_pending_enrichment: customModeEnabled,
+        fallback_reason: customModeEnabled ? (customFallbackReason || 'user_override') : null,
+        source: 'manual',
+        status: 'active'
+      });
+      persistRoutineDraft();
+      renderRoutineList();
+      document.getElementById('manualProductSheet').style.display = 'none';
+      document.getElementById('catalogSearchResults').style.display = 'none';
+      showMsg('Product added to your routine.', 'success');
+    });
+
 
     document.addEventListener('DOMContentLoaded', () => {
       if (!sessionId) {
@@ -656,48 +1050,9 @@
         return;
       }
       loadIntake();
-      loadDocuments();
+      loadRoutineStep3();
       initCityAutocomplete();
-      try { initConnectRecords(); } catch (_) {}
     });
-
-    function getCachedIdentity() {
-      try {
-        const c = JSON.parse(localStorage.getItem('patient_identity_cache') || '{}');
-        if (c && c.session_id === sessionId) return c;
-      } catch (_) {}
-      return null;
-    }
-
-    function canConnectRecordsFromIdentity(id) {
-      if (!id) return false;
-      const hasName = !!(id.first_name && id.last_name);
-      const hasDob = !!id.dob;
-      const hasContact = !!(id.email || id.phone);
-      const hasPostal = !!id.postal_code;
-      return hasName && hasDob && hasContact && hasPostal;
-    }
-
-    function initConnectRecords() {
-      const box = document.getElementById('connectRecordsBox');
-      if (!box) return;
-      const id = getCachedIdentity();
-      box.style.display = canConnectRecordsFromIdentity(id) ? 'block' : 'none';
-      const btn = document.getElementById('connectRecordsBtn');
-      const why = document.getElementById('connectRecordsWhyBtn');
-      if (btn) {
-        btn.addEventListener('click', () => {
-          if (!id) return;
-          try { sessionStorage.setItem('connect_records_identity', JSON.stringify(id)); } catch (_) {}
-          window.location.href = 'connect-records.html';
-        });
-      }
-      if (why) {
-        why.addEventListener('click', () => {
-          showMsg('We use your name, date of birth, and address only to safely match your medical records. You’ll always confirm before anything is imported.', 'success');
-        });
-      }
-    }
 
     // Lightweight autocomplete: uses a backend hint if available, otherwise falls back to freeform.
     // We store the chosen suggestion's place id when provided.

@@ -68,6 +68,7 @@
         "test:e2e-chat-conversation:debug": "HEADFUL=1 SANDBOX_DEBUG=1 node scripts/playwright-chat-conversation-e2e.cjs",
         "test:e2e-teamkelly-camera": "node scripts/playwright-teamkelly-face-age-camera.cjs",
         "test:e2e-teamkelly-camera:debug": "HEADFUL=1 SANDBOX_DEBUG=1 node scripts/playwright-teamkelly-face-age-camera.cjs",
+        "test:month1:safe-launch:api": "node scripts/test-month1-safe-launch-api.cjs",
         "test:step1:prod": "DB_PATH=./tmp/ci-test.db NODE_ENV=test node ./scripts/test-step1-pipeline.js",
         "test:taxonomy:product-ingredient": "bash ./scripts/ci-product-ingredient-taxonomy.sh",
         "seed:cosing:minimal": "node ./scripts/seed-cosing-minimal.js",

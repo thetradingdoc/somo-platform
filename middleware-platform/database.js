@@ -1611,7 +1611,7 @@ try {
   const addColumnIfMissing = (columnName, sql) => {
     if (!usersInfo.some(c => c.name === columnName)) {
       if (!SKIP_STARTUP_MIGRATIONS) {
-        console.log(`📦 Adding ${columnName} column to users table...`);
+      console.log(`📦 Adding ${columnName} column to users table...`);
       }
       db.exec(sql);
     }
@@ -1630,7 +1630,7 @@ try {
   addColumnIfMissing('google_calendar_last_error', `ALTER TABLE users ADD COLUMN google_calendar_last_error TEXT;`);
 
   if (!SKIP_STARTUP_MIGRATIONS) {
-    console.log('✅ Migration complete: Google Calendar columns ensured on users');
+  console.log('✅ Migration complete: Google Calendar columns ensured on users');
   }
 } catch (migrationError) {
   console.warn('⚠️  Users Google Calendar migration failed:', migrationError.message);
@@ -18774,22 +18774,35 @@ module.exports.getCosingInciCandidatesNormalized = function getCosingInciCandida
 module.exports.replaceProductIngredients = function replaceProductIngredients(productId, ingredients) {
   try {
     const del = db.prepare(`DELETE FROM product_ingredients WHERE product_id = ?`);
-    const ins = db.prepare(`
-      INSERT INTO product_ingredients (
-        id, product_id, inci_name, ingredient_order, raw_ingredient,
-        normalized_inci, ingredient_role, confidence,
-        ingredient_canonical_id, match_method,
-        created_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `);
+    const cols = db.prepare(`PRAGMA table_info(product_ingredients)`).all().map((c) => c.name);
+    const hasEnrichmentVersion = cols.includes('enrichment_version');
+    const hasSafetyFlags = cols.includes('safety_flags_json');
+    const ins = hasEnrichmentVersion || hasSafetyFlags
+      ? db.prepare(`
+        INSERT INTO product_ingredients (
+          id, product_id, inci_name, ingredient_order, raw_ingredient,
+          normalized_inci, ingredient_role, confidence,
+          ingredient_canonical_id, match_method,
+          enrichment_version, safety_flags_json, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `)
+      : db.prepare(`
+        INSERT INTO product_ingredients (
+          id, product_id, inci_name, ingredient_order, raw_ingredient,
+          normalized_inci, ingredient_role, confidence,
+          ingredient_canonical_id, match_method,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `);
     const tx = db.transaction((rows) => {
       del.run(productId);
       rows.forEach((ing, idx) => {
         const inci = String(ing?.inci_name || '').trim();
         if (!inci) return;
         const order = Number.isFinite(Number(ing?.ingredient_order)) ? Number(ing.ingredient_order) : idx;
-        ins.run(
+        const args = [
           `${productId}:${order}:${inci.toLowerCase()}`,
           productId,
           inci.toLowerCase(),
@@ -18804,7 +18817,14 @@ module.exports.replaceProductIngredients = function replaceProductIngredients(pr
           })(),
           ing?.ingredient_canonical_id != null ? String(ing.ingredient_canonical_id) : null,
           ing?.match_method != null ? String(ing.match_method) : null
-        );
+        ];
+        if (hasEnrichmentVersion || hasSafetyFlags) {
+          args.push(
+            ing?.enrichment_version != null ? String(ing.enrichment_version) : null,
+            ing?.safety_flags_json != null ? String(ing.safety_flags_json) : null
+          );
+        }
+        ins.run(...args);
       });
     });
     tx(Array.isArray(ingredients) ? ingredients : []);

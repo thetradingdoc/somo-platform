@@ -229,7 +229,7 @@
     </div>
     <div class="btn-row">
       <a class="btn btn-shop" id="btnReturnShop" href="../littlelab-landing/public/index.html">Return to shop</a>
-      <a class="btn btn-primary" href="wallet.html">View Wallet</a>
+      <a class="btn btn-primary" id="walletCtaBtn" href="wallet.html">View Wallet</a>
       <a class="btn btn-secondary" href="appointments.html">Appointments</a>
       <a class="btn btn-secondary" href="patient-dashboard.html">Dashboard</a>
     </div>
@@ -244,6 +244,7 @@
       }
       const params = new URLSearchParams(window.location.search);
       const appointmentId = params.get('appointment_id');
+      const walletCtaBtn = document.getElementById('walletCtaBtn');
       try {
         if (typeof window !== 'undefined' && Array.isArray(window.dataLayer)) {
           window.dataLayer.push({ event: 'pay_success', appointment_id: appointmentId || undefined });
@@ -271,6 +272,19 @@
       }
       const API_BASE = window.API_BASE || 'http://localhost:4000';
       const sid = localStorage.getItem('patient_session_id');
+      async function maybeHideWalletCta() {
+        if (!sid || !walletCtaBtn) return;
+        try {
+          const featureRes = await fetch(`${API_BASE}/api/patient/features`, {
+            headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+          });
+          const featureJson = await featureRes.json();
+          if (featureRes.ok && featureJson?.success && !featureJson?.features?.wallet_enabled) {
+            walletCtaBtn.style.display = 'none';
+          }
+        } catch (_) {}
+      }
+      maybeHideWalletCta();
       if (!sid) return;
       async function pollPaymentStatus() {
         const maxAttempts = 15;
