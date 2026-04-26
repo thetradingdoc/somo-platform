@@ -4064,6 +4064,10 @@ app.use('/api/public/prescriptions', publicCatalogReadLimiter, publicProductsRou
 app.use('/public/products', publicCatalogReadLimiter, publicProductsRoutes);
 app.use('/public/prescriptions', publicCatalogReadLimiter, publicProductsRoutes);
 
+// Public plans search (consumer MA lookup)
+const publicPlanSearchRoutes = require('./routes/public-plan-search');
+app.use('/api/public/plans', publicCatalogReadLimiter, publicPlanSearchRoutes);
+
 // Public checkout (unauthenticated ensure customer)
 const publicCheckoutRoutes = require('./routes/public-checkout');
 app.use('/api/public/checkout', publicCheckoutRoutes);

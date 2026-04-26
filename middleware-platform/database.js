@@ -18788,14 +18788,14 @@ module.exports.replaceProductIngredients = function replaceProductIngredients(pr
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `)
       : db.prepare(`
-        INSERT INTO product_ingredients (
-          id, product_id, inci_name, ingredient_order, raw_ingredient,
-          normalized_inci, ingredient_role, confidence,
-          ingredient_canonical_id, match_method,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      `);
+      INSERT INTO product_ingredients (
+        id, product_id, inci_name, ingredient_order, raw_ingredient,
+        normalized_inci, ingredient_role, confidence,
+        ingredient_canonical_id, match_method,
+        created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `);
     const tx = db.transaction((rows) => {
       del.run(productId);
       rows.forEach((ing, idx) => {
@@ -18822,7 +18822,7 @@ module.exports.replaceProductIngredients = function replaceProductIngredients(pr
           args.push(
             ing?.enrichment_version != null ? String(ing.enrichment_version) : null,
             ing?.safety_flags_json != null ? String(ing.safety_flags_json) : null
-          );
+        );
         }
         ins.run(...args);
       });

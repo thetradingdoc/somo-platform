@@ -43,7 +43,10 @@ function buildPolicy({ policyVersion, profile }) {
 }
 
 const batchId = getArg('batch-id', null);
-const scorerVersion = getArg('scorer-version', 'v1');
+const scorerVersionArg = getArg('scorer-version', 'v1');
+const scorerVersion = ['all', 'any', '*', 'none', 'null', ''].includes(String(scorerVersionArg || '').toLowerCase())
+  ? null
+  : scorerVersionArg;
 const policyVersion = getArg('policy-version', 'v1');
 const policyProfile = getArg('policy-profile', 'default');
 const limit = Number(getArg('limit', '50000')) || 50000;
