@@ -29,3 +29,19 @@
   - `payor_match_candidates`
 - Confirm no data quality gate failures in `payor-observability-quality-ops-report.json`.
 
+## Additional recovery targets (premium + availability layers)
+
+If ZIP-based plan search is impacted, also verify/recover:
+
+- `payor_plan_premiums` (Landscape ingest)
+- `payor_plan_service_areas` (MA county service area ingest)
+- `zip_county_crosswalk` (Census crosswalk ingest)
+
+Recommended sequence after source repair:
+
+1. `run-payor-landscape-premium-ingest.cjs`
+2. `run-payor-service-area-ingest.cjs`
+3. `run-payor-zip-county-crosswalk-ingest.cjs`
+
+Operational note: ZIP `33101` currently has an explicit `FL` state guard in `/api/public/plans/search` as a stopgap while crosswalk/state disambiguation is tuned.
+

@@ -27,3 +27,14 @@
   - data quality checks pass
   - review queue metrics are non-zero for human adjudication
 
+## Consumer layer reprocess (added)
+
+When MA consumer-search outputs must be refreshed after source updates:
+
+1. `DB_PATH=... node middleware-platform/scripts/run-payor-pbp-benefits-ingest.cjs`
+2. `DB_PATH=... LANDSCAPE_CSV=... node middleware-platform/scripts/run-payor-landscape-premium-ingest.cjs`
+3. `DB_PATH=... SERVICE_AREA_CSV=... node middleware-platform/scripts/run-payor-service-area-ingest.cjs`
+4. `DB_PATH=... CROSSWALK_FILE=... node middleware-platform/scripts/run-payor-zip-county-crosswalk-ingest.cjs`
+
+Then run one ZIP+needs validation query (or call `/api/public/plans/search`).
+

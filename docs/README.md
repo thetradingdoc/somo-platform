@@ -1,6 +1,6 @@
 # DocLittle Platform Documentation
 
-**Last Updated:** April 19, 2026
+**Last Updated:** April 29, 2026
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
 > **Overlapping topics (Kelly vs voice vs checkout):** start with **[meta/CANONICAL_DOC_MAP.md](./meta/README.md#canonical-doc-map)** so you do not maintain the same story in two places.
@@ -26,6 +26,7 @@
 10. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/README.md#periodic-maintenance)**.
 11. Secret scanning expectations: **[SECRET_SCANNING.md](./security/SECRET_SCANNING.md)**.
 12. Browser E2E status: **[E2E_STATUS.md](./testing/README.md#e2e-status)**.
+13. Batch line-level docs gap tracker: **[CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md](./meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md)**.
 
 ---
 
@@ -46,6 +47,9 @@
 
 ### 📖 Core Documentation
 
+#### Documentation health and gap tracking
+- **[Codebase Batch Review And Documentation Gaps](./meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md)** - tracked gap list by batch (`all codebase`, `routes`, `services`)
+
 #### Architecture
 - **[Architecture decisions (ADRs)](./architecture/README.md#decisions-readme)** — SQLite, Kelly LLM, agentic checkout surfaces
 - **[Agentic checkout file map](./architecture/README.md#commerce-agentic-checkout-file-map)** — web, RN, API ownership
@@ -61,6 +65,9 @@
 - **[Code Reviews](./development/README.md#code-reviews-code-review-and-cleanup)** - Code review findings
 - **[Improvement Plan](./development/README.md#improvement-plan)** - Codebase improvements
 - **[Code Structure](./development/README.md#guides-code-structure)** - Code organization
+- **[Runtime Entrypoints And Call Paths](./architecture/RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md)** - End-to-end runtime ownership map
+- **[Code Ownership By Surface](./development/CODE_OWNERSHIP_BY_SURFACE.md)** - Where to change what
+- **[Scripts Operations Map](./development/SCRIPTS_OPERATIONS_MAP.md)** - Script risk tiers and execution map
 - **[Reliability Guide](./development/README.md#guides-reliability)** - Reliability patterns
 - **[Template Variables](./development/README.md#templates)** - Automation email/SMS template variables
 - **[GitHub Tasks](./development/README.md#github-tasks)** - Repo structure, branch hygiene

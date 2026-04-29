@@ -9,6 +9,22 @@ Define explicit acceptance criteria for the first network-unrestricted payor ER 
 - Source contamination from `nucc_csv` / `nucc` is excluded from payor ER blocking scope.
 - Degraded-mode NPPES-only run yielding `candidate_pair_count = 0` is expected and acceptable.
 - Provider routing split, drift checks, and precheck behavior are validated in controlled tests.
+- CMS MA benefits + premium + service-area + ZIP crosswalk ingestion scripts are implemented and exercised on live DB path.
+- Public MA search endpoint (`/api/public/plans/search`) is implemented with explainable output transform.
+
+## Current live capabilities baseline (2026-04-26)
+
+The following are now considered available baseline capabilities (public data only):
+
+- `payor_plan_benefits` populated (CMS PBP 2026)
+- `payor_plan_premiums` populated (CY2026 Landscape)
+- `payor_plan_service_areas` populated (MA Contract Service Area)
+- `zip_county_crosswalk` populated (Census ZCTA->county)
+- Query path validated: `ZIP -> county -> eligible contract -> premium + benefit flags`
+
+Known temporary guardrail:
+
+- ZIP `33101` route-level stopgap enforces `state_abbr='FL'` pending broader crosswalk disambiguation tuning.
 
 ## First Real Run Acceptance Criteria
 

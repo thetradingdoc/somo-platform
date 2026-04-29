@@ -2,6 +2,21 @@
 
 This note closes the loop on sources that **ship with NPPES** or appear on **data.cms.gov** but are **not** loaded into the middleware SQLite payor ER tables today.
 
+## Clarification: now in scope vs still deferred
+
+Already in scope and implemented:
+
+- CMS PBP benefits (2026)
+- CMS Landscape premium file (2026)
+- CMS MA Contract Service Area by State/County
+- Census ZIP -> county crosswalk
+
+Still deferred:
+
+- Standalone dental/vision plan datasets
+- Medigap/supplement-specific datasets
+- Medicaid and commercial plan datasets outside current MA/PDP track
+
 ## NPPES companion CSVs (`pl_pfile`, `othername_pfile`, …)
 
 - **Status:** Not ingested. No `payor_source_records` or downstream ER use is defined for these files yet.

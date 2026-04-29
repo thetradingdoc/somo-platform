@@ -1,10 +1,11 @@
 # meta — consolidated documentation
 
-**Single file:** All former `docs/meta/**/*.md` content is merged here. **Last updated:** 2026-04-20
+**Single file:** All former `docs/meta/**/*.md` content is merged here. **Last updated:** 2026-04-29
 
 ## Table of contents
 
 - [Canonical documentation map (reduce duplicate reading) (`CANONICAL_DOC_MAP.md`)](#canonical-doc-map)
+- [Codebase batch review and documentation gaps (`CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`)](#codebase-batch-review-and-documentation-gaps)
 - [Documentation Cleanup – March 2026 (`DOC_CLEANUP_MARCH_2026.md`)](#doc-cleanup-march-2026)
 - [Documentation Audit & Consolidation Plan (`DOCUMENTATION_AUDIT_AND_CONSOLIDATION_PLAN.md`)](#documentation-audit-and-consolidation-plan)
 - [Gap Analysis: Richer Triage & Patient Records Q&A (`GAP_ANALYSIS_RICHER_TRIAGE_AND_RECORDS.md`)](#gap-analysis-richer-triage-and-records)
@@ -13,6 +14,18 @@
 ## Introduction
 
 Browse by anchor above. Each section notes the former file path.
+
+---
+
+<a id="codebase-batch-review-and-documentation-gaps"></a>
+
+## Codebase batch review and documentation gaps
+
+Tracked output from a batched line-level review request (codebase -> routes -> services):
+
+- [`meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`](./CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md)
+
+Use this as the active checklist for documentation parity with implementation.
 
 ---
 

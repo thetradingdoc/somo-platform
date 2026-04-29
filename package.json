@@ -29,6 +29,8 @@
     "check:patient-journal-calendar-range": "node scripts/check-patient-journal-calendar-range-api.mjs",
     "check:patient-calendar-ui": "node scripts/check-patient-calendar-ui-playwright.mjs",
     "capture:patient-portal-screenshots": "node scripts/capture-patient-portal-screenshots.mjs",
+    "report:docs:coverage": "node scripts/generate-doc-coverage-report.cjs",
+    "check:docs:parity": "node scripts/check-docs-route-service-parity.cjs",
     "deploy:landing-hosting": "REACT_APP_API_BASE=${REACT_APP_API_BASE:-https://api.myskinandcare.com} npm run build --prefix unified-dashboard/littlelab-landing && cd unified-dashboard && npx firebase-tools deploy --only hosting"
   },
   "devDependencies": {

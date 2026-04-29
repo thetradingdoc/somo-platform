@@ -6,6 +6,27 @@ Define minimum operational contracts for each raw source so ingest is repeatable
 
 ## Source Contracts
 
+- **CMS Landscape Source File (CY2026)**
+  - Refresh cadence: monthly or when CMS republishes landscape snapshot.
+  - Owner: Middleware platform ingestion job owner.
+  - Delivery contract: `cy2026-landscape-202603.zip` archived under `~/payor-data/landscape-2026/...`.
+  - Ingest target: `payor_plan_premiums` via `run-payor-landscape-premium-ingest.cjs`.
+  - Schema drift policy: fail ingest when core identity/price fields are missing (`Contract ID`, `Plan ID`, premium columns).
+
+- **CMS MA Contract Service Area (State/County)**
+  - Refresh cadence: monthly.
+  - Owner: Middleware platform ingestion job owner.
+  - Delivery contract: monthly ZIP (for example `ma-contract-service-area-state-county-april-2026.zip`) archived under `~/payor-data/service-area-2026/...`.
+  - Ingest target: `payor_plan_service_areas` via `run-payor-service-area-ingest.cjs`.
+  - Schema drift policy: fail when `Contract ID`/`FIPS`/`State` missing; allow sparse optional columns.
+
+- **Census ZIP -> County Crosswalk**
+  - Refresh cadence: as Census relation files update.
+  - Owner: Middleware platform ingestion job owner.
+  - Delivery contract: `tab20_zcta520_county20_natl.txt` saved as `zip_county_crosswalk.txt`.
+  - Ingest target: `zip_county_crosswalk` via `run-payor-zip-county-crosswalk-ingest.cjs`.
+  - Schema drift policy: fail when ZIP or county FIPS columns are absent.
+
 - **Office Ally**
   - Refresh cadence: weekly (or upon new export delivery).
   - Owner: Middleware platform data ingestion owner.
@@ -66,6 +87,15 @@ Before Step 2 normalization:
 2. Identifier coverage report generated (`NPI`, `payer_id`, `EIN`, `state_hint`).
 3. Business-value field coverage report generated.
 4. Any schema drift alerts resolved or explicitly waived with owner approval.
+
+## Completed to date (2026-04-26)
+
+The following source contracts are now implemented in code and exercised on live DB runs:
+
+- CMS PBP benefits (`run-payor-pbp-benefits-ingest.cjs`)
+- CMS Landscape premiums (`run-payor-landscape-premium-ingest.cjs`)
+- CMS MA county service area (`run-payor-service-area-ingest.cjs`)
+- Census ZIP/county crosswalk (`run-payor-zip-county-crosswalk-ingest.cjs`)
 
 ## Payer ER Scope Exclusions (Implemented)
 

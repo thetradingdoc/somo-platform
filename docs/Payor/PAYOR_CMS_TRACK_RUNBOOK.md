@@ -4,6 +4,16 @@
 
 Use this when Office Ally / Inovalon exports are **not** loaded yet. Free sources: CMS MA artifacts, NPPES dissemination (`npidata_pfile`, `endpoint_pfile`), NUCC, tier-1 pulls.
 
+## 0. Current completed state (2026-04-26)
+
+These are already implemented and validated:
+
+- `run-payor-pbp-benefits-ingest.cjs` (benefits layer)
+- `run-payor-landscape-premium-ingest.cjs` (premium layer)
+- `run-payor-service-area-ingest.cjs` (county service area)
+- `run-payor-zip-county-crosswalk-ingest.cjs` (ZIP eligibility bridge)
+- `GET /api/public/plans/search` (ZIP + needs + sort -> explainable plan cards)
+
 ## 1. One SQLite file
 
 1. `cd middleware-platform`
@@ -106,3 +116,17 @@ Use this when moving from “pipeline works in dev” to **production**.
 4. **Hosted metrics** — Point **`PAYOR_INGEST_METRICS_WEBHOOK_URL`** (and optional log tailer on **`PAYOR_INGEST_METRICS_LOG_PATH`**) at your observability stack; save dashboard links and “who pages” in your team runbook (outside this repo if preferred).
 
 **Regression bundle (provider + payor smoke):** `npm run test:payor:section14-smoke` (Jest, in-band).
+
+## 9. Consumer search data refresh sequence (new)
+
+When refreshing MA consumer-search layers, run in this order (same `DB_PATH`):
+
+1. `run-payor-pbp-benefits-ingest.cjs`
+2. `run-payor-landscape-premium-ingest.cjs`
+3. `run-payor-service-area-ingest.cjs`
+4. `run-payor-zip-county-crosswalk-ingest.cjs`
+
+Then validate one end-to-end query:
+
+- Input: ZIP + needs (for example `33101`, `dental,hearing`)
+- Output: plans include premium, stars, MOOP, need coverage signals.

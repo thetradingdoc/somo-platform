@@ -140,6 +140,9 @@ jobs:
       - name: Agentic checkout static verification (repo root)
         run: node scripts/verify-agentic-checkout.cjs
 
+      - name: Docs parity check (routes/services)
+        run: node scripts/check-docs-route-service-parity.cjs
+
       - name: Install patient-app dependencies
         working-directory: ./patient-app
         run: npm ci

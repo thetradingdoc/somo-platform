@@ -25,6 +25,24 @@ The objective is to move from basic payer lookup/caching to a canonical, pre-res
 
 ### Implementation status (latest architecture snapshot)
 
+### Latest completed milestone (2026-04-26)
+
+The platform now supports a full public-data MA search chain:
+
+1. **Benefits layer loaded** from CMS PBP:
+   - `payor_plan_benefits` populated via `run-payor-pbp-benefits-ingest.cjs` (v3 logic with `covered_source`).
+2. **Premium layer loaded** from CMS Landscape:
+   - `payor_plan_premiums` populated via `run-payor-landscape-premium-ingest.cjs`.
+3. **Service area + ZIP eligibility loaded**:
+   - `payor_plan_service_areas` via `run-payor-service-area-ingest.cjs`
+   - `zip_county_crosswalk` via `run-payor-zip-county-crosswalk-ingest.cjs`
+4. **Consumer search API added**:
+   - `GET /api/public/plans/search` (`routes/public-plan-search.js`)
+   - input: `zip`, `needs[]`, `sort_by`
+   - output: plan cards with premium, stars, MOOP, matched/unmatched needs, reasons, warnings, coverage detail, confidence.
+
+**Operational stopgap:** ZIP `33101` is temporarily state-filtered to `FL` in the route to prevent county crosswalk bleed while broader ZIP/county disambiguation is tuned.
+
 **Offline payor ER (Steps 1–7)** — **Implemented** in SQLite (`middleware-platform/database.js` + migrations), with services and scripts: raw ingest (`payor_source_records`, `payor_ingest_batches`), normalization (`payor-normalization-service`), blocking (`payor-blocking-service`), fuzzy scoring (`payor-fuzzy-match-service`), composite decisions (`payor-resolution-scoring-service` / policy tables), canonical entities (`payor_canonical_entities`, aliases, links, relationships), and review queue tables + **admin APIs** (`/api/admin/payor-review-queue*`). Contamination guardrails (e.g. MA directory excluded from blocking, ingest routing split for Type 1 vs Type 2 NPPES) are in place per `PAYOR_ENTITY_RESOLUTION_TODOS.md` §9.1.
 
 **Runtime (Step 8)** — **`payor-registry-resolver-service.js`** resolves payer text to canonical ids on insurance paths behind **`PAYOR_CANONICAL_RESOLVER_ENABLED`** / **`PAYOR_CANONICAL_RESOLVER_SHADOW`** (no claim-time fuzzy matching).
@@ -424,3 +442,5 @@ This protects latency and reliability in claim-time paths.
 ## Summary
 
 The platform combines **legacy payer cache and transactions** (`insurance_payers`, Stedi/gateway) with a **canonical payor entity-resolution pipeline** (offline Steps 1–7), **runtime resolver** (Step 8), and **provider registry + network precheck** (Section 12). National-scale **quality** depends on loaded sources (especially NPPES Type 2 volume and optional vendor exports). **Production rollout** of flags, metrics sinks, and review workflows is documented in **`PAYOR_CMS_TRACK_RUNBOOK.md`**; **`PAYOR_ENTITY_RESOLUTION_TODOS.md`** tracks remaining procurement and test-matrix items.
+
+As of the latest update, the stack also includes a launchable MA discovery layer: **ZIP availability + premium + benefit fit** served from SQLite via `/api/public/plans/search`.

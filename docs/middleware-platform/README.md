@@ -2,7 +2,7 @@
 
 **Single file:** This document replaces the previous `docs/middleware-platform/*.md` tree. **Landing-assistant reasoning** (result summary, gates, rollout) remains canonical in [`docs/reasoning/README.md`](../reasoning/README.md).
 
-**Last updated:** 2026-04-20
+**Last updated:** 2026-04-29
 
 ## Table of contents
 
@@ -72,6 +72,94 @@
 ## Introduction
 
 Middleware-specific docs for Kelly, Skin & Care intake, voice/Retell, Step10/LangGraph, checkout and payments, security, catalog/OBF, and operations.
+
+### Documentation parity tracker
+
+- Active gap tracker: [`docs/meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`](../meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md)
+- Current batch scope: whole codebase, `routes/`, `services/`
+- Use this to keep docs aligned when new route/service files are added
+
+### Runtime ownership quick map (2026-04-29)
+
+Route ownership anchors for developer navigation (expand in future updates):
+
+- **Public experience + commerce**
+  - `routes/public-plan-search.js`
+  - `routes/public-geo.js`
+  - `routes/public-checkout.js`
+  - `routes/public-checkout-chat.js`
+  - `routes/public-face-read.js`
+- **Customer and business surfaces**
+  - `routes/customer-dashboard.js`
+  - `routes/customer-billing.js`
+  - `routes/customer-wallet.js`
+  - `routes/providers.js`
+  - `routes/pricing.js`
+- **Admin and operations**
+  - `routes/admin-tenants.js`
+  - `routes/admin-ai-assistant.js`
+  - `routes/internal-service-ops.js`
+  - `routes/usage.js`
+  - `routes/usage-monitor.js`
+- **Clinical + payer/payor + RCM**
+  - `routes/rcm.js`
+  - `routes/case-report.js`
+  - `routes/prescriptions.js`
+  - `routes/invoices.js`
+
+Route group expectations:
+
+- **Public routes** (`/api/public/*`, `/public/*`)
+  - guardrails: request validation, public rate limit buckets, no privileged session assumptions
+- **Admin routes** (`/api/admin/*`)
+  - guardrails: `requireAdminAuth`, stronger auth/session checks, audit-oriented logging
+- **Internal routes** (`/api/internal/*`)
+  - guardrails: service-to-service auth/token checks; never expose on public clients
+- **Patient/provider/customer routes**
+  - guardrails: domain auth middleware + endpoint-specific limiters and validation
+
+Service-domain map anchors for developer navigation:
+
+- **Assistant/reasoning orchestration**: `services/reasoning-*`, `services/checkout-graph.js`, `services/session-state-*`
+- **Security/compliance**: `services/anti-sybil-service.js`, `services/redaction-service.js`, `services/privacy-governance-service.js`
+- **Geo/plan/coverage**: `services/geo-resolver-service.js`, `services/scan-route-response.js`, `services/landing-*`
+- **Payor/provider network**: `services/payor-*`, `services/provider-network-*`
+- **Payments/reliability**: `services/payment-*`, `services/settlement-*`, `services/refund-workflow-service.js`
+
+Service dependency boundaries and data authority:
+
+- **Routing layer (`routes/*`)** owns HTTP contracts and middleware composition; should not hold deep business state logic.
+- **Service layer (`services/*`)** owns domain decisions and state transitions.
+- **Database access (`database.js`)** is authority for persistence primitives and migrations.
+- **Cross-domain orchestration** should happen in explicit orchestrator services, not ad-hoc route coupling.
+
+Per-domain entry services:
+
+- Assistant/reasoning: `reasoning-fsm-service.js`, `reasoning-job-queue-service.js`
+- Payments: `payment-orchestrator.js`, `refund-workflow-service.js`, settlement services
+- Geo/coverage: `geo-resolver-service.js`, `scan-route-response.js`
+- Payor/provider network: `payor-registry-resolver-service.js`, `provider-network-precheck-service.js`
+
+Failure-mode notes:
+
+- **Reasoning**: default to deterministic/fallback path when model/gate paths fail.
+- **Payments**: enforce idempotency and reconcile webhook/process route divergence.
+- **Payor**: use feature-flagged canonical resolver rollout and explicit review queue handling.
+
+Per-domain debug quick links:
+
+- Runtime/call paths: `docs/architecture/RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md`
+- Ownership map: `docs/development/CODE_OWNERSHIP_BY_SURFACE.md`
+- Scripts map: `docs/development/SCRIPTS_OPERATIONS_MAP.md`
+- Gap tracker: `docs/meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`
+
+New route checklist:
+
+1. Add route mount and validation/auth/rate-limit middleware.
+2. Add/update tests (unit or integration for contract behavior).
+3. Add observability hooks (logs/metrics/audit where relevant).
+4. Update this middleware docs ownership map.
+5. Update `docs/meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md` if introducing new route/service coverage.
 
 **Configure Retell** (from repo): `cd middleware-platform && node configure-retell.js` — requires `RETELL_API_KEY`, `RETELL_AGENT_ID`, and usually a running API.
 
