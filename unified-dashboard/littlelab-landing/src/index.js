@@ -8,6 +8,7 @@ import {
   normalizeHttpApiBase,
   normalizePublicMetaJson
 } from './landingAssistantApi';
+import { computePlanMatchMeta, sortPlansByMode } from './planSort';
 import './skin-care-tokens.css';
 import './styles.css';
 /** Doctor headshot for hero kicker (distinct from approved seal). Served from `public/images/branding/`. */
@@ -87,6 +88,92 @@ const GLOBAL_MEDICAL_IMAGE_POOL = Array.from(
     DEFAULT_PAYOR_CARD_IMAGE
   ])
 );
+const LANDING_SEED_PAYOR_CARDS = [
+  {
+    id: 'seed-aetna',
+    title: 'Aetna Medicare',
+    star: 4.7,
+    priceLine: 'From $0/mo',
+    servicesLine: 'Dental, vision, hearing',
+    image: PAYOR_THEME_IMAGES.preventive[0] || DEFAULT_PAYOR_CARD_IMAGE,
+    moop: 4900,
+    priorAuthCount: 1,
+    confidence: 'estimated',
+    coverageCount: 3,
+    planType: 'HMO',
+    yearlyCostLine: '$4,900',
+    approvalLine: 'Low burden',
+    warningLine: '',
+    cardTag: 'Top Rated',
+    engagementTags: ['Top quality', 'Dental included', 'Vision included'],
+    coveredTagLabels: ['Dental', 'Vision', 'Hearing'],
+    partialTagLabels: [],
+    missingTagLabels: []
+  },
+  {
+    id: 'seed-uhc',
+    title: 'UnitedHealthcare',
+    star: 4.5,
+    priceLine: 'From $12/mo',
+    servicesLine: 'Dental, specialist, preventive',
+    image: PAYOR_THEME_IMAGES.specialist[0] || DEFAULT_PAYOR_CARD_IMAGE,
+    moop: 5600,
+    priorAuthCount: 2,
+    confidence: 'estimated',
+    coverageCount: 3,
+    planType: 'PPO',
+    yearlyCostLine: '$5,600',
+    approvalLine: 'Medium burden',
+    warningLine: '',
+    cardTag: 'Popular',
+    engagementTags: ['Low monthly cost', 'Preventive', 'Specialist'],
+    coveredTagLabels: ['Dental', 'Specialist', 'Preventive'],
+    partialTagLabels: [],
+    missingTagLabels: []
+  },
+  {
+    id: 'seed-humana',
+    title: 'Humana Medicare',
+    star: 4.6,
+    priceLine: 'From $18/mo',
+    servicesLine: 'Vision, hearing, preventive',
+    image: PAYOR_THEME_IMAGES.vision[0] || DEFAULT_PAYOR_CARD_IMAGE,
+    moop: 6400,
+    priorAuthCount: 1,
+    confidence: 'estimated',
+    coverageCount: 3,
+    planType: 'HMO-POS',
+    yearlyCostLine: '$6,400',
+    approvalLine: 'Low burden',
+    warningLine: '',
+    cardTag: 'Best Value',
+    engagementTags: ['Vision included', 'Hearing included', 'Preventive'],
+    coveredTagLabels: ['Vision', 'Hearing', 'Preventive'],
+    partialTagLabels: [],
+    missingTagLabels: []
+  },
+  {
+    id: 'seed-bcbs',
+    title: 'Blue Cross',
+    star: 4.4,
+    priceLine: 'From $24/mo',
+    servicesLine: 'Dental, vision, hospital',
+    image: PAYOR_THEME_IMAGES.hospital[0] || DEFAULT_PAYOR_CARD_IMAGE,
+    moop: 6800,
+    priorAuthCount: 2,
+    confidence: 'estimated',
+    coverageCount: 3,
+    planType: 'PPO',
+    yearlyCostLine: '$6,800',
+    approvalLine: 'Medium burden',
+    warningLine: '',
+    cardTag: 'Popular',
+    engagementTags: ['Dental included', 'Vision included', 'Hospital'],
+    coveredTagLabels: ['Dental', 'Vision', 'Hospital'],
+    partialTagLabels: [],
+    missingTagLabels: []
+  }
+];
 
 const STAR_BANDS = [
   { id: '4.5+', label: '★★★★★', min: 4.5 },
@@ -158,12 +245,21 @@ async function fetchPublicPlansJsonWithFallback(base, routeWithLeadingSlash, que
   let lastData = {};
   for (const endpoint of endpoints) {
     const target = query ? `${endpoint}?${query}` : endpoint;
-    const res = await fetch(target);
-    const data = await res.json().catch(() => ({}));
+    let res = null;
+    let data = {};
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      res = await fetch(target, { cache: 'no-store', signal: controller.signal });
+      clearTimeout(timeout);
+      data = await res.json().catch(() => ({}));
+    } catch (_) {
+      continue;
+    }
     lastResponse = res;
     lastData = data;
     // If endpoint is missing on this host, try next route shape.
-    if (res.status === 404) continue;
+    if (res.status === 404 || res.status === 304) continue;
     return { res, data };
   }
   return { res: lastResponse, data: lastData };
@@ -180,8 +276,17 @@ async function fetchPublicGeoJsonWithFallback(base, routeWithLeadingSlash) {
   let lastResponse = null;
   let lastData = {};
   for (const endpoint of endpoints) {
-    const res = await fetch(endpoint);
-    const data = await res.json().catch(() => ({}));
+    let res = null;
+    let data = {};
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      res = await fetch(endpoint, { cache: 'no-store', signal: controller.signal });
+      clearTimeout(timeout);
+      data = await res.json().catch(() => ({}));
+    } catch (_) {
+      continue;
+    }
     lastResponse = res;
     lastData = data;
     if (res.status === 404) continue;
@@ -190,26 +295,26 @@ async function fetchPublicGeoJsonWithFallback(base, routeWithLeadingSlash) {
   return { res: lastResponse, data: lastData };
 }
 
-const BEST_MATCH_THRESHOLD = 0.8;
-const PARTIAL_MATCH_THRESHOLD = 0.5;
-
-function computePlanMatchMeta(plan, selectedNeeds) {
-  const requestedNeeds = Array.isArray(selectedNeeds) ? selectedNeeds.filter(Boolean) : [];
-  if (!requestedNeeds.length) {
-    return { ratio: 1, matchedCount: 0, totalCount: 0, status: 'best' };
-  }
-  const coverage = plan?.coverage_detail || {};
-  const matchedCount = requestedNeeds.filter((needId) => coverage?.[needId]?.covered === true).length;
-  const totalCount = requestedNeeds.length;
-  const ratio = totalCount ? matchedCount / totalCount : 0;
-  const status = ratio >= BEST_MATCH_THRESHOLD ? 'best' : ratio >= PARTIAL_MATCH_THRESHOLD ? 'partial' : 'weak';
-  return { ratio, matchedCount, totalCount, status };
-}
-
 function formatNeedLabel(needKey) {
-  const raw = String(needKey || '').replace(/_/g, ' ').trim();
+  const normalized = String(needKey || '').trim().toLowerCase();
+  const overrides = {
+    chiro: 'Chiropractic',
+    chiropractic: 'Chiropractic',
+    nursing_home: 'Nursing home'
+  };
+  if (overrides[normalized]) return overrides[normalized];
+  const raw = normalized.replace(/_/g, ' ').trim();
   if (!raw) return '';
   return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function shuffledCopy(list) {
+  const out = Array.isArray(list) ? list.slice() : [];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 function formatCurrencyValue(value) {
@@ -388,6 +493,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
   const [resolvedLocation, setResolvedLocation] = useState({ zip: '', state: '', county: '' });
   const [zip, setZip] = useState('');
   const [sortBy, setSortBy] = useState('premium');
+  const [strictNeedsOnly, setStrictNeedsOnly] = useState(false);
   const [selectedNeeds, setSelectedNeeds] = useState([]);
   const [filterState, setFilterState] = useState({
     costBands: [],
@@ -432,6 +538,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
   const [isMobileViewport, setIsMobileViewport] = useState(
     () => (typeof window !== 'undefined' ? window.innerWidth <= 1024 : false)
   );
+  const buildStamp = useMemo(() => String(process.env.REACT_APP_BUILD_STAMP || 'local-dev'), []);
   const textScale = 'large';
   const resultsRef = useRef(null);
   const comparePanelRef = useRef(null);
@@ -493,7 +600,6 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     { id: 'dental', label: 'Dental' },
     { id: 'vision', label: 'Vision' },
     { id: 'hearing', label: 'Hearing' },
-    { id: 'cancer', label: 'Cancer care' },
     { id: 'physio', label: 'Physio' },
     { id: 'chiro', label: 'Chiropractic' },
     { id: 'preventive', label: 'Preventive' },
@@ -503,6 +609,28 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     { id: 'ambulance', label: 'Ambulance' },
     { id: 'nursing_home', label: 'Nursing home' }
   ];
+  const supportedNeedIds = useMemo(
+    () => new Set(supportedNeedOptions.map((need) => need.id)),
+    [supportedNeedOptions]
+  );
+  const normalizeNeedSelection = useCallback((rawNeeds) => {
+    const rawList = Array.isArray(rawNeeds)
+      ? rawNeeds
+      : String(rawNeeds || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+    const normalized = [];
+    const seen = new Set();
+    rawList.forEach((value) => {
+      const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+      const canonical = key === 'chiropractic' ? 'chiro' : key;
+      if (!supportedNeedIds.has(canonical) || seen.has(canonical)) return;
+      seen.add(canonical);
+      normalized.push(canonical);
+    });
+    return normalized;
+  }, [supportedNeedIds]);
   const locationFilterData = geoOptions;
   const zipScopedStateOptions = useMemo(() => {
     if (!zipGeoCandidates.length) return [];
@@ -553,9 +681,9 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (issues.includes('missing_zip_county_crosswalk')) return 'ZIP crosswalk table is missing.';
     return 'Geo mapping data is incomplete.';
   }, [geoDiagnostics]);
-  const [featuredPayorCards, setFeaturedPayorCards] = useState([]);
+  const [featuredPayorCards, setFeaturedPayorCards] = useState(LANDING_SEED_PAYOR_CARDS);
   /** `idle` | `loading` | `ready` | `error` — featured rail uses API data only. */
-  const [featuredCardsStatus, setFeaturedCardsStatus] = useState('idle');
+  const [featuredCardsStatus, setFeaturedCardsStatus] = useState('ready');
   /** Row counts from GET /api/public/plans/meta (SQLite CMS tables). */
   const [planDatasetMeta, setPlanDatasetMeta] = useState(null);
   const normalizePayorName = useCallback((rawName) => {
@@ -644,6 +772,12 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (hasState) return true;
     return hasZip;
   }, [filterState.county, filterState.state, locationStatus, selectedNeeds.length, zip]);
+  const showZipUnmappedHint = useMemo(() => {
+    const hasZip = Boolean(String(zip || '').trim());
+    const hasCountyScopeInput = Boolean(String(filterState.state || '').trim() && String(filterState.county || '').trim());
+    const scopeAlreadyCounty = String(searchScopeMeta?.scopeUsed || '').toLowerCase() === 'county';
+    return locationStatus === 'unresolved_zip' && hasZip && !hasCountyScopeInput && !scopeAlreadyCounty;
+  }, [filterState.county, filterState.state, locationStatus, searchScopeMeta?.scopeUsed, zip]);
 
   const classifyResultErrorType = useCallback((msg) => {
     const text = String(msg || '').toLowerCase();
@@ -803,6 +937,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (nextFilterState.planStyles.length) params.set('plan_style', nextFilterState.planStyles.join(','));
     if (nextFilterState.maxYearlyCost) params.set('max_yearly_cost', String(nextFilterState.maxYearlyCost));
     if (nextFilterState.approvalNeeded) params.set('approval_needed', '1');
+    if (strictNeedsOnly) params.set('strict_needs_only', '1');
     if (nextFilterState.state) params.set('state', nextFilterState.state);
     if (nextFilterState.county) params.set('county', nextFilterState.county);
     const nextPayor = payorOverride || selectedPayor;
@@ -813,7 +948,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
       return;
     }
     window.location.href = targetUrl;
-  }, [filterState, location, resolvedLocation, selectedNeeds, selectedPayor, sortBy, zip]);
+  }, [filterState, location, resolvedLocation, selectedNeeds, selectedPayor, sortBy, strictNeedsOnly, zip]);
 
   const handleSearchClick = useCallback(() => {
     if (!selectedNeeds.length) {
@@ -937,17 +1072,14 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     const loc =
       typeof window !== 'undefined' && window.location ? { hostname: window.location.hostname } : null;
     const bases = buildNavigatorPublicApiBases(apiBaseCandidates, loc);
-    const defaultZip = zip.trim() || '10456';
+    const sampleStates = ['CA', 'TX', 'FL', 'NY', 'NJ', 'PA', 'IL', 'GA', 'NC', 'AZ', 'OH', 'MI', 'VA', 'WA', 'MA', 'CO'];
     const defaultNeeds = selectedNeeds.length ? selectedNeeds : ['dental', 'vision', 'specialist', 'preventive'];
-    const requestKey = `${defaultZip}|${defaultNeeds.slice().sort().join(',')}|deep-v2`;
+    const requestKey = `pipeline-sample|${defaultNeeds.slice().sort().join(',')}|v1`;
     const now = Date.now();
     const isRecentlyFetched =
       featuredCardsFetchRef.current.lastKey === requestKey &&
       now - featuredCardsFetchRef.current.lastFetchedAt < 5 * 60 * 1000;
     if (featuredCardsFetchRef.current.inFlight || isRecentlyFetched) return;
-    const clearFeatured = () => {
-      setFeaturedPayorCards([]);
-    };
     try {
       featuredCardsFetchRef.current.inFlight = true;
       setFeaturedCardsStatus('loading');
@@ -957,39 +1089,42 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
         { sort_by: 'lowest_premium', needs: defaultNeeds },
         { sort_by: 'premium', needs: defaultNeeds.slice().reverse() }
       ];
-      const plans = [];
+      const shuffledStates = shuffledCopy(sampleStates);
+      const plansByPayer = new Map();
+      const uniquePayerTarget = 12;
       for (const base of bases) {
-        const plansBatches = await Promise.all(
-          querySets.map(async (query) => {
+        for (const state of shuffledStates) {
+          for (const query of querySets) {
             const params = new URLSearchParams({
-              zip: defaultZip,
+              location_type: 'state',
+              state,
               sort_by: query.sort_by,
-              limit: '100',
+              limit: '50',
               needs: query.needs.join(',')
             });
             const { res, data } = await fetchPublicPlansJsonWithFallback(base, '/search', params.toString());
-            if (!res.ok || data?.success === false || data?.data_ready === false) return [];
-            return Array.isArray(data?.plans) ? data.plans : [];
-          })
-        );
-        plans.push(...plansBatches.flat());
-        if (plans.length) break;
+            if (!res?.ok || data?.success === false || data?.data_ready === false) continue;
+            const batch = Array.isArray(data?.plans) ? data.plans : [];
+            for (const plan of batch) {
+              const payerKey = normalizePayorName(plan?.payer_name);
+              if (!payerKey) continue;
+              if (!plansByPayer.has(payerKey)) plansByPayer.set(payerKey, []);
+              plansByPayer.get(payerKey).push(plan);
+            }
+            if (plansByPayer.size >= uniquePayerTarget) break;
+          }
+          if (plansByPayer.size >= uniquePayerTarget) break;
+        }
+        if (plansByPayer.size >= uniquePayerTarget) break;
       }
-      if (!plans.length) {
-        clearFeatured();
+      if (!plansByPayer.size) {
+        if (!featuredPayorCards.length) setFeaturedPayorCards(LANDING_SEED_PAYOR_CARDS);
         setFeaturedCardsStatus('ready');
         featuredCardsFetchRef.current.lastKey = requestKey;
         featuredCardsFetchRef.current.lastFetchedAt = now;
         return;
       }
-      const grouped = new Map();
-      for (const plan of plans) {
-        const key = normalizePayorName(plan.payer_name);
-        if (!key) continue;
-        if (!grouped.has(key)) grouped.set(key, []);
-        grouped.get(key).push(plan);
-      }
-      const cardOverrides = Array.from(grouped.entries())
+      const cardOverrides = shuffledCopy(Array.from(plansByPayer.entries())
         .map(([payerName, payerPlans]) => {
           const best = payerPlans
             .slice()
@@ -1020,10 +1155,10 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
             planType: String(best?.plan_type || '')
           };
         })
-        .sort((a, b) => b.star - a.star);
+        .sort((a, b) => b.star - a.star));
 
       if (!cardOverrides.length) {
-        clearFeatured();
+        if (!featuredPayorCards.length) setFeaturedPayorCards(LANDING_SEED_PAYOR_CARDS);
         setFeaturedCardsStatus('ready');
         featuredCardsFetchRef.current.lastKey = requestKey;
         featuredCardsFetchRef.current.lastFetchedAt = now;
@@ -1102,17 +1237,25 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
           missingTagLabels
         };
       });
-      setFeaturedPayorCards(nextCards);
+      const mergedCards = [...nextCards];
+      if (mergedCards.length < 4) {
+        for (const seed of LANDING_SEED_PAYOR_CARDS) {
+          if (mergedCards.some((card) => card.id === seed.id || card.title === seed.title)) continue;
+          mergedCards.push(seed);
+          if (mergedCards.length >= 4) break;
+        }
+      }
+      setFeaturedPayorCards(mergedCards);
       setFeaturedCardsStatus('ready');
       featuredCardsFetchRef.current.lastKey = requestKey;
       featuredCardsFetchRef.current.lastFetchedAt = now;
     } catch (_) {
-      clearFeatured();
+      if (!featuredPayorCards.length) setFeaturedPayorCards(LANDING_SEED_PAYOR_CARDS);
       setFeaturedCardsStatus('error');
     } finally {
       featuredCardsFetchRef.current.inFlight = false;
     }
-  }, [apiBaseCandidates, imageForCard, normalizePayorName, selectedNeeds, zip]);
+  }, [apiBaseCandidates, featuredPayorCards.length, imageForCard, normalizePayorName, selectedNeeds]);
 
   const payorRails = useMemo(() => {
     if (!featuredPayorCards.length) return [];
@@ -1121,7 +1264,12 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
       .slice()
       .sort((a, b) => Number(b.star || 0) - Number(a.star || 0));
     if (topRatedSource.length) {
-      return [{ id: 'top-rated', title: 'Top rated', cards: topRatedSource }];
+      const filler = featuredPayorCards
+        .slice()
+        .sort((a, b) => Number(b.star || 0) - Number(a.star || 0))
+        .filter((card) => !topRatedSource.some((t) => t.id === card.id));
+      const blendedTopRated = [...topRatedSource, ...filler].slice(0, 12);
+      return [{ id: 'top-rated', title: 'Top rated', cards: blendedTopRated }];
     }
     const preview = featuredPayorCards
       .slice()
@@ -1132,22 +1280,18 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
 
   const gallerySectionTitle = useMemo(() => {
     const rail = payorRails[0];
-    if (!rail) return 'Plans near you';
-    if (rail.id === 'top-rated') return 'Top rated plans near you';
-    if (rail.id === 'preview') return 'Plans near you';
-    return `${rail.title} near you`;
+    if (!rail) return 'Sample plans from our pipeline';
+    if (rail.id === 'top-rated') return 'Top rated sample plans';
+    if (rail.id === 'preview') return 'Sample plans from our pipeline';
+    return rail.title;
   }, [payorRails]);
 
   const landingPreviewMeta = useMemo(() => {
     if (isResultsPage) return '';
-    const z = String(zip || '').trim() || String(resolvedLocation.zip || '').trim();
-    if (z) return `Based on ZIP ${z}`;
-    const loc = String(location || '').trim();
-    if (loc) return loc.length > 36 ? `Near ${loc.slice(0, 36)}…` : `Near ${loc}`;
-    return 'Add a ZIP for local results';
-  }, [isResultsPage, zip, resolvedLocation.zip, location]);
+    return 'Randomized across multiple states';
+  }, [isResultsPage]);
 
-  const filteredResults = useMemo(() => {
+  const exactMatchResults = useMemo(() => {
     if (!results.length) return [];
     const anyStarBandMatch = (stars) => {
       if (!filterState.starBands.length) return true;
@@ -1182,48 +1326,10 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     });
   }, [filterState, results, selectedNeeds, selectedPayor]);
 
-  const displayedResults = useMemo(() => {
-    const list = filteredResults.slice();
-    if (!list.length) return list;
-    if (sortBy === 'coverage') {
-      return list.sort((a, b) => {
-        const ma = computePlanMatchMeta(a, selectedNeeds);
-        const mb = computePlanMatchMeta(b, selectedNeeds);
-        const ratioDiff = mb.ratio - ma.ratio;
-        if (ratioDiff !== 0) return ratioDiff;
-        const premiumDiff = Number(a.monthly_premium || 99999) - Number(b.monthly_premium || 99999);
-        if (premiumDiff !== 0) return premiumDiff;
-        return Number(b.star_rating || 0) - Number(a.star_rating || 0);
-      });
-    }
-    if (sortBy === 'highest_stars') {
-      return list.sort((a, b) => {
-        const starDiff = Number(b.star_rating || 0) - Number(a.star_rating || 0);
-        if (starDiff !== 0) return starDiff;
-        return Number(a.monthly_premium || 99999) - Number(b.monthly_premium || 99999);
-      });
-    }
-    if (sortBy === 'lowest_moop') {
-      return list.sort((a, b) => {
-        const moopDiff = Number(a.moop_amount || Number.MAX_SAFE_INTEGER) - Number(b.moop_amount || Number.MAX_SAFE_INTEGER);
-        if (moopDiff !== 0) return moopDiff;
-        return Number(a.monthly_premium || 99999) - Number(b.monthly_premium || 99999);
-      });
-    }
-    return list.sort((a, b) => Number(a.monthly_premium || 99999) - Number(b.monthly_premium || 99999));
-  }, [filteredResults, selectedNeeds, sortBy]);
-
-  const activePlan = useMemo(() => {
-    const id = String(activePlanId || '').trim();
-    if (!id) return null;
-    return displayedResults.find((plan) => String(plan.contract_id || '').trim() === id) || null;
-  }, [activePlanId, displayedResults]);
-
-  useEffect(() => {
-    if (showPlanDetails && !activePlan) {
-      setShowPlanDetails(false);
-    }
-  }, [showPlanDetails, activePlan]);
+  const displayedResults = useMemo(
+    () => sortPlansByMode(exactMatchResults, sortBy, selectedNeeds),
+    [exactMatchResults, selectedNeeds, sortBy]
+  );
 
   const computePriorAuthBurden = useCallback((plan) => {
     const count = Object.values(plan?.coverage_detail || {}).filter((detail) => detail?.prior_auth === true).length;
@@ -1233,7 +1339,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
   }, []);
 
   const closestPartialResults = useMemo(() => {
-    if (!results.length || filteredResults.length) return [];
+    if (!results.length || exactMatchResults.length) return [];
     const narrowed = results.filter((plan) => {
       const payorName = String(plan.payer_name || '').toLowerCase();
       const stars = Number(plan.star_rating || 0);
@@ -1250,21 +1356,30 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     });
     return narrowed
       .filter((plan) => computePlanMatchMeta(plan, selectedNeeds).matchedCount > 0)
-      .slice()
-      .sort((a, b) => {
-        const ma = computePlanMatchMeta(a, selectedNeeds);
-        const mb = computePlanMatchMeta(b, selectedNeeds);
-        const ratioDiff = mb.ratio - ma.ratio;
-        if (ratioDiff !== 0) return ratioDiff;
-        const moopDiff = Number(a.moop_amount || Number.MAX_SAFE_INTEGER) - Number(b.moop_amount || Number.MAX_SAFE_INTEGER);
-        if (moopDiff !== 0) return moopDiff;
-        return Number(a.monthly_premium || 99999) - Number(b.monthly_premium || 99999);
-      });
-  }, [filterState, filteredResults.length, results, selectedNeeds, selectedPayor]);
+      .slice();
+  }, [exactMatchResults.length, filterState, results, selectedNeeds, selectedPayor]);
 
-  const renderedResults = filteredResults.length ? displayedResults : closestPartialResults;
-  const hasNoExactMatches = searched && !loading && !error && filteredResults.length === 0 && closestPartialResults.length > 0;
+  const displayedPartialResults = useMemo(
+    () => sortPlansByMode(closestPartialResults, sortBy, selectedNeeds),
+    [closestPartialResults, selectedNeeds, sortBy]
+  );
+
+  const renderedResults = displayedResults.length
+    ? displayedResults
+    : (strictNeedsOnly ? [] : displayedPartialResults);
+  const hasNoExactMatches = searched && !loading && !error && displayedResults.length === 0 && displayedPartialResults.length > 0;
   const noResultsAtAll = searched && !loading && !error && renderedResults.length === 0;
+  const activePlan = useMemo(() => {
+    const id = String(activePlanId || '').trim();
+    if (!id) return null;
+    return renderedResults.find((plan) => String(plan.contract_id || '').trim() === id) || null;
+  }, [activePlanId, renderedResults]);
+
+  useEffect(() => {
+    if (showPlanDetails && !activePlan) {
+      setShowPlanDetails(false);
+    }
+  }, [activePlan, showPlanDetails]);
 
   const comparePlans = useMemo(() => {
     const selected = new Set(compareIds);
@@ -1368,6 +1483,28 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (filterState.approvalNeeded) labels.push('Prior approval may be needed');
     return labels;
   }, [filterState, planStyleLabelMap]);
+  const activeFilterPills = useMemo(() => {
+    const pills = [];
+    selectedNeeds.forEach((needId) => {
+      pills.push({ id: `need-${needId}`, label: formatNeedLabel(needId), kind: 'need', value: needId });
+    });
+    if (filterState.monthlyMax !== '' && Number.isFinite(Number(filterState.monthlyMax))) {
+      if (Number(filterState.monthlyMax) === 0) pills.push({ id: 'monthlyMax', label: 'Monthly cost: $0 premium only', kind: 'monthlyMax' });
+      else pills.push({ id: 'monthlyMax', label: `Monthly cost: up to $${Number(filterState.monthlyMax)}/mo`, kind: 'monthlyMax' });
+    }
+    filterState.starBands.forEach((bandId) => {
+      const band = STAR_BANDS.find((b) => b.id === bandId);
+      pills.push({ id: `star-${bandId}`, label: `Rating: ${band?.label || bandId}`, kind: 'starBand', value: bandId });
+    });
+    if (filterState.maxYearlyCost) pills.push({ id: 'maxYearlyCost', label: `Max yearly cost: up to $${Number(filterState.maxYearlyCost).toLocaleString()}`, kind: 'maxYearlyCost' });
+    filterState.planStyles.forEach((style) => pills.push({ id: `planStyle-${style}`, label: `Plan type: ${planStyleLabelMap[style] || style}`, kind: 'planStyle', value: style }));
+    if (filterState.approvalNeeded) pills.push({ id: 'approvalNeeded', label: 'Prior approval may be needed', kind: 'approvalNeeded' });
+    if (selectedPayor) pills.push({ id: 'payor', label: `Payor: ${selectedPayor}`, kind: 'payor' });
+    if (strictNeedsOnly) pills.push({ id: 'strict', label: 'Exact selected needs only', kind: 'strict' });
+    if (filterState.state) pills.push({ id: 'state', label: `State: ${filterState.state}`, kind: 'state' });
+    if (filterState.county) pills.push({ id: 'county', label: `County: ${filterState.county}`, kind: 'county' });
+    return pills;
+  }, [filterState, planStyleLabelMap, selectedNeeds, selectedPayor, strictNeedsOnly]);
 
   const resetAllResultFilters = useCallback(() => {
     setFilterState({
@@ -1381,6 +1518,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
       county: ''
     });
     setSelectedPayor('');
+    setStrictNeedsOnly(false);
   }, []);
 
   const resetRestrictiveOnly = useCallback(() => {
@@ -1446,6 +1584,48 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (nextFilterState.maxYearlyCost && Number(nextFilterState.maxYearlyCost) <= 5000) nextTopFilters.push('low-moop');
     navigateToResults('', { filterState: nextFilterState, topFilters: nextTopFilters });
   };
+  const removeActiveFilterPill = useCallback((pill) => {
+    if (!pill || !pill.kind) return;
+    if (pill.kind === 'payor') {
+      setSelectedPayor('');
+      return;
+    }
+    if (pill.kind === 'strict') {
+      setStrictNeedsOnly(false);
+      return;
+    }
+    if (pill.kind === 'need') {
+      setSelectedNeeds((prev) => prev.filter((id) => id !== pill.value));
+      return;
+    }
+    if (pill.kind === 'state') {
+      setFilterState((prev) => ({ ...prev, state: '', county: '' }));
+      return;
+    }
+    if (pill.kind === 'county') {
+      setFilterState((prev) => ({ ...prev, county: '' }));
+      return;
+    }
+    if (pill.kind === 'monthlyMax') {
+      setFilterState((prev) => ({ ...prev, monthlyMax: '' }));
+      return;
+    }
+    if (pill.kind === 'starBand') {
+      setFilterState((prev) => ({ ...prev, starBands: prev.starBands.filter((id) => id !== pill.value) }));
+      return;
+    }
+    if (pill.kind === 'maxYearlyCost') {
+      setFilterState((prev) => ({ ...prev, maxYearlyCost: '' }));
+      return;
+    }
+    if (pill.kind === 'planStyle') {
+      setFilterState((prev) => ({ ...prev, planStyles: prev.planStyles.filter((id) => id !== pill.value) }));
+      return;
+    }
+    if (pill.kind === 'approvalNeeded') {
+      setFilterState((prev) => ({ ...prev, approvalNeeded: false }));
+    }
+  }, []);
 
   const toggleCompare = (contractId) => {
     if (!contractId) return;
@@ -1469,6 +1649,10 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    console.info(`[Landing build] ${buildStamp}`);
+  }, [buildStamp]);
   useEffect(() => {
     if (!renderedResults.length) {
       setActivePlanId('');
@@ -1500,10 +1684,10 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     const params = new URLSearchParams(window.location.search);
     const nextZip = String(params.get('zip') || '').trim();
     const nextLocation = String(params.get('location') || '').trim();
-    const nextNeeds = String(params.get('needs') || '')
+    const nextNeeds = normalizeNeedSelection(String(params.get('needs') || '')
       .split(',')
       .map((v) => v.trim())
-      .filter(Boolean);
+      .filter(Boolean));
     const nextState = String(params.get('state') || '').trim();
     const nextCounty = String(params.get('county') || '').trim();
     const nextFilters = String(params.get('filters') || '')
@@ -1527,6 +1711,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     const nextApprovalNeeded = ['1', 'true', 'yes'].includes(String(params.get('approval_needed') || '').toLowerCase());
     const nextSort = String(params.get('sort_by') || '').trim();
     const nextPayor = String(params.get('payor') || '').trim();
+    const nextStrictNeedsOnly = ['1', 'true', 'yes'].includes(String(params.get('strict_needs_only') || '').toLowerCase());
     if (nextZip) {
       setZip(nextZip);
       setLocationStatus('resolving');
@@ -1555,7 +1740,8 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     }));
     if (nextSort) setSortBy(nextSort);
     if (nextPayor) setSelectedPayor(nextPayor);
-  }, [isResultsPage]);
+    setStrictNeedsOnly(nextStrictNeedsOnly);
+  }, [isResultsPage, normalizeNeedSelection]);
   useEffect(() => {
     if (!isResultsPage) return;
     const cleanZip = String(zip || '').replace(/[^\d]/g, '').slice(0, 5);
@@ -1601,6 +1787,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (selectedNeeds.length) params.set('needs', selectedNeeds.join(','));
     params.set('sort_by', sortBy);
     if (selectedPayor.trim()) params.set('payor', selectedPayor.trim());
+    if (strictNeedsOnly) params.set('strict_needs_only', '1');
     if (topFilterIds.length) params.set('filters', topFilterIds.join(','));
     if (filterState.monthlyMax !== '' && Number.isFinite(Number(filterState.monthlyMax))) {
       params.set('monthly_max', String(filterState.monthlyMax));
@@ -1615,12 +1802,12 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
     if (window.location.search !== `?${params.toString()}`) {
       window.history.replaceState({}, '', nextUrl);
     }
-  }, [filterState, isResultsPage, location, selectedNeeds, selectedPayor, sortBy, topFilterIds, zip]);
+  }, [filterState, isResultsPage, location, selectedNeeds, selectedPayor, sortBy, strictNeedsOnly, topFilterIds, zip]);
   useEffect(() => {
     if (!isResultsPage) return;
     if (!canRunSearch) return;
     void executeSearch();
-  }, [canRunSearch, executeSearch, isResultsPage, sortBy, selectedPayor]);
+  }, [canRunSearch, executeSearch, isResultsPage, selectedPayor, sortBy, strictNeedsOnly]);
   useEffect(() => {
     if (!isResultsPage && showFiltersSheet) setShowFiltersSheet(false);
   }, [isResultsPage, showFiltersSheet]);
@@ -1983,7 +2170,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
                 ) : null}
               </button>
             </div>
-            {locationStatus === 'unresolved_zip' && zip ? (
+            {showZipUnmappedHint ? (
               <p className="navigator-hero-subtitle" role="status">
                 ZIP {zip} is not mapped yet. Select state/county in Filters to continue.
               </p>
@@ -2105,11 +2292,6 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
           <span className="payor-section-label-line" aria-hidden="true" />
           <span className="payor-section-label-meta">{landingPreviewMeta}</span>
         </div>
-        {featuredCardsStatus === 'loading' && !payorRails.length ? (
-          <div className="payor-gallery-empty" role="status">
-            Loading preview from your ZIP and needs…
-          </div>
-        ) : null}
         {featuredCardsStatus === 'error' && !payorRails.length ? (
           <div className="payor-gallery-empty" role="alert">
             Could not load preview plans. Check that the API is running and CMS tables are ingested.
@@ -2347,50 +2529,40 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
             <div className="results-sort-bar">
               <span className="results-sort-label">Sort by:</span>
               <button type="button" className={`results-sort-btn ${sortBy === 'premium' ? 'is-active' : ''}`} onClick={() => setSortBy('premium')}>Lowest price</button>
+              <button type="button" className={`results-sort-btn ${sortBy === 'highest_premium' ? 'is-active' : ''}`} onClick={() => setSortBy('highest_premium')}>Highest price</button>
               <button type="button" className={`results-sort-btn ${sortBy === 'highest_stars' ? 'is-active' : ''}`} onClick={() => setSortBy('highest_stars')}>Best rated</button>
               <button type="button" className={`results-sort-btn ${sortBy === 'lowest_moop' ? 'is-active' : ''}`} onClick={() => setSortBy('lowest_moop')}>Lowest max cost</button>
               <button type="button" className={`results-sort-btn ${sortBy === 'coverage' ? 'is-active' : ''}`} onClick={() => setSortBy('coverage')}>Best coverage</button>
+              <span className="results-sort-label">Match mode:</span>
+              <button type="button" className={`results-sort-btn ${strictNeedsOnly ? 'is-active' : ''}`} onClick={() => setStrictNeedsOnly(true)}>
+                Exact only
+              </button>
+              <button type="button" className={`results-sort-btn ${!strictNeedsOnly ? 'is-active' : ''}`} onClick={() => setStrictNeedsOnly(false)}>
+                Flexible
+              </button>
+              <button type="button" className="results-sort-btn" onClick={() => setShowFiltersSheet(true)}>Filters</button>
+              <button type="button" className="compare-clear-btn" onClick={resetAllResultFilters}>Clear all</button>
             </div>
-            <div className="results-needs-bar">
-              <span className="results-needs-label">Showing plans that cover:</span>
-              {selectedNeeds.map((needId) => (
-                <span key={`need-pill-${needId}`} className="results-need-pill">{formatNeedLabel(needId)}</span>
-              ))}
-              <div className="results-needs-picker">
-                <button
-                  type="button"
-                  className={`results-sort-btn ${showNeedsMenu ? 'is-active' : ''}`}
-                  onClick={() => setShowNeedsMenu((prev) => !prev)}
-                  aria-expanded={showNeedsMenu}
-                  aria-controls={showNeedsMenu ? 'results-needs-picker-menu' : undefined}
-                >
-                  + Add a need
-                </button>
-                {showNeedsMenu ? (
-                  <div id="results-needs-picker-menu" className="results-needs-menu" role="listbox" aria-label="Coverage needs">
-                    {supportedNeedOptions.map((opt) => (
-                      <button
-                        key={`results-need-${opt.id}`}
-                        type="button"
-                        role="option"
-                        aria-selected={selectedNeeds.includes(opt.id)}
-                        className={`needs-picker-item ${selectedNeeds.includes(opt.id) ? 'is-active' : ''}`}
-                        onClick={() => toggleNeed(opt.id)}
-                      >
-                        {selectedNeeds.includes(opt.id) ? '✓ ' : ''}{opt.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+            {activeFilterPills.length ? (
+              <div className="empty-active-filters">
+                {activeFilterPills.map((pill) => (
+                  <button key={pill.id} type="button" className="empty-filter-chip" onClick={() => removeActiveFilterPill(pill)}>
+                    {pill.label} ✕
+                  </button>
+                ))}
               </div>
-            </div>
+            ) : null}
           </>
         ) : null}
 
         {hasNoExactMatches ? (
           <div className="navigator-empty navigator-empty--partial">
             <h2>No exact matches</h2>
-            <p>Showing closest plans that match some of your selected needs.</p>
+            <p>
+              {strictNeedsOnly
+                ? 'Exact selected-needs mode is on, so partial matches are hidden. Turn on partial matches to see closest plans.'
+                : 'No exact matches for all selected needs. Showing closest plans that match some selected needs.'}
+            </p>
           </div>
         ) : null}
 
@@ -2462,6 +2634,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
                           {matchMeta.status === 'best' ? <span className="plan-badge plan-badge--best">Best match</span> : null}
                           {matchMeta.status === 'partial' ? <span className="plan-badge plan-badge--partial">Partial coverage</span> : null}
                           <span className="plan-badge plan-badge--data">Estimated data</span>
+                          <span className="plan-badge">Matched {matchMeta.matchedCount}/{Math.max(selectedNeeds.length, 1)} selected needs</span>
                           {compareIds.includes(item.contract_id) ? <span className="plan-badge plan-badge--compare">Comparing</span> : null}
                         </div>
                         <p className="plan-title">{item.plan_name || 'Unnamed Plan'}</p>
@@ -2602,7 +2775,8 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
                             label: 'Most you pay/year',
                             getter: (p) => formatCurrencyValue(p.moop_amount),
                             winner: (a, b) => Number(a.moop_amount || Number.MAX_SAFE_INTEGER) < Number(b.moop_amount || Number.MAX_SAFE_INTEGER) ? 0 : Number(b.moop_amount || Number.MAX_SAFE_INTEGER) < Number(a.moop_amount || Number.MAX_SAFE_INTEGER) ? 1 : -1,
-                            badge: 'Lower yearly risk'
+                            badge: 'Lower yearly risk',
+                            highlightHigherDanger: true
                           },
                           {
                             label: 'Star rating',
@@ -2645,8 +2819,10 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
                             <div className="compare-grid-cell compare-grid-cell--label">{row.label}</div>
                             {comparePlans.slice(0, 2).map((plan, idx) => {
                               const winnerIdx = row.winner(comparePlans[0], comparePlans[1]);
+                              const loserIdx = winnerIdx === 0 ? 1 : winnerIdx === 1 ? 0 : -1;
+                              const isHigherRisk = row.highlightHigherDanger === true && loserIdx === idx;
                               return (
-                                <div className="compare-grid-cell" key={`compare-row-${row.label}-${plan.contract_id || idx}`}>
+                                <div className={`compare-grid-cell ${isHigherRisk ? 'is-higher-risk' : ''}`} key={`compare-row-${row.label}-${plan.contract_id || idx}`}>
                                   {row.getter(plan)}
                                   {winnerIdx === idx && row.badge ? <span className={`compare-winner-badge ${idx === 0 ? 'is-plan-a' : 'is-plan-b'}`}>{row.badge}</span> : null}
                                 </div>

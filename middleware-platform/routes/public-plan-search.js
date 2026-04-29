@@ -2,7 +2,13 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { getGeoCompletenessDiagnostics } = require('./geo-diagnostics');
-const { ensureCanonicalGeoTables, getActiveGeoVersion, resolveLocation } = require('../services/geo-resolver-service');
+const {
+  ensureCanonicalGeoTables,
+  getActiveGeoVersion,
+  resolveLocation,
+  normalizeZip,
+  normalizeCountyName
+} = require('../services/geo-resolver-service');
 
 const NEED_TO_CATEGORY = {
   dental: 'b16_dental',
@@ -40,18 +46,32 @@ function normalizeNeeds(rawNeeds) {
       .split(',')
       .map((v) => v.trim())
       .filter(Boolean);
-  const out = [];
+  const accepted = [];
+  const ignored = [];
+  const seenAccepted = new Set();
+  const seenIgnored = new Set();
   for (const n of arr) {
-    const key = String(n || '').toLowerCase().replace(/\s+/g, '_');
-    if (NEED_TO_CATEGORY[key]) out.push({ need: key, category: NEED_TO_CATEGORY[key] });
+    const key = String(n || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const canonical = key === 'chiropractic' ? 'chiro' : key;
+    if (NEED_TO_CATEGORY[canonical]) {
+      if (seenAccepted.has(canonical)) continue;
+      seenAccepted.add(canonical);
+      accepted.push({ need: canonical, category: NEED_TO_CATEGORY[canonical] });
+      continue;
+    }
+    if (canonical && !seenIgnored.has(canonical)) {
+      seenIgnored.add(canonical);
+      ignored.push(canonical);
+    }
   }
-  return out;
+  return { accepted, ignored };
 }
 
 function resolveOrderBy(sortBy) {
   const key = String(sortBy || '').toLowerCase();
   if (key === 'highest_stars') return 'overall_star_rating DESC, monthly_premium ASC';
   if (key === 'lowest_moop') return 'moop_amount ASC, monthly_premium ASC';
+  if (key === 'highest_premium') return 'monthly_premium DESC, overall_star_rating DESC';
   return 'monthly_premium ASC, overall_star_rating DESC';
 }
 
@@ -211,12 +231,14 @@ router.get('/search', (req, res) => {
     const geoVersion = getActiveGeoVersion();
     const locationType = String(req.query.location_type || 'zip').trim().toLowerCase();
     const zip = String(req.query.zip || '').trim();
+    const normalizedZip = normalizeZip(zip);
     const state = String(req.query.state || '').trim().toUpperCase();
     const county = String(req.query.county || '').trim();
+    const normalizedCounty = normalizeCountyName(county);
     if (!['zip', 'county', 'state'].includes(locationType)) {
       return res.status(400).json({ success: false, error: 'location_type must be one of zip|county|state' });
     }
-    if (locationType === 'zip' && !/^\d{5}$/.test(zip)) {
+    if (locationType === 'zip' && !/^\d{5}$/.test(normalizedZip)) {
       return res.status(400).json({ success: false, error: 'zip must be a 5-digit string' });
     }
     if (locationType === 'county' && (!state || !county)) {
@@ -226,12 +248,13 @@ router.get('/search', (req, res) => {
       return res.status(400).json({ success: false, error: 'state is required for location_type=state' });
     }
 
-    const needs = normalizeNeeds(req.query.needs);
+    const { accepted: needs, ignored: ignoredNeeds } = normalizeNeeds(req.query.needs);
     const categories = Array.from(new Set(needs.map((n) => n.category)));
     if (!categories.length) {
       return res.status(400).json({
         success: false,
-        error: 'needs is required (e.g. dental,hearing)'
+        error: 'needs is required (e.g. dental,hearing)',
+        ignored_needs: ignoredNeeds
       });
     }
 
@@ -244,6 +267,7 @@ router.get('/search', (req, res) => {
       return res.json({
         success: true,
         input: { zip, state, county, location_type: locationType, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
+        ignored_needs: ignoredNeeds,
         zip_filter_applied: false,
         scope_requested: locationType,
         scope_used: null,
@@ -267,8 +291,9 @@ router.get('/search', (req, res) => {
     let scopeUsed = locationType;
     let resolvedCountyFips = '';
 
+    const warnings = [];
     if (locationType === 'zip') {
-      const locationResolution = resolveLocation({ zip });
+      const locationResolution = resolveLocation({ zip: normalizedZip });
       zipCountyRowsForZip = Array.isArray(locationResolution?.county_fips) ? locationResolution.county_fips.length : 0;
       canApplyZipCountyFilter = hasGeoTables && locationResolution?.scope !== 'zip_unmapped' && zipCountyRowsForZip > 0;
       if (!canApplyZipCountyFilter) {
@@ -280,8 +305,18 @@ router.get('/search', (req, res) => {
           scope_used: null,
           precision: 'fallback',
           geo_version: geoVersion,
-          geo_diagnostics: geoDiagnostics
+          geo_diagnostics: geoDiagnostics,
+          normalized_zip: normalizedZip
         });
+      }
+      if (state && locationResolution?.state && locationResolution.state !== state) {
+        warnings.push(`State ${state} conflicts with ZIP ${normalizedZip} mapping (${locationResolution.state}); ZIP mapping used.`);
+      }
+      if (normalizedCounty && Array.isArray(locationResolution?.candidates) && locationResolution.candidates.length > 0) {
+        const zipHasCounty = locationResolution.candidates.some((c) => normalizeCountyName(c.county) === normalizedCounty);
+        if (!zipHasCounty) {
+          warnings.push(`County "${county}" does not match ZIP ${normalizedZip} mapping; ZIP mapping used.`);
+        }
       }
       candidateSql = `
         WITH zip_counties AS (
@@ -292,13 +327,17 @@ router.get('/search', (req, res) => {
         benefit_any AS (
           SELECT
             contract_id,
+            plan_id,
+            COALESCE(segment_id, '') AS segment_id,
             MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
           FROM payor_plan_benefits
           WHERE benefit_category IN (${categoryPlaceholders})
-          GROUP BY contract_id
+          GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
         )
         SELECT
           sa.contract_id,
+          pr.plan_id,
+          COALESCE(pr.segment_id, '') AS segment_id,
           pr.org_name AS payer_name,
           pr.plan_name,
           pr.plan_type,
@@ -310,13 +349,19 @@ router.get('/search', (req, res) => {
         FROM zip_counties zc
         JOIN payor_plan_service_areas sa ON sa.county_fips = zc.county_fips
         JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
-        LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
+        LEFT JOIN benefit_any ba
+          ON ba.contract_id = pr.contract_id
+         AND ba.plan_id = pr.plan_id
+         AND ba.segment_id = COALESCE(pr.segment_id, '')
         WHERE pr.monthly_consolidated_premium IS NOT NULL
+          AND upper(COALESCE(pr.state_abbr, '')) = upper(COALESCE(sa.state_abbr, ''))
+          AND lower(trim(replace(replace(replace(COALESCE(pr.county_name, ''), '.', ''), ' County', ''), ' county', '')))
+            = lower(trim(replace(replace(replace(COALESCE(sa.county_name, ''), '.', ''), ' County', ''), ' county', '')))
           AND COALESCE(ba.any_covered, 0) = 1
         ORDER BY ${orderBy}
         LIMIT ?
       `;
-      params = [zip, ...categories, limit];
+      params = [normalizedZip, ...categories, limit];
       scopeUsed = 'zip';
     } else if (locationType === 'county') {
       if (!hasServiceAreas) {
@@ -336,22 +381,36 @@ router.get('/search', (req, res) => {
            FROM geo_county
            WHERE source_version = ?
              AND state_abbr = ?
-             AND county_name = ?
+             AND (
+               county_name = ?
+               OR lower(trim(replace(replace(replace(county_name, '.', ''), ' County', ''), ' county', ''))) = ?
+             )
            LIMIT 1`
-        ).get(geoVersion, state, county);
+        ).get(geoVersion, state, county, normalizedCounty);
         resolvedCountyFips = String(countyRow?.county_fips || '').trim();
+      }
+      if (/^\d{5}$/.test(normalizedZip)) {
+        const zipLocation = resolveLocation({ zip: normalizedZip });
+        const zipFips = Array.isArray(zipLocation?.county_fips) ? zipLocation.county_fips.filter(Boolean) : [];
+        if (zipFips.length && resolvedCountyFips && !zipFips.includes(resolvedCountyFips)) {
+          warnings.push(`ZIP ${normalizedZip} and county "${county}" conflict; county filter used for location_type=county.`);
+        }
       }
       candidateSql = `
         WITH benefit_any AS (
           SELECT
             contract_id,
+            plan_id,
+            COALESCE(segment_id, '') AS segment_id,
             MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
           FROM payor_plan_benefits
           WHERE benefit_category IN (${categoryPlaceholders})
-          GROUP BY contract_id
+          GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
         )
         SELECT DISTINCT
           sa.contract_id,
+          pr.plan_id,
+          COALESCE(pr.segment_id, '') AS segment_id,
           pr.org_name AS payer_name,
           pr.plan_name,
           pr.plan_type,
@@ -362,18 +421,30 @@ router.get('/search', (req, res) => {
           sa.county_name
         FROM payor_plan_service_areas sa
         JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
-        LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
+        LEFT JOIN benefit_any ba
+          ON ba.contract_id = pr.contract_id
+         AND ba.plan_id = pr.plan_id
+         AND ba.segment_id = COALESCE(pr.segment_id, '')
         WHERE sa.state_abbr = ?
           AND (
             (? != '' AND sa.county_fips = ?)
-            OR (? = '' AND sa.county_name = ?)
+            OR (
+              ? = ''
+              AND (
+                sa.county_name = ?
+                OR lower(trim(replace(replace(replace(sa.county_name, '.', ''), ' County', ''), ' county', ''))) = ?
+              )
+            )
           )
           AND pr.monthly_consolidated_premium IS NOT NULL
+          AND upper(COALESCE(pr.state_abbr, '')) = upper(COALESCE(sa.state_abbr, ''))
+          AND lower(trim(replace(replace(replace(COALESCE(pr.county_name, ''), '.', ''), ' County', ''), ' county', '')))
+            = lower(trim(replace(replace(replace(COALESCE(sa.county_name, ''), '.', ''), ' County', ''), ' county', '')))
           AND COALESCE(ba.any_covered, 0) = 1
         ORDER BY ${orderBy}
         LIMIT ?
       `;
-      params = [...categories, state, resolvedCountyFips, resolvedCountyFips, resolvedCountyFips, county, limit];
+      params = [...categories, state, resolvedCountyFips, resolvedCountyFips, resolvedCountyFips, county, normalizedCounty, limit];
       scopeUsed = 'county';
     } else {
       if (!hasServiceAreas) {
@@ -391,13 +462,17 @@ router.get('/search', (req, res) => {
         WITH benefit_any AS (
           SELECT
             contract_id,
+            plan_id,
+            COALESCE(segment_id, '') AS segment_id,
             MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
           FROM payor_plan_benefits
           WHERE benefit_category IN (${categoryPlaceholders})
-          GROUP BY contract_id
+          GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
         )
         SELECT DISTINCT
           sa.contract_id,
+          pr.plan_id,
+          COALESCE(pr.segment_id, '') AS segment_id,
           pr.org_name AS payer_name,
           pr.plan_name,
           pr.plan_type,
@@ -408,9 +483,13 @@ router.get('/search', (req, res) => {
           sa.county_name
         FROM payor_plan_service_areas sa
         JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
-        LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
+        LEFT JOIN benefit_any ba
+          ON ba.contract_id = pr.contract_id
+         AND ba.plan_id = pr.plan_id
+         AND ba.segment_id = COALESCE(pr.segment_id, '')
         WHERE sa.state_abbr = ?
           AND pr.monthly_consolidated_premium IS NOT NULL
+          AND upper(COALESCE(pr.state_abbr, '')) = upper(COALESCE(sa.state_abbr, ''))
           AND COALESCE(ba.any_covered, 0) = 1
         ORDER BY ${orderBy}
         LIMIT ?
@@ -420,28 +499,48 @@ router.get('/search', (req, res) => {
     }
     const rows = db.db.prepare(candidateSql).all(...params);
 
-    const contractIds = Array.from(new Set(rows.map((r) => r.contract_id).filter(Boolean)));
+    const planKeys = Array.from(
+      new Set(
+        rows
+          .map((r) => `${String(r.contract_id || '').trim()}|${String(r.plan_id || '').trim()}|${String(r.segment_id || '').trim()}`)
+          .filter((k) => !k.startsWith('||'))
+      )
+    ).map((k) => {
+      const [contract_id, plan_id, segment_id] = k.split('|');
+      return { contract_id, plan_id, segment_id: segment_id || '' };
+    });
     let rollups = [];
-    if (contractIds.length) {
-      const contractPlaceholders = contractIds.map(() => '?').join(', ');
+    if (planKeys.length) {
+      const keyPlaceholders = planKeys.map(() => '(?, ?, ?)').join(', ');
+      const keyParams = planKeys.flatMap((k) => [k.contract_id, k.plan_id, k.segment_id]);
       const rollupSql = `
-        WITH roll AS (
+        WITH key_set(contract_id, plan_id, segment_id) AS (
+          VALUES ${keyPlaceholders}
+        ),
+        roll AS (
           SELECT
-            contract_id,
-            benefit_category,
+            pb.contract_id,
+            pb.plan_id,
+            COALESCE(pb.segment_id, '') AS segment_id,
+            pb.benefit_category,
             MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS covered_yes,
             MAX(CASE WHEN covered = 0 THEN 1 ELSE 0 END) AS covered_no,
             MIN(copay_min) AS copay_min,
             MAX(CASE WHEN prior_auth_required = 1 THEN 1 ELSE 0 END) AS prior_auth_required,
             MAX(CASE WHEN covered_source = 'bendesc_yn_explicit_1' THEN 1 ELSE 0 END) AS has_explicit_1,
             MAX(CASE WHEN covered_source = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS has_blank_non_pace
-          FROM payor_plan_benefits
-          WHERE contract_id IN (${contractPlaceholders})
-            AND benefit_category IN (${categoryPlaceholders})
-          GROUP BY contract_id, benefit_category
+          FROM payor_plan_benefits pb
+          JOIN key_set ks
+            ON ks.contract_id = pb.contract_id
+           AND ks.plan_id = pb.plan_id
+           AND ks.segment_id = COALESCE(pb.segment_id, '')
+          WHERE pb.benefit_category IN (${categoryPlaceholders})
+          GROUP BY pb.contract_id, pb.plan_id, COALESCE(pb.segment_id, ''), pb.benefit_category
         )
         SELECT
           contract_id,
+          plan_id,
+          segment_id,
           benefit_category,
           covered_yes,
           covered_no,
@@ -454,17 +553,19 @@ router.get('/search', (req, res) => {
           END AS covered_source
         FROM roll
       `;
-      rollups = db.db.prepare(rollupSql).all(...contractIds, ...categories);
+      rollups = db.db.prepare(rollupSql).all(...keyParams, ...categories);
     }
 
-    const rollupByContract = new Map();
+    const rollupByPlan = new Map();
     for (const r of rollups) {
-      if (!rollupByContract.has(r.contract_id)) rollupByContract.set(r.contract_id, new Map());
-      rollupByContract.get(r.contract_id).set(r.benefit_category, r);
+      const key = `${String(r.contract_id || '').trim()}|${String(r.plan_id || '').trim()}|${String(r.segment_id || '').trim()}`;
+      if (!rollupByPlan.has(key)) rollupByPlan.set(key, new Map());
+      rollupByPlan.get(key).set(r.benefit_category, r);
     }
 
     const plans = rows.map((row) => {
-      const categoryMap = rollupByContract.get(row.contract_id) || new Map();
+      const planKey = `${String(row.contract_id || '').trim()}|${String(row.plan_id || '').trim()}|${String(row.segment_id || '').trim()}`;
+      const categoryMap = rollupByPlan.get(planKey) || new Map();
       const coverage_detail = {};
       const matched_needs = [];
       const unmatched_needs = [];
@@ -522,10 +623,11 @@ router.get('/search', (req, res) => {
 
     return res.json({
       success: true,
-      input: { zip, state, county, location_type: locationType, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
+      input: { zip: normalizedZip, state, county, location_type: locationType, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
+      ignored_needs: ignoredNeeds,
       zip_filter_applied: canApplyZipCountyFilter,
       zip_geo_fallback: locationType === 'zip' && hasGeoTables && !canApplyZipCountyFilter
-        ? { zip, reason: 'zip_not_in_crosswalk' }
+        ? { zip: normalizedZip, reason: 'zip_not_in_crosswalk' }
         : null,
       scope_requested: locationType,
       scope_used: scopeUsed,
@@ -534,6 +636,7 @@ router.get('/search', (req, res) => {
       geo_version: geoVersion,
       geo_dataset_complete: geoDiagnostics.is_complete,
       geo_diagnostics: geoDiagnostics,
+      location_warnings: warnings,
       count: plans.length,
       plans
     });
