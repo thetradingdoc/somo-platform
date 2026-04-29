@@ -3,6 +3,7 @@ const { listProviderSearchResults } = require('../services/provider-search-servi
 
 function resetFixtures() {
   db.db.exec(`
+    PRAGMA foreign_keys = OFF;
     DELETE FROM provider_credentialing_artifacts;
     DELETE FROM provider_credentialing_profiles;
     DELETE FROM provider_payer_networks;
@@ -14,6 +15,7 @@ function resetFixtures() {
     DELETE FROM payor_canonical_entities;
     DELETE FROM payor_source_records;
     DELETE FROM payor_ingest_batches;
+    PRAGMA foreign_keys = ON;
   `);
 }
 

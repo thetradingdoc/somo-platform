@@ -3587,6 +3587,12 @@ app.get('/', (req, res) => {
   sendLittleLabOrApiRunningStub(res);
 });
 
+// Canonical marketing/info route: serve LittleLab landing shell.
+// The React app inspects pathname and renders the full "How it works" experience.
+app.get('/how-it-works', (req, res) => {
+  sendLittleLabOrApiRunningStub(res);
+});
+
 // ============================================
 // Unified Dashboard Routes (doclittle.site frontend)
 // ============================================
@@ -4067,6 +4073,8 @@ app.use('/public/prescriptions', publicCatalogReadLimiter, publicProductsRoutes)
 // Public plans search (consumer MA lookup)
 const publicPlanSearchRoutes = require('./routes/public-plan-search');
 app.use('/api/public/plans', publicCatalogReadLimiter, publicPlanSearchRoutes);
+const publicGeoRoutes = require('./routes/public-geo');
+app.use('/api/public/geo', publicCatalogReadLimiter, publicGeoRoutes);
 
 // Public checkout (unauthenticated ensure customer)
 const publicCheckoutRoutes = require('./routes/public-checkout');

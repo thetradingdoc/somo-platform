@@ -108,13 +108,9 @@ function parseJsonObject(rawText) {
   const text = String(rawText || '').trim();
   if (!text) throw new Error('reasoning_model_empty_output');
 
-  // Common provider behavior: JSON wrapped in markdown fences.
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced && fenced[1]) {
-    const inner = fenced[1].trim();
-    if (inner.startsWith('{') && inner.endsWith('}')) {
-      return JSON.parse(inner);
-    }
+  // Fail closed: markdown-wrapped JSON violates the model contract.
+  if (/```/.test(text)) {
+    throw new Error('reasoning_model_non_json_output:markdown_fence');
   }
 
   if (!text.startsWith('{') || !text.endsWith('}')) {

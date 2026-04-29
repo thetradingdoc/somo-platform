@@ -335,6 +335,61 @@ export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assi
  * @param {{ hostname: string, port?: string, origin: string } | null} location - `window.location` subset or null
  * @returns {string}
  */
+/**
+ * Bases to try for `/api/public/plans/*` (search + meta). On localhost, same-origin (`''`)
+ * hits CRA `setupProxy` → middleware so we do not stop at a remote host that returns 200
+ * with empty CMS tables while local `middleware-dev.db` has real counts.
+ *
+ * @param {string[]} apiBaseCandidates - normalized origins from mountApp
+ * @param {{ hostname?: string } | null} location
+ * @returns {string[]}
+ */
+export function buildNavigatorPublicApiBases(apiBaseCandidates, location) {
+  const normalized = Array.from(
+    new Set((apiBaseCandidates || []).map((c) => normalizeHttpApiBase(String(c || '').trim())).filter(Boolean))
+  );
+  const host = String(location?.hostname || '').toLowerCase();
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  const out = [];
+  if (isLocal) {
+    out.push('');
+    ['http://127.0.0.1:4000', 'http://localhost:4000'].forEach((b) => {
+      if (!out.includes(b)) out.push(b);
+    });
+  }
+  normalized.forEach((b) => {
+    if (!out.includes(b)) out.push(b);
+  });
+  if (!out.length) out.push('');
+  return out;
+}
+
+/** Unwrap optional `{ data: { ...counts } }` shapes from gateways. */
+export function normalizePublicMetaJson(raw) {
+  const body = raw && typeof raw === 'object' ? raw : {};
+  const inner = body.data && typeof body.data === 'object' ? body.data : null;
+  if (
+    inner &&
+    (inner.payor_plan_benefits_row_count != null ||
+      inner.distinct_contract_ids != null ||
+      inner.payor_plan_premiums_row_count != null ||
+      Array.isArray(inner.missing_tables))
+  ) {
+    return { ...body, ...inner };
+  }
+  return body;
+}
+
+/** True if meta payload includes at least one finite numeric dataset metric. */
+export function navigatorMetaHasNumericCounts(m) {
+  if (!m || m.success === false) return false;
+  const keys = ['payor_plan_benefits_row_count', 'distinct_contract_ids', 'payor_plan_premiums_row_count', 'distinct_org_names'];
+  return keys.some((k) => {
+    const v = m[k];
+    return v != null && Number.isFinite(Number(v));
+  });
+}
+
 export function middlewareApiBaseFromLocation(envBase, location) {
   const fromEnv = normalizeHttpApiBase(envBase || '');
   if (fromEnv) return fromEnv;

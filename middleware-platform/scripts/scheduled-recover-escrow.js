@@ -8,7 +8,8 @@
  *   node scripts/scheduled-recover-escrow.js [olderThanHours]
  * 
  * Or add to cron:
- *   */15 * * * * cd /path/to/middleware-platform && node scripts/scheduled-recover-escrow.js
+ *   Cron example (every 15 min):
+ *   15,30,45,0 * * * * cd /path/to/middleware-platform && node scripts/scheduled-recover-escrow.js
  */
 
 const EscrowRecoveryService = require('../services/escrow-recovery-service');

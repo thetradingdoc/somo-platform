@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { getGeoCompletenessDiagnostics } = require('./geo-diagnostics');
+const { ensureCanonicalGeoTables, getActiveGeoVersion, resolveLocation } = require('../services/geo-resolver-service');
 
 const NEED_TO_CATEGORY = {
   dental: 'b16_dental',
@@ -53,6 +55,28 @@ function resolveOrderBy(sortBy) {
   return 'monthly_premium ASC, overall_star_rating DESC';
 }
 
+function hasZipCountyCrosswalkTable() {
+  try {
+    const row = db.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='zip_county_crosswalk'")
+      .get();
+    return Boolean(row && row.name === 'zip_county_crosswalk');
+  } catch (_) {
+    return false;
+  }
+}
+
+function hasTable(tableName) {
+  try {
+    const row = db.db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+      .get(String(tableName || ''));
+    return Boolean(row && row.name === tableName);
+  } catch (_) {
+    return false;
+  }
+}
+
 function toBool(v) {
   return Number(v) === 1;
 }
@@ -87,11 +111,119 @@ function buildConfidence(coverageDetailByNeed) {
   return 'low';
 }
 
+/**
+ * GET /api/public/plans/meta
+ * Row counts and distinct keys from the loaded SQLite CMS plan tables (no fabricated marketing numbers).
+ * `payor_plan_premiums_row_count` = rows in `payor_plan_premiums` (Landscape ingest: one row per MA plan with premium).
+ * `distinct_contract_ids` = unique `contract_id` values (often equals row count when `contract_id` is the primary key).
+ * `cms_data_updated_label` = optional display string from env `CMS_DATA_UPDATED` (e.g. April 2026) for hosted UIs.
+ */
+router.get('/meta', (req, res) => {
+  try {
+    ensureCanonicalGeoTables();
+    const geoVersion = getActiveGeoVersion();
+    const requiredTables = ['payor_plan_premiums', 'payor_plan_benefits'];
+    const missingTables = requiredTables.filter((t) => !hasTable(t));
+    const dataReady = missingTables.length === 0;
+    const payload = {
+      success: true,
+      data_ready: dataReady,
+      missing_tables: missingTables,
+      payor_plan_benefits_row_count: null,
+      payor_plan_premiums_row_count: null,
+      distinct_contract_ids: null,
+      distinct_org_names: null,
+      zip_county_crosswalk_row_count: null,
+      payor_plan_service_areas_row_count: null,
+      /** Optional human label for UI (set on GCP/middleware, e.g. `April 2026`). */
+      cms_data_updated_label: String(process.env.CMS_DATA_UPDATED || '').trim() || null
+    };
+    /** Populate each metric when its table exists so the UI can show real counts even if one ingest is missing. */
+    if (hasTable('payor_plan_benefits')) {
+      try {
+        payload.payor_plan_benefits_row_count = Number(
+          db.db.prepare('SELECT COUNT(*) AS c FROM payor_plan_benefits').get()?.c ?? 0
+        );
+      } catch (_) {
+        payload.payor_plan_benefits_row_count = null;
+      }
+    }
+    if (hasTable('payor_plan_premiums')) {
+      try {
+        payload.payor_plan_premiums_row_count = Number(
+          db.db.prepare('SELECT COUNT(*) AS c FROM payor_plan_premiums').get()?.c ?? 0
+        );
+        payload.distinct_contract_ids = Number(
+          db.db
+            .prepare(
+              `SELECT COUNT(DISTINCT contract_id) AS c
+               FROM payor_plan_premiums
+               WHERE contract_id IS NOT NULL AND TRIM(contract_id) != ''`
+            )
+            .get()?.c ?? 0
+        );
+        payload.distinct_org_names = Number(
+          db.db
+            .prepare(
+              `SELECT COUNT(DISTINCT TRIM(org_name)) AS c
+               FROM payor_plan_premiums
+               WHERE org_name IS NOT NULL AND TRIM(org_name) != ''`
+            )
+            .get()?.c ?? 0
+        );
+      } catch (_) {
+        payload.payor_plan_premiums_row_count = null;
+        payload.distinct_contract_ids = null;
+        payload.distinct_org_names = null;
+      }
+    }
+    if (hasTable('zip_county_crosswalk')) {
+      try {
+        payload.zip_county_crosswalk_row_count = Number(
+          db.db.prepare('SELECT COUNT(*) AS c FROM zip_county_crosswalk').get()?.c ?? 0
+        );
+      } catch (_) {
+        payload.zip_county_crosswalk_row_count = null;
+      }
+    }
+    if (hasTable('payor_plan_service_areas')) {
+      try {
+        payload.payor_plan_service_areas_row_count = Number(
+          db.db.prepare('SELECT COUNT(*) AS c FROM payor_plan_service_areas').get()?.c ?? 0
+        );
+      } catch (_) {
+        payload.payor_plan_service_areas_row_count = null;
+      }
+    }
+    payload.geo_diagnostics = getGeoCompletenessDiagnostics(db.db, hasTable);
+    payload.geo_dataset_complete = Boolean(payload.geo_diagnostics?.is_complete);
+    payload.geo_version = geoVersion;
+    return res.json(payload);
+  } catch (error) {
+    console.error('[public-plan-search] meta error:', error.message);
+    return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+  }
+});
+
 router.get('/search', (req, res) => {
   try {
+    ensureCanonicalGeoTables();
+    const geoVersion = getActiveGeoVersion();
+    const locationType = String(req.query.location_type || 'zip').trim().toLowerCase();
     const zip = String(req.query.zip || '').trim();
-    if (!/^\d{5}$/.test(zip)) {
+    const state = String(req.query.state || '').trim().toUpperCase();
+    const county = String(req.query.county || '').trim();
+    if (!['zip', 'county', 'state'].includes(locationType)) {
+      return res.status(400).json({ success: false, error: 'location_type must be one of zip|county|state' });
+    }
+    if (locationType === 'zip' && !/^\d{5}$/.test(zip)) {
       return res.status(400).json({ success: false, error: 'zip must be a 5-digit string' });
+    }
+    if (locationType === 'county' && (!state || !county)) {
+      return res.status(400).json({ success: false, error: 'state and county are required for location_type=county' });
+    }
+    if (locationType === 'state' && !state) {
+      return res.status(400).json({ success: false, error: 'state is required for location_type=state' });
     }
 
     const needs = normalizeNeeds(req.query.needs);
@@ -106,47 +238,186 @@ router.get('/search', (req, res) => {
     const limit = Math.max(1, Math.min(parseInt(req.query.limit || '25', 10) || 25, 100));
     const orderBy = resolveOrderBy(req.query.sort_by);
 
-    const zipStateStopgap = zip === '33101' ? 'FL' : null;
-    const stateFilterSql = zipStateStopgap ? 'AND sa.state_abbr = ?' : '';
-    const categoryPlaceholders = categories.map(() => '?').join(', ');
-    const candidateSql = `
-      WITH zip_counties AS (
-        SELECT DISTINCT county_fips
-        FROM zip_county_crosswalk
-        WHERE zip_code = ?
-      ),
-      benefit_any AS (
-        SELECT
-          contract_id,
-          MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
-        FROM payor_plan_benefits
-        WHERE benefit_category IN (${categoryPlaceholders})
-        GROUP BY contract_id
-      )
-      SELECT
-        sa.contract_id,
-        pr.org_name AS payer_name,
-        pr.plan_name,
-        pr.plan_type,
-        pr.monthly_consolidated_premium AS monthly_premium,
-        pr.overall_star_rating,
-        pr.moop_amount,
-        sa.state_abbr,
-        sa.county_name
-      FROM zip_counties zc
-      JOIN payor_plan_service_areas sa ON sa.county_fips = zc.county_fips
-      JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
-      LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
-      WHERE pr.monthly_consolidated_premium IS NOT NULL
-      ${stateFilterSql}
-        AND COALESCE(ba.any_covered, 0) = 1
-      ORDER BY ${orderBy}
-      LIMIT ?
-    `;
+    const requiredTables = ['payor_plan_premiums', 'payor_plan_benefits'];
+    const missingRequiredTables = requiredTables.filter((t) => !hasTable(t));
+    if (missingRequiredTables.length) {
+      return res.json({
+        success: true,
+        input: { zip, state, county, location_type: locationType, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
+        zip_filter_applied: false,
+        scope_requested: locationType,
+        scope_used: null,
+        precision: 'fallback',
+        geo_version: geoVersion,
+        data_ready: false,
+        message: `Plan data is not loaded yet. Missing tables: ${missingRequiredTables.join(', ')}`,
+        count: 0,
+        plans: []
+      });
+    }
 
-    const params = [zip, ...categories];
-    if (zipStateStopgap) params.push(zipStateStopgap);
-    params.push(limit);
+    const categoryPlaceholders = categories.map(() => '?').join(', ');
+    const hasServiceAreas = hasTable('payor_plan_service_areas');
+    const hasGeoTables = hasZipCountyCrosswalkTable() && hasServiceAreas;
+    const geoDiagnostics = getGeoCompletenessDiagnostics(db.db, hasTable);
+    let canApplyZipCountyFilter = false;
+    let zipCountyRowsForZip = 0;
+    let candidateSql = '';
+    let params = [];
+    let scopeUsed = locationType;
+    let resolvedCountyFips = '';
+
+    if (locationType === 'zip') {
+      const locationResolution = resolveLocation({ zip });
+      zipCountyRowsForZip = Array.isArray(locationResolution?.county_fips) ? locationResolution.county_fips.length : 0;
+      canApplyZipCountyFilter = hasGeoTables && locationResolution?.scope !== 'zip_unmapped' && zipCountyRowsForZip > 0;
+      if (!canApplyZipCountyFilter) {
+        return res.status(422).json({
+          success: false,
+          error: 'zip_unmapped',
+          message: `ZIP ${zip} is not mapped yet. Choose state/county to continue.`,
+          scope_requested: 'zip',
+          scope_used: null,
+          precision: 'fallback',
+          geo_version: geoVersion,
+          geo_diagnostics: geoDiagnostics
+        });
+      }
+      candidateSql = `
+        WITH zip_counties AS (
+          SELECT DISTINCT county_fips
+          FROM zip_county_crosswalk
+          WHERE zip_code = ?
+        ),
+        benefit_any AS (
+          SELECT
+            contract_id,
+            MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
+          FROM payor_plan_benefits
+          WHERE benefit_category IN (${categoryPlaceholders})
+          GROUP BY contract_id
+        )
+        SELECT
+          sa.contract_id,
+          pr.org_name AS payer_name,
+          pr.plan_name,
+          pr.plan_type,
+          pr.monthly_consolidated_premium AS monthly_premium,
+          pr.overall_star_rating,
+          pr.moop_amount,
+          sa.state_abbr,
+          sa.county_name
+        FROM zip_counties zc
+        JOIN payor_plan_service_areas sa ON sa.county_fips = zc.county_fips
+        JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
+        LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
+        WHERE pr.monthly_consolidated_premium IS NOT NULL
+          AND COALESCE(ba.any_covered, 0) = 1
+        ORDER BY ${orderBy}
+        LIMIT ?
+      `;
+      params = [zip, ...categories, limit];
+      scopeUsed = 'zip';
+    } else if (locationType === 'county') {
+      if (!hasServiceAreas) {
+        return res.status(422).json({
+          success: false,
+          error: 'location_scope_unavailable',
+          message: 'County-level scope unavailable because service area tables are missing.',
+          scope_requested: 'county',
+          scope_used: null,
+          precision: 'fallback',
+          geo_version: geoVersion
+        });
+      }
+      if (hasTable('geo_county')) {
+        const countyRow = db.db.prepare(
+          `SELECT county_fips
+           FROM geo_county
+           WHERE source_version = ?
+             AND state_abbr = ?
+             AND county_name = ?
+           LIMIT 1`
+        ).get(geoVersion, state, county);
+        resolvedCountyFips = String(countyRow?.county_fips || '').trim();
+      }
+      candidateSql = `
+        WITH benefit_any AS (
+          SELECT
+            contract_id,
+            MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
+          FROM payor_plan_benefits
+          WHERE benefit_category IN (${categoryPlaceholders})
+          GROUP BY contract_id
+        )
+        SELECT DISTINCT
+          sa.contract_id,
+          pr.org_name AS payer_name,
+          pr.plan_name,
+          pr.plan_type,
+          pr.monthly_consolidated_premium AS monthly_premium,
+          pr.overall_star_rating,
+          pr.moop_amount,
+          sa.state_abbr,
+          sa.county_name
+        FROM payor_plan_service_areas sa
+        JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
+        LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
+        WHERE sa.state_abbr = ?
+          AND (
+            (? != '' AND sa.county_fips = ?)
+            OR (? = '' AND sa.county_name = ?)
+          )
+          AND pr.monthly_consolidated_premium IS NOT NULL
+          AND COALESCE(ba.any_covered, 0) = 1
+        ORDER BY ${orderBy}
+        LIMIT ?
+      `;
+      params = [...categories, state, resolvedCountyFips, resolvedCountyFips, resolvedCountyFips, county, limit];
+      scopeUsed = 'county';
+    } else {
+      if (!hasServiceAreas) {
+        return res.status(422).json({
+          success: false,
+          error: 'location_scope_unavailable',
+          message: 'State-level scope unavailable because service area tables are missing.',
+          scope_requested: 'state',
+          scope_used: null,
+          precision: 'fallback',
+          geo_version: geoVersion
+        });
+      }
+      candidateSql = `
+        WITH benefit_any AS (
+          SELECT
+            contract_id,
+            MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
+          FROM payor_plan_benefits
+          WHERE benefit_category IN (${categoryPlaceholders})
+          GROUP BY contract_id
+        )
+        SELECT DISTINCT
+          sa.contract_id,
+          pr.org_name AS payer_name,
+          pr.plan_name,
+          pr.plan_type,
+          pr.monthly_consolidated_premium AS monthly_premium,
+          pr.overall_star_rating,
+          pr.moop_amount,
+          sa.state_abbr,
+          sa.county_name
+        FROM payor_plan_service_areas sa
+        JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
+        LEFT JOIN benefit_any ba ON ba.contract_id = sa.contract_id
+        WHERE sa.state_abbr = ?
+          AND pr.monthly_consolidated_premium IS NOT NULL
+          AND COALESCE(ba.any_covered, 0) = 1
+        ORDER BY ${orderBy}
+        LIMIT ?
+      `;
+      params = [...categories, state, limit];
+      scopeUsed = 'state';
+    }
     const rows = db.db.prepare(candidateSql).all(...params);
 
     const contractIds = Array.from(new Set(rows.map((r) => r.contract_id).filter(Boolean)));
@@ -251,8 +522,18 @@ router.get('/search', (req, res) => {
 
     return res.json({
       success: true,
-      input: { zip, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
-      stopgap_state_filter: zipStateStopgap ? { zip, state_abbr: zipStateStopgap } : null,
+      input: { zip, state, county, location_type: locationType, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
+      zip_filter_applied: canApplyZipCountyFilter,
+      zip_geo_fallback: locationType === 'zip' && hasGeoTables && !canApplyZipCountyFilter
+        ? { zip, reason: 'zip_not_in_crosswalk' }
+        : null,
+      scope_requested: locationType,
+      scope_used: scopeUsed,
+      precision: scopeUsed === locationType ? 'exact' : 'fallback',
+      stopgap_state_filter: null,
+      geo_version: geoVersion,
+      geo_dataset_complete: geoDiagnostics.is_complete,
+      geo_diagnostics: geoDiagnostics,
       count: plans.length,
       plans
     });
