@@ -75,6 +75,8 @@ __pycache__/
 # Playwright & test artifacts (repo root and packages)
 /test-results/
 middleware-platform/test-results/
+unified-dashboard/littlelab-landing/test-results/
+unified-dashboard/littlelab-landing/playwright-report/
 playwright-report/
 
 # Build outputs
