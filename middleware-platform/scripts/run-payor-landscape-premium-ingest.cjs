@@ -84,7 +84,70 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 30000');
 
+function ensureColumns(tableName, columnSqlByName) {
+  const cols = db.prepare(`PRAGMA table_info(${tableName})`).all().map((c) => String(c.name || '').toLowerCase());
+  Object.entries(columnSqlByName).forEach(([name, sql]) => {
+    if (!cols.includes(String(name).toLowerCase())) {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${sql}`);
+    }
+  });
+}
+
+function rebuildLegacyPremiumTableIfNeeded() {
+  const cols = db.prepare('PRAGMA table_info(payor_plan_premiums)').all();
+  const hasContractPrimaryKey = cols.some((c) => String(c.name) === 'contract_id' && Number(c.pk) === 1);
+  if (!hasContractPrimaryKey) return;
+
+  db.exec(`
+    ALTER TABLE payor_plan_premiums RENAME TO payor_plan_premiums_legacy;
+    CREATE TABLE payor_plan_premiums (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contract_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      segment_id TEXT NOT NULL DEFAULT '',
+      state_abbr TEXT,
+      county_name TEXT,
+      plan_name TEXT,
+      org_name TEXT,
+      plan_type TEXT,
+      org_type TEXT,
+      snp_indicator TEXT,
+      part_c_premium REAL,
+      monthly_consolidated_premium REAL,
+      annual_part_d_deductible REAL,
+      moop_amount REAL,
+      overall_star_rating REAL,
+      source TEXT DEFAULT 'cms_landscape_2026',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(contract_id, plan_id, segment_id, state_abbr, county_name)
+    );
+    INSERT INTO payor_plan_premiums (
+      contract_id, plan_id, segment_id, state_abbr, county_name, plan_name, org_name, plan_type,
+      monthly_consolidated_premium, overall_star_rating, moop_amount, source, created_at, updated_at
+    )
+    SELECT
+      contract_id,
+      COALESCE(NULLIF(contract_id, ''), '') AS plan_id,
+      '' AS segment_id,
+      NULL AS state_abbr,
+      NULL AS county_name,
+      plan_name,
+      org_name,
+      plan_type,
+      monthly_consolidated_premium,
+      overall_star_rating,
+      moop_amount,
+      'legacy_migrated',
+      datetime('now'),
+      datetime('now')
+    FROM payor_plan_premiums_legacy;
+    DROP TABLE payor_plan_premiums_legacy;
+  `);
+}
+
 if (!DRY_RUN) {
+  rebuildLegacyPremiumTableIfNeeded();
   db.exec(`
     CREATE TABLE IF NOT EXISTS payor_plan_premiums (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,9 +171,26 @@ if (!DRY_RUN) {
       updated_at TEXT DEFAULT (datetime('now')),
       UNIQUE(contract_id, plan_id, segment_id, state_abbr, county_name)
     );
-    CREATE INDEX IF NOT EXISTS idx_ppp_contract_plan ON payor_plan_premiums(contract_id, plan_id);
+  `);
+  ensureColumns('payor_plan_premiums', {
+    plan_id: 'plan_id TEXT NOT NULL DEFAULT \'\'',
+    segment_id: 'segment_id TEXT NOT NULL DEFAULT \'\'',
+    state_abbr: 'state_abbr TEXT',
+    county_name: 'county_name TEXT',
+    org_type: 'org_type TEXT',
+    snp_indicator: 'snp_indicator TEXT',
+    part_c_premium: 'part_c_premium REAL',
+    annual_part_d_deductible: 'annual_part_d_deductible REAL',
+    source: 'source TEXT',
+    created_at: 'created_at TEXT',
+    updated_at: 'updated_at TEXT'
+  });
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_ppp_state ON payor_plan_premiums(state_abbr);
     CREATE INDEX IF NOT EXISTS idx_ppp_premium ON payor_plan_premiums(monthly_consolidated_premium);
+    CREATE INDEX IF NOT EXISTS idx_ppp_contract_plan ON payor_plan_premiums(contract_id, plan_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ppp_contract_plan_seg_state_county_unique
+      ON payor_plan_premiums(contract_id, plan_id, segment_id, state_abbr, county_name);
   `);
 }
 

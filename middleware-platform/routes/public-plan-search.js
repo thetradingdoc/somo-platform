@@ -2,12 +2,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { getGeoCompletenessDiagnostics } = require('./geo-diagnostics');
+const { normalizeZip, normalizeCountyName } = require('../services/geo-normalize');
 const {
   ensureCanonicalGeoTables,
   getActiveGeoVersion,
-  resolveLocation,
-  normalizeZip,
-  normalizeCountyName
+  resolveLocation
 } = require('../services/geo-resolver-service');
 
 const NEED_TO_CATEGORY = {
@@ -236,16 +235,20 @@ router.get('/search', (req, res) => {
     const county = String(req.query.county || '').trim();
     const normalizedCounty = normalizeCountyName(county);
     if (!['zip', 'county', 'state'].includes(locationType)) {
-      return res.status(400).json({ success: false, error: 'location_type must be one of zip|county|state' });
+      return res.status(400).json({ success: false, error: 'location_type must be one of zip|county|state', geo_version: geoVersion });
     }
     if (locationType === 'zip' && !/^\d{5}$/.test(normalizedZip)) {
-      return res.status(400).json({ success: false, error: 'zip must be a 5-digit string' });
+      return res.status(400).json({ success: false, error: 'zip must be a 5-digit string', geo_version: geoVersion });
     }
     if (locationType === 'county' && (!state || !county)) {
-      return res.status(400).json({ success: false, error: 'state and county are required for location_type=county' });
+      return res.status(400).json({
+        success: false,
+        error: 'state and county are required for location_type=county',
+        geo_version: geoVersion
+      });
     }
     if (locationType === 'state' && !state) {
-      return res.status(400).json({ success: false, error: 'state is required for location_type=state' });
+      return res.status(400).json({ success: false, error: 'state is required for location_type=state', geo_version: geoVersion });
     }
 
     const { accepted: needs, ignored: ignoredNeeds } = normalizeNeeds(req.query.needs);
@@ -254,7 +257,8 @@ router.get('/search', (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'needs is required (e.g. dental,hearing)',
-        ignored_needs: ignoredNeeds
+        ignored_needs: ignoredNeeds,
+        geo_version: geoVersion
       });
     }
 
@@ -611,6 +615,8 @@ router.get('/search', (req, res) => {
         monthly_premium: row.monthly_premium == null ? null : Number(row.monthly_premium),
         star_rating: row.overall_star_rating == null ? null : Number(row.overall_star_rating),
         moop_amount: row.moop_amount == null ? null : Number(row.moop_amount),
+        state_abbr: row.state_abbr == null ? null : String(row.state_abbr).trim().toUpperCase(),
+        county_name: row.county_name == null ? null : String(row.county_name).trim(),
         matched_needs,
         unmatched_needs,
         reasons: Array.from(new Set(reasons)),

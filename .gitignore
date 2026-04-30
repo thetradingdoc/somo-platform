@@ -72,6 +72,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Local UI / Playwright debug captures (do not commit)
+e2e-debug-*.png
+.tmp-*.png
+
 # Playwright & test artifacts (repo root and packages)
 /test-results/
 middleware-platform/test-results/

@@ -30,6 +30,15 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 30000');
 
+function normalizeCountyName(v) {
+  const s = String(v || '').trim();
+  if (!s) return null;
+  const cleaned = s.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const lower = cleaned.toLowerCase();
+  if (/\b(county|parish|borough)\b$/.test(lower)) return cleaned;
+  return `${cleaned} County`;
+}
+
 if (!DRY_RUN) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS zip_county_crosswalk (
@@ -45,6 +54,7 @@ if (!DRY_RUN) {
     );
     CREATE INDEX IF NOT EXISTS idx_zcc_zip ON zip_county_crosswalk(zip_code);
     CREATE INDEX IF NOT EXISTS idx_zcc_fips ON zip_county_crosswalk(county_fips);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_zcc_zip_fips_unique ON zip_county_crosswalk(zip_code, county_fips);
   `);
 }
 
@@ -77,7 +87,7 @@ for (let i = 1; i < lines.length; i += 1) {
   const rec = {
     zip_code: zip.slice(0, 5),
     county_fips: fips.padStart(5, '0'),
-    county_name: I.county_name >= 0 ? ((cells[I.county_name] || '').trim() || null) : null,
+    county_name: I.county_name >= 0 ? normalizeCountyName(cells[I.county_name]) : null,
     area_land: I.area_land >= 0 ? (Number.parseInt(cells[I.area_land], 10) || null) : null
   };
   if (DRY_RUN && stats.rows_parsed < 3) console.log('[DRY]', JSON.stringify(rec));

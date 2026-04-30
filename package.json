@@ -10,6 +10,7 @@
     "retention:cleanup": "node scripts/retention-cleanup.cjs",
     "verify:agentic-checkout": "node scripts/verify-agentic-checkout.cjs",
     "ci:local": "node scripts/check-performance-budgets.cjs && node scripts/check-auth-ui-guardrails.cjs && node scripts/check-landing-route-canonicalization.cjs && RETENTION_DRY_RUN=1 node scripts/retention-cleanup.cjs && node scripts/verify-agentic-checkout.cjs && npm test --prefix middleware-platform && npm run release:security-gate --prefix middleware-platform",
+    "verify:payor-navigator:local": "npm run geo:check:crosswalk-count --prefix middleware-platform && npm test --prefix middleware-platform -- --runInBand && npm run build --prefix unified-dashboard/littlelab-landing",
     "test:landing": "npm test --prefix unified-dashboard/littlelab-landing -- --watchAll=false --runInBand",
     "test:reasoning-pipeline": "npm test --prefix middleware-platform -- --runInBand reasoning-pipeline",
     "test:food-route": "npm test --prefix unified-dashboard/littlelab-landing -- --watchAll=false --runInBand --testPathPattern=food-route",
@@ -31,6 +32,7 @@
     "capture:patient-portal-screenshots": "node scripts/capture-patient-portal-screenshots.mjs",
     "report:docs:coverage": "node scripts/generate-doc-coverage-report.cjs",
     "check:docs:parity": "node scripts/check-docs-route-service-parity.cjs",
+    "dev:landing:rebuild-restart": "npm run build --prefix unified-dashboard/littlelab-landing && (lsof -ti:4000 | xargs kill -9 2>/dev/null || true) && npm start --prefix middleware-platform",
     "deploy:landing-hosting": "REACT_APP_API_BASE=${REACT_APP_API_BASE:-https://api.myskinandcare.com} npm run build --prefix unified-dashboard/littlelab-landing && cd unified-dashboard && npx firebase-tools deploy --only hosting"
   },
   "devDependencies": {

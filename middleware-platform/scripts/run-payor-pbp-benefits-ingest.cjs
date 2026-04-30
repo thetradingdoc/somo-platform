@@ -170,6 +170,15 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 30000');
 
+function ensureColumns(tableName, columnSqlByName) {
+  const cols = db.prepare(`PRAGMA table_info(${tableName})`).all().map((c) => String(c.name || '').toLowerCase());
+  Object.entries(columnSqlByName).forEach(([name, sql]) => {
+    if (!cols.includes(String(name).toLowerCase())) {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${sql}`);
+    }
+  });
+}
+
 if (!DRY_RUN) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS payor_plan_benefits (
@@ -195,9 +204,27 @@ if (!DRY_RUN) {
       updated_at TEXT DEFAULT (datetime('now')),
       UNIQUE(contract_id, plan_id, segment_id, benefit_file, benefit_label)
     );
-    CREATE INDEX IF NOT EXISTS idx_ppb_contract_plan ON payor_plan_benefits(contract_id, plan_id);
     CREATE INDEX IF NOT EXISTS idx_ppb_category ON payor_plan_benefits(benefit_category);
     CREATE INDEX IF NOT EXISTS idx_ppb_covered ON payor_plan_benefits(covered);
+  `);
+  ensureColumns('payor_plan_benefits', {
+    plan_id: 'plan_id TEXT NOT NULL DEFAULT \'\'',
+    segment_id: 'segment_id TEXT NOT NULL DEFAULT \'\'',
+    benefit_label: 'benefit_label TEXT',
+    benefit_file: 'benefit_file TEXT',
+    copay_max: 'copay_max REAL',
+    coinsurance_pct_min: 'coinsurance_pct_min REAL',
+    coinsurance_pct_max: 'coinsurance_pct_max REAL',
+    max_plan_amt: 'max_plan_amt REAL',
+    max_enr_amt: 'max_enr_amt REAL',
+    raw_file: 'raw_file TEXT',
+    ingest_version: 'ingest_version TEXT',
+    updated_at: 'updated_at TEXT'
+  });
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_ppb_contract_plan ON payor_plan_benefits(contract_id, plan_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ppb_contract_plan_seg_file_label_unique
+      ON payor_plan_benefits(contract_id, plan_id, segment_id, benefit_file, benefit_label);
   `);
   const cols = db.prepare(`PRAGMA table_info(payor_plan_benefits)`).all();
   const hasCoveredSource = cols.some((c) => String(c.name || '').toLowerCase() === 'covered_source');

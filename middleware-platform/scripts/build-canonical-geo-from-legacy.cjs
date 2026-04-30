@@ -15,9 +15,10 @@ function run() {
        ON CONFLICT(source_version) DO NOTHING`
     ).run(SOURCE_VERSION);
 
-    db.db.prepare('DELETE FROM geo_zip WHERE source_version = ?').run(SOURCE_VERSION);
-    db.db.prepare('DELETE FROM geo_county WHERE source_version = ?').run(SOURCE_VERSION);
-    db.db.prepare('DELETE FROM geo_zip_county_map WHERE source_version = ?').run(SOURCE_VERSION);
+    // geo_zip/geo_county have PKs that are not version-scoped; replace the canonical surface fully each build.
+    db.db.exec('DELETE FROM geo_zip_county_map;');
+    db.db.exec('DELETE FROM geo_zip;');
+    db.db.exec('DELETE FROM geo_county;');
 
     db.db.exec(`
       INSERT INTO geo_county (county_fips, county_name, state_abbr, source_version, updated_at)

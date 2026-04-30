@@ -1,5 +1,3 @@
-const { ensureCanonicalGeoTables, getActiveGeoVersion } = require('../services/geo-resolver-service');
-
 function toPositiveInt(rawValue, fallbackValue) {
   const parsed = Number.parseInt(String(rawValue ?? ''), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallbackValue;
@@ -14,12 +12,56 @@ function getGeoThresholds() {
   };
 }
 
+function pickGeoVersion(sqliteDb) {
+  const active = sqliteDb
+    .prepare('SELECT source_version FROM geo_dataset_versions WHERE is_active = 1 ORDER BY published_at DESC LIMIT 1')
+    .get();
+  const activeVersion = String(active?.source_version || '').trim();
+  if (!activeVersion) {
+    const fallback = sqliteDb
+      .prepare(
+        `SELECT source_version
+         FROM geo_zip_county_map
+         GROUP BY source_version
+         ORDER BY COUNT(*) DESC, source_version DESC
+         LIMIT 1`
+      )
+      .get();
+    return String(fallback?.source_version || 'legacy-crosswalk');
+  }
+
+  const activeMapCount = Number(sqliteDb.prepare(
+    'SELECT COUNT(*) AS c FROM geo_zip_county_map WHERE source_version = ?'
+  ).get(activeVersion)?.c ?? 0);
+  if (activeMapCount > 0) return activeVersion;
+
+  const best = sqliteDb
+    .prepare(
+      `SELECT source_version
+       FROM geo_zip_county_map
+       GROUP BY source_version
+       ORDER BY COUNT(*) DESC, source_version DESC
+       LIMIT 1`
+    )
+    .get();
+  return String(best?.source_version || activeVersion);
+}
+
+function countCanonicalForVersion(sqliteDb, sourceVersion) {
+  return {
+    zipCount: Number(
+      sqliteDb.prepare('SELECT COUNT(DISTINCT zip5) AS c FROM geo_zip WHERE source_version = ?').get(sourceVersion)?.c ?? 0
+    ),
+    countyCount: Number(
+      sqliteDb.prepare('SELECT COUNT(DISTINCT county_fips) AS c FROM geo_county WHERE source_version = ?').get(sourceVersion)?.c ?? 0
+    )
+  };
+}
+
 function getGeoCompletenessDiagnostics(sqliteDb, hasTableFn) {
-  ensureCanonicalGeoTables();
-  const activeGeoVersion = getActiveGeoVersion();
   const thresholds = getGeoThresholds();
   const diagnostics = {
-    geo_version: activeGeoVersion,
+    geo_version: null,
     has_canonical_geo: false,
     has_zip_county_crosswalk: false,
     has_service_areas: false,
@@ -46,28 +88,38 @@ function getGeoCompletenessDiagnostics(sqliteDb, hasTableFn) {
   if (diagnostics.issues.length) return diagnostics;
 
   try {
+    let activeGeoVersion = pickGeoVersion(sqliteDb);
+    diagnostics.geo_version = activeGeoVersion;
     diagnostics.zip_county_crosswalk_row_count = Number(
       sqliteDb.prepare('SELECT COUNT(*) AS c FROM zip_county_crosswalk').get()?.c ?? 0
     );
     if (diagnostics.has_canonical_geo) {
-      diagnostics.distinct_zip_count = Number(
-        sqliteDb
+      let canonicalCounts = countCanonicalForVersion(sqliteDb, activeGeoVersion);
+      if (
+        canonicalCounts.zipCount < thresholds.min_distinct_zip_count ||
+        canonicalCounts.countyCount < thresholds.min_distinct_county_count
+      ) {
+        const best = sqliteDb
           .prepare(
-            `SELECT COUNT(DISTINCT zip5) AS c
-             FROM geo_zip
-             WHERE source_version = ?`
+            `SELECT source_version
+             FROM geo_zip_county_map
+             GROUP BY source_version
+             ORDER BY COUNT(*) DESC, source_version DESC
+             LIMIT 1`
           )
-          .get(activeGeoVersion)?.c ?? 0
-      );
-      diagnostics.distinct_county_count = Number(
-        sqliteDb
-          .prepare(
-            `SELECT COUNT(DISTINCT county_fips) AS c
-             FROM geo_county
-             WHERE source_version = ?`
-          )
-          .get(activeGeoVersion)?.c ?? 0
-      );
+          .get();
+        const bestVersion = String(best?.source_version || '');
+        if (bestVersion && bestVersion !== activeGeoVersion) {
+          const bestCounts = countCanonicalForVersion(sqliteDb, bestVersion);
+          if (bestCounts.zipCount > canonicalCounts.zipCount || bestCounts.countyCount > canonicalCounts.countyCount) {
+            activeGeoVersion = bestVersion;
+            diagnostics.geo_version = bestVersion;
+            canonicalCounts = bestCounts;
+          }
+        }
+      }
+      diagnostics.distinct_zip_count = canonicalCounts.zipCount;
+      diagnostics.distinct_county_count = canonicalCounts.countyCount;
     } else {
       diagnostics.distinct_zip_count = Number(
         sqliteDb
@@ -109,7 +161,7 @@ function getGeoCompletenessDiagnostics(sqliteDb, hasTableFn) {
   }
   if (diagnostics.distinct_county_count < thresholds.min_distinct_county_count) {
     diagnostics.issues.push('distinct_county_count_below_threshold');
-  }
+  } 
   if (diagnostics.states_with_counties_count < thresholds.min_states_with_counties_count) {
     diagnostics.issues.push('states_with_counties_count_below_threshold');
   }

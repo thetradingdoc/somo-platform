@@ -4,6 +4,7 @@ const db = require('../database');
 const fs = require('fs');
 const path = require('path');
 const { getGeoCompletenessDiagnostics } = require('./geo-diagnostics');
+const { normalizeZip } = require('../services/geo-normalize');
 const { getActiveGeoVersion, resolveLocation, ensureCanonicalGeoTables } = require('../services/geo-resolver-service');
 const US_STATE_ABBRS = Object.freeze([
   'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
@@ -23,10 +24,6 @@ function hasTable(tableName) {
   } catch (_) {
     return false;
   }
-}
-
-function normalizeZip(raw) {
-  return String(raw || '').replace(/[^\d]/g, '').slice(0, 5);
 }
 
 const EPA_COUNTY_FALLBACK_CSV = path.join(__dirname, '..', 'states_and_counties.csv');

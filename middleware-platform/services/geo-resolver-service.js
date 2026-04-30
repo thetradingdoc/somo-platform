@@ -1,4 +1,5 @@
 const db = require('../database');
+const { normalizeZip, normalizeCountyName } = require('./geo-normalize');
 
 function ensureCanonicalGeoTables() {
   db.db.exec(`
@@ -67,10 +68,6 @@ function getActiveGeoVersion() {
   return fallbackVersion;
 }
 
-function normalizeZip(rawZip) {
-  return String(rawZip || '').replace(/[^\d]/g, '').slice(0, 5);
-}
-
 function readCanonicalZipCandidates(zip5, sourceVersion) {
   return db.db.prepare(
     `SELECT
@@ -105,10 +102,13 @@ function readCanonicalCounty(state, countyName, sourceVersion) {
     `SELECT county_fips, county_name, state_abbr
      FROM geo_county
      WHERE state_abbr = ?
-       AND county_name = ?
+      AND (
+        county_name = ?
+        OR lower(trim(replace(replace(replace(county_name, '.', ''), ' County', ''), ' county', ''))) = ?
+      )
        AND source_version = ?
      LIMIT 1`
-  ).get(state, countyName, sourceVersion);
+  ).get(state, countyName, normalizeCountyName(countyName), sourceVersion);
 }
 
 function resolveLocation({ zip, state, county }) {
@@ -215,5 +215,7 @@ function resolveLocation({ zip, state, county }) {
 module.exports = {
   ensureCanonicalGeoTables,
   getActiveGeoVersion,
-  resolveLocation
+  resolveLocation,
+  normalizeZip,
+  normalizeCountyName
 };

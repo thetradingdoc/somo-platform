@@ -45,6 +45,18 @@ function nullIfBlank(v) {
   return s === '' || s === 'N/A' ? null : s;
 }
 
+function normalizeCountyName(v) {
+  const s = nullIfBlank(v);
+  if (!s) return null;
+  const cleaned = String(s)
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const lower = cleaned.toLowerCase();
+  if (/\b(county|parish|borough)\b$/.test(lower)) return cleaned;
+  return `${cleaned} County`;
+}
+
 const lines = fs.readFileSync(SERVICE_AREA_CSV, 'utf8').split(/\r?\n/).filter(Boolean);
 const headers = parseCSVLine(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, ''));
 
@@ -67,6 +79,15 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 30000');
 
+function ensureColumns(tableName, columnSqlByName) {
+  const cols = db.prepare(`PRAGMA table_info(${tableName})`).all().map((c) => String(c.name || '').toLowerCase());
+  Object.entries(columnSqlByName).forEach(([name, sql]) => {
+    if (!cols.includes(String(name).toLowerCase())) {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${sql}`);
+    }
+  });
+}
+
 if (!DRY_RUN) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS payor_plan_service_areas (
@@ -88,7 +109,18 @@ if (!DRY_RUN) {
     CREATE INDEX IF NOT EXISTS idx_ppsa_contract ON payor_plan_service_areas(contract_id);
     CREATE INDEX IF NOT EXISTS idx_ppsa_fips ON payor_plan_service_areas(county_fips);
     CREATE INDEX IF NOT EXISTS idx_ppsa_state ON payor_plan_service_areas(state_abbr);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ppsa_contract_fips_unique ON payor_plan_service_areas(contract_id, county_fips);
   `);
+  ensureColumns('payor_plan_service_areas', {
+    org_name: 'org_name TEXT',
+    org_type: 'org_type TEXT',
+    plan_type: 'plan_type TEXT',
+    partial: 'partial TEXT',
+    ssa_code: 'ssa_code TEXT',
+    source: 'source TEXT',
+    created_at: 'created_at TEXT',
+    updated_at: 'updated_at TEXT'
+  });
 }
 
 const stmt = DRY_RUN ? null : db.prepare(`
@@ -125,8 +157,8 @@ for (let i = 1; i < lines.length; i += 1) {
   const rec = {
     contract_id,
     county_fips: fips.padStart(5, '0'),
-    county_name: nullIfBlank(cells[I.county]),
-    state_abbr: nullIfBlank(cells[I.state]),
+    county_name: normalizeCountyName(cells[I.county]),
+    state_abbr: String(nullIfBlank(cells[I.state]) || '').toUpperCase() || null,
     org_name: nullIfBlank(cells[I.org_name]),
     org_type: nullIfBlank(cells[I.org_type]),
     plan_type: nullIfBlank(cells[I.plan_type]),
