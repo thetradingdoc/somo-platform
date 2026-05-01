@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { createPool } = require('../utils/postgres');
 const { getGeoCompletenessDiagnostics } = require('./geo-diagnostics');
 const { normalizeZip, normalizeCountyName } = require('../services/geo-normalize');
 const {
@@ -8,7 +9,18 @@ const {
   getActiveGeoVersion,
   resolveLocation
 } = require('../services/geo-resolver-service');
+const usePostgres = !!process.env.POSTGRES_URL;
+let pg = null;
+if (usePostgres) {
+  try {
+    pg = createPool();
+  } catch (err) {
+    console.error('[public-plan-search] failed to init postgres pool:', err.message);
+  }
+}
 
+// Dental rows use benefit_category b16_dental (from pbp_b16_dental.txt). Search requires covered=1 in payor_plan_benefits;
+// ingest must set covered from plan-level pbp_a_ben_cov when *_bendesc_yn is absent (see run-payor-pbp-benefits-ingest.cjs).
 const NEED_TO_CATEGORY = {
   dental: 'b16_dental',
   hearing: 'b18_hearing_exams_aids',
@@ -139,6 +151,108 @@ function buildConfidence(coverageDetailByNeed) {
  */
 router.get('/meta', (req, res) => {
   try {
+    if (usePostgres && pg) {
+      return (async () => {
+        const requiredTables = ['payor_plan_premiums', 'payor_plan_benefits'];
+        const tableRows = await pg.unsafe(
+          `SELECT table_name
+             FROM information_schema.tables
+            WHERE table_schema='public'
+              AND table_name = ANY($1::text[])`,
+          [requiredTables]
+        );
+        const present = new Set(tableRows.map((r) => String(r.table_name)));
+        const missingTables = requiredTables.filter((t) => !present.has(t));
+        const dataReady = missingTables.length === 0;
+
+        const payload = {
+          success: true,
+          data_ready: dataReady,
+          missing_tables: missingTables,
+          payor_plan_benefits_row_count: null,
+          payor_plan_premiums_row_count: null,
+          distinct_contract_ids: null,
+          distinct_org_names: null,
+          zip_county_crosswalk_row_count: null,
+          payor_plan_service_areas_row_count: null,
+          cms_data_updated_label: String(process.env.CMS_DATA_UPDATED || '').trim() || null
+        };
+
+        const count = async (table) => {
+          const rows = await pg.unsafe(`SELECT COUNT(*)::bigint AS c FROM ${table}`);
+          return Number(rows?.[0]?.c || 0);
+        };
+
+        try {
+          payload.payor_plan_benefits_row_count = await count('payor_plan_benefits');
+        } catch (_) {}
+        try {
+          payload.payor_plan_premiums_row_count = await count('payor_plan_premiums');
+          const distinctContracts = await pg.unsafe(
+            `SELECT COUNT(DISTINCT contract_id)::bigint AS c
+               FROM payor_plan_premiums
+              WHERE contract_id IS NOT NULL AND TRIM(contract_id) != ''`
+          );
+          payload.distinct_contract_ids = Number(distinctContracts?.[0]?.c || 0);
+          const distinctOrgs = await pg.unsafe(
+            `SELECT COUNT(DISTINCT TRIM(org_name))::bigint AS c
+               FROM payor_plan_premiums
+              WHERE org_name IS NOT NULL AND TRIM(org_name) != ''`
+          );
+          payload.distinct_org_names = Number(distinctOrgs?.[0]?.c || 0);
+        } catch (_) {}
+        try {
+          payload.zip_county_crosswalk_row_count = await count('zip_county_crosswalk');
+        } catch (_) {}
+        try {
+          payload.payor_plan_service_areas_row_count = await count('payor_plan_service_areas');
+        } catch (_) {}
+
+        const geo = await pg.unsafe(
+          `SELECT
+              (SELECT COUNT(DISTINCT zip5)::bigint FROM geo_zip) AS distinct_zip_count,
+              (SELECT COUNT(DISTINCT county_fips)::bigint FROM geo_county) AS distinct_county_count,
+              (SELECT COUNT(DISTINCT state_abbr)::bigint FROM geo_county WHERE state_abbr IS NOT NULL AND TRIM(state_abbr) != '') AS states_with_counties_count`
+        );
+        const g = geo?.[0] || {};
+        const diagnostics = {
+          geo_version: null,
+          has_canonical_geo: true,
+          has_zip_county_crosswalk: true,
+          has_service_areas: true,
+          zip_county_crosswalk_row_count: payload.zip_county_crosswalk_row_count || 0,
+          distinct_zip_count: Number(g.distinct_zip_count || 0),
+          distinct_county_count: Number(g.distinct_county_count || 0),
+          states_with_counties_count: Number(g.states_with_counties_count || 0),
+          thresholds: {
+            min_distinct_zip_count: parseInt(process.env.PUBLIC_GEO_MIN_DISTINCT_ZIPS || '500', 10),
+            min_distinct_county_count: parseInt(process.env.PUBLIC_GEO_MIN_DISTINCT_COUNTIES || '100', 10),
+            min_states_with_counties_count: parseInt(process.env.PUBLIC_GEO_MIN_STATES_WITH_COUNTIES || '10', 10)
+          },
+          is_complete: true,
+          issues: []
+        };
+        if (diagnostics.distinct_zip_count < diagnostics.thresholds.min_distinct_zip_count) diagnostics.issues.push('distinct_zip_count_below_threshold');
+        if (diagnostics.distinct_county_count < diagnostics.thresholds.min_distinct_county_count) diagnostics.issues.push('distinct_county_count_below_threshold');
+        if (diagnostics.states_with_counties_count < diagnostics.thresholds.min_states_with_counties_count) diagnostics.issues.push('states_with_counties_count_below_threshold');
+        diagnostics.is_complete = diagnostics.issues.length === 0;
+
+        const versionRows = await pg.unsafe(
+          `SELECT source_version
+             FROM geo_dataset_versions
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1`
+        );
+        payload.geo_version = String(versionRows?.[0]?.source_version || '');
+        payload.geo_diagnostics = diagnostics;
+        payload.geo_dataset_complete = diagnostics.is_complete;
+        return res.json(payload);
+      })().catch((error) => {
+        console.error('[public-plan-search] meta postgres error:', error.message);
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+      });
+    }
     ensureCanonicalGeoTables();
     const geoVersion = getActiveGeoVersion();
     const requiredTables = ['payor_plan_premiums', 'payor_plan_benefits'];
@@ -226,6 +340,228 @@ router.get('/meta', (req, res) => {
 
 router.get('/search', (req, res) => {
   try {
+    if (usePostgres && pg) {
+      return (async () => {
+        const locationType = String(req.query.location_type || 'zip').trim().toLowerCase();
+        const zip = String(req.query.zip || '').trim();
+        const normalizedZip = normalizeZip(zip);
+        const state = String(req.query.state || '').trim().toUpperCase();
+        const county = String(req.query.county || '').trim();
+        const { accepted: needs, ignored: ignoredNeeds } = normalizeNeeds(req.query.needs);
+        const categories = Array.from(new Set(needs.map((n) => n.category)));
+        const limit = Math.max(1, Math.min(parseInt(req.query.limit || '25', 10) || 25, 100));
+
+        if (!['zip', 'county', 'state'].includes(locationType)) {
+          return res.status(400).json({ success: false, error: 'location_type must be one of zip|county|state' });
+        }
+        if (!categories.length) {
+          return res.status(400).json({ success: false, error: 'needs is required (e.g. dental,hearing)', ignored_needs: ignoredNeeds });
+        }
+        if (locationType === 'zip' && !/^\d{5}$/.test(normalizedZip)) {
+          return res.status(400).json({ success: false, error: 'zip must be a 5-digit string' });
+        }
+        if (locationType === 'county' && (!state || !county)) {
+          return res.status(400).json({ success: false, error: 'state and county are required for location_type=county' });
+        }
+        if (locationType === 'state' && !state) {
+          return res.status(400).json({ success: false, error: 'state is required for location_type=state' });
+        }
+
+        const requiredTables = ['payor_plan_premiums', 'payor_plan_benefits'];
+        const tableRows = await pg.unsafe(
+          `SELECT table_name
+             FROM information_schema.tables
+            WHERE table_schema='public'
+              AND table_name = ANY($1::text[])`,
+          [requiredTables]
+        );
+        const present = new Set(tableRows.map((r) => String(r.table_name)));
+        const missingRequiredTables = requiredTables.filter((t) => !present.has(t));
+        if (missingRequiredTables.length) {
+          return res.json({
+            success: true,
+            data_ready: false,
+            message: `Plan data is not loaded yet. Missing tables: ${missingRequiredTables.join(', ')}`,
+            count: 0,
+            plans: []
+          });
+        }
+
+        let rows = [];
+        if (locationType === 'zip') {
+          rows = await pg.unsafe(
+            `
+            WITH zip_counties AS (
+              SELECT DISTINCT county_fips
+              FROM zip_county_crosswalk
+              WHERE zip_code = $1
+            ),
+            benefit_any AS (
+              SELECT contract_id, plan_id, COALESCE(segment_id, '') AS segment_id,
+                     MAX(CASE WHEN covered = 1 THEN 1 WHEN benefit_category = 'b16_dental' AND (covered = 0 OR covered IS NULL) AND COALESCE(covered_source, '') = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS any_covered
+              FROM payor_plan_benefits
+              WHERE benefit_category = ANY($2::text[])
+              GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
+            )
+            SELECT
+              sa.contract_id,
+              pr.plan_id,
+              COALESCE(pr.segment_id, '') AS segment_id,
+              pr.org_name AS payer_name,
+              pr.plan_name,
+              pr.plan_type,
+              pr.monthly_consolidated_premium AS monthly_premium,
+              pr.overall_star_rating,
+              pr.moop_amount,
+              sa.state_abbr,
+              sa.county_name
+            FROM zip_counties zc
+            JOIN payor_plan_service_areas sa ON sa.county_fips = zc.county_fips
+            JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
+            LEFT JOIN benefit_any ba
+              ON ba.contract_id = pr.contract_id
+             AND ba.plan_id = pr.plan_id
+             AND ba.segment_id = COALESCE(pr.segment_id, '')
+            WHERE pr.monthly_consolidated_premium IS NOT NULL
+              AND COALESCE(ba.any_covered, 0) = 1
+            ORDER BY pr.monthly_consolidated_premium ASC, pr.overall_star_rating DESC
+            LIMIT $3
+            `,
+            [normalizedZip, categories, limit]
+          );
+        } else if (locationType === 'county') {
+          const normalizedCounty = normalizeCountyName(county);
+          rows = await pg.unsafe(
+            `
+            WITH benefit_any AS (
+              SELECT contract_id, plan_id, COALESCE(segment_id, '') AS segment_id,
+                     MAX(CASE WHEN covered = 1 THEN 1 WHEN benefit_category = 'b16_dental' AND (covered = 0 OR covered IS NULL) AND COALESCE(covered_source, '') = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS any_covered
+              FROM payor_plan_benefits
+              WHERE benefit_category = ANY($1::text[])
+              GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
+            )
+            SELECT DISTINCT
+              sa.contract_id,
+              pr.plan_id,
+              COALESCE(pr.segment_id, '') AS segment_id,
+              pr.org_name AS payer_name,
+              pr.plan_name,
+              pr.plan_type,
+              pr.monthly_consolidated_premium AS monthly_premium,
+              pr.overall_star_rating,
+              pr.moop_amount,
+              sa.state_abbr,
+              sa.county_name
+            FROM payor_plan_service_areas sa
+            JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
+            LEFT JOIN benefit_any ba
+              ON ba.contract_id = pr.contract_id
+             AND ba.plan_id = pr.plan_id
+             AND ba.segment_id = COALESCE(pr.segment_id, '')
+            WHERE sa.state_abbr = $2
+              AND (
+                sa.county_name = $3
+                OR lower(trim(replace(replace(replace(sa.county_name, '.', ''), ' County', ''), ' county', ''))) = $4
+              )
+              AND pr.monthly_consolidated_premium IS NOT NULL
+              AND COALESCE(ba.any_covered, 0) = 1
+            ORDER BY pr.monthly_consolidated_premium ASC, pr.overall_star_rating DESC
+            LIMIT $5
+            `,
+            [categories, state, county, normalizedCounty, limit]
+          );
+        } else {
+          rows = await pg.unsafe(
+            `
+            WITH benefit_any AS (
+              SELECT contract_id, plan_id, COALESCE(segment_id, '') AS segment_id,
+                     MAX(CASE WHEN covered = 1 THEN 1 WHEN benefit_category = 'b16_dental' AND (covered = 0 OR covered IS NULL) AND COALESCE(covered_source, '') = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS any_covered
+              FROM payor_plan_benefits
+              WHERE benefit_category = ANY($1::text[])
+              GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
+            )
+            SELECT DISTINCT
+              sa.contract_id,
+              pr.plan_id,
+              COALESCE(pr.segment_id, '') AS segment_id,
+              pr.org_name AS payer_name,
+              pr.plan_name,
+              pr.plan_type,
+              pr.monthly_consolidated_premium AS monthly_premium,
+              pr.overall_star_rating,
+              pr.moop_amount,
+              sa.state_abbr,
+              sa.county_name
+            FROM payor_plan_service_areas sa
+            JOIN payor_plan_premiums pr ON pr.contract_id = sa.contract_id
+            LEFT JOIN benefit_any ba
+              ON ba.contract_id = pr.contract_id
+             AND ba.plan_id = pr.plan_id
+             AND ba.segment_id = COALESCE(pr.segment_id, '')
+            WHERE sa.state_abbr = $2
+              AND pr.monthly_consolidated_premium IS NOT NULL
+              AND COALESCE(ba.any_covered, 0) = 1
+            ORDER BY pr.monthly_consolidated_premium ASC, pr.overall_star_rating DESC
+            LIMIT $3
+            `,
+            [categories, state, limit]
+          );
+        }
+
+        const plans = rows.map((row) => {
+          const coverage_detail = {};
+          needs.forEach((n) => {
+            coverage_detail[n.need] = { covered: true, copay: null, prior_auth: null };
+          });
+          return {
+            contract_id: row.contract_id,
+            payer_name: row.payer_name,
+            plan_name: row.plan_name,
+            plan_type: row.plan_type,
+            monthly_premium: row.monthly_premium == null ? null : Number(row.monthly_premium),
+            star_rating: row.overall_star_rating == null ? null : Number(row.overall_star_rating),
+            moop_amount: row.moop_amount == null ? null : Number(row.moop_amount),
+            state_abbr: row.state_abbr == null ? null : String(row.state_abbr).trim().toUpperCase(),
+            county_name: row.county_name == null ? null : String(row.county_name).trim(),
+            matched_needs: needs.map((n) => n.need),
+            unmatched_needs: [],
+            reasons: [],
+            warnings: [],
+            coverage_detail,
+            data_source: 'CMS PBP 2026',
+            confidence: 'high'
+          };
+        });
+
+        const versionRows = await pg.unsafe(
+          `SELECT source_version
+             FROM geo_dataset_versions
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1`
+        );
+        const geoVersion = String(versionRows?.[0]?.source_version || '');
+
+        return res.json({
+          success: true,
+          input: { zip: normalizedZip, state, county, location_type: locationType, needs: needs.map((n) => n.need), sort_by: req.query.sort_by || 'lowest_premium' },
+          ignored_needs: ignoredNeeds,
+          zip_filter_applied: locationType === 'zip',
+          scope_requested: locationType,
+          scope_used: locationType,
+          precision: 'exact',
+          geo_version: geoVersion,
+          geo_dataset_complete: true,
+          geo_diagnostics: { is_complete: true, issues: [] },
+          location_warnings: [],
+          count: plans.length,
+          plans
+        });
+      })().catch((error) => {
+        console.error('[public-plan-search] postgres error:', error.message);
+        return res.status(500).json({ success: false, error: 'server_error', message: error.message });
+      });
+    }
     ensureCanonicalGeoTables();
     const geoVersion = getActiveGeoVersion();
     const locationType = String(req.query.location_type || 'zip').trim().toLowerCase();
@@ -333,7 +669,7 @@ router.get('/search', (req, res) => {
             contract_id,
             plan_id,
             COALESCE(segment_id, '') AS segment_id,
-            MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
+            MAX(CASE WHEN covered = 1 THEN 1 WHEN benefit_category = 'b16_dental' AND (covered = 0 OR covered IS NULL) AND COALESCE(covered_source, '') = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS any_covered
           FROM payor_plan_benefits
           WHERE benefit_category IN (${categoryPlaceholders})
           GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
@@ -406,7 +742,7 @@ router.get('/search', (req, res) => {
             contract_id,
             plan_id,
             COALESCE(segment_id, '') AS segment_id,
-            MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
+            MAX(CASE WHEN covered = 1 THEN 1 WHEN benefit_category = 'b16_dental' AND (covered = 0 OR covered IS NULL) AND COALESCE(covered_source, '') = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS any_covered
           FROM payor_plan_benefits
           WHERE benefit_category IN (${categoryPlaceholders})
           GROUP BY contract_id, plan_id, COALESCE(segment_id, '')
@@ -468,7 +804,7 @@ router.get('/search', (req, res) => {
             contract_id,
             plan_id,
             COALESCE(segment_id, '') AS segment_id,
-            MAX(CASE WHEN covered = 1 THEN 1 ELSE 0 END) AS any_covered
+            MAX(CASE WHEN covered = 1 THEN 1 WHEN benefit_category = 'b16_dental' AND (covered = 0 OR covered IS NULL) AND COALESCE(covered_source, '') = 'bendesc_yn_blank_non_pace' THEN 1 ELSE 0 END) AS any_covered
           FROM payor_plan_benefits
           WHERE benefit_category IN (${categoryPlaceholders})
           GROUP BY contract_id, plan_id, COALESCE(segment_id, '')

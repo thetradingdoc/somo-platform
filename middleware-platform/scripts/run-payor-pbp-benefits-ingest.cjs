@@ -135,6 +135,8 @@ function extractForSection(row, headers, sectionPrefix) {
   const orgType = nullIfBlank(row['orgtype']);
   const bendescRaw = coveredKey ? nullIfBlank(row[coveredKey]) : null;
   const naOrNocRaw = naOrNocKey ? nullIfBlank(row[naOrNocKey]) : null;
+  // pbp_b16_dental.txt has no per-section *_bendesc_yn columns; CMS uses plan-level pbp_a_ben_cov (1 = offers dental).
+  const planBenCov = nullIfBlank(row['pbp_a_ben_cov']);
 
   let covered = null;
   let covered_source = 'inferred_null';
@@ -148,6 +150,14 @@ function extractForSection(row, headers, sectionPrefix) {
   } else if (bendescRaw === '0') {
     covered = 0;
     covered_source = 'bendesc_yn_explicit_0';
+  } else if (
+    (bendescRaw === null || bendescRaw === '') &&
+    String(sectionPrefix || '').toLowerCase().startsWith('pbp_b16') &&
+    planBenCov === '1' &&
+    orgType !== '08'
+  ) {
+    covered = 1;
+    covered_source = 'plan_level_ben_cov_b16';
   } else if ((bendescRaw === null || bendescRaw === '') && orgType !== '08') {
     covered = 0;
     covered_source = 'bendesc_yn_blank_non_pace';
