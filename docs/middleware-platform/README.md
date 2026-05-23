@@ -1,8 +1,15 @@
 # Middleware platform documentation (consolidated)
+> Last reviewed: 2026-05-21
+
+**Last Updated:** 2026-05-21
+
+
+**Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
+
+## Existing Documentation Body
 
 **Single file:** This document replaces the previous `docs/middleware-platform/*.md` tree. **Landing-assistant reasoning** (result summary, gates, rollout) remains canonical in [`docs/reasoning/README.md`](../reasoning/README.md).
 
-**Last updated:** 2026-04-29
 
 ## Table of contents
 
@@ -73,9 +80,11 @@
 
 Middleware-specific docs for Kelly, Skin & Care intake, voice/Retell, Step10/LangGraph, checkout and payments, security, catalog/OBF, and operations.
 
+**Patient portal — Timeline / billing / journal:** API contracts and SQLite scope are summarized in **[`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** (`calendar-range`, billing events, `include_empty_days`, Postgres caveat). HTTP ownership: **`routes/patient-routine.js`**, **`routes/patient-billing-portal.js`** (see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)).
+
 ### Documentation parity tracker
 
-- Active gap tracker: [`docs/meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`](../meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md)
+- Active gap tracker: [`docs/meta/README.md#codebase-batch-review-and-documentation-gaps`](../meta/README.md#codebase-batch-review-and-documentation-gaps)
 - Current batch scope: whole codebase, `routes/`, `services/`
 - Use this to keep docs aligned when new route/service files are added
 
@@ -83,12 +92,22 @@ Middleware-specific docs for Kelly, Skin & Care intake, voice/Retell, Step10/Lan
 
 Route ownership anchors for developer navigation (expand in future updates):
 
+- **Patient portal (routine / timeline / shelf / billing / booking)** — see [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)
+  - `routes/patient-routine.js` — template, daily, photo, journal calendar-range, progress-summary, handoff
+  - `routes/patient-shelf.js` — shelf products + link to routine items
+  - `routes/patient-products.js` — product catalog and lists
+  - `routes/patient-billing-portal.js` — billing documents, events, money-summary
+  - `routes/patient-booking.js` — appointments, booking slots, Kelly triage message
+  - `routes/patient-care-program-billing.js` (Stripe care program subscription)
+  - `middleware/patient-session.js` — shared patient session middleware
 - **Public experience + commerce**
   - `routes/public-plan-search.js`
   - `routes/public-geo.js`
+  - `routes/public-provider-search.js`
   - `routes/public-checkout.js`
   - `routes/public-checkout-chat.js`
   - `routes/public-face-read.js`
+  - `routes/public-routines.js` (concern catalog + preview for consumer funnel)
 - **Customer and business surfaces**
   - `routes/customer-dashboard.js`
   - `routes/customer-billing.js`
@@ -148,10 +167,10 @@ Failure-mode notes:
 
 Per-domain debug quick links:
 
-- Runtime/call paths: `docs/architecture/RUNTIME_ENTRYPOINTS_AND_CALL_PATHS.md`
-- Ownership map: `docs/development/CODE_OWNERSHIP_BY_SURFACE.md`
-- Scripts map: `docs/development/SCRIPTS_OPERATIONS_MAP.md`
-- Gap tracker: `docs/meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md`
+- Runtime/call paths: [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)
+- Ownership map: `docs/development/README.md#consolidated-code_ownership_by_surfacemd`
+- Scripts map: `docs/development/README.md#consolidated-scripts_operations_mapmd`
+- Gap tracker: `docs/meta/README.md#codebase-batch-review-and-documentation-gaps`
 
 New route checklist:
 
@@ -159,7 +178,7 @@ New route checklist:
 2. Add/update tests (unit or integration for contract behavior).
 3. Add observability hooks (logs/metrics/audit where relevant).
 4. Update this middleware docs ownership map.
-5. Update `docs/meta/CODEBASE_BATCH_REVIEW_AND_DOC_GAPS.md` if introducing new route/service coverage.
+5. Update `docs/meta/README.md#codebase-batch-review-and-documentation-gaps` if introducing new route/service coverage.
 
 **Configure Retell** (from repo): `cd middleware-platform && node configure-retell.js` — requires `RETELL_API_KEY`, `RETELL_AGENT_ID`, and usually a running API.
 
@@ -174,7 +193,6 @@ New route checklist:
 
 ## Agentic Reasoning Solution Design
 
-*Former path: `docs/middleware-platform/AGENTIC_REASONING_SOLUTION_DESIGN.md`*
 
 Date: 2026-04-17  
 **Status:** Supplemental / historical — **canonical reasoning architecture, contracts, rollout, and ops** are in **[`docs/reasoning/README.md`](../reasoning/README.md)**. Update that file first; keep this doc only for mermaid diagrams or narrative not yet ported.
@@ -431,7 +449,6 @@ This design is implemented via `todos/pending/AGENTIC_REASONING_TODOS.md`:
 
 ## Kelly + Payment Architecture
 
-*Former path: `docs/middleware-platform/architecture-kelly-payment.md`*
 
 
 This document summarizes the current end-to-end architecture.
@@ -495,7 +512,6 @@ This document summarizes the current end-to-end architecture.
 
 ## DocLittle platform architecture (concise)
 
-*Former path: `docs/middleware-platform/ARCHITECTURE.md`*
 
 This document orients new contributors. Deep dives live in `docs/` and `docs/architecture/`.
 
@@ -523,8 +539,8 @@ This document orients new contributors. Deep dives live in `docs/` and `docs/arc
 
 ## `server.js` scale
 
-- Policy for splitting routes: `docs/development/README.md#server-js-refactor-policy`.
-- Do not grow `server.js` for new features without following that policy.
+- Compose entry ~**11k** lines after phase 6+ extraction; ownership map: [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md).
+- Policy for new routes: `docs/development/README.md#server-js-refactor-policy` — add handlers under `routes/` + `services/`, not inline in `server.js`.
 
 ## Security & payments
 
@@ -548,7 +564,6 @@ This document orients new contributors. Deep dives live in `docs/` and `docs/arc
 
 ## Catalog coverage (X2) and routine evidence (Kelly)
 
-*Former path: `docs/middleware-platform/CATALOG_COVERAGE_AND_ROUTINE_EVIDENCE_RUNBOOK.md`*
 
 ## X2 — Automated catalog coverage metrics
 
@@ -602,7 +617,6 @@ When enabled, those fields are populated alongside `evidence_bundle`. Default is
 
 ## Checkout chat UI (patient `checkout-chat.html`)
 
-*Former path: `docs/middleware-platform/CHECKOUT_CHAT_UI_NOTES.md`*
 
 Reference for engineers and QA. Source: `unified-dashboard/patients/checkout-chat.html`.
 
@@ -638,7 +652,6 @@ There is **no** “Delivery tracking” step in the UI; delivery/invoice details
 
 ## Checkout State Contamination Runbook
 
-*Former path: `docs/middleware-platform/CHECKOUT_STATE_CONTAMINATION_RUNBOOK.md`*
 
 ## Purpose
 Operational runbook for checkout rail incidents where users are incorrectly resumed, payment controls appear early, or rail stages rewind.
@@ -700,7 +713,6 @@ Operational runbook for checkout rail incidents where users are incorrectly resu
 
 ## Checkout UX QA Checklist
 
-*Former path: `docs/middleware-platform/CHECKOUT_UX_QA_CHECKLIST.md`*
 
 Use this checklist for quick manual verification of chat checkout UX across desktop and mobile widths.  
 See also: `CHECKOUT_CHAT_UI_NOTES.md`.
@@ -765,7 +777,6 @@ See also: `CHECKOUT_CHAT_UI_NOTES.md`.
 
 ## Community Charter
 
-*Former path: `docs/middleware-platform/COMMUNITY_CHARTER.md`*
 
 
 ## Values
@@ -793,7 +804,6 @@ See also: `CHECKOUT_CHAT_UI_NOTES.md`.
 
 ## Contribution Rulebook and Anti-Abuse Penalties
 
-*Former path: `docs/middleware-platform/CONTRIBUTION_RULEBOOK_AND_ANTI_ABUSE.md`*
 
 
 ## Contribution rules
@@ -827,7 +837,6 @@ See also: `CHECKOUT_CHAT_UI_NOTES.md`.
 
 ## Debugging the Kelly LLM + tools path
 
-*Former path: `docs/middleware-platform/debug-llm-kelly-path.md`*
 
 Non-deterministic failures usually come from **(A) provider limits**, **(B) stale DB state**, or **(C) harness vs server mismatch** — not from “the model reasoning wrong” in isolation.
 
@@ -874,7 +883,7 @@ Non-deterministic failures usually come from **(A) provider limits**, **(B) stal
 
 - `processTurn` try/catch + rate-limit recovery: `services/kelly-agent-service.js`
 - Slot gating: `services/kelly-tool-executor.js` (`_getAvailableSlots`)
-- Session wipe: `server.js` `handlePatientTriageMessage` + `database.wipeChatSessionClinicalState`
+- Session wipe: `services/kelly-triage-turn-service.js` (patient triage path) + `database.wipeChatSessionClinicalState`
 - LLM routing / Groq retries: `services/llm-router.js`
 
 
@@ -884,7 +893,6 @@ Non-deterministic failures usually come from **(A) provider limits**, **(B) stal
 
 ## Deployment data checklist (gates + LLM-4)
 
-*Former path: `docs/middleware-platform/DEPLOYMENT_DATA_CHECKLIST.md`*
 
 **impl-6 / impl-13:** Verify in each production/staging environment **before** relying on booking/triage gates or language persistence.
 
@@ -921,7 +929,6 @@ Non-deterministic failures usually come from **(A) provider limits**, **(B) stal
 
 ## Endpoint Sensitivity Inventory
 
-*Former path: `docs/middleware-platform/ENDPOINT_SENSITIVITY_INVENTORY.md`*
 
 | Endpoint | Sensitivity | Required Controls |
 |---|---|---|
@@ -946,7 +953,6 @@ Non-deterministic failures usually come from **(A) provider limits**, **(B) stal
 
 ## Face apparent-age pipeline — implementation plan (skin analysis + NVIDIA)
 
-*Former path: `docs/middleware-platform/FACE_APPARENT_AGE_SKIN_ANALYSIS_PIPELINE.md`*
 
 **Status:** Planning / hackathon-first  
 **Audience:** Builders aligning Little Lab skin analysis with an on-prem NVIDIA box (e.g. DGX Spark over SSH).  
@@ -1188,7 +1194,6 @@ This document is the single implementation blueprint; detailed tickets can be sp
 
 ## Fraud Response Playbook (Phase 0)
 
-*Former path: `docs/middleware-platform/FRAUD_RESPONSE_PLAYBOOK.md`*
 
 
 ## Purpose
@@ -1264,7 +1269,6 @@ Operational playbook for suspicious payment and sybil-pattern activity in middle
 
 ## Impact Governance Charter
 
-*Former path: `docs/middleware-platform/IMPACT_GOVERNANCE_CHARTER.md`*
 
 
 ## Goals
@@ -1293,7 +1297,6 @@ Operational playbook for suspicious payment and sybil-pattern activity in middle
 
 ## Impact Methodology and Limitations
 
-*Former path: `docs/middleware-platform/IMPACT_METHODOLOGY.md`*
 
 
 ## What the public dashboard shows
@@ -1326,7 +1329,6 @@ Operational playbook for suspicious payment and sybil-pattern activity in middle
 
 ## Verified Impact Standard (v1)
 
-*Former path: `docs/middleware-platform/IMPACT_VERIFIED_STANDARD.md`*
 
 
 ## Evidence requirements
@@ -1363,7 +1365,6 @@ Implemented in code:
 
 ## Incident response (payments / security)
 
-*Former path: `docs/middleware-platform/INCIDENT_RESPONSE.md`*
 
 ## Severity model
 
@@ -1410,7 +1411,6 @@ Record:
 
 ## Kelly fix bundle — apply guide
 
-*Former path: `docs/middleware-platform/KELLY_FIX_APPLY_GUIDE.md`*
 
 This doc summarizes changes aligned with the **Kelly fix bundle** (LLM routing, triage RAG, migrations, harness hygiene).
 
@@ -1451,10 +1451,9 @@ Harness DB file must match the running server (`GET /health?show_db_path=1` → 
 
 ## Kelly god-object fix — implementation todos
 
-*Former path: `docs/middleware-platform/kelly-god-object-fix-todos.md`*
 
 Action checklist for the **phase-aligned prompts** work (Skin & Care landing + full Kelly cleanup).  
-**Full context, diagrams, and file map:** [kelly-phase-prompt-architecture.md](./kelly-phase-prompt-architecture.md).
+**Full context, diagrams, and file map:** kelly-phase-prompt-architecture.md (`./kelly-phase-prompt-architecture.md`).
 
 ---
 
@@ -1491,7 +1490,7 @@ Single writer rule: **`intake_complete` and `skincare_post_intake` are set only 
 
 | Meta key | Set where / by whom | Cleared / overridden when | Read where |
 |----------|---------------------|----------------------------|------------|
-| `routine_intake_active` | Landing (`kelly_flow` / equivalent) and voice path when Skin & Care flow starts; see [retell-kelly-flow.md](./retell-kelly-flow.md). | **`resolveOrchestrationPhase`**: medical-escape fragments during intake or after follow-up → also sets `kelly_triage_reopen` and clears consumer path. **`return_to_triage` tool**: does not clear this key today; triage reopen drives phase. | **`resolveOrchestrationPhase`** (`routineIntakeHold`, `routineSkincareConsumerHold`, escalation blocks). |
+| `routine_intake_active` | Landing (`kelly_flow` / equivalent) and voice path when Skin & Care flow starts; see retell-kelly-flow.md (`./retell-kelly-flow.md`). | **`resolveOrchestrationPhase`**: medical-escape fragments during intake or after follow-up → also sets `kelly_triage_reopen` and clears consumer path. **`return_to_triage` tool**: does not clear this key today; triage reopen drives phase. | **`resolveOrchestrationPhase`** (`routineIntakeHold`, `routineSkincareConsumerHold`, escalation blocks). |
 | `intake_complete` | **Server only:** `KellyToolExecutor._syncRoutineSkincareIntakeMeta` when Skin & Care **hard gates** pass (same block as `skincare_post_intake`). | Not routinely cleared mid-session; new assessment flows may reset via future product logic. | **`resolveOrchestrationPhase`** (`routineIntakeHold` false when true); prompts reference orchestrator state. |
 | `skincare_post_intake` | **Same function, immediately after** `intake_complete` in `_syncRoutineSkincareIntakeMeta`. | **`resolveOrchestrationPhase`**: post–intake medical escape → `'0'` with `routine_intake_active` cleared. **`return_to_triage`** in `kelly-tool-executor.js` → `'0'`. | **`resolveOrchestrationPhase`**: with `routine_intake_active` + `intake_complete`, selects **`ROUTINE_FOLLOWUP`** instead of falling through to **`TRIAGE_ACTIVE`** (session row + no RAG). |
 
@@ -1518,12 +1517,12 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 
 - [x] **A1.** Add `kelly_flow` (or `routine_intake_active`) to `sendLandingAssistantTurn` in `unified-dashboard/littlelab-landing/src/landingAssistantApi.js` for Skin & Care. (Default `kelly_flow: 'skincare'`; pass `kellyFlow: null` to omit.)
 - [x] **A2.** Smoke-test **two-turn minimum**: (1) confirm `routine_intake_active` / meta after first turn; (2) second turn with a fact stated on turn 1 — verify the model still “knows” it once **D2** exists (or file a known gap if D2 is not shipped yet). **Automation:** `npm run smoke:landing-assistant` in `middleware-platform` (optional `DB_PATH` for SQLite meta assert).
-- [x] **A3.** Document required values for Retell `dynamic_variables` (server already reads flow in `webhooks/retell-websocket.js`). **Doc:** [retell-kelly-flow.md](./retell-kelly-flow.md).
+- [x] **A3.** Document required values for Retell `dynamic_variables` (server already reads flow in `webhooks/retell-websocket.js`). **Doc:** retell-kelly-flow.md (`./retell-kelly-flow.md`).
 - [x] **A4 / Task 1.** **Option A meta contract:** who sets/clears/reads `routine_intake_active`, `intake_complete`, and `skincare_post_intake` (single-writer rule). Documented in **Skin & Care session meta contract** earlier in this file; code header in `services/kelly-orchestrator-phase.js` stays the implementation anchor.
 
 ### Phase S2 — Skin assessment product spec (before schema wiring)
 
-- [x] **S2.1 (tasks 6–8).** Step 2 **four paths**, **minimum report contents**, **path → Step 1 field map**, and **hard/soft completion gates** (spec only): [skincare-assessment-product-spec.md](./skincare-assessment-product-spec.md).
+- [x] **S2.1 (tasks 6–8).** Step 2 **four paths**, **minimum report contents**, **path → Step 1 field map**, and **hard/soft completion gates** (spec only): skincare-assessment-product-spec.md (`./skincare-assessment-product-spec.md`).
 
 ### Phase S2.5 — Task 22 design lock + migration header
 
@@ -1556,9 +1555,9 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 
 ### Phase D — Persistence & summary injection
 
-- [x] **D1.** Field mapping documented in [retell-kelly-flow.md](./retell-kelly-flow.md) (`quality`, `onset`, `associated_sx`, optional `medications`).
+- [x] **D1.** Field mapping documented in retell-kelly-flow.md (`./retell-kelly-flow.md`) (`quality`, `onset`, `associated_sx`, optional `medications`).
 - [x] **D2.** **`get_triage_session`** + **`store_triage_opqrst`** on `ROUTINE_INTAKE` / **`ROUTINE_FOLLOWUP`** allow list; **`formatRoutineIntakeSummaryFromTriageRow`** injected in `_runLLMLoop` for both phases when `KELLY_PHASE_PROMPTS` applies. Summary includes structured assessment columns, consumer labels for severity/timing/radiation, **photos/uploads** (`media_requested`, `media_received`, `media_ids`), and optional **`Still needed (server)`** / **`Nice to clarify`** lines from **`skincare_intake_hard_missing_json`** / **`skincare_intake_gaps_json`** (parsed in `kelly-agent-service.js` when building context).
-- [x] **D3.** **`KellyToolExecutor._syncRoutineSkincareIntakeMeta`** sets **`intake_complete`** / **`skincare_post_intake`** meta + **`intake_complete_at`** when hard gates pass; gap metas `skincare_intake_gaps_json` / `skincare_intake_hard_missing_json`. Next-phase note in [retell-kelly-flow.md](./retell-kelly-flow.md).
+- [x] **D3.** **`KellyToolExecutor._syncRoutineSkincareIntakeMeta`** sets **`intake_complete`** / **`skincare_post_intake`** meta + **`intake_complete_at`** when hard gates pass; gap metas `skincare_intake_gaps_json` / `skincare_intake_hard_missing_json`. Next-phase note in retell-kelly-flow.md (`./retell-kelly-flow.md`).
 
 ### Phase D2b — Intake question order & tool copy (consumer)
 
@@ -1587,7 +1586,7 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 
 ### Phase H — Docs & handoff
 
-- [x] **H1.** [kelly-phase-prompt-architecture.md](./kelly-phase-prompt-architecture.md) and this file updated for env vars, test map, `ROUTINE_FOLLOWUP`, summary/gaps, clinical fallback, and prompt-vs-server nuance (**§ Known nuance** below).
+- [x] **H1.** kelly-phase-prompt-architecture.md (`./kelly-phase-prompt-architecture.md`) and this file updated for env vars, test map, `ROUTINE_FOLLOWUP`, summary/gaps, clinical fallback, and prompt-vs-server nuance (**§ Known nuance** below).
 - [x] **H2.** `KELLY_PHASE_PROMPTS` + `KELLY_ORCHESTRATOR_PHASE` notes in `middleware-platform/.env.example`.
 
 ---
@@ -1631,10 +1630,10 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 | Session meta, tools, hard/soft gate sync | `services/kelly-tool-executor.js` |
 | Consumer clinical text fallback (skincare vs triage) | `services/clinical-recommendation-policy.js` |
 | Phase-dispatched prompts + `formatRoutineIntakeSummaryFromTriageRow` | `services/kelly-prompt-builder.js` |
-| Landing HTTP + triage wrapper | `server.js` |
+| Landing HTTP + triage wrapper | `routes/public-landing-assistant.js`, `routes/patient-booking.js`, `services/kelly-triage-turn-service.js` |
 | Voice | `webhooks/retell-websocket.js` |
 | Landing client | `unified-dashboard/littlelab-landing/src/landingAssistantApi.js` |
-| Skin assessment spec + Task 22 lock | [skincare-assessment-product-spec.md](./skincare-assessment-product-spec.md), `migrations/021_skincare_assessment_columns.js` |
+| Skin assessment spec + Task 22 lock | skincare-assessment-product-spec.md (`./skincare-assessment-product-spec.md`), `migrations/021_skincare_assessment_columns.js` |
 | Deterministic Skin & Care regression suite | `__tests__/kelly-skincare-assessment.test.js` |
 
 ---
@@ -1643,12 +1642,12 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 |------|------|
 | 2026-04-03 | Extracted checklist + condensed problem/success for execution tracking. |
 | 2026-04-03 | A2 two-turn smoke; A/D coupling note; B4/B6 orchestrator + safety de-dupe; C0 tool descriptions; G0 CI prerequisite; totals; I1 folded into C0. |
-| 2026-04-03 | **Phase A shipped:** landing `kelly_flow`, `smoke:landing-assistant`, [retell-kelly-flow.md](./retell-kelly-flow.md). |
+| 2026-04-03 | **Phase A shipped:** landing `kelly_flow`, `smoke:landing-assistant`, retell-kelly-flow.md (`./retell-kelly-flow.md`). |
 | 2026-04-03 | **Phase B shipped:** `kelly-prompt-builder.js`, `KELLY_PHASE_PROMPTS`, `__tests__/kelly-prompt-builder.test.js`. |
 | 2026-04-03 | **Phases C–D:** routine intake tool overrides, `get_triage_session`/`store_triage_opqrst` in intake, summary injection, `intake_complete` auto. |
 | 2026-04-03 | **Option A (orchestration):** `ROUTINE_FOLLOWUP` phase; `skincare_post_intake` co-set with `intake_complete` in **`_syncRoutineSkincareIntakeMeta`**; consumer hold avoids post-intake `TRIAGE_ACTIVE` drop. Meta contract in `kelly-orchestrator-phase.js` header. |
 | 2026-04-03 | **Task 1 complete:** meta contract table + A4 in this doc; `KELLY_PHASE_PROMPTS` row notes `ROUTINE_FOLLOWUP`. |
-| 2026-04-03 | **Phase S2 + S2.5:** [skincare-assessment-product-spec.md](./skincare-assessment-product-spec.md); `021_skincare_assessment_columns.js` (design header + columns). |
+| 2026-04-03 | **Phase S2 + S2.5:** skincare-assessment-product-spec.md (`./skincare-assessment-product-spec.md`); `021_skincare_assessment_columns.js` (design header + columns). |
 | 2026-04-03 | **S3–S4b:** DB patch + tool merge; hard gates + gap metas; `processTurn` assessment UI fields; summary + tool schema updates. |
 | 2026-04-03 | **D2b + gaps in summary:** `formatRoutineIntakeSummaryFromTriageRow` extras; intake/follow-up question order; routine tool overrides; `kelly-skincare-assessment.test.js`; phase-validation test fix for RAG mention-in-override. |
 | 2026-04-03 | **`FALLBACK_REPLY_ROUTINE_SKINCARE`** in clinical-recommendation-policy + `_runLLMLoop` phase branch (avoids triage fallback copy on Skin & Care). Docs: success criteria, G/H, nuance §, file map, totals. |
@@ -1660,7 +1659,6 @@ Use as GitHub issues or project tasks. Check boxes as you merge.
 
 ## Kelly phase-scoped prompts & Skin & Care god-object fix
 
-*Former path: `docs/middleware-platform/kelly-phase-prompt-architecture.md`*
 
 This document explains the **problem**, the **current architecture**, the **target architecture**, and a **checklist** for implementers. It is the working spec for fixing mixed clinical vs consumer behavior on the Little Lab landing assistant and tightening Kelly across phases.
 
@@ -1707,14 +1705,14 @@ On the **Skin & Care** landing assistant, users report:
 
 | Client | Route | Next step |
 |--------|--------|-----------|
-| Little Lab landing assistant | `POST /api/public/landing-assistant/turn` | `handlePublicLandingAssistantMessage` → `runKellyTriageTurnForHttpRequest` → `KellyAgentService.processTurn` (`channel: 'chat'`) |
-| Patient portal triage | `POST /api/patient/triage/message` | Same `runKellyTriageTurnForHttpRequest` |
+| Little Lab landing assistant | `POST /api/public/landing-assistant/turn` | `routes/public-landing-assistant.js` → `services/kelly-triage-turn-service.js` → `KellyAgentService.processTurn` (`channel: 'chat'`) |
+| Patient portal triage | `POST /api/patient/triage/message` | `routes/patient-booking.js` → same `runKellyTriageTurnForHttpRequest` |
 | Checkout chat (public / patient) | `POST /api/public|patient/checkout-chat/turn` (+ stream) | `handlePatientCheckoutChatMessage` → often `CheckoutGraph` first, else Kelly with `commerceCheckout` |
 | Retell voice | WebSocket `webhooks/retell-websocket.js` | `KellyAgentService.processTurn` (`channel: 'voice'`) |
 
 ### 3.2 Intake activation (existing)
 
-- **Chat:** `runKellyTriageTurnForHttpRequest` in `server.js` — if `kelly_flow` / `routine_intake_active` in body or `meta` matches `kellyFlowActivatesRoutineIntake()`, sets `routine_intake_active` on session meta via `KellyToolExecutor._setSessionMeta`.
+- **Chat:** `runKellyTriageTurnForHttpRequest` in `services/kelly-triage-turn-service.js` — if `kelly_flow` / `routine_intake_active` in body or `meta` matches `kellyFlowActivatesRoutineIntake()`, sets `routine_intake_active` on session meta via `KellyToolExecutor._setSessionMeta`.
 - **Voice:** `retell-websocket.js` — reads `extractKellyFlowFromRetellCall(callMeta)` and sets the same meta.
 
 Values that activate (see `ROUTINE_INTAKE_KELLY_FLOW_VALUES`): `routine_intake`, `skincare`, `skincare_intake`.
@@ -1753,8 +1751,8 @@ This section is the **exhaustive** map of how requests reach Kelly and adjacent 
 
 | Method | Path | Handler chain |
 |--------|------|----------------|
-| `POST` | `/api/public/landing-assistant/turn` | `handlePublicLandingAssistantMessage` → `runKellyTriageTurnForHttpRequest` → `processTurn` (`chat`) |
-| `POST` | `/api/patient/triage/message` | `handlePatientTriageMessage` → same |
+| `POST` | `/api/public/landing-assistant/turn` | `routes/public-landing-assistant.js` → `runKellyTriageTurnForHttpRequest` → `processTurn` (`chat`) |
+| `POST` | `/api/patient/triage/message` | `routes/patient-booking.js` → same |
 | `POST` | `/api/patient/orchestrate` | **Deprecated alias** — same as triage/message |
 | `POST` | `/api/patient/checkout-chat/turn` | `handlePatientCheckoutChatMessage` (see §3.5.4) |
 | `POST` | `/api/patient/checkout-chat/turn/stream` | `handlePatientCheckoutChatMessageStream` — same logic, SSE |
@@ -1797,7 +1795,7 @@ flowchart TB
     PERS1[upsertOrchestrateSession after turn]
   end
 
-  subgraph checkoutH [Checkout handler server.js]
+  subgraph checkoutH [Checkout handler services/patient-checkout-chat-service.js]
     HCC[handlePatientCheckoutChatMessage]
     HCCS[handlePatientCheckoutChatMessageStream]
     EARLY["Early exits: card/CVV text, deterministic verification"]
@@ -1949,7 +1947,7 @@ flowchart TB
 | G6 | Voice runs **coding graph** and **Kelly** on same transcript | `retell-websocket.js` |
 | G7 | Landing **`kelly_flow`** was historically missing; **now defaulted** for Skin & Care (`landingAssistantApi.js`) — stale clients or bypassed HTTP paths may still omit it |
 | G8 | **Step10** is a separate patient reasoning rail | `step10-graph.js`, not `processTurn` |
-| G9 | **`/orchestrate`** duplicates triage — easy to forget in docs | `server.js` route alias |
+| G9 | **`/orchestrate`** duplicates triage — easy to forget in docs | `routes/patient-booking.js` (or legacy alias in `server.js`) |
 
 ---
 
@@ -1997,7 +1995,7 @@ Explicitly document in the slice:
 - Lesions **are** the problem; “any other symptoms” means **systemic / alarm** (fever, rapid spread, severe pain), not “describe pimples again.”
 - **Forbidden** while in intake: switching to **annual / routine visit with no symptoms** if a **skin concern** is on file.
 - **Forbidden** consumer-unfriendly: “route to specialist” **unless** escalating to clinical triage phase.
-- **Question order** in the prompt: **hard** vs **soft** fields aligned with server meta (`skincare_intake_hard_missing_json` / `skincare_intake_gaps_json`) when injected into the summary; see [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md) **Known nuance** — server **`intake_complete`** uses **five** hard gates; **onset** is taught in copy but is **not** in `_skincareHardGateMissingList` until product aligns.
+- **Question order** in the prompt: **hard** vs **soft** fields aligned with server meta (`skincare_intake_hard_missing_json` / `skincare_intake_gaps_json`) when injected into the summary; see kelly-god-object-fix-todos.md (`./kelly-god-object-fix-todos.md`) **Known nuance** — server **`intake_complete`** uses **five** hard gates; **onset** is taught in copy but is **not** in `_skincareHardGateMissingList` until product aligns.
 
 ### 4.7 `ROUTINE_FOLLOWUP` and reply guardrails
 
@@ -2027,7 +2025,7 @@ Explicitly document in the slice:
 
 ## 7. Implementation checklist (todos)
 
-Use this as GitHub issues or project tasks. **Authoritative short copy with totals:** [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md).
+Use this as GitHub issues or project tasks. **Authoritative short copy with totals:** kelly-god-object-fix-todos.md (`./kelly-god-object-fix-todos.md`).
 
 **Coupling:** **A1** and **D2** should ship together when possible — activating `ROUTINE_INTAKE` without persistence surfaces re-asks immediately.
 
@@ -2035,7 +2033,7 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 
 - [x] **A1.** Add `kelly_flow` to `sendLandingAssistantTurn` (default `skincare`; `kellyFlow: null` omits). See `littlelab-landing/src/landingAssistantApi.js`.
 - [x] **A2.** Two-turn smoke: `npm run smoke:landing-assistant` in `middleware-platform` (+ optional `DB_PATH` meta assert). See `scripts/smoke-landing-assistant-two-turn.cjs`.
-- [x] **A3.** Retell / HTTP values: [retell-kelly-flow.md](./retell-kelly-flow.md).
+- [x] **A3.** Retell / HTTP values: retell-kelly-flow.md (`./retell-kelly-flow.md`).
 
 ### Phase B — Prompt dispatch
 
@@ -2054,9 +2052,9 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 
 ### Phase D — Persistence & summary injection
 
-- [x] **D1.** [retell-kelly-flow.md](./retell-kelly-flow.md) — `quality`, `onset`, `associated_sx`, optional `medications`.
+- [x] **D1.** retell-kelly-flow.md (`./retell-kelly-flow.md`) — `quality`, `onset`, `associated_sx`, optional `medications`.
 - [x] **D2.** `get_triage_session` / `store_triage_opqrst` on **`ROUTINE_INTAKE`** and **`ROUTINE_FOLLOWUP`**; summary + gap lines in `_runLLMLoop` (`formatRoutineIntakeSummaryFromTriageRow`, meta `skincare_intake_*_json`).
-- [x] **D3.** **`KellyToolExecutor._syncRoutineSkincareIntakeMeta`**; next-phase note in [retell-kelly-flow.md](./retell-kelly-flow.md).
+- [x] **D3.** **`KellyToolExecutor._syncRoutineSkincareIntakeMeta`**; next-phase note in retell-kelly-flow.md (`./retell-kelly-flow.md`).
 
 ### Phase E — Code guards
 
@@ -2079,10 +2077,10 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 
 ### Phase H — Docs & handoff
 
-- [x] **H1.** This doc + [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md) updated (env vars, paths, `ROUTINE_FOLLOWUP`, summary/gaps, clinical fallback, prompt-vs-server nuance).
+- [x] **H1.** This doc + kelly-god-object-fix-todos.md (`./kelly-god-object-fix-todos.md`) updated (env vars, paths, `ROUTINE_FOLLOWUP`, summary/gaps, clinical fallback, prompt-vs-server nuance).
 - [x] **H2.** `.env.example` updated for `KELLY_PHASE_PROMPTS` / `KELLY_ORCHESTRATOR_PHASE`.
 
-**Count:** Full checklist and totals live in [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md) (includes **D2b**, **G0–G3**, **H1** complete).
+**Count:** Full checklist and totals live in kelly-god-object-fix-todos.md (`./kelly-god-object-fix-todos.md`) (includes **D2b**, **G0–G3**, **H1** complete).
 
 ---
 
@@ -2094,7 +2092,7 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 | LLM loop, legacy monolith | `services/kelly-agent-service.js` (`_buildSystemPromptLegacy`) |
 | Phase-dispatched prompts | `services/kelly-prompt-builder.js` |
 | Tool execution, session meta | `services/kelly-tool-executor.js` |
-| Landing HTTP | `server.js` (`runKellyTriageTurnForHttpRequest`, `handlePublicLandingAssistantMessage`) |
+| Landing HTTP | `routes/public-landing-assistant.js`, `services/kelly-triage-turn-service.js` |
 | Voice | `webhooks/retell-websocket.js` |
 | Landing client API | `unified-dashboard/littlelab-landing/src/landingAssistantApi.js` |
 | Baseline + Skin & Care suite | `__tests__/kelly-phase-validation.test.js`, `__tests__/kelly-skincare-assessment.test.js`, `__tests__/kelly-prompt-builder.test.js` |
@@ -2118,7 +2116,7 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 | 2026-04-03 | Initial spec: problem, current vs target architecture, implementation checklist for devs. |
 | 2026-04-03 | §3.5: complete as-built diagrams (HTTP, checkout, voice, `processTurn`), route table, gaps G1–G9. |
 | 2026-04-03 | §7: checklist aligned with kelly-god-object-fix-todos (A2 two-turn, B4/B6, C0, G0, A/D coupling); 27 implementation todos. |
-| 2026-04-03 | Phase A done: landing `kelly_flow`, smoke script, [retell-kelly-flow.md](./retell-kelly-flow.md). |
+| 2026-04-03 | Phase A done: landing `kelly_flow`, smoke script, retell-kelly-flow.md (`./retell-kelly-flow.md`). |
 | 2026-04-03 | Phase B: `kelly-prompt-builder.js`, `KELLY_PHASE_PROMPTS`, tests, `.env.example`. |
 | 2026-04-03 | Phases C–D: intake tool overrides, persistence tools, prompt summary, `intake_complete` auto. |
 | 2026-04-03 | **Doc refresh:** `ROUTINE_FOLLOWUP` in terms table; accurate `processTurn` / `_runLLMLoop` path (`buildKellySystemPrompt`, summary, routine tool maps, clinical skincare fallback); §3.4 test list; §4.6–4.7; G7 landing note; G/H checklist aligned with todos; file map; D3 anchor `_syncRoutineSkincareIntakeMeta`. |
@@ -2130,7 +2128,6 @@ Use this as GitHub issues or project tasks. **Authoritative short copy with tota
 
 ## Key Rotation Schedule and Emergency Rotation Runbook
 
-*Former path: `docs/middleware-platform/KEY_ROTATION_AND_EMERGENCY_RUNBOOK.md`*
 
 
 ## Rotation schedule
@@ -2177,9 +2174,7 @@ Track schedules in `secret_rotation_registry` and monitor due items from:
 
 ## LangGraph & LangSmith — Developer Guide
 
-*Former path: `docs/middleware-platform/LANGGRAPH_LANGSMITH.md`*
 
-**Last Updated:** April 6, 2026
 
 Single reference: config, what’s traced, how to see progress, scripts, and troubleshooting.
 
@@ -2215,7 +2210,7 @@ Only **LangChain/LangGraph** calls are sent. Raw HTTP/DB is not traced unless wr
 3. Open a run: top-level = `invoke()`; child spans = graph nodes. For video consult: node order + output state (`current_stage`, `rag_context`, `processing_metadata.merged_count`) show progress.
 4. No live streaming; use your APIs for real-time UI; LangSmith for post-hoc inspection.
 
-**Quick check:** `cd middleware-platform && npm run test:langsmith`
+**Quick check:** confirm `LANGSMITH_API_KEY` + `LANGCHAIN_TRACING_V2=true`, then exercise a traced path (e.g. voice consult or Step10 invoke). There is **no** `npm run test:langsmith` in `package.json`.
 
 ---
 
@@ -2242,10 +2237,10 @@ LANGGRAPH_CHECKPOINT_SCHEMA=public
 
 | Command | Purpose |
 |---------|---------|
-| `npm run test:langsmith` | Send test trace to LangSmith (requires network) |
-| `npm run test:langgraph` | Transcript + function_call through coding graph (shadow) |
 | `npm run reconcile:langgraph` | Detect divergence Postgres checkpoints vs voice_call_states; `--repair` to seed |
 | `npm run migrate:langgraph` | Seed Postgres checkpointer from voice_call_states; `--dry-run`, `--limit=N` |
+
+There are **no** `npm run test:langsmith` / `npm run test:langgraph` scripts in `package.json` today — use LangSmith UI for trace verification or add an explicit script if needed.
 
 ---
 
@@ -2290,7 +2285,6 @@ LANGGRAPH_CHECKPOINT_SCHEMA=public
 
 ## Log and Export Redaction Standards
 
-*Former path: `docs/middleware-platform/LOG_REDACTION_STANDARDS.md`*
 
 
 ## Never log
@@ -2319,7 +2313,6 @@ LANGGRAPH_CHECKPOINT_SCHEMA=public
 
 ## OBF Ingestion Runbook (Baseline + Delta + Master Catalog Serving)
 
-*Former path: `docs/middleware-platform/OBF_INGESTION_RUNBOOK.md`*
 
 ## Scope
 
@@ -2465,7 +2458,6 @@ After moving Cloud Run env to Secret Manager refs, rotate all previously exposed
 
 ## On-call & escalation (payments / security)
 
-*Former path: `docs/middleware-platform/ONCALL_AND_ESCALATION.md`*
 
 This is the operational policy for incidents involving payment processing, webhooks, reconciliation, and security events.
 
@@ -2502,7 +2494,6 @@ View effective owners:
 
 ## Payment Data Handling Standard
 
-*Former path: `docs/middleware-platform/PAYMENT_DATA_HANDLING_STANDARD.md`*
 
 ## 1) Prohibited Data
 
@@ -2548,7 +2539,6 @@ Allowed: Stripe `payment_intent_id`, `payment_method` references, tokenized iden
 
 ## Payment Data Incident Playbook
 
-*Former path: `docs/middleware-platform/PAYMENT_DATA_INCIDENT_PLAYBOOK.md`*
 
 ## Trigger Conditions
 
@@ -2589,7 +2579,6 @@ Allowed: Stripe `payment_intent_id`, `payment_method` references, tokenized iden
 
 ## Payment errors — customer-facing taxonomy and support runbook
 
-*Former path: `docs/middleware-platform/PAYMENT_ERRORS_AND_SUPPORT_RUNBOOK.md`*
 
 This document is the **customer-facing** framing for payment failures and disputes. Engineering details live in code (`refund-workflow-service`, `payment-dispute-service`, `settlement-retry-service`) and admin APIs under `/api/admin/payment-ops/*`.
 
@@ -2635,7 +2624,6 @@ This document is the **customer-facing** framing for payment failures and disput
 
 ## Payments reliability — SLOs & SLIs (Phase 0)
 
-*Former path: `docs/middleware-platform/PAYMENT_SLOS_SLIS.md`*
 
 This defines the **service level indicators** (SLIs) and **service level objectives** (SLOs) for payment + webhook + reconciliation reliability.
 
@@ -2700,7 +2688,6 @@ These thresholds are evaluated by the reliability monitor and exposed at `GET /a
 
 ## PHI/PII Data Inventory and Classification (Payments + Impact)
 
-*Former path: `docs/middleware-platform/PHI_PII_DATA_INVENTORY_AND_CLASSIFICATION.md`*
 
 
 ## Inventory authority
@@ -2741,7 +2728,6 @@ These thresholds are evaluated by the reliability monitor and exposed at `GET /a
 
 ## Postmortem template (Sev1 / Sev2)
 
-*Former path: `docs/middleware-platform/POSTMORTEM_TEMPLATE.md`*
 
 ## Summary
 
@@ -2786,7 +2772,6 @@ These thresholds are evaluated by the reliability monitor and exposed at `GET /a
 
 ## Predeploy Security Checklist (Payment/Checkout)
 
-*Former path: `docs/middleware-platform/PREDEPLOY_SECURITY_CHECKLIST.md`*
 
 - [ ] `npm run release:security-gate` passes.
 - [ ] No raw PAN/CVC fields accepted by payment endpoints.
@@ -2809,7 +2794,6 @@ These thresholds are evaluated by the reliability monitor and exposed at `GET /a
 
 ## Privacy Hardening Checklist
 
-*Former path: `docs/middleware-platform/PRIVACY_HARDENING_CHECKLIST.md`*
 
 Owner: Security + Platform Engineering  
 Scope: Checkout, payment, and sensitive data handling
@@ -2853,7 +2837,6 @@ Scope: Checkout, payment, and sensitive data handling
 
 ## Reasoning Map v1 Rollout
 
-*Former path: `docs/middleware-platform/reasoning-map-v1-rollout.md`*
 
 ## Purpose
 
@@ -2917,7 +2900,6 @@ Use `AGENT_REASONING_MAP_V1=true` only in staging first, then:
 
 ## Retell Configuration - Quick Reference
 
-*Former path: `docs/middleware-platform/RETELL_CONFIG_QUICK_REFERENCE.md`*
 
 ## ✅ CORRECT VALUES FOR RETELL DASHBOARD
 
@@ -3015,7 +2997,6 @@ Then check:
 
 ## Retell SIP Trunk Configuration - FINAL VALUES
 
-*Former path: `docs/middleware-platform/RETELL_SIP_CONFIG_FINAL.md`*
 
 ## ❌ Current Issue
 Calls are failing with **"User declined"** status. This indicates a **SIP authentication mismatch** between Retell and Twilio.
@@ -3146,7 +3127,6 @@ Then check:
 
 ## Retell `kelly_flow` and routine intake (A3)
 
-*Former path: `docs/middleware-platform/retell-kelly-flow.md`*
 
 Retell voice and HTTP chat share the same **session meta** key `routine_intake_active` when the flow should use **`ROUTINE_INTAKE`** (narrow tools + orchestrator copy): skincare / routine intake, not default triage.
 
@@ -3212,7 +3192,7 @@ export DB_PATH=./middleware-dev.db   # optional: assert meta in SQLite
 node scripts/smoke-landing-assistant-two-turn.cjs
 ```
 
-See also: [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md) (Phase A).
+See also: kelly-god-object-fix-todos.md (`./kelly-god-object-fix-todos.md`) (Phase A).
 
 
 ---
@@ -3221,7 +3201,6 @@ See also: [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md) (Phas
 
 ## Review Committee Process for Disputed Impact Claims
 
-*Former path: `docs/middleware-platform/REVIEW_COMMITTEE_PROCESS.md`*
 
 
 ## Intake
@@ -3255,7 +3234,6 @@ See also: [kelly-god-object-fix-todos.md](./kelly-god-object-fix-todos.md) (Phas
 
 ## Reasoning pipeline — roadmap todos
 
-*Former path: `docs/middleware-platform/roadmaps/reasoning-pipeline-roadmap-todos.md`*
 
 Last-mile work from **ingredient-first (biochemical)** to **product-first (commercial/consumer)**, aligned with layered reasoning (structure → graph → NL + evidence).
 
@@ -3389,7 +3367,6 @@ Recommended: **Basket (A1–A4)** before **Pinecone (C)** so semantic retrieval 
 
 ## Runbook: Kelly Loop Debugging
 
-*Former path: `docs/middleware-platform/runbook-kelly-loops.md`*
 
 Use this when Kelly repeats OPQRST, specialist summary, or checkout prompts.
 
@@ -3420,7 +3397,7 @@ Use this when Kelly repeats OPQRST, specialist summary, or checkout prompts.
 
 ## Session wipe + harness IDs (Fix 2)
 
-- **Server** (`handlePatientTriageMessage`): clinical state is cleared via `wipeChatSessionClinicalState` only when there is **no** `patient_orchestrate_sessions` row for `session_id` **or** `turn_count === 0`. We do **not** wipe when `turn_count >= 1` and RAG is still missing (would nuke in-progress OPQRST).
+- **Server** (`kelly-triage-turn-service.js` patient path): clinical state is cleared via `wipeChatSessionClinicalState` only when there is **no** `patient_orchestrate_sessions` row for `session_id` **or** `turn_count === 0`. We do **not** wipe when `turn_count >= 1` and RAG is still missing (would nuke in-progress OPQRST).
 - **Harness** (`run-kelly-tests.sh`): each run sets `KELLY_SESSION_ID="k-${case_id}-$(uuidgen)"` so a shared dev SQLite file does not reuse stale `triage_rag_results` for the same string id.
 
 ## LLM + SQLite alignment (harness vs server)
@@ -3478,7 +3455,6 @@ Before handing a fix to another developer, include:
 
 ## Runbook: Payment and Settlement Debugging
 
-*Former path: `docs/middleware-platform/runbook-payment-settlement.md`*
 
 
 Use this when checkout appears successful but funds did not move.
@@ -3546,7 +3522,6 @@ Before escalating a payment issue, include:
 
 ## Scan Release Sprints (Pack C)
 
-*Former path: `docs/middleware-platform/SCAN_RELEASE_SPRINTS.md`*
 
 ## Sprint 1 (P0): Identity Hit
 - Flow: scan -> `obf_index_cache` or `live_api` -> hero card.
@@ -3593,7 +3568,6 @@ Before escalating a payment issue, include:
 
 ## Service-to-service least privilege and scoped tokens
 
-*Former path: `docs/middleware-platform/SERVICE_TO_SERVICE_CREDENTIAL_SCOPES.md`*
 
 
 Service tokens are stored hashed in `service_credentials` and validated by scope.
@@ -3627,7 +3601,6 @@ Service tokens are stored hashed in `service_credentials` and validated by scope
 
 ## SIP Authentication Troubleshooting Guide
 
-*Former path: `docs/middleware-platform/SIP_AUTH_TROUBLESHOOTING.md`*
 
 ## ❌ Current Issue
 **Call Status**: `failed`  
@@ -3733,7 +3706,6 @@ node scripts/test-retell-outbound.js +18622307479
 
 ## Skin Taxonomy Gold Dataset Plan
 
-*Former path: `docs/middleware-platform/skin-taxonomy-gold-dataset.md`*
 
 ## Source
 - Pro-verified dermatology Q/A corpus.
@@ -3763,7 +3735,6 @@ node scripts/test-retell-outbound.js +18622307479
 
 ## Skin Taxonomy Quality Gates
 
-*Former path: `docs/middleware-platform/skin-taxonomy-quality-gates.md`*
 
 ## Offline gates
 - Agreement (core skin type): >= 0.90 on adjudicated set.
@@ -3794,7 +3765,6 @@ node scripts/test-retell-outbound.js +18622307479
 
 ## Skin & Care — Step 2 paths, report shape, and Step 1 inputs
 
-*Former path: `docs/middleware-platform/skincare-assessment-product-spec.md`*
 
 **Status:** Phase 2 product spec + Phase 2.5 schema design lock (before tool/prompt wiring).  
 **Companion:** Column definitions and enums are duplicated in the header of `migrations/021_skincare_assessment_columns.js` (single source for DB shape).
@@ -3896,7 +3866,6 @@ Detailed allowed values and JSON shapes are in **`021_skincare_assessment_column
 
 ## Middleware Coding Standards
 
-*Former path: `docs/middleware-platform/standards.md`*
 
 
 This document defines quality rules for Kelly and payment stack work.
@@ -3973,7 +3942,6 @@ Before merge for Kelly/payment changes:
 
 ## Step 10 + LangSmith
 
-*Former path: `docs/middleware-platform/STEP10_LANGSMITH_RUNBOOK.md`*
 
 
 ## When traces appear
@@ -3990,12 +3958,9 @@ Before merge for Kelly/payment changes:
 ```bash
 cd middleware-platform
 STEP10_GRAPH_ENABLED=false node -e "require('./services/step10-graph').invokeStep10({ patient_id: 'p1' }).then(console.log)"
-npm run smoke:step10
 ```
 
-## CI
-
-`package.json` includes `smoke:step10` (stub-mode invoke). Pair with `jest` tests for routing and stub behavior.
+There is **no** `npm run smoke:step10` in `package.json`. Pair manual invokes with targeted Jest suites when they exist for Step10 routing.
 
 
 ---
@@ -4004,7 +3969,6 @@ npm run smoke:step10
 
 ## Provider phone surfacing — rollout checklist
 
-*Former path: `docs/middleware-platform/STEP10_PROVIDER_PHONE_ROLLOUT.md`*
 
 
 Before enabling directory phones in chat or voice:
@@ -4023,7 +3987,6 @@ The checkout chat client shows a **Call** button only when `phone_trust` is `ver
 
 ## Stripe Webhook Paths
 
-*Former path: `docs/middleware-platform/STRIPE_WEBHOOK_PATHS.md`*
 
 Canonical webhook path:
 - `POST /webhooks/stripe` (mounted from `routes/stripe-webhook-handler`)
@@ -4049,7 +4012,6 @@ Operational policy:
 
 ## Kelly + Payment Test Matrix (Handoff)
 
-*Former path: `docs/middleware-platform/test-matrix-handoff.md`*
 
 
 Use this matrix for PR validation and cross-team handoff.
@@ -4107,7 +4069,6 @@ For payment endpoint smoke tests, exercise:
 
 ## Transparency Cadence
 
-*Former path: `docs/middleware-platform/TRANSPARENCY_CADENCE.md`*
 
 
 ## Weekly
@@ -4136,7 +4097,6 @@ For payment endpoint smoke tests, exercise:
 
 ## Treasury / Routing Decision Rights (Pre-token)
 
-*Former path: `docs/middleware-platform/TREASURY_DECISION_RIGHTS.md`*
 
 
 ## Decision owners
@@ -4167,7 +4127,6 @@ For payment endpoint smoke tests, exercise:
 
 ## Voice Agent: Functions & Dynamic Variables
 
-*Former path: `docs/middleware-platform/VOICE_AGENT_FUNCTIONS_AND_DYNAMIC_VARIABLES.md`*
 
 Single reference for the Retell voice agent: all tool functions and dynamic variables (for dashboard audio/LLM tests). Source: `server.js` (where variables are set), `webhooks/retell-websocket.js` (where they are read and where functions are handled).
 
@@ -4283,8 +4242,8 @@ Set these in Retell (Variable name → Test value). Use your real DB values for 
 
 ## 4. Related docs
 
-- [RETELL_CONFIG_QUICK_REFERENCE.md](./RETELL_CONFIG_QUICK_REFERENCE.md) — Retell URLs, ngrok, Twilio.
-- [LANGGRAPH_LANGSMITH.md](./LANGGRAPH_LANGSMITH.md) — Tracing and voice coding graph.
+- RETELL_CONFIG_QUICK_REFERENCE.md (`./RETELL_CONFIG_QUICK_REFERENCE.md`) — Retell URLs, ngrok, Twilio.
+- LANGGRAPH_LANGSMITH.md (`./LANGGRAPH_LANGSMITH.md`) — Tracing and voice coding graph.
 
 
 ---
@@ -4293,7 +4252,6 @@ Set these in Retell (Variable name → Test value). Use your real DB values for 
 
 ## Voice Agent Checkout Configuration Verification
 
-*Former path: `docs/middleware-platform/VOICE_CHECKOUT_VERIFICATION.md`*
 
 ## ✅ Verification Complete - Ready for Deployment
 
@@ -4349,7 +4307,6 @@ Set these in Retell (Variable name → Test value). Use your real DB values for 
 
 ---
 
-**Last Updated:** January 2026
 
 
 ---
@@ -4358,7 +4315,6 @@ Set these in Retell (Variable name → Test value). Use your real DB values for 
 
 ## Voice triage parity (Kelly vs Retell direct)
 
-*Former path: `docs/middleware-platform/VOICE_TRIAGE_PARITY.md`*
 
 Linked from **`docs/architecture/README.md#commerce-agentic-checkout-file-map`** (Gates legend and booking tools table).
 
@@ -4426,7 +4382,6 @@ Use `scripts/test-voice-triage-parity-smoke.sh` with the server running (optiona
 
 ## Wallet key custody model and recovery procedures
 
-*Former path: `docs/middleware-platform/WALLET_KEY_CUSTODY_AND_RECOVERY.md`*
 
 
 ## Custody model
@@ -4462,7 +4417,6 @@ Use `scripts/test-voice-triage-parity-smoke.sh` with the server running (optiona
 
 ## DocLittle Payment Architecture — Wiring Guide
 
-*Former path: `docs/middleware-platform/WIRING_GUIDE.md`*
 
 ## What is wired
 
@@ -4566,4 +4520,3 @@ POST /webhooks/stripe          → payment_intent.succeeded event
 ```
 
 **Money moves.** Patient pays → platform keeps 20% → provider gets 80% in USDC.
-

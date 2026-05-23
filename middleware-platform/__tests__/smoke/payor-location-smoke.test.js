@@ -4,8 +4,8 @@
  * Multi-state HTTP smoke for `/api/public/plans/search`.
  * Skipped unless RUN_PAYOR_HTTP_SMOKE=1 and server is reachable.
  *
- *   RUN_PAYOR_HTTP_SMOKE=1 npx jest __tests__/payor-location-smoke.test.js --runInBand
- *   PAYOR_TEST_API_BASE=http://127.0.0.1:4000 RUN_PAYOR_HTTP_SMOKE=1 npx jest ...
+ *   npm run test:payor:location-smoke
+ *   PAYOR_TEST_API_BASE=http://127.0.0.1:4000 npm run test:payor:location-smoke
  */
 
 const ENABLED = process.env.RUN_PAYOR_HTTP_SMOKE === '1';

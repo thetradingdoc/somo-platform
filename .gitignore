@@ -110,6 +110,7 @@ middleware-platform/data/payor-sources/*
 # Local scratch (do not commit)
 /step0.md
 /step1b
+middleware-platform/reports/
 
 # Railway/Netlify
 .railway/

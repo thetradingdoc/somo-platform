@@ -24,15 +24,15 @@ describe('category route API contract', () => {
   });
 
   test('beautyfacts and foodfacts handlers both use shared payload builder', () => {
-    const serverPath = path.join(__dirname, '..', 'server.js');
-    const src = fs.readFileSync(serverPath, 'utf8');
+    const scanPath = path.join(__dirname, '..', 'routes', 'public-product-scan.js');
+    const src = fs.readFileSync(scanPath, 'utf8');
     const occurrences = (src.match(/\.\.\.buildCategoryRoutePayload\(categoryEval\)/g) || []).length;
     expect(occurrences).toBeGreaterThanOrEqual(2);
   });
 
-  test('server exposes scan_summary feature gate variable', () => {
-    const serverPath = path.join(__dirname, '..', 'server.js');
-    const src = fs.readFileSync(serverPath, 'utf8');
+  test('public product scan routes expose scan_summary feature gate variable', () => {
+    const scanPath = path.join(__dirname, '..', 'routes', 'public-product-scan.js');
+    const src = fs.readFileSync(scanPath, 'utf8');
     expect(src.includes('SCAN_SUMMARY_V1')).toBe(true);
   });
 });

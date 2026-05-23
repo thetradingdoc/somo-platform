@@ -6,8 +6,8 @@
  */
 
 const Database = require('better-sqlite3');
-const { up: m031 } = require('../migrations/031_user_sessions_and_knowledge_chunks');
-const { createRetriever } = require('../services/retriever');
+const { up: m031 } = require('../../migrations/031_user_sessions_and_knowledge_chunks');
+const { createRetriever } = require('../../services/retriever');
 
 (async () => {
   const db = new Database(':memory:');
