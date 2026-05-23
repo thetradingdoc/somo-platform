@@ -34,7 +34,7 @@ export default function ExploreScreen() {
       }>
       <ThemedView style={styles.titleContainer}>
         <ThemedText type="title" style={{ fontFamily: Fonts.rounded }}>
-          Shop & checkout
+          Manage prescriptions
         </ThemedText>
       </ThemedView>
 

@@ -7,17 +7,24 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { API_BASE_URL, DEMO_PATIENT_EMAIL, getApiReachabilityIssue } from '@/config';
+import { BillingTheme } from '@/constants/billingTheme';
+import { FontFamilies } from '@/constants/fontFamilies';
 import { JournalTokens } from '@/constants/journalTokens';
+import { SkinCare } from '@/constants/skinCareTokens';
+import { PENDING_ROUTINE_CONCERN_KEY } from '@/constants/routineSession';
+import { patientGet } from '@/lib/patient-api';
 
 const API_BASE = API_BASE_URL;
 const API_REACHABILITY = getApiReachabilityIssue();
@@ -70,6 +77,7 @@ async function clearStoredPatientSession() {
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState(
     DEMO_PATIENT_EMAIL || 'doctorjay254@gmail.com'
@@ -102,7 +110,15 @@ export default function HomeScreen() {
         if (sid && storedEmail) {
           setSessionId(sid);
           setEmail(storedEmail);
-          setStep('appointments');
+          const template = await patientGet('/api/patient/routine/template').catch(() => ({
+            has_template: false,
+          }));
+          if (!template?.has_template) {
+            router.replace('/routine/pick');
+            return;
+          }
+          router.replace('/(tabs)/today');
+          return;
         }
       } catch {
         // ignore
@@ -139,7 +155,7 @@ export default function HomeScreen() {
           setAppointments([]);
           setStep('email');
           setError(
-            `${msg} — Sign in again. Each API server has its own sessions; switching hosts (e.g. ngrok → api.doclittle.site) requires a new login.`
+            `${msg} — Sign in again. Each API server has its own sessions; switching hosts (e.g. ngrok → api.skinandcare.com) requires a new login.`
           );
           return;
         }
@@ -212,8 +228,20 @@ export default function HomeScreen() {
       await SecureStore.setItemAsync(SESSION_KEY, sid);
       await SecureStore.setItemAsync(EMAIL_KEY, email.trim());
       await SecureStore.setItemAsync(API_BASE_KEY, API_BASE);
-      await loadAppointments(sid);
-      setStep('appointments');
+      const pendingConcern = await SecureStore.getItemAsync(PENDING_ROUTINE_CONCERN_KEY);
+      const template = await patientGet('/api/patient/routine/template').catch(() => ({
+        has_template: false,
+      }));
+      if (!template?.has_template) {
+        if (pendingConcern) await SecureStore.deleteItemAsync(PENDING_ROUTINE_CONCERN_KEY);
+        router.replace({
+          pathname: '/routine/pick',
+          params: pendingConcern ? { concern: pendingConcern } : {},
+        });
+        return;
+      }
+      await SecureStore.deleteItemAsync(PENDING_ROUTINE_CONCERN_KEY);
+      router.replace('/(tabs)/today');
     } catch (e: unknown) {
       setError(formatFetchError(e));
     } finally {
@@ -261,7 +289,11 @@ export default function HomeScreen() {
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
-    backgroundColor: disabled ? '#d1d5db' : primary ? JournalTokens.color.brandBlue : '#6b7280',
+    backgroundColor: disabled
+      ? '#d1d5db'
+      : primary
+        ? BillingTheme.button.primaryBg
+        : SkinCare.gray,
     alignItems: 'center' as const,
   });
 
@@ -272,12 +304,19 @@ export default function HomeScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}>
         <ThemedView style={{ flex: 1, paddingHorizontal: HORIZONTAL_PADDING, paddingBottom: 24 }}>
-          <ThemedText type="title" style={{ marginTop: 8, marginBottom: 8 }}>
-            S&C
-          </ThemedText>
-          <ThemedText style={{ fontSize: 14, opacity: 0.7, marginBottom: 16 }}>
-            Skin & Care
-          </ThemedText>
+          <View style={{ marginTop: 8, marginBottom: 16 }}>
+            <Text
+              accessibilityLabel="Skin and Care"
+              style={{
+                fontFamily: FontFamilies.ui,
+                fontSize: 28,
+                fontWeight: '700',
+                color: '#000000',
+                letterSpacing: -0.5,
+              }}>
+              S&C
+            </Text>
+          </View>
 
           {API_REACHABILITY ? (
             <View

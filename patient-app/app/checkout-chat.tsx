@@ -961,7 +961,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: SkinCare.accent,
   },
-  payHeroText: { fontSize: 16, fontWeight: '800', color: SkinCare.black },
+  payHeroText: { fontSize: 16, fontWeight: '800', color: SkinCare.white },
   payDisabled: { opacity: 0.55 },
   composerRow: {
     flexDirection: 'row',
@@ -1089,6 +1089,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  payModalPrimaryText: { fontWeight: '800', color: SkinCare.black, fontSize: 16 },
+  payModalPrimaryText: { fontWeight: '800', color: SkinCare.white, fontSize: 16 },
   payModalCancel: { paddingVertical: 12, alignItems: 'center' },
 });
