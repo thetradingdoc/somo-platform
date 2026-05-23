@@ -17,6 +17,7 @@ This folder defines **what we ship** for the routine tracker product. When code,
 | [09-step1-match-design.md](./09-step1-match-design.md) | Step 1 funnel — design notes |
 | [10-agentic-funnel-scope.md](./10-agentic-funnel-scope.md) | Agentic funnel scope |
 | [11-growth-backlog.md](./11-growth-backlog.md) | Growth and friction backlog (deferred) |
+| [12-funnel-qa-checklist.md](./12-funnel-qa-checklist.md) | Manual + API QA for `/start` funnel |
 
 **Supersedes:** scattered care-funnel notes in `docs/consumer/` (see redirect there).
 

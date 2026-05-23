@@ -76,6 +76,7 @@
         "test:provider:network-drift-quality": "jest __tests__/provider-network-drift-quality-service.test.js --runInBand",
         "test:payor:section14-smoke": "jest __tests__/provider-registry-dedup.test.js __tests__/provider-search-service.integration.test.js __tests__/provider-network-linker-conflict.test.js __tests__/provider-network-drift-quality-service.test.js __tests__/provider-network-precheck-service.test.js __tests__/payor-registry-resolver-service.test.js __tests__/payor-blocking-service.test.js __tests__/payor-fuzzy-match-service.test.js __tests__/payor-normalization-service.test.js __tests__/payor-resolution-scoring-service.test.js __tests__/payor-resolution-utils.test.js --runInBand",
         "test:payor:location-smoke": "RUN_PAYOR_HTTP_SMOKE=1 jest --config jest.smoke.config.js --runInBand",
+        "test:e2e-funnel": "playwright test e2e/landing-funnel-match.spec.cjs e2e/landing-funnel-preview.spec.cjs --project landing",
         "test:e2e-landing": "(cd ../unified-dashboard/littlelab-landing && npm run build) && playwright test --project landing",
         "test:e2e-landing:find-provider": "(cd ../unified-dashboard/littlelab-landing && npm run build) && playwright test e2e/landing-find-provider.spec.cjs --project landing",
         "test:e2e-landing:quick": "playwright test --project landing",
