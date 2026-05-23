@@ -1246,15 +1246,7 @@ async function handlePatientCheckoutChatMessageStream(req, res) {
     sseWrite({ type: 'error', success: false, error: e.message || 'stream_failed', request_id: req.id });
     return res.end();
   }
-
-module.exports = {
-  handlePatientCheckoutChatMessage,
-  handlePatientCheckoutChatMessageStream,
-  _getCheckoutStage,
-  buildStageContract,
-  _isMidFlightCheckout,
-};
-
+}
 
 module.exports = {
   handlePatientCheckoutChatMessage,
