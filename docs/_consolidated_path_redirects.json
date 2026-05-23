@@ -195,5 +195,7 @@
   "docs/testing/SCAN_RESULTS_UI_AUDIT_EVIDENCE.md": "docs/testing/README.md#scan-results-ui-audit-evidence",
   "docs/testing/STAGING_PRODUCT_VERIFICATION.md": "docs/testing/README.md#staging-product-verification",
   "docs/testing/TELEMEDICINE_E2E.md": "docs/testing/README.md#telemedicine-e2e",
-  "docs/testing/TRANSCRIPT_ONLY_E2E.md": "docs/testing/README.md#transcript-only-e2e"
+  "docs/testing/TRANSCRIPT_ONLY_E2E.md": "docs/testing/README.md#transcript-only-e2e",
+  "docs/ARCHITECTURE.md": "docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md",
+  "docs/user-journey/08-growth-backlog.md": "docs/user-journey/11-growth-backlog.md"
 }

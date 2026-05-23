@@ -1,9 +1,17 @@
 # testing — consolidated documentation
+> Last reviewed: 2026-05-21
 
-**Single file:** All former `docs/testing/**/*.md` content is merged here. **Last updated:** 2026-04-20
+**Last Updated:** 2026-05-21
+
+
+**Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
+
+## Existing Documentation Body
+
 
 ## Table of contents
 
+- [Production Playwright suites (`PROD_PLAYWRIGHT_SUITES.md`)](./PROD_PLAYWRIGHT_SUITES.md)
 - [Agentic checkout — accessibility smoke (manual) (`AGENTIC_CHECKOUT_A11Y_SMOKE.md`)](#agentic-checkout-a11y-smoke)
 - [Agentic checkout — manual E2E checklist (staging) (`AGENTIC_CHECKOUT_E2E_CHECKLIST.md`)](#agentic-checkout-e2e-checklist)
 - [Browser E2E status (`E2E_STATUS.md`)](#e2e-status)
@@ -18,13 +26,14 @@
 
 Browse by anchor above. Each section notes the former file path.
 
+**Middleware unit tests (Jest):** [`middleware-platform/__tests__/README.md`](../../middleware-platform/__tests__/README.md) — what `npm test` runs in `middleware-platform`, Node harnesses excluded from Jest, Playwright vs `test:eval-engine`.
+
 ---
 
 <a id="agentic-checkout-a11y-smoke"></a>
 
 ## Agentic checkout — accessibility smoke (manual)
 
-*Former path: `docs/testing/AGENTIC_CHECKOUT_A11Y_SMOKE.md`*
 
 Use **Chrome DevTools** → device toolbar for width; **Reduce motion**: macOS System Settings → Accessibility → Display → Reduce motion (or DevTools rendering).
 
@@ -54,20 +63,19 @@ Use **Chrome DevTools** → device toolbar for width; **Reduce motion**: macOS S
 
 ## Agentic checkout — manual E2E checklist (staging)
 
-*Former path: `docs/testing/AGENTIC_CHECKOUT_E2E_CHECKLIST.md`*
 
-Use this when validating **landing → login → checkout-chat → quote → pay → success** end-to-end. **CI** runs static checks (including `npm run verify:agentic-checkout` at the repo root) and middleware Jest; there is **no browser Cypress suite** in-repo until `middleware-platform/cypress/` is restored — see `docs/deployment/README.md#ci-and-deploy-source-of-truth`.
+Use this when validating **landing → login → checkout-chat → quote → pay → success** end-to-end. **CI** runs static checks (including `npm run verify:agentic-checkout` at the repo root) and middleware Jest. **Browser E2E** uses **Playwright** under `middleware-platform/e2e/` (there is no Cypress tree). See [`docs/deployment/README.md`](../deployment/README.md) for CI truth.
 
 ## Prerequisites
 
 - Middleware running with Stripe test keys and seed products (e.g. demo serums).
 - Patient portal reachable at `REACT_APP_PATIENT_PORTAL_PREFIX` (default `/unified-dashboard/patients`).
-- LittleLab landing built with `REACT_APP_API_BASE` pointing at the same middleware.
+- Skin & Care marketing landing (`littlelab-landing`) built with `REACT_APP_API_BASE` pointing at the same middleware.
 
 ## Flow
 
 1. **Landing — Ask (chat-first)**  
-   Open LittleLab → product card → **Ask about this product** → login → lands on `checkout-chat.html` with `product_id` / `provider_id` in the query string.
+   Open the Skin & Care marketing landing → product card → **Ask about this product** → login → lands on `checkout-chat.html` with `product_id` / `provider_id` in the query string.
 
 2. **Quote**  
    Confirm header shows server price; in devtools Network, `POST /api/public/commerce/quote` returns `200` with `quote_id` and `amount`.
@@ -98,16 +106,12 @@ Use this when validating **landing → login → checkout-chat → quote → pay
 - **Learn / explore:** `intent=learn_more` and `phase3=1` → body `mode-learn`; checkout stepper/cart emphasis stays off until the user converts.
 - **Checkout-first:** `intent=checkout_chat` (and optional `source=landing`) → body `mode-checkout`; cart + stepper visible.
 
-**Automated:** from repo root, serve static files (`python3 -m http.server 8765`), then in `middleware-platform`:
-
-`PLAYWRIGHT_BROWSERS_PATH=0 CHECKOUT_E2E_BASE_URL=http://127.0.0.1:8765 npm run test:e2e-checkout-modes`  
-Full Kelly journey + in-chat verification + pay:  
-`PLAYWRIGHT_BROWSERS_PATH=0 CHECKOUT_E2E_BASE_URL=http://127.0.0.1:8765 npm run test:e2e-kelly-checkout`
+**Automated (checkout-related):** there is **no** `npm run test:e2e-checkout-modes` or dedicated commerce-checkout Playwright script in [`middleware-platform/package.json`](../../middleware-platform/package.json). Use the Node-driven Playwright scripts that exist today, e.g. `npm run test:e2e-chat-conversation --prefix middleware-platform`, `npm run test:e2e-chat-scan-gate --prefix middleware-platform`, or add a new npm script when a dedicated checkout Playwright suite lands.
 
 ## Copy source of truth
 
-- Default strings live in `unified-dashboard/patients/checkout-chat.html` (`DEFAULT_KELLY_COPY`).
-- Overrides: `unified-dashboard/copy/checkout-kelly.json` (keep keys in sync when changing UI).
+- Default strings live in `unified-dashboard/patients/checkout-chat.html` (see `DEFAULT_KELLY_COPY` constant name in source).
+- Overrides: `unified-dashboard/copy/checkout-kelly.json` (filename is legacy; keep keys in sync when changing UI).
 
 ## Cross-device manual matrix (spot-check)
 
@@ -129,14 +133,13 @@ Full Kelly journey + in-chat verification + pay:
 
 ## Browser E2E status
 
-*Former path: `docs/testing/E2E_STATUS.md`*
+**Playwright:** specs live in [`middleware-platform/e2e/`](../../middleware-platform/e2e/) (e.g. `landing-pipeline.spec.cjs`, `landing-find-provider.spec.cjs`, `prod-smoke.spec.cjs`). Config: [`middleware-platform/playwright.config.cjs`](../../middleware-platform/playwright.config.cjs) (local landing build) and [`middleware-platform/playwright.prod.config.cjs`](../../middleware-platform/playwright.prod.config.cjs) (prod).
 
+**Common commands:** `npm run test:e2e-landing --prefix middleware-platform`, `npm run test:e2e-landing:find-provider --prefix middleware-platform`, `npm run test:prod:smoke --prefix middleware-platform`. Full matrix: [PROD_PLAYWRIGHT_SUITES.md](./PROD_PLAYWRIGHT_SUITES.md).
 
-There is **no** `middleware-platform/cypress/` (or Playwright) tree in this repository at present. CI **starts the API** and would run Cypress **only if** that directory exists.
+**Manual / staging flows:** [AGENTIC_CHECKOUT_E2E_CHECKLIST.md](./README.md#agentic-checkout-e2e-checklist), [STAGING_PRODUCT_VERIFICATION.md](./README.md#staging-product-verification).
 
-**Manual / staging flows:** use [AGENTIC_CHECKOUT_E2E_CHECKLIST.md](./README.md#agentic-checkout-e2e-checklist) and [STAGING_PRODUCT_VERIFICATION.md](./README.md#staging-product-verification).
-
-**CI truth:** [CI_AND_DEPLOY_SOURCE_OF_TRUTH.md](../deployment/README.md#ci-and-deploy-source-of-truth).
+**CI truth:** [deployment README](../deployment/README.md).
 
 
 ---
@@ -145,7 +148,6 @@ There is **no** `middleware-platform/cypress/` (or Playwright) tree in this repo
 
 ## Testing Documentation
 
-*Former path: `docs/testing/README.md`*
 
 Test results, test suites, and testing guides.
 
@@ -157,9 +159,11 @@ Jest suites live under `middleware-platform/__tests__/` (e.g. reasoning-map, ses
 
 ```bash
 cd middleware-platform
-npm test                    # jest --passWithNoTests (all __tests__)
-npm run test:reasoning-map  # focused Jest suite
+npm test                         # jest --passWithNoTests (all __tests__)
+npm run test:reasoning-map       # focused Jest suite
 npm run test:session-orchestration
+npm run test:e2e-landing         # build landing + Playwright project landing
+npm run medicaid:smoke          # provider search HTTP smoke (requires API on :4000 by default)
 ```
 
 ## Related documentation
@@ -170,7 +174,6 @@ npm run test:session-orchestration
 
 ---
 
-**Last Updated:** April 9, 2026
 
 
 ---
@@ -179,7 +182,6 @@ npm run test:session-orchestration
 
 ## Scan Results UI Audit Evidence
 
-*Former path: `docs/testing/SCAN_RESULTS_UI_AUDIT_EVIDENCE.md`*
 
 Date: 2026-04-15
 Scope: Phase `4.1F` scan results conversion redesign
@@ -187,7 +189,7 @@ Scope: Phase `4.1F` scan results conversion redesign
 ## Current-state Playwright audit
 
 - Spec: `middleware-platform/e2e/landing-results-visual.spec.cjs`
-- Command: `npm run test:e2e:results-visual`
+- Command: `npm run test:e2e:results-visual --prefix middleware-platform`
 - Audit notes captured:
   - Results content was visually low-emphasis vs. surrounding content.
   - Hero image needed stronger fallback behavior.
@@ -207,7 +209,7 @@ Scope: Phase `4.1F` scan results conversion redesign
 - Hero card is first visual block with product image + confidence + source badges.
 - Structured tiles show icon-led cards with available/deferred/unavailable states.
 - Decision block answers all five user questions.
-- Sticky bottom action row always exposes `Use this product`, `Fix results`, `Ask Kelly`, and conditional `See alternatives`.
+- Sticky bottom action row always exposes `Use this product`, `Fix results`, **Ask** (commerce chat), and conditional `See alternatives`.
 
 
 ---
@@ -216,14 +218,13 @@ Scope: Phase `4.1F` scan results conversion redesign
 
 ## Staging verification — commerce quote parity and chat → pay
 
-*Former path: `docs/testing/STAGING_PRODUCT_VERIFICATION.md`*
 
-CI proves **static** contracts (syntax, Jest smoke, agentic checkout file checks, patient-app `tsc`). It does **not** prove Stripe, Kelly tool quotes, and manual checkout use the same amounts.
+CI proves **static** contracts (syntax, Jest smoke, agentic checkout file checks, patient-app `tsc`). It does **not** prove Stripe, commerce LLM tool quotes, and manual checkout use the same amounts.
 
-## Quote parity (Kelly vs manual)
+## Quote parity (commerce assistant vs manual)
 
 1. In staging, open checkout chat with a known `product_id` / `provider_id`.
-2. Ask Kelly to quote (or trigger `get_product_quote`) and note `quote_id` and amount from the tool / UI.
+2. Use **Ask** / commerce chat to quote (or trigger `get_product_quote`) and note `quote_id` and amount from the tool / UI.
 3. Call `POST /api/public/commerce/quote` with the same product/provider (or use **Pay without chat** path) and compare **amount** and **quote_id** behavior to your product rules.
 4. Document any intentional divergence in `todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`.
 
@@ -238,7 +239,6 @@ Follow **[AGENTIC_CHECKOUT_E2E_CHECKLIST.md](./README.md#agentic-checkout-e2e-ch
 
 ## TELEMEDICINE_E2E
 
-*Former path: `docs/testing/TELEMEDICINE_E2E.md`*
 
 ## Telemedicine E2E Test Plan
 
@@ -384,7 +384,6 @@ Goal: Ensure transcript-only guard works and produces a transcript-only Diagnost
 
 ## Phase 10 Task 63 — Transcript-only path: end-to-end test
 
-*Former path: `docs/testing/TRANSCRIPT_ONLY_E2E.md`*
 
 
 Verify that when a patient completes a consult with **no document uploads**, the DiagnosticReport is created with the **TRANSCRIPT-ONLY REPORT** header and **no hallucinated lab/imaging findings**.
@@ -427,5 +426,3 @@ ORDER BY created_at DESC LIMIT 1;
 ```
 
 Expect `report_preview` to start with `# TRANSCRIPT-ONLY REPORT`.
-
-

@@ -1,6 +1,29 @@
+# architecture - Unified Architecture and System Design
+> Last reviewed: 2026-05-21
+
+**Last Updated:** 2026-05-21
+
+
+**Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
+
+## Existing Documentation Body
+
+This document is the single source of truth for this subfolder. It consolidates architecture, system design, operational behavior, and implementation notes previously split across multiple markdown files.
+
+
+## Scope
+
+
+- Folder: `architecture`
+- Consolidated on: 2026-04-29
+
+
+
+## Existing README Content
+
+
 # architecture — consolidated documentation
 
-**Single file:** All former `docs/architecture/**/*.md` content is merged here. **Last updated:** 2026-04-20
 
 ## Table of contents
 
@@ -47,6 +70,7 @@
 - [Hybrid Architecture — One-Page Overview (`overview/HYBRID_ARCHITECTURE_OVERVIEW.md`)](#overview-hybrid-architecture-overview)
 - [RAG Integration: File Extraction vs Translation Layer (`overview/RAG_INTEGRATION_APPROACHES.md`)](#overview-rag-integration-approaches)
 - [Local Test Runbook — Patient Journey & Landing (`patients/LOCAL_TEST_RUNBOOK.md`)](#patients-local-test-runbook)
+- [Patient timeline, routine & billing — API snapshot (`patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`)](#patients-patient-timeline-routine-and-billing)
 - [Patient Architecture — Voice, Chat, UI & Session (`patients/PATIENT_ARCHITECTURE.md`)](#patients-patient-architecture)
 - [Patient Orchestrator — `session_id` vs `triage_sessions` (C1 / impl-5) (`patients/PATIENT_ORCHESTRATOR_TRIAGE_PROVENANCE.md`)](#patients-patient-orchestrator-triage-provenance)
 - [patients/PATIENT_WALLET (`patients/PATIENT_WALLET.md`)](#patients-patient-wallet)
@@ -79,7 +103,6 @@ Browse by anchor above. Each section notes the former file path.
 
 ## LangChain, LangGraph & RAG — Implementation Architecture
 
-*Former path: `docs/architecture/ai/LANGCHAIN_LANGGRAPH_RAG_ARCHITECTURE.md`*
 
 This document describes how LangChain, LangGraph, and RAG are implemented in the DocLittle middleware platform, and how state, memory, context window, evaluation, and strategy are architected.
 
@@ -582,89 +605,9 @@ result.checks.push({ field: 'urgency', expected: expected.urgency, actual: triag
 
 <a id="branding-littlelab-brand"></a>
 
-## branding/LITTLELAB_BRAND
+## branding/LITTLELAB_BRAND (deprecated)
 
-*Former path: `docs/architecture/branding/LITTLELAB_BRAND.md`*
-
-## LittleLab Brand Guidelines (v0)
-
-**Name**: LittleLab  
-**Tagline**: *Your virtual care companion.*
-
----
-
-### 1. Positioning
-
-- LittleLab is the **patient-facing** and **clinic-facing** brand for the virtual care + coding assistant experience.
-- The brand should feel:
-  - **Calm**: soft gradients, plenty of whitespace/dark-space.
-  - **Competent**: clear typography, precise language.
-  - **Companion-like**: copy is friendly but not casual; avoids jokes.
-
----
-
-### 2. Naming & Usage
-
-- Use **LittleLab** (one word, capital L’s) in:
-  - Page titles (e.g., “LittleLab Patient Portal”).
-  - Logos/wordmarks on patient and provider UIs.
-- Avoid mixing **DocLittle** on any new patient-facing flows.
-  - Existing legacy references can remain behind the scenes but should be gradually migrated.
-
-Examples:
-
-- ✅ “LittleLab Patient Portal”
-- ✅ “Welcome to LittleLab”
-- ❌ “DocLittle Patient Portal” (deprecated for new UIs)
-
----
-
-### 3. Core Copy Snippets
-
-You can reuse these snippets across landing, login, and email surfaces.
-
-- **Short hero line**:
-  - “Your virtual care companion.”
-- **Landing sub-copy**:
-  - “Search symptoms, conditions, and visits. LittleLab turns them into clear next steps for you and your care team.”
-- **Patient login intro**:
-  - “Access your LittleLab portal with a secure 6-digit code.”
-- **Provider login intro**:
-  - “Sign in to your LittleLab clinic dashboard.”
-
----
-
-### 4. Tone & Style
-
-- **Plain language**:
-  - Prefer “visit”, “appointment”, “records” over billing jargon.
-- **Reassuring**:
-  - Acknowledge uncertainty, point to clear actions.
-- **No diagnosis promises**:
-  - Emphasise that LittleLab surfaces information and connects patients with clinicians; it does **not** replace medical judgement.
-
----
-
-### 5. Visual Direction (landing reference)
-
-- **Typography**:
-  - Headlines: `Playfair Display`, semi-condensed, large, with subtle gradient.
-  - Body: `Inter` or `Inter var`, 14–16 px, relaxed line-height.
-- **Color**:
-  - Backgrounds: deep navy / midnight (`#050915` onwards).
-  - Accent: warm gold (`#E8B059`) for highlights and cursor.
-  - Status: emerald for “healthy/connected”, muted red only when necessary.
-
----
-
-### 6. Where to Apply
-
-- New 3D landing search (LittleLab React app).
-- `unified-dashboard/patients/*`:
-  - Titles, logos, and subtitles.
-- Provider dashboard login and any new clinic-facing pages.
-
-
+**Superseded (2026):** Consumer brand, palette, typography, and logo rules for **skinandcare** / **Skin & Care** live in **[`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md)**. The narrative below described an older **LittleLab** positioning; do not use it for new Skin & Care surfaces.
 
 ---
 
@@ -672,7 +615,6 @@ You can reuse these snippets across landing, login, and email surfaces.
 
 ## Booking blocker matrix (patient flow)
 
-*Former path: `docs/architecture/care-delivery/BOOKING_BLOCKER_MATRIX.md`*
 
 
 Reference for tests and ops. Maps phases to owners and status.
@@ -699,7 +641,6 @@ Reference for tests and ops. Maps phases to owners and status.
 
 ## Booking + Checkout Pending Tasks (Today)
 
-*Former path: `docs/architecture/care-delivery/BOOKING_CHECKOUT_PENDING_TODAY.md`*
 
 This file contains only the pending work discussed today.
 
@@ -838,7 +779,6 @@ This file contains only the pending work discussed today.
 
 ## Booking Rollout Checklist
 
-*Former path: `docs/architecture/care-delivery/BOOKING_ROLLOUT_CHECKLIST.md`*
 
 ## Stage 0 - Preflight
 
@@ -884,9 +824,7 @@ This file contains only the pending work discussed today.
 
 ## Video Consult — Architecture, Env & Runbook
 
-*Former path: `docs/architecture/care-delivery/VIDEO_CONSULT.md`*
 
-**Last Updated:** April 8, 2026
 
 Single reference for LiveKit video consult: flow, environment variables, and ops runbook.
 
@@ -997,10 +935,10 @@ The **marketing landing** (`littlelab-landing`) can open a **public** LiveKit ro
 ## 6. Related
 
 - [LANDING_TRY_NOW_LIVEKIT.md](./README.md#experience-landing-try-now-livekit) — Landing UI, preview → LiveKit handoff, debugging
-- [HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md) — Voice vs Video vs PDF, shared RAG/codes
+- HYBRID_ARCHITECTURE_OVERVIEW.md (`./HYBRID_ARCHITECTURE_OVERVIEW.md`) — Voice vs Video vs PDF, shared RAG/codes
 - [MEDIA_LAYER_ARCHITECTURE.md](./README.md#media-media-layer-architecture) — Media layer
 - [LangGraph & LangSmith (middleware docs)](../middleware-platform/README.md#langgraph-langsmith) — Tracing (video consult runs, retrieve_context metadata)
-- [VISION_UV_R_AND_D.md](./VISION_UV_R_AND_D.md) — UV imaging track (separate hardware/validation program)
+- VISION_UV_R_AND_D.md (`./VISION_UV_R_AND_D.md`) — UV imaging track (separate hardware/validation program)
 
 
 ---
@@ -1009,7 +947,6 @@ The **marketing landing** (`littlelab-landing`) can open a **public** LiveKit ro
 
 ## Agentic checkout — file map
 
-*Former path: `docs/architecture/commerce/AGENTIC_CHECKOUT_FILE_MAP.md`*
 
 
 Cross-surface feature: **landing / deep link → chat (Kelly) → server quote → Stripe pay**.
@@ -1027,7 +964,7 @@ Cross-surface feature: **landing / deep link → chat (Kelly) → server quote �
 | Analytics | `emitFunnelEvent` / `dataLayer` in HTML | `patient-app/lib/checkoutAnalytics.ts` | — |
 | Static verify | — | — | `scripts/verify-agentic-checkout.cjs` (CI) |
 
-**Related docs:** [SKIN_CARE_TOKENS_AND_ASSETS.md](./SKIN_CARE_TOKENS_AND_ASSETS.md), [PUBLIC_AGENTIC_CHECKOUT.md](./PUBLIC_AGENTIC_CHECKOUT.md) (if present), [STAGING_PRODUCT_VERIFICATION.md](../testing/README.md#staging-product-verification).
+**Related docs:** SKIN_CARE_TOKENS_AND_ASSETS.md (`./SKIN_CARE_TOKENS_AND_ASSETS.md`), PUBLIC_AGENTIC_CHECKOUT.md (`./PUBLIC_AGENTIC_CHECKOUT.md`) (if present), [STAGING_PRODUCT_VERIFICATION.md](../testing/README.md#staging-product-verification).
 
 
 ---
@@ -1036,7 +973,6 @@ Cross-surface feature: **landing / deep link → chat (Kelly) → server quote �
 
 ## Agentic Commerce Rollout Plan
 
-*Former path: `docs/architecture/commerce/AGENTIC_COMMERCE_ROLLOUT_PLAN.md`*
 
 ## Summary
 This rollout introduces “agentic commerce” on the provider side:
@@ -1136,9 +1072,8 @@ If issues occur:
 
 ## Public agentic checkout (catalog → quote → pay)
 
-*Former path: `docs/architecture/commerce/PUBLIC_AGENTIC_CHECKOUT.md`*
 
-Unauthenticated flows for retail products on the patient portal and LittleLab landing. **Charge amounts are never taken from the browser alone** for capture: they come from the product row in SQLite (`products.price`) × quantity, via `PaymentOrchestrator` or payment-link fallback.
+Unauthenticated flows for retail products on the patient portal and the Skin & Care marketing landing (`littlelab-landing`). **Charge amounts are never taken from the browser alone** for capture: they come from the product row in SQLite (`products.price`) × quantity, via `PaymentOrchestrator` or payment-link fallback.
 
 ## Endpoints
 
@@ -1162,7 +1097,7 @@ Unauthenticated flows for retail products on the patient portal and LittleLab la
 
 ## UI rollout
 
-- **LittleLab landing:** `REACT_APP_CHAT_FIRST_CHECKOUT` (default: on). Set to `false` to hide the chat-first “Ask about this product” CTA and emphasize buy-now only for gradual rollout.
+- **Skin & Care marketing landing** (`littlelab-landing`): `REACT_APP_CHAT_FIRST_CHECKOUT` (default: on). Set to `false` to hide the chat-first “Ask about this product” CTA and emphasize buy-now only for gradual rollout.
 
 ## References
 
@@ -1179,7 +1114,6 @@ Unauthenticated flows for retail products on the patient portal and LittleLab la
 
 ## Database Schema Approach for Multi-Tenancy
 
-*Former path: `docs/architecture/database/DATABASE_SCHEMA_APPROACH.md`*
 
 ## Your Question: "Are you suggesting event tenant schema?"
 
@@ -1541,7 +1475,6 @@ Result: Only appt-3 and appt-4 (Clinic B's data)
 
 ## ADR 001: SQLite as default application database
 
-*Former path: `docs/architecture/decisions/001-persistence-sqlite.md`*
 
 
 ## Status
@@ -1568,7 +1501,6 @@ Use **SQLite** (`better-sqlite3`) as the default store with migrations run at st
 
 ## ADR 002: Kelly uses a pluggable primary LLM (Anthropic vs Groq)
 
-*Former path: `docs/architecture/decisions/002-kelly-multi-llm.md`*
 
 
 ## Status
@@ -1597,7 +1529,6 @@ Kelly must run in production with reliable tool calling while keeping cost and l
 
 ## ADR 003: Agentic checkout spans static web, native app, and public APIs
 
-*Former path: `docs/architecture/decisions/003-agentic-checkout-surfaces.md`*
 
 ## Status
 
@@ -1605,7 +1536,7 @@ Accepted.
 
 ## Context
 
-Patients may start from **LittleLab landing**, **deep links**, or the **Expo app**. Checkout must feel chat-first while using **server-locked quotes** and **Stripe** for payment.
+Patients may start from the **Skin & Care marketing landing** (`littlelab-landing`), **deep links**, or the **Expo app**. Checkout must feel chat-first while using **server-locked quotes** and **Stripe** for payment.
 
 ## Decision
 
@@ -1625,17 +1556,15 @@ Patients may start from **LittleLab landing**, **deep links**, or the **Expo app
 
 ## Architecture Decision Records (ADR)
 
-*Former path: `docs/architecture/decisions/README.md`*
 
-**Last Updated:** April 9, 2026
 
 Short, durable notes on **why** the platform chose certain approaches. Add a new file `NNN-short-title.md` when a decision is significant for reviewers and new contributors.
 
 | ADR | Topic |
 |-----|--------|
-| [001-persistence-sqlite.md](./001-persistence-sqlite.md) | SQLite as default persistence |
-| [002-kelly-multi-llm.md](./002-kelly-multi-llm.md) | Kelly LLM routing (Anthropic / Groq) |
-| [003-agentic-checkout-surfaces.md](./003-agentic-checkout-surfaces.md) | Agentic checkout (web + RN + APIs) |
+| 001-persistence-sqlite.md (`./001-persistence-sqlite.md`) | SQLite as default persistence |
+| 002-kelly-multi-llm.md (`./002-kelly-multi-llm.md`) | Kelly LLM routing (Anthropic / Groq) |
+| 003-agentic-checkout-surfaces.md (`./003-agentic-checkout-surfaces.md`) | Agentic checkout (web + RN + APIs) |
 
 
 ---
@@ -1644,7 +1573,6 @@ Short, durable notes on **why** the platform chose certain approaches. Add a new
 
 ## Phase 0 — Derm patient Q&A: scope, intent taxonomy, metrics, positioning
 
-*Former path: `docs/architecture/derm-patient-qa/PHASE_0_SCOPE_AND_METRICS.md`*
 
 This document implements **Phase 0** from `todos/pending/DERM_PATIENT_QA_REDDIT_PIPELINE_TODOS.md` (align and scope). It is the **product + evaluation contract** for the Reddit-informed patient Q&A pipeline (intent router → passage retrieval → grounded answers).
 
@@ -1743,7 +1671,6 @@ Every user turn is classified into **exactly one** primary intent before heavy r
 
 ## Phase 2 — Derm patient Q&A triage
 
-*Former path: `docs/architecture/derm-patient-qa/PHASE_2_TRIAGE.md`*
 
 Triage runs **before** heavy passage retrieval so intent, risk, and scheduling alignment shape what is retrieved and how answers are framed.
 
@@ -1792,7 +1719,6 @@ Each classification includes structured `_log` (intent, subkind, systemic urgenc
 
 ## Phase 3 — Derm patient education corpus & retrieval
 
-*Former path: `docs/architecture/derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md`*
 
 Patient-facing answers need **passage** retrieval, parallel to the **code-oriented** Colab `/retrieve` path used for ICD/CPT.
 
@@ -1839,7 +1765,7 @@ Implemented in `middleware-platform/services/layer2-rag/`:
 
 - **Client**: `patient-education-client.js` — `retrievePatientEducationPassages`, `retrievePatientEducationForDermQA` (respects Phase 2 `retrieval_policy`).
 - **Proxy**: `POST /api/rag/retrieve_passages` forwards to Colab `/api/retrieve_passages` or `/retrieve_passages`.
-- **Env**: documented in [`ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`](../ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md) (`RAG_EDUCATION_URL` vs `RAG_API_URL`).
+- **Env**: documented in `ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md` (`../ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`) (`RAG_EDUCATION_URL` vs `RAG_API_URL`).
 
 
 ---
@@ -1848,7 +1774,6 @@ Implemented in `middleware-platform/services/layer2-rag/`:
 
 ## Phase 4 — Answer generation and safety
 
-*Former path: `docs/architecture/derm-patient-qa/PHASE_4_ANSWER_AND_SAFETY.md`*
 
 Implements **prompt templates**, **grounding**, **citations**, **image disclaimers**, and **corpus content policy** hooks before any LLM call.
 
@@ -1896,7 +1821,6 @@ Loader: `middleware-platform/services/derm-patient-qa-answer.js` (`loadTemplates
 
 ## Phase 5 — Product / API wiring
 
-*Former path: `docs/architecture/derm-patient-qa/PHASE_5_PRODUCT_WIRING.md`*
 
 ## Feature flag
 
@@ -1984,9 +1908,7 @@ Authenticated HTTP tests: obtain a patient session (e.g. demo login flow), then 
 
 ## Skin & Care landing — Try now & LiveKit
 
-*Former path: `docs/architecture/experience/LANDING_TRY_NOW_LIVEKIT.md`*
 
-**Last updated:** April 7, 2026
 
 This doc describes the **marketing landing assistant** (`unified-dashboard/littlelab-landing`) and how **LiveKit** is used for optional live video. It complements **[VIDEO_CONSULT.md](./README.md#care-delivery-video-consult)** (provider/telehealth pipeline with agents, transcript, vision events).
 
@@ -2011,7 +1933,7 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 4. **LiveKit** — If `REACT_APP_API_BASE` points at middleware with `LIVEKIT_*` set, **`POST /api/livekit/token`** runs and the client connects with **`livekit-client`**. Preview tracks are **stopped only after** LiveKit’s camera track is attached (avoids a black flash).
 5. **Without API base** — Local preview only; pill shows **Preview** and copy notes demo mode.
 
-**Production API origin:** the public landing build uses split-domain routing — set `REACT_APP_API_BASE` to the middleware host (e.g. `https://api.myskinandcare.com`), not the Firebase Hosting UI origin. See [EDGE_ROUTING_CONFIGS.md](../deployment/EDGE_ROUTING_CONFIGS.md).
+**Production API origin:** the public landing build uses split-domain routing — set `REACT_APP_API_BASE` to the middleware host (e.g. `https://api.myskinandcare.com`), not the Firebase Hosting UI origin. See EDGE_ROUTING_CONFIGS.md (`../deployment/EDGE_ROUTING_CONFIGS.md`).
 
 ---
 
@@ -2058,9 +1980,9 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 ## 6. Related docs
 
 - [VIDEO_CONSULT.md](./README.md#care-delivery-video-consult) — Provider video consult, agents, env, runbook  
-- [HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md) — Voice vs video vs PDF  
+- HYBRID_ARCHITECTURE_OVERVIEW.md (`./HYBRID_ARCHITECTURE_OVERVIEW.md`) — Voice vs video vs PDF  
 - [Kelly phase prompts (middleware docs)](../middleware-platform/README.md#kelly-phase-prompt-architecture) — Landing Kelly / `kelly_flow`  
-- [SKIN_CARE_TOKENS_AND_ASSETS.md](./SKIN_CARE_TOKENS_AND_ASSETS.md) — Brand tokens used by the landing shell  
+- SKIN_CARE_TOKENS_AND_ASSETS.md (`./SKIN_CARE_TOKENS_AND_ASSETS.md`) — Brand tokens used by the landing shell  
 
 
 ---
@@ -2069,26 +1991,18 @@ The landing app **does not** call `/api/video-consult`. YOLO and frame ingestion
 
 ## Skin & Care — tokens, assets, and env (frontend)
 
-*Former path: `docs/architecture/experience/SKIN_CARE_TOKENS_AND_ASSETS.md`*
+**Brand canonical doc:** [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md) (palette, typography, S&C lockup, surface scope).
 
-
-## CSS tokens (web)
+### CSS tokens (web)
 
 - **Canonical file:** `unified-dashboard/assets/css/skin-care-tokens.css`
-- **Import rule for new HTML surfaces:** link global + tokens after charset/viewport, before page-specific CSS:
+- **Import rule for new HTML surfaces:** link `skin-care-tokens.css` after charset/viewport, before page-specific CSS (provider shells that use only `global.css` are **out of scope** for consumer tokens — see Brand guidelines).
 
-```html
-<link rel="stylesheet" href="../assets/css/global.css" />
-<link rel="stylesheet" href="../assets/css/skin-care-tokens.css" />
-```
+### React Native parity
 
-Use variables such as `var(--brand-accent)`, `var(--brand-cream)`, `var(--font-ui)` — do not introduce clinical blue for Skin & Care checkout.
+- **`patient-app/constants/skinCareTokens.ts`** — mirrors consumer palette for RN checkout and related screens.
 
-## React Native parity
-
-- **Constants:** `patient-app/constants/skinCareTokens.ts` mirrors the same hex values as `skin-care-tokens.css` for checkout and related native screens.
-
-## Env vars (patient app)
+### Env vars (patient app)
 
 | Variable | Purpose |
 |----------|---------|
@@ -2099,18 +2013,20 @@ Use variables such as `var(--brand-accent)`, `var(--brand-cream)`, `var(--font-u
 
 See `patient-app/.env.example` and `patient-app/config.ts`.
 
-## Env vars (web / landing)
+### Env vars (web / landing)
 
 | Variable | Purpose |
 |----------|---------|
 | `REACT_APP_MERCHANT_ID` | Merchant id on littlelab-landing catalog |
 | `REACT_APP_PATIENT_PORTAL_PREFIX` | Patient HTML base path |
 | `REACT_APP_CHAT_FIRST_CHECKOUT` | `false` to hide Ask-first CTA |
+| `REACT_APP_PUBLIC_SITE_URL` | Marketing origin (production: `https://myskinandcare.com`) |
 
-## Brand assets
+### Brand assets
 
-- Panda / favicon: `unified-dashboard/assets/images/` (e.g. `logo-panda.svg`, `favicon.svg`)
-- Landing media: `unified-dashboard/littlelab-landing/public/images/`
+- **S&C mark & wordmark:** `unified-dashboard/littlelab-landing/public/images/branding/` (`logo-mark.svg`, `favicon.svg`, `logo-wordmark-stacked.svg`)
+- **Shared copy for static HTML:** `unified-dashboard/assets/images/logo-mark.svg`
+- **Landing media:** `unified-dashboard/littlelab-landing/public/images/`
 
 ## Related
 
@@ -2123,9 +2039,7 @@ See `patient-app/.env.example` and `patient-app/config.ts`.
 
 ## FHIR‑Native RCM Mapping (2026) — EMPI + EDI → FHIR
 
-*Former path: `docs/architecture/financial/FHIR_NATIVE_RCM_MAPPING.md`*
 
-**Last Updated:** April 6, 2026
 
 Goal: make the Financial Intelligence Layer **FHIR‑first**. EDI (837/835) is an **ingest format**, not the internal data model. Normalize claims and remits into FHIR resources so agents operate on interoperable, longitudinal data.
 
@@ -2240,7 +2154,6 @@ All financial agents must write audit records:
 
 ## DocLittle Financial Layer - Detailed Architecture Document
 
-*Former path: `docs/architecture/financial/FINANCIAL_LAYER_ARCHITECTURE.md`*
 
 > **Note on Naming:** The codebase uses **Stedi** (not "Stepi") for the healthcare EDI API. Stedi is the insurance claims/eligibility provider.
 
@@ -2260,9 +2173,9 @@ All financial agents must write audit records:
 
 ## 1. Executive Overview
 
-**FHIR‑native RCM (2026):** For the Financial Intelligence Layer roadmap (EMPI + EDI→FHIR normalization into `ExplanationOfBenefit`), see **[FHIR_NATIVE_RCM_MAPPING.md](./FHIR_NATIVE_RCM_MAPPING.md)**.
+**FHIR‑native RCM (2026):** For the Financial Intelligence Layer roadmap (EMPI + EDI→FHIR normalization into `ExplanationOfBenefit`), see **FHIR_NATIVE_RCM_MAPPING.md (`./FHIR_NATIVE_RCM_MAPPING.md`)**.
 
-**Tiba Alignment:** The platform aligns with the Tiba Settlement Protocol for deterministic coding (c_i, q_i, φ_i, f^P_i, n_i), EOB line-item responsibility, modifier rules, prior-auth checks, OOP max, balance billing, and provider trust scores. Gaps and remediation: **[TIBA_AND_BILLING_TODO.md](./TIBA_AND_BILLING_TODO.md)**.
+**Tiba Alignment:** The platform aligns with the Tiba Settlement Protocol for deterministic coding (c_i, q_i, φ_i, f^P_i, n_i), EOB line-item responsibility, modifier rules, prior-auth checks, OOP max, balance billing, and provider trust scores. Gaps and remediation: **TIBA_AND_BILLING_TODO.md (`./TIBA_AND_BILLING_TODO.md`)**.
 
 ### 1.1 Purpose
 
@@ -2834,7 +2747,6 @@ When payer fee schedule data is available:
 
 ---
 
-*Document generated from codebase analysis. Last updated: February 2026.*
 
 
 ---
@@ -2843,7 +2755,6 @@ When payer fee schedule data is available:
 
 ## Impact Community and Token Strategy
 
-*Former path: `docs/architecture/financial/IMPACT_COMMUNITY_TOKEN_STRATEGY.md`*
 
 
 ## Purpose
@@ -3021,7 +2932,6 @@ Financial upside follows trusted impact and product utility, not hype."
 
 ## Provider Trust Score Probationary Period
 
-*Former path: `docs/architecture/financial/PROVIDER_TRUST_PROBATION.md`*
 
 ## Overview
 
@@ -3076,7 +2986,6 @@ A: Yes - manually set `trust_score = 0.8` in `provider_trust_metrics` table for 
 
 ---
 
-*Last Updated: February 2026*
 
 
 ---
@@ -3085,7 +2994,6 @@ A: Yes - manually set `trust_score = 0.8` in `provider_trust_metrics` table for 
 
 ## Static Records Audit
 
-*Former path: `docs/architecture/financial/STATIC_RECORDS_AUDIT.md`*
 
 This document lists all hardcoded/static records found in the codebase (frontend and backend, including admin).
 
@@ -3296,7 +3204,6 @@ document.getElementById('aovTrend').textContent = '+2.7%';
 
 ## Stuck Escrow Recovery System
 
-*Former path: `docs/architecture/financial/STUCK_ESCROW_RECOVERY.md`*
 
 ## Overview
 
@@ -3495,7 +3402,6 @@ WHERE transfer_1_status = 'completed'
 
 ---
 
-*Last Updated: February 2026*
 
 
 ---
@@ -3504,9 +3410,7 @@ WHERE transfer_1_status = 'completed'
 
 ## Tiba & Billing — Consolidated Todo
 
-*Former path: `docs/architecture/financial/TIBA_AND_BILLING_TODO.md`*
 
-**Last Updated:** April 6, 2026
 
 Merged from: Tiba Gap Analysis, Gap Remediation Todo, Tiba Detailed Todo, Backend Billing Review.
 
@@ -3640,7 +3544,6 @@ The Tiba Settlement Protocol defines deterministic coding (c_i, q_i, φ_i, f^P_i
 
 ## Healthcare Use Case Assessment
 
-*Former path: `docs/architecture/healthcare/HEALTHCARE_ASSESSMENT.md`*
 
 ## Overview
 Deep assessment of Voice Agent, FHIR, Payment, EPIC, Stedi, Circle, and Stripe integrations for healthcare appointment booking and billing.
@@ -4130,11 +4033,10 @@ Deep assessment of Voice Agent, FHIR, Payment, EPIC, Stedi, Circle, and Stripe i
 
 ## Layer 1: Multimodal Perception Layer
 
-*Former path: `docs/architecture/intelligence-layer/LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md`*
 
 ## Implementation Guide
 
-**Source**: [MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md](./MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md)  
+**Source**: MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md (`./MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md`)  
 **Status**: Implemented — `middleware-platform/services/perception-layer/`
 
 ---
@@ -4359,7 +4261,6 @@ Run `buildPerceptualState` with `clinicalText` and optionally `imagePath`. No te
 
 ## Multimodal Medical AI Agent Architecture
 
-*Former path: `docs/architecture/intelligence-layer/MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md`*
 
 ## Complete System Design for Clinical Coding & Decision Support
 
@@ -6159,12 +6060,10 @@ This is **not AI-assisted coding** — it's **medical intelligence infrastructur
 
 ## Intelligence Layer Architecture
 
-*Former path: `docs/architecture/intelligence-layer/README.md`*
 
-**Last Updated:** April 9, 2026
 
-**Source of Truth**: [MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md](./MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md)  
-**Layer 1 Implementation**: [LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md](./LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md)
+**Source of Truth**: MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md (`./MULTIMODAL_MEDICAL_AI_ARCHITECTURE.md`)  
+**Layer 1 Implementation**: LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md (`./LAYER1_PERCEPTION_IMPLEMENTATION_GUIDE.md`)
 
 ---
 
@@ -6203,7 +6102,7 @@ The intelligence layer is the most vital part of the middleware. It implements a
 
 - [Middleware Brain Improvements](./README.md#middleware-middleware-brain-improvements-implementation)
 - [LangChain/LangGraph Architecture](./README.md#ai-langchain-langgraph-rag-architecture)
-- [Knowledge Base](../../knowledge-base/README.md)
+- Knowledge Base (`../../knowledge-base/README.md`)
 
 
 ---
@@ -6212,7 +6111,6 @@ The intelligence layer is the most vital part of the middleware. It implements a
 
 ## Architecture Issues Analysis
 
-*Former path: `docs/architecture/maintenance/ARCHITECTURE_ISSUES.md`*
 
 **Date**: January 27, 2025  
 **Status**: Critical issues identified that prevent proper multi-tenancy
@@ -6621,7 +6519,6 @@ const appointments = db.getAppointmentsByClinic(clinic_id);
 
 ## DocLittle Media Layer – Architecture Document
 
-*Former path: `docs/architecture/media/MEDIA_LAYER_ARCHITECTURE.md`*
 
 > **Purpose:** Documents the media infrastructure (voice, video, transcription) that connects patients, providers, and the AI agent. Single agent + LLM orchestrate multiple media channels.
 
@@ -6975,17 +6872,15 @@ Call start
 
 ## Middleware Brain Improvements - Gap Analysis & Implementation Status
 
-*Former path: `docs/architecture/middleware/MIDDLEWARE_BRAIN_GAP_ANALYSIS.md`*
 
 
-**Last Updated:** January 2026  
 **Status:** P0/P1 gaps addressed; P2/P3 documented for future work
 
 ---
 
 ## Executive Summary
 
-This document captures the gap analysis for the Middleware Brain Improvements and implementation status. The main implementation doc is [MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md](./MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md).
+This document captures the gap analysis for the Middleware Brain Improvements and implementation status. The main implementation doc is MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md (`./MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md`).
 
 ---
 
@@ -7031,10 +6926,10 @@ This document captures the gap analysis for the Middleware Brain Improvements an
 
 ## Related Documentation
 
-- [Implementation Doc](./MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md)
+- Implementation Doc (`./MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md`)
 - [LangChain/LangGraph Architecture](./README.md#ai-langchain-langgraph-rag-architecture)
-- [Runbooks](../../runbooks/README.md#readme)
-- [Data Retention Policy](../../compliance/README.md#data-retention-policy)
+- Runbooks (`../../runbooks/README.md#readme`)
+- Data Retention Policy (`../../compliance/README.md#data-retention-policy`)
 
 
 ---
@@ -7043,7 +6938,6 @@ This document captures the gap analysis for the Middleware Brain Improvements an
 
 ## Middleware Brain Improvements: Code Changes & Impact
 
-*Former path: `docs/architecture/middleware/MIDDLEWARE_BRAIN_IMPROVEMENTS_IMPLEMENTATION.md`*
 
 This document maps each improvement from the middleware brain review to specific code changes, what they do, and current status.
 
@@ -7052,7 +6946,7 @@ This document maps each improvement from the middleware brain review to specific
 **Gap Analysis Status:** ~70% complete task list, ~30% missing implementation details. This document includes concrete acceptance criteria, code examples, edge cases, and sequencing logic. Add details before starting work, especially for P0 tasks.
 
 **Implementation Progress (Updated):**
-- [x] **LangSmith test script** — `npm run test:langsmith` verifies API key + traced call
+- [x] **LangSmith verification** — no dedicated npm script in `middleware-platform/package.json`; confirm `/health?detailed=true` → `langsmith` and exercise a traced path (see [`docs/middleware-platform/README.md`](../middleware-platform/README.md#langgraph-langsmith))
 - [x] **LangChain always used when available** — `medical-coding-service.js` prefers LangChain for tracing
 - [x] **LangSmith status in `/health?detailed=true`** — returns `langsmith: { enabled, project, hasKey }`
 - [x] **Confidence thresholds** — reject <0.6, escalate 0.6-0.75; `CONFIDENCE_THRESHOLD_LOW`, `CONFIDENCE_THRESHOLD_ESCALATE` env
@@ -7878,7 +7772,7 @@ class CircuitBreaker {
 
 **Note:** Retell's voice LLM is hosted by Retell and not traceable in our LangSmith. LangChain/LangSmith covers middleware-side LLM usage (PDF coding, admin AI, chat, coding suggestions).
 
-**Test LangSmith:** `cd middleware-platform && npm run test:langsmith`
+**Test LangSmith:** set `LANGSMITH_API_KEY` + `LANGCHAIN_TRACING_V2=true`, hit `/health?detailed=true`, then trigger a traced middleware LLM path and confirm runs in the LangSmith UI. **There is no** `npm run test:langsmith` today — add one if CI needs it.
 
 ---
 
@@ -8012,7 +7906,6 @@ Every task should have:
 
 ## Multi-Tenant Voice Agent Architecture
 
-*Former path: `docs/architecture/multi-tenant/MULTI_TENANT_VOICE_AGENT.md`*
 
 ## Current Setup (Single Tenant)
 
@@ -8479,7 +8372,6 @@ Our hours are...
 
 ## Multi-Tenant Clinic Signup Implementation
 
-*Former path: `docs/architecture/multi-tenant/multi-tenant-signup-implementation.md`*
 
 ## Overview
 
@@ -8831,7 +8723,6 @@ The multi-tenant clinic signup flow is now fully functional and ready for testin
 
 ## DocLittle Platform: Architecture Overview & Colab RAG Integration
 
-*Former path: `docs/architecture/overview/ARCHITECTURE_OVERVIEW_AND_COLAB_RAG.md`*
 
 **Document Purpose**: Single reference for (1) connecting Colab RAG, (2) billing/medical coding agent architecture, (3) medical reasoning flow, (4) voice agent integration, and (5) payment for appointments.
 
@@ -8973,7 +8864,7 @@ RAG_API_URL=http://localhost:4000/api/rag
 RAG_EDUCATION_URL=https://your-education-rag.example.com
 ```
 
-Full contract, corpus versioning, and middleware behavior: [`derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md`](derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md).
+Full contract, corpus versioning, and middleware behavior: `derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md` (`derm-patient-qa/PHASE_3_CORPUS_AND_INDEX.md`).
 
 Implementation:
 
@@ -9439,7 +9330,7 @@ Twilio receives call → POST /voice/incoming
 - [FINANCIAL_LAYER_ARCHITECTURE.md](./README.md#financial-financial-layer-architecture) — Stedi, coding pipeline, EOB, settlement, voice tools
 - [STATE_FLOW.md](./README.md#voice-agent-state-flow) — Medical coding state machine
 - [Voice agent functions (consolidated middleware docs)](../middleware-platform/README.md#voice-agent-functions-and-dynamic-variables) — All Retell functions and dynamic variables
-- [pending/PRODUCTION_READINESS_TASKS.md](../../todos/pending/PRODUCTION_READINESS_TASKS.md) — Tasks to be production-ready, including Azure setup
+- pending/PRODUCTION_READINESS_TASKS.md (`../../todos/pending/PRODUCTION_READINESS_TASKS.md`) — Tasks to be production-ready, including Azure setup
 
 
 ---
@@ -9448,11 +9339,9 @@ Twilio receives call → POST /voice/incoming
 
 ## Hybrid Architecture — Improvements (Implemented)
 
-*Former path: `docs/architecture/overview/HYBRID_ARCHITECTURE_IMPROVEMENTS.md`*
 
-**Last Updated:** April 6, 2026
 
-This doc listed planned improvements for the hybrid Voice + Video + PDF + RAG setup. **All items below are implemented.** For current architecture and boundaries, see **[HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md)**.
+This doc listed planned improvements for the hybrid Voice + Video + PDF + RAG setup. **All items below are implemented.** For current architecture and boundaries, see **HYBRID_ARCHITECTURE_OVERVIEW.md (`./HYBRID_ARCHITECTURE_OVERVIEW.md`)**.
 
 ---
 
@@ -9467,7 +9356,7 @@ This doc listed planned improvements for the hybrid Voice + Video + PDF + RAG se
 | 5 | **Single code shape at boundary** | All code arrays use `{ code, description, confidence }`; validation in shared pipeline; `invalid_codes` when applicable. |
 | 6 | **Translate before RAG (optional)** | Documented in HYBRID_ARCHITECTURE_OVERVIEW.md §6; code comment in video-consult-graph at RAG call. English-only coding until translate step added. |
 | 7 | **Idempotency for end_session** | Route checks `session?.session_status === 'ended'`; if so, returns success + last result from metadata without re-running graph. |
-| 8 | **One-page hybrid diagram** | [HYBRID_ARCHITECTURE_OVERVIEW.md](./HYBRID_ARCHITECTURE_OVERVIEW.md) — diagram, summary table, boundaries. |
+| 8 | **One-page hybrid diagram** | HYBRID_ARCHITECTURE_OVERVIEW.md (`./HYBRID_ARCHITECTURE_OVERVIEW.md`) — diagram, summary table, boundaries. |
 
 ---
 
@@ -9482,7 +9371,6 @@ The original improvement plan is preserved in git history. Priority order was: �
 
 ## Hybrid Architecture — One-Page Overview
 
-*Former path: `docs/architecture/overview/HYBRID_ARCHITECTURE_OVERVIEW.md`*
 
 **Context:** Doctor Little uses multiple entry points (Voice, Video, PDF) that share coding, RAG, and FHIR. This doc answers “where does this run?” and “how are codes obtained?” in one place.
 
@@ -9556,7 +9444,6 @@ See **HYBRID_ARCHITECTURE_IMPROVEMENTS.md** for the improvement plan and **VIDEO
 
 ---
 
-**Last Updated:** April 6, 2026
 
 ---
 
@@ -9573,7 +9460,6 @@ See **HYBRID_ARCHITECTURE_IMPROVEMENTS.md** for the improvement plan and **VIDEO
 
 ## RAG Integration: File Extraction vs Translation Layer
 
-*Former path: `docs/architecture/overview/RAG_INTEGRATION_APPROACHES.md`*
 
 
 **Context**: Middleware runs 24/7 on Azure. Colab is ephemeral—it cannot run as a live RAG server. Two approaches compared against the current implementation.
@@ -9848,9 +9734,7 @@ function chunksToCodes(chunks) {
 
 ## Local Test Runbook — Patient Journey & Landing
 
-*Former path: `docs/architecture/patients/LOCAL_TEST_RUNBOOK.md`*
 
-**Last Updated:** April 6, 2026
 
 Merged from: LOCAL_E2E_RUNBOOK, LOCAL_LANDING_TEST_FLOW.
 
@@ -9879,7 +9763,7 @@ API at `http://localhost:4000`.
 
 ---
 
-## 3. Option B: Landing + Portal (LittleLab)
+## 3. Option B: Landing + Portal (Skin & Care marketing — `littlelab-landing`)
 
 1. **Seed data:**
    ```bash
@@ -9906,13 +9790,19 @@ npm run seed:patient-demo
 
 ---
 
+<a id="patients-patient-timeline-routine-and-billing"></a>
+
+## Patient timeline, routine & billing — API snapshot
+
+Standalone doc (not consolidated inline): **[`patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](./patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** — Expo Today / Timeline / Money tabs, routine compare & layering APIs, `calendar-range`, billing events, SQLite scope, and [`SERVER_DECOMPOSITION.md`](./SERVER_DECOMPOSITION.md) route ownership.
+
+---
+
 <a id="patients-patient-architecture"></a>
 
 ## Patient Architecture — Voice, Chat, UI & Session
 
-*Former path: `docs/architecture/patients/PATIENT_ARCHITECTURE.md`*
 
-**Last Updated:** April 6, 2026
 
 Merged from: PATIENT_VOICE_BOOKING_ARCHITECTURE, TRIAGE_SESSION_SCOPE, PATIENT_UI_SOURCE_OF_TRUTH.
 
@@ -9932,7 +9822,7 @@ Merged from: PATIENT_VOICE_BOOKING_ARCHITECTURE, TRIAGE_SESSION_SCOPE, PATIENT_U
 9. Feedback Loop
 ```
 
-**Entry Points:** `POST /api/patient/triage/message`, Retell WebSocket → `handlePatientTriageMessage`. Kelly (LLM) primary; PatientOrchestrator fallback.
+**Entry Points:** `POST /api/patient/triage/message` (`routes/patient-booking.js` → `services/kelly-triage-turn-service.js`), Retell WebSocket → Kelly triage service. Kelly (LLM) primary; PatientOrchestrator fallback.
 
 ---
 
@@ -9965,7 +9855,6 @@ Merged from: PATIENT_VOICE_BOOKING_ARCHITECTURE, TRIAGE_SESSION_SCOPE, PATIENT_U
 
 ## Patient Orchestrator — `session_id` vs `triage_sessions` (C1 / impl-5)
 
-*Former path: `docs/architecture/patients/PATIENT_ORCHESTRATOR_TRIAGE_PROVENANCE.md`*
 
 ## Provenance
 
@@ -9994,7 +9883,6 @@ Merged from: PATIENT_VOICE_BOOKING_ARCHITECTURE, TRIAGE_SESSION_SCOPE, PATIENT_U
 
 ## patients/PATIENT_WALLET
 
-*Former path: `docs/architecture/patients/PATIENT_WALLET.md`*
 
 ## Patient Wallet (MVP + future)
 
@@ -10031,7 +9919,6 @@ The **Wallet** is the patient’s financial home in the Patient Portal:
 
 ## Payment Architecture Overview
 
-*Former path: `docs/architecture/payments/PAYMENT_ARCHITECTURE.md`*
 
 ## Two Separate Payment Systems
 
@@ -10152,7 +10039,7 @@ static async _handleStripePayment(checkout, merchant, paymentRequest) {
 
 - **4.1 Payment method selection:** `PAYMENT_METHODS_ALLOWED` env; `GET /api/payment/methods`
 - **4.2 Retell function:** `get_available_payment_methods` – returns configured methods for voice
-- **4.3 Documentation:** See [PAYMENT_ENV_AND_FLOWS.md](./PAYMENT_ENV_AND_FLOWS.md) for env vars and flow diagrams
+- **4.3 Documentation:** See PAYMENT_ENV_AND_FLOWS.md (`./PAYMENT_ENV_AND_FLOWS.md`) for env vars and flow diagrams
 - **4.4 Security:** `payment-security.js` – log sanitization, credential checks, PCI scope
 
 
@@ -10163,7 +10050,6 @@ static async _handleStripePayment(checkout, merchant, paymentRequest) {
 
 ## Payment Environment Variables & Flow Diagrams
 
-*Former path: `docs/architecture/payments/PAYMENT_ENV_AND_FLOWS.md`*
 
 
 ## 4.3 Environment Variables
@@ -10279,7 +10165,6 @@ Request payment_method
 
 ## Payment Token Flow (Task 25)
 
-*Former path: `docs/architecture/payments/PAYMENT_TOKEN_FLOW.md`*
 
 
 ## Overview
@@ -10320,7 +10205,6 @@ Payment links use a token stored in `payment_tokens` and resolved via `getPaymen
 
 ## Doctor Dashboard Rebuild TODOs
 
-*Former path: `docs/architecture/providers/DOCTOR_DASHBOARD_REBUILD_TODOS.md`*
 
 This checklist covers the rebuild of the doctor portal dashboard around triage priority, provider tasks, schedule, and specialist consult workflows.
 
@@ -10489,7 +10373,6 @@ This checklist covers the rebuild of the doctor portal dashboard around triage p
 
 ## Provider/Prescription DB Rename Phase 2 Plan (Optional)
 
-*Former path: `docs/architecture/providers/PROVIDER_PRESCRIPTION_DB_PHASE2_PLAN.md`*
 
 ## Objective
 Provide a zero-downtime path to physical DB naming changes if desired.
@@ -10526,7 +10409,6 @@ Provide a zero-downtime path to physical DB naming changes if desired.
 
 ## Provider/Prescription Naming Migration Guide
 
-*Former path: `docs/architecture/providers/PROVIDER_PRESCRIPTION_NAMING_MIGRATION_GUIDE.md`*
 
 ## Goal
 - Move API/domain terminology from `merchant`/`product` to `provider`/`prescription`.
@@ -10565,7 +10447,6 @@ Provide a zero-downtime path to physical DB naming changes if desired.
 
 ## Provider/Prescription Rollout Checklist
 
-*Former path: `docs/architecture/providers/PROVIDER_PRESCRIPTION_ROLLOUT_CHECKLIST.md`*
 
 ## Pre-rollout
 - [ ] Confirm route aliases mounted in target environment.
@@ -10600,7 +10481,6 @@ Provide a zero-downtime path to physical DB naming changes if desired.
 
 ## Architecture Documentation
 
-*Former path: `docs/architecture/README.md`*
 
 System architecture, design decisions, and technical documentation.
 
@@ -10645,7 +10525,7 @@ System architecture, design decisions, and technical documentation.
 - **[financial/STATIC_RECORDS_AUDIT.md](./README.md#financial-static-records-audit)**
 
 ### Stripe
-- **[integrations/stripe/issuing/STRIPE_ISSUING.md](../../integrations/README.md#stripe-issuing-stripe-issuing)** — Stripe Issuing (consolidated)
+- **integrations/stripe/issuing/STRIPE_ISSUING.md (`../../integrations/README.md#stripe-issuing-stripe-issuing`)** — Stripe Issuing (consolidated)
 
 ---
 
@@ -10667,7 +10547,6 @@ System architecture, design decisions, and technical documentation.
 
 ---
 
-**Last Updated:** April 13, 2026
 
 
 ---
@@ -10676,9 +10555,7 @@ System architecture, design decisions, and technical documentation.
 
 ## Vision UV R&D (separate track)
 
-*Former path: `docs/architecture/vision/VISION_UV_R_AND_D.md`*
 
-**Last Updated:** April 8, 2026
 
 UV-assisted skin imaging is a separate R&D stream from current RGB capture guidance.
 
@@ -10715,7 +10592,6 @@ UV-assisted skin imaging is a separate R&D stream from current RGB capture guida
 
 ## 🎯 Platform Vision: "Plaid for AI Agents"
 
-*Former path: `docs/architecture/vision/VISION.md`*
 
 ## The Big Picture
 
@@ -10951,7 +10827,6 @@ This is a **middleware platform** that:
 
 ## Automated Retell Agent Creation
 
-*Former path: `docs/architecture/voice-agent/AUTOMATED_RETELL_AGENT_CREATION.md`*
 
 ## Problem
 
@@ -11281,7 +11156,6 @@ async function updateClinicAgent(clinicId, updates) {
 
 ## Multi-Model Reality Check – Architecture & Cost Analysis
 
-*Former path: `docs/architecture/voice-agent/MULTI_MODEL_REALITY_CHECK.md`*
 
 
 ## Executive Summary
@@ -11412,7 +11286,6 @@ Priority 4: Multi-Model (0% savings, +accuracy) 🟢
 
 ## Real-Time Language Switching During Calls
 
-*Former path: `docs/architecture/voice-agent/REAL_TIME_LANGUAGE_SWITCHING.md`*
 
 ## Your Scenario:
 1. Agent starts in English
@@ -11743,7 +11616,6 @@ If you want perfect voice pronunciation:
 
 ## Medical Coding Voice Agent – Runbook
 
-*Former path: `docs/architecture/voice-agent/RUNBOOK.md`*
 
 Operational procedures for the medical coding voice agent.
 
@@ -12019,7 +11891,6 @@ See `docs/architecture/README.md#voice-agent-multi-model-reality-check` for full
 
 ## Medical Coding Voice Agent – State Flow
 
-*Former path: `docs/architecture/voice-agent/STATE_FLOW.md`*
 
 
 State machine for the medical coding voice agent. Implemented in `coding-state-service.js`, persisted via `retell-websocket.js`.
@@ -12078,7 +11949,6 @@ Costs fetched from Twilio/Retell APIs on call end; fallback to calculated estima
 
 ## Medical Coding Voice Agent – Tool Schemas & Usage
 
-*Former path: `docs/architecture/voice-agent/TOOL_SCHEMAS.md`*
 
 
 Reference for Retell function calls used during medical coding voice conversations.
@@ -12241,9 +12111,7 @@ Get allowed amounts for CPT codes from payer fee schedule.
 
 ## Voice Agent — Todo & Implementation Status
 
-*Former path: `docs/architecture/voice-agent/VOICE_AGENT_TODO_AND_STATUS.md`*
 
-**Last Updated:** April 6, 2026
 
 Merged from: MEDICAL_CODING_AGENT_TODO, AI_AGENT_FINANCIAL_LAYER_TODO, IMPLEMENTATION_STATUS.
 
@@ -12317,8 +12185,498 @@ Merged from: MEDICAL_CODING_AGENT_TODO, AI_AGENT_FINANCIAL_LAYER_TODO, IMPLEMENT
 
 ## 6. Related Docs
 
-- [RUNBOOK.md](./RUNBOOK.md) — Imports, evaluation, troubleshooting
-- [TOOL_SCHEMAS.md](./TOOL_SCHEMAS.md) — Tool definitions
-- [MULTI_MODEL_REALITY_CHECK.md](./MULTI_MODEL_REALITY_CHECK.md) — Cost analysis
+- RUNBOOK.md (`./RUNBOOK.md`) — Imports, evaluation, troubleshooting
+- TOOL_SCHEMAS.md (`./TOOL_SCHEMAS.md`) — Tool definitions
+- MULTI_MODEL_REALITY_CHECK.md (`./MULTI_MODEL_REALITY_CHECK.md`) — Cost analysis
 
 
+
+## Consolidated: CURRENT_STATE_ARCHITECTURE.md
+
+
+# Current State Architecture (Codebase-Derived)
+
+**Scope:** Monorepo-wide snapshot of how the platform is currently built, based on code and docs in this repository.  
+**Audience:** Engineering, product, operations, security/compliance, onboarding developers.
+
+---
+
+## 1) Executive Summary
+
+DocLittle is a multi-surface healthcare platform centered on a Node/Express middleware (`middleware-platform`) that orchestrates:
+
+- Voice workflows (Retell + Twilio + booking/payment/insurance tools)
+- Patient web portal and native mobile app experiences
+- Agentic checkout and commerce (catalog -> quote -> chat -> Stripe checkout)
+- Insurance/RCM and FHIR-adjacent healthcare data flows
+- Video consult and tokenized realtime/session flows
+- Admin/business/ops dashboards and automation pipelines
+
+The system is intentionally **integration-heavy**, with many optional providers behind environment flags (Stripe, Circle, Stedi, Epic, 1upHealth, LiveKit, Azure services, LangSmith/LangChain tooling).  
+
+---
+
+## 2) Repository Topology
+
+Primary runtime surfaces:
+
+- `middleware-platform/` - Core backend API + orchestration + workers + integrations
+- `unified-dashboard/` - Static/web portals (patient, business, admin, insurer) and shared JS/CSS
+- `unified-dashboard/littlelab-landing/` - React/CRA landing and assistant experience
+- `patient-app/` - Expo/React Native app (auth + appointments + checkout chat integration)
+- `docs/` - Consolidated canonical documentation
+- `scripts/`, `infra/`, `Knowledge/`, `todos/` - operations, infra, data assets, roadmap state
+
+---
+
+## 3) System Context Diagram
+
+```mermaid
+flowchart LR
+    P[Patients] --> WEB[Patient Web Portal<br/>unified-dashboard/patients]
+    P --> APP[Patient Mobile App<br/>patient-app Expo]
+    P --> VOICE[Phone Call / Voice Entry]
+
+    CLINIC[Clinic Staff / Providers] --> BIZ[Business Portal<br/>unified-dashboard/business]
+    OPS[Ops/Admin Team] --> ADMIN[Admin Portal<br/>unified-dashboard/admin]
+
+    WEB --> API[Middleware API<br/>middleware-platform/server.js]
+    APP --> API
+    VOICE --> RETELL[Retell AI]
+    RETELL --> API
+
+    API --> DB[(SQLite default / Postgres if configured)]
+    API --> STRIPE[Stripe]
+    API --> CIRCLE[Circle]
+    API --> STEDI[Stedi API]
+    API --> LIVEKIT[LiveKit]
+    API --> TWILIO[Twilio]
+    API --> EMAIL[SMTP / Azure Communication]
+    API --> EHR[EHR Integrations<br/>Epic / 1upHealth]
+    API --> AZURE[Azure Storage/Services]
+    API --> LLM[LLM & Reasoning Providers<br/>Anthropic/Groq/OpenAI + LangSmith]
+```
+
+---
+
+## 4) Container / Module Architecture
+
+```mermaid
+flowchart TB
+    subgraph ClientSurfaces
+      U1[unified-dashboard/patients]
+      U2[unified-dashboard/business]
+      U3[unified-dashboard/admin]
+      U4[littlelab-landing React app]
+      M1[patient-app Expo RN]
+    end
+
+    subgraph Middleware["middleware-platform"]
+      S1[server.js monolith entrypoint]
+      R1[routes/*.js]
+      SV1[services/*.js]
+      MW1[middleware/*.js]
+      DBA[database.js + adapters]
+      WK1[workers/schedulers<br/>DLQ/EHR sync/postgres sync]
+    end
+
+    subgraph DataAndState
+      D1[(Operational DB)]
+      D2[(Object/blob storage)]
+      D3[(Observability & metrics tables)]
+    end
+
+    subgraph External
+      X1[Payments: Stripe/Circle/Visa/Mastercard]
+      X2[Healthcare: Stedi/FHIR/EHR]
+      X3[Voice/RTC: Retell/Twilio/LiveKit]
+      X4[AI: LLMs, embeddings, LangSmith]
+    end
+
+    ClientSurfaces --> S1
+    S1 --> R1
+    R1 --> SV1
+    SV1 --> DBA
+    DBA --> D1
+    SV1 --> D2
+    SV1 --> D3
+    SV1 --> External
+    WK1 --> SV1
+```
+
+---
+
+## 5) Backend Core (`middleware-platform`)
+
+### 5.1 Runtime Characteristics
+
+- Express-based API server with high route density (`server.js` + `routes/`)
+- Security/boot guards:
+  - Env validation on startup
+  - Production JWT/FHIR guard requirements
+  - Security middleware and webhook protections
+- Feature flag style toggles via env for progressive rollout/shadowing
+- Multi-domain support for patient/business/admin routing and static serve integration
+
+### 5.2 Persistence Model
+
+- Primary local default: SQLite (`better-sqlite3`) with migration-heavy `database.js`
+- Optional Postgres mode when `POSTGRES_URL` is set
+- Hybrid support patterns appear throughout data access for compatibility/sync
+- State transition guards implemented for appointment/payment/checkout lifecycles
+- WAL and timeout pragmas for SQLite concurrency
+
+### 5.3 API Layering
+
+- `server.js`: central composition + many directly-declared endpoints
+- `routes/*.js`: domain-focused route modules (payments, FHIR, products, consult, orders, wallet, etc.)
+- `services/*.js`: business logic, orchestration, integration clients, queue/workers, RAG/LLM layers
+- `middleware/*.js`: auth/security/rate-limit/scope enforcement
+
+---
+
+## 6) Frontend Surfaces
+
+## 6.1 Unified Dashboard (web)
+
+Directories:
+
+- `unified-dashboard/patients` - login/dashboard/appointments/book/schedule/triage/wallet/checkout-chat/profile
+- `unified-dashboard/business` - provider/clinic operations, products/orders/invoices, feature flags, records
+- `unified-dashboard/admin` - platform administration, workflows, clients, CRM-like pages
+- Shared runtime scripts:
+  - `assets/js/patient-api.js`
+  - `assets/js/patient-shell.js`
+  - auth/session/composer utility scripts
+
+Characteristics:
+
+- Mostly static HTML + vanilla JS + shared CSS token system
+- Calls middleware APIs directly
+- Implements multiple patient/payment experiences including Stripe checkout redirects
+
+## 6.2 Landing Experience (`littlelab-landing`)
+
+- React/CRA app for marketing + assistant funnel
+- Includes assistant pages, scan/ingredient/product experiences, tests, and media assets
+- Integrates with middleware endpoints for public catalog/quote/assistant workflows
+
+## 6.3 Patient Mobile App (`patient-app`)
+
+- Expo Router + React Native
+- Current implemented focus:
+  - Session/auth verification flow
+  - Appointment visibility
+  - Checkout chat modal experience (`checkout-chat.tsx`) aligned with web APIs
+- Supporting modules:
+  - checkout helpers and analytics
+  - design token parity (`skinCareTokens.ts`)
+  - optional ledger/safe-harbor primitives (`useUnifiedLedger.ts`, `SafeHarborRing.tsx`)
+- Dedicated doc (current): `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
+
+---
+
+## 7) Domain Architecture by Capability
+
+## 7.1 Voice Agent and Telephony
+
+Core components:
+
+- Retell integration (`retell-service.js`, `routes/retell-functions.js`, webhook handlers)
+- Voice-specific routes (`routes/voice.js`, `routes/voice-web-call.js`)
+- Twilio services and webhook protections
+- Voice triage guardrails and session-parity enforcement
+
+Pattern:
+
+1. Voice turn arrives from Retell/webhook
+2. Middleware maps session/context and tool request
+3. Domain services execute booking/payment/insurance/actions
+4. Response returned to voice orchestration
+5. Events/logs/audit stored and optionally traced
+
+## 7.2 Booking and Patient Journey
+
+Key services:
+
+- `booking-service.js`
+- `patient-portal-service.js`
+- `patient-intake-service.js`
+- `patient-orchestrator-service.js`
+- scheduling/reminder services
+
+Capabilities:
+
+- Appointment lifecycle management (create/search/confirm/reschedule/cancel)
+- Patient session verification and portal access
+- Emerging matching/triage orchestration flows represented in docs + service layer
+
+## 7.3 Checkout, Payments, Wallets, Settlement
+
+Key route/service stack:
+
+- Routes: `public-checkout.js`, `public-commerce-quote.js`, `payment.js`, `payment-ops.js`, wallet endpoints
+- Services:
+  - `payment-orchestrator.js`, `payment-flow-service.js`, `payment-service.js`
+  - `checkout-workflow-service.js`, `checkout-payment-status-service.js`
+  - `commerce-payment-settlement.js`, `settlement-service.js`, `instant-settlement-service.js`
+  - `circle-service.js`, `hsa-wallet-service.js`
+
+Current shape:
+
+- Stripe is the primary card checkout/payment rail in active patient flows
+- Circle/wallet capabilities remain present in code and APIs
+- Fraud and anti-sybil controls sit around sensitive payment edges
+
+## 7.4 Insurance, Claims, RCM, EOB
+
+Relevant services:
+
+- `insurance-service.js`, `rcm-service.js`, `eob-calculation-service.js`, `adjudication-service.js`
+- payer/payor pipeline services (normalization, fuzzy matching, canonicalization, scoring)
+- claims and payer cache support
+
+Capabilities:
+
+- Insurance eligibility and claims workflows
+- Payer resolution/canonical registry pipelines
+- Billing/financial data transformations
+
+## 7.5 FHIR/EHR and Clinical Data
+
+Key components:
+
+- `routes/fhir.js`, `routes/diagnostic-report.js`
+- `fhir-service.js`, adapters, middleware scope guards
+- `ehr-sync-service.js`, `ehr-aggregator-service.js`, Epic-related adapters
+
+Pattern:
+
+- Middleware acts as normalized gateway between internal data model and FHIR/EHR interactions
+- Additional production protections enforce secure access paths to PHI-sensitive resources
+
+## 7.6 AI / Reasoning / RAG / Knowledge
+
+Key components:
+
+- LLM routing + orchestration: `llm-router.js`, `kelly-agent-service.js`, `kelly-tool-executor.js`
+- Reasoning/quality layers: `reasoning-map-service.js`, `routine-reasoning-orchestrator.js`, summary/retrieval guardrails
+- RAG services under `layer2-rag/*` and vector retrieval modules
+- Derm and scan/ingredient pipelines
+- LangSmith and LangChain instrumentation hooks
+
+Characteristics:
+
+- Multi-model architecture with provider abstraction tendencies
+- Strong script-driven validation harnesses for reasoning quality and release gates
+- Feature-flag and staged rollout patterns for AI route evolution
+
+## 7.7 Video Consult / Realtime
+
+- Routes/services for consult lifecycle and LiveKit token/session support
+- Separate but connected to broader consult/patient flow
+- Includes SSE and session orchestration constructs
+
+## 7.8 Admin, Operations, Automation
+
+Evidence in routes/services/scripts:
+
+- Tenant, workflows, usage, internal ops, fraud review, automation routes
+- Large operational script inventory for audits, migrations, backfills, reports, rollout checks
+- Supports production-readiness gates, DLQ triage/replay, and observability reporting
+
+---
+
+## 8) Agentic Checkout End-to-End Flow (Current)
+
+```mermaid
+sequenceDiagram
+    participant U as User (Web/App)
+    participant FE as Checkout UI (web or RN)
+    participant API as Middleware API
+    participant K as Kelly/LLM Services
+    participant C as Catalog/Quote Services
+    participant S as Stripe
+
+    U->>FE: Open checkout chat
+    FE->>API: GET public products
+    API->>C: Resolve catalog/products
+    C-->>API: product data
+    API-->>FE: catalog payload
+
+    U->>FE: Ask question / request quote
+    FE->>API: POST checkout-chat turn (or stream)
+    API->>K: run assistant + tools
+    K-->>API: answer + structured actions
+    API-->>FE: assistant response
+
+    FE->>API: POST commerce quote / checkout start
+    API->>S: create checkout session / payment intent
+    S-->>API: checkout URL/session
+    API-->>FE: redirect info
+    FE->>S: Hosted checkout
+    S-->>API: webhook events
+    API->>API: settle/update payment state
+```
+
+## 8.1 Patient App Agent Orchestration (Current)
+
+The patient app orchestrates agent behavior through middleware, not on-device.
+
+Current mobile pattern:
+
+1. Mobile sends turn to `POST /api/patient/checkout-chat/turn/stream`.
+2. Middleware invokes Kelly agent services and tool execution.
+3. Tool executor calls commerce/quote/payment services as needed.
+4. Middleware streams deltas back to RN client (SSE), with non-stream fallback route.
+5. Mobile uses `quote_id` and starts hosted checkout via middleware route.
+
+This is documented in:
+
+- `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
+
+---
+
+## 9) Patient Wallet and Billing Flow (Current Code Presence)
+
+```mermaid
+flowchart LR
+    PW[Patient Wallet UI / Endpoints] --> API[Middleware wallet routes]
+    API --> STRIPE[Stripe deposit/checkout rails]
+    API --> CIRCLE[Circle account/wallet rails]
+    API --> LEDGER[Ledger/transaction tables]
+    API --> APPT[Appointment payment status]
+
+    APPT --> PORTAL[Patient dashboard/wallet pages]
+    LEDGER --> ADMIN[Business/admin visibility paths]
+```
+
+Notes:
+
+- Wallet-related backend and UI flows exist.
+- Platform docs/roadmap indicate a launch simplification trend toward Stripe card-first paths.
+
+---
+
+## 10) Data and Storage Architecture
+
+Data domains visible in code/docs:
+
+- Patient + appointment + scheduling state
+- Checkout/payment/transaction/claims records
+- Payer/provider directory and normalization artifacts
+- Clinical/FHIR/EHR synchronized resources
+- Session/tool call/audit/ops telemetry
+- Knowledge/embedding/vector-related metadata
+
+Storage patterns:
+
+- Relational operational store (SQLite default, optional Postgres)
+- Blob/object storage for uploads and some pipeline assets
+- In-memory + DB-backed caches/queues + DLQ-style recovery utilities
+
+---
+
+## 11) Security, Compliance, and Reliability Controls
+
+Implemented control patterns:
+
+- Startup env validation and production hard gates
+- JWT and route-scoped access protections for sensitive healthcare routes
+- Rate limiting and anti-abuse controls
+- Webhook validation/replay guard logic for external callbacks
+- Redaction and secure logging modules
+- Fraud/anti-sybil review queues for payment-sensitive operations
+- Extensive operational scripts for verification and readiness
+
+---
+
+## 12) Observability and Quality Gates
+
+The codebase includes a broad quality harness:
+
+- Jest and integration tests
+- Playwright and E2E scripts (landing, journey, checkout, scan routes)
+- Domain-specific verification scripts for:
+  - reasoning quality
+  - performance budgets
+  - release readiness
+  - routing consistency
+  - security scans/redaction
+  - data pipeline correctness
+
+This indicates a platform designed around **scripted ops evidence** in addition to unit/integration tests.
+
+---
+
+## 13) Feature Inventory (What Exists in Code)
+
+The following capabilities are represented by concrete modules/routes/scripts:
+
+- Multi-tenant clinic/provider/patient surface architecture
+- Voice receptionist flows with Retell tool execution
+- Patient portal auth and appointment self-service
+- Agentic checkout (web + RN parity) with Kelly chat and Stripe integration
+- Product catalog, quote, and commerce order primitives
+- Wallet and deposit/payment claim pathways (including Circle integration)
+- Insurance eligibility/claims and RCM/EOB service layers
+- FHIR/EHR integrations and sync workers
+- Video consult token/session lifecycle support
+- AI reasoning + RAG + scan/ingredient intelligence pipelines
+- Provider/payor normalization, search, and network checks
+- Fraud/anti-sybil and payment reliability mechanisms
+- Admin/business operational dashboards and automation
+- Extensive migration/backfill and rollout observability scripts
+
+---
+
+## 14) Architectural Strengths (Current State)
+
+- Broad feature coverage across voice, clinical ops, payments, and commerce
+- Strong integration abstraction in service layer
+- Robust operational script ecosystem for validation and rollback confidence
+- Multi-surface parity effort (web + native) in checkout
+- Security-conscious startup/runtime guardrails for sensitive healthcare data
+
+---
+
+## 15) Architectural Tradeoffs / Risks (Current State)
+
+- `server.js` is very large and central; ownership boundaries can blur
+- High capability density can increase coupling and test matrix complexity
+- Legacy and new pathways coexist (wallet/circle vs stripe-first trends), requiring clear deprecation strategy
+- Mixed SQLite/Postgres patterns require disciplined migration and adapter consistency
+- Feature-flag growth increases configuration complexity and operational burden
+
+---
+
+## 16) Recommended Next Documentation Steps
+
+To keep this document accurate over time:
+
+1. Add a monthly "delta log" section (new routes/services, removed features, migration status).
+2. Track source-of-truth status for each major domain (active, legacy, deprecated, experimental).
+3. Map each high-value flow to a test evidence pointer (script/test file references).
+4. Add ownership tags per domain (`payments`, `voice`, `rcm`, `patient app`, etc.).
+5. Add deployment topology by environment (local/staging/prod) with exact infra boundaries.
+
+---
+
+## 17) Diagram Index
+
+- System Context Diagram (Section 3)
+- Container/Module Diagram (Section 4)
+- Agentic Checkout Sequence (Section 8)
+- Wallet/Billing Flow Diagram (Section 9)
+
+These are intentionally implementation-aligned and can be expanded into C4 Level 1/2/3 documents later.
+
+
+
+## Runtime entrypoints (canonical)
+
+**Last reviewed:** 2026-05-02
+
+Authoritative route + SPA map aligned with `server.js`: **[RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md](./RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md)**.
+
+**Debug checklist:** verify `PORT`, `DB_PATH`, feature flags; confirm HTTP owner in `middleware-platform/routes/` and domain logic in `middleware-platform/services/`; track doc gaps in [`docs/meta/README.md`](./meta/README.md#codebase-batch-review-and-documentation-gaps).

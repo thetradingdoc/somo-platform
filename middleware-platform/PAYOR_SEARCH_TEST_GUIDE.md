@@ -46,17 +46,17 @@ cd middleware-platform
 npx jest __tests__/geo-resolver-county-normalization.test.js --runInBand
 
 # Full smoke suite (requires running middleware on port 4000)
-RUN_PAYOR_HTTP_SMOKE=1 npx jest __tests__/payor-location-smoke.test.js --runInBand
+RUN_PAYOR_HTTP_SMOKE=1 npx jest __tests__/smoke/payor-location-smoke.test.js --runInBand
 
 # Both at once
 RUN_PAYOR_HTTP_SMOKE=1 npx jest \
   __tests__/geo-resolver-county-normalization.test.js \
-  __tests__/payor-location-smoke.test.js \
+  __tests__/smoke/payor-location-smoke.test.js \
   --runInBand --verbose
 
 # Against a non-local server
 PAYOR_TEST_API_BASE=http://payor-pipeline-runner:4000 \
-RUN_PAYOR_HTTP_SMOKE=1 npx jest __tests__/payor-location-smoke.test.js --runInBand
+RUN_PAYOR_HTTP_SMOKE=1 npx jest __tests__/smoke/payor-location-smoke.test.js --runInBand
 ```
 
 ---
@@ -72,7 +72,7 @@ Unit tests — no server, no live HTTP, suitable for CI.
 | `normalizeZip` | 5-digit, ZIP+4, whitespace, non-digit stripping, truncation, null/empty (via **`geo-normalize.js`**) |
 | `normalizeCountyName` | County suffix strip, St./Saint, hyphens (e.g. Miami-Dade), CMS samples (via **`geo-normalize.js`**) |
 
-### `payor-location-smoke.test.js`
+### `__tests__/smoke/payor-location-smoke.test.js`
 
 HTTP integration tests — **skipped** unless `RUN_PAYOR_HTTP_SMOKE=1` and the server responds.
 
@@ -88,7 +88,7 @@ HTTP integration tests — **skipped** unless `RUN_PAYOR_HTTP_SMOKE=1` and the s
 
 ## Geographic coverage matrix
 
-See `SEARCH_CASES` in `__tests__/payor-location-smoke.test.js` for the authoritative list (labels include state, county/ZIP, and needs).
+See `SEARCH_CASES` in `__tests__/smoke/payor-location-smoke.test.js` for the authoritative list (labels include state, county/ZIP, and needs).
 
 High-risk cases for **out-of-state leakage** on multi-county ZIPs: `07001` (NJ), `11001` (NY), `22003` (VA), and `33101` (FL).
 
@@ -146,5 +146,84 @@ Bridge linkage counts **do not** prove ZIP search correctness. Use the tests abo
 PAYOR_TEST_API_BASE=http://$(gcloud compute instances describe payor-pipeline-runner \
   --format='get(networkInterfaces[0].accessConfigs[0].natIP)'):4000 \
 RUN_PAYOR_HTTP_SMOKE=1 \
-npx jest __tests__/payor-location-smoke.test.js --runInBand --verbose
+npx jest __tests__/smoke/payor-location-smoke.test.js --runInBand --verbose
 ```
+
+---
+
+## Production Playwright signoff (hash + CORS + mobile)
+
+These checks are implemented in:
+
+- `playwright.prod.config.cjs`
+- `e2e/prod-smoke.spec.cjs`
+- `e2e/prod-cors.spec.cjs`
+- `e2e/prod-mobile-regression.spec.cjs`
+
+### What this suite validates
+
+- Cache-busting smoke:
+  - HTML includes expected `main.<hash>.js` when pinned.
+  - Fallback requires at least one `/static/js/main.*.js` script.
+- Release hash parity:
+  - Deployed `main.<hash>.js` hash matches expected hash from env or metadata.
+- CORS:
+  - `OPTIONS` preflight on key public routes succeeds.
+  - Required CORS headers exist for plans/geo endpoints.
+  - Browser cross-origin fetch from `myskinandcare.com` to `api.myskinandcare.com` succeeds.
+- Mobile regression:
+  - Filter drawer open/close via backdrop and `X`.
+  - Bottom CTA visibility/clickability (no overlap regression).
+  - ZIP search -> results -> filters -> detail flow.
+
+### Run commands
+
+```bash
+cd middleware-platform
+
+# Desktop smoke/hash + CORS
+npm run test:prod:smoke
+
+# Mobile-only regression checks
+npm run test:prod:mobile
+
+# Full prod pack
+npm run test:prod:full
+```
+
+Repo-root equivalents:
+
+```bash
+npm run test:prod:smoke
+npm run test:prod:mobile
+npm run test:prod:full
+```
+
+### Optional release hash inputs
+
+To enforce a specific deployed main bundle hash:
+
+```bash
+EXPECTED_MAIN_JS_HASH=76fc2f20 npm run test:prod:smoke
+```
+
+Or read from deployment metadata/artifact log JSON:
+
+```bash
+PROD_RELEASE_METADATA_PATH=./path/to/deploy-audit.json npm run test:prod:smoke
+```
+
+Supported metadata keys:
+
+- `main_js_hash`
+- `mainJsHash`
+- `expected_main_js_hash`
+- `expectedMainJsHash`
+
+### CI/nightly
+
+Nightly workflow: `.github/workflows/prod-playwright-nightly.yml`
+
+- Runs prod smoke + mobile suites daily and on manual dispatch.
+- Uploads Playwright artifacts on every run.
+- Emits an explicit workflow error annotation on failures.

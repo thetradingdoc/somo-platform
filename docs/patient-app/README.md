@@ -337,7 +337,7 @@ New contracts required:
 
 ## 8) Related Docs
 
-- `docs/architecture/CURRENT_STATE_ARCHITECTURE.md`
+- [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)
 - `docs/middleware-platform/README.md`
 - `docs/voice-agent/README.md`
 - `todos/pending/PATIENT_APP_JOURNAL_REDESIGN_TODOS.md`
@@ -717,5 +717,5 @@ No single canonical document yet defines:
 ## 10) Related Documents
 
 - `docs/patient-app/PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`
-- `docs/architecture/CURRENT_STATE_ARCHITECTURE.md`
+- [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)
 - `docs/patient-app/BACKEND_ROUTES_AND_TABLES_PATIENT_PORTAL.md`
