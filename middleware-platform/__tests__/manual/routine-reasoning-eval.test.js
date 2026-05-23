@@ -6,16 +6,17 @@
  */
 
 const Database = require('better-sqlite3');
-const { up: m028 } = require('../migrations/028_ingredient_interactions');
-const { up: m029 } = require('../migrations/029_ingredient_rag_chunks');
-const { up: m031 } = require('../migrations/031_user_sessions_and_knowledge_chunks');
-const { up: m032 } = require('../migrations/032_knowledge_chunks_sku_columns');
-const { up: m033 } = require('../migrations/033_knowledge_chunks_sku_seed');
-const { up: m034 } = require('../migrations/034_product_sku_catalog');
-const { up: m035 } = require('../migrations/035_knowledge_vector_index_meta');
-const { createConflictGraph } = require('../services/ingredient-conflict-graph');
-const { createSessionStateService } = require('../services/session-state');
-const { createRetriever } = require('../services/retriever');
+const { up: m028 } = require('../../migrations/028_ingredient_interactions');
+const { up: m029 } = require('../../migrations/029_ingredient_rag_chunks');
+const { up: m031 } = require('../../migrations/031_user_sessions_and_knowledge_chunks');
+const { up: m032 } = require('../../migrations/032_knowledge_chunks_sku_columns');
+const { up: m033 } = require('../../migrations/033_knowledge_chunks_sku_seed');
+const { up: m034 } = require('../../migrations/034_product_sku_catalog');
+const { up: m035 } = require('../../migrations/035_knowledge_vector_index_meta');
+const { up: m052 } = require('../../migrations/052_demo_vitc_serum_product_id_skinandcare');
+const { createConflictGraph } = require('../../services/ingredient-conflict-graph');
+const { createSessionStateService } = require('../../services/session-state');
+const { createRetriever } = require('../../services/retriever');
 const {
   composeLocal,
   validateReply,
@@ -24,17 +25,18 @@ const {
   parseRoutineReplyJsonFromLlmText,
   validateExternalLlmRoutineReply,
   skuChunkSupportsConflict,
-} = require('../services/composer');
-const { getChunksForRoutineVerdict } = require('../services/ingredient-rag-chunks-service');
-const { getRoutinePostHookSnapshot } = require('../services/routine-post-turn-hook');
-const { splitTextForEmbedding } = require('../services/text-chunking');
-const { embedTexts } = require('../services/embedding-stub');
-const { buildRoutineReasoningPayload } = require('../services/routine-reasoning-orchestrator');
-const { sortConflictsBySeverityThenRole } = require('../services/routine-conflict-priority');
-const { createVectorRetrieverStub } = require('../services/vector-retriever-stub');
-const { createVectorRetriever } = require('../services/vector-retriever');
-const { recordVectorSyncStats, getVectorIndexMeta } = require('../services/vector-index-ops');
-const { buildAgentTurnReply } = require('../services/agent-turn-reply');
+} = require('../../services/composer');
+const { getChunksForRoutineVerdict } = require('../../services/ingredient-rag-chunks-service');
+const { getRoutinePostHookSnapshot } = require('../../services/routine-post-turn-hook');
+const { splitTextForEmbedding } = require('../../services/text-chunking');
+const { embedTexts } = require('../../services/embedding-stub');
+const { buildRoutineReasoningPayload } = require('../../services/routine-reasoning-orchestrator');
+const { sortConflictsBySeverityThenRole } = require('../../services/routine-conflict-priority');
+const { createVectorRetrieverStub } = require('../../services/vector-retriever-stub');
+const { createVectorRetriever } = require('../../services/vector-retriever');
+const { recordVectorSyncStats, getVectorIndexMeta } = require('../../services/vector-index-ops');
+const { buildAgentTurnReply } = require('../../services/agent-turn-reply');
+const { CANONICAL_DEMO_VITC_SERUM, LEGACY_DEMO_VITC_SERUM } = require('../../lib/demo-product-ids');
 
 let _passed = 0;
 let _failed = 0;
@@ -54,6 +56,7 @@ m032(db);
 m033(db);
 m034(db);
 m035(db);
+m052(db);
 
 const graph = createConflictGraph(db);
 const sessions = createSessionStateService(db);
@@ -739,7 +742,7 @@ test('B3: SKU seed row exists and is retrievable for demo product', () => {
   const row = db.prepare('SELECT id, product_id, sku FROM knowledge_chunks WHERE id = ?').get(
     'sku-seed-demo-vitc-mono-001',
   );
-  if (!row || row.product_id !== 'doclittle_demo_vitc_serum') throw new Error('seed row missing');
+  if (!row || row.product_id !== CANONICAL_DEMO_VITC_SERUM) throw new Error('seed row missing');
   const mono = retriever.getChunksForIngredient('cosing:ascorbic acid');
   if (!mono.some((c) => c.id === 'sku-seed-demo-vitc-mono-001')) throw new Error('seed not in ingredient retrieval');
 });
@@ -828,12 +831,12 @@ test('B5: buildSystemPrompt includes product_id and sku on chunk tags', () => {
       chunk_source_tier: 'knowledge_sku',
       evidence_level: 'established',
       text: 'Product-specific note.',
-      product_id: 'doclittle_demo_vitc_serum',
+      product_id: CANONICAL_DEMO_VITC_SERUM,
       sku: 'SKU-DEMO-VITC-001',
     },
   ];
   const prompt = buildSystemPrompt(v, bundle, defaultSession());
-  if (!prompt.includes('product_id="doclittle_demo_vitc_serum"')) throw new Error('missing product_id attr');
+  if (!prompt.includes(`product_id="${CANONICAL_DEMO_VITC_SERUM}"`)) throw new Error('missing product_id attr');
   if (!prompt.includes('sku="SKU-DEMO-VITC-001"')) throw new Error('missing sku attr');
 });
 
@@ -863,7 +866,7 @@ test('vector stub: pinecone backend still returns empty hits', async () => {
 
 section('I — Epic B (B1–B6 SKU corpus, tiers, citations)');
 
-const { createProductSkuCatalog } = require('../services/product-sku-catalog');
+const { createProductSkuCatalog } = require('../../services/product-sku-catalog');
 
 test('B1/B2: product_sku_catalog upsert resolves SKUs by product_id', () => {
   const cat = createProductSkuCatalog(db);
@@ -884,7 +887,7 @@ test('B4: retriever ranks knowledge_sku before knowledge_pair for same verdict',
   const v = graph.evaluateRoutine([
     { time: 'am', ingredient_ids: [ID.ascorbicAcid, ID.niacinamide] },
   ]);
-  const b = retriever.getChunksForVerdict(v, { productIds: ['doclittle_demo_vitc_serum'] });
+  const b = retriever.getChunksForVerdict(v, { productIds: [LEGACY_DEMO_VITC_SERUM] });
   if (!b.chunks.length) throw new Error('expected chunks');
   const first = b.chunks[0];
   if (first.chunk_source_tier !== 'knowledge_sku') {
@@ -899,14 +902,14 @@ test('B5/B6: composeLocal cites SKU-scoped chunk when routine product matches', 
   const v = graph.evaluateRoutine([
     { time: 'am', ingredient_ids: [ID.ascorbicAcid, ID.niacinamide] },
   ]);
-  const b = retriever.getChunksForVerdict(v, { productIds: ['doclittle_demo_vitc_serum'] });
+  const b = retriever.getChunksForVerdict(v, { productIds: [CANONICAL_DEMO_VITC_SERUM] });
   const session = defaultSession({
     current_routine: [
       {
         time: 'am',
         products: [
           {
-            product_id: 'doclittle_demo_vitc_serum',
+            product_id: CANONICAL_DEMO_VITC_SERUM,
             name: 'Demo C',
             ingredient_ids: [ID.ascorbicAcid, ID.niacinamide],
           },
@@ -925,14 +928,14 @@ test('B5: validateReply rejects reply that omits required SKU citation', () => {
   const v = graph.evaluateRoutine([
     { time: 'am', ingredient_ids: [ID.ascorbicAcid, ID.niacinamide] },
   ]);
-  const b = retriever.getChunksForVerdict(v, { productIds: ['doclittle_demo_vitc_serum'] });
+  const b = retriever.getChunksForVerdict(v, { productIds: [CANONICAL_DEMO_VITC_SERUM] });
   const session = defaultSession({
     current_routine: [
       {
         time: 'am',
         products: [
           {
-            product_id: 'doclittle_demo_vitc_serum',
+            product_id: CANONICAL_DEMO_VITC_SERUM,
             name: 'Demo C',
             ingredient_ids: [ID.ascorbicAcid, ID.niacinamide],
           },
@@ -951,7 +954,7 @@ test('B6: skuChunkSupportsConflict links mono SKU chunk to pair verdict', () => 
   const ch = {
     id: 'mono',
     chunk_source_tier: 'knowledge_sku',
-    product_id: 'doclittle_demo_vitc_serum',
+    product_id: CANONICAL_DEMO_VITC_SERUM,
     ingredient_a: 'cosing:ascorbic acid',
     ingredient_b: null,
   };
@@ -1012,7 +1015,7 @@ test('B3: scoped pair row retrieved when product_id matches (formulation-specifi
       'Formulation-specific note: this SKU stacks BP with vitamin C in a tested protocol.',
       'eval',
       'probable',
-      'doclittle_demo_vitc_serum',
+      CANONICAL_DEMO_VITC_SERUM,
       'SKU-DEMO-VITC-001',
     );
   } catch (e) {
@@ -1021,7 +1024,7 @@ test('B3: scoped pair row retrieved when product_id matches (formulation-specifi
   const v = graph.evaluateRoutine([
     { time: 'am', ingredient_ids: [ID.benzylPeroxide, ID.ascorbicAcid] },
   ]);
-  const b = retriever.getChunksForVerdict(v, { productIds: ['doclittle_demo_vitc_serum'] });
+  const b = retriever.getChunksForVerdict(v, { productIds: [CANONICAL_DEMO_VITC_SERUM] });
   const hasPair = b.chunks.some((c) => c.id === 'eval-sku-pair-bp-vitc');
   if (!hasPair) throw new Error('expected SKU-scoped pair chunk in bundle');
   if (b.chunks[0].chunk_source_tier !== 'knowledge_sku') {

@@ -11,8 +11,8 @@
  */
 
 const Database = require('better-sqlite3');
-const { up: migrate028 } = require('../migrations/028_ingredient_interactions');
-const { createConflictGraph } = require('../services/ingredient-conflict-graph');
+const { up: migrate028 } = require('../../migrations/028_ingredient_interactions');
+const { createConflictGraph } = require('../../services/ingredient-conflict-graph');
 
 // ─── harness ──────────────────────────────────────────────────────────────────
 let _passed = 0;

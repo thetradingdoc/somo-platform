@@ -1,0 +1,712 @@
+{
+  "anti_aging": {
+    "concern": "anti_aging",
+    "skin_type": "combination",
+    "total_weeks": 12,
+    "am_routine": [
+      {
+        "step": 1,
+        "ingredient": "Gentle non-stripping cleanser",
+        "reason": "Cleanse without disrupting barrier before actives"
+      },
+      {
+        "step": 2,
+        "ingredient": "Niacinamide 5% + hyaluronic acid serum",
+        "reason": "Barrier support and humectant hydration"
+      },
+      {
+        "step": 3,
+        "ingredient": "L-ascorbic acid (vitamin C) 10-15% serum",
+        "reason": "Antioxidant ROS neutralization and collagen synthesis"
+      },
+      {
+        "step": 4,
+        "ingredient": "Ceramide-containing moisturizer",
+        "reason": "Barrier reinforcement for combination skin"
+      },
+      {
+        "step": 5,
+        "ingredient": "Broad-spectrum SPF 30+ (zinc oxide/titanium dioxide)",
+        "reason": "80% of facial aging is UV-related; daily protection essential"
+      }
+    ],
+    "pm_routine": [
+      {
+        "step": 1,
+        "ingredient": "Gentle non-stripping cleanser",
+        "reason": "Remove sunscreen and oxidized vitamin C before retinoid",
+        "notes": "Double cleanse if wearing SPF or makeup"
+      },
+      {
+        "step": 2,
+        "ingredient": "Hyaluronic acid serum",
+        "reason": "Humectant buffer reduces retinoid irritation",
+        "notes": "Apply to slightly damp skin for best absorption"
+      },
+      {
+        "step": 3,
+        "ingredient": "Adapalene 0.1% gel (OTC retinoid)",
+        "reason": "Stimulates collagen synthesis; comparable to tretinoin 0.025%",
+        "notes": "Pea-sized amount; start every 2-3 nights, increase as tolerated"
+      },
+      {
+        "step": 4,
+        "ingredient": "Ceramide + squalane moisturizer",
+        "reason": "Occlude and buffer retinoid; reduce peeling",
+        "notes": "Sandwich method: moisturizer before and after retinoid if irritation occurs"
+      },
+      {
+        "step": 5,
+        "ingredient": "Centella asiatica or allantoin spot treatment",
+        "reason": "Soothe irritation on sensitized areas",
+        "notes": "Use only on areas experiencing retinoid-related redness or peeling"
+      },
+      {
+        "step": 6,
+        "ingredient": "Shea butter or petrolatum occlusive (T-zone excluded)",
+        "reason": "Emollient seal on dry zones of combination skin",
+        "notes": "Apply only to cheeks and dry areas; avoid oily T-zone"
+      }
+    ],
+    "key_rules": [
+      "Never apply vitamin C (L-ascorbic acid) and retinoid in the same PM session",
+      "Avoid AHAs/BHAs on nights retinoid is applied",
+      "SPF is non-negotiable daily — UV causes 80% of facial aging",
+      "Increase retinoid frequency only after 4 weeks of tolerance at current schedule",
+      "Expect redness and peeling in weeks 1-4; this is expected, not a reason to stop"
+    ],
+    "red_flags": [
+      "Severe burning or blistering — discontinue retinoid and consult dermatologist",
+      "Persistent irritation beyond 8 weeks — reduce retinoid frequency",
+      "New hyperpigmentation — may indicate post-inflammatory response; review routine",
+      "Skipping SPF — negates anti-aging benefits and worsens photoaging"
+    ],
+    "weekly_schedule": {
+      "weeks_1_2": {
+        "label": "Foundation phase",
+        "focus": "Establish barrier tolerance before introducing actives",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C serum",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "No actives yet. Skin must be stable before retinoid introduction.",
+        "expect": "Skin adjusting to new routine. No dramatic changes expected."
+      },
+      "weeks_3_4": {
+        "label": "Retinoid introduction",
+        "focus": "Begin retinoid 2x per week using sandwich method",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C serum",
+          "Niacinamide",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Moisturiser (thin layer)",
+          "Retinoid (pea-sized)",
+          "Moisturiser (seal)"
+        ],
+        "photo_prompt": true,
+        "notes": "Sandwich method: moisturiser → retinoid → moisturiser. 2x per week only.",
+        "expect": "Mild dryness or flaking normal. Purging possible weeks 3-6."
+      },
+      "weeks_5_8": {
+        "label": "Retinoid escalation",
+        "focus": "Increase to every other night. Alternate with recovery nights.",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C serum",
+          "Niacinamide",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Retinoid nights: moisturiser → retinoid → moisturiser",
+          "Recovery nights: niacinamide + ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Drop back to 2x/week if significant irritation persists.",
+        "expect": "Purging resolves. Texture improvement begins. Some dryness still normal."
+      },
+      "weeks_9_12": {
+        "label": "Active maintenance",
+        "focus": "Retinoid nightly if tolerated. Add AHA 1-2x per week.",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C serum",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Retinoid (nightly if tolerated)",
+          "Ceramide moisturiser",
+          "AHA 1-2x per week (not on retinoid nights)"
+        ],
+        "photo_prompt": true,
+        "notes": "Never AHA and retinoid same night. SPF non-negotiable — retinoids cause photosensitivity.",
+        "expect": "Visible improvement in fine lines and texture by week 10-12."
+      }
+    },
+    "sources_used": {
+      "clinical": 16,
+      "community": 13,
+      "total": 23
+    }
+  },
+  "acne": {
+    "concern": "acne",
+    "skin_type": "oily",
+    "total_weeks": 12,
+    "am_routine": [
+      {
+        "step": 1,
+        "ingredient": "salicylic acid cleanser 0.5–2%",
+        "reason": "BHA dissolves excess sebum and has comedolytic properties"
+      },
+      {
+        "step": 2,
+        "ingredient": "niacinamide 4–5%",
+        "reason": "Reduces sebaceous activity; anti-inflammatory, no resistance risk"
+      },
+      {
+        "step": 3,
+        "ingredient": "azelaic acid 10% (OTC)",
+        "reason": "Antimicrobial vs P. acnes; normalizes keratinization"
+      },
+      {
+        "step": 4,
+        "ingredient": "oil-free non-comedogenic moisturizer",
+        "reason": "Barrier support without occluding pores"
+      },
+      {
+        "step": 5,
+        "ingredient": "broad-spectrum SPF 30+ sunscreen",
+        "reason": "Retinoid use increases photosensitivity; daily protection required"
+      }
+    ],
+    "pm_routine": [
+      {
+        "step": 1,
+        "ingredient": "salicylic acid cleanser 0.5–2%",
+        "reason": "Removes excess sebum and surface debris",
+        "notes": "Do not over-cleanse; twice daily maximum"
+      },
+      {
+        "step": 2,
+        "ingredient": "niacinamide 4–5%",
+        "reason": "Ceramide synthesis support; anti-inflammatory",
+        "notes": "Apply before tretinoin to buffer potential irritation"
+      },
+      {
+        "step": 3,
+        "ingredient": "tretinoin 0.025% cream/gel",
+        "reason": "Gold-standard retinoid; comedolytic and anti-inflammatory",
+        "notes": "Pea-sized amount every 2–3 nights initially; increase to nightly as tolerated"
+      },
+      {
+        "step": 4,
+        "ingredient": "hyaluronic acid or glycerin humectant",
+        "reason": "Humectant support reduces tretinoin-related dryness",
+        "notes": "Apply to slightly damp skin for best effect"
+      },
+      {
+        "step": 5,
+        "ingredient": "ceramide-containing moisturizer",
+        "reason": "Restores barrier; reduces retinoid irritation",
+        "notes": "Squalane or shea butter acceptable alternatives"
+      },
+      {
+        "step": 6,
+        "ingredient": "azelaic acid 10% (OTC) — alternate nights only",
+        "reason": "Avoid combining with tretinoin on same night",
+        "notes": "Use on nights when tretinoin is skipped to minimize irritation"
+      }
+    ],
+    "key_rules": [
+      "Introduce tretinoin gradually (every 2–3 nights) to minimize purging and irritation",
+      "Never combine tretinoin and AHAs/BHAs in the same application",
+      "Apply SPF every morning without exception when using tretinoin",
+      "Isotretinoin is reserved for severe/nodulo-cystic or antibiotic-resistant acne — requires prescription",
+      "Expect 12 weeks minimum before judging tretinoin efficacy; initial purge is normal"
+    ],
+    "red_flags": [
+      "Nodulo-cystic or scarring acne: refer for prescription evaluation including oral isotretinoin",
+      "Severe peeling, blistering, or chemical burn appearance: discontinue tretinoin immediately",
+      "No improvement after 12 weeks of consistent use: seek dermatology review",
+      "Hormonal flare pattern (perimenstrual): may require hormonal therapy assessment"
+    ],
+    "weekly_schedule": {
+      "weeks_1_2": {
+        "label": "Baseline phase",
+        "focus": "Gentle cleanser, moisturiser, SPF only",
+        "am_steps": [
+          "Gentle cleanser (pH 5.5)",
+          "Light non-comedogenic moisturiser",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Light moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Strip back everything first. Establish baseline tolerance.",
+        "expect": "No dramatic changes. Stabilising."
+      },
+      "weeks_3_4": {
+        "label": "BHA introduction",
+        "focus": "Salicylic acid 2% on 2-3 nights per week",
+        "am_steps": [
+          "Gentle cleanser",
+          "Niacinamide serum",
+          "Light moisturiser",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "BHA (salicylic 2%) 2-3x per week",
+          "Light moisturiser"
+        ],
+        "photo_prompt": false,
+        "notes": "Alternating nights. Not every night initially.",
+        "expect": "Mild purging weeks 3-5 possible. Some initial dryness."
+      },
+      "weeks_5_8": {
+        "label": "Retinoid introduction",
+        "focus": "Add retinoid on non-BHA nights",
+        "am_steps": [
+          "Gentle cleanser",
+          "Niacinamide serum",
+          "Light moisturiser",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "BHA nights (2-3x): salicylic 2% + moisturiser",
+          "Retinoid nights (2x): moisturiser → retinoid → moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Never BHA and retinoid same night.",
+        "expect": "Improvement in comedones and texture. Some purging still possible."
+      },
+      "weeks_9_12": {
+        "label": "Optimisation",
+        "focus": "Increase retinoid frequency. Add azelaic acid if PIH present.",
+        "am_steps": [
+          "Gentle cleanser",
+          "Azelaic acid 10-15% (if PIH)",
+          "Niacinamide",
+          "SPF 30-50"
+        ],
+        "pm_steps": [
+          "Retinoid (every other to nightly)",
+          "BHA 1-2x per week",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Azelaic acid safe AM and PM. Anti-inflammatory and reduces PIH.",
+        "expect": "Significant reduction in active acne. PIH fading. Texture improving."
+      }
+    },
+    "sources_used": {
+      "clinical": 16,
+      "community": 14,
+      "total": 23
+    }
+  },
+  "hyperpigmentation": {
+    "concern": "hyperpigmentation",
+    "skin_type": "combination",
+    "total_weeks": 24,
+    "am_routine": [
+      {
+        "step": 1,
+        "ingredient": "gentle non-irritating cleanser",
+        "reason": "Avoid skin irritation which worsens hyperpigmentation"
+      },
+      {
+        "step": 2,
+        "ingredient": "L-ascorbic acid (vitamin C) 10-15%",
+        "reason": "Antioxidant neutralizes ROS; complements UV protection"
+      },
+      {
+        "step": 3,
+        "ingredient": "broad-spectrum SPF 30+ sunscreen",
+        "reason": "Solar protection is most important in hyperpigmentation management"
+      }
+    ],
+    "pm_routine": [
+      {
+        "step": 1,
+        "ingredient": "gentle non-irritating cleanser",
+        "reason": "Avoid irritation to prevent post-inflammatory hyperpigmentation",
+        "notes": "Lukewarm water; avoid scrubbing or harsh physical exfoliation"
+      },
+      {
+        "step": 2,
+        "ingredient": "azelaic acid 10-20% cream",
+        "reason": "Inhibits tyrosinase; anti-inflammatory; effective for PIH",
+        "notes": "OTC at 10%; 20% cream effective for melasma per clinical evidence"
+      },
+      {
+        "step": 3,
+        "ingredient": "tretinoin 0.05% cream",
+        "reason": "Reduces dyspigmentation; improves epidermal melasma",
+        "notes": "Start 2-3 nights/week; increase gradually to reduce irritation risk"
+      },
+      {
+        "step": 4,
+        "ingredient": "lightweight non-comedogenic moisturizer",
+        "reason": "Buffer tretinoin irritation; maintain barrier function",
+        "notes": "Apply over tretinoin if significant dryness or irritation occurs"
+      }
+    ],
+    "key_rules": [
+      "Sunscreen daily is non-negotiable; UV exposure drives melanogenesis and reverses treatment gains",
+      "Do not combine azelaic acid and tretinoin on the same night initially; alternate to reduce irritation",
+      "Introduce tretinoin slowly (2-3 nights/week) and increase frequency only if well tolerated",
+      "Avoid any physical trauma or picking; PIH worsens with inflammation",
+      "Reassess at 6-12 weeks; melasma requires 6-12 months of consistent treatment"
+    ],
+    "red_flags": [
+      "Increasing redness, burning, or peeling — reduce tretinoin frequency immediately",
+      "New darker patches after starting treatment may indicate irritant PIH; stop aggravating agent",
+      "No improvement after 12 weeks warrants dermatologist review for prescription hydroquinone 2-4%",
+      "Avoid hydroquinone monobenzyl ether — can cause irreversible mottled depigmentation"
+    ],
+    "weekly_schedule": {
+      "weeks_1_2": {
+        "label": "Protection first",
+        "focus": "SPF only — without it nothing else works",
+        "am_steps": [
+          "Gentle cleanser",
+          "SPF 50 (broad spectrum PA+++)"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "UV exposure is the primary driver of hyperpigmentation. Every brightening active fails without SPF.",
+        "expect": "No brightening yet. Foundation established."
+      },
+      "weeks_3_6": {
+        "label": "Brightening actives",
+        "focus": "Vitamin C AM, niacinamide PM",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C (L-ascorbic 10-20%)",
+          "SPF 50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Niacinamide 5-10%",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Vitamin C and niacinamide can be used together — niacin flushing reaction is a myth at standard concentrations.",
+        "expect": "Gradual brightening. 8-12 weeks for visible change in dark spots."
+      },
+      "weeks_7_10": {
+        "label": "Second brightening pathway",
+        "focus": "Add tranexamic acid or azelaic acid",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C",
+          "Tranexamic acid or azelaic acid",
+          "SPF 50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Niacinamide",
+          "Azelaic acid (if not used AM)",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": false,
+        "notes": "Tranexamic acid inhibits plasminogen-melanocyte interaction. Azelaic acid inhibits tyrosinase. Both safe long-term.",
+        "expect": "Visible fading of PIH and melasma. 3 months minimum for deep pigmentation."
+      },
+      "weeks_11_12": {
+        "label": "Retinoid addition",
+        "focus": "Add retinoid 2x per week to accelerate cell turnover",
+        "am_steps": [
+          "Gentle cleanser",
+          "Vitamin C",
+          "SPF 50"
+        ],
+        "pm_steps": [
+          "Niacinamide",
+          "Retinoid (2x per week)",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Retinoids accelerate pigment clearance via increased cell turnover. Not on AHA nights.",
+        "expect": "Combination approach delivering meaningful results by week 12."
+      }
+    },
+    "sources_used": {
+      "clinical": 17,
+      "community": 13,
+      "total": 23
+    }
+  },
+  "barrier_repair": {
+    "concern": "barrier_repair",
+    "skin_type": "sensitive",
+    "total_weeks": 8,
+    "am_routine": [
+      {
+        "step": 1,
+        "ingredient": "gentle non-foaming cleanser (glycerin-based)",
+        "reason": "Removes impurities without disrupting lipid bilayer"
+      },
+      {
+        "step": 2,
+        "ingredient": "hyaluronic acid serum",
+        "reason": "Humectant that boosts stratum corneum hydration"
+      },
+      {
+        "step": 3,
+        "ingredient": "ceramide + cholesterol + free fatty acid moisturizer",
+        "reason": "Lipid triad shown to improve barrier function and TEWL"
+      },
+      {
+        "step": 4,
+        "ingredient": "colloidal oatmeal or panthenol (B5) layer",
+        "reason": "Soothing agents reduce inflammation on sensitive skin"
+      },
+      {
+        "step": 5,
+        "ingredient": "mineral-filter broad-spectrum SPF 30+",
+        "reason": "UV exposure impairs lipid bilayer and barrier recovery"
+      }
+    ],
+    "pm_routine": [
+      {
+        "step": 1,
+        "ingredient": "gentle non-foaming cleanser (glycerin-based)",
+        "reason": "Preserves existing barrier lipids during cleansing",
+        "notes": "Avoid hot water; use lukewarm only"
+      },
+      {
+        "step": 2,
+        "ingredient": "glycerin toner or essence",
+        "reason": "Replenishes humectants lost during the day",
+        "notes": "Apply to damp skin for enhanced uptake"
+      },
+      {
+        "step": 3,
+        "ingredient": "niacinamide serum (≤2%)",
+        "reason": "Supports ceramide synthesis and reduces sensitivity",
+        "notes": "Low concentration minimizes flush risk on sensitive skin"
+      },
+      {
+        "step": 4,
+        "ingredient": "ceramide-dominant emollient cream",
+        "reason": "Atopic skin studies show reduced TEWL with ceramide emollients",
+        "notes": "Choose fragrance-free, methylisothiazolinone-free formulas"
+      },
+      {
+        "step": 5,
+        "ingredient": "squalane or shea butter occlusive",
+        "reason": "Occlusion supports all three phases of barrier recovery",
+        "notes": "Apply as final seal; avoid if prone to milia"
+      },
+      {
+        "step": 6,
+        "ingredient": "allantoin spot treatment (if irritation present)",
+        "reason": "Soothing agent calms localized reactive areas",
+        "notes": "Optional; use only on compromised zones"
+      }
+    ],
+    "key_rules": [
+      "Avoid all fragrance including essential oils — primary sensitizer for compromised barriers",
+      "Introduce one new product at a time, patch-test 48h on inner arm before full use",
+      "No AHAs, BHAs, or retinoids until barrier is fully restored (minimum 4 weeks)",
+      "Ceramide moisturizer must contain all three lipids: ceramides, cholesterol, free fatty acids",
+      "Reapply moisturizer after water exposure; do not allow skin to air-dry after washing"
+    ],
+    "red_flags": [
+      "Burning or stinging beyond 10 min after product application — discontinue immediately",
+      "Spreading redness or swelling — may indicate contact dermatitis, seek evaluation",
+      "Weeping, crusting, or oozing skin — potential infection, requires clinical assessment",
+      "No improvement in TEWL or hydration after 6 weeks — re-evaluate diagnosis"
+    ],
+    "weekly_schedule": {
+      "weeks_1_4": {
+        "label": "Full reset",
+        "focus": "Stop ALL actives. Three products only.",
+        "am_steps": [
+          "Water rinse or gentle cleanser",
+          "Ceramide moisturiser",
+          "Mineral SPF"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Ceramide moisturiser",
+          "Petroleum jelly on worst areas (slugging)"
+        ],
+        "photo_prompt": true,
+        "notes": "No actives for 4 weeks minimum. Slugging at night accelerates barrier recovery.",
+        "expect": "Stinging and tightness reduce weeks 1-2. Redness calming by week 3-4."
+      },
+      "weeks_5_8": {
+        "label": "Stabilisation",
+        "focus": "Introduce niacinamide only — one product",
+        "am_steps": [
+          "Gentle cleanser",
+          "Niacinamide 5%",
+          "Ceramide moisturiser",
+          "Mineral SPF"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Niacinamide 5%",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "One new product only. Wait the full 4 weeks before adding anything else.",
+        "expect": "Skin more resilient. Reactivity continuing to reduce."
+      },
+      "weeks_9_12": {
+        "label": "Cautious reintroduction",
+        "focus": "One active at lowest possible frequency",
+        "am_steps": [
+          "Gentle cleanser",
+          "Niacinamide",
+          "Ceramide moisturiser",
+          "SPF"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Retinoid (1x per week only) OR AHA (1x per week — not both)",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "One active, once a week. Any stinging means go back a phase.",
+        "expect": "Barrier stable enough for cautious reintroduction. Still fragile — proceed slowly."
+      }
+    },
+    "sources_used": {
+      "clinical": 14,
+      "community": 16,
+      "total": 16
+    }
+  },
+  "rosacea": {
+    "concern": "rosacea",
+    "skin_type": "sensitive",
+    "total_weeks": 16,
+    "am_routine": [
+      {
+        "step": 1,
+        "ingredient": "soap-free gentle cleanser",
+        "reason": "Soap substitutes minimize skin irritation in rosacea"
+      },
+      {
+        "step": 2,
+        "ingredient": "niacinamide 2%",
+        "reason": "Anti-inflammatory; suits sensitive rosacea-prone skin"
+      },
+      {
+        "step": 3,
+        "ingredient": "mineral sunscreen (zinc oxide/titanium dioxide) SPF 50",
+        "reason": "Physical blockers prevent photoexacerbation; safe for sensitive skin"
+      }
+    ],
+    "pm_routine": [
+      {
+        "step": 1,
+        "ingredient": "soap-free gentle cleanser",
+        "reason": "Minimize irritation; avoid stripping barrier",
+        "notes": "Use lukewarm water; avoid rubbing or exfoliating cloths"
+      },
+      {
+        "step": 2,
+        "ingredient": "azelaic acid 10% (OTC) or 15% (Rx gel)",
+        "reason": "FDA-approved for rosacea; antimicrobial and anti-inflammatory",
+        "notes": "Apply twice daily; 15% gel is prescription; 10% is OTC; allow to fully absorb"
+      },
+      {
+        "step": 3,
+        "ingredient": "glycerin-based moisturizer",
+        "reason": "Humectant supports barrier without occluding or triggering flares",
+        "notes": "Avoid heavy occlusives like petrolatum which may aggravate rosacea"
+      }
+    ],
+    "key_rules": [
+      "Identify and avoid personal triggers: heat, spicy food, alcohol, sunlight, wind",
+      "Never use topical corticosteroids — risk of steroid rosacea and rebound erythema",
+      "Apply azelaic acid consistently for 3–4 months before assessing full response",
+      "Mineral sunscreen daily is mandatory to prevent UV-triggered flares",
+      "Introduce new products one at a time to identify irritants"
+    ],
+    "red_flags": [
+      "Worsening redness, burning or pustules despite 8 weeks of routine — seek dermatologist review",
+      "Any use of topical steroids — discontinue immediately, risk of steroid rosacea",
+      "Ocular symptoms (redness, grittiness) may indicate ocular rosacea — urgent review needed",
+      "Severe skin thickening or nodularity may indicate phymatous subtype requiring specialist care"
+    ],
+    "weekly_schedule": {
+      "weeks_1_4": {
+        "label": "Trigger identification",
+        "focus": "Bare minimum while identifying personal triggers",
+        "am_steps": [
+          "Gentle non-foaming cleanser",
+          "Mineral SPF 50 (zinc oxide or titanium dioxide)"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Avoid: fragrances, alcohol, menthol, witch hazel, eucalyptus. Keep a trigger diary in the app.",
+        "expect": "Flares may continue while triggers are being identified."
+      },
+      "weeks_5_8": {
+        "label": "Calming actives",
+        "focus": "Azelaic acid AM, niacinamide PM",
+        "am_steps": [
+          "Gentle cleanser",
+          "Azelaic acid 10-15%",
+          "Ceramide moisturiser",
+          "Mineral SPF 50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Niacinamide 5%",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": true,
+        "notes": "Azelaic acid has strong evidence for rosacea. Niacinamide calms vascular reactivity.",
+        "expect": "Reduction in baseline redness by weeks 6-8. Flare frequency may reduce."
+      },
+      "weeks_9_12": {
+        "label": "Maintenance",
+        "focus": "Consistent routine. Cautious vitamin C introduction.",
+        "am_steps": [
+          "Gentle cleanser",
+          "Niacinamide or azelaic acid",
+          "Ceramide moisturiser",
+          "Mineral SPF 50"
+        ],
+        "pm_steps": [
+          "Gentle cleanser",
+          "Azelaic acid",
+          "Ceramide moisturiser"
+        ],
+        "photo_prompt": false,
+        "notes": "Vitamin C tolerated by some rosacea patients at 10% — patch test on jawline first. Avoid retinoids unless prescribed.",
+        "expect": "Controlled baseline. Flares manageable. Avoid retinoids — can trigger flares."
+      }
+    },
+    "sources_used": {
+      "clinical": 20,
+      "community": 10,
+      "total": 24
+    }
+  }
+}

@@ -13,7 +13,7 @@ const {
   _levenshtein,
   _stripParenthetical,
   _isNoise
-} = require('../services/inci-resolve');
+} = require('../../services/inci-resolve');
 
 let _passed = 0;
 let _failed = 0;

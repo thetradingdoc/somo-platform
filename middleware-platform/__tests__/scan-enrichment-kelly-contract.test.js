@@ -3,8 +3,8 @@ const path = require('path');
 
 describe('scan -> enrichment -> kelly contract', () => {
   test('public scan endpoints return enrichment payload + grounding metadata', () => {
-    const serverPath = path.join(__dirname, '..', 'server.js');
-    const src = fs.readFileSync(serverPath, 'utf8');
+    const scanPath = path.join(__dirname, '..', 'routes', 'public-product-scan.js');
+    const src = fs.readFileSync(scanPath, 'utf8');
     const enrichedOccurrences = (src.match(/ingredients_enriched/g) || []).length;
     const summaryOccurrences = (src.match(/ingredient_summary/g) || []).length;
     const groundingOccurrences = (src.match(/grounding_metadata/g) || []).length;
@@ -14,8 +14,8 @@ describe('scan -> enrichment -> kelly contract', () => {
   });
 
   test('landing assistant forwards scan grounding into Kelly turn', () => {
-    const serverPath = path.join(__dirname, '..', 'server.js');
-    const src = fs.readFileSync(serverPath, 'utf8');
+    const triagePath = path.join(__dirname, '..', 'services', 'kelly-triage-turn-service.js');
+    const src = fs.readFileSync(triagePath, 'utf8');
     expect(src.includes('scanGrounding: latestBarcodeContextEvent?.product_data || null')).toBe(true);
   });
 

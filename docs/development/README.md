@@ -1,6 +1,29 @@
+# development - Unified Architecture and System Design
+> Last reviewed: 2026-05-21
+
+**Last Updated:** 2026-05-21
+
+
+**Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
+
+## Existing Documentation Body
+
+This document is the single source of truth for this subfolder. It consolidates architecture, system design, operational behavior, and implementation notes previously split across multiple markdown files.
+
+
+## Scope
+
+
+- Folder: `development`
+- Consolidated on: 2026-04-29
+
+
+
+## Existing README Content
+
+
 # development — consolidated documentation
 
-**Single file:** All former `docs/development/**/*.md` content is merged here. **Last updated:** 2026-04-20
 
 ## Table of contents
 
@@ -11,8 +34,8 @@
 - [API Reliability & Crash Prevention (`guides/RELIABILITY.md`)](#guides-reliability)
 - [Codebase Improvement Plan (`IMPROVEMENT_PLAN.md`)](#improvement-plan)
 - [Invoice Billing System - Implementation Summary (`invoice-billing/IMPLEMENTATION_SUMMARY.md`)](#invoice-billing-implementation-summary)
-- [Kelly (LLM) — environment and debugging (`KELLY_ENV_AND_DEBUG.md`)](#kelly-env-and-debug)
-- [DocLittle Platform – Full Backlog (`MASTER_TODO_FULL.md`)](#master-todo-full)
+- [Voice / commerce LLM (`KELLY_*`) — environment and debugging (`KELLY_ENV_AND_DEBUG.md`)](#kelly-env-and-debug)
+- [Platform — full backlog (`MASTER_TODO_FULL.md`)](#master-todo-full)
 - [Periodic maintenance (quarterly suggested) (`PERIODIC_MAINTENANCE.md`)](#periodic-maintenance)
 - [`server.js` — incremental refactor policy (`SERVER_JS_REFACTOR_POLICY.md`)](#server-js-refactor-policy)
 - [Structured logging (future) (`STRUCTURED_LOGGING_FUTURE.md`)](#structured-logging-future)
@@ -29,7 +52,6 @@ Browse by anchor above. Each section notes the former file path.
 
 ## Code Review and Cleanup Summary
 
-*Former path: `docs/development/code-reviews/CODE_REVIEW_AND_CLEANUP.md`*
 
 ## Date: December 2024
 
@@ -249,9 +271,7 @@ For issues:
 
 ## Documentation Summary
 
-*Former path: `docs/development/DOCUMENTATION_SUMMARY.md`*
 
-**Last Updated:** April 7, 2026
 
 High-level index of platform docs. **Full navigation and structure:** [docs/README.md](../README.md#readme).
 
@@ -266,7 +286,6 @@ High-level index of platform docs. **Full navigation and structure:** [docs/READ
 
 ## GitHub Tasks
 
-*Former path: `docs/development/GITHUB_TASKS.md`*
 
 
 Tasks to improve repo structure, hygiene, and maintainability based on branch and structure review.
@@ -355,9 +374,8 @@ Tasks to improve repo structure, hygiene, and maintainability based on branch an
 
 ## Code Structure Review
 
-*Former path: `docs/development/guides/CODE_STRUCTURE.md`*
 
-This document outlines the code structure and organization of the DocLittle platform.
+This document outlines the code structure and organization of the **doclittle-platform** monorepo (consumer product: **Skin & Care**; legal entity where required: **Doctor Little LLC** — see [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md)).
 
 ## 📁 Project Structure
 
@@ -455,7 +473,7 @@ doclittle-platform/
 
 ## New code guidelines
 
-- Prefer adding **Express routes** under `middleware-platform/routes/` and **mounting** them from `server.js` instead of growing inline handlers in `server.js` (~18k lines).
+- Prefer adding **Express routes** under `middleware-platform/routes/` and **mounting** them from `server.js` instead of growing inline handlers in `server.js` (~11k lines compose entry; see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md)).
 - **Jest** uses `middleware-platform/__tests__/` (see `jest.config.js`). The npm script runs `jest --passWithNoTests` until more tests land.
 - **Integration / manual scripts** may still live as `middleware-platform/test-*.js` or under `scripts/`; migrating those into `__tests__/` is incremental cleanup.
 - **Module boundaries (soft rule):** `routes/` → `services/` → `adapters/` / `database`; avoid `services/` importing Express `req`/`res`. Keeps units testable without booting HTTP.
@@ -539,10 +557,10 @@ New features can be added by:
 
 ## 📚 Related Documentation
 
-- [API Documentation](./api/README.md#api-documentation)
-- [Architecture Overview](./architecture/README.md#readme)
-- [Deployment Guide](./deployment/README.md#readme)
-- [Testing Guide](./testing/README.md#readme)
+- API Documentation (`./api/README.md#api-documentation`)
+- Architecture Overview (`./architecture/README.md#readme`)
+- Deployment Guide (`./deployment/README.md#readme`)
+- Testing Guide (`./testing/README.md#readme`)
 
 ---
 
@@ -557,7 +575,6 @@ New features can be added by:
 
 ## API Reliability & Crash Prevention
 
-*Former path: `docs/development/guides/RELIABILITY.md`*
 
 ## Overview
 This document outlines the comprehensive reliability measures implemented to ensure the API runs continuously without crashes, protecting businesses that depend on it.
@@ -737,8 +754,9 @@ node --max-old-space-size=100 server.js
 # Test error handling
 curl -X POST /api/test-error
 
-# Check health
-curl https://api.doclittle.site/health?detailed=true
+# Check health (use your deployed API origin)
+curl "https://api.skinandcare.com/health?detailed=true"
+# Legacy/alternate hostnames may still be allowlisted, e.g. https://api.myskinandcare.com/health?detailed=true
 ```
 
 ## Emergency Procedures
@@ -778,7 +796,6 @@ The API is now protected with multiple layers of reliability:
 
 ## Codebase Improvement Plan
 
-*Former path: `docs/development/IMPROVEMENT_PLAN.md`*
 
 **Created**: 2025-01-27  
 **Status**: Planning Phase  
@@ -1331,11 +1348,10 @@ cron.schedule('0 2 * * *', async () => {
 
 ## Invoice Billing System - Implementation Summary
 
-*Former path: `docs/development/invoice-billing/IMPLEMENTATION_SUMMARY.md`*
 
 ## Overview
 
-This document summarizes the complete implementation of the invoice billing system for the DocLittle platform. The system enables clinics to generate patient invoices from insurance claims, send them via email, and track payments.
+This document summarizes the complete implementation of the invoice billing system for the platform. The system enables clinics to generate patient invoices from insurance claims, send them via email, and track payments. Customer-facing legal naming on invoices and receipts should follow [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md) (**Doctor Little LLC** where a legal party is required).
 
 ## Implementation Date
 
@@ -1625,9 +1641,9 @@ For issues or questions:
 
 <a id="kelly-env-and-debug"></a>
 
-## Kelly (LLM) — environment and debugging
+## Voice / commerce LLM (`KELLY_*`) — environment and debugging
 
-*Former path: `docs/development/KELLY_ENV_AND_DEBUG.md`*
+> **Naming:** Internal services and env vars use **Kelly** (`KellyAgentService`, `KELLY_*`). Customer-facing copy and chrome use **Skin & Care** / **Skin & Care assistant** — not “Kelly” as the product name ([`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md)).
 
 Primary implementation: `middleware-platform/services/llm-router.js`, `middleware-platform/services/kelly-agent-service.js`.
 
@@ -1643,7 +1659,7 @@ See also **`middleware-platform/.env.example`** for full variable names.
 | `KELLY_ANTHROPIC_MODEL` | Anthropic model id (default `claude-sonnet-4-5`). |
 | `KELLY_GROQ_MODEL` / `KELLY_GROQ_FALLBACK_MODEL` | Groq models for primary and compact retry paths. |
 | `KELLY_PROVIDER_TIMEOUT_MS` | Per-request HTTP timeout for LLM calls (default 20000). |
-| `KELLY_TURN_TIMEOUT_MS` | Kelly turn-level timeout (documented in startup log). |
+| `KELLY_TURN_TIMEOUT_MS` | LLM turn-level timeout (documented in startup log). |
 | `UNIFIED_CHANNEL_ADAPTER_ENABLED` | Feature flag for Phase 0 unified ingress adapter (`1`/`true` = use shared `adaptIncomingEvent` in chat + video ingress; default off keeps legacy paths). |
 | `UNIFIED_CHANNEL_ADAPTER_SHADOW_ENABLED` | Shadow-mode adapter pass (`1`/`true` runs adapter side-by-side while legacy remains primary). |
 | `CASE_DEIDENT_ENABLED` | Feature flag for de-identified case-pattern ingestion (`1`/`true` enables writing `case_patterns`; default off for dev/staging safety). |
@@ -1677,9 +1693,8 @@ See **[STRUCTURED_LOGGING_FUTURE.md](./README.md#structured-logging-future)** (p
 
 <a id="master-todo-full"></a>
 
-## DocLittle Platform – Full Backlog
+## Platform — full backlog (internal roadmap)
 
-*Former path: `docs/development/MASTER_TODO_FULL.md`*
 
 **Last Generated:** April 6, 2026  
 This document consolidates:
@@ -1719,7 +1734,6 @@ Make and document a product/legal decision on when the main visit charge occurs 
 ```1:336:docs/MASTER_TODO.md
 # Master TODO — Cash-Only Research-Backed Telehealth Platform
 
-**Last Updated:** April 6, 2026
 
 Consolidated task list for completing the platform. Built on current architecture: multi-tenant, Retell voice, LiveKit video, LangGraph, FHIR, `appointments`, `video_consult_sessions`, `voice_checkouts`, `clinics`, `fhir_patients`.
 
@@ -2427,7 +2441,6 @@ MATCH‑INCENT‑1. Implement **provider supply‑side surge incentives**:
 
 ## Periodic maintenance (quarterly suggested)
 
-*Former path: `docs/development/PERIODIC_MAINTENANCE.md`*
 
 Use this checklist to keep **documentation** and **CI expectations** aligned as the repo evolves.
 
@@ -2450,16 +2463,16 @@ Use this checklist to keep **documentation** and **CI expectations** aligned as 
 
 ## `server.js` — incremental refactor policy
 
-*Former path: `docs/development/SERVER_JS_REFACTOR_POLICY.md`*
 
 
-`middleware-platform/server.js` is the Express entry and still contains a large amount of route wiring and handlers.
+`middleware-platform/server.js` is the Express **compose entry** (~11k lines after phase 6+ extraction). Patient/public Kelly triage, checkout-chat, profile/auth/documents/wallet/insurance, admin dashboard API, and voice scheduling HTTP live in **`routes/`** + **`services/`** — see [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md) and [`RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md).
 
 ## Rules for new work
 
 1. **Prefer new HTTP handlers in `middleware-platform/routes/*.js`** and mount with `app.use('/api/...', router)` (or equivalent) from `server.js`.
 2. **Business logic** belongs in `services/` (and `adapters/` for third parties), not inline in `server.js`.
-3. **Touching `server.js` for a small change** is acceptable when moving code out would balloon the PR; follow up with extraction when practical.
+3. **Do not** add new patient or public API handlers inline in `server.js`; use the route modules above.
+4. **Touching `server.js` for a small change** is acceptable when moving code out would balloon the PR; follow up with extraction when practical.
 
 ## Review expectation
 
@@ -2476,17 +2489,16 @@ Reduce file size over time by moving **one route group at a time** to `routes/`,
 
 ## Structured logging (future)
 
-*Former path: `docs/development/STRUCTURED_LOGGING_FUTURE.md`*
 
 
-Today **Kelly** and **LLMRouter** use `console.warn` / `console.error` and opt-in debug flags (`KELLY_DEBUG`, etc.).
+Today **`KellyAgentService`** / **LLMRouter** use `console.warn` / `console.error` and opt-in debug flags (`KELLY_DEBUG`, etc.).
 
 ## Direction
 
 For production observability, consider:
 
 - A single **structured logger** (e.g. **pino** with JSON lines) behind a thin wrapper.
-- **Correlation IDs** per HTTP request and Kelly session, passed into tool execution.
+- **Correlation IDs** per HTTP request and LLM session, passed into tool execution.
 - Redaction of **PII** and tokens at log boundaries.
 
 No change is required for local development; this is a **future consolidation** when operational requirements justify the dependency and migration effort.
@@ -2498,7 +2510,6 @@ No change is required for local development; this is a **future consolidation** 
 
 ## Automation Template Variables
 
-*Former path: `docs/development/templates.md`*
 
 
 This document lists all available template variables for use in automation email and SMS templates.
@@ -2570,3 +2581,96 @@ Pass custom variables via `context.variables` when calling `AutomationService.ch
 - For SMS templates, only the `content` field is used (no `subject` field)
 
 
+
+## Consolidated: CODE_OWNERSHIP_BY_SURFACE.md
+
+
+# Code Ownership By Surface
+
+
+## Runtime Surfaces
+
+- **API Host / routing composition**
+  - Owner files: `middleware-platform/server.js`, `middleware-platform/routes/*`
+  - Responsibilities: route mounting, middleware order, endpoint composition
+
+- **Business/service orchestration**
+  - Owner files: `middleware-platform/services/*`
+  - Responsibilities: domain logic, state transitions, integration orchestration
+
+- **Landing web UX**
+  - Owner files: `unified-dashboard/littlelab-landing/src/*`
+  - Responsibilities: user flows, API calling patterns, presentation state
+
+- **Patient app UX**
+  - Owner files: `patient-app/app/*`, `patient-app/src/*`
+  - Responsibilities: mobile session UX, patient journey screens, API clients
+
+- **Operational automation**
+  - Owner files: `scripts/*`, `middleware-platform/scripts/*`
+  - Responsibilities: checks, migrations, diagnostics, release verification
+
+## High-Risk Change Areas
+
+- `middleware-platform/server.js` route/middleware order
+- payment + webhook reconciliation (`routes/payment.js`, webhook handlers, payment services)
+- reasoning and snapshot contracts (`services/reasoning-*`, `services/session-*`)
+- public plan/geo/coverage contract paths (`routes/public-plan-search.js`, `routes/public-geo.js`)
+- payor canonicalization + precheck (`services/payor-*`, `services/provider-network-*`)
+
+## Required Documentation Update Rule
+
+When adding or materially changing:
+- a route file in `middleware-platform/routes/`, or
+- a service file in `middleware-platform/services/`,
+
+update at least one of:
+- `docs/middleware-platform/README.md` (ownership tables/maps)
+- `docs/meta/README.md#codebase-batch-review-and-documentation-gaps` (gap closure tracker)
+
+CI doc parity check is enforced by `scripts/check-docs-route-service-parity.cjs`.
+
+
+
+## Consolidated: SCRIPTS_OPERATIONS_MAP.md
+
+
+# Scripts Operations Map
+
+
+## Purpose
+
+Map operational scripts to safe usage level so engineers can run the right checks without accidental production-impacting actions.
+
+## Tiers
+
+- **Tier A (safe/read-only checks)**
+  - verification/report scripts
+  - examples: `scripts/check-*.mjs`, `scripts/report-*.cjs`, `verify:*` npm scripts
+
+- **Tier B (controlled write to local/test state)**
+  - local migrations, local seeders, local replay scripts
+  - requires explicit `DB_PATH` and environment awareness
+
+- **Tier C (external side effects / prod-adjacent)**
+  - deployment scripts, remote mutation scripts, credential/domain setup scripts
+  - should run only with owner approval and change tracking
+
+## Script Families
+
+- **Root scripts (`scripts/`)**
+  - deployment and environment setup
+  - UI/API smoke checks
+  - docs and guardrail checks
+
+- **Middleware scripts (`middleware-platform/scripts/`)**
+  - payor pipeline, readiness, observability
+  - reasoning gates and E2E checks
+  - payment/ops diagnostics and recovery tasks
+
+## Required Script Execution Notes
+
+- Always set/verify `DB_PATH` before stateful middleware scripts.
+- Prefer dry-run flags where available.
+- Capture outputs for audit when running Tier C scripts.
+- Link operational outcomes back to `docs/runbooks/` or `todos/` tracking items.
