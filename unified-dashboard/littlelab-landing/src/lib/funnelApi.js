@@ -169,6 +169,27 @@ export async function fetchFunnelSpecialists(zip, limit = 12) {
   return data;
 }
 
+/** Fire-and-forget funnel handoff analytics (requires patient session). */
+export function recordFunnelPortalEvent(sessionId, event, metadata = {}) {
+  const sid = String(sessionId || '').trim();
+  if (!sid || !event) return Promise.resolve();
+  const base = resolveFunnelApiBase();
+  return fetch(`${base}/api/patient/funnel/event`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-session-id': sid,
+      ...FUNNEL_HEADERS,
+    },
+    body: JSON.stringify({
+      event,
+      route: metadata.route ?? null,
+      concern_id: metadata.concern_id ?? null,
+      user_goal: metadata.user_goal ?? null,
+    }),
+  }).catch(() => {});
+}
+
 export async function bridgeFunnelToKelly(sessionId, payload) {
   const base = resolveFunnelApiBase();
   const res = await fetch(`${base}/api/patient/funnel/bridge`, {

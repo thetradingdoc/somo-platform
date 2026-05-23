@@ -28,6 +28,7 @@ See `PAYOR_SEARCH_TEST_GUIDE.md`.
 ## Other runners
 
 - **Playwright (landing / scan):** `e2e/*.spec.cjs` — see `package.json` scripts (`test:e2e-landing`, etc.).
+- **Funnel API E2E (middleware on :4000):** `npm run test:e2e-funnel` — `landing-funnel-match` + `landing-funnel-preview` specs only (no CRA build).
 - **Acne journey eval (plain Node):** `npm run test:eval-engine` → `tests/e2e/eval-engine.unit.test.js`.
 - **Reasoning eval (CI):** `npm run eval:reasoning:harness` (not the manual routine-reasoning file).
 

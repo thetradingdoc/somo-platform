@@ -3119,7 +3119,7 @@ const { registerPublicFunnelSpecialistRoutes } = require('./routes/public-funnel
 registerPublicFunnelSpecialistRoutes(app, { apiLimiter });
 
 const { registerPatientFunnelBridgeRoutes } = require('./routes/patient-funnel-bridge');
-registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession });
+registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession, recordPatientPortalEvent });
 
 // Legacy consumer static paths → littlelab funnel
 app.get(/^\/consumer(\/.*)?$/, (req, res) => {

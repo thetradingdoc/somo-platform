@@ -33,7 +33,7 @@
 10. `server.js` refactor policy (new routes only in `routes/`): **[SERVER_JS_REFACTOR_POLICY.md](./development/README.md#server-js-refactor-policy)**.
 11. Quarterly maintenance checklist: **[PERIODIC_MAINTENANCE.md](./development/README.md#periodic-maintenance)**.
 12. Secret scanning expectations: **[Security docs](./security/README.md)**.
-13. Browser E2E status: **[E2E_STATUS.md](./testing/README.md#e2e-status)**.
+13. Browser E2E status: **[E2E_STATUS.md](./testing/README.md#e2e-status)**; funnel API smoke: `cd middleware-platform && npm run test:e2e-funnel` (server on :4000).
 14. Batch line-level docs gap tracker: **[meta gap tracker section](./meta/README.md#codebase-batch-review-and-documentation-gaps)**.
 
 ---
