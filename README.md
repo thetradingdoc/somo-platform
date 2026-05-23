@@ -1,20 +1,21 @@
-# DocLittle - AI Voice Receptionist Platform
+# Skin & Care Platform — AI Voice Receptionist
+> Last reviewed: May 5, 2026
 
 **Version**: 3.0.0  
 **Status**: Production Ready  
-**Last Updated:** April 9, 2026
+**Last Updated:** 2026-05-21
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
 > **Contributing**: See **[`CONTRIBUTING.md`](./CONTRIBUTING.md)** for the PR checklist and commands aligned with CI.
 
-> **Architecture notes:** [ADRs](docs/architecture/README.md#decisions-readme) · [Agentic checkout file map](docs/architecture/README.md#commerce-agentic-checkout-file-map) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
+> **Architecture notes:** [Patient timeline & billing](docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) · [Route ownership](docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) · [`server.js` decomposition](docs/architecture/SERVER_DECOMPOSITION.md) · [Architecture index](docs/architecture/README.md) · [`server.js` policy](docs/development/README.md#server-js-refactor-policy)
 
 ---
 
 ## 📋 Overview
 
-DocLittle is a comprehensive AI-powered voice receptionist platform for healthcare providers. The system handles appointment booking, patient management, payment processing, insurance verification, and appointment reminders through an intelligent voice agent integrated with Retell AI.
+Skin & Care is a comprehensive AI-powered voice receptionist platform for healthcare providers. The system handles appointment booking, patient management, payment processing, insurance verification, and appointment reminders through an intelligent voice agent integrated with Retell AI. (Clinical and billing operations may be provided by **Doctor Little LLC** where applicable.)
 
 ### Key Features
 
@@ -48,9 +49,8 @@ DocLittle is a comprehensive AI-powered voice receptionist platform for healthca
 - Epic/1upHealth (EHR integration)
 
 **Frontend**:
-- Vanilla HTML/CSS/JavaScript
-- Netlify (deployment)
-- Railway (backend deployment)
+- Static dashboards + CRA landing (`unified-dashboard/littlelab-landing`)
+- Deploy/hosting: see **[docs/deployment/README.md](docs/deployment/README.md)** (GCP is the documented source of truth)
 
 **Standards**:
 - FHIR R4 (healthcare data)
@@ -61,7 +61,7 @@ DocLittle is a comprehensive AI-powered voice receptionist platform for healthca
 
 ```
 doclittle-platform/
-├── middleware-platform/     # Backend API (Express, Stripe, Retell, Kelly, FHIR, …)
+├── middleware-platform/     # Backend API (Express, Stripe, Retell, voice LLM, FHIR, …)
 ├── unified-dashboard/       # Provider/patient HTML dashboards + static assets
 │   └── littlelab-landing/   # CRA marketing / Skin & Care landing (build → served as static)
 ├── patient-app/             # Expo (React Native) patient app
@@ -118,21 +118,16 @@ python3 -m http.server 8000
 
 ### Local domain routing (mirrors production)
 
-To reproduce the production routing locally, point the doclittle domains to `127.0.0.1` before starting the middleware server:
-
-```bash
-sudo sh -c 'echo "127.0.0.1 doclittle.site api.doclittle.site" >> /etc/hosts'
-```
-
-With `middleware-platform` running (`npm start`), visit these URLs in your browser:
+With `middleware-platform` running (`npm start`), visit:
 
 | Surface                      | Local URL                       | Served From                              |
 |------------------------------|---------------------------------|------------------------------------------|
-| Admin landing                | https://doclittle.site/admin    | `unified-dashboard/admin/index.html`     |
-| Clinic/business dashboard    | https://doclittle.site/business/business-dashboard.html | `unified-dashboard/business` |
-| Insurer console              | https://doclittle.site/insurer/insurer-dashboard.html  | `unified-dashboard/insurer`  |
-| Patient wallet/portal        | https://doclittle.site/patients/wallet.html            | `unified-dashboard/patients` |
-| API & signup flow            | https://api.doclittle.site      | `middleware-platform/public/signup` + APIs |
+| Athlete shop (marketing)     | http://localhost:4000/          | `littlelab-landing` build                |
+| Admin landing                | http://localhost:4000/admin     | `unified-dashboard/admin/index.html`     |
+| Clinic/business dashboard    | http://localhost:4000/business/business-dashboard.html | `unified-dashboard/business` |
+| API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
+
+Production hosts: `myskinandcare.com`, `api.skinandcare.com` (GCP). See `docs/deployment/README.md`.
 
 > The `/admin` route now provides a lightweight launcher linking to the clinic, insurer, and patient portals plus the API hub.
 
@@ -181,17 +176,12 @@ GOOGLE_CALENDAR_ID=your_calendar_id
 GOOGLE_CLIENT_EMAIL=your_service_account_email
 GOOGLE_PRIVATE_KEY=your_private_key
 
-# Email (SMTP or Azure Communication Services)
-# Option 1: SMTP (Gmail, SendGrid, Mailgun, etc.)
+# Email (SMTP on GCP — Gmail, SendGrid, Workspace, etc.)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email
-SMTP_PASS=your_password
-SMTP_FROM=noreply@doclittle.health
-
-# Option 2: Azure Communication Services Email
-AZURE_COMMUNICATION_CONNECTION_STRING=endpoint=https://your-resource.communication.azure.com/;accesskey=your-access-key
-AZURE_EMAIL_SENDER=DoNotReply@your-domain.com
+SMTP_PASSWORD=your_password
+SMTP_FROM=info@myskinandcare.com
 
 # Twilio (SMS)
 TWILIO_ACCOUNT_SID=your_twilio_sid
@@ -205,8 +195,8 @@ EPIC_CLIENT_ID=your_epic_client_id
 EPIC_REDIRECT_URI=your_redirect_uri
 
 # Base URL (for production)
-API_BASE_URL=https://doclittle.site
-BASE_URL=https://doclittle.site
+API_BASE_URL=https://api.skinandcare.com
+BASE_URL=https://api.skinandcare.com
 # Note: API_BASE_URL takes priority over BASE_URL
 # For local development, these can be omitted (defaults to localhost)
 
@@ -371,71 +361,22 @@ The system automatically migrates the database schema on startup. The `database.
 
 ## 🧪 Testing
 
-### Run Tests
-
 ```bash
 cd middleware-platform
-node tests/test-comprehensive-system.js
+npm test    # Jest (see package.json for focused suites)
 ```
 
-### Test Coverage
-
-- ✅ Appointment booking (schedule, search, confirm, reschedule, cancel)
-- ✅ Complex scheduling scenarios
-- ✅ Insurance collection and eligibility checks
-- ✅ Payment checkout creation
-- ✅ Admin endpoints
-- ✅ Database migrations
+Playwright (landing + prod smoke): see **[docs/testing/README.md](docs/testing/README.md)** and **`middleware-platform/package.json`** scripts (`test:e2e-landing`, `test:prod:smoke`, etc.).
 
 ---
 
 ## 🚢 Deployment
 
-### Backend (Railway)
+**Canonical:** **[docs/deployment/README.md](docs/deployment/README.md)** — GCP workflows, gates, and rollback ([docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md](docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)).
 
-1. Connect GitHub repository to Railway
-2. Set root directory to `middleware-platform`
-3. Configure environment variables in Railway dashboard
-4. Deploy automatically on push to main branch
+Scheduled prod monitors: **[docs/runbooks/PROD_MONITORING_WORKFLOWS.md](docs/runbooks/PROD_MONITORING_WORKFLOWS.md)**.
 
-**Railway Configuration** (`railway.json`):
-```json
-{
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "node server.js",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
-```
-
-### Frontend (Netlify)
-
-1. Connect GitHub repository to Netlify
-2. Set build directory to `unified-dashboard`
-3. Configure environment variables
-4. Deploy automatically on push to main branch
-
-**Netlify Configuration** (`netlify.toml`):
-```toml
-[build]
-  publish = "unified-dashboard"
-  command = "echo 'No build needed'"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-```
-
-### Domain Configuration
-
-- Backend: `https://web-production-a783d.up.railway.app`
-- Frontend: Configured to use Railway backend automatically
-- Custom domain: Update `BASE_URL` environment variable
+Legacy `netlify.toml` / `railway.json` files may still exist for historical reference; do not treat them as the primary deploy path unless an active runbook says otherwise.
 
 ---
 
@@ -611,11 +552,12 @@ curl "http://localhost:4000/api/patient/benefits?memberId=CIGNA901234&patientNam
 All documentation has been organized in the [`docs/`](./docs/) folder:
 
 ### Quick Links
-- **Setup Guides**: [Setup](./docs/setup/README.md#getting-started-setup), [Stripe Issuing](./docs/setup/stripe/STRIPE_ISSUING_COMPLETE_GUIDE.md)
+- **Setup Guides**: [Setup](./docs/setup/README.md#getting-started-setup), [Stripe Issuing](./docs/integrations/README.md#stripe-issuing-stripe-issuing)
+- **Routine tracker**: [User journey](./docs/user-journey/README.md)
 - **Architecture**: [Vision](./docs/architecture/README.md#vision-vision), [Payment Architecture](./docs/architecture/README.md#payments-payment-architecture)
 - **API**: [API Documentation](./docs/api/README.md#api-documentation)
 - **Deployment**: [Security](./docs/deployment/README.md#security-security-improvements), [Backup Strategy](./docs/deployment/README.md#guides-backup-strategy)
-- **Voice Agent**: [Kelly's Prompt](./docs/voice-agent/prompts/kelly-voice-agent-prompt.md)
+- **Voice Agent**: [Main voice agent prompt](./docs/voice-agent/prompts/kelly-voice-agent-prompt.md)
 
 See [`docs/README.md`](./docs/README.md) for a complete index of all documentation.
 
@@ -637,6 +579,5 @@ For issues and questions:
 
 ---
 
-**Last Updated:** April 9, 2026  
+**Last Updated:** 2026-05-02  
 **Version**: 3.0.0
-

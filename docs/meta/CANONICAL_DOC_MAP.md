@@ -1,0 +1,27 @@
+# Canonical documentation map
+
+**Last Updated:** 2026-05-21
+
+Use this table to avoid maintaining the same story in multiple folders. **Edit this file** when you add a new major runtime surface or split ownership.
+
+| Topic | Read first | Also useful (do not duplicate) |
+|-------|------------|----------------------------------|
+| **Repo overview & contributing** | Root [`README.md`](../../README.md), [`CONTRIBUTING.md`](../../CONTRIBUTING.md) | [`docs/README.md`](../README.md) |
+| **Deploy / CI / GCP** | [`docs/deployment/README.md`](../deployment/README.md) | [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md), [`docs/runbooks/PROD_MONITORING_WORKFLOWS.md`](../runbooks/PROD_MONITORING_WORKFLOWS.md) |
+| **Environment variables** | [`docs/setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md`](../setup/ENVIRONMENT_VARIABLES_BY_SURFACE.md) | [`docs/setup/README.md`](../setup/README.md), [`unified-dashboard/littlelab-landing/.env.example`](../../unified-dashboard/littlelab-landing/.env.example) |
+| **HTTP routes & static SPA mounts** | [`docs/architecture/SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md), [`docs/architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md`](../architecture/RUNTIME_ENTRYPOINTS_AND_ROUTE_OWNERSHIP.md) | [`middleware-platform/server.js`](../../middleware-platform/server.js) (~11k compose), [`middleware-platform/routes/`](../../middleware-platform/routes/), [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js), [`bootstrap/static-hosting.js`](../../middleware-platform/bootstrap/static-hosting.js) |
+| **Kelly triage (patient + landing)** | [`services/kelly-triage-turn-service.js`](../../middleware-platform/services/kelly-triage-turn-service.js) | [`routes/patient-booking.js`](../../middleware-platform/routes/patient-booking.js), [`routes/public-landing-assistant.js`](../../middleware-platform/routes/public-landing-assistant.js) |
+| **Medicare plan search (payor)** | [`docs/Payor/README.md`](../Payor/README.md) | [`middleware-platform/routes/public-plan-search.js`](../../middleware-platform/routes/public-plan-search.js) |
+| **Medicaid provider directory & public search** | [`docs/Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md`](../Payor/PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md) | [`middleware-platform/routes/public-provider-search.js`](../../middleware-platform/routes/public-provider-search.js), [`unified-dashboard/littlelab-landing/src/pages/FindProvider.js`](../../unified-dashboard/littlelab-landing/src/pages/FindProvider.js) |
+| **Voice / commerce LLM, checkout, Retell, middleware depth** | [`docs/middleware-platform/README.md`](../middleware-platform/README.md) (TOC anchors) | [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md) (consumer naming), [`docs/reasoning/README.md`](../reasoning/README.md), [`docs/architecture/README.md`](../architecture/README.md) |
+| **Testing & E2E** | [`docs/testing/README.md`](../testing/README.md), [`docs/testing/PROD_PLAYWRIGHT_SUITES.md`](../testing/PROD_PLAYWRIGHT_SUITES.md) | [`middleware-platform/package.json`](../../middleware-platform/package.json) (`test:e2e-*`, `test:prod:*`), [`middleware-platform/playwright.config.cjs`](../../middleware-platform/playwright.config.cjs) |
+| **Database / migrations** | [`docs/Database/README.md`](../Database/README.md), [`docs/Database/DB_STRUCTURE_AND_PIPELINE.md`](../Database/DB_STRUCTURE_AND_PIPELINE.md) | [`middleware-platform/database.js`](../../middleware-platform/database.js), [`middleware-platform/migrations/postgres/README.md`](../../middleware-platform/migrations/postgres/README.md) |
+| **Security / compliance** | [`docs/security/README.md`](../security/README.md), [`docs/compliance/README.md`](../compliance/README.md) | [`docs/legal/README.md`](../legal/README.md) |
+| **Voice agent** | [`docs/architecture/README.md`](../architecture/README.md) (voice anchors), [`docs/voice-agent/README.md`](../voice-agent/README.md) | [`docs/voice-agent/prompts/README.md`](../voice-agent/prompts/README.md) |
+| **Patient app — Timeline, billing, calendar-range API** | [`docs/architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md) | [`docs/architecture/README.md`](../architecture/README.md), [`docs/patient-app/README.md`](../patient-app/README.md), [`SERVER_DECOMPOSITION.md`](../architecture/SERVER_DECOMPOSITION.md) |
+| **Routine tracker user journey (MVP)** | [`docs/user-journey/README.md`](../user-journey/README.md) | [`07-v1-product-decisions.md`](../user-journey/07-v1-product-decisions.md) (photo = day logged), [`06-mobile-and-web-parity.md`](../user-journey/06-mobile-and-web-parity.md), [`02-journey-now.md`](../user-journey/02-journey-now.md), [`04-surfaces-and-urls.md`](../user-journey/04-surfaces-and-urls.md) |
+| **Todos vs docs** | [`todos/README.md`](../../todos/README.md) | This map — **do not** copy long checklists into product docs; link instead |
+
+## Middleware consolidated README
+
+Voice/commerce LLM stack (`KellyAgentService`, `KELLY_*` env vars), payments, Retell, LangGraph notes, and long-form runbooks live in one file: [`docs/middleware-platform/README.md`](../middleware-platform/README.md). Use its **table of contents** for anchors; avoid copying sections elsewhere. Customer-facing naming is **Skin & Care** / **Doctor Little LLC** per [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md).
