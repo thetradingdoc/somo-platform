@@ -13,6 +13,7 @@
         "setup:gmail-smtp": "node scripts/setup-gmail-smtp.cjs",
         "setup:face-read-env": "node scripts/ensure-face-read-env.cjs",
         "smoke:face-scan": "node scripts/face-scan-smoke.cjs",
+        "sandbox:funnel-kelly-gap": "node scripts/sandbox-funnel-kelly-gap-compare.cjs",
         "sandbox:routine-photo": "node scripts/sandbox-routine-photo-loop.cjs",
         "test:smtp-receipt": "node scripts/test-smtp-receipt.cjs",
         "backup": "node scripts/backup-database.js",

@@ -3110,6 +3110,26 @@ registerFaceReadPublicRoute(app, { apiLimiter });
 const { registerPublicRoutineRoutes } = require('./routes/public-routines');
 registerPublicRoutineRoutes(app, { apiLimiter });
 
+const { registerPublicFunnelMatchRoutes } = require('./routes/public-funnel-match');
+registerPublicFunnelMatchRoutes(app, { apiLimiter });
+const { registerPublicFunnelIntakeRoutes } = require('./routes/public-funnel-intake');
+registerPublicFunnelIntakeRoutes(app, { apiLimiter });
+
+const { registerPublicFunnelSpecialistRoutes } = require('./routes/public-funnel-specialists');
+registerPublicFunnelSpecialistRoutes(app, { apiLimiter });
+
+const { registerPatientFunnelBridgeRoutes } = require('./routes/patient-funnel-bridge');
+registerPatientFunnelBridgeRoutes(app, { apiLimiter, requirePatientSession });
+
+// Legacy consumer static paths → littlelab funnel
+app.get(/^\/consumer(\/.*)?$/, (req, res) => {
+  const sub = String(req.path || '').replace(/^\/consumer\/?/, '');
+  if (sub.includes('get-app') || sub.includes('join')) {
+    return res.redirect(302, '/patients/patient-login.html?intent=signup');
+  }
+  return res.redirect(302, '/start');
+});
+
 const { registerPatientCareProgramBillingRoutes } = require('./routes/patient-care-program-billing');
 registerPatientCareProgramBillingRoutes(app, {
   apiLimiter,
