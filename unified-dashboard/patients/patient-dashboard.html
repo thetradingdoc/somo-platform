@@ -4,26 +4,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#314DB6">
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#c85103">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>Home - Skin &amp; Care Patient Portal</title>
+    <title>Today - Skin &amp; Care</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/skin-care-tokens.css">
+    <link rel="stylesheet" href="../assets/css/patient-consumer.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
-            --primary: #314DB6;
-            --primary-dark: #2a409a;
-            --primary-light: #5b77de;
+            --primary: var(--sc-color-primary, #c85103);
+            --primary-dark: var(--brand-accent-hover, #a84402);
+            --primary-light: #faf6f3;
+            --cta-primary: #000000;
+            --cta-primary-hover: #1a1a1a;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: var(--font-ui);
+            background: #f7fafc;
         }
 
         .layout {
             display: flex;
             min-height: 100vh;
-            background: linear-gradient(180deg, #ffffff 0%, #f7f9ff 100%);
+            background: #f7fafc;
         }
 
         .sidebar {
@@ -102,7 +108,7 @@
 
         .nav-item.active {
             background: var(--primary);
-            color: white;
+            color: #fff;
         }
 
         .nav-icon {
@@ -244,61 +250,12 @@
         .routine-card-grid.list-mode {
             grid-template-columns: 1fr;
         }
-        .routine-card {
-            border-radius: 24px;
-            padding: 18px;
-            min-height: 220px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            background: linear-gradient(135deg, #3d5ed3 0%, #314DB6 100%);
-            color: #fff;
-        }
+        /* Card chrome: patient-consumer.css (portfolio pastels) */
         .routine-card-top {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
             gap: 10px;
-        }
-        .routine-card-date {
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.84);
-        }
-        .routine-card-title {
-            margin: 10px 0 2px 0;
-            font-size: 24px;
-            line-height: 1;
-            color: #fff;
-        }
-        .routine-card-sub {
-            margin: 0;
-            color: rgba(255, 255, 255, 0.9);
-            font-size: var(--patient-row-meta-size);
-        }
-        .routine-progress-label {
-            margin-top: 14px;
-            margin-bottom: 8px;
-            font-size: 14px;
-            font-weight: 700;
-            color: rgba(255, 255, 255, 0.96);
-        }
-        .routine-progress-track {
-            width: 100%;
-            height: 6px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.35);
-            overflow: hidden;
-        }
-        .routine-progress-bar {
-            height: 100%;
-            border-radius: 999px;
-        }
-        .routine-progress-pct {
-            margin-top: 8px;
-            font-size: 24px;
-            font-weight: 700;
-            color: #fff;
-            text-align: right;
         }
         .routine-card-actions {
             margin-top: 14px;
@@ -317,21 +274,18 @@
             color: #fff;
         }
         .routine-open-products-btn {
-            background: #eef0f6;
-            color: #4f46e5;
+            background: var(--sc-color-secondary, #f5f5f5);
+            color: var(--sc-color-primary, #c85103);
             font-weight: 800;
             font-size: 13px;
             letter-spacing: 0.01em;
         }
-        .routine-card.peach { background: linear-gradient(135deg, #3d5ed3 0%, #314DB6 100%); }
-        .routine-card.lilac { background: linear-gradient(135deg, #3d5ed3 0%, #314DB6 100%); }
-        .routine-card.sky { background: linear-gradient(135deg, #3d5ed3 0%, #314DB6 100%); }
         .routine-empty-state {
-            border: 1px dashed #93c5fd;
-            background: #eff6ff;
+            border: 1px dashed rgba(200, 81, 3, 0.35);
+            background: #faf6f3;
             border-radius: 14px;
             padding: 16px;
-            color: #1e3a8a;
+            color: #000;
             display: none;
         }
 
@@ -347,8 +301,8 @@
             gap: 10px;
         }
         .home-stat-tile {
-            background: #f3f5fb;
-            border: 1px solid #e4e8f4;
+            background: var(--sc-color-secondary, #f5f5f5);
+            border: 1px solid rgba(0, 0, 0, 0.08);
             border-radius: 14px;
             padding: 12px 14px;
         }
@@ -374,15 +328,16 @@
             min-height: 50px;
             border-radius: 999px;
             border: 0;
-            background: var(--primary);
+            background: var(--cta-primary, #000);
             color: #fff;
             font-weight: 800;
             letter-spacing: 0.01em;
             font-size: 15px;
             cursor: pointer;
+            font-family: var(--font-ui);
         }
         .home-create-btn:hover {
-            background: var(--primary-dark);
+            background: var(--cta-primary-hover, #1a1a1a);
         }
 
         .btn {
@@ -396,12 +351,12 @@
         }
 
         .btn-primary {
-            background: var(--primary);
-            color: white;
+            background: var(--cta-primary, #000);
+            color: #fff;
         }
 
         .btn-primary:hover {
-            background: var(--primary-dark);
+            background: var(--cta-primary-hover, #1a1a1a);
         }
 
         .btn-secondary {
@@ -461,9 +416,9 @@
             transition: all 0.2s ease;
         }
         .logout-btn:hover {
-            border-color: #c7d2fe;
+            border-color: rgba(200, 81, 3, 0.35);
             color: var(--primary);
-            background: #f7f9ff;
+            background: #faf6f3;
         }
         .logout-btn svg {
             width: 20px;
@@ -617,7 +572,7 @@
     </style>
 </head>
 
-<body>
+<body class="patient-consumer">
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">☰</button>
     <div class="mobile-menu-overlay" onclick="toggleMobileMenu()"></div>
@@ -635,26 +590,18 @@
             <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item active">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span>
-                    <span>Home</span>
+                    <span>Today</span>
                 </a>
                 <a href="schedule.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
-                    <span>Calendar</span>
-                </a>
-                <a href="appointments.html" class="nav-item">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
-                    <span>Routine</span>
-                </a>
-                <a href="my-records.html" class="nav-item">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>
-                    <span>Products</span>
+                    <span>Timeline</span>
                 </a>
                 <a href="wallet.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span>
-                    <span>Wallet</span>
+                    <span>Money</span>
                 </a>
                 <a href="profile.html" class="nav-item">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg></span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span>
                     <span>Profile</span>
                 </a>
             </nav>
@@ -664,8 +611,8 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
-                <h1 class="page-title" id="greetingTitle">Home</h1>
-                <p class="page-subtitle">Routine progress for this week and quick access to your journal.</p>
+                <h1 class="page-title" id="greetingTitle">Today</h1>
+                <p class="page-subtitle">Log today&apos;s progress photo, follow your routine, and open Timeline or Money when you need them.</p>
             </div>
             
 
@@ -675,8 +622,8 @@
             <section class="routine-board" aria-label="Routine management board">
                 <div class="routine-board-header">
                     <div>
-                        <h2 class="routine-board-title">Routines</h2>
-                        <p class="routine-board-subtitle">Routine summary with quick actions for current tasks.</p>
+                        <h2 class="routine-board-title">Today at a glance</h2>
+                        <p class="routine-board-subtitle">Your routine, daily logging, and what to do next.</p>
                     </div>
                     <div class="routine-board-date" id="routineBoardDate" aria-live="polite">—</div>
                 </div>
@@ -686,23 +633,47 @@
                         <button class="routine-view-btn" id="homeGridBtn" type="button" aria-pressed="false" aria-label="Switch to grid view">⊞</button>
                     </div>
                 </div>
+                <div id="homeTodayPrimary" class="home-today-primary" hidden>
+                    <article id="homePhaseCard" class="today-phase-card" aria-label="This week in your program">
+                        <p class="today-phase-kicker" id="homePhaseKicker"></p>
+                        <p class="today-phase-body" id="homePhaseBody"></p>
+                        <button type="button" class="today-phase-expand" id="homePhaseExpandBtn" hidden aria-expanded="false">More about this phase</button>
+                        <p class="today-phase-notes" id="homePhaseNotes" hidden></p>
+                    </article>
+                    <div class="today-photo-block" id="homePhotoBlock">
+                        <button type="button" class="home-create-btn today-photo-btn" id="homePhotoBtn">Add today&apos;s photo</button>
+                        <input type="file" id="homePhotoInput" accept="image/jpeg,image/png,image/webp" hidden />
+                        <p class="today-photo-done" id="homePhotoDone" hidden>Logged for today ✓</p>
+                    </div>
+                    <div class="today-steps-collapse" id="homeStepsCollapse" hidden>
+                        <button type="button" class="today-steps-toggle" id="homeStepsToggle" aria-expanded="false">
+                            <span id="homeStepsSummary">Today&apos;s steps</span>
+                            <span class="today-steps-chevron" aria-hidden="true">▾</span>
+                        </button>
+                        <ul class="today-steps-list" id="homeStepsList" hidden></ul>
+                    </div>
+                    <div class="today-red-flags" id="homeRedFlags" hidden role="alert">
+                        <p class="today-red-title">When to seek help</p>
+                        <ul id="homeRedFlagsList"></ul>
+                    </div>
+                </div>
                 <div class="home-stats-summary" aria-label="Stats summary">
                     <article class="home-stat-tile">
-                        <div class="home-stat-label">In Progress</div>
+                        <div class="home-stat-label">Logged today</div>
                         <div class="home-stat-value" id="summaryInProgress">0</div>
                     </article>
                     <article class="home-stat-tile">
-                        <div class="home-stat-label">Upcoming</div>
+                        <div class="home-stat-label">This week</div>
                         <div class="home-stat-value" id="summaryUpcoming">0</div>
                     </article>
                     <article class="home-stat-tile">
-                        <div class="home-stat-label">Total Tasks</div>
+                        <div class="home-stat-label">Routine steps</div>
                         <div class="home-stat-value" id="summaryTotalTasks">0</div>
                     </article>
                 </div>
                 <div class="routine-card-grid list-mode" id="homeCardsGrid"></div>
                 <div class="home-create-row">
-                    <button class="home-create-btn" id="homeCreateRoutineBtn" type="button">Create your first routine</button>
+                    <button class="home-create-btn" id="homeCreateRoutineBtn" type="button">Choose your routine</button>
                 </div>
             </section>
         </main>
@@ -738,8 +709,13 @@
             .substring(0, 2)
             .toUpperCase() || 'PT';
 
-        document.getElementById('userName').textContent = fallbackLabel;
-        document.getElementById('userAvatar').textContent = initials;
+        function setElText(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        setElText('userName', fallbackLabel);
+        setElText('userAvatar', initials);
 
         // Update with server-resolved patient identity (mvp-fhir-12/13)
         async function updateUserInfo() {
@@ -753,18 +729,19 @@
                 if (!r.ok || !data.success) return;
                 const name = (data.patient && data.patient.name) ? data.patient.name : 'Patient';
                 patientId = (data.patient && data.patient.id) ? data.patient.id : null;
-                document.getElementById('userName').textContent = name;
+                setElText('userName', name);
                 const nameParts = name.split(' ').filter(Boolean);
                 const firstName = nameParts[0] || name;
                 const initials2 = nameParts.map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'PT';
-                document.getElementById('greetingTitle').textContent = `Hi ${firstName}`;
-                document.getElementById('userAvatar').textContent = initials2;
+                setElText('greetingTitle', `Hi ${firstName}`);
+                setElText('userAvatar', initials2);
             } catch (_) { }
         }
         updateUserInfo();
 
         document.addEventListener('DOMContentLoaded', () => {
             try { configureHomeFab(false); } catch (_) {}
+            try { initHomeTodayInteractions(); } catch (_) {}
             void (async () => {
                 try {
                     await loadHomeProgressSummary();
@@ -842,6 +819,260 @@
             }
         }
 
+        function patientSessionHeaders(json) {
+            const sid = localStorage.getItem('patient_session_id') || '';
+            const h = { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' };
+            if (json) h['Content-Type'] = 'application/json';
+            return h;
+        }
+
+        function todayIso() {
+            return new Date().toISOString().slice(0, 10);
+        }
+
+        function selectedRoutineDateIso() {
+            try {
+                const q = new URLSearchParams(window.location.search).get('date');
+                if (q && /^\d{4}-\d{2}-\d{2}$/.test(q)) return q;
+            } catch (_) {}
+            return todayIso();
+        }
+
+        function configureHomePhotoUi(todayLogged, allowsPhoto = true) {
+            const btn = document.getElementById('homePhotoBtn');
+            const done = document.getElementById('homePhotoDone');
+            const input = document.getElementById('homePhotoInput');
+            if (!allowsPhoto) {
+                if (btn) btn.hidden = true;
+                if (input) input.disabled = true;
+                if (done) done.hidden = true;
+                return;
+            }
+            if (todayLogged) {
+                if (btn) btn.hidden = true;
+                if (input) input.disabled = true;
+                if (done) done.hidden = false;
+            } else {
+                if (btn) btn.hidden = false;
+                if (input) input.disabled = false;
+                if (done) done.hidden = true;
+            }
+        }
+
+        async function ensureTodayDailyEntry() {
+            const date = selectedRoutineDateIso();
+            const r = await fetch(`${API_BASE}/api/patient/routine/daily?date=${encodeURIComponent(date)}`, {
+                headers: patientSessionHeaders(false),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (data?.daily_entry?.id) return String(data.daily_entry.id);
+            const cr = await fetch(`${API_BASE}/api/patient/routine/daily`, {
+                method: 'POST',
+                headers: patientSessionHeaders(true),
+                body: JSON.stringify({ entry_date: date, item_logs: [] }),
+            });
+            const created = await cr.json().catch(() => ({}));
+            if (!cr.ok || !created.success) throw new Error(created.error || 'Could not create daily entry.');
+            return String(created.daily_entry_id);
+        }
+
+        async function uploadTodayPhoto(file) {
+            const entryId = await ensureTodayDailyEntry();
+            const form = new FormData();
+            form.append('file', file);
+            const r = await fetch(
+                `${API_BASE}/api/patient/routine/daily/${encodeURIComponent(entryId)}/photo`,
+                { method: 'POST', headers: patientSessionHeaders(false), body: form }
+            );
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.success) throw new Error(data.error || 'Photo upload failed.');
+            return data;
+        }
+
+        async function loadRoutinePhase(todayLogged) {
+            const primary = document.getElementById('homeTodayPrimary');
+            if (!primary) return;
+            const sid = localStorage.getItem('patient_session_id') || '';
+            if (!sid) {
+                primary.hidden = true;
+                return;
+            }
+            const date = selectedRoutineDateIso();
+            const r = await fetch(`${API_BASE}/api/patient/routine/phase?date=${encodeURIComponent(date)}`, {
+                headers: patientSessionHeaders(false),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.has_template || !data.phase) {
+                primary.hidden = true;
+                return;
+            }
+            primary.hidden = false;
+            const phase = data.phase;
+            const week = Number(phase.program_week) || 1;
+            const total = Number(phase.total_weeks) || 12;
+            const label = phase.label ? String(phase.label).trim() : '';
+            const kicker = document.getElementById('homePhaseKicker');
+            const body = document.getElementById('homePhaseBody');
+            const expandBtn = document.getElementById('homePhaseExpandBtn');
+            const notesEl = document.getElementById('homePhaseNotes');
+            if (kicker) {
+                kicker.textContent = label
+                    ? `Week ${week} of ${total} · ${label}`
+                    : `Week ${week} of ${total}`;
+            }
+            if (body) {
+                body.textContent = phase.expect
+                    ? String(phase.expect)
+                    : phase.focus
+                      ? String(phase.focus)
+                      : 'Add a progress photo when you are ready — we track your week for you.';
+            }
+            const notes = phase.notes ? String(phase.notes).trim() : '';
+            if (expandBtn && notesEl) {
+                if (notes) {
+                    expandBtn.hidden = false;
+                    notesEl.textContent = notes;
+                    notesEl.hidden = true;
+                    expandBtn.setAttribute('aria-expanded', 'false');
+                } else {
+                    expandBtn.hidden = true;
+                    notesEl.hidden = true;
+                }
+            }
+            const items = Array.isArray(data.items) ? data.items : [];
+            const am = items.filter((i) => String(i.usage_time || '').toLowerCase() === 'am').length;
+            const pm = items.filter((i) => String(i.usage_time || '').toLowerCase() === 'pm').length;
+            const stepsCollapse = document.getElementById('homeStepsCollapse');
+            const stepsSummary = document.getElementById('homeStepsSummary');
+            const stepsList = document.getElementById('homeStepsList');
+            if (stepsCollapse && stepsSummary && stepsList) {
+                if (items.length) {
+                    stepsCollapse.hidden = false;
+                    stepsSummary.textContent = `AM · ${am} step${am === 1 ? '' : 's'} · PM · ${pm} step${pm === 1 ? '' : 's'}`;
+                    stepsList.innerHTML = items
+                        .map((row) => {
+                            const slot = homeEsc(String(row.usage_time || 'any').toUpperCase());
+                            const name = homeEsc(row.product_name || 'Step');
+                            const goal = row.goal ? `<span class="today-step-goal">${homeEsc(row.goal)}</span>` : '';
+                            return `<li><span class="today-step-slot">${slot}</span><span class="today-step-name">${name}</span>${goal}</li>`;
+                        })
+                        .join('');
+                } else {
+                    stepsCollapse.hidden = true;
+                }
+            }
+            const flags = Array.isArray(phase.red_flags) ? phase.red_flags.slice(0, 3) : [];
+            const redWrap = document.getElementById('homeRedFlags');
+            const redList = document.getElementById('homeRedFlagsList');
+            if (redWrap && redList) {
+                if (flags.length) {
+                    redWrap.hidden = false;
+                    redList.innerHTML = flags.map((f) => `<li>${homeEsc(f)}</li>`).join('');
+                } else {
+                    redWrap.hidden = true;
+                }
+            }
+            const allowsPhoto = data.allows_photo !== false && data.day_mode !== 'historical';
+            const isViewDate = date !== todayIso();
+            if (isViewDate && kicker) {
+                kicker.textContent = `${date} · ${kicker.textContent}`;
+            }
+            if (data.day_mode === 'historical' && body) {
+                body.textContent = 'Viewing history — this day is read-only.';
+            }
+            if (data.day_mode === 'backfill' && body && !todayLogged) {
+                body.textContent = `Backfill for ${date} — add a progress photo for this day.`;
+            }
+            configureHomePhotoUi(!!todayLogged, allowsPhoto);
+        }
+
+        function initHomeTodayInteractions() {
+            const photoBtn = document.getElementById('homePhotoBtn');
+            const photoInput = document.getElementById('homePhotoInput');
+            if (photoBtn && photoInput) {
+                photoBtn.addEventListener('click', async () => {
+                    try {
+                        const date = selectedRoutineDateIso();
+                        let ghostUrl = null;
+                        for (let back = 1; back <= 14; back += 1) {
+                            const d = new Date(`${date}T12:00:00`);
+                            d.setDate(d.getDate() - back);
+                            const iso = d.toISOString().slice(0, 10);
+                            const prior = await fetch(`${API_BASE}/api/patient/routine/daily?date=${encodeURIComponent(iso)}`, {
+                                headers: patientSessionHeaders(false)
+                            }).then((r) => r.json()).catch(() => ({}));
+                            const media = prior?.daily_entry?.media;
+                            if (Array.isArray(media) && media[0]?.media_url) {
+                                ghostUrl = media[0].media_url;
+                                break;
+                            }
+                        }
+                        if (ghostUrl && window.confirm('Align with your last photo guide, then continue to pick a new photo?')) {
+                            const preview = document.createElement('div');
+                            preview.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+                            preview.innerHTML = `<div style="max-width:320px;background:#fff;border-radius:12px;padding:12px;text-align:center"><img src="${ghostUrl}" style="width:100%;opacity:0.35;border-radius:8px" alt="Guide"/><p style="margin-top:8px;font-size:13px;color:#475569">Faint guide from your last photo</p><button type="button" id="ghostContinueBtn" style="margin-top:8px;padding:8px 14px">Continue</button></div>`;
+                            document.body.appendChild(preview);
+                            await new Promise((resolve) => {
+                                preview.querySelector('#ghostContinueBtn')?.addEventListener('click', () => {
+                                    preview.remove();
+                                    resolve();
+                                });
+                            });
+                        }
+                    } catch (_) {}
+                    photoInput.click();
+                });
+                photoInput.addEventListener('change', async () => {
+                    const file = photoInput.files && photoInput.files[0];
+                    photoInput.value = '';
+                    if (!file) return;
+                    try {
+                        photoBtn.disabled = true;
+                        const data = await uploadTodayPhoto(file);
+                        const expect = data?.skin_report?.assistant_summary;
+                        if (expect) {
+                            const body = document.getElementById('homePhaseBody');
+                            if (body) body.textContent = expect;
+                        }
+                        configureHomePhotoUi(true);
+                        await loadHomeProgressSummary();
+                        if (typeof window.showPatientToast === 'function') {
+                            window.showPatientToast('Logged for today', 'success');
+                        }
+                    } catch (e) {
+                        const errEl = document.getElementById('errorMessage');
+                        if (errEl) {
+                            errEl.textContent = e.message || 'Could not upload photo.';
+                            errEl.style.display = 'block';
+                        }
+                    } finally {
+                        photoBtn.disabled = false;
+                    }
+                });
+            }
+            const stepsToggle = document.getElementById('homeStepsToggle');
+            const stepsList = document.getElementById('homeStepsList');
+            if (stepsToggle && stepsList) {
+                stepsToggle.addEventListener('click', () => {
+                    const open = stepsList.hidden;
+                    stepsList.hidden = !open;
+                    stepsToggle.setAttribute('aria-expanded', String(open));
+                    const chev = stepsToggle.querySelector('.today-steps-chevron');
+                    if (chev) chev.textContent = open ? '▴' : '▾';
+                });
+            }
+            const expandBtn = document.getElementById('homePhaseExpandBtn');
+            const notesEl = document.getElementById('homePhaseNotes');
+            if (expandBtn && notesEl) {
+                expandBtn.addEventListener('click', () => {
+                    const open = notesEl.hidden;
+                    notesEl.hidden = !open;
+                    expandBtn.setAttribute('aria-expanded', String(open));
+                    expandBtn.textContent = open ? 'Hide phase details' : 'More about this phase';
+                });
+            }
+        }
+
         function renderRoutineCards(cards = [], opts = {}) {
             const grid = document.getElementById('homeCardsGrid');
             if (!grid) return;
@@ -850,48 +1081,58 @@
                 grid.classList.add('list-mode');
                 if (empty) {
                     grid.innerHTML = `
-                    <article class="routine-card lilac home-empty-card">
-                        <div>
-                            <div class="routine-card-top">
-                                <div class="routine-card-date">Routine</div>
-                            </div>
-                            <h3 class="routine-card-title">No routine yet. Create your first routine.</h3>
-                            <p class="routine-card-sub">Start with name, products, and timing to unlock daily logging.</p>
+                    <article class="routine-card home-empty-card" style="--card-bg:#e9e7fd;--card-accent:#4f3ff0">
+                        <div class="routine-card-top">
+                            <span class="routine-card-date">Routine</span>
                         </div>
+                        <h3 class="routine-card-title">Choose your routine</h3>
+                        <p class="routine-card-sub">Pick one of five guided templates to unlock daily AM/PM steps and progress photos.</p>
                     </article>
                 `;
                 } else {
                     grid.innerHTML = `
-                    <article class="routine-card lilac">
-                        <div>
-                            <h3 class="routine-card-title">Could not load routine</h3>
-                            <p class="routine-card-sub">Check your connection and refresh the page.</p>
-                        </div>
+                    <article class="routine-card" style="--card-bg:#ffd3e2;--card-accent:#df3670">
+                        <h3 class="routine-card-title">Could not load routine</h3>
+                        <p class="routine-card-sub">Check your connection and refresh the page.</p>
                     </article>
                 `;
                 }
                 return;
             }
             const palettes = [
-                { cls: 'peach', bar: '#f59e0b' },
-                { cls: 'lilac', bar: '#4f46e5' },
-                { cls: 'sky', bar: '#0e7490' }
+                { bg: '#fee4cb', accent: '#ff942e' },
+                { bg: '#e9e7fd', accent: '#4f3ff0' },
+                { bg: '#dbf6fd', accent: '#096c86' },
+                { bg: '#ffd3e2', accent: '#df3670' },
+                { bg: '#c8f7dc', accent: '#34c471' },
+                { bg: '#d5deff', accent: '#4067f9' }
             ];
             grid.innerHTML = cards.map((c, idx) => {
                 const p = palettes[idx % palettes.length];
                 const pct = Math.max(0, Math.min(100, Number(c.progress_pct) || 0));
+                const windowDays = Number(c.days_window) > 0 ? Number(c.days_window) : 7;
+                let daysLeft = Number(c.days_left);
+                if (!Number.isFinite(daysLeft)) {
+                    daysLeft = Math.max(0, windowDays - Math.round((pct / 100) * windowDays));
+                }
+                const daysLabel = daysLeft === 0
+                    ? (pct >= 100 ? 'On track' : windowDays + ' Days Left')
+                    : daysLeft + ' Day' + (daysLeft === 1 ? '' : 's') + ' Left';
                 return `
-                    <article class="routine-card ${p.cls}">
-                        <div>
-                            <div class="routine-card-top">
-                                <div class="routine-card-date">${homeEsc(c.date_label || 'This week')}</div>
-                            </div>
-                            <h3 class="routine-card-title">${homeEsc(c.title || 'Routine task')}</h3>
-                            <p class="routine-card-sub">${homeEsc(c.subtitle || 'Progress')}</p>
-                            <div class="routine-progress-label">Progress</div>
-                            <div class="routine-progress-track"><div class="routine-progress-bar" style="width:${pct}%;background:${p.bar};"></div></div>
-                            <div class="routine-progress-pct">${pct}%</div>
+                    <article class="routine-card" style="--card-bg:${p.bg};--card-accent:${p.accent}">
+                        <div class="routine-card-top">
+                            <span class="routine-card-date">${homeEsc(c.date_label || 'Last 7 days')}</span>
                         </div>
+                        <h3 class="routine-card-title">${homeEsc(c.title || 'Routine task')}</h3>
+                        <p class="routine-card-sub">${homeEsc(c.subtitle || 'Routine task')}</p>
+                        <p class="routine-progress-label">Progress</p>
+                        <div class="routine-progress-track">
+                            <span class="routine-progress-bar" style="width:${pct}%"></span>
+                        </div>
+                        <p class="routine-progress-pct">${pct}%</p>
+                        <footer class="routine-card-footer">
+                            <span class="routine-days-left">${homeEsc(daysLabel)}</span>
+                        </footer>
                     </article>
                 `;
             }).join('');
@@ -900,31 +1141,30 @@
         function configureHomeFab(hasTemplate) {
             const fab = document.getElementById('patientScanFab');
             if (!fab) return;
-            if (!hasTemplate) {
-                fab.style.display = 'none';
-                fab.setAttribute('aria-hidden', 'true');
-                return;
-            }
             fab.style.display = '';
             fab.removeAttribute('aria-hidden');
-            fab.textContent = '+';
-            fab.href = 'appointments.html';
             fab.classList.add('compact');
-            fab.setAttribute('aria-label', 'Add routine entry');
-            fab.title = 'Add';
+            if (!hasTemplate) {
+                fab.href = 'patient-routine-pick.html';
+                fab.setAttribute('aria-label', 'Choose your routine');
+                fab.title = 'Choose your routine';
+                return;
+            }
+            fab.href = 'schedule.html';
+            fab.setAttribute('aria-label', 'Add progress photo');
+            fab.title = 'Add progress photo';
         }
 
         function configureHomePrimaryCta(hasTemplate) {
             const btn = document.getElementById('homeCreateRoutineBtn');
             if (!btn) return;
             if (hasTemplate) {
-                btn.textContent = 'Open routine';
+                btn.textContent = 'Open Timeline';
+                btn.onclick = () => { window.location.href = 'schedule.html'; };
             } else {
-                btn.textContent = 'Create your first routine';
+                btn.textContent = 'Choose your routine';
+                btn.onclick = () => { window.location.href = 'patient-routine-pick.html'; };
             }
-            btn.onclick = () => {
-                window.location.href = 'appointments.html';
-            };
         }
 
         async function fireHomeSummaryViewed() {
@@ -989,23 +1229,28 @@
                 };
                 const hasTemplate = !!data.has_template;
                 setHomeRoutineChrome(hasTemplate);
-                setText('summaryInProgress', Number(hasTemplate ? (s.in_progress || 0) : 0));
-                setText('summaryUpcoming', Number(hasTemplate ? (s.upcoming || 0) : 0));
+                setText('summaryInProgress', hasTemplate ? (s.today_logged ? 'Yes' : 'Not yet') : '—');
+                setText('summaryUpcoming', hasTemplate ? `${Number(s.adherence_pct) || 0}%` : '—');
                 setText('summaryTotalTasks', Number(hasTemplate ? (s.total_tasks || 0) : 0));
                 if (!hasTemplate) {
+                    const primary = document.getElementById('homeTodayPrimary');
+                    if (primary) primary.hidden = true;
                     renderRoutineCards([], { emptyNewUser: true });
                 } else {
                     const c = Array.isArray(data.cards) ? data.cards : [];
                     if (!c.length) {
                         renderRoutineCards([{
                             title: 'Your routine',
-                            subtitle: 'Add steps and products on the Routine page.',
+                            subtitle: 'Add today\'s progress photo above to track your week.',
                             progress_pct: 0,
                             date_label: 'This week'
                         }]);
                     } else {
                         renderRoutineCards(c);
                     }
+                    try {
+                        await loadRoutinePhase(!!s.today_logged);
+                    } catch (_) {}
                 }
                 configureHomeFab(hasTemplate);
                 configureHomePrimaryCta(hasTemplate);
@@ -1047,8 +1292,17 @@
 
     </script>
     <script type="module">
-        import { mountBottomTabs } from '../assets/js/patient-shell.js';
+        import { mountBottomTabs, showToast } from '../assets/js/patient-shell.js';
+        window.showPatientToast = showToast;
         mountBottomTabs();
+        if (new URLSearchParams(window.location.search).get('started') === '1') {
+            showToast('Routine started — log your first progress photo today.', 'success');
+            try {
+                const u = new URL(window.location.href);
+                u.searchParams.delete('started');
+                window.history.replaceState({}, '', u.pathname + u.search);
+            } catch (_) {}
+        }
     </script>
 </body>
 

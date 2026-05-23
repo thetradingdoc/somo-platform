@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#1e40af" />
+    <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#c85103" />
   <link rel="manifest" href="../manifest.webmanifest" />
-  <title>Calendar - Skin &amp; Care Patient Portal</title>
+  <title>Timeline - Skin &amp; Care Patient Portal</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
+  <link rel="stylesheet" href="../assets/css/skin-care-tokens.css" />
+  <link rel="stylesheet" href="../assets/css/patient-consumer.css" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="../assets/js/config.js" defer></script>
   <script>
@@ -15,11 +18,11 @@
   </script>
   <style>
     :root {
-      --primary: #1e40af;
-      --primary-dark: #1e3a8a;
-      --primary-light: #3b82f6;
-      --journal-accent: #14b8c4;
-      --journal-accent-soft: #ecfeff;
+      --primary: var(--sc-color-primary, #c85103);
+      --primary-dark: var(--brand-accent-hover, #a84402);
+      --primary-light: #faf6f3;
+      --journal-accent: var(--sc-color-primary, #c85103);
+      --journal-accent-soft: #faf6f3;
     }
     body {
       background: #f7fafc;
@@ -309,8 +312,8 @@
       color: var(--gray-700);
     }
     .cal-view-actions button.active {
-      border-color: #1e40af;
-      background: #1e40af;
+      border-color: var(--sc-color-primary, #c85103);
+      background: var(--sc-color-primary, #c85103);
       color: #fff;
     }
     .checkin-list {
@@ -417,8 +420,8 @@
       flex-wrap: wrap;
     }
     .journal-range-btn {
-      border: 1px solid #1d4ed8;
-      background: #1e40af;
+      border: 1px solid var(--primary-dark);
+      background: var(--primary);
       color: #fff;
       border-radius: 999px;
       width: 38px;
@@ -433,8 +436,8 @@
       line-height: 1;
     }
     .journal-range-btn:hover:not(:disabled) {
-      background: #1d4ed8;
-      border-color: #1e3a8a;
+      background: var(--primary-dark);
+      border-color: var(--primary-dark);
     }
     .journal-range-btn:disabled {
       opacity: 0.6;
@@ -506,6 +509,42 @@
       border-color: #bae6fd;
       color: #0f766e;
     }
+    .journal-day--horizon {
+      background: #f8fafc;
+      border-style: dashed;
+      border-color: #cbd5e1;
+      color: #64748b;
+    }
+    .journal-day--purge {
+      background: #fef2f2;
+      border-color: #f4a4a4;
+      color: #991b1b;
+    }
+    .journal-day__week {
+      position: absolute;
+      left: 3px;
+      bottom: 3px;
+      z-index: 3;
+      font-size: 8px;
+      font-weight: 800;
+      background: rgba(15, 23, 42, 0.75);
+      color: #fff;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    .journal-day__hint {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      bottom: 2px;
+      z-index: 2;
+      font-size: 7px;
+      line-height: 8px;
+      text-align: center;
+      color: #64748b;
+      overflow: hidden;
+      max-height: 18px;
+    }
     .journal-day--logged {
       background: #cffafe;
       border-color: #67e8f9;
@@ -515,6 +554,21 @@
       border-color: #67e8f9;
       color: #fff;
       text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+    }
+    .journal-day--bill-due {
+      background: #E6F1FB;
+      border-color: #85B7EB;
+      color: #0C447C;
+    }
+    .journal-day--bill-paid {
+      background: #EAF3DE;
+      border-color: #9BC76A;
+      color: #3B6D11;
+    }
+    .journal-day--bill-review {
+      background: #FEF3C7;
+      border-color: #EF9F27;
+      color: #854F0B;
     }
     .journal-day__img {
       position: absolute;
@@ -529,6 +583,25 @@
       inset: 0;
       background: linear-gradient(to bottom, rgba(0,0,0,0.12), rgba(0,0,0,0.35));
       z-index: 1;
+    }
+    .journal-day__bill-glyph {
+      position: absolute;
+      top: 3px;
+      left: 4px;
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 1;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .journal-day--bill-due .journal-day__bill-glyph {
+      color: #0c447c;
+    }
+    .journal-day--bill-paid .journal-day__bill-glyph {
+      color: #3b6d11;
+    }
+    .journal-day--bill-review .journal-day__bill-glyph {
+      color: #854f0b;
     }
     .journal-day__num {
       position: relative;
@@ -853,8 +926,8 @@
       gap: 6px;
       padding: 5px;
       border-radius: 14px;
-      background: #eef2ff;
-      border: 1px solid #e0e7ff;
+      background: #faf6f3;
+      border: 1px solid rgba(200, 81, 3, 0.15);
       align-items: stretch;
     }
     .cal-view-segmented button {
@@ -892,8 +965,60 @@
     }
     .cal-view-segmented button.active {
       background: #fff;
-      color: #1e40af;
-      box-shadow: 0 1px 4px rgba(30, 64, 175, 0.12);
+      color: var(--primary);
+      box-shadow: 0 1px 4px rgba(200, 81, 3, 0.15);
+    }
+    .journal-day--band-purge { box-shadow: inset 0 0 0 2px rgba(220, 38, 38, 0.35); }
+    .journal-day--band-intro { box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.25); }
+    .journal-day--band-active { box-shadow: inset 0 0 0 2px rgba(200, 81, 3, 0.2); }
+    .journal-phase-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 8px 0 12px;
+      font-size: 11px;
+      color: var(--gray-600);
+    }
+    .journal-phase-legend__item {
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--gray-200);
+      background: #fff;
+    }
+    .journal-phase-legend__item--purge { border-color: rgba(220, 38, 38, 0.4); color: #b91c1c; }
+    .routine-compare-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.55);
+      padding: 16px;
+    }
+    .routine-compare-modal.hidden { display: none; }
+    .routine-compare-modal__panel {
+      background: #fff;
+      border-radius: 16px;
+      max-width: 720px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 16px;
+    }
+    .routine-compare-modal__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 640px) {
+      .routine-compare-modal__grid { grid-template-columns: 1fr; }
+    }
+    .routine-compare-col img {
+      width: 100%;
+      border-radius: 10px;
+      object-fit: cover;
+      aspect-ratio: 3/4;
     }
     /* Journal photos strip (directional toward Routine / future month grid) */
     .journal-photo-strip {
@@ -943,6 +1068,7 @@
       }
     }
     .journal-photo-thumb {
+      position: relative;
       aspect-ratio: 1;
       border-radius: 12px;
       overflow: hidden;
@@ -961,6 +1087,31 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+    }
+    .journal-photo-thumb__week {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(15, 23, 42, 0.75);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      z-index: 2;
+    }
+    .journal-photo-thumb__phase {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      bottom: 4px;
+      font-size: 9px;
+      background: rgba(255, 255, 255, 0.88);
+      color: #334155;
+      padding: 2px 4px;
+      border-radius: 4px;
+      z-index: 2;
+      text-align: center;
     }
     #planSummaryText {
       flex: 1 1 200px;
@@ -999,7 +1150,7 @@
     }
   </style>
 </head>
-<body>
+<body class="patient-consumer">
   <button
     id="mobileMenuToggleBtn"
     class="mobile-menu-toggle"
@@ -1018,19 +1169,13 @@
       </div>
       <nav class="sidebar-nav">
         <a href="patient-dashboard.html" class="nav-item">
-          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Home</span>
+          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span>Today</span>
         </a>
         <a href="schedule.html" class="nav-item active">
-          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Calendar</span>
-        </a>
-        <a href="appointments.html" class="nav-item">
-          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Routine</span>
-        </a>
-        <a href="my-records.html" class="nav-item">
-          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span><span>Products</span>
+          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span>Timeline</span>
         </a>
         <a href="wallet.html" class="nav-item">
-          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span><span>Wallet</span>
+          <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span><span>Money</span>
         </a>
         <a href="profile.html" class="nav-item">
           <span class="nav-icon nav-icon-svg" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span><span>Profile</span>
@@ -1040,8 +1185,13 @@
 
     <main class="main-content">
       <div class="page-header">
-        <h1 class="page-title">Calendar</h1>
-        <p class="page-subtitle">Track your routine by day. Use List, Calendar, and Photos to review logs and media in one journal timeline.</p>
+        <h1 class="page-title">Timeline</h1>
+        <p class="page-subtitle">Your routine journal by day — progress photos, logged steps, and billing markers when you need them.</p>
+      </div>
+      <div id="routinePickBanner" class="routine-pick-banner" style="display:none;" role="status">
+        <strong>Choose a routine to start.</strong>
+        <a href="patient-routine-pick.html">Pick one of five guided templates</a>
+        to unlock your calendar.
       </div>
       <div class="calendar-toolbar">
         <div id="planSummaryText" style="font-size:13px;color:var(--gray-600);">Loading your routine plan and journal activity…</div>
@@ -1194,6 +1344,11 @@
           <div id="journalRangeLabel" class="journal-range-label" aria-live="polite">Loading range...</div>
           <button id="journalNextRangeBtn" class="journal-range-btn" type="button" aria-label="Next 6 months">&gt;</button>
         </div>
+        <div id="journalPhaseLegend" class="journal-phase-legend" hidden aria-label="Routine phase legend">
+          <span class="journal-phase-legend__item journal-phase-legend__item--intro">Intro (W1–2)</span>
+          <span class="journal-phase-legend__item journal-phase-legend__item--purge">Expected purge (W3–5)</span>
+          <span class="journal-phase-legend__item">Active treatment</span>
+        </div>
         <div id="journalMonthStack" class="journal-month-stack"></div>
       </section>
       <section id="checkinListPanel" class="checkin-list" aria-label="Visits and routine summary list">
@@ -1208,6 +1363,16 @@
         <div id="journalPhotoThumbs" class="journal-photo-thumbs"></div>
       </section>
     </main>
+  </div>
+
+  <div id="routineCompareModal" class="routine-compare-modal hidden" role="dialog" aria-labelledby="routineCompareTitle" aria-modal="true">
+    <div class="routine-compare-modal__panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h3 id="routineCompareTitle" style="margin:0;font-size:16px;font-weight:700;">Compare progress</h3>
+        <button id="routineCompareClose" type="button" aria-label="Close compare" style="font-size:22px;line-height:1;border:none;background:transparent;">&times;</button>
+      </div>
+      <div id="routineCompareBody" class="routine-compare-modal__grid"></div>
+    </div>
   </div>
 
   <!-- Chat modal using existing triage tooling -->
@@ -1468,9 +1633,13 @@
       }).length;
       const adh = prog && prog.summary != null ? `${Math.round(Number(prog.summary.adherence_pct) || 0)}%` : '—';
       if (!tpl) {
-        planSummaryTextEl.textContent = `No active routine template yet — build one on Routine to start your day-by-day journal.`;
+        planSummaryTextEl.textContent = `No routine yet — choose a guided template to start your journal.`;
+        const banner = document.getElementById('routinePickBanner');
+        if (banner) banner.style.display = 'block';
         return;
       }
+      const banner = document.getElementById('routinePickBanner');
+      if (banner) banner.style.display = 'none';
       const win = `${tpl.start_date || '—'} · ${Number(tpl.duration_days) || 28} days · ${tpl.repeat_cadence === 'selected_days' ? 'selected weekdays' : 'daily'}`;
       planSummaryTextEl.textContent = `Routine plan window: ${win}. This week adherence ${adh}.`;
     }
@@ -1514,10 +1683,21 @@
 
     function classifyDay(d) {
       if (!d) return 'off';
+      const bv = d.billing_visual;
+      if (bv === 'due') return 'bill-due';
+      if (bv === 'paid') return 'bill-paid';
+      if (bv === 'review') return 'bill-review';
       if (d.has_media && d.thumbnail_url) return 'media';
       if (d.has_entry) return 'logged';
       if (d.is_routine_day) return 'due';
       return 'off';
+    }
+
+    function billingVisualHuman(vis) {
+      if (vis === 'due') return 'Bill due';
+      if (vis === 'paid') return 'Paid';
+      if (vis === 'review') return 'Needs review';
+      return 'Billing';
     }
 
     function rangeMonths(startIso, endIso) {
@@ -1605,14 +1785,51 @@
         for (let day = 1; day <= last.getDate(); day += 1) {
           const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
           const row = journalState.dayMap.get(iso) || null;
-          const cls = classifyDay(row);
+          let cls = classifyDay(row);
+          if (row && row.is_purge_window && row.is_routine_day && !row.has_media && cls === 'due') cls = 'purge';
+          if (row && row.is_routine_day && !row.has_media && cls === 'due') cls = 'horizon';
+          const bandCls = row && row.phase_band ? ` journal-day--band-${String(row.phase_band).replace(/[^a-z]/gi, '')}` : '';
           const pct = row && row.has_entry ? Math.max(0, Math.min(100, Number(row.completion_score) || 0)) : null;
-          const media = row && row.has_media && row.thumbnail_url ? String(row.thumbnail_url) : '';
+          const hideRoutineMedia = row && (row.billing_visual === 'due' || row.billing_visual === 'paid' || row.billing_visual === 'review');
+          const media = row && !hideRoutineMedia && row.has_media && row.thumbnail_url ? String(row.thumbnail_url) : '';
+          const weekBadge = row && row.program_week ? `<span class="journal-day__week">W${row.program_week}</span>` : '';
+          const horizonHint =
+            row && row.is_routine_day && !row.has_media && (row.phase_expect_snippet || row.phase_label)
+              ? `<span class="journal-day__hint">${String(row.phase_expect_snippet || row.phase_label).replace(/</g, '&lt;')}</span>`
+              : '';
           const badge = pct != null ? `<span class="journal-day__badge">${pct}%</span>` : '';
           const img = media
-            ? `<img class="journal-day__img" src="${media}" alt="Journal media ${iso}" loading="lazy" referrerpolicy="no-referrer" /><span class="journal-day__overlay"></span>`
+            ? `<img class="journal-day__img" src="${media}" alt="Journal media ${iso}" loading="lazy" referrerpolicy="no-referrer" /><span class="journal-day__overlay"></span>${weekBadge}`
             : '';
-          cells.push(`<a class="journal-day journal-day--${cls}" href="appointments.html?journal_date=${encodeURIComponent(iso)}" aria-label="Open journal day ${iso}">${img}<span class="journal-day__num">${day}</span>${badge}</a>`);
+          const routineHref =
+            row && (row.is_routine_day || row.has_entry)
+              ? `patient-dashboard.html?date=${encodeURIComponent(iso)}`
+              : `appointments.html?journal_date=${encodeURIComponent(iso)}`;
+          const billA11y =
+            row && row.billing_visual === 'due'
+              ? ', bill due'
+              : row && row.billing_visual === 'paid'
+                ? ', paid'
+                : row && row.billing_visual === 'review'
+                  ? ', billing needs review'
+                  : '';
+          const billGlyph =
+            row && row.billing_visual === 'due'
+              ? 'D'
+              : row && row.billing_visual === 'paid'
+                ? 'P'
+                : row && row.billing_visual === 'review'
+                  ? '!'
+                  : '';
+          const glyphHtml = billGlyph
+            ? `<span class="journal-day__bill-glyph" aria-hidden="true">${billGlyph}</span>`
+            : '';
+          const milestone = row && row.milestone_label
+            ? `<span class="journal-day__milestone">${String(row.milestone_label).replace(/</g, '&lt;')}</span>`
+            : '';
+          cells.push(
+            `<a class="journal-day journal-day--${cls}${bandCls}" href="${routineHref}" aria-label="Open journal day ${iso}${billA11y}">${glyphHtml}${img}${horizonHint}${milestone}<span class="journal-day__num">${day}</span>${badge}</a>`
+          );
         }
         return `
           <section class="journal-month" aria-label="${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}">
@@ -1627,9 +1844,16 @@
     function renderCheckinList() {
       if (!checkinListMount) return;
       const ordered = journalState.orderedDays || [];
-      const listRows = ordered.filter((d) => d && (d.has_entry || d.has_media || d.is_routine_day)).slice(0, 60);
+      const listRows = ordered
+        .filter(
+          (d) =>
+            d &&
+            (d.has_entry || d.has_media || d.is_routine_day || (Number(d.billing_event_count) > 0))
+        )
+        .slice(0, 60);
       if (!listRows.length) {
-        checkinListMount.innerHTML = '<div class="checkin-item"><span>No routine entries yet. Start from Routine to create your first day log.</span><span><a href="appointments.html">Routine</a></span></div>';
+        checkinListMount.innerHTML =
+          '<div class="checkin-item"><span>No routine or billing activity in this range yet.</span><span><a href="appointments.html">Routine</a></span></div>';
         return;
       }
       const fmtDate = (iso) => {
@@ -1647,16 +1871,79 @@
         const title = parseLocalDateFromIso(`${monthKey}-01`)?.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) || monthKey;
         blocks.push(`<div class="checkin-list-section-title">${title}</div>`);
         rows.forEach((d) => {
-          const status = d.has_media ? 'Photo linked' : d.has_entry ? `Logged ${Math.round(Number(d.completion_score) || 0)}%` : (d.is_routine_day ? 'Due' : 'No log');
-          blocks.push(`<a class="checkin-item" href="appointments.html?journal_date=${encodeURIComponent(d.date)}"><span>${fmtDate(d.date)} · ${status}</span><span>${d.has_media ? 'Photo' : (d.has_entry ? 'Entry' : '—')}</span></a>`);
+          const billPart =
+            Number(d.billing_event_count) > 0
+              ? `${billingVisualHuman(d.billing_visual)} · ${d.billing_event_count} ${Number(d.billing_event_count) === 1 ? 'event' : 'events'}`
+              : '';
+          const status = billPart
+            ? billPart
+            : d.has_media
+              ? 'Photo linked'
+              : d.has_entry
+                ? `Logged ${Math.round(Number(d.completion_score) || 0)}%`
+                : d.is_routine_day
+                  ? 'Due'
+                  : 'No log';
+          const right = Number(d.billing_event_count) > 0 ? 'Bill' : d.has_media ? 'Photo' : d.has_entry ? 'Entry' : '—';
+          blocks.push(`<a class="checkin-item" href="appointments.html?journal_date=${encodeURIComponent(d.date)}"><span>${fmtDate(d.date)} · ${status}</span><span>${right}</span></a>`);
         });
       }
       checkinListMount.innerHTML = blocks.join('');
     }
 
+    function findPriorMediaDateWeb(rows, fromDate) {
+      const sorted = (rows || [])
+        .filter((r) => r && r.has_media && r.date && r.date < fromDate)
+        .sort((a, b) => b.date.localeCompare(a.date));
+      return sorted[0]?.date || null;
+    }
+
+    async function openRoutineCompareModal(dateA, dateB) {
+      const modal = document.getElementById('routineCompareModal');
+      const body = document.getElementById('routineCompareBody');
+      if (!modal || !body) return;
+      body.innerHTML = '<p>Loading…</p>';
+      modal.classList.remove('hidden');
+      try {
+        const headers = patientSessionHeaders(false);
+        const res = await fetch(
+          `${API_BASE}/api/patient/routine/compare?date_a=${encodeURIComponent(dateA)}&date_b=${encodeURIComponent(dateB)}`,
+          { headers }
+        );
+        const data = await res.json();
+        const col = (side, label) => {
+          const d = data[side];
+          if (!d || !d.has_entry) return `<div class="routine-compare-col"><p>${label}</p><p>No entry</p></div>`;
+          const img = d.thumbnail_url || d.media_url
+            ? `<img src="${d.thumbnail_url || d.media_url}" alt="${label}" />`
+            : '';
+          const cap = [d.program_week ? `W${d.program_week}` : '', d.phase_label || ''].filter(Boolean).join(' · ');
+          return `<div class="routine-compare-col"><p><strong>${label}</strong> ${d.date}${cap ? ` — ${cap}` : ''}</p>${img}<p style="font-size:12px;color:#64748b">${(d.assistant_summary || '').replace(/</g, '&lt;')}</p></div>`;
+        };
+        body.innerHTML = col('day_a', 'Earlier') + col('day_b', 'Later');
+      } catch (e) {
+        body.innerHTML = `<p>${String(e.message || 'Could not load compare.')}</p>`;
+      }
+    }
+
+    function wireJournalPhotoCompare(mediaRows) {
+      if (!journalPhotoThumbs) return;
+      journalPhotoThumbs.querySelectorAll('[data-compare-date]').forEach((el) => {
+        el.addEventListener('dblclick', (ev) => {
+          ev.preventDefault();
+          const date = el.getAttribute('data-compare-date');
+          const prior = findPriorMediaDateWeb(mediaRows, date);
+          if (prior) void openRoutineCompareModal(prior, date);
+        });
+      });
+    }
+
     function renderJournalPhotos() {
       if (!journalPhotoThumbs) return;
       const mediaRows = (journalState.orderedDays || []).filter((d) => d && d.has_media && d.thumbnail_url).slice(0, 30);
+      const legend = document.getElementById('journalPhaseLegend');
+      const hasRoutine = (journalState.orderedDays || []).some((d) => d && d.is_routine_day);
+      if (legend) legend.hidden = !hasRoutine;
       if (!mediaRows.length) {
         journalPhotoThumbs.innerHTML = `
           <a class="journal-photo-thumb" href="appointments.html" aria-label="Open routine to add first picture">
@@ -1665,12 +1952,32 @@
         `;
         return;
       }
-      journalPhotoThumbs.innerHTML = mediaRows.map((m) => `
-        <a class="journal-photo-thumb" href="appointments.html?journal_date=${encodeURIComponent(m.date)}" aria-label="Open routine day ${m.date}">
+      journalPhotoThumbs.innerHTML = mediaRows.map((m) => {
+        const week = m.program_week ? `<span class="journal-photo-thumb__week">W${m.program_week}</span>` : '';
+        const label = m.phase_label ? `<span class="journal-photo-thumb__phase">${String(m.phase_label).replace(/</g, '&lt;')}</span>` : '';
+        const symptom = m.has_symptoms && m.top_symptom
+          ? `<span class="journal-photo-thumb__phase">${String(m.top_symptom).replace(/</g, '&lt;')}</span>`
+          : '';
+        return `
+        <a class="journal-photo-thumb" data-compare-date="${m.date}" href="patient-dashboard.html?date=${encodeURIComponent(m.date)}" aria-label="Open routine day ${m.date}. Double-click to compare with prior photo.">
           <img src="${m.thumbnail_url}" alt="Routine photo ${m.date}" loading="lazy" referrerpolicy="no-referrer" />
+          ${week}${label}${symptom}
         </a>
-      `).join('');
+      `;
+      }).join('');
+      wireJournalPhotoCompare(mediaRows);
     }
+
+    (function initRoutineCompareModal() {
+      const modal = document.getElementById('routineCompareModal');
+      const closeBtn = document.getElementById('routineCompareClose');
+      if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) modal.classList.add('hidden');
+        });
+      }
+    })();
 
     function clearHold() {
       if (holdInterval) window.clearInterval(holdInterval);

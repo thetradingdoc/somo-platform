@@ -1,38 +1,22 @@
 import { Tabs, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { BillingTheme } from '@/constants/billingTheme';
 import { JournalTokens } from '@/constants/journalTokens';
-import { patientGet } from '@/lib/patient-api';
 
 export default function TabLayout() {
   const router = useRouter();
-  const [showScanFab, setShowScanFab] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const data = await patientGet('/api/patient/home/progress-summary');
-        if (alive) setShowScanFab(Boolean(data?.has_template));
-      } catch {
-        if (alive) setShowScanFab(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   return (
     <View style={styles.root}>
       <Tabs
-        initialRouteName="home"
+        initialRouteName="today"
         screenOptions={{
-          tabBarActiveTintColor: JournalTokens.color.brandBlue,
-          tabBarInactiveTintColor: JournalTokens.color.muted,
+          tabBarActiveTintColor: JournalTokens.color.brandAccent,
+          tabBarInactiveTintColor: BillingTheme.color['color.nav.inactive'],
           headerShown: false,
           tabBarButton: HapticTab,
           tabBarStyle: styles.tabBar,
@@ -40,57 +24,53 @@ export default function TabLayout() {
           sceneStyle: { backgroundColor: JournalTokens.color.cream },
         }}>
         <Tabs.Screen
-          name="home"
+          name="today"
           options={{
-            title: 'Home',
-            tabBarIcon: ({ color }) => <IconSymbol size={22} name="house.fill" color={color} />,
+            title: 'Today',
+            tabBarIcon: ({ color }) => <IconSymbol size={22} name="sun.max.fill" color={color} />,
           }}
         />
         <Tabs.Screen
-          name="calendar"
+          name="timeline"
           options={{
-            title: 'Calendar',
+            title: 'Timeline',
             tabBarIcon: ({ color }) => <IconSymbol size={22} name="calendar" color={color} />,
           }}
         />
         <Tabs.Screen
-          name="products"
+          name="money"
           options={{
-            title: 'Products',
-            tabBarIcon: ({ color }) => <IconSymbol size={22} name="square.grid.2x2.fill" color={color} />,
+            title: 'Money',
+            tabBarIcon: ({ color }) => <IconSymbol size={22} name="creditcard.fill" color={color} />,
           }}
         />
         <Tabs.Screen
-          name="routine"
+          name="index"
           options={{
-            title: 'Routine',
-            tabBarIcon: ({ color }) => <IconSymbol size={22} name="checklist" color={color} />,
+            title: 'Account',
+            tabBarIcon: ({ color }) => <IconSymbol size={22} name="person.fill" color={color} />,
           }}
         />
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: 'More',
-            tabBarIcon: ({ color }) => <IconSymbol size={22} name="ellipsis.circle.fill" color={color} />,
-          }}
-        />
-        <Tabs.Screen name="index" options={{ href: null }} />
-        <Tabs.Screen name="journal" options={{ href: null }} />
+        <Tabs.Screen name="home" options={{ href: null }} />
+        <Tabs.Screen name="profile" options={{ href: null }} />
+        <Tabs.Screen name="products" options={{ href: null }} />
+        <Tabs.Screen name="routine" options={{ href: null }} />
+        <Tabs.Screen name="more" options={{ href: null }} />
         <Tabs.Screen name="shelf" options={{ href: null }} />
         <Tabs.Screen name="insights" options={{ href: null }} />
         <Tabs.Screen name="explore" options={{ href: null }} />
       </Tabs>
 
-      {showScanFab ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Scan product"
-          accessibilityHint="Open the product scan entry sheet"
-          onPress={() => router.push('/scan-entry')}
-          style={styles.scanFab}>
-          <Text allowFontScaling style={styles.scanFabText}>+ Scan</Text>
-        </Pressable>
-      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add progress photo"
+        accessibilityHint="Opens camera to log today's progress photo"
+        onPress={() => router.push({ pathname: '/(tabs)/today', params: { photo: '1' } })}
+        style={styles.scanFab}>
+        <Text allowFontScaling style={styles.scanFabText}>
+          + Photo
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -118,7 +98,7 @@ const styles = StyleSheet.create({
     minWidth: 120,
     minHeight: JournalTokens.minTap,
     borderRadius: JournalTokens.radius.pill,
-    backgroundColor: JournalTokens.color.accent,
+    backgroundColor: BillingTheme.button.primaryBg,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: JournalTokens.spacing.lg,
@@ -127,7 +107,7 @@ const styles = StyleSheet.create({
   scanFabText: {
     fontFamily: JournalTokens.font.body,
     fontWeight: '700',
-    color: JournalTokens.color.card,
+    color: BillingTheme.button.primaryText,
     fontSize: 15,
   },
 });

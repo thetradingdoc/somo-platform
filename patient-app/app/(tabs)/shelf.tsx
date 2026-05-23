@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { JournalTokens } from '@/constants/journalTokens';
-import { patientGet } from '@/lib/patient-api';
+import { patientGet, patientPost } from '@/lib/patient-api';
 
 type ShelfProduct = {
   id: string;
@@ -16,26 +16,50 @@ type ShelfProduct = {
   key_ingredients?: string | null;
 };
 
+type TemplateItem = {
+  id: string;
+  product_name: string;
+  usage_time?: string;
+};
+
+type LayeringResult = {
+  overall?: string;
+  conflicts?: Array<{ ingredient_a?: string; ingredient_b?: string; notes?: string }>;
+};
+
 export default function ShelfScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [catalogWarning, setCatalogWarning] = useState<string | null>(null);
   const [products, setProducts] = useState<ShelfProduct[]>([]);
+  const [templateItems, setTemplateItems] = useState<TemplateItem[]>([]);
+  const [layering, setLayering] = useState<LayeringResult | null>(null);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [shelf, health] = await Promise.all([
+      const [shelf, health, template] = await Promise.all([
         patientGet('/api/patient/shelf/products'),
         patientGet('/api/patient/health/catalog'),
+        patientGet('/api/patient/routine/template').catch(() => null),
       ]);
       setProducts(Array.isArray(shelf?.products) ? (shelf.products as ShelfProduct[]) : []);
       setCatalogWarning(health?.catalog_ok ? null : String(health?.message || 'Catalog indexes may be unavailable.'));
+      const items = Array.isArray(template?.items) ? (template.items as TemplateItem[]) : [];
+      setTemplateItems(items.filter((it) => it.id));
+      if (template?.has_template) {
+        const layer = await patientGet('/api/patient/routine/layering-check').catch(() => null);
+        setLayering(layer?.overall ? (layer as LayeringResult) : null);
+      } else {
+        setLayering(null);
+      }
     } catch (e: any) {
       setError(e?.message || 'Unable to load products.');
       setProducts([]);
       setCatalogWarning(null);
+      setLayering(null);
     } finally {
       setLoading(false);
     }
@@ -45,20 +69,49 @@ export default function ShelfScreen() {
     void load();
   }, [load]);
 
+  const linkToStep = async (productId: string, templateItemId: string) => {
+    setLinkingId(productId);
+    try {
+      await patientPost(`/api/patient/shelf/products/${encodeURIComponent(productId)}/link-routine-item`, {
+        template_item_id: templateItemId,
+      });
+      await load();
+    } catch (e: any) {
+      setError(e?.message || 'Could not link product to routine step.');
+    } finally {
+      setLinkingId(null);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />}>
-        <Text allowFontScaling style={styles.title}>Products</Text>
-        <Text allowFontScaling style={styles.subtitle}>Inventory and routine-linked shelf products.</Text>
+        <Text allowFontScaling style={styles.title}>Manage prescriptions</Text>
+        <Text allowFontScaling style={styles.subtitle}>Track medications and routine-linked products.</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {catalogWarning ? <Text style={styles.warning}>{catalogWarning}</Text> : null}
 
+        {layering && layering.overall && layering.overall !== 'safe' ? (
+          <View style={styles.warnCard}>
+            <Text style={styles.warnTitle}>Layering note</Text>
+            <Text style={styles.warnBody}>
+              Your current routine may have ingredient conflicts ({layering.overall}). Adjust timing or check with your
+              clinician before combining actives.
+            </Text>
+            {(layering.conflicts || []).slice(0, 2).map((c, i) => (
+              <Text key={i} style={styles.warnMeta}>
+                {c.ingredient_a} + {c.ingredient_b}: {c.notes || 'Use caution'}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+
         {!products.length && !error ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>No products yet</Text>
-            <Text style={styles.cardBody}>Use + Scan to add products, then manage inventory here.</Text>
+            <Text style={styles.cardTitle}>No prescriptions yet</Text>
+            <Text style={styles.cardBody}>Use + Capture or add items here to track what you use.</Text>
           </View>
         ) : null}
 
@@ -75,6 +128,20 @@ export default function ShelfScreen() {
             {p.key_ingredients ? (
               <View style={styles.badge}>
                 <Text allowFontScaling style={styles.badgeText}>Ingredients: {p.key_ingredients}</Text>
+              </View>
+            ) : null}
+            {templateItems.length ? (
+              <View style={styles.linkRow}>
+                <Text style={styles.linkLabel}>Link to routine step:</Text>
+                {templateItems.slice(0, 4).map((it) => (
+                  <Pressable
+                    key={`${p.id}-${it.id}`}
+                    disabled={linkingId === p.id}
+                    style={styles.linkChip}
+                    onPress={() => void linkToStep(p.id, it.id)}>
+                    <Text style={styles.linkChipText}>{it.product_name || it.usage_time || 'Step'}</Text>
+                  </Pressable>
+                ))}
               </View>
             ) : null}
           </View>
@@ -109,7 +176,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4DFD7',
   },
   badgeText: { color: JournalTokens.color.terracotta, fontFamily: JournalTokens.font.body, fontWeight: '700', fontSize: 12 },
+  warnCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: JournalTokens.radius.lg,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    padding: JournalTokens.spacing.md,
+  },
+  warnTitle: { fontFamily: JournalTokens.font.body, fontWeight: '700', color: '#92400E' },
+  warnBody: { marginTop: 4, fontSize: 13, color: '#78350F' },
+  warnMeta: { marginTop: 4, fontSize: 12, color: '#92400E' },
+  linkRow: { marginTop: JournalTokens.spacing.md, gap: 6 },
+  linkLabel: { fontSize: 12, color: JournalTokens.color.muted, fontFamily: JournalTokens.font.body },
+  linkChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: JournalTokens.radius.pill,
+    backgroundColor: JournalTokens.color.line,
+  },
+  linkChipText: { fontSize: 12, color: JournalTokens.color.ink, fontFamily: JournalTokens.font.body },
   error: { color: '#b91c1c', fontSize: 13 },
   warning: { color: '#9a3412', fontSize: 13 },
 });
-

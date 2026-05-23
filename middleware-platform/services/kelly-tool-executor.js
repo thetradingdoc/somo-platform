@@ -1807,6 +1807,25 @@ class KellyToolExecutor {
           };
         }
 
+        case 'check_product_layering': {
+          const { runLayeringCheck } = require('../lib/routine-layering-check');
+          const names = Array.isArray(args.product_names)
+            ? args.product_names.map((n) => String(n).trim()).filter(Boolean)
+            : [];
+          if (!names.length && args.product_a && args.product_b) {
+            names.push(String(args.product_a).trim(), String(args.product_b).trim());
+          }
+          const steps = names.map((n) => ({ product_name: n }));
+          const result = runLayeringCheck({ steps, db: db.db });
+          return {
+            success: true,
+            overall: result.overall,
+            conflicts: result.conflicts || [],
+            actives_detected: result.actives_detected || [],
+            disclaimer: 'Layering conflict guidance only — not an ingredient toxicity score.',
+          };
+        }
+
         default:
           console.warn(`[KellyToolExecutor] Unknown tool: ${toolName}`);
           return { success: false, error: `Unknown tool: ${toolName}` };

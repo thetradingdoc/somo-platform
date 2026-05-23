@@ -4,20 +4,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#314DB6">
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="theme-color" content="#c85103">
     <link rel="manifest" href="../manifest.webmanifest">
-    <title>Routine - Skin &amp; Care Patient Portal</title>
+    <title>Custom routine - Skin &amp; Care Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/skin-care-tokens.css">
+    <link rel="stylesheet" href="../assets/css/patient-consumer.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
-            --primary: #314DB6;
-            --primary-dark: #2a409a;
-            --primary-light: #5b77de;
+            --primary: var(--sc-color-primary, #c85103);
+            --primary-dark: var(--brand-accent-hover, #a84402);
+            --primary-light: #faf6f3;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: var(--font-ui);
         }
 
         .layout {
@@ -104,7 +107,7 @@
         }
 
         .nav-item.active {
-            background: linear-gradient(135deg, #2f48aa 0%, #3d5ed3 100%);
+            background: var(--sc-color-primary, #c85103);
             color: white;
         }
 
@@ -208,7 +211,7 @@
             font-weight: 700;
             color: var(--gray-900);
             margin-bottom: var(--patient-space-1);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: var(--font-ui);
             letter-spacing: -0.01em;
         }
 
@@ -1041,7 +1044,7 @@
     </style>
 </head>
 
-<body>
+<body class="patient-consumer">
     <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">☰</button>
     <div class="mobile-menu-overlay" onclick="toggleMobileMenu()"></div>
 
@@ -1053,35 +1056,32 @@
                 </a>
                 <div class="sidebar-subtitle">Patient Portal</div>
             </div>
-            <nav class="sidebar-nav">
+                        <nav class="sidebar-nav">
                 <a href="patient-dashboard.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span>
-                    <span>Home</span>
+                    <span>Today</span>
                 </a>
                 <a href="schedule.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
-                    <span>Calendar</span>
-                </a>
-                <a href="appointments.html" class="nav-item active">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span>
-                    <span>Routine</span>
-                </a>
-                <a href="my-records.html" class="nav-item">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>
-                    <span>Products</span>
+                    <span>Timeline</span>
                 </a>
                 <a href="wallet.html" class="nav-item">
                     <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span>
-                    <span>Wallet</span>
+                    <span>Money</span>
                 </a>
                 <a href="profile.html" class="nav-item">
-                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg></span>
+                    <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span>
                     <span>Profile</span>
                 </a>
             </nav>
         </aside>
 
         <main class="main-content">
+            <div class="routine-pick-banner" style="margin-bottom:16px;">
+                <strong>Advanced:</strong> build a custom routine from products on your shelf.
+                New users should <a href="patient-routine-pick.html">choose a guided routine</a> first.
+            </div>
+
                 <div class="page-header">
                 <h1 class="page-title">Routine</h1>
                 <p class="page-subtitle">Track what to use now, what is next, and past routine activity.</p>
@@ -1870,6 +1870,10 @@
 
             noTpl.style.display = 'none';
             body.style.display = 'block';
+            try {
+                const qDate = new URLSearchParams(window.location.search).get('journal_date');
+                if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) dateInput.value = qDate;
+            } catch (_) {}
             if (!dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
 
             const date = dateInput.value;
@@ -1907,34 +1911,31 @@
             return r.daily_entry_id;
         }
 
+        async function ensureDailyEntryForDate(date) {
+            const daily = await patientApi.request(`/api/patient/routine/daily?date=${encodeURIComponent(date)}`, { method: 'GET' });
+            if (daily?.daily_entry?.id) return String(daily.daily_entry.id);
+            const cr = await patientApi.request('/api/patient/routine/daily', {
+                method: 'POST',
+                body: JSON.stringify({ entry_date: date, item_logs: [], notes: 'Progress photo session' })
+            });
+            if (!cr || !cr.success) throw new Error(cr?.error || 'Could not create daily entry.');
+            return String(cr.daily_entry_id);
+        }
+
         async function attachJournalPhoto(file) {
             if (!dailyJournalState.templateItems.length) {
                 throw new Error('Create a routine template first.');
             }
-            await persistDailyJournal();
-            await loadDailyJournal();
-            const dailyId = dailyJournalState.dailyEntry?.id || dailyJournalState.lastSavedDailyEntryId;
-            if (!dailyId) throw new Error('Could not create daily entry.');
-
+            const dateInput = document.getElementById('journalDateInput');
+            const date = dateInput?.value || new Date().toISOString().slice(0, 10);
+            const dailyId = await ensureDailyEntryForDate(date);
             const formData = new FormData();
-            formData.append('files', file);
-            const idem = `journal-photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            const up = await patientApi.request('/api/patient/documents', {
+            formData.append('file', file);
+            const up = await patientApi.request(`/api/patient/routine/daily/${encodeURIComponent(dailyId)}/photo`, {
                 method: 'POST',
-                headers: { 'idempotency-key': idem },
                 body: formData
             });
-            if (!up || !up.success) throw new Error(up?.error || 'Upload failed');
-            const docIds = Array.isArray(up.document_ids) ? up.document_ids : [];
-            if (!docIds.length) throw new Error('No document returned from upload.');
-
-            for (const docId of docIds) {
-                const link = await patientApi.request(`/api/patient/routine/daily/${encodeURIComponent(dailyId)}/media-link`, {
-                    method: 'POST',
-                    body: JSON.stringify({ patient_document_id: docId, media_type: 'image' })
-                });
-                if (!link || !link.success) throw new Error(link?.error || 'Could not link photo to this day.');
-            }
+            if (!up || !up.success) throw new Error(up?.error || 'Photo upload failed.');
             await loadDailyJournal();
         }
 

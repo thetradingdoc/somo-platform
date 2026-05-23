@@ -9,17 +9,39 @@ export default function ScanEntryScreen() {
   const router = useRouter();
   return (
     <SafeAreaView style={styles.root}>
-      <Stack.Screen options={{ title: 'Scan Product', presentation: 'modal' }} />
+      <Stack.Screen options={{ title: 'Quick Capture', presentation: 'modal' }} />
       <View style={styles.sheet}>
-        <Text allowFontScaling style={styles.title}>Scan entry</Text>
+        <Text allowFontScaling style={styles.title}>Quick capture</Text>
         <Text allowFontScaling style={styles.subtitle}>
-          Choose how you want to add a product to your journal.
+          Add billing information quickly from camera, files, or manual entry.
         </Text>
-        <Pressable style={styles.cta} accessibilityRole="button" accessibilityLabel="Scan barcode">
-          <Text allowFontScaling style={styles.ctaText}>Scan barcode</Text>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push('/capture-scan')}
+          accessibilityRole="button"
+          accessibilityLabel="Scan receipt">
+          <Text allowFontScaling style={styles.ctaText}>Scan receipt</Text>
         </Pressable>
-        <Pressable style={styles.cta} accessibilityRole="button" accessibilityLabel="Upload ingredient label">
-          <Text allowFontScaling style={styles.ctaText}>Upload ingredient label</Text>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push('/capture-upload')}
+          accessibilityRole="button"
+          accessibilityLabel="Upload EOB or PDF">
+          <Text allowFontScaling style={styles.ctaText}>Upload EOB/PDF</Text>
+        </Pressable>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push('/capture-manual-bill')}
+          accessibilityRole="button"
+          accessibilityLabel="Add bill manually">
+          <Text allowFontScaling style={styles.ctaText}>Add bill manually</Text>
+        </Pressable>
+        <Pressable
+          style={styles.cta}
+          onPress={() => router.push('/capture-manual-payment')}
+          accessibilityRole="button"
+          accessibilityLabel="Add payment manually">
+          <Text allowFontScaling style={styles.ctaText}>Add payment manually</Text>
         </Pressable>
         <Pressable style={[styles.cta, styles.secondary]} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Close scan entry">
           <Text allowFontScaling style={styles.secondaryText}>Close</Text>
