@@ -191,11 +191,14 @@ export function mountBottomTabs() {
   tabs.id = 'patientBottomTabs';
   tabs.className = 'patient-bottom-tabs';
   tabs.innerHTML = `
-    <a class="tab ${active === 'home' ? 'active' : ''}" href="patient-dashboard.html" aria-label="Home" ${active === 'home' ? 'aria-current="page"' : ''}>
-      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/></svg></span><span class="label">Home</span>
+    <a class="tab ${active === 'home' ? 'active' : ''}" href="patient-dashboard.html" aria-label="Today" ${active === 'home' ? 'aria-current="page"' : ''}>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg></span><span class="label">Today</span>
     </a>
-    <a class="tab ${active === 'calendar' ? 'active' : ''}" href="schedule.html" aria-label="Calendar" ${active === 'calendar' ? 'aria-current="page"' : ''}>
-      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span class="label">Calendar</span>
+    <a class="tab ${active === 'calendar' ? 'active' : ''}" href="schedule.html" aria-label="Timeline" ${active === 'calendar' ? 'aria-current="page"' : ''}>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></span><span class="label">Timeline</span>
+    </a>
+    <a class="tab ${active === 'profile' ? 'active' : ''}" href="profile.html" aria-label="Account" ${active === 'profile' ? 'aria-current="page"' : ''}>
+      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span><span class="label">Account</span>
     </a>
     <a class="tab ${active === 'routine' ? 'active' : ''}" href="appointments.html" aria-label="Routine" ${active === 'routine' ? 'aria-current="page"' : ''}>
       <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg></span><span class="label">Routine</span>
@@ -205,9 +208,6 @@ export function mountBottomTabs() {
     </a>
     <a class="tab ${active === 'wallet' ? 'active' : ''}" data-wallet-tab="1" href="wallet.html" aria-label="Wallet" ${active === 'wallet' ? 'aria-current="page"' : ''}>
       <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M2.5 10.5h19"/><path d="M16 14h3"/></svg></span><span class="label">Wallet</span>
-    </a>
-    <a class="tab ${active === 'profile' ? 'active' : ''}" href="profile.html" aria-label="Profile" ${active === 'profile' ? 'aria-current="page"' : ''}>
-      <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.6-6 8-6s6.5 2 8 6"/></svg></span><span class="label">Profile</span>
     </a>
   `;
   document.body.appendChild(tabs);

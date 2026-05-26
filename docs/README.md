@@ -1,7 +1,7 @@
 # Skin & Care Platform Documentation
-> Last reviewed: 2026-05-21
+> Last reviewed: 2026-05-25
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-25
 
 
 > **📌 Source of Truth**: This `docs/` folder is the canonical documentation for the platform. All `.md` files belong in `docs/` (or `todos/` for active/archive task tracking).  
@@ -17,7 +17,7 @@
 - Canonical docs: `docs/`
 - Task tracking only: `todos/pending` and `todos/archive`
 - Non-canonical root exceptions: `README.md`, `CONTRIBUTING.md`
-- Migrated legacy docs from module folders: `docs/repo-migrated/`
+- Archived legacy docs pointer: `docs/repo-migrated/README.md`
 
 ### For new developers
 
@@ -132,11 +132,12 @@
 - **Agentic checkout backlog / status (`../todos/pending/AGENTIC_CHECKOUT_UI_AND_BACKEND_TODOS.md`)** — Backend audit + open items (read status at top). Frontend UI spec (complete): archive (`../todos/archive/AGENTIC_CHECKOUT_UI_FRONTEND_TODOS.md`).
 
 #### Voice Agent, Video Consult & Medical Coding
+- **[Medical Coding (canonical)](./Medical%20Coding/README.md)** — Architecture, operations, eval (start here for codebook/RAG)
 - **[Hybrid Architecture Overview](./architecture/README.md#overview-hybrid-architecture-overview)** - Voice vs Video vs PDF, shared RAG/codes, boundaries
 - **[Video Consult](./architecture/README.md#care-delivery-video-consult)** - LiveKit video: flow, env, runbook
 - **[Landing Try now & LiveKit](./architecture/README.md#experience-landing-try-now-livekit)** - Skin & Care landing camera-first UI, `try-landing-*` rooms, voice LLM vs LiveKit
 - **[Voice Agent Config](./voice-agent/README.md)** - Voice agent setup
-- **[Medical Coding Runbook](./architecture/README.md#voice-agent-runbook)** - Imports, evaluation, tools, configure-retell
+- **[Medical Coding Runbook (legacy anchor)](./architecture/README.md#voice-agent-runbook)** - Points to canonical docs; partial freshness
 - **[Tool Schemas](./architecture/README.md#voice-agent-tool-schemas)** - Retell functions (suggest_codes_from_symptoms, extract_medical_text, etc.)
 - **[LangGraph & LangSmith](./middleware-platform/README.md#langgraph-langsmith)** — Tracing, what’s monitored, scripts (consolidated middleware docs)
 
@@ -233,10 +234,11 @@ docs/
 - [Stedi Integration](./integrations/README.md#stedi-api-stedi-api-endpoints)
 
 ### Voice Agent & Medical Coding
+- [Medical Coding (canonical)](./Medical%20Coding/README.md)
 - [Voice Agent Config](./voice-agent/README.md)
 - [Video Consult](./architecture/README.md#care-delivery-video-consult)
 - [Landing Try now & LiveKit](./architecture/README.md#experience-landing-try-now-livekit)
-- [Medical Coding Runbook](./architecture/README.md#voice-agent-runbook)
+- [Medical Coding Runbook (legacy)](./architecture/README.md#voice-agent-runbook)
 - [Retell Configuration](./middleware-platform/README.md#retell-config-quick-reference)
 - [Voice Agent Todo & Status](./architecture/README.md#voice-agent-voice-agent-todo-and-status)
 

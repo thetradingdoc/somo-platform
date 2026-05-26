@@ -24,6 +24,7 @@ type TemplateItem = {
 
 type LayeringResult = {
   overall?: string;
+  graph_unavailable?: boolean;
   conflicts?: Array<{ ingredient_a?: string; ingredient_b?: string; notes?: string }>;
 };
 
@@ -93,7 +94,13 @@ export default function ShelfScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {catalogWarning ? <Text style={styles.warning}>{catalogWarning}</Text> : null}
 
-        {layering && layering.overall && layering.overall !== 'safe' ? (
+        {layering?.graph_unavailable || layering?.overall === 'unknown' ? (
+          <View style={styles.warnCard}>
+            <Text style={styles.warnTitle}>Layering check</Text>
+            <Text style={styles.warnBody}>Ingredient compatibility data is temporarily unavailable.</Text>
+          </View>
+        ) : null}
+        {layering && layering.overall && layering.overall !== 'safe' && layering.overall !== 'unknown' ? (
           <View style={styles.warnCard}>
             <Text style={styles.warnTitle}>Layering note</Text>
             <Text style={styles.warnBody}>

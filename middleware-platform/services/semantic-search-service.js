@@ -68,6 +68,83 @@ async function embedText(text) {
  * @param {string} specialty - Optional specialty filter (e.g. 'orthopedics') for scope reduction
  * @param {string} region - Region code (US, UK, ZA). Non-US regions exclude CPT/HCPCS (US-specific).
  */
+const EMBEDDING_BATCH_SIZE = 2000;
+const MIN_SEMANTIC_SCORE = 0.3;
+
+function pushTopScored(top, item, maxSize) {
+  if (item.score < MIN_SEMANTIC_SCORE) return;
+  top.push(item);
+  top.sort((a, b) => b.score - a.score);
+  if (top.length > maxSize) top.length = maxSize;
+}
+
+const KEYWORD_PREFILTER_LIMIT = 300;
+
+function formatScoredTop(top, topK) {
+  return top
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .map(({ code, code_type, description_text, score }) => ({
+      code,
+      code_type,
+      description: description_text || '',
+      semantic_score: Math.round(score * 1000) / 1000
+    }));
+}
+
+function keywordSearchForType(type, queryText) {
+  if (!queryText) return [];
+  if (type === 'icd10' && typeof db.searchIcd10Codes === 'function') {
+    return db.searchIcd10Codes(queryText, KEYWORD_PREFILTER_LIMIT) || [];
+  }
+  if (type === 'cpt' && typeof db.searchCptCodes === 'function') {
+    return db.searchCptCodes(queryText, KEYWORD_PREFILTER_LIMIT) || [];
+  }
+  if (type === 'hcpcs' && typeof db.searchHcpcsCodes === 'function') {
+    return db.searchHcpcsCodes(queryText, KEYWORD_PREFILTER_LIMIT) || [];
+  }
+  return [];
+}
+
+async function scoreEmbeddingType(queryEmbedding, codeType, specialty, topK, region, queryText = '') {
+  if (region && region.toUpperCase() !== 'US') {
+    const t = (codeType || '').toLowerCase();
+    if (t === 'cpt' || t === 'hcpcs') return [];
+  }
+  if (typeof db.getCodeEmbeddingsBatch !== 'function') return [];
+
+  const top = [];
+  const type = (codeType || '').toLowerCase();
+
+  if (queryText && typeof db.getCodeEmbeddingsForCodes === 'function') {
+    const kw = keywordSearchForType(type, queryText);
+    const codes = kw.map((r) => r.code).filter(Boolean);
+    if (codes.length) {
+      const rows = db.getCodeEmbeddingsForCodes(type, codes);
+      for (const r of rows) {
+        const score = cosineSimilarity(queryEmbedding, r.embedding);
+        pushTopScored(top, { ...r, score }, topK * 2);
+      }
+      if (top.length) {
+        return formatScoredTop(top, topK);
+      }
+    }
+  }
+
+  let offset = 0;
+  for (;;) {
+    const rows = db.getCodeEmbeddingsBatch(codeType, specialty, offset, EMBEDDING_BATCH_SIZE);
+    if (!rows.length) break;
+    for (const r of rows) {
+      const score = cosineSimilarity(queryEmbedding, r.embedding);
+      pushTopScored(top, { ...r, score }, topK * 2);
+    }
+    offset += EMBEDDING_BATCH_SIZE;
+    if (type !== 'icd10' && offset > 4000) break;
+  }
+  return formatScoredTop(top, topK);
+}
+
 async function searchCodesBySemantics(query, topK = 15, codeType = null, specialty = null, region = 'US') {
   const q = (query || '').toString().trim();
   if (!q) return [];
@@ -78,26 +155,16 @@ async function searchCodesBySemantics(query, topK = 15, codeType = null, special
   const queryEmbedding = await embedText(q);
   if (!queryEmbedding) return [];
 
-  let rows = typeof db.getAllCodeEmbeddings === 'function' ? db.getAllCodeEmbeddings(codeType, specialty) : [];
-  if (region && region.toUpperCase() !== 'US') {
-    rows = rows.filter(r => (r.code_type || '').toLowerCase() !== 'cpt' && (r.code_type || '').toLowerCase() !== 'hcpcs');
+  const types = codeType ? [codeType] : ['icd10', 'cpt', 'hcpcs'];
+  const perTypeK = Math.max(topK, Math.ceil((topK * 2) / types.length));
+  const merged = [];
+  for (const t of types) {
+    const chunk = await scoreEmbeddingType(queryEmbedding, t, specialty, perTypeK, region, q);
+    merged.push(...chunk);
   }
-  if (rows.length === 0) return [];
-
-  const scored = rows.map(r => ({
-    ...r,
-    score: cosineSimilarity(queryEmbedding, r.embedding)
-  }));
-  return scored
-    .filter(r => r.score > 0.3)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK)
-    .map(({ code, code_type, description_text, score }) => ({
-      code,
-      code_type,
-      description: description_text || '',
-      semantic_score: Math.round(score * 1000) / 1000
-    }));
+  return merged
+    .sort((a, b) => (b.semantic_score || 0) - (a.semantic_score || 0))
+    .slice(0, topK);
 }
 
 /**

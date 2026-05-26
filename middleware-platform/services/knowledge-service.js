@@ -5,7 +5,11 @@ const crypto = require('crypto');
 const db = require('../database');
 const cache = require('./cache-service');
 const { buildSearchQuery, buildSearchIntent } = require('./layer2-rag/search-intent-builder');
-const { retrieveFromColabRAG } = require('./layer2-rag/remote-rag-client');
+const {
+  retrieveRemoteCodeKnowledge,
+  resolveRagApiUrl
+} = require('./layer2-rag/remote-rag-client');
+const { pineconeFallbackEnabled } = require('./layer2-rag/pinecone-code-metadata-client');
 const { extractNegativeConstraints, filterCodesByNegativeConstraints } = require('./layer2-rag/negative-constraints');
 const { filterIcd10ByGuidelines } = require('./layer2-rag/guideline-resolver');
 const { rerankByPerceptualRelevance } = require('./layer2-rag/reranking-service');
@@ -19,6 +23,7 @@ const EXTRACTION_PATTERNS_PATH = path.resolve(__dirname, '../../Knowledge/ontolo
 const KNOWLEDGE_EXPORT_PATH = path.resolve(__dirname, '../../Knowledge/RAG/knowledge_export.json');
 const ICD10_CORRECTIONS_PATH = path.resolve(__dirname, '../../Knowledge/RAG/icd10_term_corrections.json');
 const CONCEPT_CORRECTIONS_PATH = path.resolve(__dirname, '../../Knowledge/RAG/concept_icd10_corrections.json');
+const LAY_LANGUAGE_EXPANSIONS_PATH = path.resolve(__dirname, '../../Knowledge/rules/lay-language-icd-expansions.json');
 
 // Colab export state (populated by loadColabExports)
 let _colabLoaded = false;
@@ -30,53 +35,88 @@ let _phraseExpansions = {};
 let _medicalPhrasesFromExport = [];
 let _cptFamilyMap = {};
 
+function loadConceptIcdCorrections() {
+  if (!fs.existsSync(CONCEPT_CORRECTIONS_PATH)) return;
+  try {
+    const conceptCorr = JSON.parse(fs.readFileSync(CONCEPT_CORRECTIONS_PATH, 'utf8'));
+    let conceptApplied = 0;
+    for (const [cid, fix] of Object.entries(conceptCorr)) {
+      if (cid.startsWith('_') || !fix?.icd10_codes?.length) continue;
+      if (_conceptMap[cid]) {
+        _conceptMap[cid].icd10_codes = fix.icd10_codes;
+        conceptApplied++;
+      }
+    }
+    if (conceptApplied > 0) {
+      console.log(`[knowledge-service] Applied ${conceptApplied} concept ICD-10 corrections`);
+    }
+  } catch (e) {
+    console.warn('[knowledge-service] concept corrections load failed:', e.message);
+  }
+}
+
+function mergeIcd10TermCorrectionsIntoExportMap() {
+  if (!fs.existsSync(ICD10_CORRECTIONS_PATH)) return;
+  try {
+    const corrections = JSON.parse(fs.readFileSync(ICD10_CORRECTIONS_PATH, 'utf8'));
+    let applied = 0;
+    for (const [term, icd10] of Object.entries(corrections)) {
+      if (term.startsWith('_')) continue;
+      if (!Array.isArray(icd10) || icd10.length === 0) continue;
+      const key = term.toLowerCase().trim();
+      if (!_termToCodes[key]) _termToCodes[key] = { icd10: [], cpt: [] };
+      if (!_termToCodes[key].icd10 || _termToCodes[key].icd10.length === 0) {
+        _termToCodes[key].icd10 = icd10;
+        applied++;
+      }
+    }
+    if (applied > 0) {
+      console.log(`[knowledge-service] Merged ${applied} ICD-10 term corrections into term map`);
+    }
+  } catch (e) {
+    console.warn('[knowledge-service] icd10_term_corrections merge failed:', e.message);
+  }
+}
+
+function loadLayLanguageExpansions() {
+  if (!fs.existsSync(LAY_LANGUAGE_EXPANSIONS_PATH)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(LAY_LANGUAGE_EXPANSIONS_PATH, 'utf8'));
+    const extraPhrases = Array.isArray(data.phrases) ? data.phrases : [];
+    for (const p of extraPhrases) {
+      if (p && !MEDICAL_PHRASES.includes(p)) MEDICAL_PHRASES.push(p);
+    }
+    const expansions = data.phrase_expansions || {};
+    for (const [phrase, targets] of Object.entries(expansions)) {
+      if (phrase.startsWith('_')) continue;
+      const existing = PHRASE_EXPANSIONS[phrase] || [];
+      PHRASE_EXPANSIONS[phrase] = [...new Set([...existing, ...(Array.isArray(targets) ? targets : [])])];
+    }
+    console.log(
+      `[knowledge-service] Lay-language expansions loaded (${extraPhrases.length} phrases, ${Object.keys(expansions).length} maps)`
+    );
+  } catch (e) {
+    console.warn('[knowledge-service] lay-language-icd-expansions load failed:', e.message);
+  }
+}
+
 function loadColabExports() {
   if (_colabLoaded) return;
+  mergeIcd10TermCorrectionsIntoExportMap();
   if (!fs.existsSync(KNOWLEDGE_EXPORT_PATH)) {
-    console.warn(
-      '[knowledge-service] Colab export not found at ' + KNOWLEDGE_EXPORT_PATH + '.\n' +
-      '  Copy JSON to Knowledge/RAG/knowledge_export.json. Falling back to built-in knowledge only.'
-    );
+    _colabLoaded = true;
     return;
   }
   try {
     const data = JSON.parse(fs.readFileSync(KNOWLEDGE_EXPORT_PATH, 'utf8'));
     _conceptMap = data.concept_specialty_map || {};
     _icd10Expansions = data.icd10_code_expansions || {};
-    _termToCodes = data.term_to_codes || {};
-    _phraseExpansions = data.phrase_expansions || {};
+    _termToCodes = { ..._termToCodes, ...(data.term_to_codes || {}) };
+    _phraseExpansions = { ..._phraseExpansions, ...(data.phrase_expansions || {}) };
     _medicalPhrasesFromExport = Array.isArray(data.medical_phrases) ? data.medical_phrases : [];
     _cptFamilyMap = data.cpt_family_map || {};
     _colabMeta = data._meta || {};
-    if (fs.existsSync(CONCEPT_CORRECTIONS_PATH)) {
-      try {
-        const conceptCorr = JSON.parse(fs.readFileSync(CONCEPT_CORRECTIONS_PATH, 'utf8'));
-        let conceptApplied = 0;
-        for (const [cid, fix] of Object.entries(conceptCorr)) {
-          if (cid.startsWith('_') || !fix?.icd10_codes?.length) continue;
-          if (_conceptMap[cid]) {
-            _conceptMap[cid].icd10_codes = fix.icd10_codes;
-            conceptApplied++;
-          }
-        }
-        if (conceptApplied > 0) console.log(`[knowledge-service] Applied ${conceptApplied} concept ICD-10 corrections`);
-      } catch (e) { console.warn('[knowledge-service] concept corrections load failed:', e.message); }
-    }
-    if (fs.existsSync(ICD10_CORRECTIONS_PATH)) {
-      const corrections = JSON.parse(fs.readFileSync(ICD10_CORRECTIONS_PATH, 'utf8'));
-      let applied = 0;
-      for (const [term, icd10] of Object.entries(corrections)) {
-        if (term.startsWith('_')) continue;
-        if (!Array.isArray(icd10) || icd10.length === 0) continue;
-        const key = term.toLowerCase().trim();
-        if (!_termToCodes[key]) _termToCodes[key] = { icd10: [], cpt: [] };
-        if (!_termToCodes[key].icd10 || _termToCodes[key].icd10.length === 0) {
-          _termToCodes[key].icd10 = icd10;
-          applied++;
-        }
-      }
-      if (applied > 0) console.log(`[knowledge-service] Applied ${applied} ICD-10 corrections from icd10_term_corrections.json`);
-    }
+    loadConceptIcdCorrections();
     _colabLoaded = true;
     const m = data._meta || {};
     console.log(
@@ -92,7 +132,6 @@ function loadColabExports() {
     console.error('[knowledge-service] Failed to load Colab export: ' + err.message);
   }
 }
-loadColabExports();
 
 let icdCache = [];
 let simpleRules = [];
@@ -267,7 +306,8 @@ const MEDICAL_PHRASES = [
   'low back pain', 'lumbar strain', 'chronic low back pain',
   'urinary tract infection', 'uti',
   'osteoarthritis', 'knee osteoarthritis', 'hip osteoarthritis',
-  'anxiety disorder', 'generalized anxiety', 'major depressive disorder', 'depression',
+  'anxiety', 'anxiety disorder', 'generalized anxiety', 'major depressive disorder', 'depression',
+  'psychotherapy', 'psychotherapy session',
   'asthma', 'chronic obstructive pulmonary disease', 'copd',
   'gerd', 'gastroesophageal reflux',
   'migraine', 'migraine headache',
@@ -282,8 +322,31 @@ const PHRASE_EXPANSIONS = {
   'wellness check': ['general examination'],
   'preventive exam': ['general examination'],
   'type 2 diabetes': ['E11'],
-  'diabetic neuropathy': ['E11']
+  'diabetic neuropathy': ['E11'],
+  'hypertension': ['I10', 'essential (primary) hypertension'],
+  'high blood pressure': ['I10'],
+  'essential hypertension': ['I10'],
+  'anxiety': ['F41', 'anxiety disorder', 'generalized anxiety'],
+  'anxiety disorder': ['F41', 'generalized anxiety'],
+  'psychotherapy': ['90834', '45 minutes', 'F41', 'anxiety disorder'],
+  // MPFS CPT descriptions use CMS abbreviations (e.g. "Office o/p est low 20 min"), not lay terms.
+  'office visit': ['office o/p'],
+  'established patient': ['office o/p est', 'o/p est'],
+  'new patient': ['office o/p new', 'o/p new'],
+  'evaluation and management': ['office o/p'],
+  'urinary tract infection': ['N39', 'cystitis', 'R30'],
+  'annual wellness visit': ['Z00', 'G0438', 'G0439', 'general examination'],
+  'wellness visit': ['Z00', 'G0438', 'preventive examination'],
+  'prenatal visit': ['Z34', 'supervision of pregnancy'],
+  'pregnant': ['Z34', 'O09'],
+  'migraine headache': ['G43', 'G44']
 };
+
+function initPhraseKnowledge() {
+  loadLayLanguageExpansions();
+  loadColabExports();
+}
+initPhraseKnowledge();
 
 /**
  * Filter codes to keep only those with at least one valid ICD-10/CPT pair.
@@ -597,19 +660,18 @@ async function getCandidatesForCoding(clinicalNote, options = {}) {
   let cpt;
   let icd10;
 
-  // Try Colab RAG when RAG_API_URL is configured
-  if (process.env.RAG_API_URL && process.env.RAG_API_URL.trim()) {
-    const colabResult = await retrieveFromColabRAG({
+  if (pineconeFallbackEnabled() || resolveRagApiUrl()) {
+    const remoteResult = await retrieveRemoteCodeKnowledge({
       query: query || rawText.slice(0, 2000),
       specialty: searchIntent?.specialty || 'general',
       region: searchIntent?.region || 'US',
       exclusion_terms: negativeConstraints,
       top_k: Math.max(limitIcd10, limitCpt)
     });
-    if (colabResult && (colabResult.icd10?.length > 0 || colabResult.cpt?.length > 0)) {
-      icd10 = (colabResult.icd10 || []).slice(0, limitIcd10);
-      cpt = (colabResult.cpt || []).slice(0, limitCpt);
-      console.log(`📚 Colab RAG: ${icd10.length} ICD-10, ${cpt.length} CPT candidates`);
+    if (remoteResult && (remoteResult.icd10?.length > 0 || remoteResult.cpt?.length > 0)) {
+      icd10 = (remoteResult.icd10 || []).slice(0, limitIcd10);
+      cpt = (remoteResult.cpt || []).slice(0, limitCpt);
+      console.log(`📚 Remote codes (${remoteResult.metadata?.source || 'remote'}): ${icd10.length} ICD-10, ${cpt.length} CPT`);
     }
   }
 
@@ -792,6 +854,63 @@ async function getCodeCandidates(clinicalNote, options = {}) {
   return enrichCandidatesFromExport(candidates, clinicalNote || '', options);
 }
 
+function _lookupCodeDescription(code, type) {
+  if (!code) return '';
+  const raw = String(code).trim();
+  try {
+    if (type === 'icd10') {
+      const row = db.prepare(
+        `SELECT description FROM icd10_codes WHERE UPPER(REPLACE(TRIM(code), '.', '')) = UPPER(REPLACE(?, '.', '')) LIMIT 1`
+      ).get(raw);
+      return row?.description || '';
+    }
+    if (type === 'cpt') {
+      const row = db.prepare('SELECT description FROM cpt_codes WHERE UPPER(TRIM(code)) = UPPER(?) LIMIT 1').get(raw);
+      return row?.description || '';
+    }
+    if (type === 'hcpcs') {
+      const row = db.prepare('SELECT long_desc FROM hcpcs_codes WHERE UPPER(TRIM(code)) = UPPER(?) LIMIT 1').get(raw);
+      return row?.long_desc || '';
+    }
+  } catch (_) { /* sqlite optional */ }
+  return '';
+}
+
+/**
+ * Boost / inject ICD candidates from term-level corrections when clinical text matches.
+ * @param {{ icd10?: object[], cpt?: object[], hcpcs?: object[] }} candidates
+ * @param {string} clinicalText
+ */
+function applyRemoteIcdCorrections(candidates, clinicalText) {
+  const text = (clinicalText || '').toLowerCase();
+  const icd10 = [...(candidates.icd10 || [])];
+  if (!text || text.length < 3) return { ...candidates, icd10 };
+
+  if (fs.existsSync(ICD10_CORRECTIONS_PATH)) {
+    try {
+      const corrections = JSON.parse(fs.readFileSync(ICD10_CORRECTIONS_PATH, 'utf8'));
+      for (const [term, codes] of Object.entries(corrections)) {
+        if (term.startsWith('_') || !Array.isArray(codes) || !codes.length) continue;
+        if (!text.includes(term.toLowerCase())) continue;
+        for (const code of codes) {
+          const c = String(code).trim().toUpperCase();
+          if (!c) continue;
+          if (icd10.some((x) => String(x?.code || '').toUpperCase() === c)) continue;
+          icd10.unshift({
+            code: c,
+            description: _lookupCodeDescription(c, 'icd10'),
+            confidence: 0.92,
+            source: 'term_correction'
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[knowledge-service] applyRemoteIcdCorrections failed:', e.message);
+    }
+  }
+  return { ...candidates, icd10 };
+}
+
 /**
  * Unified dual-source code retrieval: remote RAG + local search in parallel, merge, validate.
  * Use this for video consult, assistant overlay, or any API that needs consistent code suggestions.
@@ -807,35 +926,51 @@ async function getCodeCandidatesDualSource(clinicalText, options = {}) {
   const maxCpt = options.maxCpt ?? 15;
   const maxHcpcs = options.maxHcpcs ?? 10;
 
+  const remoteTimeoutMs = options.remoteTimeoutMs ?? parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '2000', 10);
   const [remoteSettled, localSettled] = await Promise.allSettled([
-    retrieveFromColabRAG({ query: text, specialty, top_k: Math.max(maxIcd10, maxCpt, maxHcpcs) }),
+    retrieveRemoteCodeKnowledge(
+      { query: text, specialty, top_k: Math.max(maxIcd10, maxCpt, maxHcpcs) },
+      { timeoutMs: remoteTimeoutMs }
+    ),
     _getCodeCandidatesImpl(text, { ...options, maxIcd10, maxCpt, maxHcpcs, useSemantic: options.useSemantic !== false })
   ]);
 
-  const remote = remoteSettled.status === 'fulfilled' && remoteSettled.value
+  let remote = remoteSettled.status === 'fulfilled' && remoteSettled.value
     ? remoteSettled.value
     : { icd10: [], cpt: [], hcpcs: [], metadata: { source: 'remote_error' } };
+  remote = applyRemoteIcdCorrections(remote, text);
   const local = localSettled.status === 'fulfilled' && localSettled.value
     ? localSettled.value
     : { icd10: [], cpt: [], hcpcs: [], metadata: { source: 'local_error' } };
 
   let merged = _mergeRemoteAndLocalCodes(remote, local, { maxIcd10, maxCpt, maxHcpcs });
-  merged = enrichCandidatesFromExport(merged, text, options);
 
   const codeStrings = {
     icd10: (merged.icd10 || []).map((c) => c?.code).filter(Boolean),
     cpt: (merged.cpt || []).map((c) => c?.code).filter(Boolean),
     hcpcs: (merged.hcpcs || []).map((c) => c?.code).filter(Boolean)
   };
-  const validation = validateCodesExist(codeStrings, { trustExternalSource: true });
+  const validation = validateCodesExist(codeStrings, { trustExternalSource: false });
   const validIcd10 = (merged.icd10 || []).filter((c) => c?.code && !validation.invalid.icd10.includes(String(c.code).trim()));
   const validCpt = (merged.cpt || []).filter((c) => c?.code && !validation.invalid.cpt.includes(String(c.code).trim()));
   const validHcpcs = (merged.hcpcs || []).filter((c) => c?.code && !validation.invalid.hcpcs.includes(String(c.code).trim()));
 
   const codes = {
-    icd10: validIcd10.map((c) => ({ code: c.code, description: c.description || '', confidence: ensureCodeConfidence(c) })),
-    cpt: validCpt.map((c) => ({ code: c.code, description: c.description || '', confidence: ensureCodeConfidence(c) })),
-    hcpcs: validHcpcs.map((c) => ({ code: c.code, description: c.description || '', confidence: ensureCodeConfidence(c) }))
+    icd10: validIcd10.map((c) => ({
+      code: c.code,
+      description: c.description || _lookupCodeDescription(c.code, 'icd10'),
+      confidence: ensureCodeConfidence(c)
+    })),
+    cpt: validCpt.map((c) => ({
+      code: c.code,
+      description: c.description || _lookupCodeDescription(c.code, 'cpt'),
+      confidence: ensureCodeConfidence(c)
+    })),
+    hcpcs: validHcpcs.map((c) => ({
+      code: c.code,
+      description: c.description || _lookupCodeDescription(c.code, 'hcpcs'),
+      confidence: ensureCodeConfidence(c)
+    }))
   };
   const invalid_codes = (validation.invalid.icd10.length || validation.invalid.cpt.length || validation.invalid.hcpcs.length)
     ? validation.invalid
@@ -926,6 +1061,33 @@ const PHRASE_MATCH_BOOST = 2;
 const ICD10_PER_TERM = 25;
 const CPT_PER_TERM = 10;
 
+const EM_SET = new Set(['99202', '99203', '99204', '99205', '99211', '99212', '99213', '99214', '99215']);
+
+function isEmCode(code) {
+  return EM_SET.has(String(code || '').trim());
+}
+
+const TELEHEALTH_VISIT_CUES = /\b(telehealth|tele-health|telemedicine|video visit|virtual visit)\b/i;
+const OUTPATIENT_VISIT_CUES = /\b(office visit|established patient|new patient|follow[- ]?up|e\/m|evaluation and management)\b/i;
+
+/**
+ * When query implies telehealth or office E/M, rank E/M CPT ahead of telehealth G-codes.
+ */
+function rankCptWithTelehealthContext(cptList, note) {
+  if (!note || !Array.isArray(cptList) || !cptList.length) return cptList;
+  const telehealth = TELEHEALTH_VISIT_CUES.test(note);
+  const visit = OUTPATIENT_VISIT_CUES.test(note) || telehealth;
+  if (!visit) return cptList;
+  const em = cptList.filter((c) => isEmCode(c?.code));
+  if (!em.length) return cptList;
+  const gTele = cptList.filter((c) => {
+    const code = String(c?.code || '').trim();
+    return /^G\d/i.test(code) && !isEmCode(code);
+  });
+  const other = cptList.filter((c) => !em.includes(c) && !gTele.includes(c));
+  return [...em, ...other, ...gTele];
+}
+
 async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
   const maxIcd10 = options.maxIcd10 ?? 20;
   const maxCpt = options.maxCpt ?? 15;
@@ -998,6 +1160,13 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
     });
   }
 
+  const hadEmCpt = Array.from(cptResults.values()).some((r) => isEmCode(r.code));
+  let boostedDefaultEm = false;
+  if (!hadEmCpt && icd10Results.size > 0) {
+    boostedDefaultEm = true;
+    (searchCptCodesCached('office o/p est', 6) || []).forEach((r) => addCpt(r, 3));
+  }
+
   const sortByMatch = (a, b) => (b._matchCount || 0) - (a._matchCount || 0);
 
   let icd10 = Array.from(icd10Results.values())
@@ -1007,8 +1176,14 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
 
   let cpt = Array.from(cptResults.values())
     .sort(sortByMatch)
-    .slice(0, maxCpt)
+    .slice(0, maxCpt * 2)
     .map(({ _matchCount, ...r }) => ({ ...r, confidence: Math.min(1, 0.5 + (_matchCount || 0) * 0.1) }));
+  if (boostedDefaultEm) {
+    const em = cpt.filter((c) => isEmCode(c.code));
+    const other = cpt.filter((c) => !isEmCode(c.code));
+    cpt = [...em, ...other];
+  }
+  cpt = cpt.slice(0, maxCpt);
 
   let hcpcs = Array.from(hcpcsResults.values())
     .sort(sortByMatch)
@@ -1039,6 +1214,8 @@ async function _getCodeCandidatesImpl(clinicalNote, options = {}) {
       console.warn('⚠️  Semantic merge skipped:', e.message);
     }
   }
+
+  cpt = rankCptWithTelehealthContext(cpt, note);
 
   const rawText = rawNote || (perceptualState?.expanded_text || '');
   const rawConstraints = extractNegativeConstraints(rawText);
@@ -1193,12 +1370,6 @@ function loadModifierRules() {
     console.warn('⚠️  Modifier rules load failed:', e.message);
   }
   return modifierRules;
-}
-
-const EM_SET = new Set(['99202', '99203', '99204', '99205', '99211', '99212', '99213', '99214', '99215']);
-
-function isEmCode(code) {
-  return EM_SET.has(String(code || '').trim());
 }
 
 function isProcedureCode(code) {

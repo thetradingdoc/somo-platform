@@ -1,20 +1,31 @@
 /**
- * Remote RAG Client - Colab RAG API
+ * Remote RAG Client — Pinecone metadata (primary) + optional Colab Flask API (legacy).
  *
- * Calls the Colab RAG API (Pinecone-backed) to retrieve medical code candidates.
- * Used by getCandidatesForCoding in knowledge-service for PDF extraction and voice.
- * Returns null on failure to allow local fallback.
- * Wrapped in a circuit breaker: after N failures in window, skip remote for resetTimeMs and use local-only.
+ * Used by getCodeCandidatesDualSource in knowledge-service.
+ * Returns empty arrays on failure so local SQLite search still runs.
  */
 
 const axios = require('axios');
 const circuitBreaker = require('../../utils/circuit-breaker');
+const {
+  retrieveCodesFromPineconeMetadata,
+  pineconeFallbackEnabled
+} = require('./pinecone-code-metadata-client');
 
-// When using a single ngrok tunnel, route RAG via middleware proxy:
-// POST http://localhost:4000/api/rag/retrieve  ->  http://localhost:5000/api/retrieve
-const RAG_API_URL = process.env.RAG_API_URL || 'http://localhost:4000/api/rag';
 const RAG_TIMEOUT = parseInt(process.env.RAG_TIMEOUT || '10000', 10);
 const RAG_RETRIES = parseInt(process.env.RAG_RETRIES || '2', 10);
+const DEFAULT_REMOTE_TIMEOUT_MS = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '2000', 10);
+
+/** Empty/disabled RAG_API_URL skips Colab; unset no longer defaults to localhost (use Pinecone). */
+function resolveRagApiUrl() {
+  const raw = process.env.RAG_API_URL;
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  const u = String(raw).trim();
+  if (!u || u === '0' || u === 'false' || u === 'disabled') return null;
+  return u;
+}
 
 let logger;
 try {
@@ -23,22 +34,107 @@ try {
   logger = { info: (...a) => console.log(...a), warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
 }
 
+function emptyRemote(source = 'none') {
+  return { icd10: [], cpt: [], hcpcs: [], metadata: { source, rag_cpt_source: 'empty' } };
+}
+
+function withTimeout(promise, timeoutMs, label = 'remote') {
+  const ms = timeoutMs > 0 ? timeoutMs : DEFAULT_REMOTE_TIMEOUT_MS;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label}_timeout`)), ms);
+    })
+  ]);
+}
+
 /**
- * Call Colab RAG API to retrieve medical codes.
- *
- * @param {Object} params
- * @param {string} params.query - Clinical text or structured findings
- * @param {string} [params.specialty] - Medical specialty (e.g. orthopedics, cardiology)
- * @param {string} [params.region] - Region code (e.g. US)
- * @param {string[]} [params.exclusion_terms] - Terms to exclude from results
- * @param {number} [params.top_k] - Max results per code type
- * @returns {Promise<Object|null>} { icd10, cpt, hcpcs } or null if unavailable
+ * Primary remote retrieval: live Pinecone metadata, optional Colab fill gaps.
+ * @param {Object} params - { query, specialty, region, exclusion_terms, top_k }
+ * @param {Object} options - { timeoutMs }
  */
-async function retrieveFromColabRAG(params) {
-  if (!RAG_API_URL || !RAG_API_URL.trim()) {
-    return null;
+async function retrieveRemoteCodeKnowledge(params, options = {}) {
+  const payload = {
+    query: (params.query || '').toString().trim(),
+    specialty: params.specialty || 'general',
+    region: params.region || 'US',
+    exclusion_terms: Array.isArray(params.exclusion_terms) ? params.exclusion_terms : [],
+    top_k: params.top_k || 20
+  };
+
+  if (!payload.query) {
+    return emptyRemote('empty_query');
   }
 
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS;
+  let out = emptyRemote('none');
+
+  if (pineconeFallbackEnabled()) {
+    try {
+      const pinecone = await withTimeout(
+        retrieveCodesFromPineconeMetadata(payload.query, { top_k: payload.top_k }),
+        timeoutMs,
+        'pinecone'
+      );
+      if (pinecone && (pinecone.icd10?.length || pinecone.cpt?.length || pinecone.hcpcs?.length)) {
+        out = {
+          icd10: pinecone.icd10 || [],
+          cpt: pinecone.cpt || [],
+          hcpcs: pinecone.hcpcs || [],
+          metadata: { source: 'pinecone', rag_cpt_source: 'pinecone' }
+        };
+        logger.info('Pinecone remote code retrieval', {
+          icd10_count: out.icd10.length,
+          cpt_count: out.cpt.length,
+          hcpcs_count: out.hcpcs.length
+        });
+      }
+    } catch (e) {
+      logger.warn('Pinecone remote retrieval failed', { error: e.message });
+    }
+  }
+
+  const ragUrl = resolveRagApiUrl();
+  if (ragUrl) {
+    const needFlask =
+      out.icd10.length === 0 || out.cpt.length === 0 || out.hcpcs.length === 0;
+    if (needFlask) {
+      try {
+        const flask = await withTimeout(
+          retrieveFromColabRAGInternal(params, ragUrl),
+          timeoutMs,
+          'colab_rag'
+        );
+        if (flask) {
+          if (out.icd10.length === 0 && flask.icd10?.length) out.icd10 = flask.icd10;
+          if (out.cpt.length === 0 && flask.cpt?.length) {
+            out.cpt = flask.cpt;
+            out.metadata.rag_cpt_source = flask.metadata?.rag_cpt_source || 'flask';
+          }
+          if (out.hcpcs.length === 0 && flask.hcpcs?.length) out.hcpcs = flask.hcpcs;
+          out.metadata.source = out.metadata.source === 'pinecone' ? 'pinecone+flask' : 'flask';
+        }
+      } catch (e) {
+        logger.warn('Colab RAG remote retrieval failed', { error: e.message, url: ragUrl });
+      }
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Legacy Colab Flask RAG API (optional when RAG_API_URL is set).
+ */
+async function retrieveFromColabRAG(params) {
+  const RAG_API_URL = resolveRagApiUrl();
+  if (!RAG_API_URL) {
+    return null;
+  }
+  return retrieveFromColabRAGInternal(params, RAG_API_URL);
+}
+
+async function retrieveFromColabRAGInternal(params, RAG_API_URL) {
   const startTime = Date.now();
   const breaker = circuitBreaker.getOrCreate('remote_rag', {
     failureThreshold: parseInt(process.env.RAG_CIRCUIT_FAILURE_THRESHOLD || '5', 10),
@@ -110,21 +206,47 @@ async function retrieveFromColabRAG(params) {
       confidence: typeof c.score === 'number' ? c.score : (c.confidence ?? 0.8)
     }));
 
-    const totalCodes = icd10.length + cpt.length + hcpcs.length;
-    logger.info('Colab RAG response received', {
-      icd10_count: icd10.length,
-      cpt_count: cpt.length,
-      hcpcs_count: hcpcs.length,
-      duration_ms: duration
-    });
-    if (totalCodes === 0) {
-      logger.warn('Colab RAG returned 0 codes (remote may have no code metadata; local knowledge merge will still run)', {
-        url: RAG_API_URL,
-        query_length: payload.query?.length
+    let outIcd10 = icd10;
+    let outCpt = cpt;
+    let outHcpcs = hcpcs;
+    let ragCptSource = outCpt.length > 0 ? 'flask' : 'empty';
+
+    const needFallback =
+      pineconeFallbackEnabled() &&
+      (outCpt.length === 0 || outHcpcs.length === 0 || outIcd10.length === 0);
+
+    if (needFallback) {
+      const pineconeFallback = await retrieveCodesFromPineconeMetadata(payload.query, {
+        top_k: payload.top_k
       });
+      if (pineconeFallback) {
+        if (outCpt.length === 0 && pineconeFallback.cpt?.length) {
+          outCpt = pineconeFallback.cpt;
+          ragCptSource = 'pinecone_fallback';
+        }
+        if (outHcpcs.length === 0 && pineconeFallback.hcpcs?.length) {
+          outHcpcs = pineconeFallback.hcpcs;
+        }
+        if (outIcd10.length === 0 && pineconeFallback.icd10?.length) {
+          outIcd10 = pineconeFallback.icd10;
+        }
+      }
     }
 
-    return { icd10, cpt, hcpcs };
+    logger.info('Colab RAG response received', {
+      icd10_count: outIcd10.length,
+      cpt_count: outCpt.length,
+      hcpcs_count: outHcpcs.length,
+      rag_cpt_source: ragCptSource,
+      duration_ms: duration
+    });
+
+    return {
+      icd10: outIcd10,
+      cpt: outCpt,
+      hcpcs: outHcpcs,
+      metadata: { rag_cpt_source: ragCptSource, source: 'flask' }
+    };
   }
 
   try {
@@ -133,24 +255,22 @@ async function retrieveFromColabRAG(params) {
       return null;
     });
   } catch (error) {
-    const duration = Date.now() - startTime;
-    logger.warn('Colab RAG API call failed (local knowledge fallback will be used)', {
+    logger.warn('Colab RAG API call failed', {
       error: error.message,
       url: RAG_API_URL,
-      duration_ms: duration,
-      status: error.response?.status
+      duration_ms: Date.now() - startTime
     });
     return null;
   }
 }
 
-/**
- * Health check for Colab RAG API.
- * @returns {Promise<Object>} { healthy: boolean, status?: Object, reason?: string }
- */
 async function checkHealth() {
-  if (!RAG_API_URL || !RAG_API_URL.trim()) {
-    return { healthy: false, reason: 'RAG_API_URL not configured' };
+  const RAG_API_URL = resolveRagApiUrl();
+  if (!RAG_API_URL) {
+    return {
+      healthy: pineconeFallbackEnabled(),
+      reason: pineconeFallbackEnabled() ? 'Pinecone only (RAG_API_URL disabled)' : 'No remote RAG configured'
+    };
   }
 
   try {
@@ -166,5 +286,7 @@ async function checkHealth() {
 
 module.exports = {
   retrieveFromColabRAG,
-  checkHealth
+  retrieveRemoteCodeKnowledge,
+  checkHealth,
+  resolveRagApiUrl
 };

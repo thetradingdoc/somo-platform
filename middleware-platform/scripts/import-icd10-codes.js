@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Import ICD-10-CM codes from CMS 2020 code descriptions into the local SQLite knowledge base.
- * Source: Knowledge/ICD-10 Files/2020 Code Descriptions/icd10cm_codes_2020.txt
- * Format: CODE<tab/spaces>Description (one per line)
+ * Import ICD-10-CM codes from CDC FY2025 code descriptions into the local SQLite knowledge base.
+ * Source: Knowledge/ICD-10 Files/FY2025 Code Descriptions/icd10cm-codes-2025.txt
+ * (from https://ftp.cdc.gov/.../ICD10-CM Code Descriptions 2025.zip)
+ * Format: CODE<spaces>Description (one per line)
  */
 
 const path = require('path');
@@ -11,9 +12,9 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const db = require('../database');
 
-const ICD10_DIR = path.resolve(__dirname, '../../Knowledge/ICD-10 Files/2020 Code Descriptions');
-const ICD10_TXT = path.join(ICD10_DIR, 'icd10cm_codes_2020.txt');
-const SOURCE_FILE = 'icd10cm_codes_2020.txt';
+const ICD10_DIR = path.resolve(__dirname, '../../Knowledge/ICD-10 Files/FY2025 Code Descriptions');
+const ICD10_TXT = path.join(ICD10_DIR, 'icd10cm-codes-2025.txt');
+const SOURCE_FILE = 'icd10cm-codes-2025.txt';
 
 function parseIcd10File(filePath) {
   if (!fs.existsSync(filePath)) {

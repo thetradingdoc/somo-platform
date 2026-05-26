@@ -1,8 +1,9 @@
 # architecture - Unified Architecture and System Design
-> Last reviewed: 2026-05-21
+> Last reviewed: 2026-05-25
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-25
 
+> **Medical coding:** Canonical architecture and operations live in **[docs/Medical Coding/ARCHITECTURE.md](../Medical%20Coding/ARCHITECTURE.md)** and **[OPERATIONS.md](../Medical%20Coding/OPERATIONS.md)**. Do **not** expand this 12k-line file for codebook/RAG updates — patch the Medical Coding docs and link from here. The [#voice-agent-runbook](#voice-agent-runbook) section below is partially refreshed; older tables elsewhere may still reference `getCodeCandidates` or `localhost:4000` RAG defaults.
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
 
@@ -891,7 +892,7 @@ Trigger contract (minimal):
 | `VIDEO_CONSULT_MAX_COST_PER_SESSION` | No | 10 | Max $ per session (throttling) |
 | `VIDEO_CONSULT_ENABLE_VISION` | No | false | Enable vision/dermatology |
 | `VIDEO_CONSULT_SLOW_NODE_MS` | No | 5000 | Slow-node log warning (ms) |
-| `RAG_API_URL` | No | http://localhost:4000/api/rag | RAG proxy (middleware) |
+| `RAG_API_URL` | No | `disabled` (prod) or Pinecone direct | Colab Flask only if set to a real URL; do not rely on localhost default |
 | `COLAB_RAG_URL` | No | - | Backend RAG API; proxy forwards here. Restart after change. |
 | `RAG_TIMEOUT` / `RAG_RETRIES` | No | 10000 / 2 | RAG client timeout and retries |
 | `RAG_CIRCUIT_*` | No | 5 / 60000 / 30000 | Circuit breaker: failure threshold, window ms, reset ms |
@@ -11616,52 +11617,32 @@ If you want perfect voice pronunciation:
 
 ## Medical Coding Voice Agent – Runbook
 
+> **Canonical:** [docs/Medical Coding/OPERATIONS.md](../Medical%20Coding/OPERATIONS.md) and [ARCHITECTURE.md](../Medical%20Coding/ARCHITECTURE.md). This section is a short operational index.
 
 Operational procedures for the medical coding voice agent.
+
+**Voice retrieval:** `suggest_codes_from_symptoms` calls `getCodeCandidatesDualSource` (local SQLite + Pinecone metadata). Production: `RAG_API_URL=disabled`, not `localhost:4000`.
 
 ---
 
 ## 1. Run ICD-10 / CPT / HCPCS Imports
 
-All imports run from `middleware-platform/`:
+All imports run from `middleware-platform/`. Full CMS paths: [MEDICAL_CODEBOOK_SETUP.md](../deployment/MEDICAL_CODEBOOK_SETUP.md).
 
 ```bash
 cd middleware-platform
-```
-
-### ICD-10 (~72K codes)
-
-**Source:** `Knowledge/ICD-10 Files/2020 Code Descriptions/icd10cm_codes_2020.txt`
-
-```bash
+export SKIP_STARTUP_MIGRATIONS=1
 node scripts/import-icd10-codes.js
-```
-
-### CPT (DHS addendum, ~1.3K codes)
-
-**Source:** `Knowledge/CPT/2025_DHS_Code_List_Addendum_11_26_2024.xlsx`
-
-```bash
-node scripts/import-cpt-codes.js
-```
-
-*Note:* DHS addendum omits common E/M codes (99213, 99214). Use full CPT when available.
-
-### HCPCS (~9K codes)
-
-**Source:** `Knowledge/HCPCS/hcpc2026_jan_anweb_01122026/HCPC2026_JAN_ANWEB_01122026.txt`
-
-```bash
+node scripts/import-cpt-codes.js --source mpfs --file ../Knowledge/fee-schedules/PPRRVU.csv
 node scripts/import-hcpcs-codes.js
+node scripts/import-mpfs-medicare.js --file ../Knowledge/fee-schedules/PPRRVU.csv
+node scripts/populate-code-embeddings.js --type cpt --incremental --until-done --batch-size 5000
+node scripts/populate-code-embeddings.js --until-done --batch-size 5000
 ```
 
-### Semantic embeddings (optional)
-
-Requires `OPENAI_API_KEY` in `.env`. Run after ICD-10/CPT/HCPCS imports:
-
-```bash
-node scripts/populate-code-embeddings.js [--limit N] [--type icd10|cpt|hcpcs]
-```
+- **ICD-10:** FY2025 codebook (~74k rows in dev).
+- **CPT:** MPFS / PPRRVU (~17k codes). **Do not** use DHS-only import (~1,299 rows) for eval or production.
+- **HCPCS:** CMS HCPC annual file (~9k).
 
 ---
 
@@ -11669,29 +11650,15 @@ node scripts/populate-code-embeddings.js [--limit N] [--type icd10|cpt|hcpcs]
 
 ```bash
 cd middleware-platform
-node tests/medical-coding/evaluate-accuracy.js
+SKIP_STARTUP_MIGRATIONS=1 RAG_API_URL=disabled EVAL_USE_SEMANTIC=false npm run eval:coding
 ```
 
-Voice agent flow evaluation (extraction, triage, code retrieval):
+Report: `middleware-platform/tmp/coding-accuracy-report.json`. Baseline (dev): **92%** (56/61) with semantic off.
 
-```bash
-node tests/medical-coding/evaluate-voice-agent.js
-```
+Test cases: `tests/medical-coding/voice-agent-test-cases.json` (61 cases).  
+Legacy eval script references are removed in this repo — use `npm run eval:coding` only.
 
-With LLM hallucination check (requires `GROQ_API_KEY`):
-
-```bash
-node tests/medical-coding/evaluate-accuracy.js --llm
-```
-
-With test database:
-
-```bash
-NODE_ENV=test node tests/medical-coding/evaluate-accuracy.js
-```
-
-Test cases: `tests/medical-coding/test-cases.json` (28 cases), `tests/medical-coding/voice-agent-test-cases.json` (6 voice flow cases).  
-See `tests/medical-coding/README.md` for metrics and baseline.
+Optional LLM check: `node scripts/evaluate-accuracy.js --llm` (requires `GROQ_API_KEY`).
 
 ---
 
@@ -11786,7 +11753,7 @@ After bulk fee schedule upload or rule edits, clear the relevant bucket.
 | Triage (assess_urgency) | 500ms | 300ms |
 | Code search (ICD-10/CPT/HCPCS) | 1s | 500ms |
 | Code-pair validation | 200ms | 100ms |
-| Full getCodeCandidates | 2s | 1.5s |
+| Full getCodeCandidatesDualSource | 2s | 1.5s |
 
 Env: `MIN_CODING_CONFIDENCE=0.7` (Phase 6.4) – suggestions below threshold route to manual review.
 
@@ -12142,7 +12109,7 @@ Merged from: MEDICAL_CODING_AGENT_TODO, AI_AGENT_FINANCIAL_LAYER_TODO, IMPLEMENT
 - **Tools:** search_icd10_codes, search_cpt_codes, search_hcpcs_codes, suggest_codes_from_symptoms, extract_medical_text, validate_code_pair, assess_urgency, check_payer_guidelines, get_code_pricing
 - **Safety:** detectRedFlags, code existence validation, code-pair validation, emergency blocking
 - **Financial:** triage-rules.json, medical abbreviations, FeeScheduleService (payerId in options)
-- **Evaluation:** test-cases.json (~28), voice-agent-test-cases.json (6), evaluate-accuracy.js, evaluate-voice-agent.js
+- **Evaluation:** test-cases.json (~28), voice-agent-test-cases.json, evaluate-accuracy.js (`npm run eval:coding`)
 - **Caching:** in-memory (24h/7d/30d), cache-service, /api/admin/cache-stats
 
 ---

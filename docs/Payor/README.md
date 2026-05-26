@@ -1,6 +1,6 @@
 # Payor Documentation Index
 
-**Last Updated:** April 29, 2026  
+**Last Updated:** 2026-05-25  
 **Scope:** Canonical payor/payer architecture, operations, source contracts, and production readiness.
 
 ## Read In This Order
@@ -15,9 +15,11 @@
    [`PAYOR_SOURCE_CONTRACTS.md`](./PAYOR_SOURCE_CONTRACTS.md)
 5. **Provider network evidence contract**  
    [`PROVIDER_NETWORK_INGESTION_CONTRACTS.md`](./PROVIDER_NETWORK_INGESTION_CONTRACTS.md)
-6. **Naming convention (`payor` vs `payer`)**  
+6. **Provider directory pipeline + public search API**  
+   [`PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md`](./PROVIDER_DIRECTORY_PIPELINE_AND_PUBLIC_SEARCH.md)
+7. **Naming convention (`payor` vs `payer`)**  
    [`PAYOR_NAMING_CONVENTION.md`](./PAYOR_NAMING_CONVENTION.md)
-7. **Deferred/out-of-scope datasets**  
+8. **Deferred/out-of-scope datasets**  
    [`PAYOR_DEFERRED_THIRD_PARTY_DATASETS.md`](./PAYOR_DEFERRED_THIRD_PARTY_DATASETS.md)
 
 ## Current Status Snapshot

@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,28 +13,67 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/billing-ui';
 import { JournalTokens } from '@/constants/journalTokens';
-import {
-  formatRoutinePreview,
-  getRoutineProgram,
-  listRoutineConcerns,
-} from '@/constants/routines';
 import { PENDING_ROUTINE_CONCERN_KEY } from '@/constants/routineSession';
-import { patientPost } from '@/lib/patient-api';
+import { patientPost, publicGet } from '@/lib/patient-api';
 import { getPatientSessionId } from '@/lib/patient-session';
+
+type ConcernRow = {
+  id: string;
+  label: string;
+  total_weeks: number;
+};
+
+type ProgramPreview = {
+  key_rules?: string[];
+};
 
 export default function RoutinePickScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ concern?: string }>();
-  const concerns = useMemo(() => listRoutineConcerns(), []);
-  const initial =
-    typeof params.concern === 'string' && getRoutineProgram(params.concern)
-      ? params.concern
-      : concerns[0]?.id || 'acne';
-  const [selected, setSelected] = useState(initial);
+  const [concerns, setConcerns] = useState<ConcernRow[]>([]);
+  const [selected, setSelected] = useState('acne');
+  const [preview, setPreview] = useState<ProgramPreview | null>(null);
+  const [loadingConcerns, setLoadingConcerns] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const program = getRoutineProgram(selected);
+  const loadConcerns = useCallback(async () => {
+    setLoadingConcerns(true);
+    setError(null);
+    try {
+      const data = await publicGet('/api/public/routines/concerns');
+      const list: ConcernRow[] = Array.isArray(data?.concerns) ? data.concerns : [];
+      setConcerns(list);
+      const paramId = typeof params.concern === 'string' ? params.concern : '';
+      const initial =
+        paramId && list.some((c) => c.id === paramId) ? paramId : list[0]?.id || 'acne';
+      setSelected(initial);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Could not load care plans.');
+    } finally {
+      setLoadingConcerns(false);
+    }
+  }, [params.concern]);
+
+  useEffect(() => {
+    void loadConcerns();
+  }, [loadConcerns]);
+
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await publicGet(`/api/public/routines/${encodeURIComponent(selected)}/preview`);
+        if (!cancelled) setPreview(data?.preview || null);
+      } catch {
+        if (!cancelled) setPreview(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
 
   async function startTracking() {
     setBusy(true);
@@ -56,6 +95,8 @@ export default function RoutinePickScreen() {
     }
   }
 
+  const selectedRow = concerns.find((c) => c.id === selected);
+
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -63,21 +104,20 @@ export default function RoutinePickScreen() {
         <Text style={styles.sub}>
           Pick a guided template to track AM/PM steps and daily progress photos.
         </Text>
+        {loadingConcerns ? <ActivityIndicator /> : null}
         {concerns.map((c) => (
           <Pressable
             key={c.id}
             onPress={() => setSelected(c.id)}
             style={[styles.card, selected === c.id && styles.cardSelected]}>
             <Text style={styles.cardTitle}>{c.label}</Text>
-            <Text style={styles.cardMeta}>
-              {c.total_weeks} weeks · {formatRoutinePreview(getRoutineProgram(c.id)! )}
-            </Text>
+            <Text style={styles.cardMeta}>{c.total_weeks} weeks · guided program</Text>
           </Pressable>
         ))}
-        {program ? (
+        {preview && selectedRow ? (
           <View style={styles.preview}>
             <Text style={styles.previewTitle}>Key rules</Text>
-            {(program.key_rules || []).slice(0, 4).map((rule) => (
+            {(preview.key_rules || []).slice(0, 4).map((rule) => (
               <Text key={rule} style={styles.rule}>
                 · {rule}
               </Text>

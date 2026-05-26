@@ -47,17 +47,40 @@ function checkLayeringForActives(activeIds, graph) {
   return { overall, conflicts };
 }
 
+function ingredientGraphAvailable(db) {
+  if (!db) return false;
+  try {
+    const row = db.prepare('SELECT COUNT(*) AS n FROM ingredient_interactions').get();
+    return Number(row?.n) > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
 function runLayeringCheck({ steps, db }) {
   const activeIds = extractActivesFromSteps(steps);
   if (activeIds.length < 2) {
     return { overall: 'safe', conflicts: [], actives_detected: activeIds };
+  }
+  if (!ingredientGraphAvailable(db)) {
+    return {
+      overall: 'unknown',
+      conflicts: [],
+      actives_detected: activeIds,
+      graph_unavailable: true,
+    };
   }
   try {
     const dbModule = require('../database');
     const graph = dbModule.createIngredientConflictGraph();
     return { ...checkLayeringForActives(activeIds, graph), actives_detected: activeIds };
   } catch (_) {
-    return { overall: 'safe', conflicts: [], actives_detected: activeIds, graph_unavailable: true };
+    return {
+      overall: 'unknown',
+      conflicts: [],
+      actives_detected: activeIds,
+      graph_unavailable: true,
+    };
   }
 }
 

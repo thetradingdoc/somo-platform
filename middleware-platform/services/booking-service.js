@@ -470,6 +470,25 @@ class BookingService {
 
       // Prepare appointment record
       const isVideoConsult = (typeConfig.is_video === true) || (appointmentType === 'Video Consultation');
+      const {
+        resolvePlaceOfService,
+        resolveTelehealthModifiers,
+        serializeCptModifiers
+      } = require('./billing-claim-envelope-service');
+      const visitMode = appointmentData.visit_mode || 'sync_video';
+      const placeOfService = resolvePlaceOfService({
+        visit_mode: visitMode,
+        place_of_service: appointmentData.place_of_service
+      });
+      const telehealthMods = appointmentData.primary_cpt
+        ? resolveTelehealthModifiers({
+          visit_mode: visitMode,
+          place_of_service: placeOfService,
+          payer_id: appointmentData.payer_id || null,
+          existing_modifiers: appointmentData.cpt_modifiers || []
+        })
+        : [];
+
       // W3-S4.2: primary_icd10, primary_cpt from triage for billing (eligibility, claims)
       const appointment = {
         id: appointmentId,
@@ -491,7 +510,9 @@ class BookingService {
         provider: appointmentData.provider || 'DocLittle Mental Health Team',
         practitioner_id: appointmentData.practitioner_id || null,
         status: 'scheduled',
-        visit_mode: appointmentData.visit_mode || 'sync_video',
+        visit_mode: visitMode,
+        place_of_service: placeOfService,
+        cpt_modifiers: telehealthMods.length ? serializeCptModifiers(telehealthMods) : null,
         slot_state: 'soft_reserved',
         notes: appointmentData.notes || '',
         reminder_sent: false,
@@ -663,6 +684,11 @@ class BookingService {
 
     const notesObj = { reason: data.reason || '', attachment_ids: data.attachment_ids || [] };
     const notes = JSON.stringify(notesObj);
+    const { resolvePlaceOfService } = require('./billing-claim-envelope-service');
+    const asyncPos = resolvePlaceOfService({
+      visit_mode: 'async_review',
+      place_of_service: data.place_of_service
+    });
 
     const appointment = {
       id: appointmentId,
@@ -681,6 +707,7 @@ class BookingService {
       provider: data.provider || 'DocLittle Specialist Team',
       status: 'pending_review',
       visit_mode: 'async_review',
+      place_of_service: asyncPos,
       notes,
       calendar_event_id: null,
       calendar_link: null,

@@ -2455,6 +2455,18 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
     const resolvedCpt = args.service_code || appointment.primary_cpt || InsuranceService.mapAppointmentTypeToCPT(appointment.appointment_type, { urgency: 'routine' });
     const resolvedIcd = args.diagnosis_code || appointment.primary_icd10 || InsuranceService.mapAppointmentTypeToICD10(appointment.appointment_type);
 
+    const billingEnvelope = require('../services/billing-claim-envelope-service');
+    const placeOfService = billingEnvelope.resolvePlaceOfService({
+      visit_mode: appointment.visit_mode,
+      place_of_service: appointment.place_of_service || args.place_of_service
+    });
+    const modifiers = billingEnvelope.resolveTelehealthModifiers({
+      place_of_service: placeOfService,
+      visit_mode: appointment.visit_mode,
+      payer_id: args.payer_id,
+      existing_modifiers: billingEnvelope.parseCptModifiersJson(appointment.cpt_modifiers)
+    });
+
     const claimData = {
       appointmentId: args.appointment_id,
       patientId: patientId,
@@ -2464,6 +2476,9 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
       payerId: args.payer_id,
       serviceCode: resolvedCpt,
       diagnosisCode: resolvedIcd,
+      placeOfService,
+      visit_mode: appointment.visit_mode,
+      modifiers,
       totalAmount: parseFloat(args.total_amount),
       copayPaid: parseFloat(args.copay_paid || 0),
       dateOfService: args.date_of_service || appointment.date,

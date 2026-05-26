@@ -1425,12 +1425,16 @@ class RetellWebSocketHandler {
             const conn = this.activeConnections?.get(callId);
             const clinicId = conn?.clinic_id || null;
 
-            // Token budget check (Section 10) - disable semantic search if over budget
-            let useSemantic = undefined;
+            // Token budget check (Section 10) - voice defaults keyword-only; semantic adds embed latency
+            let useSemantic = false;
             const tokenBudget = require('../utils/token-budget');
             const estimatedTokens = Math.ceil(clinicalText.length / 4) + 2000;
-            if (!tokenBudget.canProceed(callId, estimatedTokens)) {
-                useSemantic = false;
+            if (tokenBudget.canProceed(callId, estimatedTokens)) {
+                const featureFlags = require('../utils/feature-flags');
+                if (featureFlags.isEnabled('semantic_search_enabled', clinicId, callId)) {
+                    useSemantic = true;
+                }
+            } else {
                 console.warn(`⚠️  Token budget exceeded for call ${callId}, suggest_codes using keyword-only`);
             }
 
@@ -1441,15 +1445,20 @@ class RetellWebSocketHandler {
                 perceptualState = callState.state_data.perceptual_state;
             }
 
-            const result = await knowledgeService.getCodeCandidates(clinicalText.trim(), {
+            const remoteTimeoutMs = parseInt(process.env.REMOTE_RAG_TIMEOUT_MS || '2000', 10);
+            const result = await knowledgeService.getCodeCandidatesDualSource(clinicalText.trim(), {
                 maxIcd10,
                 maxCpt,
                 maxHcpcs: 3,
                 clinicId,
                 callId,
                 perceptualState,
-                ...(useSemantic !== undefined && { useSemantic })
+                useSemantic,
+                remoteTimeoutMs
             });
+            if (result.remote_knowledge?.metadata) {
+                console.log('[suggest_codes] remote', result.remote_knowledge.metadata);
+            }
 
             // Track tokens used (embedding + retrieval estimate)
             tokenBudget.addTokens(callId, Math.ceil(clinicalText.length / 4) + 500);

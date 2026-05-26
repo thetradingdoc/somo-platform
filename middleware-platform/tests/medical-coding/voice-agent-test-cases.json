@@ -1,0 +1,794 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "lay-01",
+      "category": "lay_language",
+      "input": "patient reports chest tightness and pressure",
+      "expected": {
+        "icd10_contains": [
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-02",
+      "category": "lay_language",
+      "input": "shortness of breath when walking upstairs",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "J44"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-03",
+      "category": "lay_language",
+      "input": "burning when urinating for three days",
+      "expected": {
+        "icd10_contains": [
+          "N39",
+          "R30"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-04",
+      "category": "lay_language",
+      "input": "worst headache of my life sudden onset",
+      "expected": {
+        "icd10_contains": [
+          "G44",
+          "R51"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-05",
+      "category": "lay_language",
+      "input": "sugar has been running high fatigue thirst",
+      "expected": {
+        "icd10_contains": [
+          "E11",
+          "R73"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-06",
+      "category": "lay_language",
+      "input": "knee gives out and pops with pain",
+      "expected": {
+        "icd10_contains": [
+          "M25",
+          "S83"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-07",
+      "category": "lay_language",
+      "input": "child has ear pain and fever",
+      "expected": {
+        "icd10_contains": [
+          "H66",
+          "J06"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-08",
+      "category": "lay_language",
+      "input": "anxiety panic attacks trouble sleeping",
+      "expected": {
+        "icd10_contains": [
+          "F41",
+          "F43"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-09",
+      "category": "lay_language",
+      "input": "rash itchy hives after new medication",
+      "expected": {
+        "icd10_contains": [
+          "L50",
+          "T78"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-10",
+      "category": "lay_language",
+      "input": "belly pain right lower side nausea",
+      "expected": {
+        "icd10_contains": [
+          "K35",
+          "R10"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-1",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 1d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-2",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 2d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-3",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 3d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-4",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 4d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-5",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 5d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-6",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 6d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-7",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 7d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-8",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 8d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-9",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 9d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-10",
+      "category": "abbreviation",
+      "input": "pt c/o SOB and CP x 10d",
+      "expected": {
+        "icd10_contains": [
+          "R06",
+          "I20",
+          "R07"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "tele-1",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-2",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-3",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-4",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-5",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-6",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-7",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-8",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-9",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-10",
+      "category": "telehealth_em",
+      "input": "telehealth video visit established patient anxiety follow up",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "99213",
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "tele-11",
+      "category": "telehealth_em",
+      "input": "sync video new patient depression evaluation",
+      "expected": {
+        "icd10_contains": [
+          "F32"
+        ],
+        "cpt_contains": [
+          "99202",
+          "99203"
+        ]
+      }
+    },
+    {
+      "id": "spec-01",
+      "category": "specialty",
+      "input": "type 2 diabetes hba1c elevated foot exam",
+      "expected": {
+        "icd10_contains": [
+          "E11"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "spec-02",
+      "category": "specialty",
+      "input": "hypertension uncontrolled blood pressure",
+      "expected": {
+        "icd10_contains": [
+          "I10"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "spec-03",
+      "category": "specialty",
+      "input": "acute pharyngitis sore throat cough",
+      "expected": {
+        "icd10_contains": [
+          "J02",
+          "J06"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "spec-04",
+      "category": "specialty",
+      "input": "low back pain radiculopathy",
+      "expected": {
+        "icd10_contains": [
+          "M54"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "spec-05",
+      "category": "specialty",
+      "input": "annual wellness visit medicare",
+      "expected": {
+        "icd10_contains": [
+          "Z00"
+        ],
+        "hcpcs_contains": [
+          "G0438",
+          "G0439"
+        ]
+      }
+    },
+    {
+      "id": "pair-01",
+      "category": "pair_validation",
+      "input": "established patient office visit hypertension",
+      "expected": {
+        "icd10_contains": [
+          "I10"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "pair-02",
+      "category": "pair_validation",
+      "input": "telehealth psychotherapy 45 minutes",
+      "expected": {
+        "icd10_contains": [
+          "F41"
+        ],
+        "cpt_contains": [
+          "90834"
+        ]
+      }
+    },
+    {
+      "id": "pair-03",
+      "category": "pair_validation",
+      "input": "chest pain exercise stress test discussion",
+      "expected": {
+        "icd10_contains": [
+          "I20"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "pair-04",
+      "category": "pair_validation",
+      "input": "uri cough congestion telehealth",
+      "expected": {
+        "icd10_contains": [
+          "J06"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "pair-05",
+      "category": "pair_validation",
+      "input": "diabetes management insulin adjustment",
+      "expected": {
+        "icd10_contains": [
+          "E11"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "lay-11",
+      "category": "lay_language",
+      "input": "feeling dizzy and lightheaded when standing",
+      "expected": {
+        "icd10_contains": [
+          "R42",
+          "I95"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-12",
+      "category": "lay_language",
+      "input": "constipation and abdominal bloating",
+      "expected": {
+        "icd10_contains": [
+          "K59",
+          "R19"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-13",
+      "category": "lay_language",
+      "input": "sore throat and swollen glands",
+      "expected": {
+        "icd10_contains": [
+          "J02",
+          "R59"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-14",
+      "category": "lay_language",
+      "input": "vision blurry and thirsty frequent urination",
+      "expected": {
+        "icd10_contains": [
+          "E11",
+          "H53"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "lay-15",
+      "category": "lay_language",
+      "input": "twisted ankle cannot bear weight",
+      "expected": {
+        "icd10_contains": [
+          "S93",
+          "M25"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "abbr-11",
+      "category": "abbreviation",
+      "input": "HTN f/u med refill telehealth",
+      "expected": {
+        "icd10_contains": [
+          "I10"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "abbr-12",
+      "category": "abbreviation",
+      "input": "T2DM A1c review",
+      "expected": {
+        "icd10_contains": [
+          "E11"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "abbr-13",
+      "category": "abbreviation",
+      "input": "URI symptoms x5d",
+      "expected": {
+        "icd10_contains": [
+          "J06"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "abbr-14",
+      "category": "abbreviation",
+      "input": "GERD heartburn regurgitation",
+      "expected": {
+        "icd10_contains": [
+          "K21"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "abbr-15",
+      "category": "abbreviation",
+      "input": "MDD stable on SSRI",
+      "expected": {
+        "icd10_contains": [
+          "F32"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "tele-12",
+      "category": "telehealth_em",
+      "input": "video telehealth established depression",
+      "expected": {
+        "icd10_contains": [
+          "F32"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "tele-13",
+      "category": "telehealth_em",
+      "input": "async review dermatology rash photos",
+      "expected": {
+        "icd10_contains": [
+          "L30"
+        ],
+        "cpt_contains": []
+      }
+    },
+    {
+      "id": "spec-06",
+      "category": "specialty",
+      "input": "migraine with aura",
+      "expected": {
+        "icd10_contains": [
+          "G43"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "spec-07",
+      "category": "specialty",
+      "input": "osteoarthritis knee pain",
+      "expected": {
+        "icd10_contains": [
+          "M17"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "spec-08",
+      "category": "specialty",
+      "input": "COPD exacerbation wheezing",
+      "expected": {
+        "icd10_contains": [
+          "J44"
+        ],
+        "cpt_contains": [
+          "99214"
+        ]
+      }
+    },
+    {
+      "id": "spec-09",
+      "category": "specialty",
+      "input": "UTI dysuria frequency",
+      "expected": {
+        "icd10_contains": [
+          "N39"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "spec-10",
+      "category": "specialty",
+      "input": "prenatal routine visit",
+      "expected": {
+        "icd10_contains": [
+          "Z34"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "pair-06",
+      "category": "pair_validation",
+      "input": "follow up hyperlipidemia",
+      "expected": {
+        "icd10_contains": [
+          "E78"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "pair-07",
+      "category": "pair_validation",
+      "input": "insomnia evaluation telehealth",
+      "expected": {
+        "icd10_contains": [
+          "G47"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    },
+    {
+      "id": "pair-08",
+      "category": "pair_validation",
+      "input": "allergic rhinitis seasonal",
+      "expected": {
+        "icd10_contains": [
+          "J30"
+        ],
+        "cpt_contains": [
+          "99213"
+        ]
+      }
+    }
+  ]
+}

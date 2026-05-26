@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { JournalTokens } from '@/constants/journalTokens';
 
@@ -7,11 +7,19 @@ type Props = {
   visible: boolean;
   imageUrl: string | null;
   priorDate: string | null;
+  loading?: boolean;
   onContinue: () => void;
   onCancel: () => void;
 };
 
-export function PhotoGhostOverlay({ visible, imageUrl, priorDate, onContinue, onCancel }: Props) {
+export function PhotoGhostOverlay({
+  visible,
+  imageUrl,
+  priorDate,
+  loading = false,
+  onContinue,
+  onCancel,
+}: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
@@ -19,8 +27,8 @@ export function PhotoGhostOverlay({ visible, imageUrl, priorDate, onContinue, on
           <Text style={styles.title}>Align with your last photo</Text>
           <Text style={styles.sub}>
             {imageUrl && priorDate
-              ? `Use the faint guide from ${priorDate} so progress photos line up.`
-              : 'Take your baseline photo — we will use it to align future shots.'}
+              ? `Line up your face with the guide from ${priorDate}, then tap Continue to open the camera.`
+              : 'Take your baseline photo in good light, facing the camera. We will use it to align future shots.'}
           </Text>
           {imageUrl ? (
             <View style={styles.frame}>
@@ -32,7 +40,18 @@ export function PhotoGhostOverlay({ visible, imageUrl, priorDate, onContinue, on
               <Text style={styles.emptyText}>No prior photo yet</Text>
             </View>
           )}
-          <Pressable style={styles.primary} onPress={onContinue} accessibilityRole="button">
+          {loading ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={JournalTokens.color.accent} />
+              <Text style={styles.loadingText}>Loading your last photo…</Text>
+            </View>
+          ) : null}
+          <Pressable
+            style={[styles.primary, loading && styles.primaryDisabled]}
+            onPress={onContinue}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: loading }}>
             <Text style={styles.primaryText}>Continue to camera</Text>
           </Pressable>
           <Pressable style={styles.secondary} onPress={onCancel} accessibilityRole="button">
@@ -82,12 +101,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: { color: JournalTokens.color.muted, fontSize: 13 },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  loadingText: { fontSize: 13, color: JournalTokens.color.muted },
   primary: {
     backgroundColor: JournalTokens.color.accent,
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
   },
+  primaryDisabled: { opacity: 0.5 },
   primaryText: { color: '#fff', fontWeight: '700' },
   secondary: { paddingVertical: 8, alignItems: 'center' },
   secondaryText: { color: JournalTokens.color.muted, fontWeight: '600' },

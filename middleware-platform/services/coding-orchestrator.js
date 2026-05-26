@@ -69,12 +69,22 @@ function applyHistoricalConfidence(cpt, payerId) {
 /**
  * Apply modifier confidence (φ^modifier_i). Missing required modifier → 0.60.
  */
-function applyModifierConfidence(cpt) {
+function applyModifierConfidence(cpt, options = {}) {
   if (!cpt || cpt.length === 0) return cpt;
   const required = knowledgeService.getRequiredModifiers(cpt);
+  const billingEnvelope = require('./billing-claim-envelope-service');
+  const teleMods = billingEnvelope.resolveTelehealthModifiers({
+    place_of_service: options.place_of_service,
+    visit_mode: options.visit_mode,
+    payer_id: options.payer_id
+  });
   return cpt.map(c => {
     const cptCode = (c.code || c).toString().trim();
-    const mods = Array.isArray(c.modifiers) ? c.modifiers.map(m => String(m).trim()) : [];
+    let mods = Array.isArray(c.modifiers) ? c.modifiers.map(m => String(m).trim()) : [];
+    if (teleMods.length) {
+      const merged = new Set([...mods.map((m) => m.toUpperCase()), ...teleMods]);
+      mods = Array.from(merged);
+    }
     const need = required.get(cptCode) || [];
     const missing = need.filter(m => !mods.includes(m));
     const curr = typeof c.confidence === 'number' ? c.confidence : 0.8;

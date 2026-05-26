@@ -4,17 +4,18 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PhotoGhostOverlay } from '@/components/PhotoGhostOverlay';
+import { RoutineStepsHero } from '@/components/RoutineStepsHero';
 import { PrimaryButton, SecondaryButton } from '@/components/billing-ui';
 import { JournalTokens } from '@/constants/journalTokens';
 import { TimelineTokens } from '@/constants/timelineTokens';
 import { patientGet } from '@/lib/patient-api';
 import type { SkinReportPayload } from '@/lib/routine-capture';
-import { uploadRoutineProgressPhoto } from '@/lib/routine-capture';
-import { fetchPriorProgressPhotoUrl } from '@/lib/routine-capture-overlay';
 import { localTodayIso, resolveRoutineDayMode, weekdayLabel, type RoutineDayMode } from '@/lib/routine-day-mode';
-
-const SYMPTOM_OPTIONS = ['Redness', 'Stinging', 'New breakout', 'Dryness', 'Itching'] as const;
+import {
+  celebrateBannerCopy,
+  layeringUnavailableCopy,
+  todayScreenTitle,
+} from '@/lib/routine-copy';
 
 type PhaseItem = {
   product_name?: string;
@@ -24,14 +25,13 @@ type PhaseItem = {
 
 export default function TodayScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string; photo?: string }>();
+  const params = useLocalSearchParams<{ date?: string; photo?: string; celebrate?: string }>();
   const selectedDate =
     typeof params.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(params.date)
       ? params.date
       : localTodayIso();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [templateName, setTemplateName] = useState<string>('Your routine');
   const [hasTemplate, setHasTemplate] = useState(false);
   const [completionScore, setCompletionScore] = useState<number | null>(null);
   const [phaseItems, setPhaseItems] = useState<PhaseItem[]>([]);
@@ -42,21 +42,14 @@ export default function TodayScreen() {
   const [phaseFocus, setPhaseFocus] = useState<string | null>(null);
   const [phaseNotes, setPhaseNotes] = useState<string | null>(null);
   const [phaseNotesOpen, setPhaseNotesOpen] = useState(false);
-  const [stepsExpanded, setStepsExpanded] = useState(false);
   const [redFlags, setRedFlags] = useState<string[]>([]);
   const [assistantSummary, setAssistantSummary] = useState<string | null>(null);
   const [frozenSkinReport, setFrozenSkinReport] = useState<SkinReportPayload | null>(null);
   const [dayMode, setDayMode] = useState<RoutineDayMode>('today');
   const [allowsPhoto, setAllowsPhoto] = useState(true);
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const [ghostVisible, setGhostVisible] = useState(false);
-  const [ghostUrl, setGhostUrl] = useState<string | null>(null);
-  const [ghostPriorDate, setGhostPriorDate] = useState<string | null>(null);
-  const [pendingSymptoms, setPendingSymptoms] = useState<string[]>([]);
-  const [showSymptomPicker, setShowSymptomPicker] = useState(false);
   const [layeringWarning, setLayeringWarning] = useState<string | null>(null);
+  const [showCelebrate, setShowCelebrate] = useState(params.celebrate === '1');
   const photoTriggeredRef = useRef(false);
-  const pendingPhotoUriRef = useRef<string | null>(null);
 
   const clientDayMode = resolveRoutineDayMode(selectedDate);
 
@@ -70,9 +63,9 @@ export default function TodayScreen() {
         patientGet(`/api/patient/routine/phase?date=${selectedDate}`).catch(() => null),
       ]);
       setHasTemplate(Boolean(templateRes?.has_template));
-      setTemplateName(templateRes?.template?.name || 'Care program');
       const score = dailyRes?.daily_entry?.completion_score;
-      setCompletionScore(Number.isFinite(Number(score)) ? Number(score) : null);
+      const scoreNum = Number.isFinite(Number(score)) ? Number(score) : null;
+      setCompletionScore(scoreNum);
 
       const apiMode = (dailyRes?.day_mode || phaseRes?.day_mode || clientDayMode.mode) as RoutineDayMode;
       setDayMode(apiMode);
@@ -124,18 +117,24 @@ export default function TodayScreen() {
       if (templateRes?.has_template) {
         try {
           const layer = await patientGet('/api/patient/routine/layering-check');
-          const conflicts = Array.isArray(layer?.conflicts) ? layer.conflicts : [];
-          if (conflicts.length) {
-            setLayeringWarning(conflicts[0]?.notes || 'Check layering before combining actives.');
+          if (layer?.graph_unavailable || layer?.overall === 'unknown') {
+            setLayeringWarning(layeringUnavailableCopy());
           } else {
-            setLayeringWarning(null);
+            const conflicts = Array.isArray(layer?.conflicts) ? layer.conflicts : [];
+            if (conflicts.length) {
+              setLayeringWarning(conflicts[0]?.notes || 'Check layering before combining actives.');
+            } else if (layer?.overall && layer.overall !== 'safe') {
+              setLayeringWarning('Your routine may need spacing between actives.');
+            } else {
+              setLayeringWarning(null);
+            }
           }
         } catch {
           setLayeringWarning(null);
         }
       }
-    } catch (e: any) {
-      setError(e?.message || 'Unable to load today.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Unable to load today.');
       setHasTemplate(false);
     } finally {
       setLoading(false);
@@ -146,99 +145,45 @@ export default function TodayScreen() {
     void load();
   }, [load]);
 
-  const saveProgressPhoto = useCallback(
-    async (
-      uri: string,
-      fileName = `progress-${Date.now()}.jpg`,
-      mimeType = 'image/jpeg',
-      symptoms: string[] = []
-    ) => {
-      if (!allowsPhoto) {
-        setError('This day is read-only. Progress photos can only be added within the last 48 hours.');
-        return;
-      }
-      setPhotoBusy(true);
-      try {
-        const result = await uploadRoutineProgressPhoto({
-          entryDate: selectedDate,
-          uri,
-          fileName,
-          mimeType,
-          symptomTags: symptoms,
-        });
-        if (result.assistant_summary) setAssistantSummary(result.assistant_summary);
-        setShowSymptomPicker(false);
-        setPendingSymptoms([]);
-        await load();
-      } catch (e: any) {
-        setError(e?.message || 'Could not save photo.');
-      } finally {
-        setPhotoBusy(false);
-      }
-    },
-    [allowsPhoto, load, selectedDate]
-  );
+  const openCapture = useCallback(() => {
+    if (!allowsPhoto) return;
+    router.push({
+      pathname: '/routine/capture',
+      params: { date: selectedDate },
+    });
+  }, [allowsPhoto, router, selectedDate]);
 
-  const openCameraWithGhost = useCallback(async () => {
-    if (photoBusy || !allowsPhoto) return;
-    const prior = await fetchPriorProgressPhotoUrl(selectedDate);
-    setGhostUrl(prior.imageUrl);
-    setGhostPriorDate(prior.priorDate);
-    setGhostVisible(true);
-  }, [allowsPhoto, photoBusy, selectedDate]);
-
-  const continueFromGhost = useCallback(async () => {
-    setGhostVisible(false);
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      setError('Camera permission is required for progress photos.');
-      return;
-    }
-    const shot = await ImagePicker.launchCameraAsync({ quality: 0.7 });
-    if (shot.canceled || !shot.assets?.[0]?.uri) return;
-    setShowSymptomPicker(true);
-    setPendingSymptoms([]);
-    await saveProgressPhoto(shot.assets[0].uri, undefined, undefined, []);
-  }, [saveProgressPhoto]);
-
-  const pickProgressPhoto = useCallback(async () => {
-    if (photoBusy || !allowsPhoto) return;
+  const pickFromLibrary = useCallback(async () => {
+    if (!allowsPhoto) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      setError('Photo library access is required to upload progress photos.');
+      setError('Photo library access is required.');
       return;
     }
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
     if (picked.canceled || !picked.assets?.[0]?.uri) return;
-    await saveProgressPhoto(picked.assets[0].uri);
-  }, [allowsPhoto, photoBusy, saveProgressPhoto]);
+    router.push({
+      pathname: '/routine/capture',
+      params: { date: selectedDate, libraryUri: picked.assets[0].uri },
+    });
+  }, [allowsPhoto, router, selectedDate]);
 
   useEffect(() => {
     if (params.photo !== '1' || photoTriggeredRef.current || loading || !hasTemplate || !allowsPhoto) return;
     photoTriggeredRef.current = true;
-    void openCameraWithGhost();
-  }, [params.photo, loading, hasTemplate, allowsPhoto, openCameraWithGhost]);
+    openCapture();
+  }, [params.photo, loading, hasTemplate, allowsPhoto, openCapture]);
+
+  useEffect(() => {
+    if (params.celebrate === '1') setShowCelebrate(true);
+  }, [params.celebrate]);
 
   const weekKicker = hasTemplate
     ? `Week ${programWeek} of ${totalWeeks}${phaseLabel ? ` · ${phaseLabel}` : ''}`
     : null;
-
-  const phaseBody =
-    assistantSummary ||
-    phaseExpect ||
-    phaseFocus ||
-    (hasTemplate && dayMode !== 'historical'
-      ? 'Add a progress photo when you are ready — we track your week for you.'
-      : hasTemplate && dayMode === 'historical'
-        ? 'This is a saved snapshot from when you logged this day.'
-        : null);
-
+  const phaseSnippet = phaseExpect || phaseFocus || null;
   const loggedForDay = completionScore != null && completionScore >= 100;
-  const amCount = phaseItems.filter((i) => String(i.usage_time || '').toLowerCase() === 'am').length;
-  const pmCount = phaseItems.filter((i) => String(i.usage_time || '').toLowerCase() === 'pm').length;
-
-  const screenTitle =
-    dayMode === 'today' ? 'Today' : dayMode === 'backfill' ? 'Backfill' : 'History';
+  const showStepsHero = hasTemplate && phaseItems.length > 0 && dayMode !== 'historical';
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -246,11 +191,20 @@ export default function TodayScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />}>
         <Text allowFontScaling style={styles.title}>
-          {screenTitle}
+          {todayScreenTitle(dayMode)}
         </Text>
         <Text allowFontScaling style={styles.subtitle}>
           {selectedDate}
         </Text>
+
+        {showCelebrate && loggedForDay ? (
+          <View style={styles.celebrateBanner}>
+            <Text style={styles.celebrateText}>{celebrateBannerCopy()}</Text>
+            <Pressable onPress={() => router.push('/(tabs)/timeline')}>
+              <Text style={styles.celebrateLink}>Open Timeline</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {dayMode === 'historical' ? (
           <View style={styles.historyBanner}>
@@ -271,31 +225,17 @@ export default function TodayScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>Choose your routine</Text>
             <Text style={styles.emptyBody}>
-              Pick one of five guided templates. Your daily check-in is a quick photo — we track your progress for you.
+              Pick a guided program. Your daily check-in is one progress photo — we track change over time.
             </Text>
             <PrimaryButton label="Choose a routine" onPress={() => router.push('/routine/pick')} />
           </View>
         ) : null}
 
-        {hasTemplate && weekKicker && phaseBody ? (
-          <View style={styles.phaseCard}>
-            <Text style={styles.phaseKicker}>{weekKicker}</Text>
-            <Text style={styles.phaseBody}>{phaseBody}</Text>
-            {phaseNotes && dayMode !== 'historical' ? (
-              <Pressable
-                onPress={() => setPhaseNotesOpen((v) => !v)}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: phaseNotesOpen }}>
-                <Text style={styles.phaseExpand}>
-                  {phaseNotesOpen ? 'Hide phase details' : 'More about this phase'}
-                </Text>
-              </Pressable>
-            ) : null}
-            {phaseNotesOpen && phaseNotes ? (
-              <Text style={styles.phaseNotes}>{phaseNotes}</Text>
-            ) : null}
-          </View>
+        {hasTemplate && weekKicker ? (
+          <Text style={styles.weekKicker}>{weekKicker}</Text>
         ) : null}
+
+        {showStepsHero ? <RoutineStepsHero steps={phaseItems} alwaysExpanded /> : null}
 
         {hasTemplate && allowsPhoto ? (
           <View style={styles.photoActions}>
@@ -305,76 +245,49 @@ export default function TodayScreen() {
               </Text>
             ) : (
               <>
+                <Text style={styles.photoHint}>Done with your routine? Snap your progress.</Text>
                 <PrimaryButton
-                  label={photoBusy ? 'Saving…' : dayMode === 'today' ? "Add today's photo" : 'Add progress photo'}
-                  onPress={() => void takeProgressPhoto()}
+                  label={dayMode === 'today' ? "Log today's photo" : 'Log progress photo'}
+                  onPress={openCapture}
                 />
                 <View style={{ height: 10 }} />
-                <SecondaryButton label="Upload from library" onPress={() => void pickProgressPhoto()} />
+                <SecondaryButton label="Upload from library" onPress={() => void pickFromLibrary()} />
               </>
             )}
           </View>
         ) : null}
 
-        {layeringWarning && stepsExpanded ? (
+        {hasTemplate && phaseSnippet && !loggedForDay && dayMode !== 'historical' ? (
+          <View style={styles.anticipateCard}>
+            <Text style={styles.anticipateTitle}>What to expect</Text>
+            <Text style={styles.anticipateBody}>{phaseSnippet}</Text>
+          </View>
+        ) : null}
+
+        {layeringWarning && showStepsHero ? (
           <View style={styles.layerCard}>
             <Text style={styles.layerTitle}>Layering note</Text>
             <Text style={styles.layerBody}>{layeringWarning}</Text>
           </View>
         ) : null}
 
-        {showSymptomPicker && allowsPhoto ? (
-          <View style={styles.symptomCard}>
-            <Text style={styles.symptomTitle}>Any symptoms today? (optional)</Text>
-            <View style={styles.symptomRow}>
-              {SYMPTOM_OPTIONS.map((tag) => {
-                const on = pendingSymptoms.includes(tag);
-                return (
-                  <Pressable
-                    key={tag}
-                    style={[styles.symptomChip, on && styles.symptomChipOn]}
-                    onPress={() =>
-                      setPendingSymptoms((prev) =>
-                        on ? prev.filter((t) => t !== tag) : [...prev, tag]
-                      )
-                    }>
-                    <Text style={[styles.symptomChipText, on && styles.symptomChipTextOn]}>{tag}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <PrimaryButton label="Save photo" onPress={() => void confirmPhotoWithSymptoms()} />
+        {hasTemplate && (phaseNotes || assistantSummary) && dayMode === 'historical' ? (
+          <View style={styles.phaseCard}>
+            {assistantSummary ? <Text style={styles.phaseBody}>{assistantSummary}</Text> : null}
           </View>
         ) : null}
 
-        {hasTemplate && phaseItems.length > 0 ? (
-          <View style={styles.stepsSection}>
+        {hasTemplate && phaseNotes && dayMode !== 'historical' ? (
+          <View style={styles.phaseCard}>
             <Pressable
-              style={styles.stepsToggle}
-              onPress={() => setStepsExpanded((v) => !v)}
+              onPress={() => setPhaseNotesOpen((v) => !v)}
               accessibilityRole="button"
-              accessibilityState={{ expanded: stepsExpanded }}>
-              <Text style={styles.stepsToggleText}>
-                AM · {amCount} step{amCount === 1 ? '' : 's'} · PM · {pmCount} step{pmCount === 1 ? '' : 's'}
-                {dayMode === 'historical' && frozenSkinReport?.frozen_steps?.length ? ' · saved routine' : ''}
+              accessibilityState={{ expanded: phaseNotesOpen }}>
+              <Text style={styles.phaseExpand}>
+                {phaseNotesOpen ? 'Hide phase details' : 'More about this phase'}
               </Text>
-              <Text style={styles.stepsChevron}>{stepsExpanded ? '▴' : '▾'}</Text>
             </Pressable>
-            {stepsExpanded
-              ? phaseItems.map((row, idx) => (
-                  <View key={`${row.product_name}-${idx}`} style={styles.row}>
-                    <Text allowFontScaling style={styles.slot}>
-                      {String(row.usage_time || 'any').toUpperCase()}
-                    </Text>
-                    <View style={{ flex: 1 }}>
-                      <Text allowFontScaling style={styles.step}>
-                        {row.product_name || 'Step'}
-                      </Text>
-                      {row.goal ? <Text style={styles.goal}>{row.goal}</Text> : null}
-                    </View>
-                  </View>
-                ))
-              : null}
+            {phaseNotesOpen && phaseNotes ? <Text style={styles.phaseNotes}>{phaseNotes}</Text> : null}
           </View>
         ) : null}
 
@@ -397,36 +310,31 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: JournalTokens.color.cream },
   content: { padding: JournalTokens.spacing.lg, gap: JournalTokens.spacing.sm },
   title: { fontFamily: JournalTokens.font.display, fontSize: 30, color: JournalTokens.color.ink },
-  subtitle: { fontFamily: JournalTokens.font.body, color: JournalTokens.color.muted, marginBottom: JournalTokens.spacing.md },
+  subtitle: { fontFamily: JournalTokens.font.body, color: JournalTokens.color.muted, marginBottom: JournalTokens.spacing.sm },
+  weekKicker: { fontWeight: '700', color: JournalTokens.color.ink, fontSize: 15, marginBottom: 4 },
+  celebrateBanner: {
+    backgroundColor: TimelineTokens.badgeGreenBg,
+    borderRadius: JournalTokens.radius.md,
+    padding: JournalTokens.spacing.md,
+    marginBottom: 4,
+    gap: 6,
+  },
+  celebrateText: { color: JournalTokens.color.ink, fontWeight: '600', fontSize: 14 },
+  celebrateLink: { color: JournalTokens.color.accent, fontWeight: '700', fontSize: 14 },
   historyBanner: {
     backgroundColor: TimelineTokens.historyBannerBg,
     borderRadius: JournalTokens.radius.md,
     padding: JournalTokens.spacing.sm,
-    marginBottom: 4,
   },
   historyBannerText: { color: TimelineTokens.historyBannerFg, fontSize: 13, fontWeight: '600' },
   backfillBanner: {
     backgroundColor: TimelineTokens.backfillBannerBg,
     borderRadius: JournalTokens.radius.md,
     padding: JournalTokens.spacing.sm,
-    marginBottom: 4,
   },
   backfillBannerText: { color: TimelineTokens.backfillBannerFg, fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  phaseCard: {
-    backgroundColor: JournalTokens.color.card,
-    borderRadius: JournalTokens.radius.md,
-    borderWidth: 1,
-    borderColor: JournalTokens.color.line,
-    borderLeftWidth: 3,
-    borderLeftColor: JournalTokens.color.accent,
-    padding: JournalTokens.spacing.md,
-    gap: 8,
-  },
-  phaseKicker: { fontWeight: '700', color: JournalTokens.color.ink, fontSize: 15 },
-  phaseBody: { color: JournalTokens.color.muted, lineHeight: 22, fontFamily: JournalTokens.font.body, fontSize: 15 },
-  phaseExpand: { color: JournalTokens.color.accent, fontWeight: '600', fontSize: 13, marginTop: 4 },
-  phaseNotes: { color: JournalTokens.color.muted, fontSize: 13, lineHeight: 20, marginTop: 4 },
-  photoActions: { marginTop: 4, marginBottom: 8 },
+  photoActions: { marginTop: 4, marginBottom: 8, gap: 6 },
+  photoHint: { color: JournalTokens.color.muted, fontSize: 14, textAlign: 'center', marginBottom: 4 },
   loggedDone: {
     color: JournalTokens.color.success,
     fontWeight: '700',
@@ -434,6 +342,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 14,
   },
+  anticipateCard: {
+    backgroundColor: JournalTokens.color.card,
+    borderRadius: JournalTokens.radius.md,
+    borderWidth: 1,
+    borderColor: JournalTokens.color.line,
+    padding: JournalTokens.spacing.md,
+    gap: 6,
+  },
+  anticipateTitle: { fontWeight: '700', color: JournalTokens.color.ink, fontSize: 14 },
+  anticipateBody: { color: JournalTokens.color.muted, lineHeight: 20, fontSize: 14 },
   emptyCard: {
     backgroundColor: JournalTokens.color.card,
     borderRadius: JournalTokens.radius.md,
@@ -444,6 +362,17 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontWeight: '700', color: JournalTokens.color.ink, fontSize: 17 },
   emptyBody: { color: JournalTokens.color.muted, lineHeight: 20, fontFamily: JournalTokens.font.body },
+  phaseCard: {
+    backgroundColor: JournalTokens.color.card,
+    borderRadius: JournalTokens.radius.md,
+    borderWidth: 1,
+    borderColor: JournalTokens.color.line,
+    padding: JournalTokens.spacing.md,
+    gap: 8,
+  },
+  phaseBody: { color: JournalTokens.color.muted, lineHeight: 22, fontFamily: JournalTokens.font.body, fontSize: 15 },
+  phaseExpand: { color: JournalTokens.color.accent, fontWeight: '600', fontSize: 13 },
+  phaseNotes: { color: JournalTokens.color.muted, fontSize: 13, lineHeight: 20 },
   redCard: {
     backgroundColor: '#fef2f2',
     borderRadius: JournalTokens.radius.md,
@@ -453,40 +382,6 @@ const styles = StyleSheet.create({
   },
   redTitle: { fontWeight: '700', color: '#991b1b', marginBottom: 4 },
   redBody: { color: '#991b1b', fontSize: 13 },
-  stepsSection: { marginTop: 8, gap: 8 },
-  stepsToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: JournalTokens.color.card,
-    borderRadius: JournalTokens.radius.md,
-    borderWidth: 1,
-    borderColor: JournalTokens.color.line,
-    paddingHorizontal: JournalTokens.spacing.md,
-    paddingVertical: 12,
-  },
-  stepsToggleText: {
-    fontFamily: JournalTokens.font.body,
-    fontSize: 14,
-    fontWeight: '600',
-    color: JournalTokens.color.ink,
-  },
-  stepsChevron: { fontSize: 14, color: JournalTokens.color.muted },
-  row: {
-    minHeight: JournalTokens.minTap,
-    borderRadius: JournalTokens.radius.md,
-    borderWidth: 1,
-    borderColor: JournalTokens.color.line,
-    backgroundColor: JournalTokens.color.card,
-    paddingHorizontal: JournalTokens.spacing.md,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: JournalTokens.spacing.sm,
-  },
-  slot: { width: 34, fontFamily: JournalTokens.font.body, color: JournalTokens.color.muted, fontWeight: '700' },
-  step: { fontFamily: JournalTokens.font.body, color: JournalTokens.color.ink },
-  goal: { fontSize: 12, color: JournalTokens.color.muted, marginTop: 2 },
   error: { color: '#b91c1c', fontSize: 13 },
   layerCard: {
     backgroundColor: '#fff7ed',
@@ -498,24 +393,4 @@ const styles = StyleSheet.create({
   },
   layerTitle: { fontWeight: '700', color: '#9a3412', fontSize: 13 },
   layerBody: { color: '#9a3412', fontSize: 12, lineHeight: 18 },
-  symptomCard: {
-    backgroundColor: JournalTokens.color.card,
-    borderRadius: JournalTokens.radius.md,
-    borderWidth: 1,
-    borderColor: JournalTokens.color.line,
-    padding: 12,
-    gap: 8,
-  },
-  symptomTitle: { fontWeight: '600', color: JournalTokens.color.ink, fontSize: 14 },
-  symptomRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  symptomChip: {
-    borderWidth: 1,
-    borderColor: JournalTokens.color.line,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  symptomChipOn: { backgroundColor: JournalTokens.color.accent, borderColor: JournalTokens.color.accent },
-  symptomChipText: { fontSize: 12, color: JournalTokens.color.ink },
-  symptomChipTextOn: { color: '#fff', fontWeight: '600' },
 });

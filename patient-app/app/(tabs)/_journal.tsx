@@ -23,7 +23,7 @@ import { ErrorCard, LoadingCard, OfflineBanner, useToast } from '@/components/bi
 import { findPriorMediaDate } from '@/lib/routine-compare';
 import { patientGet, patientPatch } from '@/lib/patient-api';
 
-const SUBVIEWS = ['Calendar', 'List', 'Documents'] as const;
+const SUBVIEWS = ['Photos', 'Calendar', 'List', 'Documents'] as const;
 type Subview = (typeof SUBVIEWS)[number];
 
 type CalendarDay = {
@@ -64,6 +64,23 @@ function isoAddDays(iso: string, days: number): string {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+function programWeekDayLabel(
+  templateStartIso: string | null,
+  dateIso: string,
+  programWeek: number | null | undefined
+): string | null {
+  const week = Number(programWeek);
+  if (!Number.isFinite(week) || week < 1) return null;
+  if (!templateStartIso) return `W${week}`;
+  const start = new Date(`${templateStartIso}T12:00:00`);
+  const d = new Date(`${dateIso}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(d.getTime())) return `W${week}`;
+  const diff = Math.floor((d.getTime() - start.getTime()) / 86400000);
+  if (diff < 0) return `W${week}`;
+  const dayInWeek = (diff % 7) + 1;
+  return `W${week}·${dayInWeek}`;
 }
 
 type BillingEvent = {
@@ -177,7 +194,8 @@ function billingMarkerGlyph(billVis: ReturnType<typeof billingVisualForDay>): st
 export default function JournalScreen() {
   const router = useRouter();
   const { showToast } = useToast();
-  const [activeView, setActiveView] = useState<Subview>('Calendar');
+  const [activeView, setActiveView] = useState<Subview>('Photos');
+  const [showCalendarBills, setShowCalendarBills] = useState(false);
   const [rows, setRows] = useState<CalendarDay[]>([]);
   const [events, setEvents] = useState<BillingEvent[]>([]);
   const [documents, setDocuments] = useState<BillingDoc[]>([]);
@@ -257,6 +275,13 @@ export default function JournalScreen() {
 
   const billingByDay = useMemo(() => groupEventsByServiceDate(events), [events]);
   const stats = useMemo(() => computeStats(events), [events]);
+  const photoDays = useMemo(
+    () =>
+      rows
+        .filter((r) => r.has_media && r.thumbnail_url)
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    [rows]
+  );
 
   const monthGroups = useMemo(() => {
     const keys = monthKeysFromSources(rows, events);
@@ -318,13 +343,98 @@ export default function JournalScreen() {
   const sheetDayEvents = daySheetIso ? billingByDay.get(daySheetIso) || [] : [];
   const sheetRoutineRow = daySheetIso ? rows.find((r) => r.date === daySheetIso) : undefined;
 
+  const openCompareLatest = useCallback(() => {
+    if (photoDays.length < 2) return;
+    router.push({
+      pathname: '/compare',
+      params: { dateA: photoDays[0].date, dateB: photoDays[1].date },
+    });
+  }, [photoDays, router]);
+
+  const renderPhotos = () => {
+    if (!photoDays.length) {
+      return (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Your progress story starts here</Text>
+          <Text style={styles.cardBody}>
+            Log a front-facing photo from Today. Each check-in builds a filmstrip you can compare over time.
+          </Text>
+          <Pressable
+            style={styles.inlineBtnPrimary}
+            onPress={() => router.push('/routine/capture')}
+            accessibilityRole="button">
+            <Text style={styles.inlineBtnPrimaryText}>Log progress photo</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.photosPanel}>
+        {photoDays.length >= 2 ? (
+          <Pressable
+            style={styles.compareLatestBtn}
+            onPress={openCompareLatest}
+            accessibilityRole="button"
+            accessibilityLabel="Compare your two most recent progress photos">
+            <Text style={styles.compareLatestText}>Compare latest</Text>
+          </Pressable>
+        ) : null}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filmstrip}>
+          {photoDays.map((row) => (
+            <Pressable
+              key={`film-${row.date}`}
+              style={styles.filmFrame}
+              onPress={() => setRoutineSheetIso(row.date)}
+              accessibilityRole="button"
+              accessibilityLabel={`Progress photo ${row.date}`}>
+              <Image source={{ uri: row.thumbnail_url || '' }} style={styles.filmImage} />
+              <Text style={styles.filmLabel}>
+                {new Date(`${row.date}T12:00:00`).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                })}
+                {row.program_week ? ` · W${row.program_week}` : ''}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <Pressable
+          style={styles.logPhotoBtn}
+          onPress={() => router.push('/routine/capture')}
+          accessibilityRole="button">
+          <Text style={styles.logPhotoBtnText}>Log today&apos;s photo</Text>
+        </Pressable>
+      </View>
+    );
+  };
+
   const renderCalendar = () => {
     const months = Array.from(monthGroups.keys()).sort();
     const today = todayIsoLocal();
     const inlinePreview = filteredEvents.slice(0, 4);
+    const routineInlinePreview =
+      inlinePreview.length > 0
+        ? []
+        : rows
+            .filter(
+              (r) =>
+                r.is_routine_day &&
+                (r.has_media || r.photo_prompt || r.milestone_label || r.phase_expect_snippet)
+            )
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, 4);
 
     return (
       <View style={styles.calPanel}>
+        <Pressable
+          style={styles.billsToggle}
+          onPress={() => setShowCalendarBills((v) => !v)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: showCalendarBills }}>
+          <Text style={styles.billsToggleText}>
+            {showCalendarBills ? 'Hide bills on calendar' : 'Show bills on calendar'}
+          </Text>
+        </Pressable>
         <View style={styles.roadmapLegend} accessibilityLabel="Timeline phase legend">
           <Text style={styles.roadmapLegendText}>Intro</Text>
           <View style={[styles.roadmapSwatch, { backgroundColor: TimelineTokens.horizonBg }]} />
@@ -364,11 +474,11 @@ export default function JournalScreen() {
             const row = byIso.get(iso);
             const routineCls = classifyRoutine(row);
             const dayEv = billingByDay.get(iso) || [];
-            const billVis = billingVisualForCell(row, dayEv);
+            const billVis = showCalendarBills ? billingVisualForCell(row, dayEv) : null;
             const isToday = iso === today;
-            const dotColor = dotColorForDay(isToday, billVis);
+            const dotColor = showCalendarBills ? dotColorForDay(isToday, billVis) : null;
             const billingCount = row?.billing_event_count ?? dayEv.length;
-            const hasBilling = billingCount > 0;
+            const hasBilling = showCalendarBills && billingCount > 0;
             const a11yBill = billingStatusA11y(billVis);
             const billGlyph = billingMarkerGlyph(billVis);
 
@@ -456,10 +566,21 @@ export default function JournalScreen() {
                     ) : null}
                   </>
                 ) : null}
-                {routineCls === 'due' && row?.is_routine_day && !row?.has_media && billVis == null && row?.phase_label ? (
-                  <Text style={styles.horizonHint} numberOfLines={2}>
-                    {row.phase_expect_snippet || row.phase_label}
-                  </Text>
+                {routineCls === 'due' && row?.is_routine_day && !row?.has_media && billVis == null ? (
+                  <>
+                    {programWeekDayLabel(templateStartDate, iso, row?.program_week) ? (
+                      <View style={styles.weekDayBadge}>
+                        <Text style={styles.weekDayBadgeText}>
+                          {programWeekDayLabel(templateStartDate, iso, row?.program_week)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {row?.phase_label ? (
+                      <Text style={styles.horizonHint} numberOfLines={2}>
+                        {row.phase_expect_snippet || row.phase_label}
+                      </Text>
+                    ) : null}
+                  </>
                 ) : null}
                 <Text
                   style={[
@@ -490,25 +611,65 @@ export default function JournalScreen() {
                 ))}
               </View>
               <View style={styles.grid}>{cells}</View>
-              <View style={styles.legendRow} accessibilityLabel="Calendar legend: bill due and paid day colors">
-                <View
-                  style={styles.legendItem}
-                  accessible
-                  accessibilityLabel="Bill due: light blue cell, dot may appear">
-                  <View style={[styles.legendSwatch, { backgroundColor: TimelineTokens.billDueBg, borderColor: TimelineTokens.billDueBorder }]} importantForAccessibility="no" />
-                  <Text style={styles.legendText}>Bill due</Text>
+              {showCalendarBills ? (
+                <View style={styles.legendRow} accessibilityLabel="Calendar legend: bill due and paid day colors">
+                  <View
+                    style={styles.legendItem}
+                    accessible
+                    accessibilityLabel="Bill due: light blue cell, dot may appear">
+                    <View style={[styles.legendSwatch, { backgroundColor: TimelineTokens.billDueBg, borderColor: TimelineTokens.billDueBorder }]} importantForAccessibility="no" />
+                    <Text style={styles.legendText}>Bill due</Text>
+                  </View>
+                  <View
+                    style={styles.legendItem}
+                    accessible
+                    accessibilityLabel="Paid: light green cell, dot may appear">
+                    <View style={[styles.legendSwatch, { backgroundColor: TimelineTokens.billPaidBg, borderColor: TimelineTokens.billPaidBorder }]} importantForAccessibility="no" />
+                    <Text style={styles.legendText}>Paid</Text>
+                  </View>
                 </View>
-                <View
-                  style={styles.legendItem}
-                  accessible
-                  accessibilityLabel="Paid: light green cell, dot may appear">
-                  <View style={[styles.legendSwatch, { backgroundColor: TimelineTokens.billPaidBg, borderColor: TimelineTokens.billPaidBorder }]} importantForAccessibility="no" />
-                  <Text style={styles.legendText}>Paid</Text>
-                </View>
-              </View>
+              ) : null}
             </View>
           );
         })}
+
+        {routineInlinePreview.length > 0 ? (
+          <View style={styles.inlineListWrap}>
+            {routineInlinePreview.map((row) => (
+              <Pressable
+                key={`ril-${row.date}`}
+                style={styles.inlineListRow}
+                onPress={() => {
+                  if (row.has_media) {
+                    setRoutineSheetIso(row.date);
+                  } else {
+                    router.push({ pathname: '/(tabs)/today', params: { date: row.date } });
+                  }
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Routine day ${row.date}`}>
+                <View style={styles.inlineListLeft}>
+                  <Text style={styles.inlineListTitle} numberOfLines={2}>
+                    {row.milestone_label || row.phase_label || 'Routine day'}
+                  </Text>
+                  <Text style={styles.inlineListMeta} numberOfLines={2}>
+                    {new Date(`${row.date}T12:00:00`).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                    {row.phase_expect_snippet ? ` · ${row.phase_expect_snippet}` : ''}
+                  </Text>
+                </View>
+                <View style={styles.inlineListRight}>
+                  {row.program_week ? (
+                    <Text style={styles.inlineRoutineWeek}>W{row.program_week}</Text>
+                  ) : null}
+                  {row.has_media ? <Text style={styles.inlineRoutinePhoto}>Photo</Text> : null}
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {inlinePreview.length > 0 ? (
           <View style={styles.inlineListWrap}>
@@ -723,7 +884,7 @@ export default function JournalScreen() {
             Timeline
           </Text>
           <Text allowFontScaling style={styles.subtitle}>
-            Bills, payments, and documents by date.
+            Your progress photos and routine journey.
           </Text>
         </View>
 
@@ -750,40 +911,43 @@ export default function JournalScreen() {
           ))}
         </View>
 
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text
-              style={[
-                styles.statVal,
-                stats.billsDue > 0 ? { color: TimelineTokens.amountOwe } : { color: JournalTokens.color.ink },
-              ]}>
-              {stats.billsDue}
-            </Text>
-            <Text style={styles.statLbl}>Bills due</Text>
+        {activeView !== 'Photos' ? (
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text
+                style={[
+                  styles.statVal,
+                  stats.billsDue > 0 ? { color: TimelineTokens.amountOwe } : { color: JournalTokens.color.ink },
+                ]}>
+                {stats.billsDue}
+              </Text>
+              <Text style={styles.statLbl}>Bills due</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text
+                style={[
+                  styles.statVal,
+                  stats.owedMonth > 0 ? { color: TimelineTokens.amountPending } : { color: JournalTokens.color.ink },
+                ]}>
+                {formatUsd(stats.owedMonth)}
+              </Text>
+              <Text style={styles.statLbl}>Owed this month</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text
+                style={[
+                  styles.statVal,
+                  stats.paidMonth > 0 ? { color: TimelineTokens.amountPaid } : { color: JournalTokens.color.ink },
+                ]}>
+                {formatUsd(stats.paidMonth)}
+              </Text>
+              <Text style={styles.statLbl}>Paid this month</Text>
+            </View>
           </View>
-          <View style={styles.statCard}>
-            <Text
-              style={[
-                styles.statVal,
-                stats.owedMonth > 0 ? { color: TimelineTokens.amountPending } : { color: JournalTokens.color.ink },
-              ]}>
-              {formatUsd(stats.owedMonth)}
-            </Text>
-            <Text style={styles.statLbl}>Owed this month</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text
-              style={[
-                styles.statVal,
-                stats.paidMonth > 0 ? { color: TimelineTokens.amountPaid } : { color: JournalTokens.color.ink },
-              ]}>
-              {formatUsd(stats.paidMonth)}
-            </Text>
-            <Text style={styles.statLbl}>Paid this month</Text>
-          </View>
-        </View>
+        ) : null}
 
         {error ? <ErrorCard title="Unable to load timeline" message={error} onRetry={() => void loadRange('refresh')} /> : null}
+        {activeView === 'Photos' ? renderPhotos() : null}
         {activeView === 'Calendar' ? renderCalendar() : null}
         {activeView === 'List' ? renderList() : null}
         {activeView === 'Documents' ? renderDocuments() : null}
@@ -836,17 +1000,17 @@ export default function JournalScreen() {
         <Pressable style={styles.modalBackdrop} onPress={() => setRoutineSheetIso(null)}>
           <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>{routineSheetIso}</Text>
-            {routineSheetRow?.thumbnail_url ? (
-              <Image source={{ uri: routineSheetRow.thumbnail_url }} style={styles.routineSheetImage} />
+            {sheetRoutineRow?.thumbnail_url ? (
+              <Image source={{ uri: sheetRoutineRow.thumbnail_url }} style={styles.routineSheetImage} />
             ) : null}
-            {routineSheetRow?.milestone_label ? (
-              <Text style={styles.modalEvMeta}>{routineSheetRow.milestone_label}</Text>
+            {sheetRoutineRow?.milestone_label ? (
+              <Text style={styles.modalEvMeta}>{sheetRoutineRow.milestone_label}</Text>
             ) : null}
-            {routineSheetRow?.phase_expect_snippet ? (
-              <Text style={styles.modalBody}>{routineSheetRow.phase_expect_snippet}</Text>
+            {sheetRoutineRow?.phase_expect_snippet ? (
+              <Text style={styles.modalBody}>{sheetRoutineRow.phase_expect_snippet}</Text>
             ) : null}
-            {routineSheetRow?.top_symptom ? (
-              <Text style={styles.modalEvMeta}>Symptom: {routineSheetRow.top_symptom}</Text>
+            {sheetRoutineRow?.top_symptom ? (
+              <Text style={styles.modalEvMeta}>Symptom: {sheetRoutineRow.top_symptom}</Text>
             ) : null}
             <Pressable
               style={styles.modalLink}
@@ -856,7 +1020,7 @@ export default function JournalScreen() {
               }}>
               <Text style={styles.modalLinkText}>Open full day →</Text>
             </Pressable>
-            {routineSheetRow?.has_media ? (
+            {sheetRoutineRow?.has_media ? (
               <Pressable
                 style={styles.modalLink}
                 onPress={() => {
@@ -926,6 +1090,41 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 2,
   },
+  photosPanel: { gap: 12 },
+  compareLatestBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: JournalTokens.color.accent,
+    borderRadius: JournalTokens.radius.pill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: JournalTokens.minTap,
+    justifyContent: 'center',
+  },
+  compareLatestText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  filmstrip: { gap: 10, paddingVertical: 4 },
+  filmFrame: { width: 148, marginRight: 4 },
+  filmImage: {
+    width: 148,
+    height: 196,
+    borderRadius: JournalTokens.radius.md,
+    backgroundColor: JournalTokens.color.line,
+  },
+  filmLabel: { marginTop: 6, fontSize: 12, fontWeight: '600', color: JournalTokens.color.ink },
+  logPhotoBtn: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+    minHeight: JournalTokens.minTap,
+    justifyContent: 'center',
+  },
+  logPhotoBtnText: { color: JournalTokens.color.accent, fontWeight: '700', fontSize: 15 },
+  billsToggle: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    minHeight: JournalTokens.minTap,
+    justifyContent: 'center',
+  },
+  billsToggleText: { color: JournalTokens.color.accent, fontWeight: '600', fontSize: 14 },
   calPanel: {
     gap: 8,
   },
@@ -1114,6 +1313,22 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
   },
+  weekDayBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: TimelineTokens.weekBadgeBg,
+    borderRadius: 4,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+  },
+  weekDayBadgeText: {
+    color: TimelineTokens.weekBadgeFg,
+    fontSize: 8,
+    fontWeight: '700',
+  },
+  inlineRoutineWeek: { fontSize: 12, fontWeight: '700', color: JournalTokens.color.ink },
+  inlineRoutinePhoto: { fontSize: 11, color: JournalTokens.color.muted, marginTop: 2 },
   weekBadgeGrid: {
     position: 'absolute',
     top: 6,

@@ -4,7 +4,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { BillingTheme } from '@/constants/billingTheme';
 import { JournalTokens } from '@/constants/journalTokens';
 
 export default function TabLayout() {
@@ -16,7 +15,7 @@ export default function TabLayout() {
         initialRouteName="today"
         screenOptions={{
           tabBarActiveTintColor: JournalTokens.color.brandAccent,
-          tabBarInactiveTintColor: BillingTheme.color['color.nav.inactive'],
+          tabBarInactiveTintColor: '#94a3b8',
           headerShown: false,
           tabBarButton: HapticTab,
           tabBarStyle: styles.tabBar,
@@ -38,19 +37,14 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="money"
-          options={{
-            title: 'Money',
-            tabBarIcon: ({ color }) => <IconSymbol size={22} name="creditcard.fill" color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="index"
+          name="account"
           options={{
             title: 'Account',
             tabBarIcon: ({ color }) => <IconSymbol size={22} name="person.fill" color={color} />,
           }}
         />
+        <Tabs.Screen name="money" options={{ href: null }} />
+        <Tabs.Screen name="index" options={{ href: null }} />
         <Tabs.Screen name="home" options={{ href: null }} />
         <Tabs.Screen name="profile" options={{ href: null }} />
         <Tabs.Screen name="products" options={{ href: null }} />
@@ -63,12 +57,11 @@ export default function TabLayout() {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Add progress photo"
-        accessibilityHint="Opens camera to log today's progress photo"
-        onPress={() => router.push({ pathname: '/(tabs)/today', params: { photo: '1' } })}
-        style={styles.scanFab}>
-        <Text allowFontScaling style={styles.scanFabText}>
-          + Photo
+        accessibilityLabel="Log progress photo"
+        onPress={() => router.push('/routine/capture')}
+        style={styles.fab}>
+        <Text allowFontScaling style={styles.fabText}>
+          Log photo
         </Text>
       </Pressable>
     </View>
@@ -91,23 +84,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginBottom: 2,
   },
-  scanFab: {
+  fab: {
     position: 'absolute',
     bottom: 42,
     alignSelf: 'center',
     minWidth: 120,
     minHeight: JournalTokens.minTap,
     borderRadius: JournalTokens.radius.pill,
-    backgroundColor: BillingTheme.button.primaryBg,
+    backgroundColor: JournalTokens.color.accent,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: JournalTokens.spacing.lg,
     ...JournalTokens.shadow.card,
   },
-  scanFabText: {
+  fabText: {
     fontFamily: JournalTokens.font.body,
     fontWeight: '700',
-    color: BillingTheme.button.primaryText,
+    color: '#fff',
     fontSize: 15,
   },
 });

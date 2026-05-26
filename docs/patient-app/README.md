@@ -1,7 +1,7 @@
 # patient-app - Unified Architecture and System Design
-> Last reviewed: 2026-05-21
+> Last reviewed: 2026-05-25
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-25
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
@@ -16,8 +16,8 @@ For the active consumer MVP, start here:
 
 - **[`../user-journey/README.md`](../user-journey/README.md)** — pick → **Today** (photo) → Timeline; web parity.
 - **[`../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md`](../architecture/patients/PATIENT_TIMELINE_ROUTINE_AND_BILLING.md)** — **Today** + routine APIs, Timeline / Money / Profile, `calendar-range`, billing.
-- [`BILLING_FIRST_MOBILE_ARCHITECTURE.md`](./BILLING_FIRST_MOBILE_ARCHITECTURE.md)
-- [`LEGACY_PATIENTS_BILLING_FIRST_UI_PORT.md`](./LEGACY_PATIENTS_BILLING_FIRST_UI_PORT.md)
+- [`PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md`](./PATIENT_APP_ARCHITECTURE_AND_AGENT_ORCHESTRATION.md)
+- [`PATIENT_HOME_SUMMARY_METRICS_V1.md`](./PATIENT_HOME_SUMMARY_METRICS_V1.md)
 
 This architecture defines:
 

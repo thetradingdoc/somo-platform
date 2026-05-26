@@ -35,9 +35,17 @@ On successful photo upload:
 
 A user on week 3 of the acne program takes a photo, reads phase `expect` copy (e.g. mild purging is normal), sees no 0% on progress cards, and feels reassured — not blamed. Ship when that loop works.
 
+## Progress photo capture (mobile)
+
+- **Live ghost (v1.2):** `/routine/capture` uses `expo-camera` front-facing `CameraView` with the prior progress photo at ~35% opacity as an absolute overlay while framing.
+- **Shorter ritual:** Shutter uploads immediately (haptics + celebrate banner on Today). Optional symptom chips in a collapsible sheet on the capture screen.
+- **Align preview (optional):** Library uploads may open `PhotoAlignPreview` via **Review alignment** — not on the default camera path.
+- **Prior photo lookup:** One `calendar-range` request (14-day window), not per-day serial fetches.
+- **Symptoms:** Optional chips sent as `symptom_tags` on multipart `POST .../photo`.
+
 ## Out of scope (v1)
 
 - Floating RAG chat on Today
-- Optional symptom prompt (“Any redness today?”) — v1.1
+- Mandatory post-capture align step on every photo (power users can opt in from library path)
 - Handoff analytics (`auth_handoff_continue_web`) before loop is trusted
 - Web journal `media-link` path unification (legacy; Today uses `/photo` like the app)

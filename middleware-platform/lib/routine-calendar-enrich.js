@@ -19,6 +19,8 @@ function resolveMilestoneLabel(programWeek, phaseKey, concernId, isPurge, hasMed
   const key = String(phaseKey || '');
   if (key === 'weeks_3_4' && !hasMedia) return 'Actives start';
   if (key === 'weeks_5_8' && !hasMedia) return 'Retinoid phase';
+  if (Number(programWeek) === 8 && !hasMedia) return 'Mid-program';
+  if (key === 'weeks_9_12' && !hasMedia) return 'Results phase';
   return null;
 }
 

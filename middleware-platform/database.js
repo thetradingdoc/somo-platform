@@ -1577,8 +1577,28 @@ try {
       console.log('📦 Adding primary_cpt column to appointments table...');
       db.exec(`ALTER TABLE appointments ADD COLUMN primary_cpt TEXT;`);
     }
-    if (needEhrSynced || needPrimaryIcd10 || needPrimaryCpt) {
+    const needPlaceOfService = !info.some(c => c.name === 'place_of_service');
+    const needCptModifiers = !info.some(c => c.name === 'cpt_modifiers');
+    if (needPlaceOfService) {
+      console.log('📦 Adding place_of_service column to appointments table...');
+      db.exec(`ALTER TABLE appointments ADD COLUMN place_of_service TEXT;`);
+    }
+    if (needCptModifiers) {
+      console.log('📦 Adding cpt_modifiers column to appointments table...');
+      db.exec(`ALTER TABLE appointments ADD COLUMN cpt_modifiers TEXT;`);
+    }
+    if (needEhrSynced || needPrimaryIcd10 || needPrimaryCpt || needPlaceOfService || needCptModifiers) {
       console.log('✅ Migration complete: EHR columns added to appointments');
+    }
+    try {
+      db.exec(`
+        UPDATE appointments SET place_of_service = '02'
+        WHERE place_of_service IS NULL AND visit_mode IN ('sync_video', 'async_review');
+        UPDATE appointments SET place_of_service = '11'
+        WHERE place_of_service IS NULL AND visit_mode IS NOT NULL AND visit_mode NOT IN ('sync_video', 'async_review');
+      `);
+    } catch (e) {
+      console.warn('⚠️  place_of_service backfill skipped:', e.message);
     }
     const needVideoRoom = !info.some(c => c.name === 'video_room_name');
     if (needVideoRoom) {
@@ -2522,6 +2542,20 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_long_desc ON hcpcs_codes(long_desc);
   CREATE INDEX IF NOT EXISTS idx_hcpcs_codes_short_desc ON hcpcs_codes(short_desc);
+
+  CREATE TABLE IF NOT EXISTS place_of_service_codes (
+    code TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    is_telehealth INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS modifier_codes (
+    code TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    applies_to TEXT DEFAULT 'cpt',
+    telehealth_required INTEGER DEFAULT 0,
+    payer_type TEXT
+  );
 
   CREATE TABLE IF NOT EXISTS code_embeddings (
     id TEXT PRIMARY KEY,
@@ -4134,6 +4168,60 @@ function migrateHcpcsCodesTable() {
 }
 
 // ============================================
+// MIGRATION: POS + modifier reference tables (837P claim envelope)
+// ============================================
+function migrateBillingReferenceTables() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS place_of_service_codes (
+        code TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        is_telehealth INTEGER DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS modifier_codes (
+        code TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        applies_to TEXT DEFAULT 'cpt',
+        telehealth_required INTEGER DEFAULT 0,
+        payer_type TEXT
+      );
+    `);
+    const posRows = [
+      ['02', 'Telehealth Provided Other than in Patient\'s Home', 1],
+      ['10', 'Telehealth Provided in Patient\'s Home', 1],
+      ['11', 'Office', 0],
+      ['22', 'On Campus-Outpatient Hospital', 0]
+    ];
+    const posStmt = db.prepare(`
+      INSERT OR IGNORE INTO place_of_service_codes (code, description, is_telehealth)
+      VALUES (?, ?, ?)
+    `);
+    for (const row of posRows) posStmt.run(...row);
+
+    const modRows = [
+      ['25', 'Significant, separately identifiable E/M service', 'cpt', 0, 'any'],
+      ['59', 'Distinct procedural service', 'cpt', 0, 'any'],
+      ['95', 'Synchronous telemedicine (commercial)', 'cpt', 1, 'commercial'],
+      ['GT', 'Via interactive audio and video (Medicare telehealth)', 'cpt', 1, 'medicare'],
+      ['TC', 'Technical component', 'cpt', 0, 'any'],
+      ['26', 'Professional component', 'cpt', 0, 'any'],
+      ['LT', 'Left side', 'cpt', 0, 'any'],
+      ['RT', 'Right side', 'cpt', 0, 'any'],
+      ['50', 'Bilateral procedure', 'cpt', 0, 'any']
+    ];
+    const modStmt = db.prepare(`
+      INSERT OR IGNORE INTO modifier_codes (code, description, applies_to, telehealth_required, payer_type)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const row of modRows) modStmt.run(...row);
+
+    console.log('✅ Migration complete: billing reference tables (POS, modifiers) ensured');
+  } catch (migrationError) {
+    console.warn('⚠️  billing reference tables migration failed:', migrationError.message);
+  }
+}
+
+// ============================================
 // MIGRATION: coding_decisions table (Phase 5.2 - audit trail)
 // ============================================
 function migrateCodingDecisionsTable() {
@@ -5387,73 +5475,75 @@ function migrateProviderRegistryCoreTables() {
 }
 
 // Run migrations on startup (optionally skipped in constrained boot environments)
-// SKIP_STARTUP_MIGRATIONS is defined near the top of this file (after env helpers).
-if (SKIP_STARTUP_MIGRATIONS) {
-  console.warn('⚠️  SKIP_STARTUP_MIGRATIONS enabled: skipping startup migration batch');
-} else {
-migrateInsuranceClaimsTable();
-migrateFHIRPatientsWalletAddress();
-migratePatientPortalSessionsEmail();
-migratePatientPortalSessionsSecurityMeta();
-migrateMonthlyInvoicesJobCalls();
-migrateOrderTracking();
-migrateMerchantOrderCommerceIdempotency();
-migrateLeadsPipeline();
-migrateLeadsPhase1(); // Phase 1: Admin portal agentic capabilities
-migrateSequences(); // Phase 2: Sequences for automation
-migrateQualificationRules(); // Phase 2: Configurable qualification rules
-migrateCustomersTable();
-migrateProviderCanonicalLinks();
-migrateTriageSessionBookingFor();
-migrateVoiceCallLogCosts();
-migrateVoiceCallStateTables();
-migrateIcd10CodesTable();
-migrateHcpcsCodesTable();
-migrateCodeEmbeddingsTable();
-    migrateCodingDecisionsTable();
-    migrateLlmUsageLogTable();
-    migratePostgresSyncRetryTable();
-    migrateDlqToolCallsTable();
-    migrateFeatureFlagsTable();
-    migrateVoiceCallLogClinicId();
-    migrateClinicMonthlyLlmCostTable();
-    migrateClinicsMonthlyCostCap();
-    migrateLongTermMemoryTables();
-    migrateClinicSettingsTable();
-    migrateHipaaAccessLogTable();
-migratePatientDocumentsStatus();
-migratePatientDocumentDownloadTokens();
-    migrateIdempotencyKeysTable();
-migrateAppointmentsCustomerId();
-migrateCustomerMerchantId(); // CRITICAL: Link customers to merchants
-migrateMerchantsSubdomain(); // Add subdomain support for tenant isolation
-migrateCustomersPasswordHash(); // Add password_hash for password-based authentication
-migrateCustomerCreditsExpiration(); // Add expiration and alert tracking for credits
-migrateFHIRPatientsMerchantId(); // Link FHIR patients to merchants (tenants)
-migrateFHIRPatientsMergedInto(); // Ensure merge markers exist on fhir_patients
-migrateCircleAccountsMerchantId(); // Link wallets to merchants (tenants)
-migrateLeadLabels(); // Create lead labels system
-migrateResearchBounties(); // Pharma data requests for impact-weighted escrow
-migrateEmpiTables(); // Enterprise Master Patient Index (FHIR-native financial layer)
-migrateRcmPremiumTables(); // Premium billed/paid (Safe Harbor 2026)
-migrateRcmAiDecisions(); // Financial agent audit (FHIR-native RCM layer)
-migrateVideoConsultSessions(); // Video consult multimodal AI sessions
-migrateEncounterVitals(); // vc-4: Provider-entered vitals during video consult
-migrateIntakeEventStream(); // Unified ingress adapter raw + normalized event persistence
-migrateSessionStateProjection(); // Deterministic canonical state projection table
-migrateBackfillSessionStateFromTriage(); // Initialize canonical state from triage history
-migrateCosmeticKnowledgeTables(); // OBF/CosIng + cosmetic restrictions
-migrateCasePatternsStore(); // De-identified case pattern retrieval store
-migrateFinalAssessmentArtifacts(); // Case summary + billing packs + decision logs
-  migratePayorRawIngestTables(); // Payor ER Step 1 raw ingest storage
-  migratePayorNormalizationTables(); // Payor ER Step 2 normalization storage
-  migratePayorBlockingTables(); // Payor ER Step 3 candidate blocking storage
-  migratePayorSimilarityTables(); // Payor ER Step 4 fuzzy similarity score storage
-  migratePayorResolutionTables(); // Payor ER Step 5 composite decisions + policy metadata
-  migratePayorCanonicalTables(); // Payor ER Step 6 canonical entities + aliases + links
-  migratePayorReviewTables(); // Payor ER Step 7 review queue + reviewer outcomes
-  migrateProviderRegistryCoreTables(); // Provider registry Section 12 batch 1 core tables
-}
+const { runStartupMigrations } = require('./database/migrations/run-startup-migrations');
+runStartupMigrations(
+  [
+    migrateInsuranceClaimsTable,
+    migrateFHIRPatientsWalletAddress,
+    migratePatientPortalSessionsEmail,
+    migratePatientPortalSessionsSecurityMeta,
+    migrateMonthlyInvoicesJobCalls,
+    migrateOrderTracking,
+    migrateMerchantOrderCommerceIdempotency,
+    migrateLeadsPipeline,
+    migrateLeadsPhase1,
+    migrateSequences,
+    migrateQualificationRules,
+    migrateCustomersTable,
+    migrateProviderCanonicalLinks,
+    migrateTriageSessionBookingFor,
+    migrateVoiceCallLogCosts,
+    migrateVoiceCallStateTables,
+    migrateIcd10CodesTable,
+    migrateHcpcsCodesTable,
+    migrateBillingReferenceTables,
+    migrateCodeEmbeddingsTable,
+    migrateCodingDecisionsTable,
+    migrateLlmUsageLogTable,
+    migratePostgresSyncRetryTable,
+    migrateDlqToolCallsTable,
+    migrateFeatureFlagsTable,
+    migrateVoiceCallLogClinicId,
+    migrateClinicMonthlyLlmCostTable,
+    migrateClinicsMonthlyCostCap,
+    migrateLongTermMemoryTables,
+    migrateClinicSettingsTable,
+    migrateHipaaAccessLogTable,
+    migratePatientDocumentsStatus,
+    migratePatientDocumentDownloadTokens,
+    migrateIdempotencyKeysTable,
+    migrateAppointmentsCustomerId,
+    migrateCustomerMerchantId,
+    migrateMerchantsSubdomain,
+    migrateCustomersPasswordHash,
+    migrateCustomerCreditsExpiration,
+    migrateFHIRPatientsMerchantId,
+    migrateFHIRPatientsMergedInto,
+    migrateCircleAccountsMerchantId,
+    migrateLeadLabels,
+    migrateResearchBounties,
+    migrateEmpiTables,
+    migrateRcmPremiumTables,
+    migrateRcmAiDecisions,
+    migrateVideoConsultSessions,
+    migrateEncounterVitals,
+    migrateIntakeEventStream,
+    migrateSessionStateProjection,
+    migrateBackfillSessionStateFromTriage,
+    migrateCosmeticKnowledgeTables,
+    migrateCasePatternsStore,
+    migrateFinalAssessmentArtifacts,
+    migratePayorRawIngestTables,
+    migratePayorNormalizationTables,
+    migratePayorBlockingTables,
+    migratePayorSimilarityTables,
+    migratePayorResolutionTables,
+    migratePayorCanonicalTables,
+    migratePayorReviewTables,
+    migrateProviderRegistryCoreTables
+  ],
+  { skip: SKIP_STARTUP_MIGRATIONS }
+);
 
 /**
  * Migration: Enterprise Master Patient Index (EMPI)
@@ -11238,11 +11328,13 @@ module.exports = {
       const hasSlotState = info.some(c => c.name === 'slot_state');
       const hasPrimaryIcd10 = info.some(c => c.name === 'primary_icd10');
       const hasPrimaryCpt = info.some(c => c.name === 'primary_cpt');
+      const hasPlaceOfService = info.some(c => c.name === 'place_of_service');
+      const hasCptModifiers = info.some(c => c.name === 'cpt_modifiers');
       const hasCalendarSource = info.some(c => c.name === 'calendar_source');
       const hasCalendarConfidence = info.some(c => c.name === 'calendar_confidence');
       const baseCols = 'id, clinic_id, customer_id, patient_name, patient_phone, patient_email, patient_id, appointment_type, date, time, start_time, end_time, duration_minutes, provider';
       const baseVals = [appointment.id, appointment.clinic_id || null, appointment.customer_id || null, appointment.patient_name, appointment.patient_phone, appointment.patient_email, appointment.patient_id || null, appointment.appointment_type, appointment.date, appointment.time, appointment.start_time, appointment.end_time, appointment.duration_minutes, appointment.provider];
-      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + (hasCalendarSource ? ', calendar_source' : '') + (hasCalendarConfidence ? ', calendar_confidence' : '') + ', created_at';
+      let cols = baseCols + (hasPractitioner ? ', practitioner_id' : '') + ', status, notes, calendar_event_id, calendar_link, video_room_name' + (hasTimezone ? ', timezone' : '') + (hasVisitMode ? ', visit_mode' : '') + (hasSlotState ? ', slot_state' : '') + (hasPrimaryIcd10 ? ', primary_icd10' : '') + (hasPrimaryCpt ? ', primary_cpt' : '') + (hasPlaceOfService ? ', place_of_service' : '') + (hasCptModifiers ? ', cpt_modifiers' : '') + (hasCalendarSource ? ', calendar_source' : '') + (hasCalendarConfidence ? ', calendar_confidence' : '') + ', created_at';
       let vals = [...baseVals];
       if (hasPractitioner) vals.push(appointment.practitioner_id || null);
       vals.push(appointment.status, notes, appointment.calendar_event_id, appointment.calendar_link, appointment.video_room_name || null);
@@ -11251,6 +11343,8 @@ module.exports = {
       if (hasSlotState) vals.push(appointment.slot_state || 'soft_reserved');
       if (hasPrimaryIcd10) vals.push(appointment.primary_icd10 || null);
       if (hasPrimaryCpt) vals.push(appointment.primary_cpt || null);
+      if (hasPlaceOfService) vals.push(appointment.place_of_service || null);
+      if (hasCptModifiers) vals.push(appointment.cpt_modifiers || null);
       if (hasCalendarSource) vals.push(appointment.calendar_source || null);
       if (hasCalendarConfidence) vals.push(appointment.calendar_confidence || null);
       vals.push(appointment.created_at);
@@ -17810,287 +17904,10 @@ module.exports = {
 };
 
 // ============================================
-// KNOWLEDGE BASE EXTENSIONS
+// KNOWLEDGE BASE (medical codes repository)
 // ============================================
-
-module.exports.bulkUpsertCptCodes = function bulkUpsertCptCodes(items = []) {
-  if (!Array.isArray(items) || items.length === 0) {
-    return { inserted: 0 };
-  }
-
-  const stmt = db.prepare(`
-    INSERT INTO cpt_codes (code, description, category, subcategory, is_new)
-    VALUES (@code, @description, @category, @subcategory, @is_new)
-    ON CONFLICT(code) DO UPDATE SET
-      description = excluded.description,
-      category = excluded.category,
-      subcategory = excluded.subcategory,
-      is_new = excluded.is_new,
-      updated_at = datetime('now')
-  `);
-
-  const insertMany = db.transaction((codes) => {
-    for (const item of codes) {
-      if (!item || !item.code || !item.description) continue;
-      stmt.run({
-        code: String(item.code).toUpperCase(),
-        description: item.description,
-        category: item.category || null,
-        subcategory: item.subcategory || null,
-        is_new: item.is_new ? 1 : 0
-      });
-    }
-  });
-
-  insertMany(items);
-  return { inserted: items.length };
-};
-
-module.exports.searchCptCodes = function searchCptCodes(query, limit = 10) {
-  if (!query || !query.trim()) return [];
-  const term = `%${query.trim().toLowerCase()}%`;
-  return db.prepare(`
-    SELECT code, description, category, subcategory
-    FROM cpt_codes
-    WHERE LOWER(code) LIKE ? OR LOWER(description) LIKE ?
-    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
-             description
-    LIMIT ?
-  `).all(term, term, term, limit);
-};
-
-// ICD-10 codes (Phase 2.1)
-module.exports.bulkUpsertIcd10Codes = function bulkUpsertIcd10Codes(items = []) {
-  if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
-  const stmt = db.prepare(`
-    INSERT INTO icd10_codes (code, description, category, billable, source_file)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(code) DO UPDATE SET
-      description = excluded.description,
-      category = excluded.category,
-      billable = excluded.billable,
-      source_file = excluded.source_file
-  `);
-  let count = 0;
-  for (const item of items) {
-    if (!item || !item.code || !item.description) continue;
-    stmt.run(
-      String(item.code).trim().toUpperCase(),
-      String(item.description).trim(),
-      item.category || null,
-      item.billable != null ? (item.billable ? 1 : 0) : 1,
-      item.source_file || null
-    );
-    count++;
-  }
-  return { inserted: count };
-};
-
-module.exports.searchIcd10Codes = function searchIcd10Codes(query, limit = 15) {
-  const q = (query || '').toString().trim();
-  if (!q) return [];
-  const term = `%${q.toLowerCase()}%`;
-  return db.prepare(`
-    SELECT code, description, category, billable
-    FROM icd10_codes
-    WHERE LOWER(code) LIKE ? OR LOWER(description) LIKE ?
-    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
-             CASE WHEN LOWER(code) = LOWER(?) THEN 0 ELSE 1 END,
-             description
-    LIMIT ?
-  `).all(term, term, term, q, limit);
-};
-
-module.exports.getIcd10CodesCount = function getIcd10CodesCount() {
-  const row = db.prepare('SELECT COUNT(*) as n FROM icd10_codes').get();
-  return row ? row.n : 0;
-};
-
-// HCPCS codes (Phase 2.2)
-module.exports.bulkUpsertHcpcsCodes = function bulkUpsertHcpcsCodes(items = []) {
-  if (!Array.isArray(items) || items.length === 0) return { inserted: 0 };
-  const stmt = db.prepare(`
-    INSERT INTO hcpcs_codes (code, long_desc, short_desc, pricing_ind, coverage_cd, type, source_file)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(code) DO UPDATE SET
-      long_desc = excluded.long_desc,
-      short_desc = excluded.short_desc,
-      pricing_ind = excluded.pricing_ind,
-      coverage_cd = excluded.coverage_cd,
-      type = excluded.type,
-      source_file = excluded.source_file
-  `);
-  let count = 0;
-  for (const item of items) {
-    if (!item || !item.code || !item.long_desc) continue;
-    stmt.run(
-      String(item.code).trim().toUpperCase(),
-      String(item.long_desc).trim(),
-      item.short_desc ? String(item.short_desc).trim() : null,
-      item.pricing_ind || null,
-      item.coverage_cd || null,
-      item.type || null,
-      item.source_file || null
-    );
-    count++;
-  }
-  return { inserted: count };
-};
-
-module.exports.searchHcpcsCodes = function searchHcpcsCodes(query, limit = 15) {
-  const q = (query || '').toString().trim();
-  if (!q) return [];
-  const term = `%${q.toLowerCase()}%`;
-  return db.prepare(`
-    SELECT code, long_desc, short_desc, pricing_ind, coverage_cd, type
-    FROM hcpcs_codes
-    WHERE LOWER(code) LIKE ? OR LOWER(long_desc) LIKE ? OR LOWER(short_desc) LIKE ?
-    ORDER BY CASE WHEN LOWER(code) LIKE ? THEN 0 ELSE 1 END,
-             CASE WHEN LOWER(code) = LOWER(?) THEN 0 ELSE 1 END,
-             long_desc
-    LIMIT ?
-  `).all(term, term, term, term, q, limit);
-};
-
-module.exports.getHcpcsCodesCount = function getHcpcsCodesCount() {
-  const row = db.prepare('SELECT COUNT(*) as n FROM hcpcs_codes').get();
-  return row ? row.n : 0;
-};
-
-// Code existence validation (Phase 6.1 - prevent hallucinated codes)
-module.exports.codeExists = function codeExists(code, codeType) {
-  if (!code || !codeType) return false;
-  const raw = String(code).trim().toUpperCase();
-  const noDots = raw.replace(/\./g, '');
-  if (codeType === 'icd10') {
-    const r = db.prepare('SELECT 1 FROM icd10_codes WHERE UPPER(TRIM(code)) = ? OR UPPER(TRIM(code)) = ?').get(raw, noDots);
-    if (r) return true;
-    const r2 = db.prepare("SELECT 1 FROM icd10_codes WHERE UPPER(REPLACE(TRIM(code), '.', '')) = ?").get(noDots);
-    return r2 != null;
-  }
-  if (codeType === 'cpt') {
-    return db.prepare('SELECT 1 FROM cpt_codes WHERE UPPER(TRIM(code)) = ?').get(raw) != null;
-  }
-  if (codeType === 'hcpcs') {
-    return db.prepare('SELECT 1 FROM hcpcs_codes WHERE UPPER(TRIM(code)) = ?').get(raw) != null;
-  }
-  return false;
-};
-
-// Code embeddings (Phase 2.3 - optional semantic search, Layer 2 specialty filter)
-function deriveSpecialtyFromCode(code, codeType) {
-  if (!code || !codeType) return 'general';
-  const c = String(code).toUpperCase().trim();
-  if (codeType === 'icd10') {
-    if (/^[ST]\d/.test(c)) return 'orthopedics';
-    if (/^I\d/.test(c)) return 'cardiology';
-    if (/^J\d/.test(c)) return 'pulmonology';
-    if (/^G\d/.test(c)) return 'neurology';
-    if (/^L\d/.test(c)) return 'dermatology';
-    if (/^K\d/.test(c)) return 'gastroenterology';
-    if (/^R\d/.test(c)) return 'emergency';
-  }
-  if (codeType === 'cpt') {
-    if (/^(2[0-4]\d{3}|2[5-9]\d{3})/.test(c)) return 'orthopedics';
-    if (/^(93\d{3})/.test(c)) return 'cardiology';
-    if (/^(94\d{3})/.test(c)) return 'pulmonology';
-  }
-  return 'general';
-}
-
-module.exports.getAllCodeEmbeddings = function getAllCodeEmbeddings(codeType = null, specialty = null) {
-  let rows;
-  try {
-    const hasSpecialty = db.prepare('PRAGMA table_info(code_embeddings)').all().some(col => col.name === 'specialty');
-    if (codeType && specialty && hasSpecialty) {
-      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings WHERE code_type = ? AND (specialty = ? OR specialty IS NULL OR specialty = \'\')').all(codeType, specialty);
-    } else if (codeType) {
-      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings WHERE code_type = ?').all(codeType);
-    } else if (specialty && hasSpecialty) {
-      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings WHERE specialty = ? OR specialty IS NULL OR specialty = \'\'').all(specialty);
-    } else {
-      rows = db.prepare('SELECT code, code_type, description_text, embedding_json, specialty FROM code_embeddings').all();
-    }
-  } catch (_) {
-    rows = db.prepare('SELECT code, code_type, description_text, embedding_json FROM code_embeddings').all();
-  }
-  return rows.filter(r => r.embedding_json).map(r => ({
-    code: r.code,
-    code_type: r.code_type,
-    description_text: r.description_text,
-    embedding: JSON.parse(r.embedding_json),
-    specialty: r.specialty || null
-  }));
-};
-
-module.exports.upsertCodeEmbedding = function upsertCodeEmbedding(record) {
-  const id = record.id || `${record.code_type}_${record.code}`;
-  const specialty = record.specialty || deriveSpecialtyFromCode(record.code, record.code_type);
-  try {
-    const hasSpecialty = db.prepare('PRAGMA table_info(code_embeddings)').all().some(col => col.name === 'specialty');
-    if (hasSpecialty) {
-      db.prepare(`
-        INSERT INTO code_embeddings (id, code, code_type, description_text, embedding_json, specialty)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          description_text = excluded.description_text,
-          embedding_json = excluded.embedding_json,
-          specialty = excluded.specialty
-      `).run(id, record.code, record.code_type, record.description_text || null, record.embedding_json || null, specialty);
-    } else {
-      db.prepare(`
-        INSERT INTO code_embeddings (id, code, code_type, description_text, embedding_json)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          description_text = excluded.description_text,
-          embedding_json = excluded.embedding_json
-      `).run(id, record.code, record.code_type, record.description_text || null, record.embedding_json || null);
-    }
-  } catch (_) {
-    db.prepare(`
-      INSERT INTO code_embeddings (id, code, code_type, description_text, embedding_json)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        description_text = excluded.description_text,
-        embedding_json = excluded.embedding_json
-    `).run(id, record.code, record.code_type, record.description_text || null, record.embedding_json || null);
-  }
-  return id;
-};
-
-module.exports.getCodeEmbeddingsCount = function getCodeEmbeddingsCount() {
-  const row = db.prepare('SELECT COUNT(*) as n FROM code_embeddings WHERE embedding_json IS NOT NULL').get();
-  return row ? row.n : 0;
-};
-
-module.exports.backfillCodeEmbeddingSpecialty = function backfillCodeEmbeddingSpecialty() {
-  const tableInfo = db.prepare('PRAGMA table_info(code_embeddings)').all();
-  const hasSpecialty = tableInfo.some(c => c.name === 'specialty');
-  if (!hasSpecialty) return { updated: 0, skipped: 0, reason: 'specialty_column_missing' };
-  const rows = db.prepare('SELECT id, code, code_type FROM code_embeddings WHERE specialty IS NULL OR specialty = \'\'').all();
-  let updated = 0;
-  const updateStmt = db.prepare('UPDATE code_embeddings SET specialty = ? WHERE id = ?');
-  for (const r of rows) {
-    const specialty = deriveSpecialtyFromCode(r.code, r.code_type);
-    updateStmt.run(specialty, r.id);
-    updated++;
-  }
-  return { updated, skipped: 0 };
-};
-
-module.exports.getCptCodesByCodes = function getCptCodesByCodes(codes = []) {
-  if (!Array.isArray(codes) || codes.length === 0) return [];
-  const normalized = codes
-    .map(code => String(code || '').trim().toUpperCase())
-    .filter(code => code.length > 0);
-
-  if (normalized.length === 0) return [];
-
-  const placeholders = normalized.map(() => '?').join(', ');
-  return db.prepare(
-    `SELECT code, description, category, subcategory FROM cpt_codes WHERE code IN (${placeholders})`
-  ).all(...normalized);
-};
+const { createMedicalCodesRepository } = require('./database/repositories/medical-codes');
+Object.assign(module.exports, createMedicalCodesRepository(db));
 
 // Fee schedule methods (real-time adjudication)
 module.exports.getFeeScheduleRate = function getFeeScheduleRate(payerId, cptCode, dateOfService = null) {
@@ -19705,6 +19522,24 @@ module.exports.upsertComplianceSignoff = function upsertComplianceSignoff(row = 
 module.exports.getComplianceSignoff = function getComplianceSignoff(signoffKey) {
   try {
     return db.prepare(`SELECT * FROM compliance_signoffs WHERE signoff_key = ?`).get(signoffKey) || null;
+  } catch (_) {
+    return null;
+  }
+};
+
+module.exports.getPrimaryTaxonomyForNpi = function getPrimaryTaxonomyForNpi(npi) {
+  if (!npi) return null;
+  try {
+    const row = db.prepare(`
+      SELECT ptl.nucc_code
+      FROM provider_registry_entities e
+      JOIN provider_taxonomy_links ptl ON ptl.provider_entity_id = e.id
+      WHERE e.canonical_npi = ?
+        AND (ptl.primary_flag = 1 OR ptl.primary_flag IS NULL)
+      ORDER BY ptl.primary_flag DESC, ptl.confidence DESC
+      LIMIT 1
+    `).get(String(npi).trim());
+    return row?.nucc_code || null;
   } catch (_) {
     return null;
   }

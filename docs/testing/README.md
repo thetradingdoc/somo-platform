@@ -1,7 +1,7 @@
 # testing — consolidated documentation
-> Last reviewed: 2026-05-21
+> Last reviewed: 2026-05-25
 
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-25
 
 
 **Canonical map:** [CANONICAL_DOC_MAP.md](../meta/CANONICAL_DOC_MAP.md) — read here first to avoid duplicating documentation.
@@ -27,6 +27,8 @@
 Browse by anchor above. Each section notes the former file path.
 
 **Middleware unit tests (Jest):** [`middleware-platform/__tests__/README.md`](../../middleware-platform/__tests__/README.md) — what `npm test` runs in `middleware-platform`, Node harnesses excluded from Jest, Playwright vs `test:eval-engine`.
+
+**Medical coding accuracy eval:** from `middleware-platform/`, `SKIP_STARTUP_MIGRATIONS=1 RAG_API_URL=disabled EVAL_USE_SEMANTIC=false npm run eval:coding` — see [docs/Medical Coding/OPERATIONS.md](../Medical%20Coding/OPERATIONS.md).
 
 ---
 

@@ -1,11 +1,12 @@
 # runbooks — consolidated documentation
 
-**Single file:** All former `docs/runbooks/**/*.md` content is merged here. **Last updated:** 2026-04-20
+**Single file:** All former `docs/runbooks/**/*.md` content is merged here. **Last updated:** 2026-05-25
 
 ## Table of contents
 
 - [Alert Rules Configuration (Section 20) (`ALERT_RULES.md`)](#alert-rules)
 - [DLQ Tool Calls Incident Note (`DLQ_TOOL_CALLS_INCIDENT_NOTE.md`)](#dlq-tool-calls-incident-note)
+- [Archived terminal DLQ snapshots (`../archive/runbooks-incidents/`)](#dlq-tool-calls-incident-note)
 - [Disaster Recovery (`DR.md`)](#dr)
 - [Error Rate Spike (>5%) (`ERROR_RATE_SPIKE.md`)](#error-rate-spike)
 - [Groq Rate Limit (429) (`GROQ_RATE_LIMIT.md`)](#groq-rate-limit)
@@ -831,7 +832,7 @@ Owner: Platform on-call
 
 ## Notes
 
-- Terminal DLQ entries were archived to `docs/runbooks/DLQ_TOOL_CALLS_TERMINAL_ARCHIVE_1776474930109.json`.
+- Terminal DLQ entries were archived to `docs/archive/runbooks-incidents/DLQ_TOOL_CALLS_TERMINAL_ARCHIVE_1776474930109.json`.
 - Root cause for non-replayable entries: `checkout_backfill_reconciliation` is unknown to `KellyToolExecutor` in this environment.
 
 

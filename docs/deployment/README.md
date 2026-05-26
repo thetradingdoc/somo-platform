@@ -1,9 +1,20 @@
 # deployment — consolidated documentation
 
-**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-04-20
+**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-05-25
+
+### Medical codebook (standalone runbooks)
+
+These files are **not** merged into this README; use them for CPT/ICD imports, prod parity, and Render env:
+
+- [MEDICAL_CODEBOOK_SETUP.md](./MEDICAL_CODEBOOK_SETUP.md) — CMS sources, MPFS import, embeddings, Pinecone, Stedi 837P
+- [PROD_DB_PARITY.md](./PROD_DB_PARITY.md) — production row counts and migration checklist
+- [RENDER_PRODUCTION_CHECKLIST.md](./RENDER_PRODUCTION_CHECKLIST.md) — Render env vars and webhook registration
+
+Canonical architecture: [docs/Medical Coding/ARCHITECTURE.md](../Medical%20Coding/ARCHITECTURE.md).
 
 ## Table of contents
 
+- [Medical codebook runbooks (standalone)](#medical-codebook-standalone-runbooks)
 - [Automated Tenant Domain Setup (`azure/AUTOMATED_TENANT_DOMAIN_SETUP.md`)](#azure-automated-tenant-domain-setup)
 - [Azure Environment Variables for Automated Domain Setup (`azure/AZURE_ENV_VARIABLES.md`)](#azure-azure-env-variables)
 - [Case report service — Azure Container Instance (Phase 6 Task 50) (`CASE_REPORT_SERVICE_ACI.md`)](#case-report-service-aci)

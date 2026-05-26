@@ -396,6 +396,21 @@ if (section("P4", "ICD/CPT map layer (knowledge + triage RAG)")) {
   } else {
     log("P4", "pass", `DB: icd10_codes rows=${n.toLocaleString()}`);
   }
+  const emb = countRows("code_embeddings");
+  if (emb === null) {
+    log("P4", "warn", "DB: code_embeddings count", "DB not accessible");
+  } else if (emb < 1000) {
+    log("P4", "warn", `DB: code_embeddings sparse rows=${emb}`, "Run: npm run embeddings:until-done");
+  } else {
+    log("P4", "pass", `DB: code_embeddings rows=${emb.toLocaleString()}`);
+  }
+  const pcmf = safeRequire("services/layer2-rag/pinecone-code-metadata-client.js");
+  if (pcmf.ok && pcmf.exports?.pineconeFallbackEnabled) {
+    const enabled = pcmf.exports.pineconeFallbackEnabled();
+    enabled
+      ? log("P4", "pass", "pinecone-code-metadata-client configured for CPT fallback")
+      : log("P4", "warn", "Pinecone CPT fallback disabled (set PINECONE_INDEX_HOST)");
+  }
 }
 
 // ─── P5 — Query Planner ──────────────────────────────────────────────────────

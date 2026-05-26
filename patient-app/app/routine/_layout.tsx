@@ -5,6 +5,7 @@ export default function RoutineStackLayout() {
     <Stack>
       <Stack.Screen name="pick" options={{ title: 'Choose routine', headerShown: true }} />
       <Stack.Screen name="setup" options={{ title: 'Routine', headerShown: false }} />
+      <Stack.Screen name="capture" options={{ title: 'Progress photo', headerShown: true }} />
     </Stack>
   );
 }

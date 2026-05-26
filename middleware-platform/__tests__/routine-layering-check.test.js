@@ -20,4 +20,21 @@ describe('routine-layering-check', () => {
     expect(result.overall).toBe('safe');
     expect(Array.isArray(result.actives_detected)).toBe(true);
   });
+
+  test('runLayeringCheck returns unknown when interaction graph empty', () => {
+    const mockDb = {
+      prepare: () => ({
+        get: () => ({ n: 0 }),
+      }),
+    };
+    const result = runLayeringCheck({
+      steps: [
+        { product_name: 'Tretinoin cream' },
+        { product_name: 'Salicylic acid toner' },
+      ],
+      db: mockDb,
+    });
+    expect(result.overall).toBe('unknown');
+    expect(result.graph_unavailable).toBe(true);
+  });
 });

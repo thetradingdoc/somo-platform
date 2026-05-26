@@ -1,13 +1,13 @@
 # Voice Agent Documentation
 
-**Last Updated:** April 9, 2026
+**Last Updated:** 2026-05-25
 
 Documentation for the Retell AI voice agent (Kelly) integration.
 
 ## 📁 Prompts
 
 - **[Kelly Voice Agent](./prompts/kelly-voice-agent-prompt.md)** - Main system prompt
-- **[Medical Voice Agent](./medical-voice-agent-prompt.md)** - Medical coding workflow (EXTRACT → TRIAGE → CODE → PRICE → VALIDATE); appended to Kelly by configure-retell.js
+- **[Medical Voice Agent](./medical-voice-agent-prompt.md)** - Medical coding workflow (EXTRACT → TRIAGE → CODE → PRICE → VALIDATE); appended to Kelly by `configure-retell.js`
 
 ## 🤖 Agent Details
 
@@ -57,6 +57,7 @@ Documentation for the Retell AI voice agent (Kelly) integration.
 
 ## 🔗 Related Documentation
 
-- [Medical Coding Runbook](../architecture/README.md#voice-agent-runbook) - Imports, evaluation, tools
+- [Medical Coding (canonical)](../Medical%20Coding/README.md) - Architecture, operations, eval
+- [Medical Coding Runbook (legacy anchor)](../architecture/README.md#voice-agent-runbook) - Short index; prefer Medical Coding docs
 - [Tool Schemas](../architecture/README.md#voice-agent-tool-schemas) - suggest_codes_from_symptoms, extract_medical_text, etc.
 - [Voice Agent Todo & Status](../architecture/README.md#voice-agent-voice-agent-todo-and-status) - Integration roadmap

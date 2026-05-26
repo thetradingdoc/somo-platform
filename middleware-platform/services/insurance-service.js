@@ -30,6 +30,61 @@ class InsuranceService {
     });
   }
 
+  /** @returns {'professional'|'institutional'} */
+  static getStediClaimSubmissionMode() {
+    const mode = String(process.env.STEDI_CLAIM_SUBMISSION_MODE || '').trim().toLowerCase();
+    if (mode === 'professional' || process.env.STEDI_USE_PROFESSIONAL_CLAIMS === '1') {
+      return 'professional';
+    }
+    return 'institutional';
+  }
+
+  static getStediClaimApiPaths() {
+    const base = '/2024-04-01/change/medicalnetwork';
+    if (this.getStediClaimSubmissionMode() === 'professional') {
+      return {
+        submit: `${base}/professionalclaims/v1/raw-x12-submission`,
+        status: (claimId) => `${base}/professionalclaims/v1/${encodeURIComponent(claimId)}`
+      };
+    }
+    return {
+      submit: `${base}/institutionalclaims/v1/raw-x12-submission`,
+      status: (claimId) => `${base}/institutionalclaims/v1/${encodeURIComponent(claimId)}`
+    };
+  }
+
+  /**
+   * Apply Stedi 277/835-style status payload to claim + code acceptance tracking.
+   * @param {object} claim - insurance_claims row
+   * @param {string} status - approved|paid|denied|rejected|processing|submitted
+   */
+  static applyClaimAdjudicationOutcome(claim, status) {
+    if (!claim?.id || !status) return;
+    const normalized = String(status).toLowerCase();
+    db.updateInsuranceClaim(claim.id, { status: normalized });
+    if (['approved', 'paid', 'denied', 'rejected'].includes(normalized)) {
+      try {
+        const CodeAcceptanceService = require('./code-acceptance-service');
+        const codes = [];
+        if (claim.service_code) {
+          claim.service_code.split(',').forEach((s) => {
+            const t = s.trim();
+            if (t && t !== 'N/A') codes.push(t);
+          });
+        }
+        if (codes.length > 0 && claim.payer_id) {
+          CodeAcceptanceService.trackCodeOutcome(claim.id, codes, normalized, claim.payer_id);
+        }
+        const providerNpi = claim.provider_npi || null;
+        if (providerNpi) {
+          CodeAcceptanceService.updateProviderTrustScore(providerNpi, normalized === 'approved' || normalized === 'paid');
+        }
+      } catch (e) {
+        console.warn('⚠️  applyClaimAdjudicationOutcome tracking skipped:', e.message);
+      }
+    }
+  }
+
   /**
    * Check patient insurance eligibility
    * X12 270/271 transaction
@@ -204,11 +259,33 @@ class InsuranceService {
    */
   static async submitClaim(claimData) {
     try {
+      const billingEnvelope = require('./billing-claim-envelope-service');
+      if (!claimData.placeOfService) {
+        claimData.placeOfService = billingEnvelope.resolvePlaceOfService({
+          visit_mode: claimData.visit_mode,
+          place_of_service: claimData.place_of_service
+        });
+      }
+      if (!claimData.modifiers || claimData.modifiers.length === 0) {
+        claimData.modifiers = billingEnvelope.resolveTelehealthModifiers({
+          place_of_service: claimData.placeOfService,
+          visit_mode: claimData.visit_mode,
+          payer_id: claimData.payerId,
+          existing_modifiers: claimData.modifiers || []
+        });
+      }
+      if (claimData.npi && !claimData.taxonomyCode && db.getPrimaryTaxonomyForNpi) {
+        claimData.taxonomyCode = db.getPrimaryTaxonomyForNpi(claimData.npi) || claimData.taxonomyCode;
+      }
+
       console.log('\n📋 INSURANCE: Submitting Claim');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('Appointment ID:', claimData.appointmentId);
       console.log('Member ID:', claimData.memberId);
       console.log('Service Code:', claimData.serviceCode);
+      console.log('Place of Service:', claimData.placeOfService || '(default)');
+      console.log('Modifiers:', (claimData.modifiers || []).join(', ') || '(none)');
+      if (claimData.taxonomyCode) console.log('Provider Taxonomy:', claimData.taxonomyCode);
       console.log('Total Amount: $' + claimData.totalAmount);
       console.log('Copay Paid: $' + claimData.copayPaid);
 
@@ -612,7 +689,9 @@ class InsuranceService {
       },
       provider: {
         providerId: claimData.providerId || 'Doclittle-Provider-001',
-        npi: claimData.npi || null
+        npi: claimData.npi || claimData.providerNpi || null,
+        taxonomyCode: claimData.taxonomyCode || null,
+        providerTaxonomyCode: claimData.taxonomyCode || null
       },
       payer: {
         payerId: claimData.payerId
@@ -620,6 +699,10 @@ class InsuranceService {
       service: {
         serviceCode: claimData.serviceCode,
         diagnosisCode: claimData.diagnosisCode,
+        placeOfServiceCode: claimData.placeOfService || '02',
+        placeOfService: claimData.placeOfService || '02',
+        procedureModifiers: claimData.modifiers || [],
+        modifiers: claimData.modifiers || [],
         dateOfService: claimData.dateOfService,
         totalAmount: claimData.totalAmount,
         copayPaid: claimData.copayPaid,
@@ -759,8 +842,9 @@ class InsuranceService {
             headers: { 'Authorization': `Bearer ${this.STEDI_API_KEY}`, 'Content-Type': 'application/json' },
             timeout: 30000
           });
+          const paths = this.getStediClaimApiPaths();
           const submitRes = await healthClient.post(
-            '/2024-04-01/change/medicalnetwork/institutionalclaims/v1/raw-x12-submission',
+            paths.submit,
             { x12: edi }
           ).catch(() => null);
           if (submitRes?.data?.claimId || submitRes?.data?.correlationId) {
@@ -803,8 +887,9 @@ class InsuranceService {
           headers: { 'Authorization': `Bearer ${this.STEDI_API_KEY}` },
           timeout: 10000
         });
+        const paths = this.getStediClaimApiPaths();
         const res = await healthClient.get(
-          `/2024-04-01/change/medicalnetwork/institutionalclaims/v1/${claim.x12_claim_id}`
+          paths.status(claim.x12_claim_id)
         ).catch(() => null);
         if (res?.data?.status) {
           const statusMap = { SUCCESS: 'approved', accepted: 'approved', rejected: 'denied', pending: 'processing' };
@@ -1019,6 +1104,15 @@ class InsuranceService {
   static async getAllPayers(limit = 100) {
     return this.fetchPayers({ limit });
   }
+}
+
+if (
+  process.env.NODE_ENV === 'production' &&
+  InsuranceService.getStediClaimSubmissionMode() === 'institutional'
+) {
+  console.warn(
+    '⚠️  STEDI_CLAIM_SUBMISSION_MODE=institutional — telehealth professional claims (837P) require STEDI_CLAIM_SUBMISSION_MODE=professional'
+  );
 }
 
 module.exports = InsuranceService;

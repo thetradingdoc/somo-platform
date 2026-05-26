@@ -12,10 +12,10 @@ One routine-tracker journey on **Expo** and **web patient portal**. Same APIs, s
 | 2 | Email + 6-digit code | `/(tabs)/index` (Account) or web handoff | `/patients/patient-login.html` |
 | 3 | Pick one of five routines | `/routine/pick` | `/patients/patient-routine-pick.html` |
 | 4 | Land on Today | `/(tabs)/today` | `/patients/patient-dashboard.html` |
-| 5 | Log progress photo | Today primary CTA | Today **Add today's photo** (or center FAB → Timeline) |
-| 6 | Review history | `/(tabs)/timeline` | `/patients/schedule.html` |
-| 7 | Bills (optional) | `/(tabs)/money` | `/patients/wallet.html` |
-| 8 | Account / settings | `/(tabs)/index` | `/patients/profile.html` |
+| 5 | Log progress photo | Today CTA or FAB → `/routine/capture` (front camera + live ghost) | Today **Log today's photo** |
+| 6 | Review history | `/(tabs)/timeline` — **Photos** filmstrip default | `/patients/schedule.html` |
+| 7 | Bills (optional) | `/(tabs)/money` via Account → Bills & receipts | `/patients/wallet.html` (secondary; Profile submenu intent) |
+| 8 | Account / settings | `/(tabs)/account` | `/patients/profile.html` |
 
 **Signup:** prefer app handoff (`patientapp://auth?ticket=…`). **Login / web:** template check → pick if none, else Today.
 
@@ -26,10 +26,12 @@ One routine-tracker journey on **Expo** and **web patient portal**. Same APIs, s
 | `patient-dashboard.html` | **Today** — stats, choose routine CTA | Today |
 | `patient-routine-pick.html` | **Pick** — 5 concern templates | `/routine/pick` |
 | `schedule.html` | **Timeline** — calendar, photos, list | Timeline |
-| `wallet.html` | **Money** — bills, receipts | Money |
-| `profile.html` | **Profile** | Account |
+| `wallet.html` | **Money** — bills, receipts (secondary) | Money (hidden tab; linked from Account) |
+| `profile.html` | **Account** — profile, Bills link | Account |
 
-Bottom nav: [patient-shell.js](../../unified-dashboard/assets/js/patient-shell.js) — Today, Timeline, Money, Profile + blue camera FAB.
+**Mobile tabs (v1.2):** Today · Timeline · Account. Center FAB **Log photo** → `/routine/capture`.
+
+**Web bottom nav:** [patient-shell.js](../../unified-dashboard/assets/js/patient-shell.js) — Today, Timeline, Account first; Routine, Products, Wallet follow (skincare-first order).
 
 ## Data: template → calendar
 

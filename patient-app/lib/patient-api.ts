@@ -24,12 +24,50 @@ export async function patientGet(path: string) {
   return data;
 }
 
+export async function patientPatch(path: string, body: unknown) {
+  const headers = await withSessionHeaders();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body ?? {}),
+  });
+  const data = await parseJson(res);
+  if (!res.ok || !data?.success) throw new Error(data?.error || 'Request failed');
+  return data;
+}
+
 export async function patientPost(path: string, body: unknown) {
   const headers = await withSessionHeaders();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body ?? {}),
+  });
+  const data = await parseJson(res);
+  if (!res.ok || !data?.success) throw new Error(data?.error || 'Request failed');
+  return data;
+}
+
+/** Multipart upload — do not set Content-Type (boundary is set automatically). */
+export async function patientUploadForm(path: string, form: FormData) {
+  const sid = await getPatientSessionId();
+  if (!sid) throw new Error('Sign in required.');
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'x-session-id': sid,
+      'ngrok-skip-browser-warning': 'true',
+    },
+    body: form,
+  });
+  const data = await parseJson(res);
+  if (!res.ok || !data?.success) throw new Error(data?.error || 'Request failed');
+  return data;
+}
+
+export async function publicGet(path: string) {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { 'ngrok-skip-browser-warning': 'true' },
   });
   const data = await parseJson(res);
   if (!res.ok || !data?.success) throw new Error(data?.error || 'Request failed');
