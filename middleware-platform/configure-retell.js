@@ -68,16 +68,19 @@ function loadHealthcarePrompt() {
         }
 
         const medicalPromptPath = path.join(docsPath, 'medical-voice-agent-prompt.md');
-        if (fs.existsSync(medicalPromptPath)) {
-            const medical = fs.readFileSync(medicalPromptPath, 'utf8');
-            prompt = prompt + '\n\n---\n\n' + medical;
-            console.log('✅ Appended medical coding workflow prompt');
+        if (!fs.existsSync(medicalPromptPath)) {
+            throw new Error(
+                `Missing required medical workflow prompt: ${path.relative(path.join(__dirname, '..'), medicalPromptPath)}`
+            );
         }
+        const medical = fs.readFileSync(medicalPromptPath, 'utf8');
+        prompt = prompt + '\n\n---\n\n' + medical;
+        console.log('✅ Appended medical coding workflow prompt');
 
         return prompt;
     } catch (error) {
-        console.error('⚠️  Could not load healthcare prompt:', error.message);
-        return null;
+        console.error('❌ Could not load healthcare prompt:', error.message);
+        throw error;
     }
 }
 
@@ -179,16 +182,17 @@ Keep responses short and natural for voice conversation.`;
             // Valid values include call-center, coffee-shop, etc.; "office" is not in the current API enum.
             ambient_sound: null,
             general_prompt: generalPrompt,
-            // Only include built-in Retell functions in general_tools
-            // Custom functions (collect_insurance, schedule_appointment, etc.) are described in the prompt
-            // and handled via WebSocket function_call messages
-            general_tools: [
-                {
-                    type: 'end_call',
-                    name: 'end_call',
-                    description: 'End the call when the customer is done or when the conversation is complete.'
-                }
-            ]
+            // Reproducible tools: Retell tool schemas MUST be set programmatically so deleting/resetting an agent
+            // does not silently remove coding + billing function-calling ability.
+            general_tools: (retellFunctions && retellFunctions.length > 0)
+                ? retellFunctions
+                : [
+                    {
+                        type: 'end_call',
+                        name: 'end_call',
+                        description: 'End the call when the customer is done or when the conversation is complete.'
+                    }
+                ]
         };
 
         const updateResponse = await axios.patch(

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "canonical": {
+    "websocket_path": "/webhook/retell/llm",
+    "required_tools": [
+      "extract_medical_text",
+      "assess_urgency",
+      "suggest_codes_from_symptoms",
+      "validate_code_pair",
+      "get_code_pricing",
+      "schedule_appointment"
+    ],
+    "prompt_markers": [
+      "suggest_codes_from_symptoms",
+      "validate_code_pair"
+    ]
+  },
+  "agents": []
+}
+

@@ -664,6 +664,42 @@
     },
     {
       "type": "function",
+      "name": "schedule_demo",
+      "description": "Schedule a product demo for a clinic interested in DocLittle.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clinic_name": { "type": "string", "description": "Name of the clinic" },
+          "contact_name": { "type": "string", "description": "Name of the person you spoke with" },
+          "contact_email": { "type": "string", "description": "Email address for demo confirmation" },
+          "contact_phone": { "type": "string", "description": "Phone number for follow-up" },
+          "preferred_date": { "type": "string", "description": "Preferred demo date (YYYY-MM-DD)" },
+          "preferred_time": { "type": "string", "description": "Preferred demo time (HH:MM)" },
+          "timezone": { "type": "string", "description": "Timezone (default: America/New_York)" },
+          "notes": { "type": "string", "description": "Additional notes about the clinic or conversation" }
+        },
+        "required": ["clinic_name", "contact_name", "contact_email", "preferred_date", "preferred_time"]
+      }
+    },
+    {
+      "type": "function",
+      "name": "collect_contact_info",
+      "description": "Collect contact information from a clinic for follow-up.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "clinic_name": { "type": "string", "description": "Name of the clinic" },
+          "contact_name": { "type": "string", "description": "Name of the person you spoke with" },
+          "contact_email": { "type": "string", "description": "Email address" },
+          "contact_phone": { "type": "string", "description": "Phone number" },
+          "role": { "type": "string", "description": "Their role (e.g., Office Manager, Practice Administrator)" },
+          "interest_level": { "type": "string", "description": "Level of interest: high, medium, low, or not_interested" }
+        },
+        "required": ["clinic_name", "contact_name", "contact_email"]
+      }
+    },
+    {
+      "type": "function",
       "name": "end_call",
       "description": "End the call when the customer is done or when the conversation is complete."
     }

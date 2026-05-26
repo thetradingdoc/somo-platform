@@ -592,7 +592,8 @@ class RetellWebSocketHandler {
             }
         }
 
-        // State machine: single path - LangGraph when enabled, fallback to coding-state-service
+        // State machine: LangGraph when enabled, fallback to coding-state-service.
+        // Production guardrail: LANGGRAPH_ROLLOUT_PCT must be 0 or 1 (enforced in services/coding-graph.js).
         const transcriptPayload = { transcript: userSaid };
         const clinicContext = { clinic_id: connection?.clinic_id || null };
         const useLangGraph = (CodingGraph.shouldUseLangGraph(callId, connection?.clinic_id) || CodingGraph.isShadowMode());

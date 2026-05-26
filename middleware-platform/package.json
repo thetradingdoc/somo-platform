@@ -31,6 +31,7 @@
         "audit:eval-cpt": "node scripts/audit-eval-cpt-coverage.cjs",
         "verify:prod-codebook": "node scripts/verify-prod-codebook.cjs",
         "verify:stedi-env": "node scripts/verify-stedi-env.cjs",
+        "verify:agent-config": "node scripts/verify-agent-config.cjs",
         "claims:resubmit-telehealth": "node scripts/resubmit-telehealth-claims.cjs",
         "payor:npi-dedup": "node scripts/run-provider-registry-npi-dedup.cjs --limit 50000",
         "payor:npi-dedup-directory": "node scripts/run-provider-registry-npi-dedup.cjs --include-directory --directory-all",

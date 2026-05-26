@@ -16,8 +16,18 @@ let graphModule = null;
 let compiledGraph = null;
 let checkpointer = null;
 
-const ROLLOUT_PCT = parseFloat(process.env.LANGGRAPH_ROLLOUT_PCT || '0');
+let ROLLOUT_PCT = parseFloat(process.env.LANGGRAPH_ROLLOUT_PCT || '0');
 const SHADOW_MODE = process.env.LANGGRAPH_SHADOW === 'true' || process.env.LANGGRAPH_SHADOW === '1';
+
+// Gap 2 decision guardrail: production must not run a partial rollout.
+// Partial rollout makes call flows non-deterministic (some calls LangGraph, some legacy).
+if (process.env.NODE_ENV === 'production') {
+  const pct = Number.isFinite(ROLLOUT_PCT) ? ROLLOUT_PCT : 0;
+  if (pct > 0 && pct < 1) {
+    throw new Error(`LANGGRAPH_ROLLOUT_PCT must be 0 or 1 in production (got ${process.env.LANGGRAPH_ROLLOUT_PCT})`);
+  }
+  ROLLOUT_PCT = pct;
+}
 
 async function loadLangGraph() {
   if (graphModule) return graphModule;

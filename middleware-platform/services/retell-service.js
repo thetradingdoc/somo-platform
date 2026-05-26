@@ -23,7 +23,8 @@ class RetellService {
   constructor() {
     this.apiKey = process.env.RETELL_API_KEY;
     this.apiBaseUrl = process.env.RETELL_API_BASE_URL || 'https://api.retellai.com';
-    this.llmWebsocketUrl = process.env.RETELL_LLM_WEBSOCKET_URL || 'wss://doclittle.site/retell-llm';
+    // Canonical path is /webhook/retell/llm (server.js upgrade handler + RetellWebSocketHandler).
+    this.llmWebsocketUrl = process.env.RETELL_LLM_WEBSOCKET_URL || 'wss://doclittle.site/webhook/retell/llm';
   }
 
   /**
@@ -147,6 +148,7 @@ Rules:
       // Read base prompt template
       // Try multiple possible paths (local dev vs Azure deployment)
       const possiblePaths = [
+        path.join(__dirname, '../../docs/voice-agent/prompts/kelly-voice-agent-prompt.md'), // Canonical docs path
         path.join(__dirname, '../../docs/voice-agent/kelly-voice-agent-prompt.md'), // Local dev
         path.join(__dirname, '../docs/voice-agent/kelly-voice-agent-prompt.md'), // Azure (if docs copied)
         path.join(process.cwd(), 'docs/voice-agent/kelly-voice-agent-prompt.md') // Fallback
@@ -177,12 +179,32 @@ Rules:
       template = template.replace(/{{BUSINESS_HOURS}}/g, clinicData.business_hours || 'Monday-Friday, 9 AM - 5 PM');
       template = template.replace(/{{PHONE_NUMBER}}/g, clinicData.phone_number || '');
       template = template.replace(/{{ADDRESS}}/g, clinicData.address || '');
-      
-      return template;
+
+      // Hard requirement: medical workflow prompt must be present when creating/updating agents.
+      // Without it, calls can degrade silently: tools exist but Kelly is not instructed to call them in order.
+      const medicalPaths = [
+        path.join(__dirname, '../../docs/voice-agent/medical-voice-agent-prompt.md'),
+        path.join(__dirname, '../docs/voice-agent/medical-voice-agent-prompt.md'),
+        path.join(process.cwd(), 'docs/voice-agent/medical-voice-agent-prompt.md')
+      ];
+      let medical = null;
+      for (const mp of medicalPaths) {
+        try {
+          if (fs.existsSync(mp)) {
+            medical = fs.readFileSync(mp, 'utf8');
+            break;
+          }
+        } catch (_) { /* try next */ }
+      }
+      if (!medical) {
+        throw new Error('Missing required docs/voice-agent/medical-voice-agent-prompt.md (medical workflow prompt)');
+      }
+
+      return template + '\n\n---\n\n' + medical;
     } catch (error) {
       console.error('Error generating clinic prompt:', error);
-      // Fallback to default prompt
-      return this.getDefaultPrompt(clinicData);
+      // Fail-fast: prompt drift/missing workflow prompt should not silently degrade calls.
+      throw error;
     }
   }
 
@@ -213,158 +235,35 @@ Always be polite, patient, and professional. If you don't know something, ask fo
    * Load Retell functions configuration for sales agent
    */
   loadSalesAgentFunctions() {
-    return [
-      {
-        name: 'schedule_demo',
-        description: 'Schedule a product demo for a clinic interested in DocLittle',
-        parameters: {
-          type: 'object',
-          properties: {
-            clinic_name: { type: 'string', description: 'Name of the clinic' },
-            contact_name: { type: 'string', description: 'Name of the person you spoke with' },
-            contact_email: { type: 'string', description: 'Email address for demo confirmation' },
-            contact_phone: { type: 'string', description: 'Phone number for follow-up' },
-            preferred_date: { type: 'string', description: 'Preferred demo date (YYYY-MM-DD)' },
-            preferred_time: { type: 'string', description: 'Preferred demo time (HH:MM)' },
-            timezone: { type: 'string', description: 'Timezone (default: America/New_York)' },
-            notes: { type: 'string', description: 'Additional notes about the clinic or conversation' }
-          },
-          required: ['clinic_name', 'contact_name', 'contact_email', 'preferred_date', 'preferred_time']
-        }
-      },
-      {
-        name: 'collect_contact_info',
-        description: 'Collect contact information from a clinic for follow-up',
-        parameters: {
-          type: 'object',
-          properties: {
-            clinic_name: { type: 'string', description: 'Name of the clinic' },
-            contact_name: { type: 'string', description: 'Name of the person you spoke with' },
-            contact_email: { type: 'string', description: 'Email address' },
-            contact_phone: { type: 'string', description: 'Phone number' },
-            role: { type: 'string', description: 'Their role (e.g., Office Manager, Practice Administrator)' },
-            interest_level: { type: 'string', description: 'Level of interest: high, medium, low, or not_interested' }
-          },
-          required: ['clinic_name', 'contact_name', 'contact_email']
-        }
-      },
-      {
-        name: 'end_call',
-        description: 'End the call gracefully when the conversation is complete',
-        parameters: {
-          type: 'object',
-          properties: {
-            reason: { type: 'string', description: 'Reason for ending call (e.g., demo_scheduled, not_interested, callback_requested)' },
-            outcome: { type: 'string', description: 'Call outcome summary' }
-          },
-          required: []
-        }
-      }
-    ];
+    const all = this.loadRetellFunctions();
+    const allow = new Set(['schedule_demo', 'collect_contact_info', 'end_call']);
+    return (Array.isArray(all) ? all : []).filter((t) => allow.has(t?.name));
   }
 
   /**
    * Load Retell functions configuration
    */
   loadRetellFunctions() {
-    // Return the functions that the voice agent can call
-    // These should match what's in the Retell WebSocket handler
-    return [
-      {
-        name: 'schedule_appointment',
-        description: 'Schedule an appointment for a patient',
-        parameters: {
-          type: 'object',
-          properties: {
-            patient_name: { type: 'string', description: 'Patient full name' },
-            patient_phone: { type: 'string', description: 'Patient phone number (required)' },
-            patient_email: { type: 'string', description: 'Patient email address' },
-            dob: { type: 'string', description: 'Patient date of birth (YYYY-MM-DD). Ask if missing after booking so we can finish onboarding.' },
-            country: { type: 'string', description: 'Patient country (e.g., United States). Ask if missing after booking so we can finish onboarding.' },
-            city: { type: 'string', description: 'Patient city (e.g., Austin). Ask if missing after booking so we can finish onboarding.' },
-            appointment_type: { type: 'string', description: 'Type of appointment' },
-            date: { type: 'string', description: 'Appointment date (YYYY-MM-DD)' },
-            time: { type: 'string', description: 'Appointment time (HH:MM)' },
-            timezone: { type: 'string', description: 'Timezone (default: America/New_York)' },
-            notes: { type: 'string', description: 'Additional notes' }
-          },
-          required: ['patient_name', 'patient_phone', 'appointment_type', 'date', 'time']
-        }
-      },
-      {
-        name: 'patient_intake',
-        description: 'Capture patient onboarding details (DOB + country/city). Call during or right after booking to keep web + voice onboarding consistent.',
-        parameters: {
-          type: 'object',
-          properties: {
-            patient_id: { type: 'string', description: 'FHIR patient ID if known (preferred)' },
-            patient_email: { type: 'string', description: 'Patient email (used to resolve patient if patient_id missing)' },
-            patient_phone: { type: 'string', description: 'Patient phone (used to resolve patient if patient_id missing)' },
-            first_name: { type: 'string', description: 'First name' },
-            last_name: { type: 'string', description: 'Last name' },
-            dob: { type: 'string', description: 'Date of birth (YYYY-MM-DD)' },
-            country: { type: 'string', description: 'Country' },
-            city: { type: 'string', description: 'City' }
-          },
-          required: ['dob', 'country', 'city']
-        }
-      },
-      {
-        name: 'get_patient_intake_status',
-        description: 'Check which onboarding fields are missing (DOB/country/city) so you only ask what is needed.',
-        parameters: {
-          type: 'object',
-          properties: {
-            patient_id: { type: 'string', description: 'FHIR patient ID if known' },
-            patient_email: { type: 'string', description: 'Patient email (resolve patient if patient_id missing)' },
-            patient_phone: { type: 'string', description: 'Patient phone (resolve patient if patient_id missing)' }
-          },
-          required: []
-        }
-      },
-      {
-        name: 'collect_insurance',
-        description: 'Collect and verify insurance information from a patient',
-        parameters: {
-          type: 'object',
-          properties: {
-            patient_name: { type: 'string', description: 'Patient full name' },
-            patient_phone: { type: 'string', description: 'Patient phone number' },
-            member_id: { type: 'string', description: 'Insurance member ID' },
-            group_number: { type: 'string', description: 'Insurance group number' },
-            payer_name: { type: 'string', description: 'Insurance payer name (e.g., CIGNA, Aetna)' },
-            date_of_birth: { type: 'string', description: 'Patient date of birth (YYYY-MM-DD)' }
-          },
-          required: ['patient_name', 'member_id', 'payer_name']
-        }
-      },
-      {
-        name: 'get_patient_claims',
-        description: 'Get patient insurance claims and benefits information',
-        parameters: {
-          type: 'object',
-          properties: {
-            patient_name: { type: 'string', description: 'Patient full name' },
-            member_id: { type: 'string', description: 'Insurance member ID' }
-          },
-          required: ['member_id']
-        }
-      },
-      {
-        name: 'process_payment',
-        description: 'Process a payment for a patient',
-        parameters: {
-          type: 'object',
-          properties: {
-            patient_name: { type: 'string', description: 'Patient full name' },
-            patient_phone: { type: 'string', description: 'Patient phone number' },
-            amount: { type: 'number', description: 'Payment amount' },
-            description: { type: 'string', description: 'Payment description' }
-          },
-          required: ['patient_name', 'patient_phone', 'amount']
-        }
-      }
+    // Single source of truth: middleware-platform/retell-functions/retell-functions.json
+    // (shared by configure-retell.js and RetellService.createAgent()).
+    const candidatePaths = [
+      path.join(__dirname, '../retell-functions/retell-functions.json'),
+      path.join(process.cwd(), 'middleware-platform/retell-functions/retell-functions.json')
     ];
+    for (const p of candidatePaths) {
+      try {
+        if (fs.existsSync(p)) {
+          const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (Array.isArray(parsed?.functions) && parsed.functions.length > 0) {
+            return parsed.functions;
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️  Failed to load retell-functions.json:', e.message);
+      }
+    }
+    console.warn('⚠️  retell-functions.json not found; using minimal fallback tool set');
+    return [{ type: 'end_call', name: 'end_call', description: 'End the call when the conversation is complete', parameters: { type: 'object', properties: {} } }];
   }
 
   /**
