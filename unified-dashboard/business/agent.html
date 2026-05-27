@@ -4,10 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voice Agent - Doctor's Portal</title>
+    <title>FrontDesk Provider Portal - Voice Agent</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/provider-portal.css">
-    <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <link rel="stylesheet" href="../assets/css/email-composer.css">
     <link rel="stylesheet" href="../assets/css/sms-composer.css">
     <script src="../assets/js/config.js"></script>
@@ -808,7 +807,7 @@
     </style>
 </head>
 
-<body>
+<body class="provider-portal">
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
 
@@ -820,7 +819,7 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo"><span class="doc">Doc</span><span class="little">Little</span></div>
-                <div class="sidebar-subtitle sidebar-subtitle-portal">Doctor's Portal</div>
+                <div class="sidebar-subtitle sidebar-subtitle-portal">FrontDesk Provider Portal</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
@@ -835,7 +834,7 @@
                         <div class="user-role">Owner</div>
                     </div>
                     <button class="logout-btn" onclick="event.stopPropagation(); logout();" title="Logout">
-                        🚪
+                        Logout
                     </button>
                 </div>
             </div>
@@ -850,8 +849,8 @@
 
             <!-- Tabs -->
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('performance', event)">📊 Performance</button>
-                <button class="tab" onclick="switchTab('automation', event)">🤖 Automation</button>
+                <button class="tab active" onclick="switchTab('performance', event)">Performance</button>
+                <button class="tab" onclick="switchTab('automation', event)">Automation</button>
             </div>
 
             <!-- Performance Tab -->
@@ -860,7 +859,7 @@
                 <div class="agent-control-panel">
                     <div class="agent-status-header">
                         <div class="agent-status-info">
-                            <h2>🎙️ Doctor's Portal</h2>
+                            <h2>Voice Agent Console</h2>
                             <div class="agent-phone-display" id="agentPhone">(585)620-2445</div>
                             <div class="agent-status-indicator">
                                 <span class="status-dot-large" id="statusDot"></span>
@@ -876,20 +875,20 @@
 
                     <div class="agent-actions-grid">
                         <button class="agent-action-btn" onclick="testCall()">
-                            <span style="font-size: 24px;">📞</span>
-                            <span>Test Call</span>
+                            <span style="font-size: 14px; font-weight: 700;">Test Call</span>
+                            <span>Run a live call check</span>
                         </button>
                         <button class="agent-action-btn" onclick="editGreeting()">
-                            <span style="font-size: 24px;">🎤</span>
-                            <span>Edit Greeting</span>
+                            <span style="font-size: 14px; font-weight: 700;">Greeting</span>
+                            <span>Update call intro</span>
                         </button>
                         <button class="agent-action-btn" onclick="editHours()">
-                            <span style="font-size: 24px;">⏰</span>
-                            <span>Business Hours</span>
+                            <span style="font-size: 14px; font-weight: 700;">Business Hours</span>
+                            <span>Adjust availability</span>
                         </button>
                         <button class="agent-action-btn" onclick="viewTranscripts()">
-                            <span style="font-size: 24px;">📝</span>
-                            <span>Call Transcripts</span>
+                            <span style="font-size: 14px; font-weight: 700;">Call Logs</span>
+                            <span>Review transcripts</span>
                         </button>
                     </div>
                 </div>
@@ -897,25 +896,25 @@
                 <!-- Performance Stats -->
                 <div class="performance-grid">
                     <div class="performance-card">
-                        <h3>📞 Total Calls (24h)</h3>
+                        <h3>Total Calls (24h)</h3>
                         <div class="performance-value" id="totalCalls">0</div>
                         <div class="performance-change positive" id="callsChange">+0 from yesterday</div>
                     </div>
 
                     <div class="performance-card">
-                        <h3>✅ Successful Calls</h3>
+                        <h3>Successful Calls</h3>
                         <div class="performance-value" id="successfulCalls">0</div>
                         <div class="performance-change" id="successRate">0% success rate</div>
                     </div>
 
                     <div class="performance-card">
-                        <h3>📅 Appointments Booked</h3>
+                        <h3>Appointments Booked</h3>
                         <div class="performance-value" id="callRevenue">0</div>
                         <div class="performance-change positive" id="revenueChange">+0 today</div>
                     </div>
 
                     <div class="performance-card">
-                        <h3>✅ Calls Resolved</h3>
+                        <h3>Calls Resolved</h3>
                         <div class="performance-value" id="conversionRate">0%</div>
                         <div class="performance-change" id="conversionChange">0 resolved / 0 calls</div>
                     </div>
@@ -930,7 +929,7 @@
                 <!-- Business Hours -->
                 <div class="business-hours-card">
                     <div class="call-log-header">
-                        <h3>⏰ Business Hours</h3>
+                        <h3>Business Hours</h3>
                         <button class="btn btn-secondary btn-sm" onclick="editHours()">
                             Edit Hours
                         </button>
@@ -952,7 +951,7 @@
 
                 <!-- Call Costs -->
                 <div class="cost-card">
-                    <h3>💰 Call Costs</h3>
+                    <h3>Call Costs</h3>
                     <div class="cost-breakdown">
                         <div class="cost-item">
                             <div class="cost-label">Today</div>
@@ -976,7 +975,7 @@
                 <!-- Recent Calls -->
                 <div class="call-log-card">
                     <div class="call-log-header">
-                        <h3>📞 Recent Calls</h3>
+                        <h3>Recent Calls</h3>
                         <button class="btn btn-secondary btn-sm" onclick="viewAllCalls()">
                             View All Calls
                         </button>
@@ -984,7 +983,7 @@
 
                     <div id="callLogList">
                         <div class="empty-state">
-                            <div class="empty-state-icon">📞</div>
+                            <div class="empty-state-icon">No calls yet</div>
                             <p>No calls yet. Call history will appear here.</p>
                         </div>
                     </div>
@@ -996,7 +995,7 @@
                 <!-- Automation Rules -->
                 <div class="automation-section">
                     <div class="automation-section-header">
-                        <h3>🤖 Automation Rules</h3>
+                        <h3>Automation Rules</h3>
                         <button class="btn btn-primary btn-sm" onclick="openRuleModal()">+ New Rule</button>
                     </div>
                     <div id="rulesList">
@@ -1009,7 +1008,7 @@
                 <!-- Templates -->
                 <div class="automation-section">
                     <div class="automation-section-header">
-                        <h3>📝 Message Templates</h3>
+                        <h3>Message Templates</h3>
                         <div>
                             <button class="btn btn-secondary btn-sm" onclick="loadTemplates('email')"
                                 style="margin-right: 8px;">Email</button>
@@ -1028,7 +1027,7 @@
                 <!-- Message History -->
                 <div class="automation-section">
                     <div class="automation-section-header">
-                        <h3>📨 Message History</h3>
+                        <h3>Message History</h3>
                         <button class="btn btn-secondary btn-sm" onclick="loadMessageHistory()">Refresh</button>
                     </div>
                     <div id="messageHistoryList">
@@ -1085,9 +1084,7 @@
 
 
         // Check authentication
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
-        }
+        const hasClientAuth = sessionStorage.getItem('authenticated') === 'true';
 
         // Safe JSON.parse with error handling
         try {
@@ -1366,7 +1363,7 @@
             if (calls.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <div class="empty-state-icon">📞</div>
+                        <div class="empty-state-icon">No call records</div>
                         <p>No calls yet. Call history will appear here.</p>
                     </div>
                 `;
@@ -1381,7 +1378,7 @@
 
                 const isSuccess = call.status === 'completed';
                 const badgeClass = isSuccess ? 'success' : 'failed';
-                const badgeText = isSuccess ? '✅ Booked' : '❌ Unresolved';
+                const badgeText = isSuccess ? 'Booked' : 'Unresolved';
 
                 return `
                     <div class="call-item">
@@ -1424,22 +1421,22 @@
         }
 
         function editGreeting() {
-            const newGreeting = prompt('Customize your receptionist greeting:', 'Hi, you\'ve reached Doctor's Portal. How can I help you today?');
+            const newGreeting = prompt('Customize your receptionist greeting:', 'Hi, you\\'ve reached FrontDesk Provider Portal. How can I help you today?');
             if (newGreeting) {
                 alert('Greeting updated!\n\nIn production, this would update the voice receptionist\'s opening message.');
             }
         }
 
         function editHours() {
-            alert('⏰ Business Hours\n\nIn production, this would open a settings modal where you can:\n\n• Set hours for each day\n• Enable/disable specific days\n• Set holiday schedules\n• Configure after-hours messaging');
+            alert('Business Hours\n\nIn production, this would open a settings modal where you can:\n\n• Set hours for each day\n• Enable/disable specific days\n• Set holiday schedules\n• Configure after-hours messaging');
         }
 
         function viewTranscripts() {
-            alert('📝 Call Transcripts\n\nIn production, this would show:\n\n• Full conversation transcripts\n• Searchable by date/customer\n• AI-generated summaries\n• Sentiment analysis\n• Key moments tagged');
+            alert('Call Transcripts\n\nIn production, this would show:\n\n• Full conversation transcripts\n• Searchable by date/customer\n• AI-generated summaries\n• Sentiment analysis\n• Key moments tagged');
         }
 
         function viewAllCalls() {
-            alert('📞 All Calls\n\nIn production, this would show a detailed call history with:\n\n• All call recordings\n• Transcripts\n• Purchase outcomes\n• Customer details\n• Export to CSV');
+            alert('All Calls\n\nIn production, this would show a detailed call history with:\n\n• All call recordings\n• Transcripts\n• Purchase outcomes\n• Customer details\n• Export to CSV');
         }
 
         function logout() {
@@ -1447,7 +1444,6 @@
             window.location.href = '../login.html';
         }
     </script>
-    <script src="../assets/js/chat-widget.js"></script>
     <script src="../assets/js/email-composer.js"></script>
     <script src="../assets/js/sms-composer.js"></script>
 </body>

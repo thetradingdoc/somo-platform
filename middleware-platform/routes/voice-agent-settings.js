@@ -3,12 +3,17 @@ const router = express.Router();
 const db = require('../database');
 const constants = require('../utils/constants');
 const RetellService = require('../services/retell-service');
-const { requireAdminAuth } = require('../middleware/admin-auth');
+const { hasValidSession } = require('../middleware/admin-auth');
+const { optionalCustomerAuth } = require('../middleware/customer-auth');
 
 const retellService = new RetellService();
 
 function resolveMerchant(req) {
     let merchantId = req.query.merchant_id || req.body?.merchant_id || null;
+
+    if (!merchantId && req.customer?.merchant_id) {
+        merchantId = req.customer.merchant_id;
+    }
 
     if (!merchantId && req.tenant && req.tenant.merchant) {
         merchantId = req.tenant.merchant.id;
@@ -27,7 +32,16 @@ function resolveMerchant(req) {
     return merchantId;
 }
 
-router.get('/settings', requireAdminAuth, async (req, res) => {
+function requireVoiceSettingsAccess(req, res, next) {
+    if (hasValidSession(req) || req.customer) return next();
+    return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+        message: 'Sign in to access voice agent settings.'
+    });
+}
+
+router.get('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
     try {
         const merchantId = resolveMerchant(req);
         if (!merchantId) {
@@ -59,7 +73,7 @@ router.get('/settings', requireAdminAuth, async (req, res) => {
     }
 });
 
-router.post('/settings', requireAdminAuth, async (req, res) => {
+router.post('/settings', optionalCustomerAuth, requireVoiceSettingsAccess, async (req, res) => {
     try {
         const merchantId = resolveMerchant(req);
         if (!merchantId) {

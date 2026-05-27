@@ -3029,6 +3029,10 @@ app.use('/voice', tenantContext({ requireTenant: false }), voiceRoutes);
 const voiceAgentSettingsRoutes = require('./routes/voice-agent-settings');
 app.use('/api/voice-agent', tenantContext({ requireTenant: false }), voiceAgentSettingsRoutes);
 
+// Kelly lifecycle/status APIs (provider-facing shell)
+const kellyRoutes = require('./routes/kelly');
+app.use('/api/kelly', kellyRoutes);
+
 // Payment routes (payment page and processing)
 const paymentRoutes = require('./routes/payment');
 app.use('/api/payment', botGuard, paymentRoutes);
@@ -3705,19 +3709,21 @@ app.post(
       return res.type('text/xml').send(missingMerchantTwiml);
     }
 
-    const dynamicVariables = {
-      merchant_id: merchantId || null
-    };
+    const dynamicVariables = {};
+
+    if (merchantId != null && merchantId !== '') {
+      dynamicVariables.merchant_id = String(merchantId);
+    }
 
     // For outbound sales calls, add lead-specific variables
     if (isOutboundSales && leadId) {
       const lead = db.getLead(leadId);
       if (lead) {
-        dynamicVariables.clinic_name = lead.clinic_name || clinicName || 'the clinic';
-        dynamicVariables.clinic_location = lead.location || 'Unknown';
-        dynamicVariables.job_title = lead.title || 'Medical Receptionist';
-        dynamicVariables.lead_id = leadId;
-        dynamicVariables.lead_source = lead.source || 'job_search';
+        dynamicVariables.clinic_name = String(lead.clinic_name || clinicName || 'the clinic');
+        dynamicVariables.clinic_location = String(lead.location || 'Unknown');
+        dynamicVariables.job_title = String(lead.title || 'Medical Receptionist');
+        dynamicVariables.lead_id = String(leadId);
+        dynamicVariables.lead_source = String(lead.source || 'job_search');
         console.log(`📋 Added lead context to dynamic variables`);
       }
     }
@@ -3729,7 +3735,7 @@ app.post(
       dynamicVariables.customer_id = String(customerId);
     }
     if (matchedCustomer?.customer_type) {
-      dynamicVariables.customer_type = matchedCustomer.customer_type;
+      dynamicVariables.customer_type = String(matchedCustomer.customer_type);
     }
 
     // Pre-populate patient context for cost optimization (P1 - reduce data entry during call)
@@ -3747,7 +3753,7 @@ app.post(
           const patientName = name ? [name.given?.join(' '), name.family].filter(Boolean).join(' ').trim() : (patient.name || null);
           const hasInsurance = !!(data?.insurance?.length || patient.insurance_verified);
           dynamicVariables.patient_id = String(patient.resource_id);
-          if (patientName) dynamicVariables.patient_name = patientName;
+          if (patientName) dynamicVariables.patient_name = String(patientName);
           dynamicVariables.has_insurance = hasInsurance ? 'yes' : 'no';
           console.log(`✅ Pre-populated patient context: ${patientName || patient.resource_id} (insurance: ${dynamicVariables.has_insurance})`);
         }

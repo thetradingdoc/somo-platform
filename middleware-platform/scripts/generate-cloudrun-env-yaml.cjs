@@ -15,6 +15,9 @@ const outPath = process.argv[2] || path.join('/tmp', `cloudrun-env-${Date.now()}
 
 const baseUrl =
   process.env.CLOUDRUN_BASE_URL || 'https://api.myskinandcare.com';
+const retellLlmWsUrl =
+  process.env.RETELL_LLM_WEBSOCKET_URL ||
+  `${String(baseUrl).replace(/\/+$/, '').replace(/^https:/, 'wss:').replace(/^http:/, 'ws:')}/webhook/retell/llm`;
 
 let parsed = {};
 if (fs.existsSync(envPath)) {
@@ -47,6 +50,7 @@ const merged = {
     randomHex(24),
   BASE_URL: baseUrl,
   API_BASE_URL: baseUrl,
+  RETELL_LLM_WEBSOCKET_URL: parsed.RETELL_LLM_WEBSOCKET_URL || retellLlmWsUrl,
   // Cloud Run: prefer pre-seeded DB for faster startup, still writable in container FS.
   DB_PATH: parsed.DB_PATH || './middleware-dev.db',
   // Startup speed guard for Cloud Run: avoid long migration batch during boot.

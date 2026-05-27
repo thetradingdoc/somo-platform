@@ -5,29 +5,20 @@
 (function () {
   const SIDEBAR_HTML = `
     <aside class="pp-sidebar" id="ppSidebar">
-      <div class="pp-sb-logo">
-        <div class="pp-sb-logo-inner">
-          <div class="pp-sb-logo-mark" aria-hidden="true">⚕</div>
-          <div>
-            <div class="pp-sb-logo-text">FrontDesk</div>
-            <div class="pp-sb-logo-sub" id="ppLogoSub">powered by Kelly</div>
-          </div>
+      <div class="pp-clinic-header">
+        <div class="pp-sb-av" id="ppClinicAv">CL</div>
+        <div>
+          <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
+          <div class="pp-sb-cr" id="ppClinicRole">Provider</div>
         </div>
       </div>
-      <a class="pp-kelly-live" id="ppKellyLive" href="agent.html">
-        <div class="pp-kelly-dot"></div>
-        <div>
-          <div class="pp-kelly-label" id="ppKellyLabel">Kelly is live</div>
-          <div class="pp-kelly-sub" id="ppKellySub">Voice · scheduling · RCM</div>
-        </div>
-      </a>
       <nav class="pp-sb-nav" id="ppSidebarNav" aria-label="Main"></nav>
       <div class="pp-sb-footer">
         <a class="pp-sb-clinic" id="ppClinicCard" href="settings.html">
-          <div class="pp-sb-av" id="ppClinicAv">CL</div>
+          <div class="pp-sb-av">CL</div>
           <div>
-            <div class="pp-sb-cn" id="ppClinicName">Clinic</div>
-            <div class="pp-sb-cr" id="ppClinicRole">Provider portal</div>
+            <div class="pp-sb-cn">Clinic profile</div>
+            <div class="pp-sb-cr">Manage provider details</div>
           </div>
         </a>
       </div>
@@ -42,10 +33,12 @@
     if (file === 'claims.html') return 'exceptions';
     if (file === 'agent.html') return 'agent';
     if (file === 'settings.html') return 'profile';
+    if (file === 'rcm.html') return 'rcm';
+    if (file === 'patient-payments.html') return 'payments';
     if (file === 'billing.html') {
       if (section === 'invoices') return 'billing';
       if (section === 'prior-auth') return 'prior-auth';
-      if (section === 'claims') return 'prior-auth';
+      if (section === 'claims') return 'claims';
       return 'claims';
     }
     if (file === 'pdf-coding.html') return 'claims';
@@ -57,6 +50,9 @@
   }
 
   function mountProviderPage(options = {}) {
+    // #region agent log
+    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H1',location:'provider-layout.js:60',message:'mountProviderPage_entry',data:{path:window.location.pathname,activeIdOption:options.activeId||null,bodyHasProviderClass:document.body.classList.contains('provider-portal')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!document.getElementById('ppSidebarNav')) {
       document.body.classList.add('provider-portal', 'provider-portal--scroll');
 
@@ -134,6 +130,10 @@
     if (typeof window.initProviderShell === 'function') {
       window.initProviderShell(initOpts);
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'ui-audit-pre',hypothesisId:'H1',location:'provider-layout.js:142',message:'mountProviderPage_exit',data:{path:window.location.pathname,activeIdResolved:activeId,hasSidebarNav:!!document.getElementById('ppSidebarNav'),bodyHasProviderClass:document.body.classList.contains('provider-portal'),legacySidebarStillExists:!!(document.getElementById('sidebar')||document.querySelector('.sidebar'))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
     if (options.topbarActions) {
       const right = document.querySelector('.pp-topbar-right');

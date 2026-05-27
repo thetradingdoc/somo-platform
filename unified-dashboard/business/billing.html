@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Billing - Consult Clinic Dashboard</title>
+    <title>FrontDesk Provider Portal - Billing</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
@@ -553,7 +553,7 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-subtitle sidebar-subtitle-portal" id="sidebarSubtitle">Doctor's Portal</div>
+                <div class="sidebar-subtitle sidebar-subtitle-portal" id="sidebarSubtitle">FrontDesk Provider Portal</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
@@ -755,7 +755,7 @@
             const sectionToNavId = {
                 scan: 'claims',
                 invoices: 'billing',
-                claims: 'prior-auth',
+                claims: 'claims',
                 'prior-auth': 'prior-auth',
                 overview: 'claims',
                 payments: 'billing',
@@ -763,8 +763,8 @@
             };
             const activeId = sectionToNavId[section] || 'claims';
             const titles = {
-                overview: ['Claims & RCM', 'Revenue pipeline & patient billing'],
-                claims: ['Claims & EOB', 'Patient claims rollup'],
+                overview: ['Claims Workspace', 'Claims and prior auth operations'],
+                claims: ['Claims Workspace', 'Claim queue and EOB follow-up'],
                 'prior-auth': ['Prior Authorization', 'Open and submit PA cases'],
                 invoices: ['Invoices', 'Patient invoices and payments'],
                 scan: ['Create claim', 'Upload superbill or visit summary']
@@ -1833,16 +1833,54 @@
         // Load payments section
         async function loadPayments() {
             const content = document.getElementById('paymentsContent');
-            content.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">💰</div>
-                    <p>Payment tracking coming soon</p>
-                    <p style="font-size: 13px; color: #64748b; margin-top: 8px;">
-                        View payment history from individual invoices.
-                    </p>
-                    <button class="btn-primary" onclick="showSection('invoices')" style="margin-top: 16px;">View Invoices</button>
-                </div>
-            `;
+            content.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading payments…</p></div>';
+            try {
+                const clinicId = (typeof window.ppGetClinicId === 'function') ? window.ppGetClinicId() : 'clinic-default';
+                const [summaryRes, listRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/rcm/payments/summary?clinic_id=${encodeURIComponent(clinicId)}`, {
+                        credentials: 'include',
+                        headers: window.ppGetAuthHeaders ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' }
+                    }),
+                    fetch(`${API_BASE}/api/rcm/payments?clinic_id=${encodeURIComponent(clinicId)}`, {
+                        credentials: 'include',
+                        headers: window.ppGetAuthHeaders ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' }
+                    })
+                ]);
+                const summaryJson = await summaryRes.json();
+                const listJson = await listRes.json();
+                if (!summaryJson.success || !listJson.success) {
+                    throw new Error(summaryJson.error || listJson.error || 'Failed to load payments');
+                }
+                const s = summaryJson.summary || {};
+                const rows = Array.isArray(listJson.payments) ? listJson.payments : [];
+                content.innerHTML = `
+                    <div class="kpi-grid" style="margin-bottom:16px;">
+                        <div class="kpi-card"><div class="kpi-value">$${Number(s.requested_total || 0).toFixed(2)}</div><div class="kpi-label">Requested</div></div>
+                        <div class="kpi-card"><div class="kpi-value">$${Number(s.paid_total || 0).toFixed(2)}</div><div class="kpi-label">Paid</div></div>
+                        <div class="kpi-card"><div class="kpi-value">$${Number(s.remittance_total || 0).toFixed(2)}</div><div class="kpi-label">Remittance</div></div>
+                        <div class="kpi-card"><div class="kpi-value">${Number(s.payment_count || 0)}</div><div class="kpi-label">Requests</div></div>
+                    </div>
+                    ${rows.length ? `
+                        <table class="claims-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th><th>Status</th><th>Method</th><th>Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows.slice(0, 30).map((p) => `
+                                  <tr>
+                                    <td>${new Date(p.requested_at).toLocaleString()}</td>
+                                    <td><span class="status-badge status-${String(p.status || 'requested').toLowerCase()}">${String(p.status || 'requested')}</span></td>
+                                    <td>${p.method || 'manual'}</td>
+                                    <td>$${Number(p.amount || 0).toFixed(2)}</td>
+                                  </tr>`).join('')}
+                            </tbody>
+                        </table>` : '<div class="empty-state"><p>No payment requests yet.</p></div>'}
+                `;
+            } catch (error) {
+                content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">!</div><p>Error: ${error.message}</p></div>`;
+            }
         }
 
         // Filter functions (simplified)

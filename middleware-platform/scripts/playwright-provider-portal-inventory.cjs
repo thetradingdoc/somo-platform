@@ -110,7 +110,10 @@ async function main() {
     base: BASE,
     login: { email: EMAIL, ok: false },
     sidebarFromToday: null,
-    pages: []
+    pages: [],
+    checks: {
+      noHangingLoading: []
+    }
   };
 
   try {
@@ -122,6 +125,13 @@ async function main() {
 
     await page.goto(`${BASE}/business/today.html`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(2000);
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await page.screenshot({ path: path.join(__dirname, '..', 'playwright-today-desktop.png'), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE}/business/today.html`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: path.join(__dirname, '..', 'playwright-today-mobile.png'), fullPage: true });
+    await page.setViewportSize({ width: 1280, height: 900 });
     const today = await collectInteractive(page);
     report.sidebarFromToday = {
       nav: today.nav,
@@ -140,6 +150,16 @@ async function main() {
         entry.legacyNav = data.legacyNav;
         entry.title = await page.title();
         entry.hasProviderPortal = await page.evaluate(() => document.body.classList.contains('provider-portal'));
+        entry.hangingLoading = await page.evaluate(() => {
+          const blocked = ['Loading...', 'Loading…', 'Could not load'];
+          const nodes = Array.from(document.querySelectorAll('.pp-panel-body, .pp-empty, .pp-panel-sub'));
+          return nodes.some((el) => {
+            const t = (el.textContent || '').trim();
+            if (!t) return false;
+            return blocked.some((token) => t === token || t.endsWith(token));
+          });
+        });
+        report.checks.noHangingLoading.push({ page: p.id, ok: !entry.hangingLoading });
       } catch (e) {
         entry.error = e.message;
       }

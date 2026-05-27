@@ -19,12 +19,25 @@ function resolveRetellVoiceId(clinicOverride) {
   return 'retell-Cimo';
 }
 
+/** Canonical Retell custom-LLM WebSocket URL from API_BASE_URL / BASE_URL. */
+function resolveLlmWebsocketUrl() {
+  if (process.env.RETELL_LLM_WEBSOCKET_URL && String(process.env.RETELL_LLM_WEBSOCKET_URL).trim()) {
+    return String(process.env.RETELL_LLM_WEBSOCKET_URL).trim().replace(/\/+$/, '');
+  }
+  const base = process.env.API_BASE_URL || process.env.BASE_URL || '';
+  if (base && !base.includes('localhost') && !base.includes('127.0.0.1')) {
+    const wsBase = String(base).trim().replace(/\/+$/, '').replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
+    return `${wsBase}/webhook/retell/llm`;
+  }
+  return 'ws://localhost:4000/webhook/retell/llm';
+}
+
 class RetellService {
   constructor() {
     this.apiKey = process.env.RETELL_API_KEY;
     this.apiBaseUrl = process.env.RETELL_API_BASE_URL || 'https://api.retellai.com';
     // Canonical path is /webhook/retell/llm (server.js upgrade handler + RetellWebSocketHandler).
-    this.llmWebsocketUrl = process.env.RETELL_LLM_WEBSOCKET_URL || 'wss://doclittle.site/webhook/retell/llm';
+    this.llmWebsocketUrl = resolveLlmWebsocketUrl();
   }
 
   /**

@@ -1,6 +1,22 @@
 # deployment — consolidated documentation
 
-**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-05-25
+**Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-05-27
+
+<a id="voice-current-architecture"></a>
+
+## Voice architecture (current production)
+
+Production voice for **myskinandcare.com** runs on **Google Cloud Run** at `https://api.myskinandcare.com` (not the marketing SPA host).
+
+| Path | Status |
+|------|--------|
+| Inbound: Twilio → `POST /voice/incoming` → Retell SIP → `wss://…/webhook/retell/llm` | Operational |
+| Outbound (Twilio-direct → `/voice/incoming`) | Operational (default in app scripts/API) |
+| Outbound (Retell `create-phone-call` / custom telephony) | Supported; requires aligned Twilio SIP trunk auth in Retell |
+
+**Authoritative detail (do not duplicate here):** [`VOICE_CURRENT_ARCHITECTURE.md`](./VOICE_CURRENT_ARCHITECTURE.md)  
+**Deploy / rollback / 429 troubleshooting:** [`docs/runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md`](../runbooks/GCP_DEPLOY_ROLLBACK_RUNBOOK.md)  
+**Retell agent verify:** [`retell-agent-inventory.md`](./retell-agent-inventory.md) + [`retell-agent-inventory.json`](./retell-agent-inventory.json)
 
 ### Medical codebook (standalone runbooks)
 
@@ -14,6 +30,7 @@ Canonical architecture: [docs/Medical Coding/ARCHITECTURE.md](../Medical%20Codin
 
 ## Table of contents
 
+- [Voice architecture (current production)](#voice-current-architecture)
 - [Medical codebook runbooks (standalone)](#medical-codebook-standalone-runbooks)
 - [Automated Tenant Domain Setup (`azure/AUTOMATED_TENANT_DOMAIN_SETUP.md`)](#azure-automated-tenant-domain-setup)
 - [Azure Environment Variables for Automated Domain Setup (`azure/AZURE_ENV_VARIABLES.md`)](#azure-azure-env-variables)

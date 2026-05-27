@@ -7,7 +7,7 @@
  */
 
 require('dotenv').config();
-const RetellService = require('../services/retell-service');
+const twilio = require('twilio');
 
 const phoneNumber = process.argv[2];
 
@@ -34,12 +34,13 @@ function formatPhoneNumber(num) {
 
 async function makeCall() {
     try {
-        const retellService = new RetellService();
-        
+        const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
         // Get configuration
         const agentId = process.env.RETELL_AGENT_ID || process.env.RETELL_SALES_AGENT_ID;
         const fromNumber = process.env.TWILIO_PHONE_NUMBER;
         const toNumber = formatPhoneNumber(phoneNumber);
+        const apiBase = process.env.API_BASE_URL || process.env.BASE_URL;
         
         if (!agentId) {
             throw new Error('RETELL_AGENT_ID or RETELL_SALES_AGENT_ID not configured');
@@ -48,6 +49,9 @@ async function makeCall() {
         if (!fromNumber) {
             throw new Error('TWILIO_PHONE_NUMBER not configured');
         }
+        if (!apiBase) {
+            throw new Error('API_BASE_URL or BASE_URL not configured');
+        }
         
         console.log('📞 Making outbound call...');
         console.log(`   From: ${fromNumber}`);
@@ -55,26 +59,25 @@ async function makeCall() {
         console.log(`   Agent: ${agentId}`);
         console.log('');
         
-        const result = await retellService.createOutboundCall(
-            agentId,
-            fromNumber,
-            toNumber,
-            {
-                override_agent_id: agentId,
-                retell_llm_dynamic_variables: {
-                    call_type: 'outbound_test'
-                },
-                metadata: {
-                    call_type: 'outbound_test',
-                    initiated_by: 'manual_script'
-                }
-            }
-        );
+        const webhookUrl = new URL(`${String(apiBase).replace(/\/+$/, '')}/voice/incoming`);
+        webhookUrl.searchParams.set('call_type', 'sales_outbound');
+        webhookUrl.searchParams.set('agent_id', agentId);
+        webhookUrl.searchParams.set('test_mode', 'manual_script');
+
+        // Twilio-direct primary path (works with current production telephony settings).
+        const twilioCall = await twilioClient.calls.create({
+            from: fromNumber,
+            to: toNumber,
+            url: webhookUrl.toString(),
+            statusCallback: `${String(apiBase).replace(/\/+$/, '')}/voice/status-callback`,
+            statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
+        });
         
         console.log('');
         console.log('✅ Call initiated successfully!');
-        console.log(`   Call ID: ${result.call_id}`);
-        console.log(`   Status: ${result.call_data?.call_status || 'initiated'}`);
+        console.log(`   Call SID: ${twilioCall.sid}`);
+        console.log(`   Status: ${twilioCall.status || 'queued'}`);
+        console.log(`   Provider: twilio_direct`);
         
     } catch (error) {
         console.error('');

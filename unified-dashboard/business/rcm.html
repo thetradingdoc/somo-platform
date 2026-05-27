@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>FrontDesk Provider Portal - RCM Command Center</title>
+  <link rel="stylesheet" href="../assets/css/provider-portal.css" />
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/navigation.js"></script>
+  <script src="../assets/js/provider-shell.js"></script>
+  <script src="../assets/js/provider-layout.js"></script>
+</head>
+<body class="provider-portal">
+  <main class="main-content">
+    <section class="pp-panel">
+      <div class="pp-panel-head">
+        <div>
+          <div class="pp-panel-title">RCM Command Center</div>
+          <div class="pp-panel-sub">Cross-claim pipeline health, cashflow, and journey orchestration</div>
+        </div>
+      </div>
+      <div class="pp-panel-body" id="rcmSummary">Loading...</div>
+    </section>
+    <section class="pp-panel" style="margin-top:12px">
+      <div class="pp-panel-head"><div class="pp-panel-title">Journey Stages</div></div>
+      <div class="pp-panel-body" id="rcmStages">Loading...</div>
+    </section>
+  </main>
+  <script>
+    const API_BASE = window.API_BASE || 'http://localhost:4000';
+    const clinicId = () => (window.ppGetClinicId ? window.ppGetClinicId() : 'clinic-default');
+    async function loadCommandCenter() {
+      const url = new URL(`${API_BASE}/api/rcm/command-center`);
+      url.searchParams.set('clinic_id', clinicId());
+      const res = await fetch(url.toString(), { credentials: 'include' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to load command center');
+      const s = data.summary || {};
+      const stages = data.stages || [];
+      document.getElementById('rcmSummary').innerHTML = `
+        <div class="pp-snap-row"><span class="pp-snap-label">Journeys total</span><span class="pp-snap-val">${Number(s.journeys_total || 0)}</span></div>
+        <div class="pp-snap-row"><span class="pp-snap-label">Journeys open</span><span class="pp-snap-val">${Number(s.journeys_open || 0)}</span></div>
+        <div class="pp-snap-row"><span class="pp-snap-label">Patient payments</span><span class="pp-snap-val">$${Number(s.patient_payments_total || 0).toFixed(2)}</span></div>
+        <div class="pp-snap-row" style="border-bottom:none"><span class="pp-snap-label">Remittance total</span><span class="pp-snap-val">$${Number(s.remittance_total || 0).toFixed(2)}</span></div>`;
+      if (!stages.length) {
+        document.getElementById('rcmStages').innerHTML = '<div class="pp-empty">No RCM journeys yet.</div>';
+      } else {
+        document.getElementById('rcmStages').innerHTML = stages
+          .map((row) => `<div class="pp-snap-row"><span class="pp-snap-label">${String(row.stage || 'unknown')}</span><span class="pp-snap-val">${Number(row.count || 0)}</span></div>`)
+          .join('');
+      }
+    }
+    document.addEventListener('DOMContentLoaded', async () => {
+      mountProviderPage({ activeId: 'rcm', eyebrow: 'Revenue orchestration', title: 'RCM Command Center' });
+      try { await loadCommandCenter(); } catch (e) { document.getElementById('rcmSummary').innerHTML = `<div class="pp-empty">${e.message}</div>`; }
+    });
+  </script>
+</body>
+</html>

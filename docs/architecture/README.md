@@ -6618,8 +6618,8 @@ One middleware agent + LLM manages all channels. Each provider (Retell, Twilio, 
 | Item | Details |
 |------|---------|
 | **Service** | `services/twilio-phone-service.js` (provisioning), `services/sms-service.js` (SMS) |
-| **SIP trunk** | `aimedicalvoiceagent.pstn.twilio.com` (Retell termination) |
-| **Phone** | +15856202445 (example; configurable) |
+| **SIP trunk** | **Environment-specific.** Example/legacy values may appear elsewhere in docs; always verify the **current** SIP domain / trunk + credential list in Twilio Console before configuring Retell. |
+| **Phone** | Example only; configurable per environment |
 | **Docs** | [`docs/middleware-platform/README.md#retell-config-quick-reference`](../middleware-platform/README.md#retell-config-quick-reference) |
 
 **Flow:**

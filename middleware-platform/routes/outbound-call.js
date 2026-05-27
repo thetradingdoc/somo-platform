@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { requireCustomerAuth } = require('../middleware/customer-auth');
+const twilio = require('twilio');
 
 /**
  * POST /api/voice/outbound/call
@@ -55,10 +56,6 @@ router.post('/call', requireCustomerAuth, async (req, res) => {
       });
     }
 
-    // Initiate call
-    const RetellService = require('../services/retell-service');
-    const retellService = new RetellService();
-
     const fromNumber = process.env.TWILIO_PHONE_NUMBER;
     if (!fromNumber) {
       return res.status(400).json({
@@ -66,18 +63,34 @@ router.post('/call', requireCustomerAuth, async (req, res) => {
       });
     }
 
-    const call = await retellService.createOutboundCall(
-      retellAgentId,
-      fromNumber,
-      phone_number,
-      {
-        override_agent_id: retellAgentId
-      }
-    );
+    // Primary path: Twilio direct outbound to our existing /voice/incoming webhook.
+    // This avoids Retell custom-telephony permission errors while preserving the same voice flow.
+    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const apiBase = process.env.API_BASE_URL || process.env.BASE_URL;
+    if (!apiBase) {
+      return res.status(400).json({
+        error: 'API base URL not configured. Please set API_BASE_URL or BASE_URL.'
+      });
+    }
+
+    const webhookUrl = new URL(`${String(apiBase).replace(/\/+$/, '')}/voice/incoming`);
+    webhookUrl.searchParams.set('call_type', 'sales_outbound');
+    webhookUrl.searchParams.set('agent_id', retellAgentId);
+    if (merchantId) webhookUrl.searchParams.set('merchant_id', String(merchantId));
+    if (customer_id) webhookUrl.searchParams.set('customer_id', String(customer_id));
+
+    const twilioCall = await twilioClient.calls.create({
+      from: fromNumber,
+      to: phone_number,
+      url: webhookUrl.toString(),
+      statusCallback: `${String(apiBase).replace(/\/+$/, '')}/voice/status-callback`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
+    });
 
     res.json({
       success: true,
-      call_id: call.call_id,
+      call_id: twilioCall.sid,
+      provider: 'twilio_direct',
       phone_number: phone_number,
       message: 'Call initiated successfully'
     });

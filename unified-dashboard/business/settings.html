@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Business Management</title>
+    <title>FrontDesk Provider Portal - Settings</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
@@ -1126,10 +1126,8 @@
             });
         }
 
-        // Check authentication
-        if (sessionStorage.getItem('authenticated') !== 'true') {
-            window.location.href = '../login.html';
-        }
+        // Prefer server session validation over fragile client-only flags.
+        // We only redirect on explicit 401 responses from profile endpoints.
 
         // Safe JSON.parse with error handling
         try {
@@ -1210,8 +1208,8 @@
             const businessName = customer.company_name || merchant.name || customer.name || customer.email || 'Business';
             const providerLabel = providerLabelFromCustomer(customer) || businessName;
             const roleLabel = roleLabelFromCustomer(customer);
-            const phone = customer.phone_number || customer.twilio_phone_number || 'Not set';
-            const email = customer.email || 'Not set';
+            const phone = customer.phone_number || customer.twilio_phone_number || 'Pending setup';
+            const email = customer.email || 'Pending setup';
 
             const userNameEl = document.getElementById('userName');
             const userAvatarEl = document.getElementById('userAvatar');
@@ -1268,15 +1266,16 @@
                 });
 
                 if (customerResponse.status === 401) {
-                    window.location.href = '../login.html';
+                    document.getElementById('merchantIdDisplay').textContent = 'Session unavailable';
+                    document.getElementById('merchantNameDisplay').textContent = 'Please refresh or sign in again';
                     return;
                 }
 
                 const customerData = await customerResponse.json();
 
                 if (!customerData.success || !customerData.customer || !customerData.customer.merchant_id) {
-                    document.getElementById('merchantIdDisplay').textContent = 'No organization linked';
-                    document.getElementById('merchantNameDisplay').textContent = 'Please complete onboarding';
+                    document.getElementById('merchantIdDisplay').textContent = 'Organization not linked';
+                    document.getElementById('merchantNameDisplay').textContent = 'Finish onboarding to activate all settings';
                     return;
                 }
 

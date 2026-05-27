@@ -4005,6 +4005,8 @@ function migrateCustomersTable() {
       customer_type: "TEXT DEFAULT 'saas'",
       twilio_phone_number: 'TEXT',
       twilio_phone_sid: 'TEXT',
+      kelly_status: "TEXT DEFAULT 'pending'",
+      provisioning_state: "TEXT DEFAULT 'requested'",
       pricing_tier: "TEXT DEFAULT 'starter'",
       custom_prompt: 'TEXT',
       prompt_updated_at: 'DATETIME',

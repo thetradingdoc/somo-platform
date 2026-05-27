@@ -2901,28 +2901,32 @@ Use `AGENT_REASONING_MAP_V1=true` only in staging first, then:
 ## Retell Configuration - Quick Reference
 
 
-## ✅ CORRECT VALUES FOR RETELL DASHBOARD
+## ⚠️ Environment-specific values (do not copy blindly)
 
-Fill in the Retell SIP trunking modal with these **EXACT** values:
+Retell SIP / Twilio trunking values are **not** stable across accounts/environments. Treat any concrete trunk SID, domain, username, or credential list name in this repo as **example/legacy** unless you have verified it in the **current Twilio Console**.
+
+For current production (`api.myskinandcare.com`) voice behavior and endpoints, see:
+- `docs/deployment/VOICE_CURRENT_ARCHITECTURE.md`
+
+### Retell Dashboard → Telephony / SIP trunk config (template)
 
 ### Phone Number
 ```
-+15856202445
+<your-twilio-phone-number>
 ```
 
 ### Termination URI
 ```
-aimedicalvoiceagent.pstn.twilio.com
+<your-twilio-sip-domain>
 ```
 
 ### SIP Trunk User Name
 ```
-doclittles
+<your-sip-credential-username>
 ```
-(Note: with "s" at the end, not "doclittle")
 
 ### SIP Trunk Password
-Get from: Twilio Console → SIP → Credential Lists → `Retell-Auth` → credential `doclittles`
+Get from: Twilio Console → SIP Trunking → Credential Lists → (your list) → (your credential)
 
 ### Outbound Transport
 ```
@@ -2938,12 +2942,14 @@ Twilio SIP Trunk
 
 ## ✅ VERIFIED TWILIO CONFIGURATION
 
-- **Trunk SID**: `TKef81908ba0a83bb52eff902076f5abfc`
-- **Trunk Name**: `Retell-AI-Trunk`
-- **Domain Name**: `aimedicalvoiceagent.pstn.twilio.com`
-- **Phone Number**: `+15856202445` ✅ Attached
-- **Credential List**: `retell-outbound` ✅ Attached
-- **IP ACLs**: `Retell-IPs` ✅ Attached
+Verify in Twilio Console (do not assume repo values):
+
+- **Trunk SID**: `<your-trunk-sid>`
+- **Trunk Name**: `<your-trunk-name>`
+- **Domain Name**: `<your-twilio-sip-domain>`
+- **Phone Number**: `<your-twilio-phone-number>` (attached)
+- **Credential List**: `<your-credential-list-name>` (attached)
+- **IP ACLs**: `<your-ip-acl-name>` (attached)
 
 ---
 
@@ -3001,14 +3007,14 @@ Then check:
 ## ❌ Current Issue
 Calls are failing with **"User declined"** status. This indicates a **SIP authentication mismatch** between Retell and Twilio.
 
-## ✅ Verified Twilio Configuration
+## ✅ Verify Twilio configuration (template)
 
 ### Trunk Details
-- **Trunk SID**: `TKef81908ba0a83bb52eff902076f5abfc`
-- **Trunk Name**: `Retell-AI-Trunk`
-- **Domain Name**: `aimedicalvoiceagent.pstn.twilio.com`
-- **Credential List**: `Retell-Auth` (SID: `CL7c71a9a98d726ae918b3d9d4f0763f75`)
-- **IP ACLs**: `Retell-IPs`, `Retell-New` (attached)
+- **Trunk SID**: `<your-trunk-sid>`
+- **Trunk Name**: `<your-trunk-name>`
+- **Domain Name**: `<your-twilio-sip-domain>`
+- **Credential List**: `<your-credential-list-name>`
+- **IP ACLs**: `<your-ip-acl-name>` (attached)
 
 ## 🔧 Retell Dashboard Configuration
 
@@ -3018,25 +3024,25 @@ Fill in these **EXACT** values:
 
 ### Phone Number
 ```
-+15856202445
+<your-twilio-phone-number>
 ```
 
 ### Termination URI
 ```
-aimedicalvoiceagent.pstn.twilio.com
+<your-twilio-sip-domain>
 ```
 ⚠️ **CRITICAL**: Must match Twilio trunk domain exactly (no trailing slash, no protocol)
 
 ### SIP Trunk User Name
 ```
-doclittles
+<your-sip-credential-username>
 ```
-⚠️ **CRITICAL**: Must match the username in Twilio's `Retell-Auth` credential list exactly
+⚠️ **CRITICAL**: Must match the username in your Twilio credential list exactly
 
 ### SIP Trunk Password
 **Get from Twilio Console:**
-1. Go to **Twilio Console → SIP Trunking → Credential Lists → Retell-Auth**
-2. Click on the credential (username: `doclittles`)
+1. Go to **Twilio Console → SIP Trunking → Credential Lists → (your list)**
+2. Click on the credential (username: `<your-sip-credential-username>`)
 3. Copy the password
 4. Paste it into Retell Dashboard
 
@@ -3056,10 +3062,10 @@ Twilio SIP Trunk
 
 ### 1. Verify Username in Twilio
 1. Go to **Twilio Console → SIP Trunking → Credential Lists**
-2. Open **Retell-Auth**
-3. Check the username - it should be `doclittles` (with "s")
+2. Open your credential list
+3. Check the username - it should match `<your-sip-credential-username>`
 4. If it's different, either:
-   - Update Twilio to use `doclittles`, OR
+   - Update Twilio to use `<your-sip-credential-username>`, OR
    - Update Retell to match Twilio's username
 
 ### 2. Verify Password Match
@@ -3068,7 +3074,7 @@ Twilio SIP Trunk
 - Copy-paste directly from Twilio console
 
 ### 3. Verify Termination URI
-- Must be exactly: `aimedicalvoiceagent.pstn.twilio.com`
+- Must be exactly: `<your-twilio-sip-domain>`
 - No `sip:`, no `https://`, no trailing `/`
 - Just the domain name
 
@@ -3090,8 +3096,8 @@ Then check:
 ### If calls still fail with "User declined":
 
 1. **Double-check username/password match**
-   - Go to Twilio → Credential Lists → Retell-Auth
-   - Verify username is exactly `doclittles`
+   - Go to Twilio → Credential Lists → (your list)
+   - Verify the username matches `<your-sip-credential-username>` (exact, case-sensitive)
    - Copy password directly from Twilio
    - Paste into Retell (no extra spaces)
 
@@ -3101,7 +3107,7 @@ Then check:
    - Add them to Twilio → SIP Trunking → IP Access Control Lists → Retell-IPs
 
 3. **Verify Termination URI**
-   - In Retell: `aimedicalvoiceagent.pstn.twilio.com`
+   - In Retell: `<your-twilio-sip-domain>`
    - In Twilio: Check trunk domain matches
 
 4. **Check Twilio Call Logs**
@@ -3620,8 +3626,8 @@ Service tokens are stored hashed in `service_credentials` and validated by scope
 
 ### Step 2: Verify Twilio Credentials
 1. Go to **Twilio Console → SIP Trunking → Credential Lists**
-2. Open **Retell-Auth**
-3. Click on the credential (should be `doclittles`)
+2. Open your credential list
+3. Click on the credential you intend to use for Retell
 4. **Copy the username exactly** (including any case sensitivity)
 5. **Copy the password exactly** (no extra spaces, no typos)
 
@@ -3630,9 +3636,9 @@ Service tokens are stored hashed in `service_credentials` and validated by scope
 2. Fill in these **EXACT** values:
 
 ```
-Phone Number: +15856202445
-Termination URI: aimedicalvoiceagent.pstn.twilio.com
-SIP Username: [paste from Twilio - should be "doclittles"]
+Phone Number: <your-twilio-phone-number>
+Termination URI: <your-twilio-sip-domain>
+SIP Username: <paste from Twilio>
 SIP Password: [paste from Twilio - exact copy]
 Outbound Transport: TCP
 ```
@@ -3660,8 +3666,7 @@ node scripts/test-retell-outbound.js +18622307479
 ### Issue 1: Username Mismatch
 **Symptom**: `401 Unauthorized` in SIP PCAP log  
 **Fix**: 
-- Check if username in Twilio is `doclittles` or `doclittle`
-- Update Retell to match **exactly** (case-sensitive)
+- Verify the SIP username configured in Retell matches the Twilio credential **exactly** (case-sensitive)
 
 ### Issue 2: Password Mismatch
 **Symptom**: `401 Unauthorized` in SIP PCAP log  
@@ -3673,7 +3678,7 @@ node scripts/test-retell-outbound.js +18622307479
 ### Issue 3: Termination URI Mismatch
 **Symptom**: `404 Not Found` or connection timeout  
 **Fix**:
-- Must be exactly: `aimedicalvoiceagent.pstn.twilio.com`
+- Must be exactly: `<your-twilio-sip-domain>`
 - No protocol prefix (`sip:`, `https://`)
 - No trailing slash (`/`)
 
@@ -3693,10 +3698,10 @@ node scripts/test-retell-outbound.js +18622307479
 
 ## 🔗 Quick Reference
 
-- **Twilio Trunk SID**: `TKef81908ba0a83bb52eff902076f5abfc`
-- **Twilio Domain**: `aimedicalvoiceagent.pstn.twilio.com`
-- **Credential List**: `Retell-Auth`
-- **Expected Username**: `doclittles` (verify in Twilio console)
+- **Twilio Trunk SID**: `<your-trunk-sid>`
+- **Twilio Domain**: `<your-twilio-sip-domain>`
+- **Credential List**: `<your-credential-list-name>`
+- **SIP Username**: `<your-sip-credential-username>`
 
 
 

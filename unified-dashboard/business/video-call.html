@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Call - Consult Telehealth</title>
+  <title>FrontDesk Provider Portal - Video Call</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <link rel="stylesheet" href="../assets/css/provider-portal.css">
   <script src="../assets/js/config.js"></script>
@@ -523,11 +523,11 @@
   }
   </style>
 </head>
-<body>
+<body class="provider-portal">
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-subtitle sidebar-subtitle-portal">Doctor's Portal</div>
+        <div class="sidebar-subtitle sidebar-subtitle-portal">FrontDesk Provider Portal</div>
       </div>
       <nav class="sidebar-nav" id="sidebarNav"></nav>
       <div class="sidebar-footer">
@@ -537,7 +537,7 @@
             <div class="user-name" id="userName">Healthcare Provider</div>
             <div class="user-role" id="userRole">Provider</div>
           </div>
-          <button class="logout-btn" onclick="event.stopPropagation(); (window.logout||function(){sessionStorage.removeItem('authenticated');window.location.href='../login.html';})();" title="Logout">🚪</button>
+          <button class="logout-btn" onclick="event.stopPropagation(); (window.logout||function(){sessionStorage.removeItem('authenticated');window.location.href='../login.html';})();" title="Logout">Logout</button>
         </div>
       </div>
     </aside>
@@ -725,18 +725,13 @@
     import { createWebVoiceTurnController } from '../shared/webVoiceTurnController.js';
     const API_BASE = window.API_BASE || 'http://localhost:4000';
 
-    // Auth check
-    if (!window.requireAuth || !window.requireAuth('../login.html')) {
-      // Redirect handled
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
       mountProviderPage({
         activeId: 'calendar',
         eyebrow: 'Telehealth',
         title: 'Video call'
       });
-      const userData = (window.requireAuth && window.requireAuth('../login.html')) || null;
+      const userData = (window.requireAuth && window.requireAuth()) || null;
       if (userData) {
         const nameEl = document.getElementById('userName');
         const avatarEl = document.getElementById('userAvatar');

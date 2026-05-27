@@ -15,6 +15,10 @@
       "validate_code_pair"
     ]
   },
-  "agents": []
+  "agents": [
+    {
+      "agent_id": "agent_7f0a517ec3b01fbab225749bd5",
+      "label": "Kelly production (myskinandcare API)"
+    }
+  ]
 }
-
