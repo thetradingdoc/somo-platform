@@ -4,7 +4,15 @@ const Metrics = require('../services/metrics');
 const { handlePublicLandingAssistantFromRequest } = require('../services/kelly-triage-turn-service');
 
 function registerPublicLandingAssistantRoutes(app, deps) {
-  const { apiLimiter, express, validatePatientTriageBody, db, upsertCustomerProductScan } = deps;
+  const {
+    apiLimiter,
+    express,
+    validatePatientTriageBody,
+    db,
+    upsertCustomerProductScan,
+    antiSybilGuard,
+    requireAdminAuth
+  } = deps;
 
 app.post('/api/public/landing-assistant/turn', apiLimiter, validatePatientTriageBody, express.json(), async (req, res) => {
   try {
@@ -150,7 +158,7 @@ app.post('/api/public/landing-assistant/tts-stream', apiLimiter, express.json(),
 
 app.get('/api/public/landing-assistant/results/:sessionId', apiLimiter, async (req, res) => {
   try {
-    const SnapshotService = require('./services/session-result-snapshot-service');
+    const SnapshotService = require('../services/session-result-snapshot-service');
     const sessionId = String(req.params?.sessionId || '').trim();
     if (!sessionId) {
       return res.status(400).json({ success: false, error: 'sessionId required', request_id: req.id });
@@ -173,7 +181,7 @@ app.get('/api/public/landing-assistant/results/:sessionId', apiLimiter, async (r
 
 app.post('/api/public/landing-assistant/results/:sessionId/edit', apiLimiter, express.json(), async (req, res) => {
   try {
-    const SnapshotService = require('./services/session-result-snapshot-service');
+    const SnapshotService = require('../services/session-result-snapshot-service');
     const sessionId = String(req.params?.sessionId || '').trim();
     const fieldPath = String(req.body?.field_path || '').trim();
     const reasonForChange = String(req.body?.reason_for_change || '').trim();
@@ -212,7 +220,7 @@ app.post('/api/public/landing-assistant/results/:sessionId/edit', apiLimiter, ex
   }
 });
 
-const { waitlistRoute } = require('./migrations/037_waitlist');
+const { waitlistRoute } = require('../migrations/037_waitlist');
 app.post(
   '/api/public/waitlist',
   apiLimiter,
@@ -226,7 +234,7 @@ app.post(
 
 app.post('/api/public/risk-appeals', apiLimiter, express.json(), async (req, res) => {
   try {
-    const { submitAppeal } = require('./services/anti-sybil-service');
+    const { submitAppeal } = require('../services/anti-sybil-service');
     const contactEmail = String(req.body?.contact_email || '').trim().toLowerCase();
     const reason = String(req.body?.reason || '').trim();
     if (!reason || reason.length < 10) {
@@ -297,7 +305,7 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
     const rawPd = req.body?.product_data;
     const productData =
       rawPd != null && typeof rawPd === 'object' && !Array.isArray(rawPd) ? rawPd : null;
-    const { appendLandingContextEvent } = require('./services/landing-context-ingest-service');
+    const { appendLandingContextEvent } = require('../services/landing-context-ingest-service');
     const write = appendLandingContextEvent({
       sessionId,
       eventType: type,
@@ -331,7 +339,7 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
         );
       } catch (_) {}
       try {
-        const SnapshotService = require('./services/session-result-snapshot-service');
+        const SnapshotService = require('../services/session-result-snapshot-service');
         SnapshotService.buildSessionResultSnapshot({ sessionId, source: 'barcode_scan_thread_event' });
       } catch (snapErr) {
         console.warn('[landing-assistant] thread-event snapshot:', snapErr?.message || snapErr);
@@ -370,7 +378,7 @@ app.post('/api/public/landing-assistant/thread-event', apiLimiter, express.json(
 
 app.post('/api/public/landing-assistant/voice-metrics/inc', apiLimiter, express.json(), async (req, res) => {
   try {
-    const { isAllowedLandingVoiceMetricName } = require('./services/landing-voice-metrics-contract');
+    const { isAllowedLandingVoiceMetricName } = require('../services/landing-voice-metrics-contract');
     const sessionId = String(req.body?.session_id || '').trim();
     const metricName = String(req.body?.metric_name || '').trim();
     const value = Math.max(1, Number(req.body?.value || 1));

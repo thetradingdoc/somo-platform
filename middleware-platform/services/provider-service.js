@@ -300,8 +300,13 @@ class ProviderService {
     const noShows = db.db.prepare(`
       SELECT COUNT(*) as count 
       ${baseQuery} 
-      AND status IN ('scheduled', 'confirmed')
-      AND datetime(end_time) < datetime(?)
+      AND (
+        status = 'no_show'
+        OR (
+          status IN ('scheduled', 'confirmed')
+          AND datetime(end_time) < datetime(?)
+        )
+      )
     `).get(...params, now.toISOString()).count;
     
     // Upcoming (next 2 hours)
@@ -317,7 +322,7 @@ class ProviderService {
     const inSession = db.db.prepare(`
       SELECT COUNT(*) as count 
       ${baseQuery} 
-      AND status IN ('scheduled', 'confirmed')
+      AND status IN ('scheduled', 'confirmed', 'arrived', 'in_room')
       AND datetime(start_time) <= datetime(?)
       AND datetime(end_time) >= datetime(?)
     `).get(...params, now.toISOString(), now.toISOString()).count;

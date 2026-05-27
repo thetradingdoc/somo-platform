@@ -288,6 +288,10 @@ router.post('/process', withPaymentIdempotency('payment_process', (req) => `paym
         const { payment_token, payment_method_id, amount, currency, idempotency_key } = req.body;
         const idemKey = req.idempotencyKey || idempotency_key || req.headers['idempotency-key'] || `payment_${payment_token}`;
 
+        // #region agent log
+        fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H5',location:'routes/payment.js:POST_/api/payment/process:entry',message:'Stripe payment process request',data:{hasToken:!!payment_token,hasPaymentMethod:!!payment_method_id,amount:Number(amount||0),currency:String(currency||'usd'),hasIdempotencyKey:!!idemKey},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion agent log
+
         const db = require('../database');
 
         // Validate token

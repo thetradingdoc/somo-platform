@@ -22,7 +22,22 @@ class PayerGatewayService {
    */
   static async checkEligibility(payload) {
     const backend = this.resolveBackend(payload.payerId);
-    const primary = await InsuranceService.checkEligibility(payload);
+    let primary;
+    try {
+      primary = await InsuranceService.checkEligibility(payload);
+      if (primary?.stediFallback) {
+        try {
+          const Metrics = require('./metrics');
+          Metrics.increment('stedi_eligibility_fallback_rate');
+        } catch (_) {}
+      }
+    } catch (e) {
+      try {
+        const Metrics = require('./metrics');
+        Metrics.increment('stedi_eligibility_error_rate');
+      } catch (_) {}
+      throw e;
+    }
 
     if (backend === 'stedi') {
       return { backend, primary, fhir: null };
@@ -49,6 +64,26 @@ class PayerGatewayService {
   static async submitClaim(payload) {
     const backend = this.resolveBackend(payload.payerId);
     const primary = await InsuranceService.submitClaim(payload);
+    if (primary?.stediFallback) {
+      try {
+        const Metrics = require('./metrics');
+        Metrics.increment('stedi_claim_fallback_rate');
+      } catch (_) {}
+    }
+    return { backend, primary };
+  }
+
+  /** Provider portal: submit existing claim row via Stedi 837. */
+  static async submitExistingClaim(claimId) {
+    const claim = db.getInsuranceClaim(claimId);
+    const backend = claim ? this.resolveBackend(claim.payer_id) : 'stedi';
+    const primary = await InsuranceService.submitExistingClaim(claimId);
+    if (primary?.stediFallback) {
+      try {
+        const Metrics = require('./metrics');
+        Metrics.increment('stedi_claim_fallback_rate');
+      } catch (_) {}
+    }
     return { backend, primary };
   }
 
@@ -74,6 +109,22 @@ class PayerGatewayService {
     }
 
     return { backend, primary, fhir };
+  }
+
+  /**
+   * Prior auth submission wrapper.
+   *
+   * Phase 1 behavior: explicitly unsupported via Stedi (no X12 278).
+   * This keeps a stable interface for Phase 2 rails (UHC FHIR write / partner).
+   */
+  static async submitPriorAuth() {
+    return {
+      backend: 'stedi',
+      success: false,
+      code: 'STEDI_278_UNSUPPORTED',
+      manualReview: true,
+      error: 'Stedi does not currently support X12 278 prior authorization submission.'
+    };
   }
 }
 

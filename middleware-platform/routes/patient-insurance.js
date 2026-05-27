@@ -1,5 +1,7 @@
 'use strict';
 
+const InsuranceService = require('../services/insurance-service');
+
 function registerPatientInsuranceRoutes(app, deps) {
   const {
     apiLimiter,
@@ -159,11 +161,33 @@ app.put('/api/patient/insurance', apiLimiter, express.json(), async (req, res) =
     // Optionally: re-run eligibility if we have payer + member
     if (finalPayerId && member_id) {
       try {
+        // Ensure we pass subscriber identity details to Stedi to avoid AAA 71 (DOB mismatch).
+        // `patient` is a FHIR patient row where the canonical fields live under `patient.resource_data`.
+        const fhirPatient = patient?.resource_data || {};
+
+        const fhirName = Array.isArray(fhirPatient.name) && fhirPatient.name[0] ? fhirPatient.name[0] : null;
+        const patientName = fhirName
+          ? `${(fhirName.given || []).join(' ')} ${fhirName.family || ''}`.trim()
+          : null;
+
+        const rawDob = fhirPatient.birthDate || fhirPatient.birth_date || null;
+        const dateOfBirth = rawDob
+          ? (() => {
+              const s = String(rawDob).trim();
+              if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+              const iso = new Date(s).toISOString().split('T')[0];
+              return iso;
+            })()
+          : null;
+
         await InsuranceService.checkEligibility({
           patientId,
           memberId: member_id,
-          payerId: finalPayerId
-          // additional fields (serviceCode, dateOfService) can be added later
+          payerId: finalPayerId,
+          patientName,
+          dateOfBirth,
+          surface: 'patient_portal',
+          dateOfService: new Date().toISOString().split('T')[0]
         });
       } catch (e) {
         console.warn('⚠️  Eligibility re-check failed during insurance update:', e.message);

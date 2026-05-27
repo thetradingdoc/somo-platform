@@ -198,6 +198,12 @@ Implemented in `services/layer2-rag/remote-rag-client.js`:
 
 ---
 
+## 6.1 Prior authorization (PA)
+
+Coding supports **PA detection** and a confidence cap (φ_auth_cap), but it does not implement the full PA case lifecycle. The canonical PA workflow (detect → request → decision → auth number on claim) is documented in:
+
+- [`docs/RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md)
+
 ## 7. Voice and API entry points
 
 ### Voice (Retell)

@@ -12,9 +12,19 @@ const { getOrCreate, STEDI } = require('../utils/circuit-breaker');
 const stediBreaker = getOrCreate(STEDI, { failureThreshold: 5, windowMs: 60000, resetTimeMs: 30000 });
 
 class InsuranceService {
-  // Stedi API Configuration
-  static STEDI_API_BASE = process.env.STEDI_API_BASE || 'https://api.stedi.com';
+  // Stedi API Configuration (translate fallback on core; eligibility/claims on healthcare)
+  static STEDI_API_BASE = process.env.STEDI_API_BASE || 'https://core.us.stedi.com';
   static STEDI_API_KEY = process.env.STEDI_API_KEY || 'test_1rRzTb0.Va9Tn88BB3fgPgttprqbrxQ1';
+  static STEDI_ELIGIBILITY_V3_PATH =
+    process.env.STEDI_ELIGIBILITY_V3_PATH || '/2024-04-01/change/medicalnetwork/eligibility/v3';
+
+  /** Stedi expects raw API key or `Key <token>` — not `Bearer` (Healthcare returns 403 with Bearer). */
+  static getStediAuthorizationHeader() {
+    const key = String(this.STEDI_API_KEY || '').trim();
+    if (!key) return '';
+    if (key.startsWith('Bearer ') || key.startsWith('Key ')) return key;
+    return key;
+  }
 
   /**
    * Get Stedi API client with authentication
@@ -23,7 +33,7 @@ class InsuranceService {
     return axios.create({
       baseURL: this.STEDI_API_BASE,
       headers: {
-        'Authorization': `Bearer ${this.STEDI_API_KEY}`,
+        Authorization: this.getStediAuthorizationHeader(),
         'Content-Type': 'application/json'
       },
       timeout: 30000 // 30 second timeout
@@ -50,6 +60,164 @@ class InsuranceService {
     return {
       submit: `${base}/institutionalclaims/v1/raw-x12-submission`,
       status: (claimId) => `${base}/institutionalclaims/v1/${encodeURIComponent(claimId)}`
+    };
+  }
+
+  static hasRealStediKey() {
+    return Boolean(this.STEDI_API_KEY && !String(this.STEDI_API_KEY).startsWith('test_'));
+  }
+
+  static isStediTestMode() {
+    const flag = String(process.env.STEDI_TEST_MODE || '').trim().toLowerCase();
+    if (flag === '0' || flag === 'false') return false;
+    if (flag === '1' || flag === 'true') return true;
+    return String(this.STEDI_API_KEY || '').startsWith('test_');
+  }
+
+  /** Production-like key, or test key with STEDI_TEST_MODE enabled. */
+  static canCallStediHealthcare() {
+    if (!this.STEDI_API_KEY) return false;
+    if (this.hasRealStediKey()) return true;
+    return this.isStediTestMode();
+  }
+
+  static getHealthcareClient() {
+    const healthcareBase = process.env.STEDI_HEALTHCARE_BASE || 'https://healthcare.us.stedi.com';
+    return axios.create({
+      baseURL: healthcareBase,
+      headers: {
+        Authorization: this.getStediAuthorizationHeader(),
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+  }
+
+  /**
+   * Re-verify eligibility within grace window before claim submit (shared by voice + provider).
+   * @returns {{ eligibilityReverified: boolean, eligibilityWarning: object|null }}
+   */
+  static async reverifyEligibilityIfNeeded(claimData) {
+    const out = { eligibilityReverified: false, eligibilityWarning: null };
+    if (!claimData.patientId || !claimData.memberId || !claimData.payerId || !claimData.serviceCode) {
+      return out;
+    }
+    try {
+      const existingChecks = db.getEligibilityChecksByPatient ? db.getEligibilityChecksByPatient(claimData.patientId) : [];
+      const relevantCheck = existingChecks.find((check) =>
+        check.member_id === claimData.memberId &&
+        check.payer_id === claimData.payerId &&
+        check.service_code === claimData.serviceCode
+      );
+      const ELIGIBILITY_GRACE_DAYS = parseFloat(process.env.ELIGIBILITY_GRACE_DAYS || '30');
+      const needsRecheck = !relevantCheck ||
+        (relevantCheck.created_at &&
+          new Date(relevantCheck.created_at) < new Date(Date.now() - ELIGIBILITY_GRACE_DAYS * 24 * 60 * 60 * 1000));
+
+      if (!needsRecheck) return out;
+
+      const eligibilityResult = await this.checkEligibility({
+        patientId: claimData.patientId,
+        patientName: claimData.patientName || 'Patient',
+        dateOfBirth: claimData.dateOfBirth || '1990-01-01',
+        memberId: claimData.memberId,
+        payerId: claimData.payerId,
+        serviceCode: claimData.serviceCode,
+        dateOfService: claimData.dateOfService,
+        surface: claimData.surface || 'claim_submit_reverify'
+      });
+      out.eligibilityReverified = true;
+      if (!eligibilityResult.eligible) {
+        out.eligibilityWarning = {
+          message: `Eligibility re-verification failed: ${eligibilityResult.message || 'Not eligible'}`,
+          eligible: false,
+          action: 'claim_submission_allowed',
+          reason: 'Some payers allow retroactive eligibility or coverage may be restored'
+        };
+      }
+    } catch (eligError) {
+      out.eligibilityWarning = {
+        message: `Eligibility re-verification failed: ${eligError.message}`,
+        action: 'claim_submission_allowed',
+        reason: 'Eligibility check error - claim submission proceeding'
+      };
+    }
+    return out;
+  }
+
+  /** @returns {Promise<{ edi: string|null, stediTranslateOk: boolean }>} */
+  static async translate837ToEdi(claimData) {
+    const x12Claim = this._buildClaimRequest(claimData);
+    const stediClient = this.getStediClient();
+    try {
+      const translateResponse = await stediBreaker.execute(
+        () => stediClient.post('/x12/translate/837-to-edi', { json: x12Claim }),
+        () => { throw new Error('Circuit open'); }
+      );
+      const edi = translateResponse.data?.edi || translateResponse.data?.output || null;
+      return { edi, stediTranslateOk: Boolean(edi) };
+    } catch (apiError) {
+      console.warn('⚠️  Stedi 837 translate failed:', apiError.message);
+      return { edi: null, stediTranslateOk: false };
+    }
+  }
+
+  /**
+   * Translate 837 and submit to Stedi Healthcare when configured; else simulation fallback.
+   */
+  static async submit837ToStedi(claimData) {
+    const { edi, stediTranslateOk } = await this.translate837ToEdi(claimData);
+
+    if (this.canCallStediHealthcare() && edi) {
+      try {
+        const healthClient = this.getHealthcareClient();
+        const paths = this.getStediClaimApiPaths();
+        const submitRes = await healthClient.post(paths.submit, { x12: edi });
+        const x12Id = submitRes?.data?.claimId || submitRes?.data?.correlationId;
+        if (x12Id) {
+          return {
+            claimId: x12Id,
+            status: 'submitted',
+            message: 'Claim submitted via Stedi Healthcare',
+            stediTranslateOk: true,
+            healthcareSubmitted: true,
+            stediFallback: false,
+            estimatedProcessingDays: 14
+          };
+        }
+      } catch (e) {
+        const status = e.response?.status;
+        console.warn('⚠️  Stedi Healthcare submit failed:', e.message, status ? `(HTTP ${status})` : '');
+        if (status === 403 && this.isStediTestMode()) {
+          return {
+            claimId: `X12_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            status: 'submitted',
+            message: '837 translated; Healthcare submit denied in test mode (403) — manual review',
+            stediTranslateOk,
+            healthcareSubmitted: false,
+            stediFallback: true,
+            manualReview: true,
+            testModeClaimBlocked: true,
+            estimatedProcessingDays: 1
+          };
+        }
+      }
+    }
+
+    if (!this.canCallStediHealthcare()) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    return {
+      claimId: `X12_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      status: 'submitted',
+      message: stediTranslateOk
+        ? '837 translated; clearinghouse submit pending or failed'
+        : 'Claim submitted (simulation)',
+      stediTranslateOk,
+      healthcareSubmitted: false,
+      stediFallback: !stediTranslateOk || !this.canCallStediHealthcare(),
+      estimatedProcessingDays: 1
     };
   }
 
@@ -108,59 +276,116 @@ class InsuranceService {
       console.log('Service Code:', eligibilityData.serviceCode);
       console.log('Date of Service:', eligibilityData.dateOfService);
 
-      // Build X12 270 eligibility inquiry
-      const x12Request = this._buildEligibilityRequest(eligibilityData);
+      const willUseV3 = this.canCallStediHealthcare();
+      // #region agent log
+      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' },
+        body: JSON.stringify({
+          sessionId: '4ae50e',
+          runId: process.env.STEDI_ARCH_DEBUG_RUN || 'pre-fix',
+          hypothesisId: 'H1',
+          location: 'insurance-service.js:checkEligibility:inputFlags',
+          message: 'eligibility_input_flags',
+          data: {
+            hasPatientName: Boolean(eligibilityData.patientName),
+            hasDateOfBirth: Boolean(eligibilityData.dateOfBirth),
+            hasMemberId: Boolean(eligibilityData.memberId),
+            hasPayerId: Boolean(eligibilityData.payerId),
+            willUseV3
+          },
+          timestamp: Date.now()
+        })
+      }).catch(() => {});
+      // #endregion
 
-      // Call Stedi API to translate to EDI format
-      const stediClient = this.getStediClient();
+      const stedi271Parser = require('./stedi-271-parser');
       let eligibilityResponse = null;
+      let usedHealthcareV3 = false;
 
-      try {
-        const translateResponse = await stediBreaker.execute(
-          () => stediClient.post('/x12/translate/270-to-edi', { json: x12Request }),
-          () => { throw new Error('Circuit open - using simulation'); }
-        );
-
-        console.log('✅ Stedi API response received');
-        console.log('   EDI Request generated:', translateResponse.data?.edi ? 'Yes' : 'No');
-
-        // Deep 271 parsing: extract structured eligibility from Stedi response
-        const stedi271Parser = require('./stedi-271-parser');
-        const parsed = stedi271Parser.parse271Response(translateResponse.data || translateResponse);
-
-        if (stedi271Parser.hasMeaningfulData(parsed)) {
-          eligibilityResponse = {
-            eligible: parsed.eligible,
-            copay: parsed.copay ?? 0,
-            allowedAmount: parsed.allowedAmount ?? 0,
-            insurancePays: parsed.insurancePays ?? 0,
-            deductibleTotal: parsed.deductibleTotal,
-            deductibleRemaining: parsed.deductibleRemaining,
-            coinsurancePercent: parsed.coinsurancePercent,
-            oopMax: parsed.oopMax ?? null,
-            oopMet: parsed.oopMet ?? 0,
-            planSummary: parsed.planSummary,
-            message: parsed.message || (parsed.eligible ? `Eligible - Copay $${parsed.copay ?? 0}` : 'Not eligible')
-          };
-          console.log('   Parsed 271 response: eligible=%s, copay=$%s', eligibilityResponse.eligible, eligibilityResponse.copay);
-        }
-      } catch (apiError) {
-        console.warn('⚠️  Stedi API call failed, using simulation:', apiError.message);
+      if (this.canCallStediHealthcare()) {
         try {
-          const Metrics = require('./metrics');
-          Metrics.increment('stedi_eligibility_error_rate');
-        } catch (_) {}
-        if (apiError.response) {
-          console.warn('   Status:', apiError.response.status);
-          console.warn('   Response:', apiError.response.data);
+          const v3 = await this.checkEligibilityViaHealthcareV3(eligibilityData);
+          if (v3.ok && v3.data) {
+            usedHealthcareV3 = true;
+            const parsed = stedi271Parser.parse271Response(v3.data);
+            eligibilityResponse = this._eligibilityFromParsed271(parsed);
+            if (!stedi271Parser.hasMeaningfulData(parsed)) {
+              const errs = (v3.data.errors || [])
+                .map((e) => e.description || e.code)
+                .filter(Boolean);
+              if (errs.length) {
+                eligibilityResponse.eligible = false;
+                eligibilityResponse.message = errs.join('; ');
+              }
+            }
+            console.log('✅ Stedi Healthcare eligibility v3 response');
+            console.log('   Eligible:', eligibilityResponse.eligible, 'Copay:', eligibilityResponse.copay);
+            if (v3.data.eligibilitySearchId) {
+              console.log('   Search ID:', v3.data.eligibilitySearchId);
+            }
+          }
+        } catch (apiError) {
+          console.warn('⚠️  Stedi Healthcare eligibility v3 failed:', apiError.message);
+          if (apiError.response) {
+            console.warn('   Status:', apiError.response.status);
+            const msg = apiError.response.data?.message || apiError.response.data?.error;
+            if (msg) console.warn('   Detail:', String(msg).slice(0, 200));
+          }
+
+          // #region agent log
+          fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' },
+            body: JSON.stringify({
+              sessionId: '4ae50e',
+              runId: process.env.STEDI_ARCH_DEBUG_RUN || 'pre-fix',
+              hypothesisId: 'H1',
+              location: 'insurance-service.js:checkEligibility:v3ErrorCode',
+              message: 'v3_request_error_code',
+              data: {
+                status: apiError.response?.status || null,
+                stediCode: apiError.response?.data?.code || null,
+                hasPatientName: Boolean(eligibilityData.patientName),
+                hasDateOfBirth: Boolean(eligibilityData.dateOfBirth)
+              },
+              timestamp: Date.now()
+            })
+          }).catch(() => {});
+          // #endregion
         }
       }
 
-      // Use parsed Stedi response, or fall back to simulation (Section 2 - graceful Tiba degradation)
-      let stediFailed = false;
       if (!eligibilityResponse) {
+        const x12Request = this._buildEligibilityRequest(eligibilityData);
+        const stediClient = this.getStediClient();
+        try {
+          const translateResponse = await stediBreaker.execute(
+            () => stediClient.post('/x12/translate/270-to-edi', { json: x12Request }),
+            () => { throw new Error('Circuit open - using simulation'); }
+          );
+          console.log('✅ Stedi translate API response received');
+          const parsed = stedi271Parser.parse271Response(translateResponse.data || translateResponse);
+          if (stedi271Parser.hasMeaningfulData(parsed)) {
+            eligibilityResponse = this._eligibilityFromParsed271(parsed);
+          }
+        } catch (apiError) {
+          console.warn('⚠️  Stedi translate eligibility failed, using simulation:', apiError.message);
+          try {
+            const Metrics = require('./metrics');
+            Metrics.increment('stedi_eligibility_error_rate');
+          } catch (_) {}
+          if (apiError.response) {
+            console.warn('   Status:', apiError.response.status);
+          }
+        }
+      }
+
+      let stediFailed = !eligibilityResponse;
+      if (usedHealthcareV3 && eligibilityResponse) {
+        stediFailed = false;
+      } else if (stediFailed) {
         eligibilityResponse = await this._simulateEligibilityCheck(eligibilityData);
-        stediFailed = true;
       }
 
       // Attempt to parse 271-style benefit details if present on response
@@ -170,11 +395,14 @@ class InsuranceService {
       const coinsurancePercent = eligibilityResponse.coinsurancePercent ?? null;
       const oopMax = eligibilityResponse.oopMax ?? null;
       const oopMet = eligibilityResponse.oopMet ?? 0;
+      const priorAuthIndicator = eligibilityResponse.priorAuthIndicator || null;
+      const priorAuthNotes = Array.isArray(eligibilityResponse.priorAuthNotes) ? eligibilityResponse.priorAuthNotes : [];
 
-      // Store eligibility check in database
+      const safePatientId = this._resolveEligibilityPatientId(eligibilityData.patientId);
+
       const eligibilityRecord = {
         id: `elig_${uuidv4()}`,
-        patient_id: eligibilityData.patientId || null,
+        patient_id: safePatientId,
         member_id: eligibilityData.memberId,
         payer_id: eligibilityData.payerId,
         service_code: eligibilityData.serviceCode,
@@ -189,6 +417,9 @@ class InsuranceService {
         oop_max: oopMax,
         oop_met: oopMet,
         plan_summary: planSummary,
+        prior_auth_indicator: priorAuthIndicator,
+        prior_auth_notes: priorAuthNotes.length ? JSON.stringify(priorAuthNotes) : null,
+        prior_auth_source: priorAuthIndicator ? '271' : null,
         response_data: JSON.stringify(eligibilityResponse),
         created_at: new Date().toISOString()
       };
@@ -215,6 +446,8 @@ class InsuranceService {
         oopMax: oopMax,
         oopMet: oopMet,
         planSummary: planSummary,
+        priorAuthIndicator: priorAuthIndicator,
+        priorAuthNotes: priorAuthNotes,
         patientResponsibility: eligibilityResponse.copay || 0,
         eligibilityId: eligibilityRecord.id,
         message: eligibilityResponse.eligible
@@ -310,97 +543,10 @@ class InsuranceService {
         }
       }
 
-      // Eligibility Re-verification at Claim Submission
-      // Coverage can change between appointment time and claim submission
-      // Re-verify eligibility to prevent denials due to expired coverage
-      let eligibilityReverified = false;
-      let eligibilityWarning = null;
-      
-      if (claimData.patientId && claimData.memberId && claimData.payerId && claimData.serviceCode) {
-        try {
-          // Check for existing eligibility check
-          const existingChecks = db.getEligibilityChecksByPatient ? db.getEligibilityChecksByPatient(claimData.patientId) : [];
-          const relevantCheck = existingChecks.find(check => 
-            check.member_id === claimData.memberId && 
-            check.payer_id === claimData.payerId &&
-            check.service_code === claimData.serviceCode
-          );
+      claimData.surface = claimData.surface || 'voice_submit_claim';
+      const { eligibilityReverified, eligibilityWarning } = await this.reverifyEligibilityIfNeeded(claimData);
 
-          // Grace period: eligibility valid for 30 days from check date (configurable)
-          const ELIGIBILITY_GRACE_DAYS = parseFloat(process.env.ELIGIBILITY_GRACE_DAYS || '30');
-          const needsRecheck = !relevantCheck || 
-            (relevantCheck.created_at && 
-             new Date(relevantCheck.created_at) < new Date(Date.now() - ELIGIBILITY_GRACE_DAYS * 24 * 60 * 60 * 1000));
-
-          if (needsRecheck) {
-            console.log(`🔄 Re-verifying eligibility at claim submission (${relevantCheck ? 'expired' : 'not found'})...`);
-            
-            const eligibilityData = {
-              patientId: claimData.patientId,
-              patientName: claimData.patientName || 'Patient',
-              dateOfBirth: claimData.dateOfBirth || '1990-01-01',
-              memberId: claimData.memberId,
-              payerId: claimData.payerId,
-              serviceCode: claimData.serviceCode,
-              dateOfService: claimData.dateOfService
-            };
-
-            const eligibilityResult = await this.checkEligibility(eligibilityData);
-            eligibilityReverified = true;
-
-            if (!eligibilityResult.eligible) {
-              // Warn but allow submission - some payers allow retroactive eligibility
-              eligibilityWarning = {
-                message: `Eligibility re-verification failed: ${eligibilityResult.message || 'Not eligible'}`,
-                eligible: false,
-                action: 'claim_submission_allowed',
-                reason: 'Some payers allow retroactive eligibility or coverage may be restored'
-              };
-              console.warn(`⚠️  Eligibility re-verification failed - allowing claim submission with warning`);
-              console.warn(`   Reason: ${eligibilityWarning.reason}`);
-            } else {
-              console.log(`✅ Eligibility re-verified: Eligible (copay: $${eligibilityResult.copay || 0})`);
-            }
-          } else {
-            console.log(`✅ Using existing eligibility check (still valid, checked ${ELIGIBILITY_GRACE_DAYS} days ago)`);
-          }
-        } catch (eligError) {
-          // Don't block claim submission if eligibility re-check fails
-          console.warn(`⚠️  Eligibility re-verification error (continuing with claim submission): ${eligError.message}`);
-          eligibilityWarning = {
-            message: `Eligibility re-verification failed: ${eligError.message}`,
-            action: 'claim_submission_allowed',
-            reason: 'Eligibility check error - claim submission proceeding'
-          };
-        }
-      }
-
-      // Build X12 837 claim
-      const x12Claim = this._buildClaimRequest(claimData);
-
-      // Call Stedi API to translate to EDI format (Section 2 - graceful Tiba degradation)
-      const stediClient = this.getStediClient();
-      let stediSucceeded = false;
-      try {
-        const translateResponse = await stediBreaker.execute(
-          () => stediClient.post('/x12/translate/837-to-edi', { json: x12Claim }),
-          () => { throw new Error('Circuit open - using simulation'); }
-        );
-
-        console.log('✅ Stedi API response received');
-        console.log('   EDI Claim generated:', translateResponse.data?.edi ? 'Yes' : 'No');
-        stediSucceeded = true;
-      } catch (apiError) {
-        // If Stedi API fails, log and continue with simulation - do not block call
-        console.warn('⚠️  Stedi API call failed, using simulation:', apiError.message);
-        if (apiError.response) {
-          console.warn('   Status:', apiError.response.status);
-          console.warn('   Response:', apiError.response.data);
-        }
-      }
-
-      // Simulate claim submission (replace with real API call when ready)
-      const claimResponse = await this._simulateClaimSubmission(claimData);
+      const claimResponse = await this.submit837ToStedi(claimData);
 
       // Store claim in database
       const claimRecord = {
@@ -474,10 +620,13 @@ class InsuranceService {
         status: 'submitted',
         message: 'Claim submitted successfully'
       };
-      if (!stediSucceeded) {
+      if (claimResponse.stediFallback) {
         result.settled = false;
         result.manualReview = true;
         result.stediFallback = true;
+      }
+      if (claimResponse.healthcareSubmitted) {
+        result.healthcareSubmitted = true;
       }
       if (eligibilityReverified) {
         result.eligibilityReverified = true;
@@ -496,6 +645,149 @@ class InsuranceService {
         manualReview: true
       };
     }
+  }
+
+  /**
+   * Submit an existing claim row to Stedi (837 translate + Healthcare submit + x12_claim_id).
+   * 278 prior auth is not supported by Stedi; PA gate uses approved auth_number on file.
+   */
+  static async submitExistingClaim(claimId) {
+    const claim = db.getClaimById ? db.getClaimById(claimId) : db.getInsuranceClaim?.(claimId);
+    if (!claim) throw new Error('Claim not found');
+
+    // Idempotency: if we already have a submitted/approved/paid claim, do a no-op.
+    // (submit-payment route already checks status, but the service should also be safe.)
+    const currentStatus = (claim.status || '').toString().trim().toLowerCase();
+    if (['submitted', 'approved', 'paid'].includes(currentStatus)) {
+      let parsed = {};
+      try {
+        if (claim.response_data) {
+          parsed = typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data;
+        }
+      } catch (_) {}
+      return {
+        success: true,
+        claimId: claim.id,
+        x12ClaimId: claim.x12_claim_id || parsed.claimId || parsed.x12_claim_id || null,
+        stediTranslateOk: parsed.stedi_translate_ok ?? parsed.stediTranslateOk ?? null,
+        healthcareSubmitted: parsed.healthcare_submitted ?? parsed.healthcareSubmitted ?? null,
+        stediFallback: Boolean(parsed.stediFallback ?? parsed.stedi_fallback ?? parsed.testModeClaimBlocked ?? false),
+        manualReview: Boolean(parsed.stediFallback ?? parsed.stedi_fallback ?? parsed.testModeClaimBlocked ?? false),
+        priorAuthorizationNumber: parsed.prior_authorization_number ?? parsed.priorAuthorizationNumber ?? null,
+        eligibilityReverified: false,
+        eligibilityWarning: null,
+        idempotent: true,
+        status: claim.status || currentStatus
+      };
+    }
+
+    let priorAuthorizationNumber = null;
+    if (claim.appointment_id && db.getAppointment) {
+      const appt = db.getAppointment(claim.appointment_id);
+      if (appt?.requires_prior_auth) {
+        const paRows = db.getPriorAuthRequestsByAppointment ? db.getPriorAuthRequestsByAppointment(claim.appointment_id) : [];
+        const approved = (paRows || []).find((r) => String(r.status || '').toLowerCase() === 'approved' && r.auth_number);
+        if (!approved) {
+          const err = new Error('Prior authorization is required for this appointment, but no approved auth number is on file.');
+          err.code = 'PRIOR_AUTH_REQUIRED';
+          throw err;
+        }
+        priorAuthorizationNumber = approved.auth_number;
+      }
+    }
+
+    let patientName = 'Patient';
+    let dateOfBirth = '1990-01-01';
+    if (claim.patient_id && db.getFHIRPatient) {
+      const fp = db.getFHIRPatient(claim.patient_id);
+      if (fp) {
+        // Prefer canonical flattened columns (when present)
+        if (fp.name) patientName = fp.name;
+
+        // Most real-world FHIR data lives in resource_data; use that for demographics
+        let resourceData = fp.resource_data || {};
+        try {
+          if (typeof resourceData === 'string') resourceData = JSON.parse(resourceData);
+        } catch (_) {}
+
+        const name0 = Array.isArray(resourceData?.name) ? resourceData.name[0] : null;
+        const given = name0?.given || [];
+        const family = name0?.family || '';
+        const composedName = [Array.isArray(given) ? given.join(' ') : null, family].filter(Boolean).join(' ').trim();
+        if (composedName) patientName = composedName;
+
+        const dobCandidate =
+          resourceData?.birthDate ||
+          resourceData?.birth_date ||
+          resourceData?.dateOfBirth ||
+          resourceData?.date_of_birth ||
+          resourceData?.dob ||
+          fp.birth_date ||
+          fp.date_of_birth ||
+          dateOfBirth;
+
+        if (dobCandidate) {
+          const s = String(dobCandidate);
+          dateOfBirth = s.length >= 10 ? s.slice(0, 10) : s;
+        }
+      }
+    }
+
+    const claimData = {
+      patientId: claim.patient_id,
+      patientName,
+      dateOfBirth,
+      memberId: claim.member_id,
+      payerId: claim.payer_id,
+      serviceCode: claim.service_code,
+      diagnosisCode: claim.diagnosis_code,
+      totalAmount: Number(claim.total_amount || 0),
+      copayPaid: Number(claim.copay_amount || 0),
+      dateOfService: claim.submitted_at
+        ? new Date(claim.submitted_at).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+      priorAuthorizationNumber,
+      providerNpi: claim.provider_npi || null,
+      appointmentId: claim.appointment_id || null,
+      surface: 'provider_portal'
+    };
+
+    const { eligibilityReverified, eligibilityWarning } = await this.reverifyEligibilityIfNeeded(claimData);
+    const claimResponse = await this.submit837ToStedi(claimData);
+
+    const priorResponse = claim.response_data
+      ? (typeof claim.response_data === 'string'
+        ? (() => { try { return JSON.parse(claim.response_data); } catch (_) { return {}; } })()
+        : claim.response_data)
+      : {};
+
+    const updates = {
+      status: 'submitted',
+      payment_status: 'pending',
+      submitted_at: new Date().toISOString(),
+      x12_claim_id: claimResponse.claimId || null,
+      response_data: JSON.stringify({
+        ...priorResponse,
+        ...claimResponse,
+        stedi_translate_ok: claimResponse.stediTranslateOk,
+        healthcare_submitted: claimResponse.healthcareSubmitted,
+        prior_authorization_number: priorAuthorizationNumber || null
+      })
+    };
+    if (db.updateInsuranceClaim) db.updateInsuranceClaim(claim.id, updates);
+
+    return {
+      success: true,
+      claimId: claim.id,
+      x12ClaimId: claimResponse.claimId,
+      stediTranslateOk: claimResponse.stediTranslateOk,
+      healthcareSubmitted: claimResponse.healthcareSubmitted,
+      stediFallback: claimResponse.stediFallback,
+      manualReview: Boolean(claimResponse.stediFallback),
+      priorAuthorizationNumber: priorAuthorizationNumber || null,
+      eligibilityReverified,
+      eligibilityWarning
+    };
   }
 
   /**
@@ -535,7 +827,7 @@ class InsuranceService {
 
       // Query insurance payer for status
       // For now, simulate response
-      const statusResponse = await this._simulateStatusCheck(claim);
+      const statusResponse = await this._queryClaimStatus(claim);
 
       // Update claim status in database
       if (statusResponse.status !== claim.status) {
@@ -650,6 +942,123 @@ class InsuranceService {
   // PRIVATE HELPER METHODS
   // ============================================
 
+  /** @private */
+  static _formatDobForStedi(dob) {
+    if (!dob) return '19900101';
+    const s = String(dob).replace(/-/g, '');
+    return s.length === 8 ? s : '19900101';
+  }
+
+  /** @private */
+  static _splitPatientName(name) {
+    const parts = String(name || 'Patient').trim().split(/\s+/).filter(Boolean);
+    return {
+      firstName: parts[0] || 'Patient',
+      lastName: parts.length > 1 ? parts.slice(1).join(' ') : 'Member'
+    };
+  }
+
+  /** @private */
+  static _cptToServiceTypeCode(cpt) {
+    const code = String(cpt || '').trim();
+    if (/^908/.test(code)) return 'MH';
+    if (/^99/.test(code)) return '30';
+    return '30';
+  }
+
+  /**
+   * Stedi Healthcare eligibility v3 JSON body (NOT wrapped in { json: ... }).
+   * @private
+   */
+  static _buildHealthcareEligibilityJson(eligibilityData) {
+    const { firstName, lastName } = this._splitPatientName(eligibilityData.patientName);
+    const tradingPartnerServiceId =
+      eligibilityData.payerId || process.env.STEDI_TEST_PAYER_ID || 'STEDI';
+    const body = {
+      tradingPartnerServiceId,
+      provider: {
+        organizationName: process.env.STEDI_PROVIDER_ORG_NAME || 'Doclittle',
+        npi: process.env.STEDI_TEST_PROVIDER_NPI || eligibilityData.providerNpi || '1999999984'
+      },
+      subscriber: {
+        memberId: eligibilityData.memberId,
+        firstName,
+        lastName,
+        dateOfBirth: this._formatDobForStedi(eligibilityData.dateOfBirth)
+      },
+      encounter: {
+        serviceTypeCodes: [this._cptToServiceTypeCode(eligibilityData.serviceCode)]
+      }
+    };
+
+    // #region agent log
+    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' },
+      body: JSON.stringify({
+        sessionId: '4ae50e',
+        runId: process.env.STEDI_ARCH_DEBUG_RUN || 'pre-fix',
+        hypothesisId: 'H1',
+        location: 'insurance-service.js:_buildHealthcareEligibilityJson:buildFlags',
+        message: 'v3_body_build_flags',
+        data: {
+          inputPatientNameProvided: Boolean(eligibilityData.patientName),
+          inputDobProvided: Boolean(eligibilityData.dateOfBirth),
+          subscriberUsesFallbackName: !eligibilityData.patientName,
+          subscriberUsesFallbackDob: !eligibilityData.dateOfBirth
+        },
+        timestamp: Date.now()
+      })
+    }).catch(() => {});
+    // #endregion
+
+    if (eligibilityData.dateOfService) {
+      body.encounter.dateOfService = String(eligibilityData.dateOfService).replace(/-/g, '');
+    }
+    return body;
+  }
+
+  /** @private */
+  static _eligibilityFromParsed271(parsed) {
+    return {
+      eligible: parsed.eligible,
+      copay: parsed.copay ?? 0,
+      allowedAmount: parsed.allowedAmount ?? 0,
+      insurancePays: parsed.insurancePays ?? 0,
+      deductibleTotal: parsed.deductibleTotal,
+      deductibleRemaining: parsed.deductibleRemaining,
+      coinsurancePercent: parsed.coinsurancePercent,
+      oopMax: parsed.oopMax ?? null,
+      oopMet: parsed.oopMet ?? 0,
+      planSummary: parsed.planSummary,
+      priorAuthIndicator: parsed.priorAuthIndicator || null,
+      priorAuthNotes: parsed.priorAuthNotes || [],
+      message: parsed.message || (parsed.eligible ? `Eligible - Copay $${parsed.copay ?? 0}` : 'Not eligible')
+    };
+  }
+
+  /**
+   * POST Healthcare eligibility v3 — request body is the eligibility object directly.
+   */
+  static async checkEligibilityViaHealthcareV3(eligibilityData) {
+    const body = this._buildHealthcareEligibilityJson(eligibilityData);
+    const healthClient = this.getHealthcareClient();
+    const res = await stediBreaker.execute(
+      () => healthClient.post(this.STEDI_ELIGIBILITY_V3_PATH, body),
+      () => { throw new Error('Circuit open'); }
+    );
+    return { ok: res.status >= 200 && res.status < 300, data: res.data, status: res.status };
+  }
+
+  /** Avoid FK errors when patient_id is not in fhir_patients. @private */
+  static _resolveEligibilityPatientId(patientId) {
+    if (!patientId) return null;
+    try {
+      if (db.getFHIRPatient && db.getFHIRPatient(patientId)) return patientId;
+    } catch (_) {}
+    return null;
+  }
+
   /**
    * Build X12 270 eligibility inquiry
    * @private
@@ -706,7 +1115,8 @@ class InsuranceService {
         dateOfService: claimData.dateOfService,
         totalAmount: claimData.totalAmount,
         copayPaid: claimData.copayPaid,
-        amountOwed: claimData.totalAmount - claimData.copayPaid
+        amountOwed: claimData.totalAmount - claimData.copayPaid,
+        priorAuthorizationNumber: claimData.priorAuthorizationNumber || null
       },
       blockchainProof: claimData.blockchainProof || null
     };
@@ -821,79 +1231,77 @@ class InsuranceService {
   }
 
   /**
-   * Submit claim; uses Stedi Healthcare API when configured, else simulation.
-   * @private
+   * Apply 835 remittance payload to claim (paid amount + status).
+   * @param {object} claim - insurance_claims row
+   * @param {object} remittance - normalized 835 fragment
    */
-  static async _simulateClaimSubmission(claimData) {
-    const hasRealKey = this.STEDI_API_KEY && !this.STEDI_API_KEY.startsWith('test_');
-    const healthcareBase = process.env.STEDI_HEALTHCARE_BASE || 'https://healthcare.us.stedi.com';
-    if (hasRealKey) {
-      try {
-        const x12Claim = this._buildClaimRequest(claimData);
-        const stediClient = this.getStediClient();
-        const translateResponse = await stediBreaker.execute(
-          () => stediClient.post('/x12/translate/837-to-edi', { json: x12Claim }),
-          () => { throw new Error('Circuit open'); }
-        );
-        const edi = translateResponse.data?.edi || translateResponse.data?.output;
-        if (edi) {
-          const healthClient = axios.create({
-            baseURL: healthcareBase,
-            headers: { 'Authorization': `Bearer ${this.STEDI_API_KEY}`, 'Content-Type': 'application/json' },
-            timeout: 30000
-          });
-          const paths = this.getStediClaimApiPaths();
-          const submitRes = await healthClient.post(
-            paths.submit,
-            { x12: edi }
-          ).catch(() => null);
-          if (submitRes?.data?.claimId || submitRes?.data?.correlationId) {
-            return {
-              claimId: submitRes.data.claimId || submitRes.data.correlationId || `stedi_${Date.now()}`,
-              status: 'submitted',
-              message: 'Claim submitted via Stedi Healthcare',
-              estimatedProcessingDays: 14
-            };
-          }
-        }
-      } catch (e) {
-        console.warn('⚠️  Stedi claim submission failed:', e.message);
-      }
+  static applyRemittanceFrom835(claim, remittance) {
+    if (!claim?.id || !remittance) return null;
+    const nowIso = new Date().toISOString();
+    const paid = typeof remittance.paidAmount === 'number' ? remittance.paidAmount : null;
+    const status = paid != null && paid > 0 ? 'paid' : 'processing';
+
+    // Let the existing adjudication pipeline update `status` (and code acceptance tracking).
+    this.applyClaimAdjudicationOutcome(claim, status);
+
+    // Split summary vs full detail to avoid duplicating huge payloads in response_data.
+    const { rawPayload, ...remittanceSummary } = remittance || {};
+    const remittanceDetail = {
+      received_at: nowIso,
+      ...remittanceSummary,
+      rawPayload: rawPayload ?? null
+    };
+
+    const updates = {
+      status,
+      status_checked_at: nowIso,
+      payment_amount: paid,
+      // Dedicated ERA/835 columns for payment posting + ledger reconciliation.
+      remittance_835_received_at: nowIso,
+      remittance_835_paid_amount: paid,
+      remittance_835_adjustment_reason: remittanceSummary.adjustmentReason || null,
+      remittance_835_detail: JSON.stringify(remittanceDetail)
+    };
+
+    // Keep payment_status aligned with the claim lifecycle.
+    if (status === 'paid') {
+      updates.payment_status = 'paid';
+      updates.paid_at = nowIso;
     }
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    let responseData = {};
+    try {
+      responseData = claim.response_data
+        ? (typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data)
+        : {};
+    } catch (_) {}
 
-    // Mock response
-    return {
-      claimId: `X12_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-      status: 'submitted',
-      message: 'Claim submitted successfully',
-      estimatedProcessingDays: 1
-    };
+    // Store a lightweight summary in response_data; full raw detail is in remittance_835_detail.
+    responseData.remittance_835 = { received_at: nowIso, ...remittanceSummary };
+    updates.response_data = JSON.stringify(responseData);
+
+    db.updateInsuranceClaim(claim.id, updates);
+    return { status, paidAmount: paid };
   }
 
   /**
-   * Check claim status; uses Stedi when configured, else simulation.
+   * Query claim status via Stedi Healthcare when configured, else simulation.
    * @private
    */
-  static async _simulateStatusCheck(claim) {
-    const hasRealKey = this.STEDI_API_KEY && !this.STEDI_API_KEY.startsWith('test_');
-    const healthcareBase = process.env.STEDI_HEALTHCARE_BASE || 'https://healthcare.us.stedi.com';
-    if (hasRealKey && claim.x12_claim_id) {
+  static async _queryClaimStatus(claim) {
+    if (this.canCallStediHealthcare() && claim.x12_claim_id) {
       try {
-        const healthClient = axios.create({
-          baseURL: healthcareBase,
-          headers: { 'Authorization': `Bearer ${this.STEDI_API_KEY}` },
-          timeout: 10000
-        });
+        const healthClient = this.getHealthcareClient();
         const paths = this.getStediClaimApiPaths();
-        const res = await healthClient.get(
-          paths.status(claim.x12_claim_id)
-        ).catch(() => null);
+        const res = await healthClient.get(paths.status(claim.x12_claim_id)).catch(() => null);
         if (res?.data?.status) {
           const statusMap = { SUCCESS: 'approved', accepted: 'approved', rejected: 'denied', pending: 'processing' };
-          return { status: statusMap[res.data.status] || res.data.status };
+          const paymentAmount = res.data.paymentAmount ?? res.data.paidAmount ?? null;
+          return {
+            status: statusMap[res.data.status] || res.data.status,
+            paymentAmount,
+            statusSource: 'stedi_healthcare'
+          };
         }
       } catch (e) {
         console.warn('⚠️  Stedi status check failed:', e.message);
@@ -925,7 +1333,8 @@ class InsuranceService {
       status: newStatus,
       paymentAmount: newStatus === 'paid' ? (claim.total_amount - claim.copay_amount) : null,
       paymentDate: newStatus === 'paid' ? new Date().toISOString() : null,
-      message: `Claim ${newStatus}`
+      message: `Claim ${newStatus}`,
+      statusSource: 'simulation'
     };
   }
 

@@ -90,6 +90,21 @@ const publicCatalogReadLimiter = rateLimit({
   skip: shouldSkipInternalJob
 });
 
+const publicDiagnosticsMax = parseInt(process.env.PUBLIC_DIAGNOSTICS_RATE_MAX || (isDev ? '2000' : '300'), 10);
+const publicDiagnosticsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number.isFinite(publicDiagnosticsMax) && publicDiagnosticsMax > 0 ? publicDiagnosticsMax : 300,
+  message: {
+    error: 'Too many diagnostic requests from this IP, please try again shortly.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator,
+  validate: { trustProxy: false, ip: false },
+  skip: shouldSkipInternalJob
+});
+
 const publicCommerceMax = parseInt(
   process.env.PUBLIC_COMMERCE_RATE_MAX || (isDev ? '4000' : '400'),
   10
@@ -254,6 +269,7 @@ const chatLimiter = rateLimit({
 module.exports = {
   apiLimiter,
   publicCatalogReadLimiter,
+  publicDiagnosticsLimiter,
   publicCommerceLimiter,
   isPublicCatalogRead,
   isPublicCommercePath,

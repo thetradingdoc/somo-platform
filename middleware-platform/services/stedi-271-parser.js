@@ -15,6 +15,8 @@ const DEFAULTS = {
   oopMax: null,
   oopMet: null,
   planSummary: null,
+  priorAuthIndicator: null, // 'Y' | 'N' | 'U' | null
+  priorAuthNotes: [],
   message: null,
   rawParsed: null
 };
@@ -33,6 +35,10 @@ function parse271Response(stediResponse) {
 
   // Unwrap axios-style response (response.data may be the payload)
   const payload = stediResponse.data || stediResponse;
+
+  if (Array.isArray(payload.benefitsInformation) && payload.benefitsInformation.length > 0) {
+    return parseFromBenefitsInformation(payload);
+  }
 
   // Direct format (Stedi Sandbox docs)
   if (hasDirectEligibilityFields(payload)) {
@@ -84,6 +90,8 @@ function normalizeFromDirect(obj) {
   const oopMax = parseAmount(obj.oopMax ?? obj.oop_max ?? obj.outOfPocketMax ?? obj.out_of_pocket_max);
   const oopMet = parseAmount(obj.oopMet ?? obj.oop_met ?? obj.outOfPocketMet ?? obj.out_of_pocket_met);
 
+  const pa = extractPriorAuth(obj.benefitsInformation);
+
   return {
     eligible: Boolean(obj.eligible ?? obj.isEligible ?? true),
     copay,
@@ -95,6 +103,8 @@ function normalizeFromDirect(obj) {
     oopMax: oopMax ?? null,
     oopMet: oopMet ?? 0,
     planSummary: obj.planSummary ?? obj.plan_summary ?? obj.summary ?? null,
+    priorAuthIndicator: pa.indicator,
+    priorAuthNotes: pa.notes,
     message: obj.message ?? obj.status_message ?? null,
     rawParsed: obj
   };
@@ -136,6 +146,104 @@ function parseFromSegments(segments) {
 }
 
 /**
+ * Parse Stedi Healthcare eligibility v3 `benefitsInformation[]` array.
+ */
+function parseFromBenefitsInformation(payload) {
+  const benefits = payload.benefitsInformation || [];
+  const pa = extractPriorAuth(benefits);
+  let copay = 0;
+  let allowedAmount = 0;
+  let insurancePays = 0;
+  let deductibleTotal = null;
+  let deductibleRemaining = null;
+  let coinsurancePercent = null;
+
+  for (const item of benefits) {
+    if (!item || typeof item !== 'object') continue;
+    const amt = parseAmount(
+      item.benefitAmount ??
+        item.amount ??
+        item.patientResponsibilityAmount ??
+        item.monetaryAmount
+    );
+    const code = String(item.code || item.name || item.serviceTypeCode || '').toLowerCase();
+    if (code.includes('copay') || item.coverageLevelCode === 'B') {
+      if (amt != null) copay = amt;
+    }
+    if (code.includes('deductible')) {
+      if (amt != null) {
+        deductibleTotal = amt;
+        deductibleRemaining = parseAmount(item.remainingAmount) ?? amt;
+      }
+    }
+    if (code.includes('coinsurance') && item.percent != null) {
+      coinsurancePercent = parseAmount(item.percent);
+    }
+    if (amt != null && !code.includes('copay') && !code.includes('deductible')) {
+      allowedAmount = Math.max(allowedAmount, amt);
+    }
+  }
+
+  insurancePays = allowedAmount > copay ? allowedAmount - copay : 0;
+  const planStatus = payload.planStatus || payload.subscriber?.planStatus;
+  const eligible =
+    planStatus === 'active' ||
+    planStatus === '1' ||
+    benefits.length > 0 ||
+    allowedAmount > 0 ||
+    copay > 0;
+
+  return {
+    eligible,
+    copay,
+    allowedAmount,
+    insurancePays,
+    deductibleTotal,
+    deductibleRemaining,
+    coinsurancePercent,
+    oopMax: null,
+    oopMet: 0,
+    planSummary: payload.planSummary || null,
+    priorAuthIndicator: pa.indicator,
+    priorAuthNotes: pa.notes,
+    message: eligible ? `Eligible - Copay $${copay}` : 'Benefits returned — review plan status',
+    rawParsed: payload
+  };
+}
+
+function extractPriorAuth(benefitsInformation) {
+  const notes = [];
+  if (!Array.isArray(benefitsInformation)) return { indicator: null, notes };
+
+  let sawY = false;
+  let sawU = false;
+  let sawN = false;
+
+  for (const item of benefitsInformation) {
+    if (!item || typeof item !== 'object') continue;
+
+    const ind = (item.authOrCertIndicator ?? item.auth_or_cert_indicator ?? '').toString().trim().toUpperCase();
+    if (ind === 'Y') sawY = true;
+    else if (ind === 'U') sawU = true;
+    else if (ind === 'N') sawN = true;
+
+    const additional = Array.isArray(item.additionalInformation) ? item.additionalInformation : [];
+    for (const a of additional) {
+      const desc = (a && typeof a === 'object' ? a.description : a) ?? null;
+      if (!desc) continue;
+      const s = String(desc).trim();
+      if (!s) continue;
+      if (/(prior\s*auth|pre\s*auth|precert|certification\s*required)/i.test(s)) {
+        notes.push(s);
+      }
+    }
+  }
+
+  const indicator = sawY ? 'Y' : (sawU ? 'U' : (sawN ? 'N' : null));
+  return { indicator, notes: Array.from(new Set(notes)).slice(0, 10) };
+}
+
+/**
  * Check if parsed result has meaningful data (not just defaults)
  */
 function hasMeaningfulData(parsed) {
@@ -143,7 +251,8 @@ function hasMeaningfulData(parsed) {
     parsed.eligible === true ||
     (parsed.copay != null && parsed.copay > 0) ||
     (parsed.allowedAmount != null && parsed.allowedAmount > 0) ||
-    (parsed.insurancePays != null && parsed.insurancePays > 0)
+    (parsed.insurancePays != null && parsed.insurancePays > 0) ||
+    (Array.isArray(parsed.rawParsed?.benefitsInformation) && parsed.rawParsed.benefitsInformation.length > 0)
   );
 }
 

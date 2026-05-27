@@ -1593,8 +1593,10 @@ Appointment ID: ${appointment.id}
     ];
 
     for (const appt of combinedEvents) {
-      // Skip cancelled appointments
-      if (appt.status === 'cancelled') continue;
+      // Skip appointments that should not block scheduling.
+      // `no_show` should free up the slot for future bookings.
+      const apptStatus = (appt.status || '').toString().trim().toLowerCase();
+      if (apptStatus === 'cancelled' || apptStatus === 'canceled' || apptStatus === 'no_show') continue;
 
       const apptStart = new Date(appt.start_time);
       const apptEnd = new Date(appt.end_time);

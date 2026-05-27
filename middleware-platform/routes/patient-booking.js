@@ -1101,6 +1101,12 @@ app.get('/api/patient/benefits', apiLimiter, async (req, res) => {
           : 0,
         coinsurance_percent: latestEligibility.coinsurance_percent || 0,
         plan_summary: latestEligibility.plan_summary || 'Plan details available',
+        prior_auth_indicator: latestEligibility.prior_auth_indicator || null,
+        prior_auth_notes: latestEligibility.prior_auth_notes
+          ? (typeof latestEligibility.prior_auth_notes === 'string'
+            ? (() => { try { return JSON.parse(latestEligibility.prior_auth_notes); } catch (_) { return []; } })()
+            : latestEligibility.prior_auth_notes)
+          : [],
         service_code: latestEligibility.service_code,
         date_of_service: latestEligibility.date_of_service,
         created_at: latestEligibility.created_at,

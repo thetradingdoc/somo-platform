@@ -120,7 +120,7 @@ function checkDisk() {
  * Check Stedi API reachability (2s timeout)
  */
 async function checkStedi() {
-  const base = process.env.STEDI_API_BASE || 'https://api.stedi.com';
+  const base = process.env.STEDI_API_BASE || 'https://core.us.stedi.com';
   const key = process.env.STEDI_API_KEY;
   if (!key) return { status: 'not_configured', latencyMs: null };
   const start = Date.now();

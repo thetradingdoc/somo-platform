@@ -1127,6 +1127,15 @@ function blockChatWhenDisabled(req, res, next) {
   });
 }
 
+function safeParseJsonArray(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 function isIsoDateOnly(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 }
@@ -1806,6 +1815,30 @@ const {
   voiceLimiter,
   scheduleCheckoutLimiter
 } = require('./middleware/rate-limiter');
+
+// OTP abuse protection (must be defined before patient portal route registration)
+const otpKey = (req) => {
+  const ip = (req.ip || req.connection?.remoteAddress || 'unknown').toString();
+  const email = (req.body?.email || '').toString().toLowerCase().trim();
+  return `${ip}::${email || 'no-email'}`;
+};
+const otpSendLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: otpKey,
+  message: { success: false, error: 'Too many verification code requests. Please try again later.' }
+});
+const otpConfirmLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: otpKey,
+  message: { success: false, error: 'Too many verification attempts. Please try again later.' }
+});
+
 const {
   registerCustomerCatalogRoutes,
   tryEnrichCustomStep3Products,
@@ -1998,6 +2031,18 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging (console)
 app.use(requestLogger);
+
+// #region agent log
+app.use((req, res, next) => {
+  const t0 = Date.now();
+  const pathLog = (req.originalUrl || req.url || '/').split('?')[0];
+  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:req-timing', message: 'req-start', data: { method: req.method, path: pathLog }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {});
+  res.on('finish', () => {
+    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:req-timing', message: 'req-finish', data: { method: req.method, path: pathLog, status: res.statusCode, ms: Date.now() - t0 }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {});
+  });
+  next();
+});
+// #endregion
 
 // Enhanced usage logging (database) - for API endpoints and /public/* catalog aliases (normalized to /api/public/* in logs)
 app.use('/api/', usageLogger);
@@ -2235,12 +2280,27 @@ function trySendCanonicalLanding(res) {
   const fs = require('fs');
   const landingBuild = getLittleLabBuildPath('index.html');
   if (fs.existsSync(landingBuild)) {
-    res.sendFile(landingBuild);
+    // #region agent log
+    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:trySendCanonicalLanding', message: 'landing-readFile-start', data: { file: 'build' }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {});
+    // #endregion
+    fs.readFile(landingBuild, (err, buf) => {
+      if (err) {
+        res.status(500).send('Landing unavailable');
+        return;
+      }
+      res.type('html').send(buf);
+    });
     return true;
   }
   const sourceLandingPath = getUnifiedDashboardPath('littlelab-landing', 'public', 'index.html');
   if (fs.existsSync(sourceLandingPath)) {
-    res.sendFile(sourceLandingPath);
+    fs.readFile(sourceLandingPath, (err, buf) => {
+      if (err) {
+        res.status(500).send('Landing unavailable');
+        return;
+      }
+      res.type('html').send(buf);
+    });
     return true;
   }
   return false;
@@ -2276,6 +2336,9 @@ function isLocalDevRootHost(hostname) {
 
 // Root endpoint - route based on domain
 app.get('/', (req, res) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:GET/', message: 'root-handler-entry', data: { host: getHostname(req), devLight: process.env.DEV_LIGHT_START === '1' }, timestamp: Date.now(), hypothesisId: 'H3' }) }).catch(() => {});
+  // #endregion
   const hostname = getHostname(req);
   const subdomain = getSubdomain(hostname);
 
@@ -2307,8 +2370,11 @@ app.get('/', (req, res) => {
     // Subdomain not found - fall through to default routing
   }
 
-  // Local / dev — single care-program entry on :4000 (override with LOCAL_DEV_ROOT=stub)
+  // Local / dev — single care-program entry on :4000 (override with LOCAL_DEV_ROOT=stub|login)
   if (isLocalDevRootHost(hostname)) {
+    if (process.env.LOCAL_DEV_ROOT === 'login') {
+      return res.redirect(302, '/login');
+    }
     if (process.env.LOCAL_DEV_ROOT === 'stub') {
       sendLittleLabOrApiRunningStub(res);
       return;
@@ -2500,6 +2566,11 @@ app.get('/invite/:code', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
+  // #region agent log
+  const __dlLoginStart = Date.now();
+  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:entry',message:'/login handler entry',data:{host:String(req.headers.host||''),path:String(req.path||''),hasOrigin:!!req.headers.origin},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion agent log
+
   const hostname = getHostname(req);
   const subdomain = getSubdomain(hostname);
 
@@ -2522,7 +2593,22 @@ app.get('/login', (req, res) => {
     const loginPath = getUnifiedDashboardPath('login.html');
     const fs = require('fs');
     if (fs.existsSync(loginPath)) {
-      return res.sendFile(loginPath);
+      // #region agent log
+      fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:localhost:exists',message:'login.html exists; starting fs.readFile',data:{elapsed_ms:Number(Date.now()-__dlLoginStart)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion agent log
+      return fs.readFile(loginPath, (readErr, buf) => {
+        if (readErr) {
+          console.error('[LOGIN ROUTE] readFile failed:', readErr.message);
+          // #region agent log
+          fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:localhost:readFile:error',message:'fs.readFile failed',data:{elapsed_ms:Number(Date.now()-__dlLoginStart)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion agent log
+          return res.status(500).send('Login page unavailable');
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H2',location:'server.js:/login:localhost:readFile:ok',message:'fs.readFile ok; sending response',data:{elapsed_ms:Number(Date.now()-__dlLoginStart),bytes:Number(buf?buf.length:0)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion agent log
+        res.type('html').send(buf);
+      });
     }
   }
 
@@ -2870,6 +2956,7 @@ const { registerPatientAuthRoutes } = require('./routes/patient-auth');
 const { registerPatientDocumentsRoutes } = require('./routes/patient-documents');
 const { registerPatientWalletRoutes } = require('./routes/patient-wallet');
 const { registerPatientInsuranceRoutes } = require('./routes/patient-insurance');
+const { registerPriorAuthRoutes } = require('./routes/prior-auth');
 const { FALLBACK_CLINIC_ID, resolveClinicIdFromRequest } = require('./lib/resolve-clinic-id');
 
 const patientRouteDeps = {
@@ -2908,33 +2995,15 @@ const patientRouteDeps = {
   parseBooleanFlag,
   withIdempotency,
   assertPatientOwnsAppointmentOrThrow,
-  validatePatientAvailableSlotsQuery,
-  validatePatientBookingScheduleBody,
-  validatePatientTriageBody,
   requireCsrfForCookieAuth,
-  auditBookingEvent,
   rotatePatientSessionIfNeeded,
   resolveClinicIdFromRequest,
   FALLBACK_CLINIC_ID,
   botGuard,
   authLimiter,
-  otpSendLimiter,
-  otpConfirmLimiter,
   listCatalogFromIndex,
   parseProductRef,
 };
-registerPatientRoutineRoutes(app, patientRouteDeps);
-registerPatientShelfRoutes(app, patientRouteDeps);
-registerPatientProductsRoutes(app, patientRouteDeps);
-registerPatientBillingPortalRoutes(app, patientRouteDeps);
-registerPatientBookingRoutes(app, patientRouteDeps);
-registerPublicLandingAssistantRoutes(app, {
-  apiLimiter,
-  express,
-  validatePatientTriageBody,
-  db,
-  upsertCustomerProductScan,
-});
 registerPublicProductScanRoutes(app, { apiLimiter });
 registerPatientCheckoutChatRoutes(app, {
   apiLimiter,
@@ -6239,6 +6308,56 @@ app.post('/api/claims/create-from-pdf', async (req, res) => {
 });
 
 /**
+ * List claims for a patient or appointment (provider portal helper).
+ * GET /api/claims?patient_id=<FHIR Patient resource_id>
+ * GET /api/claims?appointment_id=<appointment_id>
+ */
+app.get('/api/claims', async (req, res) => {
+  try {
+    const patientId = req.query.patient_id || req.query.patientId || null;
+    const appointmentId = req.query.appointment_id || req.query.appointmentId || null;
+
+    if (!patientId && !appointmentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Provide either patient_id or appointment_id'
+      });
+    }
+
+    let claims = [];
+    if (appointmentId) {
+      claims = db.getClaimsByAppointment?.(appointmentId) || [];
+    } else {
+      claims = db.getClaimsByPatient?.(patientId) || [];
+    }
+
+    const claimsOut = (claims || []).map(c => ({
+      id: c.id,
+      appointment_id: c.appointment_id || null,
+      patient_id: c.patient_id || patientId || null,
+      status: c.status || null,
+      submitted_at: c.submitted_at || null,
+      payer_id: c.payer_id || null,
+      member_id: c.member_id || null,
+      total_amount: c.total_amount || 0,
+      copay_amount: c.copay_amount || 0,
+      insurance_amount: c.insurance_amount || 0
+    }));
+
+    const latestClaimId = claimsOut[0]?.id || null;
+    res.json({
+      success: true,
+      latest_claim_id: latestClaimId,
+      claims: claimsOut,
+      count: claimsOut.length
+    });
+  } catch (error) {
+    console.error('❌ Error listing claims:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Get claim by ID with real Stedi data and EOB calculations
  * GET /api/claims/:id
  */
@@ -6660,21 +6779,6 @@ app.get('/api/circle/accounts/:entityType/:entityId', async (req, res) => {
 // Telemedicine Phase 3 — POST /api/patient/send-upload-link (upload link email)
 const { sendUploadLinkHandler } = require('./routes/patient-upload-link');
 
-const patientPortalDeps = {
-  ...patientRouteDeps,
-  requireAdminAuth,
-  sendUploadLinkHandler,
-  botGuard,
-  authLimiter,
-  otpSendLimiter,
-  otpConfirmLimiter,
-};
-registerPatientProfileRoutes(app, patientPortalDeps);
-registerPatientAuthRoutes(app, patientPortalDeps);
-registerPatientDocumentsRoutes(app, patientPortalDeps);
-registerPatientWalletRoutes(app, patientPortalDeps);
-registerPatientInsuranceRoutes(app, patientPortalDeps);
-
 // Telemedicine Phase 4 — Patient upload portal (Tasks 25–33). Router: GET /upload, POST /upload
 const uploadPortalRouter = require('./routes/upload-portal');
 app.use('/', uploadPortalRouter);           // GET /upload?token=...
@@ -6824,6 +6928,39 @@ app.use('/api', diagnosticReportRoutes);
 
 
 /**
+ * Refresh a claim's status by querying the payer via STEDI (276/277).
+ * POST /api/claims/:claimId/refresh-status
+ */
+app.post('/api/claims/:claimId/refresh-status', async (req, res) => {
+  try {
+    const { claimId } = req.params;
+    const claim = db.getClaimById(claimId);
+    if (!claim) {
+      return res.status(404).json({ success: false, error: 'Claim not found' });
+    }
+
+    const result = await InsuranceService.checkClaimStatus(claimId);
+    if (!result?.success) {
+      return res.status(400).json({ success: false, error: result?.error || 'Failed to refresh claim status' });
+    }
+
+    const updatedClaim = db.getClaimById(claimId);
+    res.json({
+      success: true,
+      claimId,
+      status: result.status,
+      paymentAmount: result.paymentAmount,
+      paymentDate: result.paymentDate,
+      message: result.message,
+      claim: updatedClaim
+    });
+  } catch (error) {
+    console.error('❌ Error refreshing claim status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * Submit claim for payment (Provider submits claim to Insurer)
  * POST /api/claims/:claimId/submit-payment
  */
@@ -6840,28 +6977,59 @@ app.post('/api/claims/:claimId/submit-payment', async (req, res) => {
     }
 
     // Check if claim is already submitted or approved
-    if (claim.status === 'submitted' || claim.status === 'approved' || claim.status === 'paid') {
-      return res.status(400).json({
-        success: false,
-        error: `Claim is already ${claim.status}. Cannot submit again.`
+    const currentStatus = (claim.status || '').toString().trim().toLowerCase();
+    if (['submitted', 'approved', 'paid'].includes(currentStatus)) {
+      let parsed = {};
+      try {
+        if (claim.response_data) {
+          parsed = typeof claim.response_data === 'string' ? JSON.parse(claim.response_data) : claim.response_data;
+        }
+      } catch (_) {}
+      return res.json({
+        success: true,
+        claimId: claimId,
+        message: `Claim is already ${claim.status}; no-op.`,
+        status: claim.status || currentStatus,
+        x12ClaimId: claim.x12_claim_id || parsed.claimId || null,
+        stediTranslateOk: parsed.stedi_translate_ok ?? null,
+        healthcareSubmitted: parsed.healthcare_submitted ?? null,
+        stediFallback: Boolean(parsed.stediFallback ?? parsed.stedi_fallback ?? false),
+        manualReview: Boolean(parsed.stediFallback ?? parsed.stedi_fallback ?? false),
+        eligibilityReverified: false,
+        eligibilityWarning: null,
+        idempotent: true
       });
     }
 
-    // Update claim status to submitted (no wallet required)
-    db.updateInsuranceClaim(claimId, {
-      status: 'submitted',
-      payment_status: 'pending',
-      submitted_at: new Date().toISOString()
-    });
-
-    console.log(`✅ Claim ${claimId} submitted for payment approval`);
-
-    res.json({
-      success: true,
-      claimId: claimId,
-      message: 'Claim submitted for payment approval',
-      status: 'submitted'
-    });
+    const InsuranceService = require('./services/insurance-service');
+    try {
+      const result = await InsuranceService.submitExistingClaim(claimId);
+      return res.json({
+        success: true,
+        claimId: claimId,
+        message: result.healthcareSubmitted
+          ? 'Claim submitted to Stedi clearinghouse.'
+          : 'Claim marked submitted; manual Stedi review may be required.',
+        status: 'submitted',
+        x12ClaimId: result.x12ClaimId || null,
+        stediTranslateOk: result.stediTranslateOk,
+        healthcareSubmitted: result.healthcareSubmitted,
+        stediFallback: result.stediFallback,
+        manualReview: result.manualReview,
+        eligibilityReverified: result.eligibilityReverified,
+        eligibilityWarning: result.eligibilityWarning || null,
+        stedi: result
+      });
+    } catch (e) {
+      if (e && e.code === 'PRIOR_AUTH_REQUIRED') {
+        return res.status(409).json({
+          success: false,
+          error: e.message,
+          code: e.code
+        });
+      }
+      throw e;
+    }
   } catch (error) {
     console.error('❌ Error submitting claim for payment:', error);
     res.status(500).json({
@@ -8310,29 +8478,6 @@ app.get('/api/provider/diagnostic-report/:appointmentId', async (req, res) => {
 // PATIENT PORTAL ENDPOINTS
 // ============================================
 
-// OTP abuse protection beyond IP-only limits (mvp-36)
-const otpKey = (req) => {
-  const ip = (req.ip || req.connection?.remoteAddress || 'unknown').toString();
-  const email = (req.body?.email || '').toString().toLowerCase().trim();
-  return `${ip}::${email || 'no-email'}`;
-};
-const otpSendLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: otpKey,
-  message: { success: false, error: 'Too many verification code requests. Please try again later.' }
-});
-const otpConfirmLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: otpKey,
-  message: { success: false, error: 'Too many verification attempts. Please try again later.' }
-});
-
 // Patient: Send verification code
 
 
@@ -8460,6 +8605,44 @@ function auditBookingEvent(req, action, resourceType, resourceId, result = 'succ
   } catch (_) {}
 }
 
+Object.assign(patientRouteDeps, {
+  validatePatientAvailableSlotsQuery,
+  validatePatientBookingScheduleBody,
+  validatePatientTriageBody,
+  auditBookingEvent,
+  otpSendLimiter,
+  otpConfirmLimiter,
+});
+registerPatientRoutineRoutes(app, patientRouteDeps);
+registerPatientShelfRoutes(app, patientRouteDeps);
+registerPatientProductsRoutes(app, patientRouteDeps);
+registerPatientBillingPortalRoutes(app, patientRouteDeps);
+registerPatientBookingRoutes(app, patientRouteDeps);
+registerPublicLandingAssistantRoutes(app, {
+  apiLimiter,
+  express,
+  validatePatientTriageBody,
+  db,
+  upsertCustomerProductScan,
+  antiSybilGuard,
+  requireAdminAuth,
+});
+
+const patientPortalDeps = {
+  ...patientRouteDeps,
+  requireAdminAuth,
+  sendUploadLinkHandler,
+  botGuard,
+  authLimiter,
+  otpSendLimiter,
+  otpConfirmLimiter,
+};
+registerPatientProfileRoutes(app, patientPortalDeps);
+registerPatientAuthRoutes(app, patientPortalDeps);
+registerPatientDocumentsRoutes(app, patientPortalDeps);
+registerPatientWalletRoutes(app, patientPortalDeps);
+registerPatientInsuranceRoutes(app, patientPortalDeps);
+registerPriorAuthRoutes(app, { apiLimiter, express, db });
 
 // GET /api/patient/triage/history — Fetch conversation history for resume (orch-5)
 
@@ -10273,8 +10456,11 @@ function assertProdPayorReadinessOrExit() {
 
 assertProdPayorReadinessOrExit();
 bootLog(`calling app.listen host=${HOST} port=${PORT}`);
-const server = app.listen(PORT, HOST, () => {
+function onServerListening() {
   bootLog('app.listen callback reached');
+  // #region agent log
+  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H1',location:'server.js:onServerListening',message:'server listening callback',data:{devLight:process.env.DEV_LIGHT_START==='1',skipMigrations:process.env.SKIP_STARTUP_MIGRATIONS==='1'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion agent log
   if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod') {
     console.log('[face-read] Auto-starting teamkelly inference (FACE_READ_AUTO_START=0 to disable)...');
     const { ensureFaceReadInference } = require('./scripts/ensure-face-read-inference.cjs');
@@ -10286,22 +10472,32 @@ const server = app.listen(PORT, HOST, () => {
   console.log('🚀 MIDDLEWARE PLATFORM - PRODUCTION READY');
   console.log('='.repeat(60));
   console.log(`\n📍 Server running on: http://${HOST}:${PORT}`);
-  // Cache warming (Section 24)
+  console.log('✅ Ready to accept requests (background startup tasks may still be running)\n');
+
+  if (process.env.DEV_LIGHT_START === '1') {
+    console.log('ℹ️  DEV_LIGHT_START=1 — skipping post-listen background workers (local dev only)\n');
+    return;
+  }
+
+  // Defer heavy sync work so HTTP handlers are not blocked during long listen-callback work.
+  setImmediate(() => {
   try {
-    _runCheckoutPreparedBackfillOnce();
-  } catch (_) {}
-  try {
-    _runCheckoutContextBackfillOnce();
-  } catch (_) {}
-  try {
-    _runCheckoutStaleInFlightRecoveryOnce();
-    setInterval(_runCheckoutStaleInFlightRecoveryOnce, 60 * 1000);
+    const checkoutSvc = require('./services/patient-checkout-chat-service');
+    if (typeof checkoutSvc._runCheckoutPreparedBackfillOnce === 'function') {
+      checkoutSvc._runCheckoutPreparedBackfillOnce().catch(() => {});
+    }
+    if (typeof checkoutSvc._runCheckoutContextBackfillOnce === 'function') {
+      checkoutSvc._runCheckoutContextBackfillOnce().catch(() => {});
+    }
+    if (typeof checkoutSvc._runCheckoutStaleInFlightRecoveryOnce === 'function') {
+      checkoutSvc._runCheckoutStaleInFlightRecoveryOnce();
+      setInterval(() => checkoutSvc._runCheckoutStaleInFlightRecoveryOnce(), 60 * 1000);
+    }
   } catch (_) {}
   try {
     const cacheService = require('./services/cache-service');
     if (typeof cacheService.warm === 'function') cacheService.warm();
   } catch (e) { console.warn('⚠️  Cache warm skipped:', e.message); }
-  // gap16: SpecialistResolver cache cleanup on startup + every 60 min
   try {
     const SpecialistResolverService = require('./services/specialist-resolver-service');
     if (SpecialistResolverService.cleanupCache) {
@@ -10309,6 +10505,8 @@ const server = app.listen(PORT, HOST, () => {
       setInterval(() => SpecialistResolverService.cleanupCache(), 60 * 60 * 1000);
     }
   } catch (e) { console.warn('⚠️  Resolver cache cleanup skipped:', e.message); }
+  });
+
   console.log('\n📊 Available Endpoints:');
   console.log('\n📞 Voice (Custom Telephony with SIP):');
   console.log(`   POST   http://localhost:${PORT}/voice/incoming`);
@@ -10470,8 +10668,13 @@ const server = app.listen(PORT, HOST, () => {
 
   // Start EHR sync service (with error handling)
   try {
-    EHRSyncService.start();
-    EhrSyncJobWorker.start();
+    const ehrSyncEnabled = process.env.EHR_SYNC_ENABLED !== '0';
+    if (ehrSyncEnabled) {
+      EHRSyncService.start();
+      EhrSyncJobWorker.start();
+    } else {
+      console.log('ℹ️  EHR sync disabled (EHR_SYNC_ENABLED=0)');
+    }
   } catch (error) {
     console.error('⚠️  Failed to start EHR sync service:', error.message);
     console.log('   EHR sync will be disabled, but server will continue');
@@ -10775,6 +10978,11 @@ const server = app.listen(PORT, HOST, () => {
   console.log('   ✅ SIP Endpoint: sip:{call_id}@5t4n6j0wnrl.sip.livekit.cloud');
   console.log('   ✅ Retell LLM WebSocket: ws://localhost:' + PORT + '/webhook/retell/llm');
   console.log('\n' + '='.repeat(60) + '\n');
+}
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`\n📍 HTTP listening on http://localhost:${PORT}`);
+  setImmediate(onServerListening);
 });
 
 // Handle WebSocket upgrades for Retell LLM

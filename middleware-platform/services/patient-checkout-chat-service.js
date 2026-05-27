@@ -1254,4 +1254,7 @@ module.exports = {
   _getCheckoutStage,
   buildStageContract,
   _isMidFlightCheckout,
+  _runCheckoutPreparedBackfillOnce,
+  _runCheckoutContextBackfillOnce,
+  _runCheckoutStaleInFlightRecoveryOnce,
 };

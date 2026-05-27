@@ -1,0 +1,10 @@
+{
+  "base": "http://127.0.0.1:4000",
+  "login": {
+    "email": "provider@doclittle.com",
+    "ok": false
+  },
+  "sidebarFromToday": null,
+  "pages": [],
+  "fatal": "apiRequestContext.post: Timeout 30000ms exceeded.\nCall log:\n  - → POST http://127.0.0.1:4000/api/customers/login\n    - user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\n    - accept: */*\n    - accept-encoding: gzip,deflate,br\n    - content-type: application/json\n    - content-length: 75\n"
+}

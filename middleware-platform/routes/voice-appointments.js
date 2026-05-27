@@ -1461,6 +1461,112 @@ app.post('/voice/appointments/cancel', async (req, res) => {
   }
 });
 
+app.post('/voice/appointments/check-in', async (req, res) => {
+  try {
+    console.log('\n✅ VOICE: Appointment Check-In');
+    safeLogRequestBody('Request body:', req);
+
+    const args = req.body.args || req.body;
+    const appointmentId = args.appointment_id || args.confirmation_number || args.id;
+    const clinicId = resolveClinicIdFromRequest(req, args) || args.clinic_id || args.clinicId;
+    if (!appointmentId) {
+      return res.status(400).json({ success: false, error: 'appointment_id is required' });
+    }
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    }
+
+    const actionRaw = (args.action || args.state || args.checkin_status || args.status || 'arrived').toString().trim().toLowerCase();
+    const checkinState =
+      actionRaw === 'arrived' ? 'arrived' :
+        actionRaw === 'in_room' || actionRaw === 'in-room' || actionRaw === 'inroom' ? 'in_room' :
+          'arrived';
+
+    const checkinNotes = args.notes || args.checkin_notes || args.checkinNotes || null;
+
+    const appointment = await db.getAppointment(appointmentId, clinicId);
+    if (!appointment) {
+      return res.status(404).json({ success: false, error: 'Appointment not found' });
+    }
+
+    const scopedClinicId = appointment.clinic_id || clinicId || null;
+    const nowIso = new Date().toISOString();
+
+    if ((appointment.status || '').toString().trim().toLowerCase() !== checkinState) {
+      db.updateAppointmentStatus(appointmentId, checkinState, null, scopedClinicId);
+    }
+
+    const updates = {};
+    if (checkinState === 'arrived' && !appointment.arrived_at) updates.arrived_at = nowIso;
+    if (checkinState === 'in_room' && !appointment.in_room_at) updates.in_room_at = nowIso;
+    if (checkinNotes) updates.checkin_notes = checkinNotes;
+
+    if (Object.keys(updates).length > 0) {
+      db.updateAppointment(appointmentId, updates, scopedClinicId);
+    }
+
+    const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
+    res.json({
+      success: true,
+      message: 'Appointment check-in recorded',
+      appointment: updatedAppointment
+    });
+  } catch (error) {
+    console.error('❌ Error recording appointment check-in:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/voice/appointments/mark-no-show', async (req, res) => {
+  try {
+    console.log('\n🚫 VOICE: Mark No-Show');
+    safeLogRequestBody('Request body:', req);
+
+    const args = req.body.args || req.body;
+    const appointmentId = args.appointment_id || args.confirmation_number || args.id;
+    const clinicId = resolveClinicIdFromRequest(req, args) || args.clinic_id || args.clinicId;
+    if (!appointmentId) {
+      return res.status(400).json({ success: false, error: 'appointment_id is required' });
+    }
+    if (!clinicId) {
+      return res.status(400).json({ success: false, error: 'clinic_id is required' });
+    }
+
+    const reason = args.reason || args.no_show_reason || args.noShowReason || null;
+    const checkinNotes = args.notes || args.checkin_notes || args.checkinNotes || null;
+
+    const appointment = await db.getAppointment(appointmentId, clinicId);
+    if (!appointment) {
+      return res.status(404).json({ success: false, error: 'Appointment not found' });
+    }
+
+    const scopedClinicId = appointment.clinic_id || clinicId || null;
+    const nowIso = new Date().toISOString();
+
+    if ((appointment.status || '').toString().trim().toLowerCase() !== 'no_show') {
+      db.updateAppointmentStatus(appointmentId, 'no_show', reason, scopedClinicId);
+    }
+
+    const updates = {};
+    if (!appointment.no_show_at) updates.no_show_at = nowIso;
+    if (checkinNotes) updates.checkin_notes = checkinNotes;
+
+    if (Object.keys(updates).length > 0) {
+      db.updateAppointment(appointmentId, updates, scopedClinicId);
+    }
+
+    const updatedAppointment = await db.getAppointment(appointmentId, scopedClinicId);
+    res.json({
+      success: true,
+      message: 'No-show recorded',
+      appointment: updatedAppointment
+    });
+  } catch (error) {
+    console.error('❌ Error marking no-show:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post('/voice/appointments/available-slots', async (req, res) => {
   try {
     const args = req.body.args || req.body;

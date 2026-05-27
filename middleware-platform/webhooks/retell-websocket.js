@@ -1516,7 +1516,8 @@ class RetellWebSocketHandler {
                 cpt: cptList.map(c => ({
                     code: c.code,
                     description: c.description,
-                    patient_friendly: simplifyForPatient(c.description)
+                    patient_friendly: simplifyForPatient(c.description),
+                    requires_prior_auth: Boolean(c.requires_prior_auth)
                 })),
                 validated_pairs: validatedPairs,
                 needs_review: hasLowConfidence

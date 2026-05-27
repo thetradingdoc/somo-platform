@@ -22,4 +22,8 @@ describe('InsuranceService Stedi claim mode', () => {
     expect(InsuranceService.getStediClaimSubmissionMode()).toBe('professional');
     expect(InsuranceService.getStediClaimApiPaths().submit).toContain('professionalclaims');
   });
+
+  test('STEDI_API_BASE does not use legacy api.stedi.com host', () => {
+    expect(String(InsuranceService.STEDI_API_BASE)).not.toContain('api.stedi.com');
+  });
 });

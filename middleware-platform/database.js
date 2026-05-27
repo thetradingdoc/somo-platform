@@ -209,8 +209,11 @@ function canTransitionAppointmentStatus(current, next) {
   const allowed = {
     pending: ['scheduled', 'confirmed', 'canceled'],
     pending_payment: ['scheduled', 'confirmed', 'canceled'],
-    scheduled: ['confirmed', 'canceled', 'completed'],
-    confirmed: ['completed', 'canceled'],
+    scheduled: ['confirmed', 'canceled', 'completed', 'arrived', 'in_room', 'no_show'],
+    confirmed: ['completed', 'canceled', 'arrived', 'in_room', 'no_show'],
+    arrived: ['in_room', 'completed', 'canceled', 'no_show'],
+    in_room: ['completed', 'canceled', 'no_show'],
+    no_show: ['completed'],
     completed: ['documented'],
     documented: [],
     canceled: []
@@ -1446,12 +1449,18 @@ try {
     const needPlan = !info.some(c => c.name === 'plan_summary');
     const needOopMax = !info.some(c => c.name === 'oop_max');
     const needOopMet = !info.some(c => c.name === 'oop_met');
+    const needPaIndicator = !info.some(c => c.name === 'prior_auth_indicator');
+    const needPaNotes = !info.some(c => c.name === 'prior_auth_notes');
+    const needPaSource = !info.some(c => c.name === 'prior_auth_source');
     if (needDeductTotal) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN deductible_total REAL;`);
     if (needDeductRemain) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN deductible_remaining REAL;`);
     if (needCoins) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN coinsurance_percent REAL;`);
     if (needPlan) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN plan_summary TEXT;`);
     if (needOopMax) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN oop_max REAL;`);
     if (needOopMet) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN oop_met REAL;`);
+    if (needPaIndicator) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN prior_auth_indicator TEXT;`);
+    if (needPaNotes) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN prior_auth_notes TEXT;`);
+    if (needPaSource) db.exec(`ALTER TABLE eligibility_checks ADD COLUMN prior_auth_source TEXT;`);
   }
 } catch (migrationError) {
   console.warn('⚠️  Eligibility checks migration failed:', migrationError.message);
@@ -1529,6 +1538,23 @@ try {
   }
 } catch (migrationError) {
   console.warn('⚠️  proof_of_care_hash migration failed:', migrationError.message);
+}
+
+// Migration: remittance detail columns (ERA/835) for richer payment posting
+try {
+  const icExists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='insurance_claims'`).get();
+  if (icExists) {
+    const info = db.prepare(`PRAGMA table_info(insurance_claims)`).all();
+    const add = (col, sql) => {
+      if (!info.some(c => c.name === col)) db.exec(sql);
+    };
+    add('remittance_835_received_at', `ALTER TABLE insurance_claims ADD COLUMN remittance_835_received_at DATETIME`);
+    add('remittance_835_paid_amount', `ALTER TABLE insurance_claims ADD COLUMN remittance_835_paid_amount REAL`);
+    add('remittance_835_adjustment_reason', `ALTER TABLE insurance_claims ADD COLUMN remittance_835_adjustment_reason TEXT`);
+    add('remittance_835_detail', `ALTER TABLE insurance_claims ADD COLUMN remittance_835_detail TEXT`);
+  }
+} catch (migrationError) {
+  console.warn('⚠️  remittance 835 detail migration failed:', migrationError.message);
 }
 
 // Migration: provider_trust_metrics (Tiba Phase 3.7)
@@ -1868,6 +1894,24 @@ try {
   console.warn('⚠️  appointments calendar metadata migration failed:', e.message);
 }
 
+// Migration: appointment check-in states (arrived/in_room/no_show)
+try {
+  const apptInfo = db.prepare(`PRAGMA table_info(appointments)`).all();
+  const addIfMissing = (col, sql) => {
+    if (!apptInfo.some(c => c.name === col)) {
+      db.exec(sql);
+      console.log(`✅ Migration: appointments.${col} added`);
+    }
+  };
+
+  addIfMissing('arrived_at', 'ALTER TABLE appointments ADD COLUMN arrived_at DATETIME');
+  addIfMissing('in_room_at', 'ALTER TABLE appointments ADD COLUMN in_room_at DATETIME');
+  addIfMissing('no_show_at', 'ALTER TABLE appointments ADD COLUMN no_show_at DATETIME');
+  addIfMissing('checkin_notes', 'ALTER TABLE appointments ADD COLUMN checkin_notes TEXT');
+} catch (e) {
+  console.warn('⚠️  appointments check-in state migration failed:', e.message);
+}
+
 // ============================================
 // ADMIN SESSIONS (DB-backed, survives restarts)
 // ============================================
@@ -2049,6 +2093,9 @@ db.exec(`
     provider TEXT DEFAULT 'DocLittle Mental Health Team',
     status TEXT DEFAULT 'scheduled',
     payment_status TEXT DEFAULT 'unpaid',
+    requires_prior_auth INTEGER DEFAULT 0,
+    auth_status TEXT,
+    prior_auth_request_id TEXT,
     notes TEXT,
     reminder_sent BOOLEAN DEFAULT 0,
     calendar_event_id TEXT,
@@ -2084,6 +2131,9 @@ db.exec(`
     deductible_remaining REAL,
     coinsurance_percent REAL,
     plan_summary TEXT,
+    prior_auth_indicator TEXT,
+    prior_auth_notes TEXT,
+    prior_auth_source TEXT,
     response_data TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
@@ -2249,6 +2299,32 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date);
   CREATE INDEX IF NOT EXISTS idx_invoice_items_invoice_id ON invoice_items(invoice_id);
   CREATE INDEX IF NOT EXISTS idx_invoice_payments_invoice_id ON invoice_payments(invoice_id);
+
+  -- ============================================
+  -- COPAY PAYMENTS (Patient responsibility)
+  -- ============================================
+  CREATE TABLE IF NOT EXISTS copay_payments (
+    id TEXT PRIMARY KEY,
+    appointment_id TEXT, -- optional linkage when copay collected at visit
+    claim_id TEXT, -- optional linkage to the underlying claim
+    invoice_id TEXT, -- optional linkage when copay captured against an invoice
+    patient_id TEXT,
+    amount REAL NOT NULL,
+    currency TEXT DEFAULT 'USD',
+    payment_method TEXT, -- cash, stripe, check, etc.
+    reference_number TEXT,
+    notes TEXT,
+    received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (appointment_id) REFERENCES appointments(id),
+    FOREIGN KEY (claim_id) REFERENCES insurance_claims(id),
+    FOREIGN KEY (invoice_id) REFERENCES invoices(id),
+    FOREIGN KEY (patient_id) REFERENCES fhir_patients(resource_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_copay_payments_appointment_id ON copay_payments(appointment_id);
+  CREATE INDEX IF NOT EXISTS idx_copay_payments_claim_id ON copay_payments(claim_id);
+  CREATE INDEX IF NOT EXISTS idx_copay_payments_invoice_id ON copay_payments(invoice_id);
 
   -- ============================================
   -- LEDGER ACCOUNTS & ENTRIES
@@ -5620,6 +5696,18 @@ function migrateRcmAiDecisions() {
       `);
       console.log('✅ Migration complete: ai_decisions_rcm table created');
     }
+
+    // HITL assignment + resolution fields (add columns without recreating the table).
+    const info = db.prepare(`PRAGMA table_info(ai_decisions_rcm)`).all();
+    const has = (name) => info.some((c) => c.name === name);
+    const addIfMissing = (col, sql) => {
+      if (!has(col)) db.exec(sql);
+    };
+
+    addIfMissing('assigned_to', `ALTER TABLE ai_decisions_rcm ADD COLUMN assigned_to TEXT;`);
+    addIfMissing('assigned_at', `ALTER TABLE ai_decisions_rcm ADD COLUMN assigned_at DATETIME;`);
+    addIfMissing('resolution_reason', `ALTER TABLE ai_decisions_rcm ADD COLUMN resolution_reason TEXT;`);
+    addIfMissing('resolution_notes', `ALTER TABLE ai_decisions_rcm ADD COLUMN resolution_notes TEXT;`);
   } catch (e) {
     console.warn('⚠️  RCM AI decisions migration failed:', e.message);
   }
@@ -11726,9 +11814,37 @@ module.exports = {
       fields.push('slot_state = ?');
       values.push(updates.slot_state);
     }
+    if (updates.arrived_at !== undefined) {
+      fields.push('arrived_at = ?');
+      values.push(updates.arrived_at);
+    }
+    if (updates.in_room_at !== undefined) {
+      fields.push('in_room_at = ?');
+      values.push(updates.in_room_at);
+    }
+    if (updates.no_show_at !== undefined) {
+      fields.push('no_show_at = ?');
+      values.push(updates.no_show_at);
+    }
+    if (updates.checkin_notes !== undefined) {
+      fields.push('checkin_notes = ?');
+      values.push(updates.checkin_notes);
+    }
     if (updates.stripe_payment_intent_id !== undefined) {
       fields.push('stripe_payment_intent_id = ?');
       values.push(updates.stripe_payment_intent_id);
+    }
+    if (updates.requires_prior_auth !== undefined) {
+      fields.push('requires_prior_auth = ?');
+      values.push(updates.requires_prior_auth ? 1 : 0);
+    }
+    if (updates.auth_status !== undefined) {
+      fields.push('auth_status = ?');
+      values.push(updates.auth_status);
+    }
+    if (updates.prior_auth_request_id !== undefined) {
+      fields.push('prior_auth_request_id = ?');
+      values.push(updates.prior_auth_request_id);
     }
 
     if (fields.length === 0) {
@@ -11898,8 +12014,9 @@ module.exports = {
         date_of_service, eligible, copay_amount, allowed_amount,
         insurance_pays, deductible_total, deductible_remaining,
         coinsurance_percent, plan_summary, oop_max, oop_met,
+        prior_auth_indicator, prior_auth_notes, prior_auth_source,
         response_data, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     return stmt.run(
       eligibility.id,
@@ -11918,9 +12035,35 @@ module.exports = {
       eligibility.plan_summary || null,
       eligibility.oop_max !== undefined ? eligibility.oop_max : null,
       eligibility.oop_met !== undefined ? eligibility.oop_met : null,
+      eligibility.prior_auth_indicator || null,
+      eligibility.prior_auth_notes || null,
+      eligibility.prior_auth_source || null,
       eligibility.response_data || null,
       eligibility.created_at || new Date().toISOString()
     );
+  },
+
+  /**
+   * Get the latest eligibility check for a member+payer, optionally filtered by CPT/service code.
+   * Used for prior-auth requirement hints (271 authOrCertIndicator).
+   */
+  getLatestEligibilityCheckForMember({ payer_id, member_id, service_code } = {}) {
+    if (!payer_id || !member_id) return null;
+    const base = `
+      SELECT *
+      FROM eligibility_checks
+      WHERE payer_id = ?
+        AND member_id = ?
+    `;
+    const params = [payer_id, member_id];
+    const withSvc = service_code ? `${base} AND (service_code = ? OR service_code IS NULL)` : base;
+    if (service_code) params.push(service_code);
+    const sql = `${withSvc} ORDER BY datetime(created_at) DESC LIMIT 1`;
+    try {
+      return db.prepare(sql).get(...params) || null;
+    } catch (_) {
+      return null;
+    }
   },
 
   // Get eligibility check by ID
@@ -11985,6 +12128,153 @@ module.exports = {
       console.error('Claim data:', JSON.stringify(claim, null, 2));
       throw error; // Re-throw to be handled by caller
     }
+  },
+
+  // ============================================
+  // PRIOR AUTH REQUESTS (RCM-PA v1)
+  // ============================================
+
+  createPriorAuthRequest(reqRow) {
+    const stmt = db.prepare(`
+      INSERT INTO prior_auth_requests (
+        id, appointment_id, claim_id, patient_id, payer_id, member_id,
+        cpt_code, icd10_code, place_of_service, date_of_service,
+        submission_rail, status, tracking_number, auth_number, expiry_date,
+        denial_reason, stedi_correlation_id, raw_request_json, raw_response_json,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const now = new Date().toISOString();
+    return stmt.run(
+      reqRow.id,
+      reqRow.appointment_id || null,
+      reqRow.claim_id || null,
+      reqRow.patient_id || null,
+      reqRow.payer_id || null,
+      reqRow.member_id || null,
+      reqRow.cpt_code || null,
+      reqRow.icd10_code || null,
+      reqRow.place_of_service || null,
+      reqRow.date_of_service || null,
+      reqRow.submission_rail || null,
+      reqRow.status || null,
+      reqRow.tracking_number || null,
+      reqRow.auth_number || null,
+      reqRow.expiry_date || null,
+      reqRow.denial_reason || null,
+      reqRow.stedi_correlation_id || null,
+      safeStringify(reqRow.raw_request_json) || null,
+      safeStringify(reqRow.raw_response_json) || null,
+      reqRow.created_at || now,
+      reqRow.updated_at || now
+    );
+  },
+
+  getPriorAuthRequest(id) {
+    try {
+      return db.prepare(`SELECT * FROM prior_auth_requests WHERE id = ?`).get(id) || null;
+    } catch (_) {
+      return null;
+    }
+  },
+
+  getPriorAuthRequestsByAppointment(appointmentId) {
+    try {
+      return db.prepare(`
+        SELECT * FROM prior_auth_requests
+        WHERE appointment_id = ?
+        ORDER BY datetime(created_at) DESC
+      `).all(appointmentId);
+    } catch (_) {
+      return [];
+    }
+  },
+
+  getPriorAuthRequestsByClinic(clinicId, { status = null, limit = 100 } = {}) {
+    try {
+      let sql = `
+        SELECT par.*,
+               a.date AS appointment_date,
+               a.time AS appointment_time,
+               a.patient_name AS appointment_patient_name,
+               a.clinic_id AS appointment_clinic_id
+        FROM prior_auth_requests par
+        LEFT JOIN appointments a ON a.id = par.appointment_id
+        WHERE (a.clinic_id = ? OR (par.appointment_id IS NULL AND par.patient_id IS NOT NULL))
+      `;
+      const params = [String(clinicId)];
+      if (status) {
+        sql += ` AND par.status = ?`;
+        params.push(String(status));
+      }
+      sql += ` ORDER BY datetime(par.created_at) DESC LIMIT ?`;
+      params.push(Math.min(Number(limit) || 100, 500));
+      const rows = db.prepare(sql).all(...params);
+      if (!rows.length && clinicId) {
+        return db.prepare(`
+          SELECT par.*, NULL AS appointment_date, NULL AS appointment_time,
+                 NULL AS appointment_patient_name, NULL AS appointment_clinic_id
+          FROM prior_auth_requests par
+          ${status ? 'WHERE par.status = ?' : ''}
+          ORDER BY datetime(par.created_at) DESC LIMIT ?
+        `).all(...(status ? [String(status), Math.min(Number(limit) || 100, 500)] : [Math.min(Number(limit) || 100, 500)]));
+      }
+      return rows.filter((r) => !r.appointment_clinic_id || r.appointment_clinic_id === String(clinicId));
+    } catch (_) {
+      return [];
+    }
+  },
+
+  updatePriorAuthRequest(id, patch = {}) {
+    const existing = this.getPriorAuthRequest(id);
+    if (!existing) return { changes: 0 };
+    const merged = { ...existing, ...(patch || {}) };
+    const stmt = db.prepare(`
+      UPDATE prior_auth_requests
+      SET
+        appointment_id = ?,
+        claim_id = ?,
+        patient_id = ?,
+        payer_id = ?,
+        member_id = ?,
+        cpt_code = ?,
+        icd10_code = ?,
+        place_of_service = ?,
+        date_of_service = ?,
+        submission_rail = ?,
+        status = ?,
+        tracking_number = ?,
+        auth_number = ?,
+        expiry_date = ?,
+        denial_reason = ?,
+        stedi_correlation_id = ?,
+        raw_request_json = ?,
+        raw_response_json = ?,
+        updated_at = ?
+      WHERE id = ?
+    `);
+    return stmt.run(
+      merged.appointment_id || null,
+      merged.claim_id || null,
+      merged.patient_id || null,
+      merged.payer_id || null,
+      merged.member_id || null,
+      merged.cpt_code || null,
+      merged.icd10_code || null,
+      merged.place_of_service || null,
+      merged.date_of_service || null,
+      merged.submission_rail || null,
+      merged.status || null,
+      merged.tracking_number || null,
+      merged.auth_number || null,
+      merged.expiry_date || null,
+      merged.denial_reason || null,
+      merged.stedi_correlation_id || null,
+      safeStringify(merged.raw_request_json) || null,
+      safeStringify(merged.raw_response_json) || null,
+      new Date().toISOString(),
+      id
+    );
   },
 
   // Get insurance claim by ID
@@ -12380,12 +12670,19 @@ module.exports = {
       payment.notes || null
     );
 
+    // #region agent log
+    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H3',location:'database.js:addInvoicePayment:afterInsert',message:'Inserted invoice payment row',data:{invoiceId:String(payment?.invoice_id||''),paymentId:String(paymentId||''),amount:Number(payment?.amount||0),method:String(payment?.payment_method||'')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion agent log
+
     // Update invoice status if fully paid
     const invoice = this.getInvoice(payment.invoice_id);
     if (invoice) {
       const totalPaid = this.getInvoicePaymentsTotal(payment.invoice_id);
       if (totalPaid >= invoice.amount) {
         this.updateInvoice(payment.invoice_id, { status: 'paid', paid_at: new Date().toISOString() });
+        // #region agent log
+        fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H4',location:'database.js:addInvoicePayment:invoicePaid',message:'Invoice marked paid after payment',data:{invoiceId:String(payment?.invoice_id||''),invoiceAmount:Number(invoice?.amount||0),totalPaid:Number(totalPaid||0)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion agent log
       }
     }
 
@@ -12407,6 +12704,74 @@ module.exports = {
     const stmt = db.prepare(`
       SELECT COALESCE(SUM(amount), 0) as total
       FROM invoice_payments
+      WHERE invoice_id = ?
+    `);
+    const result = stmt.get(invoiceId);
+    return result ? result.total : 0;
+  },
+
+  // ============================================
+  // COPAY PAYMENTS (Patient responsibility)
+  // ============================================
+  createCopayPayment(payment) {
+    const { v4: uuidv4 } = require('uuid');
+    const paymentId = payment.id || uuidv4();
+
+    const stmt = db.prepare(`
+      INSERT INTO copay_payments (
+        id,
+        appointment_id,
+        claim_id,
+        invoice_id,
+        patient_id,
+        amount,
+        currency,
+        payment_method,
+        reference_number,
+        notes,
+        received_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      paymentId,
+      payment.appointment_id || null,
+      payment.claim_id || null,
+      payment.invoice_id || null,
+      payment.patient_id || null,
+      payment.amount,
+      payment.currency || 'USD',
+      payment.payment_method || null,
+      payment.reference_number || null,
+      payment.notes || null,
+      payment.received_at || new Date().toISOString()
+    );
+
+    return { id: paymentId };
+  },
+
+  getCopayPaymentsByClaim(claimId) {
+    return db
+      .prepare(`SELECT * FROM copay_payments WHERE claim_id = ? ORDER BY received_at DESC, created_at DESC`)
+      .all(claimId);
+  },
+
+  getCopayPaymentsByAppointment(appointmentId) {
+    return db
+      .prepare(`SELECT * FROM copay_payments WHERE appointment_id = ? ORDER BY received_at DESC, created_at DESC`)
+      .all(appointmentId);
+  },
+
+  getCopayPaymentsByInvoice(invoiceId) {
+    return db
+      .prepare(`SELECT * FROM copay_payments WHERE invoice_id = ? ORDER BY received_at DESC, created_at DESC`)
+      .all(invoiceId);
+  },
+
+  getCopayPaymentsTotalByInvoice(invoiceId) {
+    const stmt = db.prepare(`
+      SELECT COALESCE(SUM(amount), 0) as total
+      FROM copay_payments
       WHERE invoice_id = ?
     `);
     const result = stmt.get(invoiceId);
@@ -12730,6 +13095,22 @@ module.exports = {
     if (updates.proof_of_care_hash !== undefined) {
       fields.push('proof_of_care_hash = ?');
       values.push(updates.proof_of_care_hash);
+    }
+    if (updates.remittance_835_received_at !== undefined) {
+      fields.push('remittance_835_received_at = ?');
+      values.push(updates.remittance_835_received_at);
+    }
+    if (updates.remittance_835_paid_amount !== undefined) {
+      fields.push('remittance_835_paid_amount = ?');
+      values.push(updates.remittance_835_paid_amount);
+    }
+    if (updates.remittance_835_adjustment_reason !== undefined) {
+      fields.push('remittance_835_adjustment_reason = ?');
+      values.push(updates.remittance_835_adjustment_reason);
+    }
+    if (updates.remittance_835_detail !== undefined) {
+      fields.push('remittance_835_detail = ?');
+      values.push(updates.remittance_835_detail);
     }
 
     if (fields.length === 0) {

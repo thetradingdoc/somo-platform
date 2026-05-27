@@ -134,6 +134,30 @@ class InvoiceService {
           : {};
       } catch (_) {}
 
+      // Alignment: when the claim is approved/paid and an EOB is already stored in response_data,
+      // reuse that stored EOB to keep patient responsibility consistent with /api/claims/:id.
+      if ((claim.status === 'approved' || claim.status === 'paid') && claimDetails?.eob) {
+        const storedEob = claimDetails.eob;
+        const patientResponsibility =
+          storedEob?.totals?.whatYouOwe ?? storedEob?.totals?.what_you_owe ?? 0;
+
+        const services = (storedEob?.lineItems || []).map((li) => ({
+          date_of_service: li.dateOfService || li.date_of_service,
+          type_of_service: li.typeOfService || li.type_of_service || li.description || '',
+          cpt_code: li.cptCode || li.cpt_code || null,
+          icd_code: li.icdCode || li.icd_code || null,
+          what_you_owe: li.whatYouOwe ?? li.what_you_owe ?? 0,
+          amount_billed: li.amountBilled ?? li.amount_billed ?? 0
+        }));
+
+        return {
+          patient_responsibility: patientResponsibility,
+          services,
+          totals: storedEob?.totals || {},
+          eligibility
+        };
+      }
+
       const eobResult = EOBCalculationService.calculateEOBFromClaim(claim, eligibility || {}, claimDetails);
       const patientResponsibility = eobResult.totals?.whatYouOwe ?? eobResult.totals?.what_you_owe ?? 0;
 

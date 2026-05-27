@@ -1,9 +1,16 @@
 #terminal 1: middleware (Products & Orders now integrated)
+# If localhost:4000 hangs: kill stale process first (see below), then start.
 cd middleware-platform
 export DB_PATH=./middleware-dev.db
-export NVM_DIR="$HOME/.nvm"
-source "$(brew --prefix nvm)/nvm.sh"
+export FACE_READ_AUTO_START=0
+export CATALOG_MASTER_SYNC_ENABLED=0
+export FINANCIAL_INTEGRITY_JOBS_ENABLED=0
+export EHR_SYNC_ENABLED=0
+export DEV_LIGHT_START=1
+export LOCAL_DEV_ROOT=login
 export KELLY_DEBUG_TURN=1
+# First time or after DB reset — create demo logins (provider/patient/insurer @ doclittle.com, demo123):
+# node scripts/seed-demo-accounts.js
 npm start
 
 
