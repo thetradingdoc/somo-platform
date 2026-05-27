@@ -67,7 +67,7 @@ Complete documentation of STEDI API integration for healthcare insurance operati
 
 **Base URL**: `https://api.stedi.com`  
 **Authentication**: Bearer token via `STEDI_API_KEY`  
-**Current API Key**: `test_1rRzTb0.Va9Tn88BB3fgPgttprqbrxQ1` (Sandbox/Test)
+**API key**: Do not hardcode or commit keys in docs. Use a local `.env` (see `middleware-platform/.env.example`).
 
 ---
 
@@ -456,6 +456,11 @@ STEDI_API_KEY=your_production_api_key_here
 **Why This Matters:**
 - **Prevent Denials:** Get authorization before service
 - **Faster Processing:** Electronic prior auth vs phone/fax
+
+DocLittle’s canonical prior-authorization workflow (including the Stedi scope constraints and the case-level tracking model) is documented in:
+
+- [`docs/RCM/PA_ARCHITECTURE.md`](../RCM/PA_ARCHITECTURE.md)
+- [`docs/RCM/STEDI_PA_WORKSTREAM.md`](../RCM/STEDI_PA_WORKSTREAM.md)
 
 ---
 

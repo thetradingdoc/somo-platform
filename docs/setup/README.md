@@ -326,6 +326,15 @@ Netlify automatically manages:
 - **Fix**: Kill the process: `kill -9 $(lsof -ti:4000)`
 - **Or**: Use a different port: `PORT=4001 npm start`
 
+### Login page is slow on localhost
+
+If `http://localhost:4000/login` loads slowly right after starting the server, it is usually a **cold start** issue (startup migrations + boot tasks), not the login page itself.
+
+- **Recommended local flags** (speed up startup):
+  - `DEV_LIGHT_START=1` — skips post-listen background workers
+  - `SKIP_STARTUP_MIGRATIONS=1` — skips the large startup migration batch (useful for local dev scripts/eval)
+- **Also check**: external asset fetches (e.g. `fonts.googleapis.com`) can stall page rendering on some networks.
+
 ### Voice Agent Not Connecting
 
 **Error: "11200 - HTTP 404"**

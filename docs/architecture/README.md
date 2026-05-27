@@ -983,8 +983,8 @@ This rollout introduces “agentic commerce” on the provider side:
 
 ## What Changed (Scope)
 1. Provider UI
-   - `unified-dashboard/business/products.html`: Agentic Commerce panel with recommendation + draft order creation.
-   - `unified-dashboard/business/orders.html`: Order list, filters, and improved empty/error messaging.
+   - **Legacy shop pages** (`unified-dashboard/business/products.html`, `unified-dashboard/business/orders.html`) are retained as **redirect stubs** for backward compatibility in clinic-only mode.
+   - Clinic provider portal home is `unified-dashboard/business/today.html` and does not expose commerce surfaces.
 2. Backend
    - `middleware-platform/routes/orders.js`: idempotent order creation + lifecycle defaults (`status=pending`, `payment_status=pending_payment`).
    - `middleware-platform/routes/stripe-webhook-handler.js`: reconcile merchant order payment on Stripe payment intent events.
@@ -997,7 +997,7 @@ To disable the provider Agentic Commerce UI without changing backend behavior:
 - Query parameter: `?agentic=0`
 - Local storage: `localStorage.setItem('agentic_commerce_ui','0')`
 
-This hides the Agentic Commerce panel on `unified-dashboard/business/products.html`.
+This hides the Agentic Commerce panel on legacy shop pages (redirect stubs in clinic-only mode).
 
 ## Rollout Stages
 ### Stage 1: Enable on a single environment
@@ -2253,7 +2253,7 @@ The Financial Layer orchestrates healthcare revenue operations: insurance eligib
 ```javascript
 // insurance-service.js
 STEDI_API_BASE = process.env.STEDI_API_BASE || 'https://api.stedi.com'
-STEDI_API_KEY = process.env.STEDI_API_KEY || 'test_1rRzTb0.Va9Tn88BB3fgPgttprqbrxQ1'
+STEDI_API_KEY = process.env.STEDI_API_KEY // required; do not hardcode or commit keys
 ```
 
 ### 2.2 Stedi Endpoints Used
@@ -3136,18 +3136,18 @@ window.selectedStates = [
 
 ---
 
-## 🟢 LOW: Mock Trend Data (Business Dashboard)
+## 🟢 LOW: Mock Trend Data (Legacy business dashboard)
 
-**Location**: `unified-dashboard/business/business-dashboard.html` (Lines 2314-2316)
+**Location**: `unified-dashboard/business/business-dashboard.html` (legacy; now a redirect stub in clinic-only mode)
 ```javascript
 // Update trend indicators (mock data for now - can be calculated from historical data)
 document.getElementById('revenueTrend').textContent = '+11%';
 document.getElementById('aovTrend').textContent = '+2.7%';
 ```
 
-**Recommendation**: 
-- Replace with actual historical data calculation
-- Low priority - UI enhancement
+**Recommendation**:
+- If commerce dashboards are still needed for a shop tenant surface, move this to an admin-only dashboard and compute real trends.
+- For clinic-only provider portal: no action needed (page is deprecated/redirect-only).
 
 ---
 
@@ -8543,7 +8543,7 @@ Required in `.env`:
 
 3. Frontend redirects:
    - Production: `doclittle.site/{clinic_slug}/dashboard.html`
-   - Development: `business/business-dashboard.html`
+   - Development: `business/today.html` (provider portal home; legacy `business-dashboard.html` is redirect-only)
 
 ### Clinic Slug Generation
 

@@ -124,7 +124,7 @@ With `middleware-platform` running (`npm start`), visit:
 |------------------------------|---------------------------------|------------------------------------------|
 | Athlete shop (marketing)     | http://localhost:4000/          | `littlelab-landing` build                |
 | Admin landing                | http://localhost:4000/admin     | `unified-dashboard/admin/index.html`     |
-| Clinic/business dashboard    | http://localhost:4000/business/business-dashboard.html | `unified-dashboard/business` |
+| Clinic provider portal (home) | http://localhost:4000/business/today.html | `unified-dashboard/business` |
 | API & signup flow            | http://localhost:4000/signup    | `middleware-platform/public/signup` + APIs |
 
 Production hosts: `myskinandcare.com`, `api.skinandcare.com` (GCP). See `docs/deployment/README.md`.

@@ -37,11 +37,9 @@ All geolocation tracking features have been implemented and tested.
 - `GET /api/admin/deliveries/analytics` - Delivery metrics (admin)
 
 ### 3. Frontend UI
-- **Tenant Dashboard** (`unified-dashboard/business/orders.html`)
-  - Interactive map (Leaflet or Google Maps)
-  - Real-time location updates (15s polling)
-  - Delivery radius visualization
-  - Manual confirmation button
+- **Tenant dashboard (legacy)** (`unified-dashboard/business/orders.html`)
+  - In clinic-only provider portal mode this URL is a **redirect stub** retained for backwards compatibility.
+  - If delivery tracking is still used for a shop/commerce tenant surface, keep the interactive tracking UI under an admin-only or commerce-only dashboard instead of the clinic provider portal.
 
 - **Customer View** (`public/customer/order-tracking.html`)
   - Simple text-based tracking
