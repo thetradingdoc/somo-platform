@@ -6,9 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claim Details - Doctor's Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
     <script src="../assets/js/auth-utils.js"></script>
-    <script src="../assets/js/navigation.js"></script>
+    <script src="../assets/js/provider-shell.js"></script>
+    <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -378,7 +380,7 @@
     </style>
 </head>
 
-<body>
+<body class="provider-portal provider-portal--scroll">
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar">
@@ -404,9 +406,9 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <button class="back-btn" onclick="window.location.href='billing.html?section=claims'">← Back to Claims</button>
+            <button class="back-btn" id="claimBackBtn" style="display:none" onclick="window.location.href='claims.html'">← Back to exceptions</button>
 
-            <div class="eob-container" id="eobContainer">
+            <div class="eob-container" id="eobContainer" style="display:none">
                 <div class="empty-state">
                     <div class="empty-state-icon">⏳</div>
                     <p>Loading claim details...</p>
@@ -424,6 +426,19 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <div class="pp-modal-overlay" id="ppModalOverlay" onclick="ppCloseModal(event)">
+        <div class="pp-modal pp-modal-panel" id="modalEob" style="display:none" role="dialog" aria-labelledby="eobTitle">
+            <div class="pp-modal-head">
+                <div class="pp-modal-title" id="eobTitle">EOB Detail</div>
+                <button type="button" class="pp-modal-close" onclick="ppCloseModal()">✕</button>
+            </div>
+            <div class="pp-modal-body"><pre id="eobBody" style="font-size:11px;white-space:pre-wrap;max-height:50vh;overflow:auto"></pre></div>
+            <div class="pp-modal-footer">
+                <button type="button" class="pp-btn pp-btn-ghost" onclick="ppCloseModal()">Close</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -444,11 +459,19 @@
         const claimId = urlParams.get('id');
 
         document.addEventListener('DOMContentLoaded', () => {
-            renderNavigation('claims');
+            mountProviderPage({
+                activeId: 'exceptions',
+                eyebrow: 'HITL review',
+                title: claimId ? 'Claim detail' : 'Exceptions inbox'
+            });
+            const eobEl = document.getElementById('eobContainer');
+            const backBtn = document.getElementById('claimBackBtn');
             if (claimId) {
+                if (eobEl) eobEl.style.display = 'block';
+                if (backBtn) backBtn.style.display = 'inline-flex';
                 loadClaim(claimId);
-            } else {
-                showError('No claim ID provided');
+            } else if (eobEl) {
+                eobEl.style.display = 'none';
             }
             loadRcmExceptions();
         });
@@ -542,12 +565,73 @@
 
         function handleRcmDraftFix(decisionId) {
             console.log('Draft fix requested for decision', decisionId);
-            alert('Drafted fix execution is not yet wired. This will call the RCM resubmit API.');
+
+            (async () => {
+                if (!decisionId) {
+                    alert('Missing decision id.');
+                    return;
+                }
+
+                if (!confirm('Apply this drafted fix and attempt claim resubmission?')) return;
+
+                try {
+                    const customer = JSON.parse(sessionStorage.getItem('customer') || '{}');
+                    const clinicId = customer.clinic_id || customer.clinicId || null;
+                    const response = await fetch(`${API_BASE}/api/rcm/drafted-fix/apply`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(clinicId ? { 'x-clinic-id': clinicId } : {})
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ decision_id: decisionId, resubmit: true })
+                    });
+
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok || !result.success) {
+                        alert('Drafted fix failed: ' + (result.error || response.statusText));
+                        return;
+                    }
+
+                    alert('Drafted fix applied' + (result.claim_id ? ` for claim ${result.claim_id}` : '') + '.');
+                    loadRcmExceptions();
+                    if (result.claim_id) loadClaim(result.claim_id);
+                } catch (error) {
+                    console.error('Error applying drafted fix:', error);
+                    alert('Error applying drafted fix: ' + error.message);
+                }
+            })();
         }
 
-        function handleViewEob(decisionId) {
+        async function handleViewEob(decisionId) {
             console.log('View EOB for decision', decisionId);
-            alert('Full EOB viewer is not yet wired. This will open the associated FHIR EOB.');
+            if (!decisionId) {
+                alert('Missing decision id.');
+                return;
+            }
+
+            try {
+                const customer = JSON.parse(sessionStorage.getItem('customer') || '{}');
+                const clinicId = customer.clinic_id || customer.clinicId || null;
+                const response = await fetch(`${API_BASE}/api/rcm/decisions/${decisionId}/eob`, {
+                    method: 'GET',
+                    headers: {
+                        ...(clinicId ? { 'x-clinic-id': clinicId } : {})
+                    },
+                    credentials: 'include'
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.success) {
+                    alert('Failed to load full EOB: ' + (result.error || response.statusText));
+                    return;
+                }
+
+                document.getElementById('eobBody').textContent = JSON.stringify(result, null, 2);
+                window.ppOpenModal('modalEob');
+            } catch (error) {
+                console.error('Error loading full EOB:', error);
+                alert('Error loading full EOB: ' + error.message);
+            }
         }
 
         async function loadClaim(claimId) {
@@ -579,6 +663,51 @@
             }
         }
 
+        async function updatePriorAuthBanner(claim) {
+            try {
+                const mount = document.getElementById('paBanner');
+                if (!mount) return;
+                const cpt = (claim.service_code || '').toString().trim();
+                const memberId = (claim.member_id || claim.subscriberId || '').toString().trim();
+                const payerId = (claim.payer_id || '').toString().trim();
+                if (!cpt || !memberId || !payerId) {
+                    mount.style.display = 'none';
+                    return;
+                }
+                const res = await fetch(`${API_BASE}/api/prior-auth/evaluate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cpt_code: cpt, member_id: memberId, payer_id: payerId })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    mount.innerHTML = `<div style="font-weight:800;">Prior authorization</div><div style="opacity:0.9;">Status unavailable.</div>`;
+                    return;
+                }
+                const required = data.required;
+                if (required === true) {
+                    mount.innerHTML = `<div style="font-weight:900;">Prior authorization likely required</div><div style="opacity:0.95;">This CPT is flagged as PA-required. Open a PA case before submitting the claim.</div>`;
+                    mount.style.background = '#fff7ed';
+                    mount.style.borderColor = '#fdba74';
+                    mount.style.color = '#7c2d12';
+                    return;
+                }
+                if (required === false) {
+                    mount.innerHTML = `<div style="font-weight:900;">Prior authorization not indicated</div><div style="opacity:0.9;">No PA signal detected for this CPT based on rules/eligibility hints.</div>`;
+                    mount.style.background = '#eff6ff';
+                    mount.style.borderColor = '#93c5fd';
+                    mount.style.color = '#1e3a8a';
+                    return;
+                }
+                mount.innerHTML = `<div style="font-weight:900;">Prior authorization unknown</div><div style="opacity:0.9;">Eligibility hints were unknown or missing. Consider checking payer portal.</div>`;
+                mount.style.background = '#f3f4f6';
+                mount.style.borderColor = '#d1d5db';
+                mount.style.color = '#111827';
+            } catch (e) {
+                console.warn('PA banner failed:', e.message);
+            }
+        }
+
         function displayClaim(claim) {
             console.log('Displaying claim:', claim);
             const container = document.getElementById('eobContainer');
@@ -588,6 +717,12 @@
             const subscriberId = claim.subscriberId || claim.member_id || 'N/A';
             const planSummary = claim.planSummary || claim.eligibility?.plan_summary || 'N/A';
             const payerName = claim.payerName || claim.eligibility?.payer_name || 'N/A';
+            const paBanner = `
+                <div id="paBanner" style="margin:14px 0 0 0;padding:12px 14px;border-radius:12px;border:1px solid #e5e7eb;background:#f9fafb;color:#111827;">
+                    <div style="font-weight:800;">Prior authorization</div>
+                    <div style="opacity:0.9;">Checking requirement…</div>
+                </div>
+            `;
 
             // Use REAL EOB data from backend (calculated from Stedi eligibility data)
             const eob = claim.eob || {};
@@ -676,10 +811,15 @@
                                 <div style="font-size: 11px; color: var(--gray-600); margin-bottom: 4px;">Payment Status</div>
                                 <span class="status-badge ${paymentStatusClass}">${paymentStatusText}</span>
                             </div>
+                            <button onclick="refreshClaimStatus('${claim.id}')" 
+                                style="padding: 10px 16px; background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; border-radius: 6px; cursor: pointer; font-weight: 600; margin-left: 12px;">
+                                🔄 Refresh Status
+                            </button>
                             ${paymentActions}
                         </div>
                     </div>
                     <div class="eob-notice">THIS IS NOT A BILL</div>
+                    ${paBanner}
                     <div class="eob-subscriber-info">
                         <div class="eob-info-item">
                             <div class="eob-info-label">Subscriber Name</div>
@@ -798,6 +938,9 @@
                     </div>
                 ` : ''}
             `;
+
+            // Async: fetch PA requirement signal (rules + 271 hint).
+            updatePriorAuthBanner(claim);
         }
 
         function showError(message) {
@@ -846,8 +989,16 @@
                 console.log('Submit payment result:', result);
                 
                 if (result.success) {
-                    alert('Claim submitted for payment approval!');
-                    // Reload claim to show updated status
+                    let msg = 'Claim submitted for payment approval!';
+                    if (result.manualReview || result.stediFallback) {
+                        msg += '\n\nNote: Stedi clearinghouse submit needs manual review (translate-only or simulation fallback).';
+                    } else if (result.healthcareSubmitted) {
+                        msg += `\n\nStedi claim ID: ${result.x12ClaimId || 'assigned'}`;
+                    }
+                    if (result.eligibilityWarning) {
+                        msg += `\n\nEligibility warning: ${result.eligibilityWarning.message || 're-verify failed'}`;
+                    }
+                    alert(msg);
                     loadClaim(claimId);
                 } else {
                     alert('Error: ' + (result.error || 'Failed to submit claim'));
@@ -881,6 +1032,28 @@
             } catch (error) {
                 console.error('Error approving claim payment:', error);
                 alert('Error approving claim: ' + error.message);
+            }
+        }
+
+        // Refresh claim status (interactive 276/277 check)
+        async function refreshClaimStatus(claimId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/claims/${claimId}/refresh-status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({})
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result.success) {
+                    alert('Error refreshing status: ' + (result.error || response.statusText));
+                    return;
+                }
+                alert(`Claim status updated: ${result.status || 'unknown'}`);
+                loadClaim(claimId);
+            } catch (error) {
+                console.error('Error refreshing claim status:', error);
+                alert('Error refreshing claim status: ' + error.message);
             }
         }
 

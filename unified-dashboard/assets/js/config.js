@@ -86,28 +86,20 @@
   // Medical/clinic: Claims = create + view. Revenue = money collected.
   // Icons use Tailwind/Heroicons SVG keys for consistency.
   const MEDICAL_NAV_ITEMS = [
-    { id: 'dashboard', label: 'Home', icon: 'home', href: 'business-dashboard.html' },
-    { id: 'calendar', label: 'Calendar', icon: 'calendar-days', href: 'calendar.html' },
+    { id: 'today', label: 'Today', icon: 'home', href: 'today.html' },
+    { id: 'calendar', label: 'Schedule', icon: 'calendar-days', href: 'calendar.html' },
     { id: 'patients', label: 'Patients', icon: 'user-group', href: 'patients.html' },
-    { id: 'profile', label: 'My Profile', icon: 'user', href: 'settings.html' },
-    { id: 'wallet', label: 'My Wallet', icon: 'wallet', href: 'wallets.html' },
-    { id: 'claims', label: 'Claims', icon: 'clipboard-document-list', href: 'billing.html?section=claims' },
-    { id: 'billing', label: 'Revenue', icon: 'banknotes', href: 'billing.html?section=overview' },
-    { id: 'video', label: 'Video', icon: 'video-camera', href: 'video-call.html' }
-  ];
-
-  const ECOMMERCE_NAV_ITEMS = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'chart-bar', href: 'business-dashboard.html' },
-    { id: 'products', label: 'Products', icon: 'cube', href: 'products.html' },
-    { id: 'orders', label: 'Orders', icon: 'shopping-cart', href: 'orders.html' },
-    { id: 'patients', label: 'Customers', icon: 'user-group', href: 'patients.html' },
-    { id: 'billing', label: 'Billing', icon: 'credit-card', href: 'billing.html' },
-    { id: 'agent', label: 'Voice Agent', icon: 'microphone', href: 'agent.html' }
+    { id: 'claims', label: 'Claims & RCM', icon: 'clipboard-document-list', href: 'billing.html?section=overview' },
+    { id: 'prior-auth', label: 'Prior Auth', icon: 'document-text', href: 'billing.html?section=prior-auth' },
+    { id: 'billing', label: 'Invoices', icon: 'banknotes', href: 'billing.html?section=invoices' },
+    { id: 'agent', label: 'Voice Agent', icon: 'microphone', href: 'agent.html' },
+    { id: 'exceptions', label: 'Exceptions', icon: 'clipboard-document-list', href: 'claims.html' },
+    { id: 'profile', label: 'Settings', icon: 'user', href: 'settings.html' }
   ];
 
   const NAV_BY_TENANT = {
     clinic: MEDICAL_NAV_ITEMS,
-    shop: ECOMMERCE_NAV_ITEMS
+    shop: MEDICAL_NAV_ITEMS
   };
 
   const NAV_ICONS = {
@@ -134,11 +126,10 @@
     subdomain,
     tenant_type: 'clinic',
     navItems: NAV_BY_TENANT.clinic,
-    sidebarSubtitle: 'Healthcare at your home'
+    sidebarSubtitle: 'FrontDesk AI'
   };
 
   window.MEDICAL_NAV_ITEMS = MEDICAL_NAV_ITEMS;
-  window.ECOMMERCE_NAV_ITEMS = ECOMMERCE_NAV_ITEMS;
   window.NAV_BY_TENANT = NAV_BY_TENANT;
 
   // Try to fetch tenant config from API

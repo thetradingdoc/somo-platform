@@ -6,8 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Business Management</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
-    <script src="../assets/js/navigation.js"></script>
+    <script src="../assets/js/auth-utils.js"></script>
+    <script src="../assets/js/provider-shell.js"></script>
+    <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -489,7 +492,7 @@
     </style>
 </head>
 
-<body>
+<body class="provider-portal provider-portal--scroll">
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
     
@@ -504,7 +507,7 @@
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Populated by navigation.js -->
+                <!-- Nav from provider-shell.js -->
             </nav>
 
             <div class="sidebar-footer">
@@ -661,17 +664,6 @@
                         <button class="btn btn-secondary btn-sm" onclick="loadProviderBookingReadiness()">Test booking readiness</button>
                     </div>
                 </div>
-
-                <div class="service-card">
-                    <div class="service-icon shopify">🛍️</div>
-                    <div class="service-info">
-                        <h4>Shopify (Optional)</h4>
-                        <p class="service-status" id="shopifyServiceStatus">Checking...</p>
-                    </div>
-                    <button class="btn btn-primary btn-sm" onclick="connectShopify()">
-                        Connect
-                    </button>
-                </div>
             </div>
 
             <!-- Notifications -->
@@ -680,8 +672,8 @@
 
                 <div class="setting-row">
                     <div class="setting-info">
-                        <h4>Order Notifications</h4>
-                        <p class="setting-description">Get notified when new orders arrive</p>
+                        <h4>Appointment Notifications</h4>
+                        <p class="setting-description">Get notified when appointments are booked or changed</p>
                     </div>
                     <div class="setting-action">
                         <input type="checkbox" id="notifOrders" onchange="toggleNotification('orders')">
@@ -1149,8 +1141,11 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            renderNavigation('settings');
-            setupMobileNavClose();
+            mountProviderPage({
+                activeId: 'profile',
+                eyebrow: 'Clinic',
+                title: 'Settings'
+            });
             setupSettingsTabs();
 
             // Close sidebar on window resize if switching to desktop
@@ -1337,10 +1332,8 @@
                 const s = json.services || {};
                 const stripeEl = document.getElementById('stripeServiceStatus');
                 const twilioEl = document.getElementById('twilioServiceStatus');
-                const shopifyEl = document.getElementById('shopifyServiceStatus');
                 if (stripeEl) stripeEl.textContent = `${s.stripe?.connected ? '✅ Connected' : '⚠️ Not configured'} - ${s.stripe?.detail || ''}`;
                 if (twilioEl) twilioEl.textContent = `${s.twilio?.connected ? '✅ Connected' : '⚠️ Not configured'} - ${s.twilio?.detail || ''}`;
-                if (shopifyEl) shopifyEl.textContent = `${s.shopify?.connected ? '✅ Connected' : 'Not connected'} - ${s.shopify?.detail || ''}`;
             } catch (_) {}
         }
 
@@ -1812,15 +1805,6 @@
 
         function manageTwilio() {
             alert(`Twilio number: ${(currentCustomer && currentCustomer.twilio_phone_number) || 'Not configured'}`);
-        }
-
-        function connectShopify() {
-            const status = (document.getElementById('shopifyServiceStatus')?.textContent || '').toLowerCase();
-            if (status.includes('connected')) {
-                alert('Shopify is connected. Manage your store integration in the developer settings.');
-            } else {
-                alert('Shopify integration is coming soon. Your practice uses voice and calendar integrations today.');
-            }
         }
 
         // Notifications

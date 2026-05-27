@@ -6,8 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Billing - Consult Clinic Dashboard</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
-    <script src="../assets/js/navigation.js"></script>
+    <script src="../assets/js/auth-utils.js"></script>
+    <script src="../assets/js/provider-shell.js"></script>
+    <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -545,7 +548,7 @@
     </style>
 </head>
 
-<body>
+<body class="provider-portal provider-portal--scroll">
     <div class="layout">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -577,8 +580,8 @@
                 <p class="page-subtitle" id="pageSubtitle">Manage all billing activities in one place</p>
             </div>
 
-            <!-- Credits Banner (always visible) -->
-            <div class="credits-banner" id="creditsBanner">
+            <!-- Credits Banner (Voice Agent page only; hidden on billing) -->
+            <div class="credits-banner" id="creditsBanner" style="display:none">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <div
@@ -607,7 +610,6 @@
                     <h2 class="section-title">Revenue</h2>
                     <div style="display: flex; gap: 8px;">
                         <button class="btn btn-secondary btn-sm" onclick="showSection('invoices')">Invoices</button>
-                        <button class="btn btn-secondary btn-sm" onclick="showSection('payments')">Payments</button>
                     </div>
                 </div>
                 <div id="overviewContent">
@@ -690,6 +692,17 @@
                 </div>
             </div>
 
+            <!-- Prior Auth Section -->
+            <div class="content-section" id="priorAuthSection">
+                <div class="section-header">
+                    <h2 class="section-title">Prior Authorization</h2>
+                    <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
+                </div>
+                <div id="priorAuthContent">
+                    <div class="pp-skeleton" style="height:80px"></div>
+                </div>
+            </div>
+
             <!-- Invoices Section -->
             <div class="content-section" id="invoicesSection">
                 <div class="section-header">
@@ -701,8 +714,8 @@
                 </div>
             </div>
 
-            <!-- Payments Section -->
-            <div class="content-section" id="paymentsSection">
+            <!-- Payments Section (hidden — use Invoices for payment history) -->
+            <div class="content-section" id="paymentsSection" style="display:none">
                 <div class="section-header">
                     <h2 class="section-title">Payments</h2>
                     <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
@@ -712,16 +725,6 @@
                 </div>
             </div>
 
-            <!-- Commerce Billing Section (for shops) -->
-            <div class="content-section" id="commerceSection">
-                <div class="section-header">
-                    <h2 class="section-title">Commerce Billing</h2>
-                    <button class="back-to-cards-btn" onclick="showSection('overview')">← Back to Revenue</button>
-                </div>
-                <div id="commerceContent">
-                    <!-- Commerce billing content populated by JavaScript -->
-                </div>
-            </div>
         </main>
     </div>
 
@@ -732,7 +735,6 @@
         const API_BASE = window.API_BASE || 'http://localhost:4000';
         let currentSection = null;
         let tenantType = 'clinic';
-        let hasMedicalBilling = false;
         // Scan/PDF state
         let pdfDoc = null;
         let pdfFile = null;
@@ -748,12 +750,27 @@
 
         // Initialize (handle already-loaded DOM)
         function startBillingApp() {
-            // Determine active nav from ?section= param so correct tab highlights
             const urlParams = new URLSearchParams(window.location.search);
-            const section = urlParams.get('section');
-            const sectionToNavId = { scan: 'claims', invoices: 'billing', claims: 'claims', overview: 'billing', payments: 'billing', commerce: 'billing' };
-            const activeId = section && sectionToNavId[section] ? sectionToNavId[section] : 'billing';
-            renderNavigation(activeId);
+            const section = urlParams.get('section') || 'overview';
+            const sectionToNavId = {
+                scan: 'claims',
+                invoices: 'billing',
+                claims: 'prior-auth',
+                'prior-auth': 'prior-auth',
+                overview: 'claims',
+                payments: 'billing',
+                commerce: 'claims'
+            };
+            const activeId = sectionToNavId[section] || 'claims';
+            const titles = {
+                overview: ['Claims & RCM', 'Revenue pipeline & patient billing'],
+                claims: ['Claims & EOB', 'Patient claims rollup'],
+                'prior-auth': ['Prior Authorization', 'Open and submit PA cases'],
+                invoices: ['Invoices', 'Patient invoices and payments'],
+                scan: ['Create claim', 'Upload superbill or visit summary']
+            };
+            const t = titles[section] || titles.overview;
+            mountProviderPage({ activeId, eyebrow: t[0], title: t[1] });
             loadCredits();
             initializeBilling();
         }
@@ -764,10 +781,10 @@
             startBillingApp();
         }
 
-        // renderSidebar function removed - now using shared navigation.js
+        // Provider shell: mountProviderPage() in startBillingApp
         // Store tenant type from TENANT_CONFIG
         if (window.TENANT_CONFIG) {
-            tenantType = window.TENANT_CONFIG.tenant_type || 'shop';
+            tenantType = window.TENANT_CONFIG.tenant_type || 'clinic';
         }
 
         // Load credits
@@ -818,9 +835,6 @@
             // Use config if present, otherwise fallback already set in renderSidebar
             tenantType = (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type) || 'clinic';
 
-            // Check if shop has medical billing enabled (for hybrid shops)
-            await checkMedicalBillingAvailability();
-
             renderNavCards();
             document.getElementById('navCards').style.display = 'none';
 
@@ -835,117 +849,35 @@
             showSection(section, appointmentId, suggestedCodesParam);
         }
 
-        // Check if medical billing features are available
-        async function checkMedicalBillingAvailability() {
-            if (tenantType === 'shop') {
-                // For shops, check if they have any medical billing data
-                try {
-                    const res = await fetch(`${API_BASE}/api/invoices?limit=1`, {
-                        credentials: 'include'
-                    });
-                    if (res.ok) {
-                        const data = await res.json();
-                        hasMedicalBilling = data.success && data.invoices && data.invoices.length > 0;
-                    }
-                } catch (error) {
-                    console.error('Error checking medical billing:', error);
-                    // Fall back to showing medical cards to avoid hiding features on error
-                    hasMedicalBilling = true;
-                }
-            } else {
-                hasMedicalBilling = true; // Clinics always have medical billing
-            }
-        }
-
         // Render navigation cards
         function renderNavCards() {
             const cardsContainer = document.getElementById('navCards');
-            const cards = [];
-
-            if (tenantType === 'shop') {
-                // Shop cards: Commerce first, then medical if available
-                cards.push({
-                    id: 'commerce',
-                    icon: '🛒',
-                    title: 'Commerce',
-                    desc: 'Orders, revenue, and voice checkouts'
-                });
-
-                if (hasMedicalBilling) {
-                    cards.push({
-                        id: 'overview',
-                        icon: '📊',
-                        title: 'Overview',
-                        desc: 'Billing summary and quick stats'
-                    });
-                    cards.push({
-                        id: 'scan',
-                        icon: '📄',
-                        title: 'Scan PDF',
-                        desc: 'Upload and extract medical codes'
-                    });
-                    cards.push({
-                        id: 'claims',
-                        icon: '📋',
-                        title: 'Claims',
-                        desc: 'View EOB and insurance claims'
-                    });
-                    cards.push({
-                        id: 'invoices',
-                        icon: '🧾',
-                        title: 'Invoices',
-                        desc: 'Manage patient invoices'
-                    });
-                    cards.push({
-                        id: 'payments',
-                        icon: '💰',
-                        title: 'Payments',
-                        desc: 'Track and record payments'
-                    });
-                } else {
-                    // Shop without medical billing - just commerce
-                    cards.push({
-                        id: 'overview',
-                        icon: '📊',
-                        title: 'Overview',
-                        desc: 'Billing summary and analytics'
-                    });
+            const cards = [
+                {
+                    id: 'overview',
+                    icon: '📊',
+                    title: 'Overview',
+                    desc: 'Billing summary and quick stats'
+                },
+                {
+                    id: 'scan',
+                    icon: '📄',
+                    title: 'Scan PDF',
+                    desc: 'Upload and extract medical codes'
+                },
+                {
+                    id: 'claims',
+                    icon: '📋',
+                    title: 'Claims',
+                    desc: 'View EOB and insurance claims'
+                },
+                {
+                    id: 'invoices',
+                    icon: '🧾',
+                    title: 'Invoices',
+                    desc: 'Manage patient invoices'
                 }
-            } else {
-                // Clinic cards: Medical billing focused
-                cards.push(
-                    {
-                        id: 'overview',
-                        icon: '📊',
-                        title: 'Overview',
-                        desc: 'Billing summary and quick stats'
-                    },
-                    {
-                        id: 'scan',
-                        icon: '📄',
-                        title: 'Scan PDF',
-                        desc: 'Upload and extract medical codes'
-                    },
-                    {
-                        id: 'claims',
-                        icon: '📋',
-                        title: 'Claims',
-                        desc: 'View EOB and insurance claims'
-                    },
-                    {
-                        id: 'invoices',
-                        icon: '🧾',
-                        title: 'Invoices',
-                        desc: 'Manage patient invoices'
-                    },
-                    {
-                        id: 'payments',
-                        icon: '💰',
-                        title: 'Payments',
-                        desc: 'Track and record payments'
-                    }
-                );
-            }
+            ];
 
             cardsContainer.innerHTML = cards.map(card => `
                 <div class="nav-card" onclick="showSection('${card.id}')">
@@ -983,6 +915,7 @@
                 'overview': 'overviewSection',
                 'scan': 'scanSection',
                 'claims': 'claimsSection',
+                'prior-auth': 'priorAuthSection',
                 'invoices': 'invoicesSection',
                 'payments': 'paymentsSection',
                 'commerce': 'commerceSection'
@@ -1006,6 +939,19 @@
             if (appointmentId && sectionId === 'scan') url += `&appointment_id=${encodeURIComponent(appointmentId)}`;
             if (suggestedCodes && sectionId === 'scan') url += `&suggested_codes=${encodeURIComponent(suggestedCodes)}`;
             window.history.pushState({}, '', url);
+
+            const navForSection = {
+                overview: 'claims',
+                scan: 'claims',
+                claims: 'prior-auth',
+                'prior-auth': 'prior-auth',
+                invoices: 'billing',
+                payments: 'billing',
+                commerce: 'claims'
+            };
+            if (typeof window.renderProviderSidebar === 'function') {
+                window.renderProviderSidebar(navForSection[sectionId] || 'claims');
+            }
         }
 
         // Load content for specific section
@@ -1020,14 +966,11 @@
                 case 'claims':
                     await loadClaims();
                     break;
+                case 'prior-auth':
+                    await loadPriorAuthSection();
+                    break;
                 case 'invoices':
                     await loadInvoices();
-                    break;
-                case 'payments':
-                    await loadPayments();
-                    break;
-                case 'commerce':
-                    await loadCommerce();
                     break;
             }
         }
@@ -1036,130 +979,186 @@
         async function loadOverview() {
             const content = document.getElementById('overviewContent');
 
-            if (tenantType === 'shop') {
-                // Commerce overview
-                try {
-                    const [creditsRes, ordersRes] = await Promise.all([
-                        fetch(`${API_BASE}/api/usage-monitor/credits`, { credentials: 'include' }),
-                        fetch(`${API_BASE}/api/orders`, { credentials: 'include' })
+            try {
+                    const clinicId = typeof window.ppGetClinicId === 'function' ? window.ppGetClinicId() : 'clinic-default';
+                    const headers = typeof window.ppGetAuthHeaders === 'function' ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' };
+                    const metricsUrl = new URL(`${API_BASE}/api/rcm/metrics/health`);
+                    metricsUrl.searchParams.set('clinic_id', clinicId);
+                    const [metricsRes, invoicesRes] = await Promise.all([
+                        fetch(metricsUrl.toString(), { credentials: 'include', headers }),
+                        fetch(`${API_BASE}/api/invoices`, { credentials: 'include' })
                     ]);
 
-                    let stats = {
-                        totalRevenue: 0,
-                        totalOrders: 0,
-                        voiceCheckouts: 0
-                    };
-
-                    if (ordersRes.ok) {
-                        const ordersData = await ordersRes.json();
-                        if (ordersData.success && ordersData.orders) {
-                            const orders = ordersData.orders;
-                            stats.totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
-                            stats.totalOrders = orders.length;
-                            stats.voiceCheckouts = orders.filter(o => o.source === 'voice' || o.payment_method === 'voice').length;
-                        }
+                    let metrics = null;
+                    if (metricsRes.ok) {
+                        const mj = await metricsRes.json();
+                        if (mj.success) metrics = mj.metrics;
                     }
 
-                    content.innerHTML = `
-                        <div class="stats-grid">
-                            <div class="stat-card">
-                                <div class="stat-label">Total Revenue</div>
-                                <div class="stat-value">$${stats.totalRevenue.toFixed(2)}</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Total Orders</div>
-                                <div class="stat-value">${stats.totalOrders}</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Voice Checkouts</div>
-                                <div class="stat-value">${stats.voiceCheckouts}</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 24px;">
-                            <p style="color: var(--gray-600); margin-bottom: 16px;">
-                                Quick actions:
-                            </p>
-                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                                <button class="btn-primary" onclick="showSection('commerce')">View Commerce Billing</button>
-                                ${hasMedicalBilling ? '<button class="btn-secondary" onclick="showSection(\'invoices\')">View Invoices</button>' : ''}
-                                <a href="orders.html" class="btn-secondary" style="text-decoration: none; display: inline-block;">View All Orders</a>
-                            </div>
-                        </div>
-                    `;
-                } catch (error) {
-                    content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading overview: ${error.message}</p></div>`;
-                }
-            } else {
-                // Clinic overview
-                try {
-                    const [invoicesRes, claimsRes] = await Promise.all([
-                        fetch(`${API_BASE}/api/invoices`, { credentials: 'include' }),
-                        fetch(`${API_BASE}/api/admin/billing/eob`, { credentials: 'include' })
-                    ]);
-
-                    let stats = {
-                        totalInvoices: 0,
-                        totalAmount: 0,
-                        paidAmount: 0,
-                        outstandingAmount: 0,
-                        totalPatients: 0
-                    };
-
+                    let outstanding = 0;
                     if (invoicesRes.ok) {
                         const invoicesData = await invoicesRes.json();
                         if (invoicesData.success && invoicesData.invoices) {
-                            const invoices = invoicesData.invoices;
-                            stats.totalInvoices = invoices.length;
-                            stats.totalAmount = invoices.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0);
-                            stats.paidAmount = invoices.reduce((sum, inv) => sum + parseFloat(inv.total_paid || 0), 0);
-                            stats.outstandingAmount = stats.totalAmount - stats.paidAmount;
+                            outstanding = invoicesData.invoices.reduce((sum, inv) => {
+                                const amt = parseFloat(inv.amount || 0);
+                                const paid = parseFloat(inv.total_paid || 0);
+                                return sum + Math.max(0, amt - paid);
+                            }, 0);
                         }
                     }
 
-                    if (claimsRes.ok) {
-                        const claimsData = await claimsRes.json();
-                        if (claimsData.success && claimsData.patients) {
-                            stats.totalPatients = claimsData.patients.length;
-                        }
-                    }
+                    const fmt = (n) => (typeof window.ppFormatMoney === 'function' ? window.ppFormatMoney(n) : '$' + Number(n || 0).toFixed(0));
+                    const claims = metrics?.claims || {};
+                    const pa = metrics?.prior_auth || {};
 
                     content.innerHTML = `
-                        <div class="stats-grid">
-                            <div class="stat-card">
-                                <div class="stat-label">Total Invoices</div>
-                                <div class="stat-value">${stats.totalInvoices}</div>
+                        <div class="pp-pipeline-cards">
+                            <div class="pp-pipe-card pp-pc-blue">
+                                <div class="pp-pipe-label">Submitted</div>
+                                <div class="pp-pipe-val">${claims.submitted || 0}</div>
+                                <div class="pp-pipe-meta">${fmt(claims.submitted_amount)} pending adjudication</div>
                             </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Total Amount</div>
-                                <div class="stat-value">$${stats.totalAmount.toFixed(2)}</div>
+                            <div class="pp-pipe-card pp-pc-green">
+                                <div class="pp-pipe-label">Paid</div>
+                                <div class="pp-pipe-val">${claims.paid || 0}</div>
+                                <div class="pp-pipe-meta">${fmt(claims.paid_amount)} collected</div>
                             </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Paid</div>
-                                <div class="stat-value">$${stats.paidAmount.toFixed(2)}</div>
+                            <div class="pp-pipe-card pp-pc-amber">
+                                <div class="pp-pipe-label">Denied / working</div>
+                                <div class="pp-pipe-val">${claims.denied || 0}</div>
+                                <div class="pp-pipe-meta">${metrics?.exceptions_pending || 0} need review</div>
                             </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Outstanding</div>
-                                <div class="stat-value">$${stats.outstandingAmount.toFixed(2)}</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Patients</div>
-                                <div class="stat-value">${stats.totalPatients}</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 24px;">
-                            <p style="color: var(--gray-600); margin-bottom: 16px;">
-                                Quick actions:
-                            </p>
-                            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                                <button class="btn-primary" onclick="showSection('scan')">Scan PDF</button>
-                                <button class="btn-secondary" onclick="showSection('invoices')">View Invoices</button>
-                                <button class="btn-secondary" onclick="showSection('claims')">View Claims</button>
+                            <div class="pp-pipe-card pp-pc-red">
+                                <div class="pp-pipe-label">Prior auth pending</div>
+                                <div class="pp-pipe-val">${pa.pending || 0}</div>
+                                <div class="pp-pipe-meta"><a href="billing.html?section=prior-auth">Open PA queue →</a></div>
                             </div>
                         </div>
+                        <div class="pp-rcm-flow" style="margin-top:16px">
+                            <div class="pp-rcm-flow-title">RCM pipeline</div>
+                            <div class="pp-rcm-steps">
+                                <div class="pp-rcm-step"><div class="pp-rcm-count">${claims.submitted || 0}</div><div class="pp-rcm-lbl">Submitted</div></div>
+                                <div class="pp-rcm-step"><div class="pp-rcm-count">${claims.pending || claims.submitted || 0}</div><div class="pp-rcm-lbl">Pending</div></div>
+                                <div class="pp-rcm-step"><div class="pp-rcm-count">${claims.paid || 0}</div><div class="pp-rcm-lbl">Paid</div></div>
+                                <div class="pp-rcm-step"><div class="pp-rcm-count">${claims.denied || 0}</div><div class="pp-rcm-lbl">Denied</div></div>
+                                <div class="pp-rcm-step"><div class="pp-rcm-count">${pa.pending || 0}</div><div class="pp-rcm-lbl">PA open</div></div>
+                            </div>
+                        </div>
+                        <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+                            <button class="pp-btn pp-btn-primary pp-btn-sm" onclick="showSection('scan')">Create claim</button>
+                            <button class="pp-btn pp-btn-ghost pp-btn-sm" onclick="showSection('claims')">Claims & EOB</button>
+                            <button class="pp-btn pp-btn-ghost pp-btn-sm" onclick="showSection('prior-auth')">Prior auth</button>
+                            <button class="pp-btn pp-btn-ghost pp-btn-sm" onclick="showSection('invoices')">Invoices</button>
+                            <a class="pp-btn pp-btn-ghost pp-btn-sm" href="claims.html">Exceptions (${metrics?.exceptions_pending || 0})</a>
+                        </div>
+                        <p style="margin-top:16px;color:var(--muted);font-size:13px">Patient invoices outstanding: ${fmt(outstanding)}</p>
                     `;
                 } catch (error) {
                     content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error loading overview: ${error.message}</p></div>`;
                 }
+        }
+
+        async function loadPriorAuthSection() {
+            const container = document.getElementById('priorAuthContent');
+            if (!container) return;
+            container.innerHTML = '<div class="pp-skeleton" style="height:80px"></div>';
+            try {
+                const list = typeof window.ppFetchPriorAuthRequests === 'function'
+                    ? await window.ppFetchPriorAuthRequests()
+                    : [];
+                if (!list.length) {
+                    container.innerHTML = '<div class="pp-empty">No prior auth cases yet. Cases appear when Kelly flags PA-required services.</div>';
+                    return;
+                }
+                const rows = list.map((r) => {
+                    const patient = r.patient_name || r.patient_id || 'Patient';
+                    const appt = r.appointment_date ? `${r.appointment_date} ${r.appointment_time || ''}`.trim() : '—';
+                    const status = r.status || 'pending';
+                    return `<tr>
+                        <td class="pp-td-name">${patient}</td>
+                        <td class="pp-td-code">${r.payer_id || '—'} · ${r.cpt_code || '—'} · ${r.icd10_code || '—'}</td>
+                        <td>${appt}</td>
+                        <td><span class="pp-pill pp-pill-w">${status}</span></td>
+                        <td>
+                            <button class="pp-btn pp-btn-ghost pp-btn-sm" onclick="submitPaRequest('${r.id}')">Submit</button>
+                            <button class="pp-btn pp-btn-ghost pp-btn-sm" onclick="approvePaRequest('${r.id}')">Approve</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+                container.innerHTML = `
+                    <div class="pp-claims-panel">
+                        <div class="pp-ctable-head">
+                            <div class="pp-th">Patient</div>
+                            <div class="pp-th">Payer · Codes</div>
+                            <div class="pp-th">Appointment</div>
+                            <div class="pp-th">Status</div>
+                            <div class="pp-th">Actions</div>
+                        </div>
+                        ${rows.replace(/<tr>/g, '<div class="pp-ctable-row">').replace(/<\/tr>/g, '</div>').replace(/<td/g, '<div').replace(/<\/td>/g, '</div>')}
+                    </div>`;
+                // Fix: use proper grid rows
+                container.innerHTML = `
+                    <div class="pp-claims-panel">
+                        <div class="pp-ctable-head">
+                            <div class="pp-th">Patient</div><div class="pp-th">Payer · Codes</div><div class="pp-th">Appointment</div><div class="pp-th">Status</div><div class="pp-th">Actions</div>
+                        </div>
+                        ${list.map((r) => {
+                            const patient = r.patient_name || r.patient_id || 'Patient';
+                            const appt = r.appointment_date ? `${r.appointment_date} ${r.appointment_time || ''}`.trim() : '—';
+                            return `<div class="pp-ctable-row">
+                                <div class="pp-td-name">${patient}</div>
+                                <div class="pp-td-code">${r.payer_id || '—'} · ${r.cpt_code || '—'}</div>
+                                <div class="pp-td-mono">${appt}</div>
+                                <div><span class="pp-pill pp-pill-w">${r.status || 'pending'}</span></div>
+                                <div style="display:flex;gap:6px">
+                                    <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" data-pa-submit="${r.id}">Submit</button>
+                                    <button type="button" class="pp-btn pp-btn-ghost pp-btn-sm" data-pa-approve="${r.id}">Approve</button>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>`;
+                container.querySelectorAll('[data-pa-submit]').forEach((btn) => {
+                    btn.addEventListener('click', () => submitPaRequest(btn.getAttribute('data-pa-submit')));
+                });
+                container.querySelectorAll('[data-pa-approve]').forEach((btn) => {
+                    btn.addEventListener('click', () => approvePaRequest(btn.getAttribute('data-pa-approve')));
+                });
+            } catch (e) {
+                container.innerHTML = `<div class="pp-empty">Could not load prior auth: ${e.message}</div>`;
+            }
+        }
+
+        async function submitPaRequest(id) {
+            try {
+                const res = await fetch(`${API_BASE}/api/prior-auth/requests/${encodeURIComponent(id)}/submit`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: typeof window.ppGetAuthHeaders === 'function' ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                alert(data.success ? 'PA submitted' : (data.error || data.code || 'Submit failed'));
+                await loadPriorAuthSection();
+            } catch (e) {
+                alert(e.message);
+            }
+        }
+
+        async function approvePaRequest(id) {
+            const authNumber = prompt('Enter authorization number:');
+            if (!authNumber) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/prior-auth/requests/${encodeURIComponent(id)}/approve`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: typeof window.ppGetAuthHeaders === 'function' ? window.ppGetAuthHeaders() : { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ auth_number: authNumber })
+                });
+                const data = await res.json();
+                alert(data.success ? 'PA approved' : (data.error || 'Approve failed'));
+                await loadPriorAuthSection();
+            } catch (e) {
+                alert(e.message);
             }
         }
 
@@ -1700,8 +1699,22 @@
         }
 
         // View EOB (simplified)
-        function viewEOB(patientId) {
-            window.location.href = `claims.html?patient=${patientId}`;
+        async function viewEOB(patientId) {
+            try {
+                const res = await fetch(
+                    `${API_BASE}/api/claims?${new URLSearchParams({ patient_id: patientId }).toString()}`,
+                    { credentials: 'include' }
+                );
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                if (!data.success || !data.latest_claim_id) {
+                    alert('No claim found for this patient.');
+                    return;
+                }
+                window.location.href = `claims.html?id=${data.latest_claim_id}`;
+            } catch (err) {
+                alert(`Error opening claim: ${err.message}`);
+            }
         }
 
         // Load invoices section
@@ -1830,75 +1843,6 @@
                     <button class="btn-primary" onclick="showSection('invoices')" style="margin-top: 16px;">View Invoices</button>
                 </div>
             `;
-        }
-
-        // Load commerce section
-        async function loadCommerce() {
-            const content = document.getElementById('commerceContent');
-
-            try {
-                const [creditsRes, ordersRes] = await Promise.all([
-                    fetch(`${API_BASE}/api/usage-monitor/credits`, { credentials: 'include' }),
-                    fetch(`${API_BASE}/api/orders`, { credentials: 'include' })
-                ]);
-
-                let stats = {
-                    totalRevenue: 0,
-                    totalOrders: 0,
-                    avgOrderValue: 0,
-                    voiceCheckouts: 0
-                };
-
-                if (ordersRes.ok) {
-                    const ordersData = await ordersRes.json();
-                    if (ordersData.success && ordersData.orders) {
-                        const orders = ordersData.orders;
-                        stats.totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
-                        stats.totalOrders = orders.length;
-                        stats.avgOrderValue = stats.totalOrders > 0 ? stats.totalRevenue / stats.totalOrders : 0;
-                        stats.voiceCheckouts = orders.filter(o => o.source === 'voice' || o.payment_method === 'voice').length;
-                    }
-                }
-
-                content.innerHTML = `
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-label">Total Revenue</div>
-                            <div class="stat-value">$${stats.totalRevenue.toFixed(2)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Total Orders</div>
-                            <div class="stat-value">${stats.totalOrders}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Average Order Value</div>
-                            <div class="stat-value">$${stats.avgOrderValue.toFixed(2)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Voice Checkouts</div>
-                            <div class="stat-value">${stats.voiceCheckouts}</div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 24px; background: white; border-radius: 12px; padding: 24px; box-shadow: var(--shadow-md);">
-                        <h3 style="margin-bottom: 16px;">📊 Commerce Billing Overview</h3>
-                        <p style="color: var(--gray-600); margin-bottom: 16px;">
-                            Your commerce billing is managed through:
-                        </p>
-                        <ul style="color: var(--gray-700); line-height: 2; margin-bottom: 24px;">
-                            <li><strong>Orders Tab:</strong> View all sales and order details</li>
-                            <li><strong>Voice Agent:</strong> Track voice checkout transactions</li>
-                            <li><strong>Credits Banner:</strong> Monitor voice minutes usage</li>
-                            <li><strong>Dashboard:</strong> Revenue analytics and trends</li>
-                        </ul>
-                        <div>
-                            <a href="orders.html" class="btn-primary" style="text-decoration: none; display: inline-block; margin-right: 12px;">View Orders</a>
-                            <a href="business-dashboard.html" class="btn-secondary" style="text-decoration: none; display: inline-block;">View Dashboard</a>
-                        </div>
-                    </div>
-                `;
-            } catch (error) {
-                content.innerHTML = `<div class="empty-state"><div class="empty-state-icon">❌</div><p>Error: ${error.message}</p></div>`;
-            }
         }
 
         // Filter functions (simplified)

@@ -317,13 +317,13 @@
 
                 // Check if response is OK before parsing JSON
                 if (!response.ok) {
-                    // Try to parse error response
+                    let errBody = null;
                     try {
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-                    } catch (parseError) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                    }
+                        errBody = await response.json();
+                    } catch (_) { /* non-JSON body */ }
+                    throw new Error(
+                        errBody?.error || errBody?.message || `HTTP ${response.status}: ${response.statusText}`
+                    );
                 }
 
                 const data = await response.json();
@@ -347,17 +347,16 @@
                     const subdomain = data.customer.subdomain;
 
                     // Localhost: stay on current origin (no subdomain redirect) to avoid SSL errors
+                    const providerHome = '/business/today.html';
                     if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
-                        window.location.href = '/business/business-dashboard.html';
+                        window.location.href = providerHome;
                     } else if (subdomain && currentHostname.includes(`${subdomain}.doclittle.site`)) {
-                        // Already on correct subdomain - just go to dashboard
-                        window.location.href = '/business/business-dashboard.html';
+                        window.location.href = providerHome;
                     } else if (subdomain) {
-                        // Need to redirect to tenant subdomain (production uses https)
                         const baseDomain = 'doclittle.site';
-                        window.location.href = `https://${subdomain}.${baseDomain}/business/business-dashboard.html`;
+                        window.location.href = `https://${subdomain}.${baseDomain}/business/today.html`;
                     } else {
-                        window.location.href = '/business/business-dashboard.html';
+                        window.location.href = providerHome;
                     }
                 } else {
                     throw new Error(data.error || data.message || 'Login failed');

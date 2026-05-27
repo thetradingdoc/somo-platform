@@ -872,7 +872,7 @@
         codeSuccess.classList.remove('hidden');
 
         // Production-simple flow: always proceed to terms, then clinic dashboard.
-        window.location.href = `/terms?redirect=${encodeURIComponent('/business/business-dashboard.html')}`;
+        window.location.href = `/terms?redirect=${encodeURIComponent('/business/today.html')}`;
       } catch (err) {
         showError(codeError, err.message);
       } finally {

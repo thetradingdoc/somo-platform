@@ -6,6 +6,9 @@
   <title>Patient Case Report - Consult</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="../assets/js/config.js"></script>
+  <link rel="stylesheet" href="../assets/css/provider-portal.css" />
+  <script src="../assets/js/provider-shell.js"></script>
+  <script src="../assets/js/provider-layout.js"></script>
   <style>
     body {
       background: var(--gray-50);
@@ -101,7 +104,7 @@
         <div class="sidebar-subtitle sidebar-subtitle-portal">Doctor's Portal</div>
       </div>
       <nav class="sidebar-nav">
-        <a href="business-dashboard.html" class="nav-item">
+        <a href="today.html" class="nav-item">
           <span class="nav-icon">📊</span><span>Dashboard</span>
         </a>
         <a href="patients.html" class="nav-item">
@@ -269,6 +272,11 @@
     document.getElementById('loadCaseBtn').addEventListener('click', loadCase);
 
     document.addEventListener('DOMContentLoaded', () => {
+      mountProviderPage({
+        activeId: 'patients',
+        eyebrow: 'Patients',
+        title: 'Patient case'
+      });
       const params = new URLSearchParams(window.location.search);
       const pid = params.get('patient_id');
       if (pid) {

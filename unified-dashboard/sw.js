@@ -1,14 +1,17 @@
 // Minimal service worker for installability and basic offline shell.
 
-const CACHE_NAME = 'doclittle-shell-v7';
+const CACHE_NAME = 'doclittle-shell-v9';
 const SHELL_URLS = [
-  '/unified-dashboard/business/business-dashboard.html',
+  '/unified-dashboard/business/today.html',
   '/unified-dashboard/patients/patient-dashboard.html',
   '/unified-dashboard/patients/appointments.html',
   '/unified-dashboard/patients/wallet.html',
   '/unified-dashboard/patients/my-records.html',
   '/unified-dashboard/assets/css/global.css',
+  '/unified-dashboard/assets/css/provider-portal.css',
   '/unified-dashboard/assets/js/config.js',
+  '/unified-dashboard/assets/js/provider-shell.js',
+  '/unified-dashboard/assets/js/provider-layout.js',
   '/unified-dashboard/assets/js/navigation.js',
   '/unified-dashboard/assets/js/patient-shell.js'
 ];

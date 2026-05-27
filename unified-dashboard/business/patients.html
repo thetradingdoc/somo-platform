@@ -4,11 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Customer List - Business Management</title>
+    <title>Patients — Provider Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <script src="../assets/js/config.js"></script>
-    <script src="../assets/js/navigation.js"></script>
+    <script src="../assets/js/auth-utils.js"></script>
+    <script src="../assets/js/provider-shell.js"></script>
+    <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -550,7 +553,7 @@
     </style>
 </head>
 
-<body>
+<body class="provider-portal provider-portal--scroll">
     <!-- Mobile Menu Toggle -->
     <button class="mobile-menu-toggle" onclick="toggleSidebar()" aria-label="Toggle menu">☰</button>
     
@@ -585,57 +588,57 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="page-header">
-                <h1 class="page-title">Customer List</h1>
-                <p class="page-subtitle">View and manage customer records and orders</p>
+                <h1 class="page-title">Patient roster</h1>
+                <p class="page-subtitle">Patients, payers, and billing summary</p>
             </div>
 
             <!-- Stats Grid -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Total Customers</span>
+                        <span class="stat-title">Total Patients</span>
                         <span class="stat-icon">👥</span>
                     </div>
                     <div class="stat-value" id="totalCustomers">0</div>
-                    <div class="stat-change">All customers</div>
+                    <div class="stat-change">All patients</div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Active Customers (30d)</span>
+                        <span class="stat-title">With EHR data</span>
                         <span class="stat-icon">✅</span>
                     </div>
                     <div class="stat-value" id="newCustomers">0</div>
-                    <div class="stat-change">Recent orders</div>
+                    <div class="stat-change">Epic encounters synced</div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Has Therapist</span>
+                        <span class="stat-title">EHR synced</span>
                         <span class="stat-icon">🏥</span>
                     </div>
                     <div class="stat-value" id="repeatCustomers">0</div>
-                    <div class="stat-change">With therapist</div>
+                    <div class="stat-change">Linked in EHR</div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-header">
-                        <span class="stat-title">Total Revenue</span>
+                        <span class="stat-title">With coverage</span>
                         <span class="stat-icon">💰</span>
                     </div>
-                    <div class="stat-value" id="avgOrderValue">$0.00</div>
-                    <div class="stat-change">Lifetime spend</div>
+                    <div class="stat-value" id="avgOrderValue">0</div>
+                    <div class="stat-change">Eligibility on file</div>
                 </div>
             </div>
 
             <!-- Filter Buttons -->
             <div class="filter-buttons" style="display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap;">
                 <button class="btn btn-primary btn-sm" id="filterAll" onclick="filterCustomers('all')">All
-                    Customers</button>
-                <button class="btn btn-secondary btn-sm" id="filterTherapist" onclick="filterCustomers('therapist')">Has
-                    Therapist</button>
-                <button class="btn btn-secondary btn-sm" id="filterActive" onclick="filterCustomers('active')">Active
-                    (30d)</button>
+                    Patients</button>
+                <button class="btn btn-secondary btn-sm" id="filterTherapist" onclick="filterCustomers('ehr')">EHR
+                    Linked</button>
+                <button class="btn btn-secondary btn-sm" id="filterActive" onclick="filterCustomers('coverage')">With
+                    Coverage</button>
             </div>
 
             <!-- Search Bar -->
@@ -643,7 +646,7 @@
                 <div class="search-input-wrapper">
                     <span class="search-icon">🔍</span>
                     <input type="text" id="searchInput" class="search-input"
-                        placeholder="Search customers by name, phone, or email..." oninput="searchCustomers()">
+                        placeholder="Search patients by name, phone, or email..." oninput="searchCustomers()">
                 </div>
             </div>
 
@@ -743,7 +746,7 @@
             });
         }
 
-        // renderSidebar function removed - now using shared navigation.js
+        // Provider shell: mountProviderPage() in DOMContentLoaded
 
         if (sessionStorage.getItem('authenticated') !== 'true') {
             window.location.href = '../login.html';
@@ -752,10 +755,11 @@
         userData = JSON.parse(sessionStorage.getItem('user'));
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Navigation is now handled by navigation.js
-            renderNavigation('patients');
-            setupMobileNavClose();
-            loadUserInfo();
+            mountProviderPage({
+                activeId: 'patients',
+                eyebrow: 'Patient roster',
+                title: 'Patients'
+            });
             loadCustomers();
 
             // Close sidebar on window resize if switching to desktop
@@ -783,12 +787,6 @@
 
         async function loadCustomers() {
             try {
-                // For shop tenants, build customers from merchant orders (commerce view)
-                if (window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop') {
-                    return await loadShopCustomersFromOrders();
-                }
-
-                // For clinic tenants, use FHIR + insurance/EHR as before
                 const response = await fetch(`${API_BASE}/fhir/Patient`);
                 const bundle = await response.json();
 
@@ -864,109 +862,16 @@
             }
         }
 
-        // Load customers for shop tenants using merchant orders
-        async function loadShopCustomersFromOrders() {
-            try {
-                const response = await fetch(`${MERCHANT_API}/orders`, {
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (response.status === 401) {
-                    window.location.href = '../login.html';
-                    return;
-                }
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                if (!data.success || !Array.isArray(data.orders)) {
-                    throw new Error(data.error || 'Failed to load orders');
-                }
-
-                const orders = data.orders;
-                const byCustomer = new Map();
-
-                orders.forEach(order => {
-                    const email = (order.customer_email || '').toLowerCase();
-                    const phone = (order.customer_phone || '').toLowerCase();
-                    const key = email || phone || (order.customer_name || '').toLowerCase() || order.id;
-
-                    if (!byCustomer.has(key)) {
-                        byCustomer.set(key, {
-                            customer_name: order.customer_name || 'Customer',
-                            customer_email: order.customer_email || '',
-                            customer_phone: order.customer_phone || '',
-                            total_orders: 0,
-                            total_spend: 0,
-                            last_order_at: null,
-                            channels: new Set()
-                        });
-                    }
-
-                    const c = byCustomer.get(key);
-                    c.total_orders += 1;
-                    c.total_spend += parseFloat(order.total_amount || 0);
-
-                    if (order.created_at) {
-                        const created = new Date(order.created_at);
-                        if (!c.last_order_at || created > new Date(c.last_order_at)) {
-                            c.last_order_at = order.created_at;
-                        }
-                    }
-
-                    const source = (order.source || 'voice').toLowerCase();
-                    c.channels.add(source);
-                });
-
-                const customers = Array.from(byCustomer.values()).map(c => ({
-                    ...c,
-                    channels: Array.from(c.channels)
-                }));
-
-                allCustomers = customers;
-                displayCustomers(allCustomers);
-                updateStatsFromPatients(allCustomers);
-            } catch (error) {
-                console.error('Error loading shop customers from orders:', error);
-                document.getElementById('customersList').innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">❌</div>
-                        <p>Failed to load customers from orders. Make sure middleware is running.</p>
-                        <button class="btn btn-secondary" onclick="loadCustomers()">Retry</button>
-                    </div>
-                `;
-            }
-        }
-
         function updateStatsFromPatients(customers) {
             const total = customers.length;
-
-            // Calculate stats for cannabis e-commerce
-            const now = new Date();
-            const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-
-            // Active customers (orders in last 30 days)
-            const activeCustomers = customers.filter(c => {
-                if (!c.last_order_at) return false;
-                const lastOrder = new Date(c.last_order_at);
-                return (now - lastOrder) < THIRTY_DAYS;
-            }).length;
-
-            // Customers with therapist (have fhir_patient_id)
-            const hasTherapist = customers.filter(c => c.fhir_patient_id).length;
-
-            // Total revenue (lifetime spend)
-            const totalRevenue = customers.reduce((sum, c) => sum + (c.total_spend || 0), 0);
+            const withEhr = customers.filter(c => c.ehr_data && c.ehr_data.encounters && c.ehr_data.encounters.length > 0).length;
+            const withFhir = customers.filter(c => c.fhir_id).length;
+            const withCoverage = customers.filter(c => c.eligibility && c.eligibility.eligible).length;
 
             document.getElementById('totalCustomers').textContent = total;
-            document.getElementById('newCustomers').textContent = activeCustomers;
-            document.getElementById('repeatCustomers').textContent = hasTherapist;
-            document.getElementById('avgOrderValue').textContent = `$${totalRevenue.toFixed(2)}`;
+            document.getElementById('newCustomers').textContent = withEhr;
+            document.getElementById('repeatCustomers').textContent = withFhir;
+            document.getElementById('avgOrderValue').textContent = withCoverage;
         }
 
         // Filter customers function
@@ -990,25 +895,23 @@
             }
             if (filterTherapistBtn) {
                 filterTherapistBtn.classList.remove('btn-primary', 'btn-secondary');
-                filterTherapistBtn.classList.add(filter === 'therapist' ? 'btn-primary' : 'btn-secondary');
+                filterTherapistBtn.classList.add(filter === 'ehr' || filter === 'therapist' ? 'btn-primary' : 'btn-secondary');
             }
             if (filterActiveBtn) {
                 filterActiveBtn.classList.remove('btn-primary', 'btn-secondary');
-                filterActiveBtn.classList.add(filter === 'active' ? 'btn-primary' : 'btn-secondary');
+                filterActiveBtn.classList.add(filter === 'coverage' || filter === 'active' ? 'btn-primary' : 'btn-secondary');
             }
 
             // Filter customers
             let filtered = [...allCustomers]; // Create a copy
-            if (filter === 'therapist') {
-                filtered = allCustomers.filter(c => c.fhir_patient_id);
+            if (filter === 'ehr') {
+                filtered = allCustomers.filter(c => c.ehr_data && c.ehr_data.encounters && c.ehr_data.encounters.length > 0);
+            } else if (filter === 'coverage') {
+                filtered = allCustomers.filter(c => c.eligibility && c.eligibility.eligible);
+            } else if (filter === 'therapist') {
+                filtered = allCustomers.filter(c => c.fhir_id);
             } else if (filter === 'active') {
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                filtered = allCustomers.filter(c => {
-                    if (!c.last_order_at) return false;
-                    const lastOrder = new Date(c.last_order_at);
-                    return !isNaN(lastOrder.getTime()) && lastOrder >= thirtyDaysAgo;
-                });
+                filtered = allCustomers.filter(c => c.eligibility && c.eligibility.eligible);
             }
 
             displayCustomers(filtered);
@@ -1025,7 +928,7 @@
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">👥</div>
-                        <p>No customers yet. Customers will appear here after their first purchase.</p>
+                        <p>No patients yet. Patients appear here when synced from your EHR or created via scheduling.</p>
                     </div>
                 `;
                 return;
@@ -1058,36 +961,6 @@
             const email = patient.customer_email || '';
             const hasEhrData = patient.ehr_data && patient.ehr_data.encounters && patient.ehr_data.encounters.length > 0;
             const eligibility = patient.eligibility || null;
-
-            // For shop tenants (cannabis e-commerce), render commerce-style card
-            const isShop = window.TENANT_CONFIG && window.TENANT_CONFIG.tenant_type === 'shop';
-            if (isShop) {
-                const hasTherapist = patient.fhir_patient_id || false;
-                const orders = patient.total_orders || 0;
-                const spend = patient.total_spend || 0;
-                const lastOrder = patient.last_order_at ? new Date(patient.last_order_at).toLocaleDateString() : '—';
-                const pid = (patient.fhir_id || patient.fhir_patient_id || patient.id || '').replace(/"/g, '&quot;');
-                return `
-                <div class="customer-card" data-patient-id="${pid}">
-                    <div class="customer-header">
-                        <div class="customer-avatar">${initials}</div>
-                        <div class="customer-info">
-                            <div class="customer-name">${patient.customer_name}${hasTherapist ? '<span class="badge badge-success" style="margin-left: 8px; font-size: 10px;">Has Therapist</span>' : ''}</div>
-                            <div class="customer-contact">${phone}${email ? ' · ' + email : ''}</div>
-                        </div>
-                    </div>
-                    <div class="customer-stats">
-                        <div class="stat-item"><div class="stat-value">${orders}</div><div class="stat-label">Total Orders</div></div>
-                        <div class="stat-item"><div class="stat-value">$${spend.toFixed(2)}</div><div class="stat-label">Lifetime Spend</div></div>
-                        <div class="stat-item"><div class="stat-value">${lastOrder}</div><div class="stat-label">Last Order</div></div>
-                    </div>
-                    <div class="customer-actions">
-                        <button class="btn btn-secondary btn-sm" onclick="viewOrders('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">View Orders</button>
-                        ${patient.customer_phone ? `<button class="btn btn-primary btn-sm" onclick="contactCustomer('${patient.customer_phone.replace(/'/g, "\\'")}')">📞 Contact</button>` : ''}
-                        ${!hasTherapist ? `<button class="btn btn-secondary btn-sm" onclick="bookTherapist('${(patient.id || patient.customer_phone || patient.customer_email || '').replace(/'/g, "\\'")}')">Book Therapist</button>` : ''}
-                    </div>
-                </div>`;
-            }
 
             // Clinic tenants: FHIR card with insurance, copay, deductible
             let ehrSummary = '';
@@ -1197,7 +1070,7 @@
                             <div class="customer-contact">${phone}${email ? ' · ' + email : ''}</div>
                         </div>
                         <div style="display: flex; gap: 4px; align-items: center;">
-                            ${hasEhrData ? '<span class="badge badge-success" style="font-size: 10px;">EPIC</span>' : ''}
+                            ${hasEhrData ? '<span class="badge badge-success" style="font-size: 10px;">EHR Synced</span>' : ''}
                             <span class="badge badge-info">FHIR</span>
                         </div>
                     </div>
@@ -1271,13 +1144,8 @@
             window.location.href = `billing.html?patient=${encodeURIComponent(fhirId)}`;
         }
 
-        function goToOrders() {
-            window.location.href = 'orders.html';
-        }
-
         function viewPatientDetails(fhirId) {
-            // Navigate to records, but also support inline insurance view via param
-            window.location.href = `records.html?id=${encodeURIComponent(fhirId)}`;
+            window.location.href = `patient-case.html?patient_id=${encodeURIComponent(fhirId)}`;
         }
 
         function viewPatientEhrDetails(fhirId) {
@@ -1385,15 +1253,6 @@
             document.body.appendChild(modal);
         }
 
-        function viewOrders(customerId) {
-            // Navigate to orders page with customer filter
-            if (customerId) {
-                window.location.href = `orders.html?customer=${encodeURIComponent(customerId)}`;
-            } else {
-                window.location.href = 'orders.html';
-            }
-        }
-
         function contactCustomer(phone) {
             if (phone) {
                 // Try to initiate call
@@ -1401,12 +1260,6 @@
             } else {
                 alert('No phone number available for this customer');
             }
-        }
-
-        function bookTherapist(customerId) {
-            // Navigate to booking page or open booking modal
-            alert('Therapist booking feature coming soon. This will create a FHIR Patient record and link it to the customer.');
-            // Future: window.location.href = `book-therapist.html?customer=${encodeURIComponent(customerId)}`;
         }
 
         function logout() {

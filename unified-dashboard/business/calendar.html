@@ -12,9 +12,11 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 
   <link rel="stylesheet" href="../assets/css/global.css">
+  <link rel="stylesheet" href="../assets/css/provider-portal.css">
   <script src="../assets/js/config.js"></script>
   <script src="../assets/js/auth-utils.js"></script>
-  <script src="../assets/js/navigation.js"></script>
+  <script src="../assets/js/provider-shell.js"></script>
+  <script src="../assets/js/provider-layout.js"></script>
   <style>
     /* Shared app layout (copied from patients/dashboard for left sidebar) */
     :root {
@@ -638,7 +640,7 @@
   </style>
 </head>
 
-<body style="background:#f3f4f6;">
+<body class="provider-portal provider-portal--scroll" style="background:var(--bg,#f4f7fa);">
   <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Open menu">☰</button>
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
   <div class="layout">
@@ -733,6 +735,7 @@
           <input type="text" id="createPatientSearch" class="input" required placeholder="Type name to search or enter manually" style="width:100%;" autocomplete="off" />
           <div id="createPatientSearchResults" style="display:none; margin-top:4px; max-height:160px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; background:#fff;"></div>
         </div>
+        <input type="hidden" id="createPatientId" />
         <div>
           <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Patient Phone *</label>
           <input type="tel" id="createPatientPhone" class="input" required style="width:100%;" placeholder="+1234567890" />
@@ -1881,7 +1884,12 @@
     }
 
     async function initCalendar() {
-      renderNavigation('calendar');
+      mountProviderPage({
+        activeId: 'calendar',
+        eyebrow: 'Schedule',
+        title: 'Appointments',
+        topbarActions: '<a class="pp-btn pp-btn-primary pp-btn-sm" href="#" onclick="document.getElementById(\'createApptModal\').style.display=\'flex\';return false;">+ New Appointment</a>'
+      });
       // Default date filter empty = show ALL appointments (past + future); user can filter by date if needed
       const dateInput = document.getElementById('dateFilter');
       dateInput.placeholder = 'All dates';
@@ -1986,10 +1994,12 @@
       document.getElementById('createPatientSearch').addEventListener('input', function () {
         const q = this.value.trim();
         const resultsEl = document.getElementById('createPatientSearchResults');
+        const idEl = document.getElementById('createPatientId');
         clearTimeout(searchTimeout);
         if (q.length < 2) {
           resultsEl.style.display = 'none';
           resultsEl.innerHTML = '';
+          if (idEl) idEl.value = '';
           return;
         }
         searchTimeout = setTimeout(async () => {
@@ -2015,17 +2025,18 @@
               });
             }
             if (patients.length === 0) {
-              resultsEl.innerHTML = '<div style="padding:12px;color:#6b7280;">No patients found. Enter details manually below.</div>';
+              resultsEl.innerHTML = '<div style="padding:12px;color:#6b7280;">No patient match. The name you typed will be used for this appointment.</div>';
             } else {
               resultsEl.innerHTML = patients.map(p => {
                 const label = [p.name, p.phone, p.email].filter(Boolean).join(' • ');
-                return `<div class="patient-search-item" data-name="${(p.name || '').replace(/"/g, '&quot;')}" data-phone="${(p.phone || '').replace(/"/g, '&quot;')}" data-email="${(p.email || '').replace(/"/g, '&quot;')}" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">${label || p.id}</div>`;
+                return `<div class="patient-search-item" data-id="${(p.id || '').replace(/"/g, '&quot;')}" data-name="${(p.name || '').replace(/"/g, '&quot;')}" data-phone="${(p.phone || '').replace(/"/g, '&quot;')}" data-email="${(p.email || '').replace(/"/g, '&quot;')}" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;">${label || p.id}</div>`;
               }).join('');
               resultsEl.querySelectorAll('.patient-search-item').forEach(el => {
                 el.addEventListener('click', () => {
                   document.getElementById('createPatientSearch').value = el.dataset.name || '';
                   document.getElementById('createPatientPhone').value = el.dataset.phone || '';
                   document.getElementById('createPatientEmail').value = el.dataset.email || '';
+                  if (idEl) idEl.value = el.dataset.id || '';
                   resultsEl.style.display = 'none';
                   resultsEl.innerHTML = '';
                 });
@@ -2054,6 +2065,7 @@
           patient_name: document.getElementById('createPatientSearch').value.trim(),
           patient_phone: document.getElementById('createPatientPhone').value.trim(),
           patient_email: document.getElementById('createPatientEmail').value.trim() || null,
+          patient_id: (document.getElementById('createPatientId') && document.getElementById('createPatientId').value.trim()) || null,
           appointment_type: document.getElementById('createApptType').value,
           date: document.getElementById('createApptDate').value,
           time: document.getElementById('createApptTime').value,

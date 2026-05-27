@@ -1,10 +1,16 @@
 /**
- * Shared Navigation Component
- * Renders navigation sidebar from TENANT_CONFIG.navItems (tenant-aware)
- * Single source of truth for navigation across all pages
+ * Legacy navigation for static sidebars (pre–FrontDesk shell).
+ * Provider pages use provider-shell.js + mountProviderPage() instead.
+ * Renders navigation sidebar from TENANT_CONFIG.navItems (tenant-aware).
  */
 
 function renderNavigation(activeId = null) {
+    if (document.getElementById('ppSidebarNav')) {
+        if (typeof window.renderProviderSidebar === 'function' && activeId) {
+            window.renderProviderSidebar(activeId);
+        }
+        return;
+    }
     const navEl = document.getElementById('sidebarNav');
     if (!navEl) {
         console.warn('⚠️ Sidebar nav element not found');
@@ -39,18 +45,30 @@ function renderNavigation(activeId = null) {
     // Determine active item if not provided
     if (!activeId) {
         const currentPath = window.location.pathname;
-        const currentFile = currentPath.split('/').pop() || 'business-dashboard.html';
+        const currentFile = currentPath.split('/').pop() || 'today.html';
         const urlParams = new URLSearchParams(window.location.search);
         const section = urlParams.get('section');
 
+        if (currentFile === 'today.html') {
+            activeId = 'today';
+        }
+        if (currentFile === 'claims.html' && navItems.some((item) => item.id === 'claims')) {
+            activeId = 'claims';
+        }
+        if (currentFile === 'agent.html' && navItems.some((item) => item.id === 'agent')) {
+            activeId = 'agent';
+        }
         if (currentFile === 'billing.html' && section) {
-            const sectionToNavId = { scan: 'claims', invoices: 'billing', claims: 'claims', overview: 'billing', payments: 'billing', commerce: 'billing' };
+            const sectionToNavId = { scan: 'claims', invoices: 'billing', claims: 'claims', overview: 'claims', payments: 'billing', commerce: 'billing' };
             if (sectionToNavId[section] && navItems.some(item => item.id === sectionToNavId[section])) {
                 activeId = sectionToNavId[section];
             }
         }
         if (!activeId && currentFile === 'invoice-detail.html' && navItems.some(item => item.id === 'billing')) {
             activeId = 'billing';
+        }
+        if (!activeId && currentFile === 'business-dashboard.html' && navItems.some(item => item.id === 'today')) {
+            activeId = 'today';
         }
         if (!activeId) {
             const matchingItem = navItems.find(item => {
@@ -107,11 +125,21 @@ function renderNavigation(activeId = null) {
         subtitleEl.textContent = window.TENANT_CONFIG.sidebarSubtitle;
     }
 
-    // Match patient portal branding in doctor/business portal.
-    const logoEl = document.querySelector('.sidebar-logo');
-    if (logoEl) {
-        logoEl.style.color = '#1d4ed8';
-        logoEl.style.fontWeight = '700';
+    // Provider portal: dark sidebar + Plus Jakarta when stylesheet loaded
+    if (document.body.classList.contains('provider-portal')) {
+        const logoEl = document.querySelector('.sidebar-logo');
+        if (logoEl) {
+            logoEl.style.color = '#fff';
+            logoEl.style.fontWeight = '700';
+            logoEl.style.fontSize = '13.5px';
+            logoEl.style.letterSpacing = '-0.02em';
+        }
+    } else {
+        const logoEl = document.querySelector('.sidebar-logo');
+        if (logoEl) {
+            logoEl.style.color = '#1d4ed8';
+            logoEl.style.fontWeight = '700';
+        }
     }
 
     mountBusinessBottomTabs(activeId, navItems);
@@ -228,7 +256,7 @@ function mountBusinessBottomTabs(activeId, navItems = []) {
     // Keep bottom nav focused and touch-friendly (5 primary actions).
     const findAny = (...ids) => ids.map((id) => navItems.find((n) => n.id === id)).find(Boolean);
     const selected = [];
-    selected.push(findAny('dashboard') || { id: 'dashboard', label: 'Home', href: 'business-dashboard.html' });
+    selected.push(findAny('today') || { id: 'today', label: 'Today', href: 'today.html' });
     selected.push(findAny('calendar') || { id: 'calendar', label: 'Calendar', href: 'calendar.html' });
     selected.push(findAny('patients') || { id: 'patients', label: 'Patients', href: 'patients.html' });
     selected.push(findAny('billing') || { id: 'billing', label: 'Revenue', href: 'billing.html?section=overview' });
@@ -241,6 +269,7 @@ function mountBusinessBottomTabs(activeId, navItems = []) {
         const href = (typeof window.resolveBusinessPath === 'function') ? window.resolveBusinessPath(item.href) : item.href;
         // Force deterministic icon set for bottom bar regardless of tenant payload icon values.
         const iconById = {
+          today: 'home',
           dashboard: 'home',
           calendar: 'calendar-days',
           patients: 'user-group',

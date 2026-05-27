@@ -6,11 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voice Agent - Doctor's Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <link rel="stylesheet" href="../assets/css/email-composer.css">
     <link rel="stylesheet" href="../assets/css/sms-composer.css">
     <script src="../assets/js/config.js"></script>
-    <script src="../assets/js/navigation.js"></script>
+    <script src="../assets/js/provider-shell.js"></script>
+    <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -822,7 +824,7 @@
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
-                <!-- Populated by navigation.js -->
+                <!-- Nav from provider-shell.js -->
             </nav>
 
             <div class="sidebar-footer">
@@ -907,27 +909,21 @@
                     </div>
 
                     <div class="performance-card">
-                        <h3>💰 Sales from Calls</h3>
-                        <div class="performance-value" id="callRevenue">$0</div>
-                        <div class="performance-change positive" id="revenueChange">+$0 today</div>
+                        <h3>📅 Appointments Booked</h3>
+                        <div class="performance-value" id="callRevenue">0</div>
+                        <div class="performance-change positive" id="revenueChange">+0 today</div>
                     </div>
 
                     <div class="performance-card">
-                        <h3>⚡ Conversion Rate</h3>
+                        <h3>✅ Calls Resolved</h3>
                         <div class="performance-value" id="conversionRate">0%</div>
-                        <div class="performance-change" id="conversionChange">0 purchases / 0 calls</div>
+                        <div class="performance-change" id="conversionChange">0 resolved / 0 calls</div>
                     </div>
 
                     <div class="performance-card">
                         <h3>⏱️ Avg Call Duration</h3>
                         <div class="performance-value" id="avgDuration">0m</div>
                         <div class="performance-change" id="durationChange">0s avg</div>
-                    </div>
-
-                    <div class="performance-card">
-                        <h3>💵 Avg Order Value</h3>
-                        <div class="performance-value" id="avgOrder">$0</div>
-                        <div class="performance-change" id="orderChange">Per call purchase</div>
                     </div>
                 </div>
 
@@ -1103,22 +1099,11 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            setupMobileNavClose();
-
-            // Close sidebar on window resize if switching to desktop
-            window.addEventListener('resize', () => {
-                if (window.innerWidth > 768) {
-                    closeSidebar();
-                }
+            mountProviderPage({
+                activeId: 'agent',
+                eyebrow: 'Voice Agent',
+                title: 'Kelly performance & settings'
             });
-
-            // Close sidebar on Escape key
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    closeSidebar();
-                }
-            });
-            loadUserInfo();
             loadAgentData();
             loadAutomationData();
 
@@ -1303,10 +1288,13 @@
 
         function loadUserInfo() {
             if (userData) {
-                document.getElementById('userName').textContent = userData.name;
-                // Logo is now static HTML, no need to update
-                const initials = userData.name.split(' ').map(n => n[0]).join('');
-                document.getElementById('userAvatar').textContent = initials;
+                const nameEl = document.getElementById('userName');
+                const avatarEl = document.getElementById('userAvatar');
+                if (nameEl) nameEl.textContent = userData.name;
+                if (avatarEl) {
+                    const initials = userData.name.split(' ').map(n => n[0]).join('');
+                    avatarEl.textContent = initials;
+                }
             }
         }
 
@@ -1329,41 +1317,42 @@
         }
 
         function updatePerformanceStats(transactions) {
-            // Filter today's calls
             const today = new Date().toDateString();
             const todayCalls = transactions.filter(t =>
                 new Date(t.created_at).toDateString() === today
             );
 
             const totalCalls = todayCalls.length;
-            const successfulCalls = todayCalls.filter(t => t.status === 'completed').length;
-            const revenue = todayCalls.reduce((sum, t) => sum + (t.amount || 0), 0);
-            const conversionRate = totalCalls > 0 ? ((successfulCalls / totalCalls) * 100).toFixed(1) : 0;
-            const avgOrder = successfulCalls > 0 ? revenue / successfulCalls : 0;
+            const resolvedCalls = todayCalls.filter(t => t.status === 'completed').length;
+            const appointmentsBooked = resolvedCalls;
+            const resolutionRate = totalCalls > 0 ? ((resolvedCalls / totalCalls) * 100).toFixed(1) : 0;
+
+            const durations = todayCalls
+                .map(t => Number(t.duration_seconds || t.call_duration || 0))
+                .filter(d => d > 0);
+            const avgSeconds = durations.length
+                ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+                : 0;
+            const avgMinutes = avgSeconds > 0 ? `${Math.floor(avgSeconds / 60)}m ${avgSeconds % 60}s` : '—';
 
             document.getElementById('totalCalls').textContent = totalCalls;
-            document.getElementById('successfulCalls').textContent = successfulCalls;
-            document.getElementById('callRevenue').textContent = `$${revenue.toFixed(2)}`;
-            document.getElementById('conversionRate').textContent = `${conversionRate}%`;
-            document.getElementById('avgOrder').textContent = `$${avgOrder.toFixed(2)}`;
+            document.getElementById('successfulCalls').textContent = resolvedCalls;
+            document.getElementById('callRevenue').textContent = appointmentsBooked;
+            document.getElementById('conversionRate').textContent = `${resolutionRate}%`;
 
             document.getElementById('callsChange').textContent = `+${totalCalls} today`;
-            document.getElementById('successRate').textContent = `${conversionRate}% success rate`;
-            document.getElementById('revenueChange').textContent = `+$${revenue.toFixed(2)} today`;
-            document.getElementById('conversionChange').textContent = `${successfulCalls} purchases / ${totalCalls} calls`;
-            document.getElementById('avgDuration').textContent = '2m'; // Simulated
-            document.getElementById('durationChange').textContent = '34s avg';
-            document.getElementById('orderChange').textContent = 'Per call purchase';
+            document.getElementById('successRate').textContent = `${resolutionRate}% resolved`;
+            document.getElementById('revenueChange').textContent = `${appointmentsBooked} booked today`;
+            document.getElementById('conversionChange').textContent = `${resolvedCalls} resolved / ${totalCalls} calls`;
+            document.getElementById('avgDuration').textContent = avgMinutes;
+            document.getElementById('durationChange').textContent = avgSeconds > 0 ? `${avgSeconds}s avg` : 'No duration data';
 
-            // Calculate costs (estimated at $0.10 per minute, avg 2 min call)
             const costPerCall = 0.20;
             const costToday = totalCalls * costPerCall;
-
-            // Month stats (approximate)
             const monthCalls = transactions.length;
             const costMonth = monthCalls * costPerCall;
-            const monthRevenue = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-            const roi = costMonth > 0 ? (monthRevenue / costMonth).toFixed(1) : 0;
+            const monthAppointments = transactions.filter(t => t.status === 'completed').length;
+            const roi = costMonth > 0 ? (monthAppointments / Math.max(monthCalls, 1)).toFixed(1) : 0;
 
             document.getElementById('costToday').textContent = `$${costToday.toFixed(2)}`;
             document.getElementById('costMonth').textContent = `$${costMonth.toFixed(2)}`;
@@ -1392,18 +1381,17 @@
 
                 const isSuccess = call.status === 'completed';
                 const badgeClass = isSuccess ? 'success' : 'failed';
-                const badgeText = isSuccess ? '✅ Purchased' : '❌ No Sale';
+                const badgeText = isSuccess ? '✅ Booked' : '❌ Unresolved';
 
                 return `
                     <div class="call-item">
                         <div class="call-info">
                             <div class="call-time">${time}</div>
                             <div class="call-customer">${call.customer_name || 'Unknown'}</div>
-                            <div class="call-duration">Duration: 2m 15s</div>
+                            <div class="call-duration">Duration: ${call.duration_seconds ? `${Math.floor(call.duration_seconds / 60)}m ${call.duration_seconds % 60}s` : '—'}</div>
                         </div>
                         <div class="call-result">
                             <span class="call-result-badge ${badgeClass}">${badgeText}</span>
-                            ${isSuccess ? `<div class="call-amount">$${(call.amount || 0).toFixed(2)}</div>` : ''}
                         </div>
                     </div>
                 `;
@@ -1432,7 +1420,7 @@
         }
 
         function testCall() {
-            alert('🎙️ Test Call\n\nIn production, this would:\n\n1. Call your phone number\n2. Let you interact with the AI voice receptionist\n3. Test the full appointment booking conversation flow\n4. Show you call transcripts and client interactions\n\nFor demo purposes, you can call:\n(585) 620-2445');
+            alert('Call your Retell number to test Kelly.\n\nFor demo: (585) 620-2445');
         }
 
         function editGreeting() {

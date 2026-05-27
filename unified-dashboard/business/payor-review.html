@@ -6,6 +6,9 @@
   <title>Payor Review Queue - Consult</title>
   <link rel="stylesheet" href="../assets/css/global.css" />
   <script src="../assets/js/config.js"></script>
+  <link rel="stylesheet" href="../assets/css/provider-portal.css" />
+  <script src="../assets/js/provider-shell.js"></script>
+  <script src="../assets/js/provider-layout.js"></script>
 </head>
 <body>
   <div class="layout">
@@ -14,7 +17,7 @@
         <div class="sidebar-subtitle">Admin Console</div>
       </div>
       <nav class="sidebar-nav">
-        <a href="business-dashboard.html" class="nav-item">
+        <a href="today.html" class="nav-item">
           <span class="nav-icon">📊</span><span>Dashboard</span>
         </a>
         <a href="payor-review.html" class="nav-item active">
@@ -174,7 +177,14 @@
     }
 
     document.getElementById('syncBtn').addEventListener('click', syncQueue);
-    document.addEventListener('DOMContentLoaded', loadQueue);
+    document.addEventListener('DOMContentLoaded', () => {
+      mountProviderPage({
+        activeId: 'payor-review',
+        eyebrow: 'Admin',
+        title: 'Payor review queue'
+      });
+      loadQueue();
+    });
   </script>
 </body>
 </html>

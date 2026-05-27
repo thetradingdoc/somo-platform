@@ -6,9 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice — Consult Clinic Dashboard</title>
     <link rel="stylesheet" href="../assets/css/global.css">
+    <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <link rel="stylesheet" href="../assets/css/chat-widget.css">
     <script src="../assets/js/config.js"></script>
-    <script src="../assets/js/navigation.js"></script>
+    <script src="../assets/js/provider-shell.js"></script>
+    <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
             --primary: #1e40af;
@@ -408,7 +410,7 @@
 
 <body>
     <div class="layout">
-        <!-- Sidebar (Consult theme — shared nav + SVG icons from navigation.js) -->
+        <!-- Legacy sidebar removed at runtime by mountProviderPage() -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-subtitle" id="sidebarSubtitle">Healthcare at your home</div>
@@ -453,11 +455,7 @@
             window.location.href = '../login.html';
         }
 
-        // Load user info
-        const userName = sessionStorage.getItem('userName') || 'Healthcare Provider';
-        const userRole = sessionStorage.getItem('userRole') || 'Provider';
-        document.getElementById('userName').textContent = userName;
-        document.getElementById('userRole').textContent = userRole;
+        // User info handled by provider shell
 
         // Logout function
         function logout() {
@@ -468,6 +466,11 @@
         }
 
         function startInvoiceDetailPage() {
+            mountProviderPage({
+                activeId: 'billing',
+                eyebrow: 'Invoices',
+                title: 'Invoice detail'
+            });
             const urlParams = new URLSearchParams(window.location.search);
             const invoiceId = urlParams.get('id');
             if (invoiceId) loadInvoice(invoiceId);
@@ -475,17 +478,9 @@
         }
 
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                startInvoiceDetailPage();
-                setTimeout(() => {
-                    if (typeof renderNavigation === 'function') renderNavigation();
-                }, 600);
-            });
+            document.addEventListener('DOMContentLoaded', startInvoiceDetailPage);
         } else {
             startInvoiceDetailPage();
-            setTimeout(() => {
-                if (typeof renderNavigation === 'function') renderNavigation();
-            }, 600);
         }
 
         async function loadInvoice(invoiceId) {
