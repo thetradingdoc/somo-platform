@@ -1957,7 +1957,12 @@ const allowedOrigins = [
   'http://127.0.0.1:3001',
   'http://127.0.0.1:5199',
   'http://127.0.0.1:8080',
-  'http://[::1]:8080'
+  'http://[::1]:8080',
+  'http://localhost:5180',
+  'http://127.0.0.1:5180',
+  'https://dodgecall.app',
+  'https://www.dodgecall.app',
+  'https://api.dodgecall.app'
 ];
 
 const corsOptions = {
@@ -1976,6 +1981,9 @@ const corsOptions = {
       return callback(null, true);
     }
     if (/^https?:\/\/([a-z0-9-]+\.)*myskinandcare\.com$/i.test(origin)) {
+      return callback(null, true);
+    }
+    if (/^https?:\/\/([a-z0-9-]+\.)*dodgecall\.app$/i.test(origin)) {
       return callback(null, true);
     }
 
@@ -2275,6 +2283,59 @@ function getLittleLabBuildPath(...subPaths) {
   return path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
 }
 
+function getDodgecallBuildPath(...subPaths) {
+  const fs = require('fs');
+  let azurePath = path.join(__dirname, 'unified-dashboard', 'dodgecall', 'build', ...subPaths);
+  if (fs.existsSync(azurePath)) {
+    return azurePath;
+  }
+  return path.join(__dirname, '..', 'unified-dashboard', 'dodgecall', 'build', ...subPaths);
+}
+
+/** Prefer Vite DodgeCall build for dodgecall.app. */
+function trySendDodgecallLanding(res) {
+  const fs = require('fs');
+  const landingBuild = path.resolve(getDodgecallBuildPath('index.html'));
+  if (fs.existsSync(landingBuild)) {
+    res.sendFile(landingBuild);
+    return true;
+  }
+  return false;
+}
+
+function isDodgecallMarketingHostname(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  return h === 'dodgecall.app' || h === 'www.dodgecall.app';
+}
+
+/** DodgeCall landing (production host or local dev default on :4000). */
+function shouldServeDodgecallLanding(hostname) {
+  return isDodgecallMarketingHostname(hostname) || isLocalDevRootHost(hostname);
+}
+
+const DODGECALL_BUILD_INSTRUCTIONS_HTML =
+  '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
+  '<h1>DodgeCall</h1><p>Landing build not found. Run:</p>' +
+  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/dodgecall && npm install && npm run build</pre>' +
+  '</body></html>';
+
+function sendDodgecallLandingOrInstructions(res) {
+  if (trySendDodgecallLanding(res)) return;
+  res.status(503).type('html').send(DODGECALL_BUILD_INSTRUCTIONS_HTML);
+}
+
+function redirectLocalDevFromSkinCare(req, res) {
+  if (isLocalDevRootHost(getHostname(req))) {
+    res.redirect(302, '/');
+    return true;
+  }
+  return false;
+}
+
+function isDodgecallApiHostname(hostname) {
+  return String(hostname || '').toLowerCase() === 'api.dodgecall.app';
+}
+
 /** Prefer CRA LittleLab build; fallback to source public index for dev. */
 function trySendCanonicalLanding(res) {
   const fs = require('fs');
@@ -2309,7 +2370,7 @@ function trySendCanonicalLanding(res) {
 /** Production API hostnames (split-domain + transition aliases). */
 function isProductionApiHostname(hostname) {
   const h = String(hostname || '').toLowerCase();
-  return h === 'api.myskinandcare.com' || h === 'api.skinandcare.com';
+  return h === 'api.myskinandcare.com' || h === 'api.skinandcare.com' || h === 'api.dodgecall.app';
 }
 
 const ROOT_API_RUNNING_STUB_HTML =
@@ -2370,20 +2431,35 @@ app.get('/', (req, res) => {
     // Subdomain not found - fall through to default routing
   }
 
-  // Local / dev — single care-program entry on :4000 (override with LOCAL_DEV_ROOT=stub|login)
+  // Local / dev — DodgeCall landing on :4000 (override with LOCAL_DEV_ROOT=login|stub|signup)
   if (isLocalDevRootHost(hostname)) {
     if (process.env.LOCAL_DEV_ROOT === 'login') {
       return res.redirect(302, '/login');
     }
-    if (process.env.LOCAL_DEV_ROOT === 'stub') {
-      sendLittleLabOrApiRunningStub(res);
-      return;
+    if (process.env.LOCAL_DEV_ROOT === 'signup') {
+      return res.redirect(302, '/signup');
     }
-    return sendLittleLabOrApiRunningStub(res);
+    if (process.env.LOCAL_DEV_ROOT === 'stub') {
+      return res.type('text/html').send(
+        '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
+        '<p>Middleware API is running.</p>' +
+        '<p><a href="/">DodgeCall landing</a></p>' +
+        '</body></html>'
+      );
+    }
+    return sendDodgecallLandingOrInstructions(res);
+  }
+
+  if (isDodgecallMarketingHostname(hostname)) {
+    return sendDodgecallLandingOrInstructions(res);
+  }
+
+  if (isDodgecallApiHostname(hostname)) {
+    return res.json({ ok: true, service: 'dodgecall-api', demo: '/api/public/dodgecall/health' });
   }
 
   // API subdomain - check if user is already logged in
-  if (isProductionApiHostname(hostname)) {
+  if (isProductionApiHostname(hostname) && !isDodgecallApiHostname(hostname)) {
     // Check if user has valid session
     const sessionId = req.cookies?.customer_session;
     if (sessionId) {
@@ -2465,6 +2541,7 @@ app.get('/', (req, res) => {
 
 // Legacy path: same SPA as /find-provider; client redirects to /find-provider.
 app.get('/how-it-works', (req, res) => {
+  if (redirectLocalDevFromSkinCare(req, res)) return;
   sendLittleLabOrApiRunningStub(res);
 });
 
@@ -2478,7 +2555,46 @@ function redirectToPatientAuth(req, res, defaultIntent = 'signup') {
 app.get(['/app', '/join'], (req, res) => redirectToPatientAuth(req, res, 'signup'));
 
 const { registerStaticHosting } = require('./bootstrap/static-hosting');
-registerStaticHosting(app, { express, rootDir: __dirname });
+registerStaticHosting(app, {
+  express,
+  rootDir: __dirname,
+  skipLittleLabSpa: (req) => shouldServeDodgecallLanding(getHostname(req)),
+});
+
+function isDodgecallApiPath(p) {
+  return (
+    p.startsWith('/api') ||
+    p.startsWith('/voice') ||
+    p.startsWith('/webhooks') ||
+    p.startsWith('/health') ||
+    p.startsWith('/signup') ||
+    p.startsWith('/login') ||
+    p.startsWith('/docs') ||
+    p.startsWith('/terms') ||
+    p.startsWith('/verify-card') ||
+    p.startsWith('/reset-password') ||
+    p.startsWith('/patients') ||
+    p.startsWith('/admin') ||
+    p.startsWith('/unified-dashboard') ||
+    p.startsWith('/littlelab-landing')
+  );
+}
+
+app.use((req, res, next) => {
+  if (!shouldServeDodgecallLanding(getHostname(req))) return next();
+  if (isDodgecallApiPath(req.path)) {
+    return next();
+  }
+  return express.static(getDodgecallBuildPath(), { index: false, maxAge: '5m' })(req, res, () => {
+    if ((req.method === 'GET' || req.method === 'HEAD') && !res.headersSent) {
+      const indexPath = getDodgecallBuildPath('index.html');
+      if (require('fs').existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+      }
+    }
+    return next();
+  });
+});
 
 // ============================================
 // Unified Dashboard Routes (doclittle.site frontend) — host-based HTML routes below
@@ -2663,6 +2779,7 @@ app.get(['/about', '/about.html'], (req, res) => {
   if (isProductionApiHostname(hostname)) {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
+  if (redirectLocalDevFromSkinCare(req, res)) return;
   // Skin & Care shop About (React SPA) — not legacy Doctor Little billing marketing page.
   sendLittleLabOrApiRunningStub(res);
 });
@@ -2685,33 +2802,54 @@ app.get('/signup-complete', (req, res) => {
   res.sendFile(getUnifiedDashboardPath('signup-complete.html'));
 });
 
-// Signup page (use case selection) - only on root domain
+/** Canonical SaaS portal entry after signup (not business-dashboard stub). */
+const SAAS_PROVIDER_PORTAL_HOME = '/business/today.html';
+
+function clearCustomerSessionCookie(res, req) {
+  const isSecure =
+    process.env.NODE_ENV === 'production' || req.secure || req.headers['x-forwarded-proto'] === 'https';
+  const opts = { httpOnly: true, secure: isSecure, sameSite: 'lax', path: '/' };
+  if (process.env.NODE_ENV === 'production' || req.headers.host?.includes('doclittle.site')) {
+    opts.domain = '.doclittle.site';
+  }
+  res.clearCookie('customer_session', opts);
+}
+
+// Signup page (provider intake) — only on root / marketing host
 app.get('/signup', (req, res) => {
   const hostname = getHostname(req);
   if (isProductionApiHostname(hostname)) {
-    // API subdomain has its own signup flow
     return res.redirect('/');
   }
 
-  // Check if user is already verified and has session - redirect to appropriate dashboard
+  const signupHtml = getUnifiedDashboardPath('signup.html');
+
+  if (req.query.fresh === '1' || req.query.new === '1') {
+    clearCustomerSessionCookie(res, req);
+    return res.sendFile(signupHtml);
+  }
+
   const sessionId = req.cookies?.customer_session;
   if (sessionId) {
     const session = db.getCustomerSession(sessionId);
     if (session) {
       const customer = db.getCustomer(session.customer_id);
-      if (customer && customer.email_verified) {
-        // User is verified - redirect based on customer_type
+      if (customer?.email_verified) {
+        const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
+        if (!termsAccepted) {
+          const termsRedirect = encodeURIComponent(SAAS_PROVIDER_PORTAL_HOME);
+          return res.redirect(
+            `/terms?customer_type=saas&redirect=${termsRedirect}`
+          );
+        }
         const customerType = customer.customer_type || 'saas';
-        const redirectUrl = customerType === 'saas'
-          ? '/business/business-dashboard.html'
-          : '/docs';
+        const redirectUrl = customerType === 'saas' ? SAAS_PROVIDER_PORTAL_HOME : '/docs';
         return res.redirect(redirectUrl);
       }
     }
   }
 
-  // Serve use case selection page for root domain
-  res.sendFile(getUnifiedDashboardPath('signup.html'));
+  return res.sendFile(signupHtml);
 });
 
 app.get('/signup/saas', (req, res) => {
@@ -3092,6 +3230,8 @@ app.use('/api/customer/agent', customerAgentRoutes);
 // ============================================
 const customerBillingRoutes = require('./routes/customer-billing');
 app.use('/api/customer/billing', customerBillingRoutes);
+const voiceBillingRoutes = require('./routes/voice-billing');
+app.use('/api/voice-billing', voiceBillingRoutes);
 
 // Customer Dashboard (Tenant-scoped data)
 const customerDashboardRoutes = require('./routes/customer-dashboard');
@@ -3116,6 +3256,10 @@ app.use('/api/voice', voiceWebCallRoutes);
 // RCM / Financial Intelligence APIs (EMPI-based)
 const rcmRoutes = require('./routes/rcm');
 app.use('/api/rcm', rcmRoutes);
+const rcmPublicRoutes = require('./routes/rcm-public');
+app.use('/api/public/rcm', rcmPublicRoutes);
+const dodgecallPublicRoutes = require('./routes/dodgecall-public');
+app.use('/api/public/dodgecall', dodgecallPublicRoutes);
 const internalServiceOpsRoutes = require('./routes/internal-service-ops');
 app.use('/api/internal/service-ops', internalServiceOpsRoutes);
 const impactPublicRoutes = require('./routes/impact-public');
@@ -3418,8 +3562,23 @@ app.post(
     console.log('To:', req.body.To);
     console.log('CallSid:', req.body.CallSid);
 
-    // Check if this is an outbound sales call (from query params)
-    const isOutboundSales = req.query.call_type === 'sales_outbound' || req.query.lead_id;
+    const { isDemoTwilioNumber, resolveTemplate: resolveDodgecallTemplate } = require('./services/dodgecall-template-registry');
+
+    // Check if this is an outbound sales call (from query params) or inbound to demo line
+    let isDodgecallDemo = req.query.call_type === 'dodgecall_demo';
+    const normalizedToForDemo = normalizePhoneNumber(req.body.To);
+    if (!isDodgecallDemo && isDemoTwilioNumber(normalizedToForDemo)) {
+      isDodgecallDemo = true;
+      console.log('📞 Inbound call to DodgeCall demo Twilio number');
+    }
+    const demoRequestId = req.query.demo_request_id;
+    const dodgecallUseCase = req.query.use_case ? String(req.query.use_case) : null;
+    const dodgecallProspectName = req.query.prospect_name
+      ? decodeURIComponent(String(req.query.prospect_name))
+      : null;
+
+    const isOutboundSales =
+      !isDodgecallDemo && (req.query.call_type === 'sales_outbound' || req.query.lead_id);
     const leadId = req.query.lead_id;
     const clinicName = req.query.clinic_name ? decodeURIComponent(req.query.clinic_name) : null;
 
@@ -3430,12 +3589,39 @@ app.post(
     let customerId = null;
     let matchedCustomer = null;
 
-    // For outbound sales calls, use sales agent; otherwise use default
+    // For outbound sales / DodgeCall demo, use dedicated agents; otherwise use default
     let retellAgentId = isOutboundSales
-      ? (process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a')
-      : (process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a');
+        ? (process.env.RETELL_SALES_AGENT_ID || process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a')
+        : (process.env.RETELL_AGENT_ID || 'agent_9151f738c705a56f4a0d8df63a');
 
-    if (isOutboundSales) {
+    if (isDodgecallDemo) {
+      try {
+        const tpl = resolveDodgecallTemplate({ use_case: dodgecallUseCase || 'receptionist' });
+        retellAgentId = req.query.agent_id || tpl.agentId;
+      } catch (e) {
+        console.error('❌ DodgeCall demo agent not configured:', e.message);
+        const errTwiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">Demo calls are temporarily unavailable. Please try again later.</Say>
+  <Hangup/>
+</Response>`;
+        return res.type('text/xml').send(errTwiml);
+      }
+    }
+
+    if (isDodgecallDemo) {
+      console.log('📞 DODGECALL DEMO CALL');
+      console.log(`   Demo request: ${demoRequestId}`);
+      console.log(`   Use case: ${dodgecallUseCase}`);
+      console.log(`   Prospect: ${dodgecallProspectName}`);
+      console.log(`   Agent: ${retellAgentId}`);
+      if (demoRequestId) {
+        const demoRow = db.getDodgecallDemoRequest(demoRequestId);
+        if (demoRow) {
+          db.updateDodgecallDemoRequest(demoRequestId, { status: 'ringing' });
+        }
+      }
+    } else if (isOutboundSales) {
       console.log('📞 OUTBOUND SALES CALL DETECTED');
       console.log(`   Lead ID: ${leadId}`);
       console.log(`   Clinic: ${clinicName}`);
@@ -3468,23 +3654,6 @@ app.post(
           console.warn(`⚠️  Customer ${customerId} has no merchant_id. Voice product/order functions may not work.`);
         }
 
-        // Check credit balance before allowing call
-        const credits = db.getCustomerCredits(customerId);
-        if (!credits || credits.credits_balance_minutes <= 0) {
-          // Check if customer has payment method (allows overage)
-          const customer = db.getCustomer(customerId);
-          const hasPaymentMethod = customer && customer.stripe_payment_method_id && customer.card_verified === 1;
-
-          if (!hasPaymentMethod) {
-            console.warn(`⚠️  Customer ${customerId} has no credits and no payment method. Call may be blocked.`);
-            // Note: We still allow the call to proceed, but will track overage
-            // In production, you might want to block calls here
-          } else {
-            console.log(`ℹ️  Customer ${customerId} has no credits but has payment method - allowing call with overage billing`);
-          }
-        } else {
-          console.log(`✅ Customer ${customerId} has ${credits.credits_balance_minutes} credits available`);
-        }
       } else {
         // Look up legacy clinic mapping
         const clinicPhone = db.getClinicPhoneNumber(normalizedToNumber);
@@ -3516,23 +3685,6 @@ app.post(
                 console.warn(`⚠️  Customer ${customerId} has no merchant_id. Voice product/order functions may not work.`);
               }
 
-              // Check credit balance before allowing call
-              const credits = db.getCustomerCredits(customerId);
-              if (!credits || credits.credits_balance_minutes <= 0) {
-                // Check if customer has payment method (allows overage)
-                const customer = db.getCustomer(customerId);
-                const hasPaymentMethod = customer && customer.stripe_payment_method_id && customer.card_verified === 1;
-
-                if (!hasPaymentMethod) {
-                  console.warn(`⚠️  Customer ${customerId} has no credits and no payment method. Call may be blocked.`);
-                  // Note: We still allow the call to proceed, but will track overage
-                  // In production, you might want to block calls here
-                } else {
-                  console.log(`ℹ️  Customer ${customerId} has no credits but has payment method - allowing call with overage billing`);
-                }
-              } else {
-                console.log(`✅ Customer ${customerId} has ${credits.credits_balance_minutes} credits available`);
-              }
             } else {
               console.warn(`⚠️  No customer found for agent_id: ${agentIdFromRequest}`);
               console.warn(`   Using default Retell agent: ${retellAgentId}`);
@@ -3545,9 +3697,34 @@ app.post(
       }
     }
 
-    // Per-clinic rate limit (Section 17)
-    const tenantKey = clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
-    const rateLimit = clinicRateLimitCheck(tenantKey);
+    if (!matchedCustomer && customerId) {
+      matchedCustomer = db.getCustomer(customerId);
+    }
+
+    if (customerId && !isOutboundSales && !isDodgecallDemo) {
+      const { canAcceptInboundCall, buildBlockedTwiml } = require('./services/billing-access');
+      const access = canAcceptInboundCall(db, customerId);
+      if (!access.allowed) {
+        console.warn(`⚠️  Inbound blocked for customer ${customerId}: ${access.reason}`);
+        return res.type('text/xml').send(buildBlockedTwiml(access.message));
+      }
+      if (access.trial) {
+        try {
+          db.touchTrialActivity(customerId);
+        } catch (_) { /* non-fatal */ }
+      }
+    }
+
+    // Per-clinic rate limit (Section 17) — tier-aware when customer known
+    const tenantKey = isDodgecallDemo
+      ? `dodgecall_demo:${demoRequestId || retellAgentId}`
+      : clinicId || customerId || retellAgentId || (isOutboundSales && leadId) || 'unknown';
+    let tierRateLimit;
+    if (matchedCustomer) {
+      const { getRateLimitForCustomer } = require('./services/billing-access');
+      tierRateLimit = getRateLimitForCustomer(matchedCustomer);
+    }
+    const rateLimit = clinicRateLimitCheck(tenantKey, tierRateLimit);
     if (!rateLimit.allowed) {
       console.warn(`⚠️  Clinic rate limit exceeded for ${tenantKey} (${rateLimit.limit}/min)`);
       const rateLimitTwiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -3565,6 +3742,12 @@ app.post(
       metadata.twilio_call_sid = req.body.CallSid;
     }
     // Add lead metadata for outbound sales calls
+    if (isDodgecallDemo) {
+      metadata.call_type = 'dodgecall_demo';
+      if (demoRequestId) metadata.demo_request_id = demoRequestId;
+      if (dodgecallUseCase) metadata.use_case = dodgecallUseCase;
+      if (dodgecallProspectName) metadata.prospect_name = dodgecallProspectName;
+    }
     if (isOutboundSales && leadId) {
       metadata.lead_id = leadId;
       metadata.call_type = 'sales_outbound';
@@ -3715,6 +3898,26 @@ app.post(
       dynamicVariables.merchant_id = String(merchantId);
     }
 
+    // DodgeCall public demo — per-use-case opener for Retell
+    if (isDodgecallDemo) {
+      const { getUseCaseContext } = require('./services/dodgecall-demo-service');
+      const useCaseKey = dodgecallUseCase || 'receptionist';
+      const ctx = getUseCaseContext(useCaseKey);
+      dynamicVariables.company_name = 'DodgeCall';
+      dynamicVariables.prospect_name = String(dodgecallProspectName || 'there');
+      dynamicVariables.use_case = String(useCaseKey);
+      dynamicVariables.use_case_label = String(ctx.use_case_label);
+      dynamicVariables.use_case_opener = String(ctx.use_case_opener);
+      dynamicVariables.call_type = 'dodgecall_demo';
+      dynamicVariables.persona_name = 'Sam';
+      if (demoRequestId) dynamicVariables.demo_request_id = String(demoRequestId);
+      try {
+        const tpl = resolveDodgecallTemplate({ use_case: useCaseKey });
+        dynamicVariables.template_id = tpl.template_id;
+      } catch (_) {}
+      console.log('📋 Added DodgeCall demo context to dynamic variables');
+    }
+
     // For outbound sales calls, add lead-specific variables
     if (isOutboundSales && leadId) {
       const lead = db.getLead(leadId);
@@ -3860,12 +4063,37 @@ app.post(
             await db.logVoiceCall({
               id: `call-${callId}`,
               customer_id: resolvedCustomerId,
+              clinic_id: clinicId || null,
               call_id: callId,
               twilio_call_sid: req.body.CallSid, // Store Twilio CallSid for cost tracking
               call_duration_seconds: null, // Will update when call ends
               function_calls_count: 0,
               status: 'active'
             });
+            if (clinicId) {
+              try {
+                db.db.prepare(`UPDATE voice_call_log SET clinic_id = ? WHERE call_id = ?`).run(clinicId, callId);
+              } catch (_) {}
+            }
+            if (clinicId) {
+              try {
+                const orchestrator = require('./services/rcm-journey-orchestrator');
+                const started = orchestrator.startJourney({
+                  clinicId,
+                  callId,
+                  patientId: req.body?.patient_id || null,
+                  source: 'voice',
+                  stage: 'pre_registration',
+                  payload: {
+                    twilio_call_sid: req.body.CallSid,
+                    direction: req.body.Direction || req.body.direction || null,
+                  },
+                });
+                console.log(`🧭 RCM journey ${started.created ? 'started' : 'reused'}: ${started.journey?.id || started.journey_id} (call ${callId})`);
+              } catch (rcmJourneyErr) {
+                console.warn('⚠️  RCM journey start on call:', rcmJourneyErr.message);
+              }
+            }
             console.log(`📝 Logged call to database for ${resolvedCustomerId ? 'customer' : 'clinic'}: ${resolvedCustomerId || clinicId}`);
             console.log(`   Twilio CallSid: ${req.body.CallSid}`);
           } catch (logError) {
@@ -4078,6 +4306,34 @@ function escapeXml(s) {
     .replace(/'/g, '&apos;');
 }
 
+// Twilio async AMD for DodgeCall demo outbound
+app.post(
+  '/voice/dodgecall-amd-callback',
+  express.urlencoded({ extended: true }),
+  twilioSignatureRequired,
+  async (req, res) => {
+    try {
+      const callSid = req.body.CallSid;
+      const answeredBy = req.body.AnsweredBy || req.body.MachineDetectionResult || '';
+      if (callSid && /machine|fax/i.test(String(answeredBy))) {
+        const row = db.db
+          .prepare('SELECT id FROM dodgecall_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+          .get(callSid);
+        if (row?.id) {
+          db.updateDodgecallDemoRequest(row.id, {
+            voicemail_detected: 1,
+            outcome: 'voicemail',
+            status: 'completed'
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('DodgeCall AMD callback error:', e.message);
+    }
+    res.sendStatus(200);
+  }
+);
+
 // Twilio Status Callback - receives call status updates
 app.post(
   '/voice/status-callback',
@@ -4112,6 +4368,26 @@ app.post(
     if (callSid) {
       setImmediate(async () => {
         try {
+          const dodgecallDemo = db.db
+            .prepare('SELECT id FROM dodgecall_demo_requests WHERE twilio_call_sid = ? LIMIT 1')
+            .get(callSid);
+          if (dodgecallDemo?.id) {
+            const patch = {};
+            if (callStatus) patch.status = callStatus;
+            if (callDuration) {
+              patch.duration_sec = parseInt(callDuration, 10);
+            }
+            if (callStatus === 'completed' && !patch.outcome) {
+              patch.outcome = 'completed_twilio';
+            }
+            if (callStatus === 'no-answer' || callStatus === 'busy') {
+              patch.outcome = callStatus;
+            }
+            if (Object.keys(patch).length) {
+              db.updateDodgecallDemoRequest(dodgecallDemo.id, patch);
+            }
+          }
+
           // Update voice_call_log with duration and calculate costs if call completed
           const voiceCall = db.db.prepare('SELECT * FROM voice_call_log WHERE twilio_call_sid = ? ORDER BY created_at DESC LIMIT 1').get(callSid);
 
@@ -4143,23 +4419,25 @@ app.post(
                 status: callStatus
               });
 
-              // Deduct credits for completed calls
               if (voiceCall.customer_id && callStatus === 'completed' && callDurationMinutes > 0) {
                 try {
-                  const creditsToDeduct = Math.ceil(callDurationMinutes); // Round up to nearest minute
-                  db.deductCredits(voiceCall.customer_id, creditsToDeduct);
-
-                  // Update voice_call_log with credits deducted
+                  const { applyUsage } = require('./services/apply-usage');
+                  const usageResult = applyUsage(db, {
+                    customerId: voiceCall.customer_id,
+                    callId: voiceCall.call_id,
+                    callSid,
+                    durationMinutes: callDurationMinutes,
+                    source: 'twilio_status'
+                  });
+                  const applied = usageResult.minutes_applied ?? 0;
                   db.db.prepare(`
                     UPDATE voice_call_log 
                     SET credits_deducted = ?
                     WHERE id = ?
-                  `).run(creditsToDeduct, voiceCall.id);
-
-                  console.log(`   ✅ Deducted ${creditsToDeduct} credits from customer ${voiceCall.customer_id}`);
+                  `).run(applied, voiceCall.id);
+                  console.log(`   ✅ applyUsage ${applied} min for customer ${voiceCall.customer_id}`);
                 } catch (creditError) {
-                  console.error(`   ❌ Failed to deduct credits: ${creditError.message}`);
-                  // Continue - don't fail the call status update
+                  console.error(`   ❌ applyUsage failed:`, creditError.message);
                 }
               }
 
@@ -7009,6 +7287,21 @@ app.post('/api/claims/:claimId/submit-payment', async (req, res) => {
 
     const InsuranceService = require('./services/insurance-service');
     try {
+      const codingCdi = require('./services/rcm-coding-cdi');
+      let clinicIdForGate = process.env.DEFAULT_CLINIC_ID || 'clinic-default';
+      if (claim.appointment_id) {
+        const appt = db.db.prepare(`SELECT clinic_id FROM appointments WHERE id = ?`).get(claim.appointment_id);
+        if (appt?.clinic_id) clinicIdForGate = appt.clinic_id;
+      }
+      const gate = codingCdi.assertJourneyReadyForClaimSubmit(clinicIdForGate, claimId);
+      if (!gate.ok) {
+        return res.status(422).json({
+          success: false,
+          code: 'rcm_gate_failed',
+          errors: gate.errors,
+          journey_id: gate.journey_id,
+        });
+      }
       const result = await InsuranceService.submitExistingClaim(claimId);
       return res.json({
         success: true,
@@ -8738,6 +9031,31 @@ app.post('/webhook/retell/events', express.json(), async (req, res) => {
             );
 
             console.log(`✅ Updated voice call log for ${callId}: ${durationSeconds}s, ${functionCallCount} functions`);
+
+            try {
+              const orchestrator = require('./services/rcm-journey-orchestrator');
+              const clinicForRcm =
+                existingCall.clinic_id ||
+                process.env.DEFAULT_CLINIC_ID ||
+                process.env.PRIMARY_CLINIC_ID ||
+                'clinic-default';
+              const { parseIntakeFromCallPayload } = require('./services/rcm-intake-parser');
+              const rawIntake = {
+                duration_seconds: durationSeconds,
+                function_calls_count: functionCallCount,
+                call_analysis: body.call_analysis || body.call?.call_analysis || null,
+                transcript_summary: body.transcript || body.call?.transcript || null,
+                transcript: body.transcript || body.call?.transcript || null,
+              };
+              const parsed = parseIntakeFromCallPayload(rawIntake);
+              orchestrator.captureIntakeFromCall({
+                clinicId: clinicForRcm,
+                callId,
+                intakePayload: { ...rawIntake, ...parsed },
+              });
+            } catch (rcmIntakeErr) {
+              console.warn('⚠️  RCM intake capture on call end:', rcmIntakeErr.message);
+            }
           }
 
           // Update lead call (for sales calls)
@@ -10467,8 +10785,12 @@ function onServerListening() {
   // #region agent log
   fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H1',location:'server.js:onServerListening',message:'server listening callback',data:{devLight:process.env.DEV_LIGHT_START==='1',skipMigrations:process.env.SKIP_STARTUP_MIGRATIONS==='1'},timestamp:Date.now()})}).catch(()=>{});
   // #endregion agent log
-  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'prod') {
-    console.log('[face-read] Auto-starting teamkelly inference (FACE_READ_AUTO_START=0 to disable)...');
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NODE_ENV !== 'prod' &&
+    process.env.FACE_READ_AUTO_START !== '0'
+  ) {
+    console.log('[face-read] Checking teamkelly inference (FACE_READ_AUTO_START=0 to disable)...');
     const { ensureFaceReadInference } = require('./scripts/ensure-face-read-inference.cjs');
     ensureFaceReadInference().catch((err) => {
       console.warn('[face-read] Auto-start failed:', err?.message || err);
@@ -10621,10 +10943,9 @@ function onServerListening() {
 
   // Canonical catalog sync: keep master OBF index updated daily (GCS + delta apply).
   try {
-    const syncEnabled = isTruthyFlag(
-      process.env.CATALOG_MASTER_SYNC_ENABLED,
-      process.env.NODE_ENV === 'production'
-    );
+    const syncEnabled =
+      !isTruthyFlag(process.env.RCM_E2E_RUN) &&
+      isTruthyFlag(process.env.CATALOG_MASTER_SYNC_ENABLED, process.env.NODE_ENV === 'production');
     if (syncEnabled) {
       const intervalMs = Math.max(
         60 * 60 * 1000,

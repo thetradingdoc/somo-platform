@@ -20,6 +20,14 @@ function createStaticPathHelpers(rootDir) {
     return path.join(rootDir, '..', 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
   }
 
+  function getDodgecallBuildPath(...subPaths) {
+    let azurePath = path.join(rootDir, 'unified-dashboard', 'dodgecall', 'build', ...subPaths);
+    if (fs.existsSync(azurePath)) {
+      return azurePath;
+    }
+    return path.join(rootDir, '..', 'unified-dashboard', 'dodgecall', 'build', ...subPaths);
+  }
+
   function trySendCanonicalLanding(res) {
     const landingBuild = getLittleLabBuildPath('index.html');
     if (fs.existsSync(landingBuild)) {
@@ -42,10 +50,20 @@ function createStaticPathHelpers(rootDir) {
     );
   }
 
+  function trySendDodgecallLanding(res) {
+    const landingBuild = getDodgecallBuildPath('index.html');
+    if (fs.existsSync(landingBuild)) {
+      return res.sendFile(landingBuild);
+    }
+    return false;
+  }
+
   return {
     getUnifiedDashboardPath,
     getLittleLabBuildPath,
+    getDodgecallBuildPath,
     trySendCanonicalLanding,
+    trySendDodgecallLanding,
     sendLittleLabOrApiRunningStub,
   };
 }

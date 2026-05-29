@@ -7,6 +7,7 @@
   <title>FrontDesk Provider Portal - Create Account</title>
   <link rel="stylesheet" href="/assets/css/global.css" />
   <script src="/assets/data/provider-signup-data.js"></script>
+  <script src="/assets/js/provider-session.js"></script>
   <style>
     :root {
       color-scheme: light;
@@ -327,8 +328,15 @@
         <div class="timeline-item">
           <div class="timeline-bullet"></div>
           <div class="timeline-body">
-            <h3>Step 3 · Finish setup</h3>
-            <p>Accept terms, get your clinic phone line, then run your first test call.</p>
+            <h3>Step 3 · Verify your phone</h3>
+            <p>Confirm your mobile number to activate your dedicated AI receptionist line.</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-bullet"></div>
+          <div class="timeline-body">
+            <h3>Step 4 · Finish setup</h3>
+            <p>Accept terms, then open your provider dashboard (60 free minutes / 7-day trial when enabled).</p>
           </div>
         </div>
       </div>
@@ -550,6 +558,35 @@
       </div>
     </section>
 
+    <section class="panel hidden" id="step-phone">
+      <h2 style="margin-top:0;">Verify your phone</h2>
+      <p class="muted">We'll text a code to confirm your identity and activate your dedicated AI receptionist line.</p>
+
+      <div>
+        <label for="verifyPhoneInput">Mobile number</label>
+        <input type="tel" id="verifyPhoneInput" required placeholder="+1 555 123 4567" autocomplete="tel" />
+        <p class="muted" style="margin-top:4px;font-size:0.85rem;">E.164 format, e.g. +15551234567</p>
+      </div>
+
+      <button type="button" id="phoneSendBtn" style="background:transparent;color:var(--accent);box-shadow:none;margin-top:8px;">
+        Send SMS code
+      </button>
+
+      <div style="margin-top:16px;">
+        <label for="phoneCodeInput">SMS code</label>
+        <input type="text" id="phoneCodeInput" maxlength="6" inputmode="numeric" placeholder="000000" />
+      </div>
+
+      <button type="button" id="phoneVerifyBtn" style="margin-top:16px;">
+        <span id="phoneVerifyBtnText">Verify &amp; get my number</span>
+        <span id="phoneVerifyBtnSpinner" class="spinner hidden"></span>
+      </button>
+
+      <div class="toast error hidden" id="phoneError"></div>
+      <div class="toast success hidden" id="phoneSuccess"></div>
+      <div class="toast info hidden" id="phoneTrialInfo"></div>
+    </section>
+
   </div>
 
   <script>
@@ -557,7 +594,9 @@
     const signupForm = document.getElementById('signupForm');
     const signupPanel = document.getElementById('step-intake');
     const codePanel = document.getElementById('step-code');
+    const phonePanel = document.getElementById('step-phone');
     const integrationPanel = null;
+    const urlAttribution = new URLSearchParams(window.location.search);
     const signupError = document.getElementById('signupError');
     const codeError = document.getElementById('codeError');
     const codeSuccess = document.getElementById('codeSuccess');
@@ -566,6 +605,17 @@
     const codeInputs = Array.from(document.querySelectorAll('#codeGrid input'));
     let pendingEmail = '';
     let pendingCustomerId = null;
+    let pendingPhoneE164 = '';
+
+    function termsRedirectUrl() {
+      const q = new URLSearchParams(window.location.search);
+      const redirect = q.get('redirect') || '/business/settings.html?billing=trial&welcome=1';
+      return `/terms?redirect=${encodeURIComponent(redirect)}&customer_type=saas`;
+    }
+
+    function goToTerms() {
+      window.location.href = termsRedirectUrl();
+    }
 
     // Populate countries, languages, license region
     document.addEventListener('DOMContentLoaded', function () {
@@ -629,6 +679,15 @@
       }
 
       onCountryChange(); // Initial state
+
+      if (urlAttribution.get('step') === 'phone') {
+        hydrateProviderSession(SIGNUP_API_BASE).then(() => {
+          showPanel(phonePanel);
+          if (pendingPhoneE164) {
+            document.getElementById('verifyPhoneInput').value = pendingPhoneE164;
+          }
+        });
+      }
     });
 
     function onCountryChange() {
@@ -690,7 +749,7 @@
     }
 
     function showPanel(panel) {
-      [signupPanel, codePanel, integrationPanel].forEach(p => {
+      [signupPanel, codePanel, phonePanel, integrationPanel].forEach(p => {
         if (p) p.classList.add('hidden');
       });
       if (panel) panel.classList.remove('hidden');
@@ -756,12 +815,21 @@
       delete payload.license_document;
       delete payload.photo;
 
+      payload.customer_type = 'saas';
+      payload.attribution = {
+        utm_source: urlAttribution.get('utm_source'),
+        utm_campaign: urlAttribution.get('utm_campaign'),
+        utm_medium: urlAttribution.get('utm_medium')
+      };
+      pendingPhoneE164 = payload.phone_number || '';
+
       console.log('Submitting provider signup');
 
       try {
         const res = await fetch(`${SIGNUP_API_BASE}/api/signup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(payload)
         });
         const data = await res.json();
@@ -825,10 +893,16 @@
         const res = await fetch(`${SIGNUP_API_BASE}/api/signup/verify-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ email: pendingEmail, code })
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.message || data.error || 'Verification failed');
+        if (data.customer && typeof persistProviderCustomer === 'function') {
+          persistProviderCustomer(data.customer);
+        } else {
+          await hydrateProviderSession(SIGNUP_API_BASE);
+        }
         let claimedProductsPreview = '';
 
         // If user scanned on landing pre-auth, claim that anonymous session now.
@@ -868,11 +942,22 @@
         } catch (_) {
           // Non-blocking: user can still continue signup even if claim fails.
         }
-        codeSuccess.textContent = `Email verified! Redirecting...${claimedProductsPreview}`;
+        codeSuccess.textContent = `Email verified!${claimedProductsPreview}`;
         codeSuccess.classList.remove('hidden');
 
-        // Production-simple flow: always proceed to terms, then clinic dashboard.
-        window.location.href = `/terms?redirect=${encodeURIComponent('/business/today.html')}`;
+        if (data.trial_sim_flow) {
+          const phoneInput = document.getElementById('verifyPhoneInput');
+          if (pendingPhoneE164) phoneInput.value = pendingPhoneE164;
+          hideError(document.getElementById('phoneError'));
+          document.getElementById('phoneSuccess').classList.add('hidden');
+          document.getElementById('phoneTrialInfo').classList.add('hidden');
+          showPanel(phonePanel);
+          window.history.pushState({ step: 'phone' }, '', `${window.location.pathname}?step=phone`);
+          phoneInput.focus();
+        } else {
+          codeSuccess.textContent += ' Redirecting to terms...';
+          setTimeout(() => goToTerms(), 600);
+        }
       } catch (err) {
         showError(codeError, err.message);
       } finally {
@@ -989,7 +1074,73 @@
       }
     }
 
-    // Integration selection removed (production simplification).
+    document.getElementById('phoneSendBtn').addEventListener('click', async () => {
+      const phoneError = document.getElementById('phoneError');
+      hideError(phoneError);
+      const phone = document.getElementById('verifyPhoneInput').value.trim();
+      try {
+        const res = await fetch(`${SIGNUP_API_BASE}/api/signup/verify-phone/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ phone_number: phone })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Failed to send code');
+        document.getElementById('phoneSuccess').textContent = 'Code sent via SMS.';
+        document.getElementById('phoneSuccess').classList.remove('hidden');
+      } catch (err) {
+        showError(phoneError, err.message);
+      }
+    });
+
+    document.getElementById('phoneVerifyBtn').addEventListener('click', async () => {
+      const phoneError = document.getElementById('phoneError');
+      const phoneVerifyBtn = document.getElementById('phoneVerifyBtn');
+      const phoneVerifyBtnText = document.getElementById('phoneVerifyBtnText');
+      const phoneVerifyBtnSpinner = document.getElementById('phoneVerifyBtnSpinner');
+      const phoneTrialInfo = document.getElementById('phoneTrialInfo');
+      hideError(phoneError);
+      phoneVerifyBtn.disabled = true;
+      phoneVerifyBtnText.textContent = 'Activating...';
+      phoneVerifyBtnSpinner.classList.remove('hidden');
+      try {
+        const res = await fetch(`${SIGNUP_API_BASE}/api/signup/verify-phone/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            phone_number: document.getElementById('verifyPhoneInput').value.trim(),
+            code: document.getElementById('phoneCodeInput').value.trim()
+          })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Verification failed');
+        if (data.customer && typeof persistProviderCustomer === 'function') {
+          persistProviderCustomer(data.customer);
+        } else {
+          await hydrateProviderSession(SIGNUP_API_BASE);
+        }
+        const num = data.trial?.twilio_phone_number;
+        if (num) {
+          phoneTrialInfo.textContent = `Your line: ${num} — 60 free minutes, 7-day trial.`;
+          phoneTrialInfo.classList.remove('hidden');
+        }
+        document.getElementById('phoneSuccess').textContent = 'Phone verified! Redirecting to terms...';
+        document.getElementById('phoneSuccess').classList.remove('hidden');
+        setTimeout(() => goToTerms(), 900);
+      } catch (err) {
+        showError(phoneError, err.message);
+      } finally {
+        phoneVerifyBtn.disabled = false;
+        phoneVerifyBtnText.textContent = 'Verify & get my number';
+        phoneVerifyBtnSpinner.classList.add('hidden');
+      }
+    });
+
+    document.getElementById('phoneCodeInput').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 8);
+    });
   </script>
 </body>
 

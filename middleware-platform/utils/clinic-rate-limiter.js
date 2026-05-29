@@ -17,10 +17,14 @@ function getWindowStart() {
 /**
  * Check if request is allowed for this tenant (clinic_id, customer_id, or agent_id).
  * @param {string} tenantKey - clinic_id, customer_id, or agent_id
+ * @param {number} [limitOverride] - per-tier max requests per minute
  * @returns {{ allowed: boolean, remaining: number, limit: number }}
  */
-function check(tenantKey) {
+function check(tenantKey, limitOverride) {
   const key = tenantKey || 'unknown';
+  const limit = Number.isFinite(limitOverride) && limitOverride > 0
+    ? Math.floor(limitOverride)
+    : MAX_PER_CLINIC;
   const now = Date.now();
   const currentWindow = getWindowStart();
 
@@ -37,10 +41,10 @@ function check(tenantKey) {
   }
 
   entry.count++;
-  const remaining = Math.max(0, MAX_PER_CLINIC - entry.count);
-  const allowed = entry.count <= MAX_PER_CLINIC;
+  const remaining = Math.max(0, limit - entry.count);
+  const allowed = entry.count <= limit;
 
-  return { allowed, remaining, limit: MAX_PER_CLINIC };
+  return { allowed, remaining, limit };
 }
 
 /**

@@ -1,0 +1,267 @@
+<style>
+*{box-sizing:border-box}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+.phase{margin-bottom:2rem}
+.phase-title{font-size:16px;font-weight:500;color:var(--color-text-primary);margin:0 0 4px}
+.phase-sub{font-size:13px;color:var(--color-text-secondary);margin:0 0 12px}
+.scenario{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px;margin-bottom:8px}
+.scenario-header{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+.scenario-id{font-size:11px;font-weight:500;color:var(--color-text-tertiary);min-width:36px;padding-top:2px}
+.scenario-title{font-size:14px;font-weight:500;color:var(--color-text-primary);flex:1}
+.status-btn{font-size:12px;padding:3px 10px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;cursor:pointer;color:var(--color-text-secondary);white-space:nowrap}
+.status-btn.pass{background:var(--color-background-success);color:var(--color-text-success);border-color:var(--color-border-success)}
+.status-btn.fail{background:var(--color-background-danger);color:var(--color-text-danger);border-color:var(--color-border-danger)}
+.status-btn.skip{background:var(--color-background-secondary);color:var(--color-text-tertiary);border-color:var(--color-border-tertiary)}
+.scenario-body{margin-top:12px;padding-top:12px;border-top:0.5px solid var(--color-border-tertiary)}
+.detail-row{display:flex;gap:8px;margin-bottom:8px;font-size:13px}
+.detail-label{color:var(--color-text-secondary);min-width:90px}
+.detail-val{color:var(--color-text-primary);flex:1}
+.cmd{font-family:var(--font-mono);font-size:12px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:6px 10px;margin:4px 0;display:block;color:var(--color-text-primary)}
+.expect{color:var(--color-text-success);font-size:13px}
+.reject{color:var(--color-text-danger);font-size:13px}
+.note{color:var(--color-text-tertiary);font-size:12px;margin-top:6px}
+.summary-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:2rem}
+.sum-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px;text-align:center}
+.sum-num{font-size:22px;font-weight:500;color:var(--color-text-primary)}
+.sum-label{font-size:12px;color:var(--color-text-secondary);margin-top:2px}
+.sum-card.s-pass .sum-num{color:var(--color-text-success)}
+.sum-card.s-fail .sum-num{color:var(--color-text-danger)}
+.sum-card.s-skip .sum-num{color:var(--color-text-tertiary)}
+.progress{height:6px;background:var(--color-background-secondary);border-radius:3px;overflow:hidden;margin-bottom:2rem}
+.progress-fill{height:100%;background:var(--color-background-success);border-radius:3px;transition:width .3s}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.5rem}
+.tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:var(--border-radius-md);background:var(--color-background-info);color:var(--color-text-info);margin-right:4px}
+.tag.stripe{background:var(--color-background-info);color:var(--color-text-info)}
+.tag.db{background:var(--color-background-secondary);color:var(--color-text-secondary)}
+.tag.call{background:var(--color-background-warning);color:var(--color-text-warning)}
+.tag.webhook{background:var(--color-background-success);color:var(--color-text-success)}
+.tag.edge{background:var(--color-background-danger);color:var(--color-text-danger)}
+</style>
+<h2 class="sr-only">Voice billing test scenario runner — mark each test pass, fail, or skip to track readiness.</h2>
+
+<div class="summary-bar">
+<div class="sum-card"><div class="sum-num" id="s-total">0</div><div class="sum-label">total</div></div>
+<div class="sum-card s-pass"><div class="sum-num" id="s-pass">0</div><div class="sum-label">passed</div></div>
+<div class="sum-card s-fail"><div class="sum-num" id="s-fail">0</div><div class="sum-label">failed</div></div>
+<div class="sum-card s-skip"><div class="sum-num" id="s-skip">0</div><div class="sum-label">skipped</div></div>
+</div>
+<div class="progress"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+
+<div class="actions">
+<button onclick="setAll('pass')">Mark all pass</button>
+<button onclick="setAll('')">Reset all</button>
+<button onclick="sendPrompt('A test scenario failed — help me debug it')">Get debug help ↗</button>
+</div>
+
+<div id="scenarios"></div>
+
+<script>
+const SCENARIOS = [
+{phase:"Phase 1 — apply-usage core",phaseDesc:"Run the jest suite first, then verify each manually.",items:[
+{id:"T1.1",title:"Double webhook same call → single deduction",tags:["db"],
+setup:"Create a usage_events row for a known call_id manually, then call applyUsage() with the same call_id.",
+cmd:"npx jest __tests__/apply-usage.test.js --verbose",
+expect:"Second call returns early. credits_balance_minutes decremented exactly once. usage_events has 1 row for the call_id.",
+reject:"Balance drops by 2× duration. Duplicate row in usage_events."},
+{id:"T1.2",title:"Plan bucket depletes before top-up bucket",tags:["db"],
+setup:"Set customer: plan_bucket=5, topup_balance_minutes=50. Simulate a 10-min call.",
+cmd:"INSERT then applyUsage(customerId, 'callX', 600000)",
+expect:"plan_bucket=0, topup_balance_minutes=45. No negative balance.",
+reject:"Either bucket goes negative. Top-up deducted before plan minutes."},
+{id:"T1.3",title:"Zero balance — no deduction, no negative",tags:["db","edge"],
+setup:"Set plan_bucket=0, topup_balance_minutes=0.",
+cmd:"applyUsage(customerId, 'callY', 300000)",
+expect:"Both buckets remain 0. usage_events row written with 0 deducted. No error thrown.",
+reject:"Negative balance. Exception propagates to caller."},
+{id:"T1.4",title:"Retell WebSocket path no longer writes completed_no_credits",tags:["call","db"],
+setup:"Set balance=0. Place a call through Retell agent. Let call complete via WS.",
+cmd:"Grep server logs for 'completed_no_credits'",
+expect:"No completed_no_credits log. applyUsage called. usage_events row present.",
+reject:"completed_no_credits log appears. Balance unchanged despite call running."},
+]},
+{phase:"Phase 2 — inbound gate",phaseDesc:"Test /voice/incoming enforcement. Use Twilio test credentials or ngrok.",items:[
+{id:"T2.1",title:"Active subscriber with minutes → call connects",tags:["call","stripe"],
+setup:"Customer: subscription_status=active, plan_bucket=100.",
+cmd:"POST /voice/incoming with valid customer Twilio number",
+expect:"TwiML response connects to Retell SIP. HTTP 200. No rejection text.",
+reject:"TwiML contains <Say> rejection. Call does not connect."},
+{id:"T2.2",title:"Zero balance → TwiML hangup returned",tags:["call","edge"],
+setup:"Customer: plan_bucket=0, topup_balance_minutes=0, subscription_status=active.",
+cmd:"POST /voice/incoming with that customer's number",
+expect:"TwiML contains <Say> message + <Hangup>. HTTP 200. Log shows 'balance_exhausted'.",
+reject:"Call connects anyway. Empty TwiML. HTTP non-200."},
+{id:"T2.3",title:"Past-due subscription → call rejected",tags:["call","stripe","edge"],
+setup:"Set subscription_status=past_due on a customer with plan_bucket=500.",
+cmd:"POST /voice/incoming",
+expect:"TwiML <Say> + <Hangup> even though minutes remain. Log shows 'subscription_inactive'.",
+reject:"Call connects because bucket is non-zero. Status not checked."},
+{id:"T2.4",title:"Canceled subscription → call rejected",tags:["call","stripe","edge"],
+setup:"Set subscription_status=canceled.",
+cmd:"POST /voice/incoming",
+expect:"Rejected. Log reason: subscription_canceled.",
+reject:"Any connection."},
+{id:"T2.5",title:"Starter tier rate limit enforced",tags:["call","edge"],
+setup:"Customer on Starter ($79). Simulate concurrent calls at limit+1.",
+cmd:"Fire N+1 simultaneous POST /voice/incoming requests",
+expect:"First N connect. N+1 returns TwiML rejection citing concurrency limit.",
+reject:"All calls connect regardless of tier. No concurrency check."},
+]},
+{phase:"Phase 3 — Stripe webhooks",phaseDesc:"Use Stripe CLI to replay events. stripe listen --forward-to localhost:3000/webhooks/stripe",items:[
+{id:"T3.1",title:"invoice.paid → minutes granted + number provisioned (first sub)",tags:["webhook","stripe"],
+setup:"New customer with no prior subscription. Trigger invoice.paid for Starter plan.",
+cmd:"stripe trigger invoice.paid --add invoice:metadata.customer_id=CUST_ID",
+expect:"plan_tier=starter, included_minutes_per_cycle=300, cycle_reset_at set, twilio_phone_number assigned. Log: number provisioned.",
+reject:"Minutes not granted. No Twilio number. Fields unchanged."},
+{id:"T3.2",title:"invoice.paid → minutes reset on renewal (existing sub)",tags:["webhook","stripe"],
+setup:"Customer with plan_bucket=50 (partially used). Trigger renewal invoice.paid.",
+cmd:"stripe trigger invoice.paid (subscription renewal)",
+expect:"plan_bucket restored to 300/900/2000 per tier. cycle_reset_at advanced by 1 month. Twilio number NOT re-provisioned.",
+reject:"Bucket not reset. cycle_reset_at unchanged. Second number provisioned."},
+{id:"T3.3",title:"Top-up checkout.session.completed → topup_balance_minutes added",tags:["webhook","stripe"],
+setup:"Customer with topup_balance_minutes=0. Trigger $30 top-up payment.",
+cmd:"stripe trigger checkout.session.completed --add session:metadata.pack=standard",
+expect:"topup_balance_minutes += 180. usage_events or credit log entry created.",
+reject:"Balance unchanged. Wrong pack size applied."},
+{id:"T3.4",title:"Idempotent webhook — same event replayed",tags:["webhook","edge"],
+setup:"Store a processed Stripe event_id. Re-fire the same event.",
+cmd:"Replay via Stripe CLI or manually POST duplicate webhook payload",
+expect:"Handler detects duplicate event_id. Returns 200. No double grant.",
+reject:"Minutes granted twice. DB shows double topup."},
+{id:"T3.5",title:"customer.subscription.deleted → status=canceled, calls blocked",tags:["webhook","stripe"],
+setup:"Active customer. Trigger subscription deletion.",
+cmd:"stripe trigger customer.subscription.deleted",
+expect:"subscription_status=canceled. Next /voice/incoming rejected. Email/log shows cancellation.",
+reject:"Status unchanged. Calls still connect."},
+{id:"T3.6",title:"customer.subscription.updated past_due → calls blocked",tags:["webhook","stripe"],
+setup:"Active customer. Update subscription to past_due.",
+cmd:"stripe trigger customer.subscription.updated --add subscription:status=past_due",
+expect:"subscription_status=past_due in DB. Inbound rejected by gate (T2.3 confirms this).",
+reject:"Status unchanged in DB."},
+]},
+{phase:"Phase 4 — signup + provisioning flow",phaseDesc:"Manual flow. Use test Stripe cards (4242 4242 4242 4242).",items:[
+{id:"T4.1",title:"SaaS signup: Retell agent created, NO Twilio number",tags:["call","stripe"],
+setup:"Complete full signup as a new SaaS user through accept-terms.",
+cmd:"Complete signup flow, inspect DB and Retell dashboard",
+expect:"retell_agent_id set on customer. twilio_phone_number is NULL. Customer redirected to settings.html?billing=subscribe.",
+reject:"Twilio number provisioned before payment. No redirect to billing."},
+{id:"T4.2",title:"After subscribe: Twilio number appears",tags:["stripe","call"],
+setup:"From T4.1 state, complete Stripe checkout for Starter plan.",
+cmd:"Complete checkout → confirm invoice.paid fires → check DB",
+expect:"twilio_phone_number populated. Inbound calls now route to this customer. T3.1 conditions met.",
+reject:"Number still NULL after payment. Manual provisioning required."},
+{id:"T4.3",title:"Trial (250 min) counts down correctly before subscribe",tags:["db"],
+setup:"New signup, pre-subscription. Make several short calls.",
+cmd:"Check credits_balance_minutes after each call",
+expect:"Balance decrements on each call. At 20% (50 min) low-balance email sent. At 0 inbound blocked.",
+reject:"Balance does not change. Email not sent. Calls still connect at 0."},
+]},
+{phase:"Phase 5 — alerts + low balance",phaseDesc:"Check email delivery and in-app banner.",items:[
+{id:"T5.1",title:"20% threshold triggers low-balance email",tags:["webhook","edge"],
+setup:"Customer: included_minutes_per_cycle=300, plan_bucket=60 (20%). Run alert cron.",
+cmd:"POST /api/usage-monitor/check-low-credits (or npm run billing:lifecycle-sweep)",
+expect:"Email sent to customer email. Log: low_balance_alert. No duplicate if run again immediately.",
+reject:"No email. Fixed 50-min threshold used instead of 20% of plan."},
+{id:"T5.2",title:"Alert not re-sent if already sent this cycle",tags:["db","edge"],
+setup:"From T5.1 state, run cron again immediately.",
+cmd:"POST /api/usage-monitor/check-low-credits (second run)",
+expect:"No duplicate email. Idempotency via sent flag or cycle timestamp.",
+reject:"Second email fires. Inbox spam."},
+{id:"T5.3",title:"Settings billing page shows correct balance bar",tags:["db"],
+setup:"Customer with plan_bucket=450, cycle=900, topup=180.",
+cmd:"Load settings.html → Billing tab",
+expect:"Shows '630 of 900 min remaining' (plan + topup). Correct plan name. Renewal date matches cycle_reset_at.",
+reject:"Shows raw plan_bucket only (450). Top-up not added. Wrong plan name."},
+]},
+{phase:"Phase 6 — admin + ops",phaseDesc:"Admin API and audit scripts.",items:[
+{id:"T6.1",title:"Admin pause-enforcement stops gate for one customer",tags:["db","edge"],
+setup:"Customer with plan_bucket=0. Call admin pause endpoint.",
+cmd:"POST /api/admin/voice-billing/:id/pause-enforcement",
+expect:"Subsequent /voice/incoming for that customer connects despite 0 balance. Other customers still gated.",
+reject:"Pause has no effect. All customers affected. No log of pause."},
+{id:"T6.2",title:"Admin resume re-enables gate",tags:["db","edge"],
+setup:"From T6.1 paused state.",
+cmd:"POST /api/admin/voice-billing/:id/resume-enforcement",
+expect:"Gate re-applied. Next call with 0 balance rejected.",
+reject:"Gate remains open. Resume is a no-op."},
+{id:"T6.3",title:"billing:audit-numbers script finds orphan numbers",tags:["db"],
+setup:"Manually insert a customer with twilio_phone_number set but subscription_status=canceled.",
+cmd:"npm run billing:audit-numbers",
+expect:"Script reports that customer as orphaned. Does not auto-release (dry-run safe).",
+reject:"Script exits clean with no findings. Orphan not flagged."},
+{id:"T6.4",title:"billing:voice-smoke passes end-to-end",tags:["call","db","stripe"],
+setup:"Ensure test env STRIPE_PRICE_* vars are set.",
+cmd:"npm run billing:voice-smoke",
+expect:"All smoke assertions pass. Exit 0.",
+reject:"Any assertion fails. Exit non-zero."},
+]},
+];
+
+function render(){
+const wrap=document.getElementById('scenarios');
+wrap.innerHTML='';
+SCENARIOS.forEach(phase=>{
+const ph=document.createElement('div');ph.className='phase';
+ph.innerHTML=`<p class="phase-title">${phase.phase}</p><p class="phase-sub">${phase.phaseDesc}</p>`;
+phase.items.forEach(sc=>{
+const s=document.createElement('div');s.className='scenario';s.id='sc-'+sc.id;
+const tagHtml=sc.tags.map(t=>`<span class="tag ${t}">${t}</span>`).join('');
+s.innerHTML=`<div class="scenario-header" onclick="toggle('${sc.id}')">
+<span class="scenario-id">${sc.id}</span>
+<span class="scenario-title">${sc.title}<br><span style="font-size:11px;font-weight:400">${tagHtml}</span></span>
+<button class="status-btn" id="btn-${sc.id}" onclick="cycle(event,'${sc.id}')">untested</button>
+</div>
+<div class="scenario-body" id="body-${sc.id}" style="display:none">
+<div class="detail-row"><span class="detail-label">Setup</span><span class="detail-val">${sc.setup}</span></div>
+<div class="detail-row"><span class="detail-label">Command</span><span class="detail-val"><code class="cmd">${sc.cmd}</code></span></div>
+<div class="detail-row"><span class="detail-label">Expect</span><span class="detail-val expect">${sc.expect}</span></div>
+<div class="detail-row"><span class="detail-label">Reject if</span><span class="detail-val reject">${sc.reject}</span></div>
+<div style="display:flex;gap:8px;margin-top:12px">
+<button onclick="mark('${sc.id}','pass')">Pass</button>
+<button onclick="mark('${sc.id}','fail')">Fail</button>
+<button onclick="mark('${sc.id}','skip')">Skip</button>
+<button onclick="sendPrompt('Help me debug test ${sc.id}: ${sc.title}')">Debug ↗</button>
+</div>
+</div>`;
+ph.appendChild(s);
+});
+wrap.appendChild(ph);
+});
+updateSummary();
+}
+
+const state={};
+function toggle(id){
+const b=document.getElementById('body-'+id);
+b.style.display=b.style.display==='none'?'block':'none';
+}
+function cycle(e,id){
+e.stopPropagation();
+const cur=state[id]||'';
+const next=cur===''?'pass':cur==='pass'?'fail':cur==='fail'?'skip':'';
+mark(id,next);
+}
+function mark(id,val){
+state[id]=val;
+const btn=document.getElementById('btn-'+id);
+btn.className='status-btn'+(val?' '+val:'');
+btn.textContent=val||'untested';
+updateSummary();
+}
+function setAll(val){
+SCENARIOS.forEach(ph=>ph.items.forEach(sc=>mark(sc.id,val)));
+}
+function updateSummary(){
+const all=SCENARIOS.flatMap(ph=>ph.items);
+const total=all.length;
+const pass=all.filter(s=>state[s.id]==='pass').length;
+const fail=all.filter(s=>state[s.id]==='fail').length;
+const skip=all.filter(s=>state[s.id]==='skip').length;
+document.getElementById('s-total').textContent=total;
+document.getElementById('s-pass').textContent=pass;
+document.getElementById('s-fail').textContent=fail;
+document.getElementById('s-skip').textContent=skip;
+const done=pass+fail+skip;
+document.getElementById('progress').style.width=Math.round(done/total*100)+'%';
+}
+render();
+</script>

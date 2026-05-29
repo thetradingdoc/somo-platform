@@ -16,14 +16,16 @@ const LITTLELAB_SPA_PREFIXES = [
 /**
  * Mount shared static assets and SPA shells (helpers remain in server.js for host-based HTML routes).
  */
-function registerStaticHosting(app, { express, rootDir }) {
+function registerStaticHosting(app, { express, rootDir, skipLittleLabSpa }) {
   const {
     getUnifiedDashboardPath,
     getLittleLabBuildPath,
+    getDodgecallBuildPath,
     sendLittleLabOrApiRunningStub,
   } = createStaticPathHelpers(rootDir);
 
   function serveLittleLabSpaGetHead(req, res, next) {
+    if (skipLittleLabSpa && skipLittleLabSpa(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     sendLittleLabOrApiRunningStub(res);
   }
@@ -76,9 +78,15 @@ function registerStaticHosting(app, { express, rootDir }) {
     },
   }));
 
+  app.use('/dodgecall-assets', express.static(getDodgecallBuildPath('assets'), {
+    maxAge: isProd ? '1y' : 0,
+    immutable: isProd,
+  }));
+
   return {
     getUnifiedDashboardPath,
     getLittleLabBuildPath,
+    getDodgecallBuildPath,
     sendLittleLabOrApiRunningStub,
   };
 }

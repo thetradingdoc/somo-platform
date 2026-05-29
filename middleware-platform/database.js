@@ -3711,6 +3711,162 @@ function migrateCustomerCreditsExpiration() {
   }
 }
 
+// Migration: Voice subscription billing (subscription_v2)
+function migrateVoiceSubscriptionBilling() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const customerCols = db.prepare("PRAGMA table_info(customers)").all().map((c) => c.name);
+    const customerAdds = {
+      stripe_subscription_id: 'TEXT',
+      subscription_status: "TEXT DEFAULT 'trialing'",
+      past_due_since: 'DATETIME',
+      canceled_at: 'DATETIME',
+      number_retention_until: 'DATETIME',
+      cycle_reset_at: 'DATETIME',
+      included_minutes_per_cycle: 'INTEGER DEFAULT 0',
+      billing_enforcement_paused: 'INTEGER DEFAULT 0',
+      billing_enforcement_paused_until: 'DATETIME',
+      billing_enforcement_paused_reason: 'TEXT',
+      billing_vertical: "TEXT DEFAULT 'general'",
+      last_low_balance_alert_at: 'DATETIME'
+    };
+    Object.keys(customerAdds).forEach((col) => {
+      if (!customerCols.includes(col)) {
+        console.log(`🔄 Migrating: customers.${col}`);
+        db.prepare(`ALTER TABLE customers ADD COLUMN ${col} ${customerAdds[col]}`).run();
+      }
+    });
+
+    const creditCols = db.prepare("PRAGMA table_info(customer_credits)").all().map((c) => c.name);
+    if (!creditCols.includes('topup_balance_minutes')) {
+      db.prepare('ALTER TABLE customer_credits ADD COLUMN topup_balance_minutes INTEGER DEFAULT 0').run();
+    }
+
+    const invoiceCols = db.prepare("PRAGMA table_info(monthly_invoices)").all().map((c) => c.name);
+    if (!invoiceCols.includes('billing_model')) {
+      db.prepare("ALTER TABLE monthly_invoices ADD COLUMN billing_model TEXT DEFAULT 'legacy_overage'").run();
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS usage_events (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT NOT NULL,
+        call_id TEXT NOT NULL UNIQUE,
+        call_sid TEXT,
+        minutes_requested INTEGER NOT NULL,
+        minutes_applied INTEGER NOT NULL,
+        source TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_usage_events_customer ON usage_events(customer_id);
+      CREATE INDEX IF NOT EXISTS idx_usage_events_created ON usage_events(created_at);
+    `);
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: voice subscription billing schema');
+  } catch (error) {
+    console.error('❌ Voice subscription billing migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: Provider SIM trial (phone-gated dedicated number)
+function migrateProviderTrialSim() {
+  try {
+    db.pragma('foreign_keys = OFF');
+
+    const customerCols = db.prepare('PRAGMA table_info(customers)').all().map((c) => c.name);
+    const customerAdds = {
+      trial_status: "TEXT DEFAULT 'none'",
+      trial_started_at: 'DATETIME',
+      trial_expires_at: 'DATETIME',
+      trial_phone_verified_at: 'DATETIME',
+      trial_last_activity_at: 'DATETIME',
+      trial_release_reason: 'TEXT',
+      trial_provision_json: 'TEXT',
+      signup_attribution_json: 'TEXT',
+      phone_verified: 'INTEGER DEFAULT 0',
+      phone_verified_at: 'DATETIME',
+      trial_welcome_dismissed_at: 'DATETIME',
+      trial_nudges_json: 'TEXT'
+    };
+    Object.keys(customerAdds).forEach((col) => {
+      if (!customerCols.includes(col)) {
+        console.log(`🔄 Migrating: customers.${col}`);
+        db.prepare(`ALTER TABLE customers ADD COLUMN ${col} ${customerAdds[col]}`).run();
+      }
+    });
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_customers_trial_status ON customers(trial_status);
+      CREATE INDEX IF NOT EXISTS idx_customers_trial_expires ON customers(trial_expires_at);
+      CREATE TABLE IF NOT EXISTS trial_nudge_log (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT NOT NULL,
+        nudge_key TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(customer_id, nudge_key, channel),
+        FOREIGN KEY (customer_id) REFERENCES customers(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_trial_nudge_customer ON trial_nudge_log(customer_id);
+    `);
+
+    db.pragma('foreign_keys = ON');
+    console.log('✅ Migration complete: provider SIM trial schema');
+  } catch (error) {
+    console.error('❌ Provider SIM trial migration failed:', error.message);
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+// Migration: DodgeCall public demo requests
+function migrateDodgecallDemoRequests() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS dodgecall_demo_requests (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        use_case TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        twilio_call_sid TEXT,
+        client_ip TEXT,
+        error_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_phone ON dodgecall_demo_requests(phone);
+      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_created ON dodgecall_demo_requests(created_at);
+      CREATE INDEX IF NOT EXISTS idx_dodgecall_demo_ip_created ON dodgecall_demo_requests(client_ip, created_at);
+    `);
+    const extraCols = [
+      ['template_id', 'TEXT'],
+      ['conversation_stage', 'TEXT'],
+      ['interest_level', 'TEXT'],
+      ['cta_offered_at', 'TEXT'],
+      ['signup_link_sent', 'INTEGER DEFAULT 0'],
+      ['outcome', 'TEXT'],
+      ['duration_sec', 'INTEGER'],
+      ['voicemail_detected', 'INTEGER DEFAULT 0'],
+      ['attribution_json', 'TEXT']
+    ];
+    const existing = new Set(
+      db.prepare('PRAGMA table_info(dodgecall_demo_requests)').all().map((c) => c.name)
+    );
+    for (const [col, type] of extraCols) {
+      if (!existing.has(col)) {
+        db.exec(`ALTER TABLE dodgecall_demo_requests ADD COLUMN ${col} ${type}`);
+      }
+    }
+    console.log('✅ Migration complete: dodgecall_demo_requests');
+  } catch (error) {
+    console.error('❌ DodgeCall demo migration failed:', error.message);
+  }
+}
+
 // Migration: Add pipeline fields to leads table
 function migrateLeadsPipeline() {
   try {
@@ -5595,6 +5751,9 @@ runStartupMigrations(
     migrateMerchantsSubdomain,
     migrateCustomersPasswordHash,
     migrateCustomerCreditsExpiration,
+    migrateVoiceSubscriptionBilling,
+    migrateProviderTrialSim,
+    migrateDodgecallDemoRequests,
     migrateFHIRPatientsMerchantId,
     migrateFHIRPatientsMergedInto,
     migrateCircleAccountsMerchantId,
@@ -14523,7 +14682,34 @@ module.exports = {
       return { changes: 1, lastInsertRowid: callId };
     } else {
       // SQLite path
-      const result = db.prepare(`
+      const hasClinicCol = db.prepare(`PRAGMA table_info(voice_call_log)`).all().some((c) => c.name === 'clinic_id');
+      const result = hasClinicCol
+        ? db.prepare(`
+        INSERT INTO voice_call_log 
+        (id, customer_id, clinic_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
+         credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
+         total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source, cost_updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        callId,
+        call.customer_id || null,
+        call.clinic_id || null,
+        call.call_id,
+        call.twilio_call_sid || null,
+        call.call_duration_seconds || null,
+        call.call_duration_minutes || null,
+        call.credits_deducted || 0,
+        call.function_calls_count || 0,
+        call.status || 'active',
+        call.twilio_cost_usd || null,
+        call.retell_cost_usd || null,
+        call.total_cost_usd || null,
+        call.twilio_cost_calculated_usd || null,
+        call.retell_cost_calculated_usd || null,
+        call.cost_source || null,
+        call.cost_updated_at || null
+      )
+        : db.prepare(`
         INSERT INTO voice_call_log 
         (id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes, 
          credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd, 
@@ -16117,6 +16303,301 @@ module.exports = {
     `).run(customerId);
   },
 
+  getUsageEventByCallId(callId) {
+    if (!callId) return null;
+    return db.prepare('SELECT * FROM usage_events WHERE call_id = ?').get(callId) || null;
+  },
+
+  getTrialMinutesConsumed(customerId, sinceIso) {
+    if (!customerId || !sinceIso) return 0;
+    const row = db.prepare(`
+      SELECT COALESCE(SUM(minutes_applied), 0) AS total
+      FROM usage_events
+      WHERE customer_id = ? AND created_at >= ?
+    `).get(customerId, sinceIso);
+    return row?.total ?? 0;
+  },
+
+  findActiveTrialCustomerByPhone(phoneE164, excludeCustomerId = null) {
+    if (!phoneE164) return null;
+    const digits = String(phoneE164).replace(/\D/g, '');
+    const rows = db.prepare(`
+      SELECT * FROM customers
+      WHERE phone_verified = 1
+        AND trial_status = 'active'
+        AND phone_number IS NOT NULL
+    `).all();
+    for (const row of rows) {
+      if (excludeCustomerId && row.id === excludeCustomerId) continue;
+      const rowDigits = String(row.phone_number).replace(/\D/g, '');
+      if (rowDigits === digits || rowDigits.endsWith(digits) || digits.endsWith(rowDigits)) {
+        return row;
+      }
+    }
+    return null;
+  },
+
+  recordTrialNudge(customerId, nudgeKey, channel) {
+    const id = `tn_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    try {
+      db.prepare(`
+        INSERT INTO trial_nudge_log (id, customer_id, nudge_key, channel)
+        VALUES (?, ?, ?, ?)
+      `).run(id, customerId, nudgeKey, channel);
+      return true;
+    } catch (e) {
+      if (String(e.message).includes('UNIQUE')) return false;
+      throw e;
+    }
+  },
+
+  hasTrialNudgeBeenSent(customerId, nudgeKey, channel) {
+    const row = db.prepare(`
+      SELECT 1 FROM trial_nudge_log
+      WHERE customer_id = ? AND nudge_key = ? AND channel = ?
+    `).get(customerId, nudgeKey, channel);
+    return !!row;
+  },
+
+  listCustomersForTrialExpirySweep() {
+    const now = new Date().toISOString();
+    return db.prepare(`
+      SELECT * FROM customers
+      WHERE trial_status IN ('active', 'exhausted')
+        AND trial_expires_at IS NOT NULL
+        AND trial_expires_at < ?
+        AND (subscription_status IS NULL OR subscription_status != 'active')
+        AND twilio_phone_sid IS NOT NULL
+    `).all(now);
+  },
+
+  listCustomersForTrialInactivitySweep(inactivityDays) {
+    const cutoff = new Date(Date.now() - inactivityDays * 24 * 60 * 60 * 1000).toISOString();
+    return db.prepare(`
+      SELECT * FROM customers
+      WHERE trial_status IN ('active', 'exhausted')
+        AND (subscription_status IS NULL OR subscription_status != 'active')
+        AND twilio_phone_sid IS NOT NULL
+        AND (
+          trial_last_activity_at IS NULL AND trial_started_at < ?
+          OR trial_last_activity_at < ?
+        )
+    `).all(cutoff, cutoff);
+  },
+
+  touchTrialActivity(customerId) {
+    return db.prepare(`
+      UPDATE customers SET trial_last_activity_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?
+    `).run(customerId);
+  },
+
+  insertDodgecallDemoRequest(row) {
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO dodgecall_demo_requests (
+        id, name, phone, use_case, template_id, status, client_ip, attribution_json, created_at, updated_at
+      )
+      VALUES (
+        @id, @name, @phone, @use_case, @template_id, @status, @client_ip, @attribution_json, @created_at, @updated_at
+      )
+    `).run({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      use_case: row.use_case,
+      template_id: row.template_id || null,
+      status: row.status || 'pending',
+      client_ip: row.client_ip || null,
+      attribution_json: row.attribution_json || null,
+      created_at: now,
+      updated_at: now
+    });
+    return row.id;
+  },
+
+  updateDodgecallDemoRequest(id, patch) {
+    if (!id) return;
+    const fields = [];
+    const params = { id, updated_at: new Date().toISOString() };
+    const allowed = [
+      'status',
+      'twilio_call_sid',
+      'error_message',
+      'template_id',
+      'conversation_stage',
+      'interest_level',
+      'cta_offered_at',
+      'signup_link_sent',
+      'outcome',
+      'duration_sec',
+      'voicemail_detected',
+      'attribution_json'
+    ];
+    for (const key of allowed) {
+      if (patch[key] != null) {
+        fields.push(`${key} = @${key}`);
+        params[key] = patch[key];
+      }
+    }
+    if (!fields.length) return;
+    fields.push('updated_at = @updated_at');
+    db.prepare(`UPDATE dodgecall_demo_requests SET ${fields.join(', ')} WHERE id = @id`).run(params);
+  },
+
+  countDodgecallDemoRequestsToday() {
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM dodgecall_demo_requests WHERE created_at >= ?`
+      )
+      .get(dayAgo);
+    return row?.c || 0;
+  },
+
+  countActiveDodgecallDemoCalls() {
+    const row = db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM dodgecall_demo_requests
+         WHERE status IN ('initiated', 'ringing', 'answered', 'in-progress')`
+      )
+      .get();
+    return row?.c || 0;
+  },
+
+  getDodgecallDemoRequest(id) {
+    if (!id) return null;
+    return db.prepare('SELECT * FROM dodgecall_demo_requests WHERE id = ?').get(id) || null;
+  },
+
+  countDodgecallDemoRequestsSince({ client_ip, phone, since, statuses }) {
+    if (client_ip) {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS c FROM dodgecall_demo_requests
+        WHERE client_ip = ? AND created_at >= ?
+      `).get(client_ip, since);
+      return row?.c || 0;
+    }
+    if (phone) {
+      let sql = `SELECT COUNT(*) AS c FROM dodgecall_demo_requests WHERE phone = ? AND created_at >= ?`;
+      const params = [phone, since];
+      if (statuses && statuses.length) {
+        sql += ` AND status IN (${statuses.map(() => '?').join(',')})`;
+        params.push(...statuses);
+      }
+      const row = db.prepare(sql).get(...params);
+      return row?.c || 0;
+    }
+    return 0;
+  },
+
+  insertUsageEvent(row) {
+    const { v4: uuidv4 } = require('uuid');
+    return db.prepare(`
+      INSERT INTO usage_events (id, customer_id, call_id, call_sid, minutes_requested, minutes_applied, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      row.id || uuidv4(),
+      row.customer_id,
+      row.call_id,
+      row.call_sid || null,
+      row.minutes_requested,
+      row.minutes_applied,
+      row.source || null
+    );
+  },
+
+  getBillingMinutePools(customerId) {
+    const customer = db.prepare('SELECT included_minutes_per_cycle FROM customers WHERE id = ?').get(customerId);
+    const credits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+    const balance = credits?.credits_balance_minutes ?? 0;
+    let topup = credits?.topup_balance_minutes ?? 0;
+    if (topup > balance) topup = balance;
+    const planPool = Math.max(0, balance - topup);
+    const includedCycle = customer?.included_minutes_per_cycle ?? 0;
+    return {
+      credits,
+      balance,
+      topup_balance_minutes: topup,
+      plan_pool_minutes: planPool,
+      included_minutes_per_cycle: includedCycle,
+      total_available: balance
+    };
+  },
+
+  addTopupMinutes(customerId, minutes) {
+    const m = Math.max(0, Math.floor(Number(minutes) || 0));
+    if (!m) return;
+    const credits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+    if (!credits) {
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare(`
+        INSERT INTO customer_credits (id, customer_id, credits_balance_minutes, topup_balance_minutes, paid_credits_purchased)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(uuidv4(), customerId, m, m, m);
+      return;
+    }
+    db.prepare(`
+      UPDATE customer_credits
+      SET topup_balance_minutes = topup_balance_minutes + ?,
+          paid_credits_purchased = paid_credits_purchased + ?,
+          credits_balance_minutes = credits_balance_minutes + ?,
+          last_replenished_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE customer_id = ?
+    `).run(m, m, m, customerId);
+  },
+
+  grantSubscriptionCycleMinutes(customerId, minutes, cycleResetAtIso) {
+    const m = Math.max(0, Math.floor(Number(minutes) || 0));
+    db.prepare(`
+      UPDATE customers
+      SET included_minutes_per_cycle = ?,
+          cycle_reset_at = ?,
+          subscription_status = 'active',
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(m, cycleResetAtIso || null, customerId);
+
+    const credits = db.prepare('SELECT * FROM customer_credits WHERE customer_id = ?').get(customerId);
+    if (!credits) {
+      const { v4: uuidv4 } = require('uuid');
+      db.prepare(`
+        INSERT INTO customer_credits (id, customer_id, credits_balance_minutes, topup_balance_minutes, free_credits_allocated, last_replenished_at)
+        VALUES (?, ?, ?, 0, 0, datetime('now'))
+      `).run(uuidv4(), customerId, m);
+      return;
+    }
+    const topup = credits.topup_balance_minutes ?? 0;
+    db.prepare(`
+      UPDATE customer_credits
+      SET credits_balance_minutes = ? + ?,
+          last_replenished_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE customer_id = ?
+    `).run(m, topup, customerId);
+  },
+
+  updateCustomerSubscriptionFields(customerId, fields) {
+    const allowed = [
+      'stripe_subscription_id', 'subscription_status', 'past_due_since', 'canceled_at',
+      'number_retention_until', 'cycle_reset_at', 'plan_tier', 'included_minutes_per_cycle',
+      'billing_enforcement_paused', 'billing_enforcement_paused_until', 'billing_enforcement_paused_reason'
+    ];
+    const sets = [];
+    const vals = [];
+    allowed.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(fields, key)) {
+        sets.push(`${key} = ?`);
+        vals.push(fields[key]);
+      }
+    });
+    if (!sets.length) return;
+    sets.push("updated_at = datetime('now')");
+    vals.push(customerId);
+    db.prepare(`UPDATE customers SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  },
+
   // Get credit usage history for analytics
   getCreditUsageHistory(customerId, days = 30) {
     const startDate = new Date();
@@ -16382,6 +16863,12 @@ module.exports = {
   createMonthlyInvoice(customerId, billingMonth, usage, options = {}) {
     const { v4: uuidv4 } = require('uuid');
 
+    const customer = db.prepare('SELECT stripe_subscription_id, subscription_status FROM customers WHERE id = ?').get(customerId);
+    const subscriptionBilling = !!(customer?.stripe_subscription_id && customer.subscription_status === 'active');
+    if (subscriptionBilling && !(usage.overage_api_requests > 0)) {
+      return { skipped: true, reason: 'subscription_v2_no_voice_overage' };
+    }
+
     // Base costs (Retell + Twilio + infrastructure)
     // Retell: ~$0.02/min, Twilio: ~$0.013/min, Infrastructure: ~$0.017/min = $0.05/min total
     const retellCostPerMin = options.retellCostPerMin || 0.02;
@@ -16417,7 +16904,9 @@ module.exports = {
     const total = subtotal;
 
     // Customer-facing prices (what we bill them)
-    const voiceMinutesCost = (usage.overage_voice_minutes || 0) * 0.05; // $0.05/min billed to customer
+    const voiceMinutesCost = subscriptionBilling
+      ? 0
+      : (usage.overage_voice_minutes || 0) * 0.05;
     const apiRequestsCost = (usage.overage_api_requests || 0) / 1000 * 0.01; // $0.01/1k requests billed
 
     // Generate invoice number (e.g., INV-2025-11-001)
@@ -16429,6 +16918,8 @@ module.exports = {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 15);
 
+    const billingModel = subscriptionBilling ? 'subscription_v2' : 'legacy_overage';
+
     return db.prepare(`
       INSERT INTO monthly_invoices (
         id, customer_id, billing_month, invoice_number,
@@ -16436,15 +16927,15 @@ module.exports = {
         voice_minutes_cost, api_requests_cost,
         job_calls_count, job_calls_cost,
         base_costs, integration_costs, markup_percentage, markup_amount,
-        subtotal, total, due_date, status, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+        subtotal, total, due_date, status, notes, billing_model
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
     `).run(
       uuidv4(), customerId, billingMonth, invoiceNumber,
       usage.voice_minutes_used || 0, usage.api_requests_used || 0,
       voiceMinutesCost, apiRequestsCost,
       leadCallsCount, leadCallsCost,
       baseCosts, integrationCosts, markupPercentage, markupAmount,
-      subtotal, total, dueDate.toISOString(), options.notes || null
+      subtotal, total, dueDate.toISOString(), options.notes || null, billingModel
     );
   },
 

@@ -455,7 +455,7 @@
             try {
                 // Get redirect URL and customer_type from query params
                 const urlParams = new URLSearchParams(window.location.search);
-                const redirectUrl = urlParams.get('redirect') || '/business/business-dashboard.html';
+                const redirectUrl = urlParams.get('redirect') || '/business/today.html';
                 const customerType = urlParams.get('customer_type') || 'saas';
 
                 const response = await fetch(`${API_BASE}/api/signup/accept-terms?redirect=${encodeURIComponent(redirectUrl)}&customer_type=${customerType}`, {
@@ -502,7 +502,7 @@
                         });
                         const termsResult = await termsCheck.json();
                         if (termsResult.success && termsResult.redirect && termsResult.redirect !== window.location.pathname) {
-                            window.location.href = termsResult.redirect || '/business/business-dashboard.html';
+                            window.location.href = termsResult.redirect || '/business/today.html';
                         }
                     }
                 }

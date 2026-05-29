@@ -42,6 +42,9 @@ try {
 
 const router = express.Router();
 
+/** Canonical provider portal home after SaaS signup (see server.js SAAS_PROVIDER_PORTAL_HOME). */
+const SAAS_PORTAL_HOME = '/business/today.html';
+
 /**
  * Get cookie options for customer session
  * Sets domain for cross-subdomain access in production
@@ -91,7 +94,8 @@ router.post('/signup', rateLimiter, async (req, res) => {
       license_number,
       license_state,
       license_region,
-      languages
+      languages,
+      attribution
     } = req.body;
 
     // Build name from first_name + last_name if provided (specialist portal)
@@ -259,7 +263,22 @@ router.post('/signup', rateLimiter, async (req, res) => {
       email_verified: false,
       provider_profile: providerProfile
     };
+    if (attribution && typeof attribution === 'object') {
+      customerRecord.signup_attribution_json = JSON.stringify(attribution);
+    } else if (req.query.utm_source || req.query.utm_campaign) {
+      customerRecord.signup_attribution_json = JSON.stringify({
+        utm_source: req.query.utm_source || null,
+        utm_campaign: req.query.utm_campaign || null,
+        utm_medium: req.query.utm_medium || null
+      });
+    }
+
     db.createCustomer(customerRecord);
+    const postCreatePatch = { customer_type: customerType };
+    if (customerRecord.signup_attribution_json) {
+      postCreatePatch.signup_attribution_json = customerRecord.signup_attribution_json;
+    }
+    db.updateCustomer(customerId, postCreatePatch);
 
     // Track incomplete signup (Step 1: Started)
     try {
@@ -510,6 +529,10 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
     // Log customer_type for debugging
     console.log(`✅ Email verified for customer ${customer.id}, customer_type in DB: ${customer.customer_type || 'null'}`);
 
+    const { isTrialSimEnabledForCustomer } = require('../services/trial-lifecycle');
+    const trialSimFlow =
+      (customer.customer_type || 'saas') === 'saas' && isTrialSimEnabledForCustomer(customer);
+
     res.json({
       success: true,
       message: 'Email verified successfully',
@@ -518,11 +541,14 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
         name: customer.name,
         email: customer.email,
         email_verified: true,
-        customer_type: customer.customer_type || null // Return actual customer_type from DB
+        customer_type: customer.customer_type || null,
+        merchant_id: customer.merchant_id || null,
+        phone_number: customer.phone_number || null,
+        twilio_phone_number: customer.twilio_phone_number || null,
+        trial_status: customer.trial_status || null
       },
-      // ALWAYS show integration selection after email verification
-      // This ensures user confirms their choice and we have the correct customer_type
-      next_step: 'select_integration'
+      trial_sim_flow: trialSimFlow,
+      next_step: trialSimFlow ? 'verify_phone' : 'accept_terms'
     });
   } catch (error) {
     console.error('❌ Email verification error:', error);
@@ -531,6 +557,182 @@ router.post('/signup/verify-email', rateLimiter, async (req, res) => {
       error: 'Failed to verify email',
       message: error.message
     });
+  }
+});
+
+/**
+ * POST /api/signup/verify-phone/send
+ * Send SMS OTP via Twilio Verify (requires session + verified email).
+ */
+router.post('/signup/verify-phone/send', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer?.email_verified) {
+      return res.status(400).json({ success: false, error: 'Email not verified' });
+    }
+
+    const { phone_number } = req.body;
+    const phone = phone_number || customer.phone_number;
+    if (!phone) {
+      return res.status(400).json({ success: false, error: 'Phone number required' });
+    }
+
+    const { normalizePhone, sendPhoneVerification } = require('../services/twilio-verify-service');
+    const { canStartTrial } = require('../services/trial-lifecycle');
+    const e164 = normalizePhone(phone);
+    const gate = canStartTrial(db, customer.id, e164);
+    if (!gate.allowed && gate.reason === 'phone_trial_in_use') {
+      return res.status(409).json({
+        success: false,
+        error: 'This phone number already has an active trial'
+      });
+    }
+
+    db.updateCustomer(customer.id, { phone_number: e164 });
+    const result = await sendPhoneVerification(e164);
+    res.json({ success: true, message: 'Verification code sent', to: result.to, mock: result.mock || false });
+  } catch (error) {
+    console.error('❌ verify-phone/send:', error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/signup/verify-phone/check
+ * Confirm OTP; start SIM trial when enabled.
+ */
+router.post('/signup/verify-phone/check', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer?.email_verified) {
+      return res.status(400).json({ success: false, error: 'Email not verified' });
+    }
+
+    const { phone_number, code } = req.body;
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'Verification code required' });
+    }
+
+    const { normalizePhone, checkPhoneVerification } = require('../services/twilio-verify-service');
+    const {
+      isTrialSimEnabledForCustomer,
+      startTrialTenant
+    } = require('../services/trial-lifecycle');
+
+    const e164 = normalizePhone(phone_number || customer.phone_number);
+    const check = await checkPhoneVerification(e164, code);
+    if (!check.approved) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired code' });
+    }
+
+    const now = new Date().toISOString();
+    db.updateCustomer(customer.id, {
+      phone_number: e164,
+      phone_verified: 1,
+      phone_verified_at: now
+    });
+
+    let trial = null;
+    const refreshed = db.getCustomer(customer.id);
+    if (isTrialSimEnabledForCustomer(refreshed)) {
+      trial = await startTrialTenant(db, customer.id, {
+        phoneE164: e164,
+        phoneVerifiedAt: now
+      });
+    }
+
+    try {
+      const incompleteSignup = db.getIncompleteSignupByEmail(refreshed.email);
+      if (incompleteSignup) {
+        db.updateIncompleteSignup(incompleteSignup.id, {
+          signup_step: 'phone_verified',
+          last_step_completed_at: now
+        });
+      }
+    } catch (_) {}
+
+    const afterTrial = db.getCustomer(customer.id);
+    res.json({
+      success: true,
+      message: trial?.twilio_phone_number
+        ? 'Phone verified. Your dedicated line is ready.'
+        : 'Phone verified',
+      phone_verified: true,
+      trial,
+      customer: serializeSignupSessionCustomer(afterTrial),
+      next_step: 'accept_terms',
+      redirect: '/terms?customer_type=saas'
+    });
+  } catch (error) {
+    console.error('❌ verify-phone/check:', error);
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+function serializeSignupSessionCustomer(customer) {
+  if (!customer) return null;
+  return {
+    id: customer.id,
+    name: customer.name,
+    email: customer.email,
+    phone_number: customer.phone_number || null,
+    twilio_phone_number: customer.twilio_phone_number || null,
+    company_name: customer.company_name || null,
+    merchant_id: customer.merchant_id || null,
+    customer_type: customer.customer_type || 'saas',
+    trial_status: customer.trial_status || null,
+    phone_verified: customer.phone_verified === 1,
+    email_verified: customer.email_verified === 1
+  };
+}
+
+/**
+ * GET /api/signup/session
+ * Lightweight session snapshot for signup/portal UI (no terms gate).
+ */
+router.get('/signup/session', rateLimiter, async (req, res) => {
+  try {
+    const sessionId = req.cookies?.customer_session;
+    if (!sessionId) {
+      return res.status(401).json({ success: false, error: 'Session required' });
+    }
+    const session = db.getCustomerSession(sessionId);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Invalid session' });
+    }
+    const customer = db.getCustomer(session.customer_id);
+    if (!customer) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    if (!customer.email_verified) {
+      return res.status(400).json({ success: false, error: 'Email not verified' });
+    }
+    const { isTrialSimEnabledForCustomer } = require('../services/trial-lifecycle');
+    res.json({
+      success: true,
+      customer: serializeSignupSessionCustomer(customer),
+      trial_sim_flow:
+        (customer.customer_type || 'saas') === 'saas' && isTrialSimEnabledForCustomer(customer)
+    });
+  } catch (error) {
+    console.error('❌ signup/session:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -988,8 +1190,8 @@ router.post('/customers/login', lenientAuthLimiter || rateLimiter, async (req, r
       },
       // Include redirect info for frontend
       redirect: customer.merchant_id 
-        ? '/business/business-dashboard.html' 
-        : (customer.customer_type === 'api' ? '/docs' : '/business/business-dashboard.html')
+        ? SAAS_PORTAL_HOME
+        : (customer.customer_type === 'api' ? '/docs' : SAAS_PORTAL_HOME)
     });
   } catch (error) {
     console.error('❌ Customer login error:', error);
@@ -1050,7 +1252,7 @@ router.post('/signin/verify', rateLimiter, async (req, res) => {
     const customerType = customer.customer_type || 'saas'; // Default to saas
 
     let nextStep = customerType === 'saas' ? 'dashboard' : 'docs';
-    let redirect = customerType === 'saas' ? '/business/business-dashboard.html' : '/docs';
+    let redirect = customerType === 'saas' ? SAAS_PORTAL_HOME : '/docs';
 
     if (!termsAccepted) {
       nextStep = 'terms';
@@ -1207,11 +1409,11 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       // CRITICAL: SaaS → Dashboard, API → Docs
       let defaultRedirect;
       if (customerType === 'saas') {
-        defaultRedirect = '/business/business-dashboard.html';
+        defaultRedirect = SAAS_PORTAL_HOME;
       } else if (customerType === 'api') {
         defaultRedirect = '/docs';
       } else {
-        defaultRedirect = '/business/business-dashboard.html'; // Fallback
+        defaultRedirect = SAAS_PORTAL_HOME;
       }
 
       const redirectUrl = req.query.redirect || defaultRedirect;
@@ -1313,13 +1515,20 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
       console.log(`✅ Customer ${customer.id} already has merchant ${merchantId}`);
     }
 
-    // Allocate free credits based on customer type
+    const { isTrialSimEnabledForCustomer } = require('../services/trial-lifecycle');
+    const simTrialOn = customerType === 'saas' && isTrialSimEnabledForCustomer(customer);
+
+    // Allocate free credits based on customer type (skip if SIM trial already granted on phone verify)
     try {
-      if (customerType === 'saas') {
-        // SaaS customers get 250 free minutes per month
-        db.allocateFreeCredits(customer.id, 250);
-        console.log(`✅ Allocated 250 free minutes (SaaS) to customer ${customer.id}`);
-      } else {
+      if (customerType === 'saas' && !simTrialOn) {
+        const { getSignupTrialMinutes } = require('../services/plan-catalog');
+        const trialMin = getSignupTrialMinutes();
+        db.allocateFreeCredits(customer.id, trialMin);
+        console.log(`✅ Allocated ${trialMin} free minutes (SaaS) to customer ${customer.id}`);
+      } else if (customerType === 'saas' && simTrialOn && customer.trial_status !== 'active') {
+        const { getSignupTrialMinutes } = require('../services/plan-catalog');
+        db.allocateFreeCredits(customer.id, getSignupTrialMinutes());
+      } else if (customerType !== 'saas') {
         // API customers get 100 free minutes (one-time)
         db.allocateFreeCredits(customer.id, 100);
         console.log(`✅ Allocated 100 free minutes (API) to customer ${customer.id}`);
@@ -1333,7 +1542,7 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     let retellAgentId = null;
     let retellAgentStatus = 'pending';
 
-    // Only create agent if customer doesn't already have one
+    // Only create agent if customer doesn't already have one (SIM trial may have created on phone verify)
     if (!customer.retell_agent_id) {
       try {
         const retellService = new RetellService();
@@ -1365,11 +1574,17 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
     let twilioPhoneNumber = null;
     let twilioPhoneSid = null;
 
-    if (customerType === 'saas' && !customer.twilio_phone_number) {
+    if (customerType === 'saas' && !customer.twilio_phone_number && !simTrialOn) {
       try {
+        const { canProvisionNumber } = require('../services/billing-access');
+        const provisionGate = canProvisionNumber(db, customer.id);
+        if (!provisionGate.allowed) {
+          console.log(`📞 Deferring Twilio provision until payment (${provisionGate.reason})`);
+        }
+
         const twilioPhoneService = new TwilioPhoneService();
 
-        if (twilioPhoneService.isAvailable()) {
+        if (provisionGate.allowed && twilioPhoneService.isAvailable()) {
           // Build webhook URL with customer_id parameter
           const apiBaseUrl = process.env.API_BASE_URL || process.env.BASE_URL ||
             (process.env.NODE_ENV === 'production' ? 'https://api.doclittle.site' : 'http://localhost:4000');
@@ -1432,16 +1647,30 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
 
     // Determine redirect URL based on customer type
     let redirectUrl;
-    const creditsAllocated = customerType === 'saas' ? 250 : 100;
+    const { getSignupTrialMinutes } = require('../services/plan-catalog');
+    const creditsAllocated = customerType === 'saas' ? getSignupTrialMinutes() : 100;
 
-    // CRITICAL: After payment, redirect to signup complete page
-    // User will receive login details via email
-    if (hasPaymentMethod) {
+    const refreshedCustomer = db.getCustomer(customer.id);
+    const needsVoiceSubscription =
+      customerType === 'saas' &&
+      refreshedCustomer.subscription_status !== 'active' &&
+      !refreshedCustomer.stripe_subscription_id;
+
+    if (simTrialOn && !refreshedCustomer.phone_verified) {
+      redirectUrl =
+        '/signup?step=phone&redirect=' + encodeURIComponent('/terms?customer_type=saas');
+      console.log('✅ SIM trial — phone verification required');
+    } else if (simTrialOn && refreshedCustomer.trial_status === 'active') {
+      const welcome = refreshedCustomer.trial_welcome_dismissed_at ? '' : '&welcome=1';
+      redirectUrl = `/business/settings.html?billing=trial${welcome}`;
+      console.log('✅ SIM trial active — redirect to trial billing');
+    } else if (needsVoiceSubscription) {
+      redirectUrl = '/business/settings.html?billing=subscribe';
+      console.log('✅ SaaS signup — redirect to voice plan checkout');
+    } else if (hasPaymentMethod) {
       redirectUrl = '/signup-complete';
       console.log(`✅ Payment verified - redirecting to signup complete page`);
     } else {
-      // Payment verification required - redirect to card verification
-      // After payment, they'll be redirected to login
       redirectUrl = `/verify-card?customer_type=${customerType}`;
       console.log(`✅ Payment required - redirecting to verify-card`);
     }

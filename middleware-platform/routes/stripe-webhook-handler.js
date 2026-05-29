@@ -149,6 +149,17 @@ router.post(
         case 'charge.dispute.closed':
           await handleChargeDispute(event.data.object);
           break;
+        case 'invoice.paid':
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted':
+        case 'checkout.session.completed': {
+          const { handleVoiceBillingStripeEvent } = require('../services/voice-billing-stripe');
+          const voiceResult = await handleVoiceBillingStripeEvent(event);
+          if (voiceResult?.handled) {
+            console.log('[StripeWebhook] Voice billing:', event.type, voiceResult);
+          }
+          break;
+        }
         default:
           console.log('[StripeWebhook] Unhandled event type:', event.type);
       }

@@ -19,6 +19,7 @@ const PatientOrchestratorService = require('../services/patient-orchestrator-ser
 const KellyAgentService = require('../services/kelly-agent-service');
 const KellyToolExecutor = require('../services/kelly-tool-executor');
 const KellyOrchestratorPhase = require('../services/kelly-orchestrator-phase');
+const dodgecallDemoHandler = require('./dodgecall-demo-handler');
 
 class RetellWebSocketHandler {
     constructor(db, config) {
@@ -150,60 +151,43 @@ class RetellWebSocketHandler {
                     // R-1: Map clinic to customer for credits (clinic.merchant_id -> customer)
                     const customerIdForCredits = this.db.getCustomerIdForClinic?.(activeConnection.clinic_id) || activeConnection.clinic_id;
                     
-                    // Get customer credits (using clinic_id as customer_id for now)
-                    const credits = this.db.getCustomerCredits(customerIdForCredits);
-                    if (credits && credits.credits_balance_minutes >= callDurationMinutes) {
-                        // Deduct credits
-                        this.db.deductCredits(customerIdForCredits, callDurationMinutes);
+                    const { applyUsage } = require('../services/apply-usage');
+                    const usageResult = applyUsage(this.db, {
+                        customerId: customerIdForCredits,
+                        callId,
+                        durationMinutes: callDurationMinutes,
+                        source: 'retell_ws'
+                    });
+                    const applied = usageResult.minutes_applied ?? 0;
 
-                        // Update voice call log with duration and credits deducted
-                        // NOTE: voice_call_log table uses customer_id, so we use clinic_id here
-                        const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
-                        if (callLog) {
-                            this.db.db.prepare(`
-                                UPDATE voice_call_log 
-                                SET call_duration_seconds = ?,
-                                    call_duration_minutes = ?,
-                                    credits_deducted = ?,
-                                    status = 'completed'
-                                WHERE call_id = ?
-                            `).run(callDurationSeconds, callDurationMinutes, callDurationMinutes, callId);
-                        } else {
-                            // Create call log if it doesn't exist
-                            const { v4: uuidv4 } = require('uuid');
-                            this.db.db.prepare(`
-                                INSERT INTO voice_call_log (
-                                    id, customer_id, call_id, call_duration_seconds, 
-                                    call_duration_minutes, credits_deducted, status
-                                ) VALUES (?, ?, ?, ?, ?, ?, 'completed')
-                            `).run(
-                                uuidv4(),
-                                customerIdForCredits, // Using clinic_id as customer_id (database schema limitation)
-                                callId,
-                                callDurationSeconds,
-                                callDurationMinutes,
-                                callDurationMinutes
-                            );
-                        }
-
-                        console.log(`✅ Deducted ${callDurationMinutes} minutes from clinic ${activeConnection.clinic_id}`);
+                    const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
+                    if (callLog) {
+                        this.db.db.prepare(`
+                            UPDATE voice_call_log 
+                            SET call_duration_seconds = ?,
+                                call_duration_minutes = ?,
+                                credits_deducted = ?,
+                                status = 'completed'
+                            WHERE call_id = ?
+                        `).run(callDurationSeconds, callDurationMinutes, applied, callId);
                     } else {
-                        // Insufficient credits - log warning
-                        console.warn(`⚠️  Insufficient credits for clinic ${activeConnection.clinic_id} (needed: ${callDurationMinutes}, available: ${credits ? credits.credits_balance_minutes : 0})`);
-
-                        // Still log the call
-                        const callLog = this.db.db.prepare('SELECT * FROM voice_call_log WHERE call_id = ?').get(callId);
-                        if (callLog) {
-                            this.db.db.prepare(`
-                                UPDATE voice_call_log 
-                                SET call_duration_seconds = ?,
-                                    call_duration_minutes = ?,
-                                    credits_deducted = 0,
-                                    status = 'completed_no_credits'
-                                WHERE call_id = ?
-                            `).run(callDurationSeconds, callDurationMinutes, callId);
-                        }
+                        const { v4: uuidv4 } = require('uuid');
+                        this.db.db.prepare(`
+                            INSERT INTO voice_call_log (
+                                id, customer_id, call_id, call_duration_seconds, 
+                                call_duration_minutes, credits_deducted, status
+                            ) VALUES (?, ?, ?, ?, ?, ?, 'completed')
+                        `).run(
+                            uuidv4(),
+                            customerIdForCredits,
+                            callId,
+                            callDurationSeconds,
+                            callDurationMinutes,
+                            applied
+                        );
                     }
+
+                    console.log(`✅ applyUsage ${applied} min (customer ${customerIdForCredits})`);
 
                     // ========== COST TRACKING ==========
                     // Fetch and store costs from Twilio and Retell APIs
@@ -390,7 +374,7 @@ class RetellWebSocketHandler {
                 callMeta.dynamic_variables ||
                 callMeta.retell_llm_dynamic_variables ||
                 (callMeta.metadata && callMeta.metadata.dynamic_variables);
-            const knownFromCall = dv && (dv.patient_name || dv.patientName);
+            const knownFromCall = dv && (dv.patient_name || dv.patientName || dv.prospect_name);
             if (knownFromCall && String(knownFromCall).trim()) {
                 const pn = String(knownFromCall).trim();
                 if (!connection.initialName) {
@@ -401,6 +385,11 @@ class RetellWebSocketHandler {
                 connection.patientId = connection.patientId || dv.patient_id || dv.patientId || null;
                 connection.awaitingName = false;
                 console.log(`✅ Voice caller name pre-filled from call metadata: ${pn}`);
+            }
+
+            if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+                connection.awaitingName = false;
+                connection._demoCallType = 'dodgecall_demo';
             }
 
             // Skincare / routine intake: Retell dynamic_variables.kelly_flow (or routine_intake_active)
@@ -440,8 +429,17 @@ class RetellWebSocketHandler {
 
             // If the call starts and the caller is silent, proactively greet once.
             // This avoids "connected but agent never speaks first" behavior.
-            if (!connection.sentInitialGreeting) {
+            if (!connection.sentInitialGreeting && !dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
                 this.sendInitialGreeting(callId, connection, callMeta, message.response_id);
+            }
+            if (!connection.sentInitialGreeting && dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+                dodgecallDemoHandler.sendDemoInitialGreeting(
+                    callId,
+                    connection,
+                    callMeta,
+                    message.response_id,
+                    (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+                );
             }
         }
 
@@ -462,6 +460,22 @@ class RetellWebSocketHandler {
         }
 
         console.log(`\n📨 Message from ${callId}:`, interactionType);
+
+        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            if (interactionType === 'ping_pong') {
+                this.sendToRetell(connection.ws, { response_type: 'ping_pong', timestamp: message.timestamp });
+                return;
+            }
+            if (interactionType === 'ping') {
+                this.sendToRetell(connection.ws, { type: 'pong' });
+                return;
+            }
+            await dodgecallDemoHandler.handleDemoMessage(callId, connection, message, {
+                sendRetellResponse: (ws, content, rid) => this.sendRetellResponse(ws, content, rid),
+                interactionType
+            });
+            return;
+        }
 
         switch (interactionType) {
             case 'call_details':
@@ -520,6 +534,25 @@ class RetellWebSocketHandler {
     // Handle user speech transcript
     async handleTranscript(callId, message) {
         const connection = this.activeConnections.get(callId);
+
+        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            const userSaid = message.transcript;
+            if (userSaid) {
+                connection.conversationHistory.push({
+                    role: 'user',
+                    content: userSaid,
+                    timestamp: Date.now()
+                });
+                await dodgecallDemoHandler.handleDemoTranscript(
+                    callId,
+                    connection,
+                    userSaid,
+                    message,
+                    (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+                );
+            }
+            return;
+        }
 
         // VOICE_AGENT_ENABLED gate (u-4): when 0, reject voice; redirect to web chat
         const voiceAgentEnabled = process.env.VOICE_AGENT_ENABLED === '1' || process.env.VOICE_AGENT_ENABLED === 'true';
@@ -758,6 +791,11 @@ class RetellWebSocketHandler {
     async handleFunctionCall(callId, message) {
         const connection = this.activeConnections.get(callId);
         if (!connection) return;
+
+        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            await dodgecallDemoHandler.handleDemoFunctionCall(callId, connection, message);
+            return;
+        }
 
         const functionCall = message.function_call || message;
         const functionName = functionCall.name;
@@ -2251,6 +2289,16 @@ class RetellWebSocketHandler {
     // Helper: build and send one-time initial greeting
     sendInitialGreeting(callId, connection, callMeta, responseId = null) {
         if (!connection || connection.sentInitialGreeting) return;
+        if (dodgecallDemoHandler.isDodgecallDemoConnection(connection)) {
+            dodgecallDemoHandler.sendDemoInitialGreeting(
+                callId,
+                connection,
+                callMeta,
+                responseId,
+                (ws, content, rid) => this.sendRetellResponse(ws, content, rid)
+            );
+            return;
+        }
         const isOutboundSales = callMeta?.metadata?.call_type === 'sales_outbound';
         const patientName = callMeta?.dynamic_variables?.patient_name || connection.customerName || null;
         const opening = isOutboundSales

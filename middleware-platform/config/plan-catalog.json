@@ -1,0 +1,69 @@
+{
+  "version": "1",
+  "billing_model": "subscription_v2",
+  "past_due_grace_days": 3,
+  "number_retention_days": 30,
+  "signup_trial_minutes": 60,
+  "trial_duration_days": 7,
+  "trial_inactivity_release_days": 21,
+  "verticals": ["general", "healthcare"],
+  "tiers": {
+    "starter": {
+      "id": "starter",
+      "name": "Starter",
+      "monthly_price_usd": 79,
+      "included_minutes_per_cycle": 300,
+      "max_phone_numbers": 1,
+      "max_requests_per_minute": 30,
+      "feature_flags": {
+        "inbound_only": true,
+        "hipaa": false,
+        "outbound": false
+      },
+      "labels": {
+        "general": "Starter",
+        "healthcare": "Solo Practice"
+      }
+    },
+    "practice": {
+      "id": "practice",
+      "name": "Practice",
+      "monthly_price_usd": 199,
+      "included_minutes_per_cycle": 900,
+      "max_phone_numbers": 1,
+      "max_requests_per_minute": 75,
+      "feature_flags": {
+        "inbound_only": false,
+        "hipaa": true,
+        "outbound": true
+      },
+      "labels": {
+        "general": "Practice",
+        "healthcare": "Small Clinic"
+      }
+    },
+    "clinic_pro": {
+      "id": "clinic_pro",
+      "name": "Clinic Pro",
+      "monthly_price_usd": 399,
+      "included_minutes_per_cycle": 2000,
+      "max_phone_numbers": 2,
+      "max_requests_per_minute": 150,
+      "feature_flags": {
+        "inbound_only": false,
+        "hipaa": true,
+        "outbound": true,
+        "calendar_integration": true
+      },
+      "labels": {
+        "general": "Clinic Pro",
+        "healthcare": "Group Practice"
+      }
+    }
+  },
+  "topup_packs": [
+    { "id": "small", "name": "Small Top-Up", "minutes": 100, "price_usd": 20 },
+    { "id": "standard", "name": "Standard Top-Up", "minutes": 180, "price_usd": 30, "popular": true },
+    { "id": "large", "name": "Large Top-Up", "minutes": 330, "price_usd": 50 }
+  ]
+}
