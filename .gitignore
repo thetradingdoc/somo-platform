@@ -111,6 +111,9 @@ middleware-platform/data/payor-sources/*
 /step0.md
 /step1b
 middleware-platform/reports/
+.pr-worktrees/
+.pr-patches/
+.sandbox-trial/
 
 # Railway/Netlify
 .railway/
