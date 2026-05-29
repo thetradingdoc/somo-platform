@@ -49,8 +49,8 @@ function shutdown(exitCode) {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
-console.log('[dev:one-place] Starting middleware API on :4000 and landing dev UI on :3000');
-console.log('[dev:one-place] Use only: http://localhost:3000');
+console.log('[dev:one-place] Starting middleware API on :4000 and Somo landing dev UI on :5180');
+console.log('[dev:one-place] Landing: http://localhost:5180  API: http://localhost:4000');
 
 start('api', ['start', '--prefix', 'middleware-platform']);
-start('ui', ['start', '--prefix', 'unified-dashboard/littlelab-landing']);
+start('ui', ['run', 'dev', '--prefix', 'unified-dashboard/somo-landing']);

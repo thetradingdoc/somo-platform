@@ -21,14 +21,13 @@ Quick reference. Full narrative: [`docs/setup/README.md`](./README.md). Copy fro
 
 See also: [Medical Coding OPERATIONS](../Medical%20Coding/OPERATIONS.md), [RENDER_PRODUCTION_CHECKLIST](../deployment/RENDER_PRODUCTION_CHECKLIST.md).
 
-## Landing CRA (`unified-dashboard/littlelab-landing/.env.local`)
+## Somo landing (`unified-dashboard/somo-landing/.env.development`)
 
 | Key | Purpose |
 |-----|---------|
-| `REACT_APP_API_BASE` | Middleware origin. **Production build:** `https://api.myskinandcare.com` (or your API host) |
-| `REACT_APP_MERCHANT_ID` | Required on non-localhost builds for checkout/catalog |
-| `REACT_APP_DEFAULT_CLINIC_ID` | Optional clinic for anonymous assistant |
-| `REACT_APP_CHECKOUT_MAINTENANCE_MODE` | Hide checkout entry points when `1` |
+| `VITE_API_BASE` | Middleware origin. **Production build:** empty (same-origin) or API host if split later |
+| `VITE_SIGNUP_URL` | Provider signup CTA (default `/signup?utm_source=somo`) |
+| `VITE_API_PROXY` | Dev-only Vite proxy target (default `http://127.0.0.1:4000`) |
 
 ## Patient app (`patient-app/.env`)
 

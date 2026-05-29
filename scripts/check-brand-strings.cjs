@@ -19,10 +19,12 @@ const SCAN_ROOTS = [
 const SKIP_DIRS = new Set([
   'node_modules',
   'dist',
+  'build',
   '.git',
   'playwright-report',
   'test-results',
   'dodgecall/dist',
+  '_archive',
 ]);
 
 const EXT = new Set(['.html', '.css', '.js', '.jsx', '.json', '.webmanifest', '.tsx', '.ts']);
@@ -39,7 +41,7 @@ const ALLOW_PATH = [
   /middleware-platform\/services\/dodgecall-/i,
   /\/api\/public\/dodgecall\//i,
   /dodgecall-demo/i,
-  /dodgecall\//i, // folder name until rename
+  /somo-landing\//i, // folder name until infra rename complete
   /brand-allowlist/i,
   /docs\/archive\//i,
   /INFRA_BRAND_DEFERRAL/i,
@@ -85,7 +87,14 @@ for (const base of SCAN_ROOTS) {
   for (const file of walk(base)) {
     const rel = path.relative(ROOT, file);
     if (isAllowedFile(rel)) continue;
-    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    let raw;
+    try {
+      raw = fs.readFileSync(file, 'utf8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
+    }
+    const lines = raw.split('\n');
     lines.forEach((line, i) => {
       if (isAllowedLine(line)) return;
       for (const { re, label } of BANNED) {

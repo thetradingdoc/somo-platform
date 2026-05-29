@@ -1,8 +1,14 @@
 'use strict';
 
-const { createStaticPathHelpers } = require('../lib/static-hosting-paths');
+const {
+  createStaticPathHelpers,
+  getHostname,
+  shouldServeSomoLanding,
+  isSomoLandingApiPath,
+} = require('../lib/static-hosting-paths');
 
-const LITTLELAB_SPA_PREFIXES = [
+/** Legacy littlelab SPA paths — redirect to / in server.js route handlers. */
+const LEGACY_LANDING_REDIRECT_PREFIXES = [
   '/start',
   '/find-provider',
   '/about',
@@ -11,36 +17,23 @@ const LITTLELAB_SPA_PREFIXES = [
   '/cart',
   '/checkout',
   '/coverage',
+  '/landing',
+  '/landing.html',
+  '/how-it-works',
+  '/skin-care',
 ];
 
 /**
- * Mount shared static assets and SPA shells (helpers remain in server.js for host-based HTML routes).
+ * Mount shared static assets for unified-dashboard HTML portals.
+ * Somo marketing SPA shell is served from server.js host-based routes.
  */
-function registerStaticHosting(app, { express, rootDir, skipLittleLabSpa }) {
+function registerStaticHosting(app, { express, rootDir }) {
   const {
     getUnifiedDashboardPath,
-    getLittleLabBuildPath,
-    getDodgecallBuildPath,
-    sendLittleLabOrApiRunningStub,
+    getSomoLandingBuildPath,
   } = createStaticPathHelpers(rootDir);
 
-  function serveLittleLabSpaGetHead(req, res, next) {
-    if (skipLittleLabSpa && skipLittleLabSpa(req)) return next();
-    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-    sendLittleLabOrApiRunningStub(res);
-  }
-
-  for (const spaPrefix of LITTLELAB_SPA_PREFIXES) {
-    app.use(spaPrefix, serveLittleLabSpaGetHead);
-  }
-
   app.use('/unified-dashboard', express.static(getUnifiedDashboardPath(), {
-    index: false,
-    extensions: ['html'],
-    maxAge: '5m',
-  }));
-
-  app.use('/littlelab-landing', express.static(getUnifiedDashboardPath('littlelab-landing'), {
     index: false,
     extensions: ['html'],
     maxAge: '5m',
@@ -59,36 +52,39 @@ function registerStaticHosting(app, { express, rootDir, skipLittleLabSpa }) {
   app.use('/assets', express.static(getUnifiedDashboardPath('assets'), { maxAge: '1d' }));
 
   const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
-  app.use('/static', express.static(getLittleLabBuildPath('static'), {
-    maxAge: isProd ? '1y' : 0,
-    immutable: isProd,
-  }));
-  app.use('/images', express.static(getLittleLabBuildPath('images'), { maxAge: '1d' }));
-  app.use('/videos', express.static(getLittleLabBuildPath('videos'), { maxAge: '1d' }));
-  app.use('/fonts', express.static(getLittleLabBuildPath('fonts'), {
-    maxAge: '1d',
-    setHeaders(res, filePath) {
-      if (filePath.endsWith('.css')) res.type('text/css');
-    },
-  }));
-  app.use('/fonts', express.static(getUnifiedDashboardPath('littlelab-landing', 'public', 'fonts'), {
-    maxAge: '1d',
-    setHeaders(res, filePath) {
-      if (filePath.endsWith('.css')) res.type('text/css');
-    },
-  }));
-
-  app.use('/dodgecall-assets', express.static(getDodgecallBuildPath('assets'), {
+  app.use('/somo-landing-assets', express.static(getSomoLandingBuildPath('assets'), {
     maxAge: isProd ? '1y' : 0,
     immutable: isProd,
   }));
 
   return {
     getUnifiedDashboardPath,
-    getLittleLabBuildPath,
-    getDodgecallBuildPath,
-    sendLittleLabOrApiRunningStub,
+    getSomoLandingBuildPath,
   };
 }
 
-module.exports = { registerStaticHosting, LITTLELAB_SPA_PREFIXES };
+/**
+ * Serve Somo marketing static files before the heavy global middleware stack.
+ * GET/HEAD only; API and portal paths pass through.
+ */
+function registerEarlySomoLandingStatic(app, { express, rootDir }) {
+  const { getSomoLandingBuildPath } = createStaticPathHelpers(rootDir);
+
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (!shouldServeSomoLanding(getHostname(req))) return next();
+    if (isSomoLandingApiPath(req.path)) return next();
+
+    return express.static(getSomoLandingBuildPath(), { index: false, maxAge: '5m' })(req, res, () => {
+      if ((req.method === 'GET' || req.method === 'HEAD') && !res.headersSent) {
+        const indexPath = getSomoLandingBuildPath('index.html');
+        if (require('fs').existsSync(indexPath)) {
+          return res.sendFile(indexPath);
+        }
+      }
+      return next();
+    });
+  });
+}
+
+module.exports = { registerStaticHosting, registerEarlySomoLandingStatic, LEGACY_LANDING_REDIRECT_PREFIXES };

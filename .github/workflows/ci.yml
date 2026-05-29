@@ -43,9 +43,9 @@ jobs:
         working-directory: ./middleware-platform
         run: npm ci
 
-      - name: Install and build littlelab-landing (reasoning scan-chat gate)
+      - name: Install and build somo-landing
         if: matrix.node-version == '20.x'
-        working-directory: ./unified-dashboard/littlelab-landing
+        working-directory: ./unified-dashboard/somo-landing
         run: npm ci && npm run build
       
       - name: Run linter (if configured)
@@ -178,18 +178,8 @@ jobs:
           fi
 
       - name: Reasoning scan-chat gate (Playwright)
-        if: matrix.node-version == '20.x'
-        working-directory: ./middleware-platform
-        env:
-          UI_BASE_URL: http://127.0.0.1:5199
-          MIDDLEWARE_API_BASE: http://127.0.0.1:4000
-        run: |
-          node scripts/serve-cra-build.cjs "../unified-dashboard/littlelab-landing/build" 5199 &
-          echo $! > /tmp/landing_static_pid
-          sleep 2
-          npx playwright install chromium
-          node scripts/playwright-chat-scan-two-turn-gate.cjs
-          kill "$(cat /tmp/landing_static_pid)" 2>/dev/null || true
+        if: false
+        run: echo "Skipped — legacy littlelab landing assistant retired; Somo landing is marketing-only."
 
       - name: Stop API server
         if: always()

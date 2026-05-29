@@ -2301,7 +2301,7 @@
           if (typeof window.LANDING_BASE === 'string' && window.LANDING_BASE) {
             elErrShop.href = window.LANDING_BASE;
           } else {
-            elErrShop.href = '/unified-dashboard/littlelab-landing/public/index.html';
+            elErrShop.href = '/';
           }
         }
         if (elErrRetry) {

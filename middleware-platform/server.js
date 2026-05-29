@@ -65,6 +65,12 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const {
+  getHostname,
+  isSomoMarketingHostname,
+  isLocalDevRootHost,
+} = require('./lib/static-hosting-paths');
+const { registerEarlySomoLandingStatic } = require('./bootstrap/static-hosting');
 // Node 18+ has global fetch; fallback to axios where needed
 // Initialize Stripe with proper configuration and validation
 const stripeConfig = require('./utils/stripe-config');
@@ -2021,6 +2027,8 @@ app.use(cors(corsOptions));
 // Handle preflight for all routes
 app.options('*', cors(corsOptions));
 
+registerEarlySomoLandingStatic(app, { express, rootDir: __dirname });
+
 const { correlationIdMiddleware } = require('./middleware/request-context');
 app.use(correlationIdMiddleware);
 
@@ -2039,18 +2047,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging (console)
 app.use(requestLogger);
-
-// #region agent log
-app.use((req, res, next) => {
-  const t0 = Date.now();
-  const pathLog = (req.originalUrl || req.url || '/').split('?')[0];
-  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:req-timing', message: 'req-start', data: { method: req.method, path: pathLog }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {});
-  res.on('finish', () => {
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:req-timing', message: 'req-finish', data: { method: req.method, path: pathLog, status: res.statusCode, ms: Date.now() - t0 }, timestamp: Date.now(), hypothesisId: 'H1' }) }).catch(() => {});
-  });
-  next();
-});
-// #endregion
 
 // Enhanced usage logging (database) - for API endpoints and /public/* catalog aliases (normalized to /api/public/* in logs)
 app.use('/api/', usageLogger);
@@ -2216,19 +2212,6 @@ app.get('/docs/*', (req, res, next) => {
 // Serve frontend for doclittle.site, API for api.doclittle.site
 // ============================================
 
-// Helper function to get hostname (strip port; support [IPv6]:port)
-function getHostname(req) {
-  const host = req.headers.host;
-  if (!host) return '';
-  if (host.startsWith('[')) {
-    const end = host.indexOf(']');
-    if (end !== -1) return host.slice(1, end);
-  }
-  const idx = host.lastIndexOf(':');
-  if (idx > 0 && !host.includes(']')) return host.slice(0, idx);
-  return host;
-}
-
 // Helper function to extract subdomain from hostname
 function getSubdomain(hostname) {
   if (!hostname) return null;
@@ -2273,29 +2256,18 @@ function getUnifiedDashboardPath(...subPaths) {
   return path.join(__dirname, '..', 'unified-dashboard', ...subPaths);
 }
 
-// Helper function to get littlelab landing build path (works both locally and in Azure)
-function getLittleLabBuildPath(...subPaths) {
+function getSomoLandingBuildPath(...subPaths) {
   const fs = require('fs');
-  let azurePath = path.join(__dirname, 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
+  let azurePath = path.join(__dirname, 'unified-dashboard', 'somo-landing', 'build', ...subPaths);
   if (fs.existsSync(azurePath)) {
     return azurePath;
   }
-  return path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build', ...subPaths);
+  return path.join(__dirname, '..', 'unified-dashboard', 'somo-landing', 'build', ...subPaths);
 }
 
-function getDodgecallBuildPath(...subPaths) {
+function trySendSomoLanding(res) {
   const fs = require('fs');
-  let azurePath = path.join(__dirname, 'unified-dashboard', 'dodgecall', 'build', ...subPaths);
-  if (fs.existsSync(azurePath)) {
-    return azurePath;
-  }
-  return path.join(__dirname, '..', 'unified-dashboard', 'dodgecall', 'build', ...subPaths);
-}
-
-/** Prefer Vite DodgeCall build for dodgecall.app. */
-function trySendDodgecallLanding(res) {
-  const fs = require('fs');
-  const landingBuild = path.resolve(getDodgecallBuildPath('index.html'));
+  const landingBuild = path.resolve(getSomoLandingBuildPath('index.html'));
   if (fs.existsSync(landingBuild)) {
     res.sendFile(landingBuild);
     return true;
@@ -2303,68 +2275,24 @@ function trySendDodgecallLanding(res) {
   return false;
 }
 
-function isDodgecallMarketingHostname(hostname) {
-  const h = String(hostname || '').toLowerCase();
-  return h === 'dodgecall.app' || h === 'www.dodgecall.app';
-}
-
-/** DodgeCall landing (production host or local dev default on :4000). */
-function shouldServeDodgecallLanding(hostname) {
-  return isDodgecallMarketingHostname(hostname) || isLocalDevRootHost(hostname);
-}
-
-const DODGECALL_BUILD_INSTRUCTIONS_HTML =
+const SOMO_LANDING_BUILD_INSTRUCTIONS_HTML =
   '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
-  '<h1>DodgeCall</h1><p>Landing build not found. Run:</p>' +
-  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/dodgecall && npm install && npm run build</pre>' +
+  '<h1>Somo</h1><p>Landing build not found. Run:</p>' +
+  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/somo-landing && npm install && npm run build</pre>' +
   '</body></html>';
 
-function sendDodgecallLandingOrInstructions(res) {
-  if (trySendDodgecallLanding(res)) return;
-  res.status(503).type('html').send(DODGECALL_BUILD_INSTRUCTIONS_HTML);
+function sendSomoLandingOrInstructions(res) {
+  if (trySendSomoLanding(res)) return;
+  res.status(503).type('html').send(SOMO_LANDING_BUILD_INSTRUCTIONS_HTML);
 }
 
-function redirectLocalDevFromSkinCare(req, res) {
-  if (isLocalDevRootHost(getHostname(req))) {
-    res.redirect(302, '/');
-    return true;
-  }
-  return false;
+function redirectLegacyLandingPath(req, res) {
+  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  return res.redirect(301, `/${qs}`);
 }
 
 function isDodgecallApiHostname(hostname) {
   return String(hostname || '').toLowerCase() === 'api.dodgecall.app';
-}
-
-/** Prefer CRA LittleLab build; fallback to source public index for dev. */
-function trySendCanonicalLanding(res) {
-  const fs = require('fs');
-  const landingBuild = getLittleLabBuildPath('index.html');
-  if (fs.existsSync(landingBuild)) {
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:trySendCanonicalLanding', message: 'landing-readFile-start', data: { file: 'build' }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {});
-    // #endregion
-    fs.readFile(landingBuild, (err, buf) => {
-      if (err) {
-        res.status(500).send('Landing unavailable');
-        return;
-      }
-      res.type('html').send(buf);
-    });
-    return true;
-  }
-  const sourceLandingPath = getUnifiedDashboardPath('littlelab-landing', 'public', 'index.html');
-  if (fs.existsSync(sourceLandingPath)) {
-    fs.readFile(sourceLandingPath, (err, buf) => {
-      if (err) {
-        res.status(500).send('Landing unavailable');
-        return;
-      }
-      res.type('html').send(buf);
-    });
-    return true;
-  }
-  return false;
 }
 
 /** Production API hostnames (split-domain + transition aliases). */
@@ -2373,33 +2301,8 @@ function isProductionApiHostname(hostname) {
   return h === 'api.myskinandcare.com' || h === 'api.skinandcare.com' || h === 'api.dodgecall.app';
 }
 
-const ROOT_API_RUNNING_STUB_HTML =
-  '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Skin &amp; Care API</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;line-height:1.5;max-width:40rem">' +
-  '<p>Middleware API is running.</p>' +
-  '<p>To serve the Skin &amp; Care landing at <code>/</code>, build the marketing app:</p>' +
-  '<pre style="background:#f4f4f5;padding:1rem;border-radius:8px;overflow:auto">cd unified-dashboard/littlelab-landing && npm install && npm run build</pre>' +
-  '</body></html>';
-
-function sendLittleLabOrApiRunningStub(res) {
-  if (trySendCanonicalLanding(res)) return;
-  res.type('text/html').send(ROOT_API_RUNNING_STUB_HTML);
-}
-
-/** Loopback and, in non-production, RFC1918 LAN hosts (phone-on-WiFi dev). */
-function isLocalDevRootHost(hostname) {
-  if (!hostname) return false;
-  const h = String(hostname).toLowerCase();
-  if (h === 'localhost' || h === '127.0.0.1' || h === '::1') return true;
-  const isProd = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
-  if (isProd) return false;
-  return /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(h);
-}
-
 // Root endpoint - route based on domain
 app.get('/', (req, res) => {
-  // #region agent log
-  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '4ae50e' }, body: JSON.stringify({ sessionId: '4ae50e', location: 'server.js:GET/', message: 'root-handler-entry', data: { host: getHostname(req), devLight: process.env.DEV_LIGHT_START === '1' }, timestamp: Date.now(), hypothesisId: 'H3' }) }).catch(() => {});
-  // #endregion
   const hostname = getHostname(req);
   const subdomain = getSubdomain(hostname);
 
@@ -2431,7 +2334,7 @@ app.get('/', (req, res) => {
     // Subdomain not found - fall through to default routing
   }
 
-  // Local / dev — DodgeCall landing on :4000 (override with LOCAL_DEV_ROOT=login|stub|signup)
+  // Local / dev — Somo landing on :4000 (override with LOCAL_DEV_ROOT=login|stub|signup)
   if (isLocalDevRootHost(hostname)) {
     if (process.env.LOCAL_DEV_ROOT === 'login') {
       return res.redirect(302, '/login');
@@ -2443,15 +2346,15 @@ app.get('/', (req, res) => {
       return res.type('text/html').send(
         '<!DOCTYPE html><html><body style="font-family:system-ui;padding:2rem">' +
         '<p>Middleware API is running.</p>' +
-        '<p><a href="/">DodgeCall landing</a></p>' +
+        '<p><a href="/">Somo landing</a></p>' +
         '</body></html>'
       );
     }
-    return sendDodgecallLandingOrInstructions(res);
+    return sendSomoLandingOrInstructions(res);
   }
 
-  if (isDodgecallMarketingHostname(hostname)) {
-    return sendDodgecallLandingOrInstructions(res);
+  if (isSomoMarketingHostname(hostname)) {
+    return sendSomoLandingOrInstructions(res);
   }
 
   if (isDodgecallApiHostname(hostname)) {
@@ -2490,60 +2393,34 @@ app.get('/', (req, res) => {
     return res.sendFile(path.join(__dirname, 'public', 'signup', 'index.html'));
   }
 
-  // Root domain - prefer canonical Skin & Care landing (build first, then source fallback).
-  if (
-    hostname === 'myskinandcare.com' ||
-    hostname === 'www.myskinandcare.com' ||
-    hostname === 'skinandcare.com' ||
-    hostname === 'www.skinandcare.com'
-  ) {
-    if (trySendCanonicalLanding(res)) return;
-  }
-
-  // Default fallback - ONLY for API subdomain or unknown domains
-  // CRITICAL: If we got here with a tenant subdomain, redirect to login instead
+  // Default fallback - tenant subdomains without merchant → login
   if (subdomain && subdomain !== 'api' && subdomain !== 'www') {
     console.log(`[ROOT ROUTE] Tenant subdomain "${subdomain}" but merchant not found - redirecting to login`);
     return res.redirect('/login');
   }
 
-  // Default fallback to signup (ONLY for API subdomain or unknown domains)
-  // Check for session first
-  const sessionId = req.cookies?.customer_session;
-  if (sessionId) {
-    const session = db.getCustomerSession(sessionId);
-    if (session) {
-      // Check customer exists and has accepted terms BEFORE redirecting to docs
-      const customer = db.getCustomer(session.customer_id);
-      if (customer && customer.email_verified) {
-        const termsAccepted = db.hasAcceptedTerms(customer.id, '1.0');
-        if (termsAccepted) {
-          // Check payment method verification (required before accessing docs)
-          const hasVerifiedPayment = customer.stripe_payment_method_id && customer.card_verified === 1;
-          if (hasVerifiedPayment) {
-            // User is fully authenticated - redirect to docs
-            return res.redirect('/docs');
-          } else {
-            // Payment verification required - redirect to verify-card
-            return res.redirect('/verify-card?redirect=/docs');
-          }
-        } else {
-          // Terms not accepted - redirect to terms page (MANDATORY)
-          return res.redirect('/terms?redirect=/docs');
-        }
-      }
-    }
-  }
-
   // Never leave GET / unanswered (avoids hung sockets and accidental catch-all 404 for edge Host values)
-  sendLittleLabOrApiRunningStub(res);
+  sendSomoLandingOrInstructions(res);
 });
 
-// Legacy path: same SPA as /find-provider; client redirects to /find-provider.
-app.get('/how-it-works', (req, res) => {
-  if (redirectLocalDevFromSkinCare(req, res)) return;
-  sendLittleLabOrApiRunningStub(res);
-});
+// Legacy littlelab marketing paths → unified Somo landing at /
+const LEGACY_LANDING_PATHS = [
+  '/how-it-works',
+  '/landing',
+  '/landing.html',
+  '/skin-care',
+  '/start',
+  '/find-provider',
+  '/about',
+  '/shop',
+  '/products',
+  '/cart',
+  '/checkout',
+  '/coverage',
+];
+for (const legacyPath of LEGACY_LANDING_PATHS) {
+  app.get(legacyPath, (req, res) => redirectLegacyLandingPath(req, res));
+}
 
 // Funnel signup / join CTAs → patient web login (email + 6-digit code), not the legacy Expo bridge.
 function redirectToPatientAuth(req, res, defaultIntent = 'signup') {
@@ -2558,100 +2435,15 @@ const { registerStaticHosting } = require('./bootstrap/static-hosting');
 registerStaticHosting(app, {
   express,
   rootDir: __dirname,
-  skipLittleLabSpa: (req) => shouldServeDodgecallLanding(getHostname(req)),
-});
-
-function isDodgecallApiPath(p) {
-  return (
-    p.startsWith('/api') ||
-    p.startsWith('/voice') ||
-    p.startsWith('/webhooks') ||
-    p.startsWith('/health') ||
-    p.startsWith('/signup') ||
-    p.startsWith('/login') ||
-    p.startsWith('/docs') ||
-    p.startsWith('/terms') ||
-    p.startsWith('/verify-card') ||
-    p.startsWith('/reset-password') ||
-    p.startsWith('/patients') ||
-    p.startsWith('/business') ||
-    p.startsWith('/admin') ||
-    p.startsWith('/unified-dashboard') ||
-    p.startsWith('/littlelab-landing')
-  );
-}
-
-app.use((req, res, next) => {
-  if (!shouldServeDodgecallLanding(getHostname(req))) return next();
-  if (isDodgecallApiPath(req.path)) {
-    return next();
-  }
-  return express.static(getDodgecallBuildPath(), { index: false, maxAge: '5m' })(req, res, () => {
-    if ((req.method === 'GET' || req.method === 'HEAD') && !res.headersSent) {
-      const indexPath = getDodgecallBuildPath('index.html');
-      if (require('fs').existsSync(indexPath)) {
-        return res.sendFile(indexPath);
-      }
-    }
-    return next();
-  });
 });
 
 // ============================================
 // Unified Dashboard Routes (doclittle.site frontend) — host-based HTML routes below
 // ============================================
 
-function sendLittleLabShopFontsCss(res) {
-  const fs = require('fs');
-  const candidates = [
-    getLittleLabBuildPath('fonts', 'shop-fonts.css'),
-    getUnifiedDashboardPath('littlelab-landing', 'public', 'fonts', 'shop-fonts.css'),
-    getUnifiedDashboardPath('assets', 'css', 'shop-fonts.css')
-  ];
-  for (const file of candidates) {
-    if (fs.existsSync(file)) {
-      res.type('text/css');
-      return res.sendFile(file);
-    }
-  }
-  res.status(404).type('text/css').send('/* shop-fonts.css not found — run: cd unified-dashboard/littlelab-landing && npm run build */');
-}
-app.get('/fonts/shop-fonts.css', (req, res) => sendLittleLabShopFontsCss(res));
-
-// CRA emits favicon PNGs (and a few root files) next to build/index.html — serve them on :4000 so tab icons match prod when `GET /` uses the build.
-function sendLittleLabRootBuildFile(fileName, res) {
-  const fs = require('fs');
-  const fromBuild = getLittleLabBuildPath(fileName);
-  if (fs.existsSync(fromBuild)) return res.sendFile(fromBuild);
-  const fromPublic = getUnifiedDashboardPath('littlelab-landing', 'public', fileName);
-  if (fs.existsSync(fromPublic)) return res.sendFile(fromPublic);
-  res.status(404).end();
-}
-['favicon-16x16.png', 'favicon-32x32.png', 'favicon-48x48.png', 'favicon-64x64.png'].forEach((name) => {
-  app.get(`/${name}`, (req, res) => sendLittleLabRootBuildFile(name, res));
-});
-
-// Serve unified-dashboard HTML pages
-app.get(['/landing', '/landing.html'], (req, res) => {
-  const utmSource = req.query?.utm_source || '';
-  const utmCampaign = req.query?.utm_campaign || '';
-  const source = req.query?.source || '';
-  if (utmSource || utmCampaign || source) {
-    console.log(`[LANDING REDIRECT] from=${req.path} utm_source=${utmSource || '-'} utm_campaign=${utmCampaign || '-'} source=${source || '-'}`);
-  }
-  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  return res.redirect(301, `/shop${qs}`);
-});
-
-// Canonical marketing alias for acquisition campaigns.
-app.get('/skin-care', (req, res) => {
-  const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  return res.redirect(302, `/shop${qs}`);
-});
-
-// Segment page for Team Kelly campaign traffic → care-program face scan.
+// Segment page for Team Kelly campaign traffic → Somo landing.
 app.get('/team-kelly', (_req, res) => {
-  return res.redirect(302, '/start');
+  return res.redirect(302, '/');
 });
 
 // Public waitlist gateway for non-invited users.
@@ -2780,9 +2572,7 @@ app.get(['/about', '/about.html'], (req, res) => {
   if (isProductionApiHostname(hostname)) {
     return res.status(404).json({ error: 'Not found on API subdomain' });
   }
-  if (redirectLocalDevFromSkinCare(req, res)) return;
-  // Skin & Care shop About (React SPA) — not legacy Doctor Little billing marketing page.
-  sendLittleLabOrApiRunningStub(res);
+  return redirectLegacyLandingPath(req, res);
 });
 
 // Reset password page
@@ -3379,22 +3169,16 @@ app.get('/wallet', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'customer', 'wallet.html'));
 });
 
-// Favicon: browsers still request /favicon.ico — serve littlelab-landing favicon-32x32.png (build, else public).
+// Favicon: browsers still request /favicon.ico — serve Somo landing favicon when built.
 app.get('/favicon.ico', (req, res) => {
   const fs = require('fs');
-  const fromBuild = getLittleLabBuildPath('favicon-32x32.png');
+  const fromBuild = getSomoLandingBuildPath('assets', 'brand', 'somo-icon.png');
   if (fs.existsSync(fromBuild)) {
     res.type('image/png');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.sendFile(fromBuild);
   }
-  const fromPublic = getUnifiedDashboardPath('littlelab-landing', 'public', 'favicon-32x32.png');
-  if (fs.existsSync(fromPublic)) {
-    res.type('image/png');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.sendFile(fromPublic);
-  }
-  const svgFavicon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚕️</text></svg>';
+  const svgFavicon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">S</text></svg>';
   res.setHeader('Content-Type', 'image/svg+xml');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.send(svgFavicon);
@@ -10792,9 +10576,6 @@ assertProdPayorReadinessOrExit();
 bootLog(`calling app.listen host=${HOST} port=${PORT}`);
 function onServerListening() {
   bootLog('app.listen callback reached');
-  // #region agent log
-  fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:String(process.env.DEBUG_RUN_ID||'pre'),hypothesisId:'H1',location:'server.js:onServerListening',message:'server listening callback',data:{devLight:process.env.DEV_LIGHT_START==='1',skipMigrations:process.env.SKIP_STARTUP_MIGRATIONS==='1'},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion agent log
   if (
     process.env.NODE_ENV !== 'production' &&
     process.env.NODE_ENV !== 'prod' &&

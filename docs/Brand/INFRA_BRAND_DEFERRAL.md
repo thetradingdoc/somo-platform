@@ -21,7 +21,7 @@ Email and signup links may still point at `https://myskinandcare.com/...` where 
 | `dodgecall-*` modules / HTTP paths | `dodgecall-demo`, `services/dodgecall-*.js` |
 | `Kelly*` services | `KellyAgentService`, `KELLY_*` env vars |
 | `STEDI_*` | Stedi integration env vars |
-| Folder `unified-dashboard/dodgecall/` | Marketing SPA path (rename optional later) |
+| Folder `unified-dashboard/somo-landing/` | Marketing SPA (was `dodgecall/`) |
 
 ## Display vs infra
 

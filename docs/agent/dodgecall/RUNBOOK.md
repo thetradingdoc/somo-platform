@@ -37,7 +37,7 @@ Sets custom LLM WebSocket, voice, minimal tools (`end_call`, `record_interest`, 
 ## Local landing
 
 ```bash
-cd unified-dashboard/dodgecall && npm install && npm run build
+cd unified-dashboard/somo-landing && npm install && npm run build
 cd middleware-platform && npm start
 # Open http://localhost:4000/
 ```

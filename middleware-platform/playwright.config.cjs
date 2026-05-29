@@ -1,7 +1,7 @@
 const path = require('path');
 const { defineConfig } = require('@playwright/test');
 
-const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'littlelab-landing', 'build');
+const landingBuild = path.join(__dirname, '..', 'unified-dashboard', 'somo-landing', 'build');
 const serveScript = path.join(__dirname, 'scripts', 'serve-cra-build.cjs');
 
 const headed = process.env.HEADED === '1';
@@ -11,10 +11,9 @@ const landingPort = String(process.env.PW_LANDING_PORT || '5199').trim() || '519
 const landingOrigin = `http://127.0.0.1:${landingPort}`;
 
 /**
- * Landing E2E: serves the CRA `littlelab-landing/build` tree (default :5199).
+ * Somo landing E2E: serves `somo-landing/build` (default :5199).
  * - Landing UI: `npm run test:e2e-landing` (builds first)
- * - Acne eval journey: `npx playwright test --project acne-journey`
- * - Headed (all projects): `HEADED=1 npx playwright test`
+ * - Headed: `HEADED=1 npx playwright test --project landing`
  *
  * API tests use PW_API_BASE_URL (default :4000).
  */
@@ -40,14 +39,7 @@ module.exports = defineConfig({
     {
       name: 'landing',
       testDir: './e2e',
-      testMatch: '**/landing*.spec.cjs',
-      use: { browserName: 'chromium' },
-    },
-    {
-      name: 'acne-journey',
-      testDir: './tests/e2e',
-      testMatch: '**/acne-patient-journey.spec.cjs',
-      timeout: 300_000,
+      testMatch: '**/somo-landing.spec.cjs',
       use: { browserName: 'chromium' },
     },
     {

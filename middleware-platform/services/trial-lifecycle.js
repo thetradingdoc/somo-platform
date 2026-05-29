@@ -382,7 +382,8 @@ function getSignupAttribution(customer) {
 
 function isDodgecallSignup(customer) {
   const attr = getSignupAttribution(customer);
-  return String(attr.utm_source || '').toLowerCase() === 'dodgecall';
+  const source = String(attr.utm_source || '').toLowerCase();
+  return source === 'dodgecall' || source === 'somo';
 }
 
 module.exports = {

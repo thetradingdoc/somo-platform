@@ -51,7 +51,7 @@
 - Epic/1upHealth (EHR integration)
 
 **Frontend**:
-- Static dashboards + CRA landing (`unified-dashboard/littlelab-landing`)
+- Static dashboards + Somo marketing landing (`unified-dashboard/somo-landing`)
 - Deploy/hosting: see **[docs/deployment/README.md](docs/deployment/README.md)** (GCP is the documented source of truth)
 
 **Standards**:

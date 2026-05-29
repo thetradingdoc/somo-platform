@@ -1,10 +1,17 @@
-#terminal 1: middleware (Products & Orders now integrated)
+# Terminal 1 — middleware (light profile for fast Somo landing on :4000)
 cd middleware-platform
 export DB_PATH=./middleware-dev.db
 export NVM_DIR="$HOME/.nvm"
 source "$(brew --prefix nvm)/nvm.sh"
+export DEV_LIGHT_START=1
+export CATALOG_MASTER_SYNC_ENABLED=0
+export EHR_SYNC_ENABLED=0
+export NOTIFICATION_QUEUE_ENABLED=0
 export KELLY_DEBUG_TURN=1
 npm start
+
+# Terminal 2 — optional: fast landing UI with HMR (proxies /api → :4000)
+# npm run dev:landing:ui
 
 
 # For production, server should be deployed to Railway

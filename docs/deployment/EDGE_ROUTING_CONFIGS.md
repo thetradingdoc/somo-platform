@@ -8,12 +8,12 @@ Use **one** pattern in production. Do not mix patterns without understanding the
 
 | Role | Host | Serves |
 |------|------|--------|
-| Marketing / SPA | `https://myskinandcare.com` | Firebase Hosting (`unified-dashboard/firebase.json` → `littlelab-landing/build`) |
+| Marketing / SPA | `https://myskinandcare.com` | Firebase Hosting (`unified-dashboard/firebase.json` → `somo-landing/build`) |
 | Middleware API | `https://api.myskinandcare.com` | Google **Cloud Run** (custom domain mapping + TLS) |
 
 The landing build must target the API host explicitly:
 
-- **`REACT_APP_API_BASE=https://api.myskinandcare.com`** (see root `deploy:landing-hosting`, which sets this for production builds so a local `littlelab-landing/.env.local` cannot override prod.)
+- **`deploy:landing-hosting`** builds `somo-landing` and deploys to Firebase (same-origin API calls go to `api.myskinandcare.com` via browser on split-domain).
 
 ### Why `https://myskinandcare.com/api/*` returns HTML
 

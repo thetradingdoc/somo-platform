@@ -41,7 +41,7 @@ curl -sS -i https://api.myskinandcare.com/health
 ### Landing (Firebase Hosting)
 
 ```bash
-cd unified-dashboard/littlelab-landing
+cd unified-dashboard/somo-landing
 REACT_APP_API_BASE=https://api.myskinandcare.com npm run build
 # deploy via firebase deploy (project configured in unified-dashboard/firebase.json)
 ```

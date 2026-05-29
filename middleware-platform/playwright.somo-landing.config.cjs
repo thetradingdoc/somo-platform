@@ -3,7 +3,7 @@ const { defineConfig } = require('@playwright/test');
 
 const somoLandingBuild = path.join(__dirname, '..', 'unified-dashboard', 'somo-landing', 'build');
 const serveScript = path.join(__dirname, 'scripts', 'serve-cra-build.cjs');
-const port = String(process.env.PW_DODGECALL_PORT || '5180').trim() || '5180';
+const port = String(process.env.PW_SOMO_LANDING_PORT || process.env.PW_DODGECALL_PORT || '5180').trim() || '5180';
 const origin = `http://127.0.0.1:${port}`;
 
 module.exports = defineConfig({
@@ -13,7 +13,7 @@ module.exports = defineConfig({
   workers: 1,
   reporter: [['list']],
   testDir: './e2e',
-  testMatch: '**/dodgecall-demo.spec.cjs',
+  testMatch: '**/somo-landing.spec.cjs',
   use: {
     baseURL: origin,
     browserName: 'chromium',

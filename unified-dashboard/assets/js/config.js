@@ -323,15 +323,13 @@
   if (typeof window.LANDING_BASE === 'string' && window.LANDING_BASE.length) {
     return;
   }
-  /** Root-relative shop entry — same on disk as unified-dashboard/littlelab-landing/public/index.html */
-  var SHOP_INDEX = '/unified-dashboard/littlelab-landing/public/index.html';
+  /** Root-relative Somo marketing landing */
+  var SHOP_INDEX = '/';
   try {
     var base = new URL(window.location.href);
     var path = base.pathname || '';
     if (path.indexOf('/unified-dashboard/') !== -1 || path.indexOf('/patients/') !== -1) {
       window.LANDING_BASE = base.origin + SHOP_INDEX;
-    } else if (path.indexOf('/littlelab-landing/') !== -1) {
-      window.LANDING_BASE = base.origin + '/littlelab-landing/public/index.html';
     } else {
       window.LANDING_BASE = base.origin + '/';
     }

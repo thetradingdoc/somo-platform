@@ -73,7 +73,7 @@ See [ISOLATION_CONTRACT.md](./ISOLATION_CONTRACT.md).
 
 | Piece | Path |
 |-------|------|
-| Landing | `unified-dashboard/dodgecall/` |
+| Landing | `unified-dashboard/somo-landing/` |
 | Public API | `middleware-platform/routes/dodgecall-public.js` |
 | Demo service | `middleware-platform/services/dodgecall-demo-service.js` |
 | Template registry | `middleware-platform/config/dodgecall-templates.json` |
