@@ -98,7 +98,8 @@ router.post('/signup', rateLimiter, async (req, res) => {
       license_state,
       license_region,
       languages,
-      attribution
+      attribution,
+      require_provider_profile
     } = req.body;
 
     // Build name from first_name + last_name if provided (specialist portal)
@@ -116,25 +117,27 @@ router.post('/signup', rateLimiter, async (req, res) => {
       });
     }
 
-    // Specialist portal: license and location required
-    if (first_name || last_name || medical_specialty) {
+    // Full provider profile only when explicitly requested or specialty supplied (license optional for light SaaS)
+    const needsFullProviderProfile =
+      require_provider_profile === true || !!medical_specialty;
+    if (needsFullProviderProfile) {
       const licenseRegionVal = license_state || license_region;
       if (!license_number || !licenseRegionVal) {
         return res.status(400).json({
           success: false,
-          error: 'License number and state/region are required for provider signup'
+          error: 'License number and state/region are required when medical specialty is provided'
         });
       }
       if (!city || !postal_code || !country) {
         return res.status(400).json({
           success: false,
-          error: 'City, postal code, and country are required'
+          error: 'City, postal code, and country are required for provider profile'
         });
       }
       if (!medical_specialty) {
         return res.status(400).json({
           success: false,
-          error: 'Medical specialty is required'
+          error: 'Medical specialty is required for provider profile'
         });
       }
     }
@@ -234,7 +237,7 @@ router.post('/signup', rateLimiter, async (req, res) => {
       ? languages.filter(Boolean)
       : (typeof languages === 'string' ? languages.split(',').map(s => s.trim()).filter(Boolean) : []);
 
-    const providerProfile = (first_name || last_name || medical_specialty)
+    const providerProfile = (first_name || last_name || medical_specialty || city || country)
       ? {
           first_name: first_name || null,
           last_name: last_name || null,
@@ -1688,9 +1691,9 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
         '/signup?step=phone&redirect=' + encodeURIComponent('/terms?customer_type=saas');
       console.log('✅ SIM trial — phone verification required');
     } else if (simTrialOn && refreshedCustomer.trial_status === 'active') {
-      const welcome = refreshedCustomer.trial_welcome_dismissed_at ? '' : '&welcome=1';
-      redirectUrl = `/business/settings.html?billing=trial${welcome}`;
-      console.log('✅ SIM trial active — redirect to trial billing');
+      const welcome = refreshedCustomer.trial_welcome_dismissed_at ? '' : '?welcome=1';
+      redirectUrl = `/business/trial-activation.html${welcome}`;
+      console.log('✅ SIM trial active — redirect to trial activation');
     } else if (needsVoiceSubscription) {
       redirectUrl = '/business/settings.html?billing=subscribe';
       console.log('✅ SaaS signup — redirect to voice plan checkout');

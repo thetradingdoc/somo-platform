@@ -43,6 +43,15 @@ module.exports = defineConfig({
       use: { browserName: 'chromium' },
     },
     {
+      name: 'signup-wizard',
+      testDir: './e2e',
+      testMatch: '**/somo-signup-wizard.spec.cjs',
+      use: {
+        browserName: 'chromium',
+        baseURL: (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, ''),
+      },
+    },
+    {
       name: 'provider-trial',
       testDir: './e2e',
       testMatch: '**/provider-trial-signup.spec.cjs',

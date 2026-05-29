@@ -23,6 +23,25 @@ export async function requestDemoCall({ name, phone, use_case, consent }) {
   return data;
 }
 
+const SIGNUP_PREFILL_KEY = 'somo_signup_prefill';
+
+/** Persist demo fields for signup wizard prefill (same origin as /signup). */
+export function saveSignupPrefill({ name, phone, use_case }) {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(
+      SIGNUP_PREFILL_KEY,
+      JSON.stringify({
+        name: name || '',
+        phone: phone || '',
+        use_case: use_case || ''
+      })
+    );
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 export function signupUrl() {
   return import.meta.env.VITE_SIGNUP_URL || '/signup?utm_source=somo';
 }

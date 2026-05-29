@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const {
   createStaticPathHelpers,
   getHostname,
@@ -68,12 +71,24 @@ function registerStaticHosting(app, { express, rootDir }) {
  * GET/HEAD only; API and portal paths pass through.
  */
 function registerEarlySomoLandingStatic(app, { express, rootDir }) {
-  const { getSomoLandingBuildPath } = createStaticPathHelpers(rootDir);
+  const { getSomoLandingBuildPath, getUnifiedDashboardPath } = createStaticPathHelpers(rootDir);
+
+  /** Signup/portal files under /assets that are not in the landing Vite build. */
+  function trySendUnifiedDashboardAsset(req, res) {
+    if (!req.path.startsWith('/assets/')) return false;
+    const rel = req.path.replace(/^\/assets\//, '');
+    if (!rel || rel.includes('..')) return false;
+    const filePath = getUnifiedDashboardPath('assets', rel);
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return false;
+    return res.sendFile(path.resolve(filePath));
+  }
 
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (!shouldServeSomoLanding(getHostname(req))) return next();
     if (isSomoLandingApiPath(req.path)) return next();
+
+    if (trySendUnifiedDashboardAsset(req, res)) return;
 
     return express.static(getSomoLandingBuildPath(), { index: false, maxAge: '5m' })(req, res, () => {
       if ((req.method === 'GET' || req.method === 'HEAD') && !res.headersSent) {

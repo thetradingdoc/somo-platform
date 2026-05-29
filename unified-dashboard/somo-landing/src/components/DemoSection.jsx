@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { USE_CASES, requestDemoCall, signupUrl } from '../api/somoDemo';
+import { USE_CASES, requestDemoCall, saveSignupPrefill, signupUrl } from '../api/somoDemo';
 
 const PERSONAS = [
   'Receptionist',
@@ -37,6 +37,11 @@ export default function DemoSection() {
         phone: phone.trim(),
         use_case: useCase,
         consent: true
+      });
+      saveSignupPrefill({
+        name: name.trim(),
+        phone: phone.trim(),
+        use_case: useCase
       });
       setStatus('success');
     } catch (err) {

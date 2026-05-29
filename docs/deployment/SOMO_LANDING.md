@@ -6,6 +6,10 @@ Single marketing SPA for **Somo** — voice demo + provider signup CTA.
 
 See [SOMO_LANDING_HERO.md](./SOMO_LANDING_HERO.md) for hero structure, assets, breakpoints, and copy.
 
+## Signup handoff
+
+CTAs use `VITE_SIGNUP_URL` or `/signup?utm_source=somo`. The signup wizard ([signup.html](../../unified-dashboard/signup.html)) shares marketing tokens (white background, League Spartan, lime `#93d33b`). After a live demo, name/phone/use case are prefilled via `sessionStorage` key `somo_signup_prefill`. Flow details: [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md).
+
 ## Repos / paths
 
 | Piece | Path |
