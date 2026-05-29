@@ -1,15 +1,15 @@
-# DocLittle API Terms of Service
+# Somo API Terms of Service
 
 **Version 1.0**  
 **Last Updated: November 17, 2025**
 
 ## 1. Agreement to Terms
 
-By accessing or using the DocLittle API Service ("Service") provided by DocLittle ("Company", "we", "us", or "our"), you agree to be bound by these Terms of Service ("Terms"). If you disagree with any part of these terms, then you do not have permission to access the Service.
+By accessing or using the Somo API Service ("Service") provided by Somo ("Company", "we", "us", or "our"), you agree to be bound by these Terms of Service ("Terms"). If you disagree with any part of these terms, then you do not have permission to access the Service.
 
 ## 2. Description of Service
 
-DocLittle provides an API service that enables voice commerce, healthcare integration, payment processing, and related services through voice agents and webhook integrations. The Service includes:
+Somo provides an API service that enables voice commerce, healthcare integration, payment processing, and related services through voice agents and webhook integrations. The Service includes:
 
 - Voice agent integration via Retell AI
 - Telephony services via Twilio
@@ -118,8 +118,8 @@ If you use the Service to process Protected Health Information (PHI) or healthca
 ## 7. Intellectual Property and Copyright Protection
 
 ### 7.1 Service Ownership and Copyright
-- The Service, including all content, features, functionality, code, designs, documentation, and proprietary methods, is owned by DocLittle and protected by copyright laws
-- All trademarks, service marks, logos, and brand names are the exclusive property of DocLittle
+- The Service, including all content, features, functionality, code, designs, documentation, and proprietary methods, is owned by Somo and protected by copyright laws
+- All trademarks, service marks, logos, and brand names are the exclusive property of Somo
 - The Service is protected by copyright, trademark, trade secret, and other intellectual property laws in the United States and internationally
 
 ### 7.2 Prohibited Use - No Copying or Reverse Engineering
@@ -136,7 +136,7 @@ If you use the Service to process Protected Health Information (PHI) or healthca
 - Removing, altering, or obscuring any copyright, trademark, or proprietary notices
 
 ### 7.3 Protection of Our Work
-- DocLittle invests significant resources in developing, maintaining, and improving the Service
+- Somo invests significant resources in developing, maintaining, and improving the Service
 - Any unauthorized use, copying, or distribution of our intellectual property may result in:
   - Immediate termination of your account and access to the Service
   - Legal action for copyright infringement and damages
@@ -228,7 +228,7 @@ TO THE MAXIMUM EXTENT PERMITTED BY LAW:
 
 ## 14. Indemnification
 
-You agree to indemnify, defend, and hold harmless DocLittle and its officers, directors, employees, and agents from any claims, damages, losses, liabilities, and expenses (including attorney's fees) arising from:
+You agree to indemnify, defend, and hold harmless Somo and its officers, directors, employees, and agents from any claims, damages, losses, liabilities, and expenses (including attorney's fees) arising from:
 - Your use of the Service
 - Your violation of these Terms
 - Your violation of any third-party rights
@@ -254,7 +254,7 @@ These Terms shall be governed by and construed in accordance with the laws of [Y
 ## 17. General Provisions
 
 ### 17.1 Entire Agreement
-These Terms, together with our Privacy Policy, constitute the entire agreement between you and DocLittle.
+These Terms, together with our Privacy Policy, constitute the entire agreement between you and Somo.
 
 ### 17.2 Severability
 If any provision of these Terms is found to be unenforceable, the remaining provisions shall remain in full effect.
@@ -270,12 +270,12 @@ Notices may be sent via email to the address associated with your account or pos
 
 ## 18. Contact Information
 
-**DocLittle**  
+**Somo**  
 Email: support@doclittle.site  
 API Documentation: https://api.doclittle.site/docs  
 Website: https://doclittle.site
 
 ---
 
-**By creating an account and using the DocLittle API Service, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.**
+**By creating an account and using the Somo API Service, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service.**
 

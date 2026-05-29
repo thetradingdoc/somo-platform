@@ -11,6 +11,15 @@ function isConfigured() {
   );
 }
 
+/** Local/staging: skip Verify API; accept OTP 000000 on check (server must set this in .env). */
+function isDevMock() {
+  const v = process.env.TWILIO_VERIFY_DEV_MOCK;
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    (v === '1' || v === 'true')
+  );
+}
+
 function normalizePhone(phone) {
   const formatted = SMSService.formatPhoneNumber(phone);
   if (!formatted || !/^\+[1-9]\d{9,14}$/.test(formatted)) {
@@ -35,24 +44,40 @@ function auth() {
  * Send SMS verification code via Twilio Verify v2.
  */
 async function sendPhoneVerification(phoneE164) {
+  const to = normalizePhone(phoneE164);
+
+  if (isDevMock()) {
+    console.warn('[TwilioVerify] TWILIO_VERIFY_DEV_MOCK — skipping SMS send');
+    return { success: true, mock: true, to };
+  }
+
   if (!isConfigured()) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[TwilioVerify] Not configured — dev mock send');
-      return { success: true, mock: true, to: phoneE164 };
+      return { success: true, mock: true, to };
     }
     throw new Error('Phone verification is not configured');
   }
 
-  const to = normalizePhone(phoneE164);
-  const response = await axios.post(
-    `${verifyApiBase()}/Verifications`,
-    new URLSearchParams({ To: to, Channel: 'sms' }).toString(),
-    {
-      auth: auth(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000
-    }
-  );
+  let response;
+  try {
+    response = await axios.post(
+      `${verifyApiBase()}/Verifications`,
+      new URLSearchParams({ To: to, Channel: 'sms' }).toString(),
+      {
+        auth: auth(),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000
+      }
+    );
+  } catch (err) {
+    const status = err.response?.status;
+    const hint =
+      status === 404
+        ? ' Twilio Verify returned 404 — check TWILIO_VERIFY_SERVICE_SID in the Twilio console, or set TWILIO_VERIFY_DEV_MOCK=1 in .env and restart the server.'
+        : '';
+    throw new Error(`${err.message || 'Verify send failed'}${hint}`);
+  }
 
   return {
     success: true,
@@ -71,6 +96,10 @@ async function checkPhoneVerification(phoneE164, code) {
     throw new Error('Invalid verification code');
   }
 
+  if (isDevMock() && trimmedCode === '000000') {
+    return { approved: true, mock: true, to };
+  }
+
   if (!isConfigured()) {
     if (process.env.NODE_ENV !== 'production' && trimmedCode === '000000') {
       return { approved: true, mock: true, to };
@@ -81,15 +110,25 @@ async function checkPhoneVerification(phoneE164, code) {
     throw new Error('Phone verification is not configured');
   }
 
-  const response = await axios.post(
-    `${verifyApiBase()}/VerificationCheck`,
-    new URLSearchParams({ To: to, Code: trimmedCode }).toString(),
-    {
-      auth: auth(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: 15000
-    }
-  );
+  let response;
+  try {
+    response = await axios.post(
+      `${verifyApiBase()}/VerificationCheck`,
+      new URLSearchParams({ To: to, Code: trimmedCode }).toString(),
+      {
+        auth: auth(),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        timeout: 15000
+      }
+    );
+  } catch (err) {
+    const status = err.response?.status;
+    const hint =
+      status === 404
+        ? ' Twilio Verify returned 404 — check TWILIO_VERIFY_SERVICE_SID or use TWILIO_VERIFY_DEV_MOCK=1 with code 000000.'
+        : '';
+    throw new Error(`${err.message || 'Verify check failed'}${hint}`);
+  }
 
   const approved = response.data?.status === 'approved';
   return {

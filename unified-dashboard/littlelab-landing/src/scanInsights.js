@@ -200,7 +200,7 @@ export function buildPinnedContextText(scanResult = {}, sessionResultSnapshot = 
       ? 'Diet context: summarize ingredient-level safety and nutrition-relevant cautions for this category. Not medical advice.'
       : route === 'non_food'
         ? 'General product context: summarize ingredient-level cautions and compatibility notes without skincare-only framing.'
-        : 'Skin & care: explain ingredient-level fit, likely irritants, and helpful actives for this user; not medical advice.';
+        : 'Somo: explain ingredient-level fit, likely irritants, and helpful actives for this user; not medical advice.';
   const base = [
     `[Pinned Product Context] ${p.product_name || scanResult?.barcode || 'unknown'} (${scanResult?.barcode || 'unknown'})`,
     matched ? `Matched in: ${matched} (auto-detected)` : '',

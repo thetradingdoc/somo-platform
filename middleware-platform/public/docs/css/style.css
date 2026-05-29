@@ -5,9 +5,9 @@
 }
 
 :root {
-    /* DocLittle Fintech Blue Theme */
-    --primary-color: #1e40af;
-    --primary-light: #3b82f6;
+    /* Somo Fintech Blue Theme */
+    --primary-color: #16a637;
+    --primary-light: #16a637;
     --primary-dark: #1e3a8a;
     --secondary-color: #10b981;
     --text-color: #1e293b;
@@ -16,10 +16,10 @@
     --bg-light: #f8fafc;
     --border-color: #e2e8f0;
     --code-bg: #1e293b;
-    --sidebar-bg: #1e40af;
+    --sidebar-bg: #16a637;
     --sidebar-text: #ffffff;
     --method-get: #10b981;
-    --method-post: #1e40af;
+    --method-post: #16a637;
     --method-put: #f59e0b;
     --method-delete: #ef4444;
 }
@@ -39,7 +39,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: 280px;
-    background: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+    background: linear-gradient(180deg, #16a637 0%, #1e3a8a 100%);
     color: var(--sidebar-text);
     position: fixed;
     height: 100vh;

@@ -1,3 +1,6 @@
+# Legacy Azure Bicep deploy only. Production Somo voice/UI uses GCP + myskinandcare.com
+# (see docs/deployment/EDGE_ROUTING_CONFIGS.md). Default name_prefix "doclittle" matches
+# existing Azure resource names — do not rename live Azure resources in a brand pass.
 name: Deploy Infrastructure
 
 on:

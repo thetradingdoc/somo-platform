@@ -9,7 +9,7 @@ export default function App() {
       <DemoSection />
       <FloatingDemoCta />
       <footer className="dc-footer">
-        <p>DodgeCall — AI voice for inbound and outbound calls.</p>
+        <p>Somo — AI voice for inbound and outbound calls.</p>
       </footer>
     </>
   );

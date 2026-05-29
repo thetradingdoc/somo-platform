@@ -32,7 +32,7 @@ export default function FunnelSaveEmail({ concernId, matchResult, onDone, onSkip
   const match = matchResult || getMatchResult();
   const route = match?.route;
   const activatesTemplate = cidResolved && (route === 'program' || route === 'dual');
-  const concernLabel = cidResolved ? concernChipLabel(cidResolved) : 'Skin & Care';
+  const concernLabel = cidResolved ? concernChipLabel(cidResolved) : 'Somo';
 
   async function handleSend(e) {
     e?.preventDefault?.();

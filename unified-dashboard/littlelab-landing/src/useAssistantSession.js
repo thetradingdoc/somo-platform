@@ -40,7 +40,7 @@ const ASSISTANT_FIRST_ENABLED =
 
 const TRY_NOW_COPY = {
   en: {
-    opener: "Hi, I'm Kelly. I'll be your Skin & Care assistant today. How can I help?",
+    opener: "Hi, I'm Kelly. I'll be your Somo assistant today. How can I help?",
     micReady: "I'm listening. Tell me what you'd like help with.",
     attachImage: 'Thanks, I received your image. What should I focus on?',
     attachDoc: 'Thanks, I received your file. What should I focus on from this document?',
@@ -56,7 +56,7 @@ const TRY_NOW_COPY = {
       'The catalog lookup did not return this product, so I captured your label in a snapshot and I am reading ingredients from that photo next.'
   },
   fr: {
-    opener: "Bonjour, je suis Kelly. Je serai votre assistante Skin & Care aujourd'hui. Comment puis-je vous aider ?",
+    opener: "Bonjour, je suis Kelly. Je serai votre assistante Somo aujourd'hui. Comment puis-je vous aider ?",
     micReady: "Je vous écoute. Dites-moi ce dont vous avez besoin.",
     attachImage: "Merci, j'ai bien recu votre image. Sur quoi voulez-vous que je me concentre ?",
     attachDoc: "Merci, j'ai bien recu votre fichier. Sur quoi voulez-vous que je me concentre dans ce document ?",
@@ -72,7 +72,7 @@ const TRY_NOW_COPY = {
       "La base catalogue n'a pas repondu; j'ai capture votre etiquette et je lis les ingredients sur la photo."
   },
   sw: {
-    opener: 'Hujambo, mimi ni Kelly. Nitakuwa msaidizi wako wa Skin & Care leo. Naweza kukusaidiaje?',
+    opener: 'Hujambo, mimi ni Kelly. Nitakuwa msaidizi wako wa Somo leo. Naweza kukusaidiaje?',
     micReady: 'Ninakusikiliza. Niambie unachohitaji msaada nacho.',
     attachImage: 'Asante, nimepokea picha yako. Ungependa nizingatie nini?',
     attachDoc: 'Asante, nimepokea faili yako. Ungependa nizingatie nini kwenye hati hii?',
@@ -86,7 +86,7 @@ const TRY_NOW_COPY = {
     barcodeLookupError: 'Nimegundua barcode, lakini utafutaji umeshindikana. Tafadhali jaribu tena baada ya muda mfupi.'
   },
   ru: {
-    opener: 'Здравствуйте, я Келли. Сегодня я ваш ассистент Skin & Care. Чем я могу помочь?',
+    opener: 'Здравствуйте, я Келли. Сегодня я ваш ассистент Somo. Чем я могу помочь?',
     micReady: 'Я слушаю вас. Расскажите, чем вам помочь.',
     attachImage: 'Спасибо, я получила ваше изображение. На чем мне сосредоточиться?',
     attachDoc: 'Спасибо, я получила ваш файл. На чем мне сосредоточиться в этом документе?',
@@ -658,7 +658,7 @@ export function useAssistantSession() {
         if (data.session_id) {
           sessionIdRef.current = data.session_id;
           try {
-            sessionStorage.setItem('littlelab_landing_assistant_sid', data.session_id);
+            sessionStorage.setItem('Somo_landing_assistant_sid', data.session_id);
           } catch (_) {}
         }
         const serverLang = String(data.preferred_language || data.language || '').trim().toLowerCase();

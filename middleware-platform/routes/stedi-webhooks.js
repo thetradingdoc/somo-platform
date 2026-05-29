@@ -11,6 +11,7 @@ const express = require('express');
 const crypto = require('crypto');
 const db = require('../database');
 const InsuranceService = require('../services/insurance-service');
+const orchestrator = require('../services/rcm-journey-orchestrator');
 
 const router = express.Router();
 
@@ -77,6 +78,19 @@ router.post('/claim-status', express.json({ limit: '1mb' }), (req, res) => {
 
     if (claim && status) {
       InsuranceService.applyClaimAdjudicationOutcome(claim, status);
+      try {
+        const clinicId = claim.clinic_id || payload?.clinicId;
+        if (clinicId) {
+          orchestrator.onClaimAdjudication({
+            clinicId,
+            claimId: claim.id,
+            status,
+            payload: { source: 'stedi_webhook', stedi: true },
+          });
+        }
+      } catch (e) {
+        console.warn('[StediWebhook] onClaimAdjudication:', e.message);
+      }
       let responseData = {};
       try {
         responseData = claim.response_data

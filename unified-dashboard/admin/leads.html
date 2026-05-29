@@ -4,15 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Search & Calling - Consʌlt Admin</title>
+    <title>Job Search & Calling - Somo Admin</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/email-composer.css">
     <script src="../assets/js/config.js"></script>
     <style>
         :root {
-            --primary: #1e40af;
+            --primary: #16a637;
             --primary-dark: #1e3a8a;
-            --primary-light: #3b82f6;
+            --primary-light: #16a637;
             --success: #10b981;
             --danger: #ef4444;
             --gray-50: #f9fafb;
@@ -263,7 +263,7 @@
 
         .contact-status.has-email {
             background: #dbeafe;
-            color: #1e40af;
+            color: #16a637;
         }
 
         .contact-status.missing {
@@ -327,7 +327,7 @@
 
         .status-calling {
             background: #dbeafe;
-            color: #1e40af;
+            color: #16a637;
         }
 
         .loading {
@@ -509,7 +509,7 @@
 
         .label-cold {
             background: #dbeafe;
-            color: #1e40af;
+            color: #16a637;
         }
 
         .label-qualified {
@@ -1076,11 +1076,11 @@
                 });
             } else {
                 // Fallback to simple prompt if composer not loaded
-                const subject = prompt(`Send email to ${lead.clinic_name || 'lead'}\n\nEnter email subject:`, 'Consʌlt Medical Billing Software - Quick Demo Request');
+                const subject = prompt(`Send email to ${lead.clinic_name || 'lead'}\n\nEnter email subject:`, 'Somo Medical Billing Software - Quick Demo Request');
                 if (!subject) return;
 
                 const content = prompt(`Enter email content (HTML supported):`,
-                    `Hi ${lead.clinic_name || 'there'},\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`);
+                    `Hi ${lead.clinic_name || 'there'},\n\nI'm reaching out from Somo. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nSomo Team`);
                 if (!content) return;
 
                 try {
@@ -1453,11 +1453,11 @@
                 });
             } else {
                 // Fallback to simple prompt
-                const subject = prompt(`Send email to ${selectedLeads.size} leads\n\nEnter email subject:`, 'Consʌlt Medical Billing Software - Quick Demo Request');
+                const subject = prompt(`Send email to ${selectedLeads.size} leads\n\nEnter email subject:`, 'Somo Medical Billing Software - Quick Demo Request');
                 if (!subject) return;
 
                 const content = prompt(`Enter email content (HTML supported):`,
-                    `Hi,\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`);
+                    `Hi,\n\nI'm reaching out from Somo. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nSomo Team`);
                 if (!content) return;
 
                 // Send emails to all selected leads
@@ -1796,8 +1796,8 @@
 
                 // Set default subject and content
                 if (options.lead) {
-                    subjectInput.value = `Consʌlt Medical Billing Software - Quick Demo Request`;
-                    contentInput.value = `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`;
+                    subjectInput.value = `Somo Medical Billing Software - Quick Demo Request`;
+                    contentInput.value = `Hi ${options.lead.clinic_name || 'there'},\n\nI'm reaching out from Somo. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nSomo Team`;
                 }
 
                 // Store lead ID
@@ -1835,8 +1835,8 @@
                 scheduleDateInput.style.display = 'none';
 
                 // Set default subject and content
-                subjectInput.value = `Consʌlt Medical Billing Software - Quick Demo Request`;
-                contentInput.value = `Hi,\n\nI'm reaching out from Consʌlt. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nConsʌlt Team`;
+                subjectInput.value = `Somo Medical Billing Software - Quick Demo Request`;
+                contentInput.value = `Hi,\n\nI'm reaching out from Somo. We provide AI-powered medical billing software that automates your billing process and reduces costs.\n\nWould you be interested in a quick 15-minute demo to see how we can help your clinic?\n\nBest regards,\nSomo Team`;
 
                 this.leadId = null; // No single lead ID in bulk mode
 
@@ -2112,7 +2112,7 @@
                                 <div style="color: var(--gray-600); font-size: 14px; margin-top: 4px;">
                                     ${activity.activity_description || 'No description'}
                                 </div>
-                                ${metadata.status ? `<div style="margin-top: 8px;"><span style="background: ${metadata.status === 'sent' ? '#d1fae5' : metadata.status === 'scheduled' ? '#dbeafe' : '#fee2e2'}; color: ${metadata.status === 'sent' ? '#065f46' : metadata.status === 'scheduled' ? '#1e40af' : '#991b1b'}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${metadata.status.toUpperCase()}</span></div>` : ''}
+                                ${metadata.status ? `<div style="margin-top: 8px;"><span style="background: ${metadata.status === 'sent' ? '#d1fae5' : metadata.status === 'scheduled' ? '#dbeafe' : '#fee2e2'}; color: ${metadata.status === 'sent' ? '#065f46' : metadata.status === 'scheduled' ? '#16a637' : '#991b1b'}; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">${metadata.status.toUpperCase()}</span></div>` : ''}
                             </div>
                         </div>
                     `;

@@ -84,7 +84,7 @@ export default function DemoSection() {
               <strong>Calling you now!</strong>
               <p>Answer your phone — you should hear our AI demo agent shortly.</p>
               <a href={signupUrl()} className="dc-btn dc-btn-navy">
-                Sign up for DodgeCall
+                Sign up for Somo
               </a>
             </div>
           ) : (
@@ -140,7 +140,7 @@ export default function DemoSection() {
                 />
                 <span>
                   I agree to receive a one-time automated demo call at the number above. If I ask during the call,
-                  DodgeCall may text me a signup link at this same number (message and data rates may apply).
+                  Somo may text me a signup link at this same number (message and data rates may apply).
                 </span>
               </label>
 

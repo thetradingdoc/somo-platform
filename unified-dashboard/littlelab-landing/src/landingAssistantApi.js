@@ -20,7 +20,7 @@ export function normalizeHttpApiBase(raw) {
 
 /**
  * @param {{ apiBase: string, message: string, sessionId: string, clinicId?: string|null, preferredLanguage?: string, kellyFlow?: string|null, signal?: AbortSignal }} opts
- * @param {string|null} [opts.kellyFlow='skincare'] — Sent as `kelly_flow` so middleware sets `routine_intake_active` (Skin & Care). Pass `null` to omit (default triage tools/prompt).
+ * @param {string|null} [opts.kellyFlow='skincare'] — Sent as `kelly_flow` so middleware sets `routine_intake_active` (Somo). Pass `null` to omit (default triage tools/prompt).
  * @returns {Promise<{ success?: boolean, reply?: string, session_id?: string, error?: string, toolsUsed?: string[] }>}
  */
 export async function sendLandingAssistantTurn({
@@ -310,7 +310,7 @@ export async function submitLandingResultEdit({
   return data;
 }
 
-export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assistant_sid') {
+export function getOrCreateLandingSessionId(storageKey = 'Somo_landing_assistant_sid') {
   try {
     let s = sessionStorage.getItem(storageKey);
     if (s) return s;
@@ -328,7 +328,7 @@ export function getOrCreateLandingSessionId(storageKey = 'littlelab_landing_assi
 /**
  * Pure helper: where to send `/api/public/*` given build env and current location.
  * Exported for unit tests. Prefer `REACT_APP_API_BASE` at build time for split hosting.
- * When env is unset on known Skin & Care production UI hosts, defaults to `https://api.myskinandcare.com`
+ * When env is unset on known Somo production UI hosts, defaults to `https://api.myskinandcare.com`
  * so Firebase Hosting (no `/api` proxy) does not send API traffic to the SPA origin.
  *
  * @param {string} envBase - typically `process.env.REACT_APP_API_BASE`

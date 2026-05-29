@@ -37,7 +37,7 @@
 
         .tracking-header h1 {
             font-size: 28px;
-            color: #1e40af;
+            color: #16a637;
             margin-bottom: 8px;
         }
 
@@ -69,13 +69,13 @@
 
         .order-input-section input:focus {
             outline: none;
-            border-color: #1e40af;
+            border-color: #16a637;
         }
 
         .btn {
             width: 100%;
             padding: 14px;
-            background: #1e40af;
+            background: #16a637;
             color: white;
             border: none;
             border-radius: 8px;
@@ -186,7 +186,7 @@
 
         .spinner {
             border: 3px solid #f3f4f6;
-            border-top: 3px solid #1e40af;
+            border-top: 3px solid #16a637;
             border-radius: 50%;
             width: 40px;
             height: 40px;
@@ -219,8 +219,8 @@
             <h1>📍 Track Your Order</h1>
             <p>Enter your order ID or email to track delivery</p>
             <div style="display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap;">
-                <a href="/wallet" style="display: inline-block; padding: 8px 16px; background: #f3f4f6; color: #1e40af; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">💳 Wallet</a>
-                <a href="storefront.html" style="display: inline-block; padding: 8px 16px; background: #f3f4f6; color: #1e40af; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">🛒 Shop</a>
+                <a href="/wallet" style="display: inline-block; padding: 8px 16px; background: #f3f4f6; color: #16a637; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">💳 Wallet</a>
+                <a href="storefront.html" style="display: inline-block; padding: 8px 16px; background: #f3f4f6; color: #16a637; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">🛒 Shop</a>
             </div>
         </div>
 
@@ -250,7 +250,7 @@
     </div>
 
     <script>
-        const API_BASE = window.API_BASE || 'https://api.doclittle.site';
+        const API_BASE = window.API_BASE || 'https://api.myskinandcare.com';
 
         async function trackOrder() {
             const orderIdInput = document.getElementById('orderId');
@@ -317,8 +317,8 @@
                 'pending': { icon: '📦', title: 'Order Pending', color: '#6b7280' },
                 'preparing': { icon: '👨‍🍳', title: 'Preparing Your Order', color: '#f59e0b' },
                 'ready': { icon: '✅', title: 'Order Ready', color: '#10b981' },
-                'out_for_delivery': { icon: '🚗', title: 'Out for Delivery', color: '#3b82f6' },
-                'in_transit': { icon: '🚚', title: 'On the Way', color: '#3b82f6' },
+                'out_for_delivery': { icon: '🚗', title: 'Out for Delivery', color: '#16a637' },
+                'in_transit': { icon: '🚚', title: 'On the Way', color: '#16a637' },
                 'delivered': { icon: '🎉', title: 'Delivered!', color: '#10b981' },
                 'exception': { icon: '⚠️', title: 'Delivery Issue', color: '#ef4444' }
             };

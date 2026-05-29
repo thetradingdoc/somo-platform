@@ -35,7 +35,7 @@
       const role = String(user.role || customer.role || '').toLowerCase();
       const email = String(user.email || customer.email || '').toLowerCase();
       if (role.includes('admin') || role === 'insurer_admin') return true;
-      if (email === 'admin@doclittle.com' || email === 'insurer@doclittle.com') return true;
+      if (email === 'admin@demo.local' || email === 'insurer@demo.local') return true;
     } catch (_) { /* ignore */ }
     return false;
   }

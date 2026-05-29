@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Skin & Care landing — Playwright E2E
+ * Somo consumer landing — Playwright E2E
  *
  * A) Static bundle (served by playwright.config webServer on :5199)
  * B) Middleware HTTP pipeline (optional): set PW_API_BASE_URL if middleware is running
@@ -41,9 +41,9 @@ test.describe('Landing — document & accessibility', () => {
     expect(res?.ok() || res?.status() === 304).toBeTruthy();
   });
 
-  test('document title references Skin & Care', async ({ page }) => {
+  test('document title references Somo', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(page).toHaveTitle(/skin/i);
+    await expect(page).toHaveTitle(/somo/i);
   });
 
   test('viewport meta is present for mobile layout', async ({ page }) => {
@@ -65,10 +65,10 @@ test.describe('Landing — header & navigation', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
   });
 
-  test('brand shows Skin & Care with logo', async ({ page }) => {
+  test('brand shows Somo with logo', async ({ page }) => {
     const brand = page.locator('a.brand-mark');
     await expect(brand).toBeVisible();
-    await expect(brand).toContainText(/skin\s*&\s*care/i);
+    await expect(brand).toContainText(/somo/i);
     await expect(brand.locator('img.brand-mark-logo')).toBeVisible();
   });
 

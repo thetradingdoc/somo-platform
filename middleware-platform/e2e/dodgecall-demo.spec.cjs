@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 
 const API_BASE = (process.env.PW_API_BASE_URL || 'http://127.0.0.1:4000').replace(/\/$/, '');
 
-test.describe('DodgeCall demo landing', () => {
+test.describe('Somo demo landing', () => {
   test('hero and demo form submit (mocked API)', async ({ page }) => {
     await page.route('**/api/public/dodgecall/request-call', async (route) => {
       await route.fulfill({
@@ -15,7 +15,7 @@ test.describe('DodgeCall demo landing', () => {
     });
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /AI call center from the future/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /never answer business calls again/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /Try Our Live Demo/i }).first()).toBeVisible();
 
     await page.locator('select').selectOption('receptionist');
@@ -26,7 +26,7 @@ test.describe('DodgeCall demo landing', () => {
     await page.getByRole('button', { name: /Get a call/i }).click();
 
     await expect(page.getByText(/Calling you now/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('link', { name: /Sign up for DodgeCall/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Sign up for Somo/i })).toBeVisible();
   });
 
   test('request-call API validates consent', async ({ request }) => {

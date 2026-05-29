@@ -399,7 +399,7 @@ export default function BiologicalAgePage() {
   return (
     <div className="funnel-root funnel-root--fullscreen">
       <Helmet>
-        <title>Biological age estimate — Skin &amp; Care</title>
+        <title>Biological age estimate — Somo</title>
       </Helmet>
       <header className="funnel-nav funnel-nav--wide">
         <FunnelBrandLockup />

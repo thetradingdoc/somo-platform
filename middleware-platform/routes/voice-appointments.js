@@ -2108,7 +2108,7 @@ app.post('/voice/insurance/collect', async (req, res) => {
 
         // Get patient info for eligibility check
         let finalPatientName = patientName || 'Patient';
-        let dateOfBirth = '1990-01-01';
+        let dateOfBirth = args.date_of_birth || args.dateOfBirth || null;
 
         if (foundPatient) {
           try {
@@ -2125,6 +2125,13 @@ app.post('/voice/insurance/collect', async (req, res) => {
           } catch (parseError) {
             console.warn('⚠️  Could not parse patient data:', parseError.message);
           }
+        }
+
+        if (!dateOfBirth && InsuranceService.isStediTestMode()) {
+          dateOfBirth = process.env.STEDI_TEST_DOB || null;
+        }
+        if (!dateOfBirth) {
+          console.warn('⚠️  Skipping eligibility — patient birthDate required (no default DOB)');
         }
 
         // W3-S4.6: Use resolved CPT from triage when call_id provided
@@ -2145,22 +2152,24 @@ app.post('/voice/insurance/collect', async (req, res) => {
         }
         serviceCode = serviceCode || (() => { try { return require('./utils/cpt-helper').getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })();
 
-        const eligibilityData = {
-          patientId: finalPatientId,
-          patientName: finalPatientName,
-          dateOfBirth: dateOfBirth,
-          memberId: args.member_id,
-          payerId: payerId,
-          serviceCode,
-          diagnosisCode: args.primary_icd10 || null,
-          dateOfService: args.date_of_service || new Date().toISOString().split('T')[0]
-        };
+        if (dateOfBirth) {
+          const eligibilityData = {
+            patientId: finalPatientId,
+            patientName: finalPatientName,
+            dateOfBirth,
+            memberId: args.member_id,
+            payerId: payerId,
+            serviceCode,
+            diagnosisCode: args.primary_icd10 || null,
+            dateOfService: args.date_of_service || new Date().toISOString().split('T')[0],
+          };
 
-        eligibilityResult = await InsuranceService.checkEligibility(eligibilityData);
-        console.log('✅ Eligibility checked:', eligibilityResult.success ? 'Covered' : 'Not covered');
+          eligibilityResult = await InsuranceService.checkEligibility(eligibilityData);
+          console.log('✅ Eligibility checked:', eligibilityResult.success ? 'Covered' : 'Not covered');
+        }
 
         // IMPORTANT: Update eligibility record with patient_id if it was missing
-        if (finalPatientId && eligibilityResult.id) {
+        if (finalPatientId && eligibilityResult?.id) {
           try {
             // Update the eligibility record to link it to the patient
             db.db.prepare(`
@@ -2409,10 +2418,20 @@ app.post('/voice/insurance/check-eligibility', async (req, res) => {
       }
     }
 
+    if (!dateOfBirth && InsuranceService.isStediTestMode()) {
+      dateOfBirth = process.env.STEDI_TEST_DOB || null;
+    }
+    if (!dateOfBirth) {
+      return res.status(400).json({
+        success: false,
+        error: 'date_of_birth or FHIR patient birthDate is required for eligibility',
+      });
+    }
+
     const eligibilityData = {
       patientId: patientId,
       patientName: patientName || 'Patient',
-      dateOfBirth: dateOfBirth || '1990-01-01', // Default if not provided
+      dateOfBirth,
       memberId: args.member_id,
       payerId: args.payer_id,
       serviceCode: serviceCode || (() => { try { const h = require('./utils/cpt-helper'); return h.getCptCodeForVisit({ specialty: 'PrimaryCare', urgency: 'routine', isNewPatient: true }); } catch (_) { return '99203'; } })(),
@@ -2573,11 +2592,21 @@ app.post('/voice/insurance/submit-claim', async (req, res) => {
       existing_modifiers: billingEnvelope.parseCptModifiersJson(appointment.cpt_modifiers)
     });
 
+    if (!dateOfBirth && InsuranceService.isStediTestMode()) {
+      dateOfBirth = process.env.STEDI_TEST_DOB || null;
+    }
+    if (!dateOfBirth) {
+      return res.status(400).json({
+        success: false,
+        error: 'date_of_birth or FHIR patient birthDate is required for claim submission',
+      });
+    }
+
     const claimData = {
       appointmentId: args.appointment_id,
       patientId: patientId,
       patientName: patientName || appointment.patient_name,
-      dateOfBirth: dateOfBirth || '1990-01-01',
+      dateOfBirth,
       memberId: args.member_id,
       payerId: args.payer_id,
       serviceCode: resolvedCpt,

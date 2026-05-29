@@ -1,14 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;800&display=swap');
+
 :root {
-  --dc-hero-bg: #0b1f3a;
-  --dc-hero-accent: #1a6b8a;
+  --dc-hero-bg: #0a0a0a;
+  --dc-hero-accent: #16a637;
   --dc-light-bg: #ffffff;
   --dc-light-text: #18181b;
   --dc-muted: #71717a;
-  --dc-label: #2563eb;
+  --dc-label: #16a637;
   --dc-border: #e4e4e7;
-  --dc-navy: #0f172a;
-  --dc-font: 'Inter', system-ui, sans-serif;
-  --dc-serif: 'DM Serif Display', Georgia, serif;
+  --dc-navy: #0a0a0a;
+  --dc-font: 'League Spartan', system-ui, sans-serif;
+  --dc-serif: 'League Spartan', system-ui, sans-serif;
+  --somo-green: #16a637;
+  --somo-green-hover: #128a2e;
 }
 
 *,
@@ -37,10 +41,10 @@ a {
   flex-direction: column;
   color: #fff;
   background:
-    radial-gradient(ellipse 90% 70% at 20% 10%, rgba(26, 107, 138, 0.55), transparent 55%),
-    radial-gradient(ellipse 70% 60% at 90% 20%, rgba(59, 130, 246, 0.35), transparent 50%),
-    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(15, 118, 110, 0.4), transparent 60%),
-    linear-gradient(165deg, #061528 0%, #0b1f3a 40%, #0d2847 100%);
+    radial-gradient(ellipse 90% 70% at 20% 10%, rgba(22, 166, 55, 0.35), transparent 55%),
+    radial-gradient(ellipse 70% 60% at 90% 20%, rgba(22, 166, 55, 0.2), transparent 50%),
+    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(10, 10, 10, 0.9), transparent 60%),
+    linear-gradient(165deg, #0a0a0a 0%, #111111 50%, #0a0a0a 100%);
 }
 
 .dc-nav {
@@ -54,9 +58,29 @@ a {
 }
 
 .dc-logo {
+  display: inline-flex;
+  align-items: baseline;
   font-weight: 700;
-  font-size: 1.2rem;
-  letter-spacing: -0.02em;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.dc-logo-s {
+  text-transform: uppercase;
+}
+
+.dc-logo-rest {
+  text-transform: lowercase;
+}
+
+.dc-hero-sub {
+  max-width: 42ch;
+  margin: 1.25rem auto 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 400;
 }
 
 .dc-nav-actions {

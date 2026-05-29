@@ -7,19 +7,19 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/scripts/run-embeddings-daemon.sh</string>
+    <string>/Users/ojrichard/Voice Agent/somo/middleware-platform/scripts/run-embeddings-daemon.sh</string>
     <string>start</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform</string>
+  <string>/Users/ojrichard/Voice Agent/somo/middleware-platform</string>
   <key>RunAtLoad</key>
   <false/>
   <key>KeepAlive</key>
   <false/>
   <key>StandardOutPath</key>
-  <string>/Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/tmp/embeddings-launchd.out.log</string>
+  <string>/Users/ojrichard/Voice Agent/somo/middleware-platform/tmp/embeddings-launchd.out.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/ojrichard/Voice Agent/doclittle-platform/middleware-platform/tmp/embeddings-launchd.err.log</string>
+  <string>/Users/ojrichard/Voice Agent/somo/middleware-platform/tmp/embeddings-launchd.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>

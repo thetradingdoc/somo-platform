@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:48px;padding:40px 20px;font-family:'League Spartan',sans-serif}
+
+.label{font-family:'League Spartan',sans-serif;font-size:11px;letter-spacing:0.2em;color:#444;text-transform:uppercase;margin-bottom:16px;text-align:center}
+
+/* ── Variant 1: Dark ── */
+.logo-dark{display:flex;align-items:baseline;line-height:1}
+.logo-dark .s{font-size:72px;font-weight:700;letter-spacing:-0.04em;color:#fff;text-transform:uppercase}
+.logo-dark .rest{font-size:72px;font-weight:700;letter-spacing:-0.053em;color:#fff;text-transform:lowercase}
+
+/* ── Variant 2: With dot accent ── */
+.logo-dot .s{font-size:72px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:-0.04em}
+.logo-dot .rest{font-size:72px;font-weight:700;color:#fff;text-transform:lowercase;letter-spacing:-0.053em}
+.logo-dot .dot{width:8px;height:8px;background:#16a637;border-radius:50%;display:inline-block;margin-left:3px;margin-bottom:14px;vertical-align:bottom}
+
+/* ── Variant 3: Light bg ── */
+.card-light{background:#f5f4f0;border-radius:16px;padding:40px 60px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.logo-light .s{font-size:72px;font-weight:700;color:#0a0a0a;text-transform:uppercase;letter-spacing:-0.04em}
+.logo-light .rest{font-size:72px;font-weight:700;color:#0a0a0a;text-transform:lowercase;letter-spacing:-0.053em}
+
+/* ── Variant 4: With tagline ── */
+.logo-tag{flex-direction:column;align-items:flex-start;gap:4px}
+.logo-tag .wordmark{display:flex;align-items:baseline}
+.logo-tag .tagline{font-size:13px;font-weight:400;letter-spacing:0.12em;color:#666;text-transform:uppercase;padding-left:4px}
+
+/* ── Variant 5: Teal accent S ── */
+.logo-accent .s{font-size:72px;font-weight:700;color:#16a637;text-transform:uppercase;letter-spacing:-0.04em}
+.logo-accent .rest{font-size:72px;font-weight:700;color:#fff;text-transform:lowercase;letter-spacing:-0.053em}
+
+/* ── Product badges ── */
+.products{display:flex;gap:24px;margin-top:8px}
+.product-badge{border:0.5px solid #333;border-radius:100px;padding:6px 16px;display:flex;align-items:center;gap:6px}
+.product-badge .p-name{font-size:14px;font-weight:600;color:#fff;letter-spacing:-0.03em}
+.product-badge .p-name .ps{text-transform:uppercase}
+.product-badge .p-name .pr{text-transform:lowercase}
+.product-badge .p-sub{font-size:11px;color:#555;letter-spacing:0.05em;text-transform:uppercase}
+.product-badge .divider{width:0.5px;height:14px;background:#333}
+
+/* ── Switcher buttons ── */
+.switcher{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.sw-btn{font-family:'League Spartan',sans-serif;font-size:12px;padding:7px 16px;border-radius:8px;border:0.5px solid #333;background:transparent;color:#666;cursor:pointer;letter-spacing:0.05em;transition:all .15s}
+.sw-btn:hover,.sw-btn.active{background:#1a1a1a;color:#fff;border-color:#555}
+
+.variant{display:flex;flex-direction:column;align-items:center;padding:32px 48px;border-radius:16px}
+.variant.on-dark{background:#111;border:0.5px solid #222}
+.variant.on-light{background:#f0ede8}
+.sep{width:100%;height:0.5px;background:#1e1e1e;margin:4px 0}
+</style>
+</head>
+<body>
+
+<!-- V1: Classic dark -->
+<div class="variant on-dark">
+<div class="label">Primary — dark</div>
+<div class="logo-dark">
+  <span class="s">S</span><span class="rest">omo</span>
+</div>
+</div>
+
+<!-- V2: Teal accent S -->
+<div class="variant on-dark">
+<div class="label">Accent S — teal</div>
+<div style="display:flex;align-items:baseline" class="logo-accent">
+  <span class="s">S</span><span class="rest">omo</span>
+</div>
+</div>
+
+<!-- V3: With dot -->
+<div class="variant on-dark">
+<div class="label">With period mark</div>
+<div style="display:flex;align-items:baseline" class="logo-dot">
+  <span class="s">S</span><span class="rest">omo</span><span class="dot"></span>
+</div>
+</div>
+
+<!-- V4: Light bg -->
+<div class="variant on-light">
+<div class="label" style="color:#aaa8a0">Primary — light</div>
+<div style="display:flex;align-items:baseline" class="logo-light">
+  <span class="s">S</span><span class="rest">omo</span>
+</div>
+</div>
+
+<!-- V5: With tagline -->
+<div class="variant on-dark">
+<div class="label">With tagline</div>
+<div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px">
+  <div style="display:flex;align-items:baseline" class="logo-dark">
+    <span class="s">S</span><span class="rest">omo</span>
+  </div>
+  <div style="font-size:12px;font-weight:400;letter-spacing:0.18em;color:#555;text-transform:uppercase;padding-left:3px">Never answer business calls again</div>
+</div>
+</div>
+
+<!-- Products -->
+<div class="variant on-dark" style="gap:20px">
+<div class="label">Product wordmarks</div>
+<div style="display:flex;gap:32px;flex-wrap:wrap;justify-content:center">
+
+  <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px">
+    <div style="display:flex;align-items:baseline" class="logo-dark">
+      <span class="s" style="font-size:42px">S</span><span class="rest" style="font-size:42px">omo</span>
+      <span style="font-size:42px;font-weight:300;color:#333;letter-spacing:-0.053em"> </span>
+      <span style="font-size:42px;font-weight:700;color:#fff;text-transform:lowercase;letter-spacing:-0.053em">front desk</span>
+    </div>
+    <div style="font-size:10px;font-weight:400;letter-spacing:0.18em;color:#555;text-transform:uppercase;padding-left:2px">AI receptionist</div>
+  </div>
+
+  <div style="width:0.5px;background:#222;align-self:stretch"></div>
+
+  <div style="display:flex;flex-direction:column;align-items:flex-start;gap:6px">
+    <div style="display:flex;align-items:baseline">
+      <span class="s" style="font-size:42px;font-weight:700;color:#16a637;text-transform:uppercase;letter-spacing:-0.04em">S</span>
+      <span style="font-size:42px;font-weight:700;color:#fff;text-transform:lowercase;letter-spacing:-0.053em">omo</span>
+      <span style="font-size:42px;font-weight:700;color:#16a637;text-transform:lowercase;letter-spacing:-0.053em">pay</span>
+    </div>
+    <div style="font-size:10px;font-weight:400;letter-spacing:0.18em;color:#555;text-transform:uppercase;padding-left:2px">Revenue cycle management</div>
+  </div>
+
+</div>
+</div>
+
+<!-- Size scale -->
+<div class="variant on-dark" style="gap:20px">
+<div class="label">Scale — 16px to 96px</div>
+<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+  <div style="display:flex;align-items:baseline"><span style="font-size:96px;font-weight:700;color:#fff;text-transform:uppercase;font-family:'League Spartan';letter-spacing:-0.04em">S</span><span style="font-size:96px;font-weight:700;color:#fff;text-transform:lowercase;font-family:'League Spartan';letter-spacing:-0.053em">omo</span></div>
+  <div style="display:flex;align-items:baseline"><span style="font-size:48px;font-weight:700;color:#fff;text-transform:uppercase;font-family:'League Spartan';letter-spacing:-0.04em">S</span><span style="font-size:48px;font-weight:700;color:#fff;text-transform:lowercase;font-family:'League Spartan';letter-spacing:-0.053em">omo</span></div>
+  <div style="display:flex;align-items:baseline"><span style="font-size:32px;font-weight:700;color:#fff;text-transform:uppercase;font-family:'League Spartan';letter-spacing:-0.04em">S</span><span style="font-size:32px;font-weight:700;color:#fff;text-transform:lowercase;font-family:'League Spartan';letter-spacing:-0.053em">omo</span></div>
+  <div style="display:flex;align-items:baseline"><span style="font-size:20px;font-weight:700;color:#fff;text-transform:uppercase;font-family:'League Spartan';letter-spacing:-0.04em">S</span><span style="font-size:20px;font-weight:700;color:#fff;text-transform:lowercase;font-family:'League Spartan';letter-spacing:-0.053em">omo</span></div>
+  <div style="display:flex;align-items:baseline"><span style="font-size:14px;font-weight:700;color:#fff;text-transform:uppercase;font-family:'League Spartan';letter-spacing:-0.04em">S</span><span style="font-size:14px;font-weight:700;color:#fff;text-transform:lowercase;font-family:'League Spartan';letter-spacing:-0.053em">omo</span></div>
+</div>
+</div>
+
+</body>
+</html>

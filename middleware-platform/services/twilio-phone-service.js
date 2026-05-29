@@ -6,6 +6,45 @@
 
 const axios = require('axios');
 
+/** US area codes that cannot be used for Twilio local search (e.g. +1555… test lines). */
+const INVALID_US_AREA_CODES = new Set(['555', '000', '001']);
+
+/**
+ * Extract 3-digit US area code from E.164 (+1XXXXXXXXXX).
+ * @returns {string|null}
+ */
+function extractUsAreaCodeFromE164(phoneE164) {
+  const digitsOnly = String(phoneE164 || '').replace(/\D/g, '');
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
+    return digitsOnly.substring(1, 4);
+  }
+  if (digitsOnly.length === 10) {
+    return digitsOnly.substring(0, 3);
+  }
+  return null;
+}
+
+/**
+ * @param {string|null|undefined} areaCode
+ * @returns {boolean}
+ */
+function isValidUsAreaCode(areaCode) {
+  if (!areaCode || !/^\d{3}$/.test(areaCode)) return false;
+  if (INVALID_US_AREA_CODES.has(areaCode)) return false;
+  if (areaCode.startsWith('0') || areaCode.startsWith('1')) return false;
+  return true;
+}
+
+/**
+ * Prefer mobile area code when valid; otherwise null.
+ * @param {string} phoneE164
+ * @returns {string|null}
+ */
+function normalizeUsAreaCode(phoneE164) {
+  const ac = extractUsAreaCodeFromE164(phoneE164);
+  return isValidUsAreaCode(ac) ? ac : null;
+}
+
 class TwilioPhoneService {
   constructor() {
     this.accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -36,7 +75,8 @@ class TwilioPhoneService {
 
     try {
       const { country = 'US', areaCode, contains } = options;
-      
+      const ac = areaCode && isValidUsAreaCode(String(areaCode)) ? String(areaCode) : null;
+
       // Build search params
       const params = new URLSearchParams({
         Country: country,
@@ -45,8 +85,8 @@ class TwilioPhoneService {
         VoiceEnabled: 'true'
       });
 
-      if (areaCode) {
-        params.append('AreaCode', areaCode);
+      if (ac) {
+        params.append('AreaCode', ac);
       }
 
       if (contains) {
@@ -55,7 +95,7 @@ class TwilioPhoneService {
 
       console.log(`🔍 Searching for available Twilio phone numbers...`);
       console.log(`   Country: ${country}`);
-      if (areaCode) console.log(`   Area Code: ${areaCode}`);
+      if (ac) console.log(`   Area Code: ${ac}`);
 
       const response = await axios.get(
         `${this.apiBaseUrl}/AvailablePhoneNumbers/${country}/Local.json?${params.toString()}`,
@@ -151,15 +191,50 @@ class TwilioPhoneService {
   }
 
   /**
+   * Search with fallbacks: mobile area code → TRIAL_DEFAULT_AREA_CODE → nationwide.
+   * @returns {Promise<{ numbers: Array, strategy: string }>}
+   */
+  async searchAvailableWithFallback(options = {}) {
+    const { country = 'US', phoneE164 } = options;
+    const preferred = options.areaCode != null
+      ? (isValidUsAreaCode(String(options.areaCode)) ? String(options.areaCode) : null)
+      : normalizeUsAreaCode(phoneE164);
+    const defaultAc = process.env.TRIAL_DEFAULT_AREA_CODE
+      ? String(process.env.TRIAL_DEFAULT_AREA_CODE).trim()
+      : null;
+    const fallbackAc = isValidUsAreaCode(defaultAc) ? defaultAc : null;
+
+    const strategies = [];
+    if (preferred) strategies.push({ areaCode: preferred, label: 'mobile_area_code' });
+    if (fallbackAc && fallbackAc !== preferred) {
+      strategies.push({ areaCode: fallbackAc, label: 'trial_default_area_code' });
+    }
+    strategies.push({ areaCode: null, label: 'nationwide' });
+
+    for (const s of strategies) {
+      const numbers = await this.searchAvailablePhoneNumbers({
+        country,
+        areaCode: s.areaCode
+      });
+      if (numbers.length > 0) {
+        return { numbers, strategy: s.label };
+      }
+    }
+
+    return { numbers: [], strategy: 'none' };
+  }
+
+  /**
    * Provision a phone number for a customer (search and purchase)
    * @param {Object} options - Provisioning options
    * @param {string} options.customerId - Customer ID
    * @param {string} options.areaCode - Area code preference (optional)
+   * @param {string} options.phoneE164 - Mobile used for area-code preference (optional)
    * @param {string} options.webhookUrl - Webhook URL for voice calls
    * @returns {Promise<Object>} Provisioned phone number details
    */
   async provisionPhoneNumberForCustomer(options) {
-    const { customerId, areaCode, webhookUrl } = options;
+    const { customerId, areaCode, phoneE164, webhookUrl } = options;
 
     if (!customerId) {
       throw new Error('Customer ID is required');
@@ -170,25 +245,26 @@ class TwilioPhoneService {
     }
 
     try {
-      // Search for available numbers
-      const availableNumbers = await this.searchAvailablePhoneNumbers({
+      const { numbers, strategy } = await this.searchAvailableWithFallback({
         country: 'US',
-        areaCode: areaCode || null
+        areaCode: areaCode || null,
+        phoneE164: phoneE164 || null
       });
 
-      if (!availableNumbers || availableNumbers.length === 0) {
-        throw new Error('No available phone numbers found');
+      if (!numbers || numbers.length === 0) {
+        throw new Error('No available phone numbers found in Twilio inventory');
       }
 
-      // Purchase the first available number
-      const phoneNumber = availableNumbers[0].phoneNumber;
+      console.log(`   Search strategy: ${strategy}`);
+
+      const phoneNumber = numbers[0].phoneNumber;
       const purchased = await this.purchasePhoneNumber(phoneNumber, webhookUrl);
 
       console.log(`✅ Successfully provisioned phone number for customer ${customerId}:`);
       console.log(`   Phone: ${purchased.phoneNumber}`);
       console.log(`   SID: ${purchased.sid}`);
 
-      return purchased;
+      return { ...purchased, searchStrategy: strategy };
     } catch (error) {
       console.error(`❌ Failed to provision phone number for customer ${customerId}:`, error.message);
       throw error;
@@ -323,4 +399,7 @@ class TwilioPhoneService {
 }
 
 module.exports = TwilioPhoneService;
+module.exports.extractUsAreaCodeFromE164 = extractUsAreaCodeFromE164;
+module.exports.isValidUsAreaCode = isValidUsAreaCode;
+module.exports.normalizeUsAreaCode = normalizeUsAreaCode;
 

@@ -22,7 +22,9 @@ describe('billing-access trial', () => {
       trial_status: 'active',
       trial_started_at: new Date().toISOString(),
       trial_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      phone_verified: 1
+      phone_verified: 1,
+      twilio_phone_number: '+12025550001',
+      twilio_phone_sid: 'PN_test_gate_trial'
     });
     db.allocateFreeCredits(customerId, 10);
   });

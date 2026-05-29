@@ -31,11 +31,19 @@
     return;
   }
 
-  // Check for production domain (doclittle.site)
-  if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' || hostname.includes('doclittle.site')) {
-    // For production, use api.doclittle.site subdomain
-    window.API_BASE = 'https://api.doclittle.site';
-    console.log('🌐 API Base URL (production - doclittle.site):', window.API_BASE);
+  const PROD_API = 'https://api.myskinandcare.com';
+  const host = hostname.toLowerCase();
+  const isProdMarketingHost =
+    host === 'myskinandcare.com' ||
+    host === 'www.myskinandcare.com' ||
+    host.endsWith('.myskinandcare.com') ||
+    host === 'skinandcare.com' ||
+    host === 'www.skinandcare.com' ||
+    host.endsWith('.skinandcare.com');
+
+  if (isProdMarketingHost) {
+    window.API_BASE = PROD_API;
+    console.log('🌐 API Base URL (production):', window.API_BASE);
     return;
   }
 
@@ -47,17 +55,11 @@
       window.API_BASE = window.location.origin;
       console.log('🌐 API Base URL (ngrok):', window.API_BASE);
     } else if (hostname.includes('netlify.app')) {
-      // Netlify - use api.doclittle.site
-      window.API_BASE = 'https://api.doclittle.site';
-    } else if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site') {
-      // Production domain - use api.doclittle.site subdomain
-      window.API_BASE = 'https://api.doclittle.site';
+      window.API_BASE = PROD_API;
     } else if (hostname.includes('azurewebsites.net')) {
-      // Azure App Service - use api subdomain
-      window.API_BASE = 'https://api.doclittle.site';
+      window.API_BASE = PROD_API;
     } else {
-      // Other custom domain - use api.doclittle.site (or configure as needed)
-      window.API_BASE = 'https://api.doclittle.site';
+      window.API_BASE = PROD_API;
     }
   } else {
     // Local access
@@ -72,7 +74,7 @@
    * - Falls back to default if API call fails
    */
 
-  // Extract subdomain if present (e.g. akin-dunbar.doclittle.site)
+  // Extract subdomain if present (e.g. tenant.myskinandcare.com)
   let subdomain = null;
   const parts = hostname.split('.');
   if (parts.length > 2) {
@@ -126,7 +128,7 @@
     subdomain,
     tenant_type: 'clinic',
     navItems: NAV_BY_TENANT.clinic,
-    sidebarSubtitle: 'FrontDesk AI'
+    sidebarSubtitle: 'Somo AI'
   };
 
   window.MEDICAL_NAV_ITEMS = MEDICAL_NAV_ITEMS;

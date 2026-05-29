@@ -2151,7 +2151,7 @@
                 <div class="today-title">${isToday(todayOrNext) ? 'Today' : 'Next appointment'}</div>
                 <div class="appointment-header" style="margin-bottom:0;">
                     <div class="appointment-info">
-                        <div class="appointment-type">${todayOrNext.appointment_type || 'Consultation'}</div>
+                        <div class="appointment-type">${todayOrNext.appointment_type || 'Somoation'}</div>
                         ${provLine}
                         <div class="appointment-datetime">${todayOrNext.datetime_display || `${todayOrNext.date || ''} ${todayOrNext.time || ''}`}</div>
                         <div class="appointment-tz-note">Times in ${escHtml(todayOrNext.timezone || 'America/New_York')}</div>
@@ -2281,7 +2281,7 @@
                     <div class="appointment-card">
                         <div class="appointment-header">
                             <div class="appointment-info">
-                                <div class="appointment-type">${apt.appointment_type || 'Consultation'}</div>
+                                <div class="appointment-type">${apt.appointment_type || 'Somoation'}</div>
                                 ${provHtml}
                                 <div class="appointment-datetime">${apt.datetime_display || apt.date + ' at ' + apt.time}</div>
                                 <div class="appointment-tz-note">Times in ${escHtml(apt.timezone || 'America/New_York')}</div>

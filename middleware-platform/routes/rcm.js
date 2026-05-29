@@ -1,9 +1,13 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const db = require('../database');
 const FinancialIntegrityService = require('../services/financial-integrity-service');
 const InsuranceService = require('../services/insurance-service');
 const RcmService = require('../services/rcm-service');
+const orchestrator = require('../services/rcm-journey-orchestrator');
+const settlement = require('../services/rcm-payment-settlement');
+const { RCM_STAGE_CONTRACT } = require('../services/rcm-stage-contract');
 const { resolveClinicIdFromRequest } = require('../lib/resolve-clinic-id');
 
 function safeJsonParse(value) {
@@ -19,6 +23,38 @@ function safeJsonParse(value) {
 function requireClinicScope(req) {
   const clinicId = resolveClinicIdFromRequest(req, req.body?.args || {});
   return clinicId ? String(clinicId).trim() : null;
+}
+
+function publicPayBase(req) {
+  const base =
+    process.env.PUBLIC_PAY_BASE_URL ||
+    process.env.APP_PUBLIC_URL ||
+    `${req.protocol}://${req.get('host')}`;
+  return String(base).replace(/\/$/, '');
+}
+
+function payUrlFromToken(req, token) {
+  if (!token) return null;
+  return `${publicPayBase(req)}/patients/pay.html?token=${encodeURIComponent(token)}`;
+}
+
+function stageLabel(stageId) {
+  const contract = orchestrator.stageContractMap().get(orchestrator.normalizeStageId(stageId));
+  return contract?.label || stageId || 'Unknown';
+}
+
+function resolvePatientDisplayName(patientId) {
+  if (!patientId) return null;
+  try {
+    const row = db.getFHIRPatient?.(String(patientId));
+    if (!row?.resource_data) return String(patientId);
+    const data = typeof row.resource_data === 'string' ? JSON.parse(row.resource_data) : row.resource_data;
+    const n = data?.name?.[0];
+    if (!n) return String(patientId);
+    return n.text || [].concat(n.given || []).join(' ') + (n.family ? ` ${n.family}` : '');
+  } catch (_) {
+    return String(patientId);
+  }
 }
 
 function normalizeRailTime(value) {
@@ -1009,24 +1045,62 @@ function ensureKellyRcmTables() {
     );
     CREATE INDEX IF NOT EXISTS idx_rcm_remit_clinic_posted ON rcm_remittances(clinic_id, posted_at DESC);
   `);
+  orchestrator.ensureKellyRcmTables();
   __kellyRcmTablesReady = true;
 }
+
+router.get('/journeys/stage-contract', (_req, res) => {
+  return res.json({ success: true, stages: RCM_STAGE_CONTRACT });
+});
 
 router.post('/journeys/start', (req, res) => {
   try {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
-    const id = `jrn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const patientId = req.body?.patient_id || null;
-    const source = req.body?.source || 'voice';
-    db.db.prepare(`INSERT INTO rcm_journeys (id, clinic_id, patient_id, source) VALUES (?, ?, ?, ?)`).run(id, clinicId, patientId, source);
-    db.db.prepare(`INSERT INTO rcm_journey_events (id, journey_id, clinic_id, event_type, stage_to, payload_json) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(`evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, id, clinicId, 'journey_started', 'intake', JSON.stringify(req.body || {}));
-    return res.json({ success: true, journey_id: id });
+    const skipGates = Boolean(req.body?.skip_gates || process.env.RCM_E2E_SKIP_GATES === '1');
+    const result = orchestrator.startJourney({
+      clinicId,
+      patientId: req.body?.patient_id || null,
+      appointmentId: req.body?.appointment_id || null,
+      claimId: req.body?.claim_id || null,
+      callId: req.body?.call_id || null,
+      source: req.body?.source || 'provider',
+      stage: req.body?.stage || 'pre_registration',
+      payload: req.body?.payload || {},
+      intakeJson: req.body?.intake || req.body?.intake_json || null,
+      skipGates,
+    });
+    return res.json({
+      success: true,
+      journey_id: result.journey?.id || result.journey_id,
+      journey: result.journey,
+      created: result.created,
+    });
   } catch (err) {
     console.error('[rcm] journeys/start error:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    return res.status(err.code ? 409 : 500).json({ success: false, error: err.message, code: err.code });
+  }
+});
+
+router.post('/journeys/:journeyId/confirm-intake', (req, res) => {
+  try {
+    ensureKellyRcmTables();
+    const clinicId = requireClinicScope(req);
+    const journeyId = String(req.params.journeyId || '').trim();
+    if (!clinicId || !journeyId) {
+      return res.status(400).json({ success: false, error: 'clinic_id and journeyId are required' });
+    }
+    const result = orchestrator.confirmIntake({
+      clinicId,
+      journeyId,
+      intake: req.body?.intake || req.body || {},
+      patientId: req.body?.patient_id || null,
+    });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[rcm] confirm-intake error:', err);
+    return res.status(err.code ? 409 : 500).json({ success: false, error: err.message, code: err.code });
   }
 });
 
@@ -1035,21 +1109,56 @@ router.post('/journeys/:journeyId/events', (req, res) => {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     const journeyId = String(req.params.journeyId || '').trim();
-    if (!clinicId || !journeyId) return res.status(400).json({ success: false, error: 'clinic_id and journeyId are required' });
-    const eventType = req.body?.event_type || 'stage_transition';
-    const stageTo = req.body?.stage_to || null;
-    const stageFrom = req.body?.stage_from || null;
-    const payload = req.body?.payload || req.body || {};
-
-    db.db.prepare(`INSERT INTO rcm_journey_events (id, journey_id, clinic_id, event_type, stage_from, stage_to, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(`evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, journeyId, clinicId, eventType, stageFrom, stageTo, JSON.stringify(payload));
-    if (stageTo) {
-      db.db.prepare(`UPDATE rcm_journeys SET stage = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND clinic_id = ?`)
-        .run(stageTo, journeyId, clinicId);
+    if (!clinicId || !journeyId) {
+      return res.status(400).json({ success: false, error: 'clinic_id and journeyId are required' });
     }
-    return res.json({ success: true });
+    const stageTo = req.body?.stage_to;
+    if (!stageTo) return res.status(400).json({ success: false, error: 'stage_to is required' });
+    const skipGates = Boolean(
+      req.body?.skip_gates || req.body?.options?.skip_gates || process.env.RCM_E2E_SKIP_GATES === '1'
+    );
+    const result = orchestrator.advanceStage({
+      journeyId,
+      clinicId,
+      stageTo,
+      stageFrom: req.body?.stage_from || null,
+      eventType: req.body?.event_type || 'stage_transition',
+      payload: req.body?.payload || req.body || {},
+      options: {
+        skipGates,
+        allowNoPatient: req.body?.allow_no_patient,
+        allowNoAppointment: req.body?.allow_no_appointment,
+        allowNoClaim: req.body?.allow_no_claim,
+        allowNoEligibility: req.body?.allow_no_eligibility,
+        dedupeKey: req.body?.dedupe_key,
+      },
+    });
+    const journey = orchestrator.enrichJourney(orchestrator.getJourney(clinicId, journeyId));
+    return res.json({ success: true, ...result, journey });
   } catch (err) {
     console.error('[rcm] journeys/:id/events error:', err);
+    return res.status(err.code ? 409 : 500).json({ success: false, error: err.message, code: err.code });
+  }
+});
+
+router.patch('/journeys/:journeyId', (req, res) => {
+  try {
+    ensureKellyRcmTables();
+    const clinicId = requireClinicScope(req);
+    const journeyId = String(req.params.journeyId || '').trim();
+    if (!clinicId || !journeyId) {
+      return res.status(400).json({ success: false, error: 'clinic_id and journeyId are required' });
+    }
+    const updates = {};
+    if (req.body?.status != null) updates.status = req.body.status;
+    if (req.body?.amount_due != null) updates.amount_due = req.body.amount_due;
+    if (req.body?.patient_id != null) updates.patient_id = req.body.patient_id;
+    if (req.body?.claim_id != null) updates.claim_id = req.body.claim_id;
+    if (req.body?.appointment_id != null) updates.appointment_id = req.body.appointment_id;
+    const journey = orchestrator.patchJourney(clinicId, journeyId, updates);
+    return res.json({ success: true, journey });
+  } catch (err) {
+    console.error('[rcm] journeys patch error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1059,9 +1168,14 @@ router.get('/journeys', (req, res) => {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
-    const limit = Math.min(parseInt(req.query.limit || '20', 10) || 20, 100);
-    const rows = db.db.prepare(`SELECT * FROM rcm_journeys WHERE clinic_id = ? ORDER BY created_at DESC LIMIT ?`).all(clinicId, limit);
-    return res.json({ success: true, journeys: rows });
+    const journeys = orchestrator.listJourneys(clinicId, {
+      limit: req.query.limit,
+      patientId: req.query.patient_id,
+      appointmentId: req.query.appointment_id,
+      status: req.query.status,
+      callId: req.query.call_id,
+    });
+    return res.json({ success: true, journeys });
   } catch (err) {
     console.error('[rcm] journeys error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -1073,11 +1187,53 @@ router.get('/journeys/:journeyId/timeline', (req, res) => {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     const journeyId = String(req.params.journeyId || '').trim();
-    if (!clinicId || !journeyId) return res.status(400).json({ success: false, error: 'clinic_id and journeyId are required' });
-    const events = db.db.prepare(`SELECT * FROM rcm_journey_events WHERE clinic_id = ? AND journey_id = ? ORDER BY created_at DESC`).all(clinicId, journeyId);
-    return res.json({ success: true, journey_id: journeyId, events: events.map((e) => ({ ...e, payload: safeJsonParse(e.payload_json) || null })) });
+    if (!clinicId || !journeyId) {
+      return res.status(400).json({ success: false, error: 'clinic_id and journeyId are required' });
+    }
+    const journey = orchestrator.enrichJourney(orchestrator.getJourney(clinicId, journeyId));
+    if (!journey) return res.status(404).json({ success: false, error: 'Journey not found' });
+    const events = db.db
+      .prepare(
+        `SELECT * FROM rcm_journey_events WHERE clinic_id = ? AND journey_id = ? ORDER BY created_at DESC`
+      )
+      .all(clinicId, journeyId);
+    return res.json({
+      success: true,
+      journey_id: journeyId,
+      journey,
+      events: events.map((e) => ({ ...e, payload: safeJsonParse(e.payload_json) || null })),
+    });
   } catch (err) {
     console.error('[rcm] journeys/:id/timeline error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/collection-queue', (req, res) => {
+  try {
+    ensureKellyRcmTables();
+    const clinicId = requireClinicScope(req);
+    if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
+    const open = db.db
+      .prepare(
+        `SELECT * FROM rcm_journeys WHERE clinic_id = ? AND status = 'open' AND stage = 'patient_collection' ORDER BY updated_at DESC LIMIT 50`
+      )
+      .all(clinicId)
+      .map((r) => orchestrator.enrichJourney(r));
+    const paidRecent = db.db
+      .prepare(
+        `SELECT * FROM rcm_payments WHERE clinic_id = ? AND status = 'paid' ORDER BY paid_at DESC LIMIT 20`
+      )
+      .all(clinicId)
+      .map((p) => ({
+        ...p,
+        patient_name: resolvePatientDisplayName(p.patient_id),
+        pay_url: payUrlFromToken(req, p.pay_token),
+        stage_label: 'Bill',
+      }));
+    return res.json({ success: true, collection_queue: open, paid_recent: paidRecent });
+  } catch (err) {
+    console.error('[rcm] collection-queue error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1093,13 +1249,66 @@ router.post('/payments/request', (req, res) => {
     const journeyId = req.body?.journey_id || null;
     const patientId = req.body?.patient_id || null;
     const method = req.body?.method || 'manual';
-    db.db.prepare(`INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(id, clinicId, journeyId, patientId, amount, method);
-    db.db.prepare(`INSERT INTO rcm_ledger_entries (id, clinic_id, journey_id, direction, amount, category, note) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(`led_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, clinicId, journeyId, 'incoming', amount, 'patient_request', 'Payment request created');
-    return res.json({ success: true, payment_id: id });
+    const payToken = crypto.randomBytes(24).toString('hex');
+    db.db
+      .prepare(
+        `INSERT INTO rcm_payments (id, clinic_id, journey_id, patient_id, amount, method, pay_token) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, clinicId, journeyId, patientId, amount, method, payToken);
+    db.db
+      .prepare(
+        `INSERT INTO rcm_ledger_entries (id, clinic_id, journey_id, direction, amount, category, note) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        `led_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        clinicId,
+        journeyId,
+        'incoming',
+        amount,
+        'patient_request',
+        'Payment request created'
+      );
+    if (journeyId) {
+      try {
+        orchestrator.advanceStage({
+          journeyId,
+          clinicId,
+          stageTo: 'patient_collection',
+          eventType: 'payment_requested',
+          payload: { payment_id: id, amount },
+          options: { skipGates: true },
+        });
+      } catch (_) {
+        /* journey may already be past collection */
+      }
+    }
+    const payUrl = payUrlFromToken(req, payToken);
+    return res.json({ success: true, payment_id: id, pay_token: payToken, pay_url: payUrl });
   } catch (err) {
     console.error('[rcm] payments/request error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/payments/:paymentId/mark-paid', (req, res) => {
+  try {
+    ensureKellyRcmTables();
+    const clinicId = requireClinicScope(req);
+    const paymentId = String(req.params.paymentId || '').trim();
+    if (!clinicId || !paymentId) {
+      return res.status(400).json({ success: false, error: 'clinic_id and paymentId are required' });
+    }
+    const row = db.db
+      .prepare(`SELECT * FROM rcm_payments WHERE id = ? AND clinic_id = ?`)
+      .get(paymentId, clinicId);
+    if (!row) return res.status(404).json({ success: false, error: 'Payment not found' });
+    const result = settlement.markPaidProvider(row, {
+      method: req.body?.method || 'manual',
+      note: req.body?.note || 'Provider marked paid',
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error('[rcm] payments/mark-paid error:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1109,8 +1318,22 @@ router.get('/payments', (req, res) => {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
-    const rows = db.db.prepare(`SELECT * FROM rcm_payments WHERE clinic_id = ? ORDER BY requested_at DESC LIMIT 100`).all(clinicId);
-    return res.json({ success: true, payments: rows });
+    const rows = db.db
+      .prepare(`SELECT * FROM rcm_payments WHERE clinic_id = ? ORDER BY requested_at DESC LIMIT 100`)
+      .all(clinicId);
+    const payments = rows.map((p) => {
+      const journey = p.journey_id
+        ? orchestrator.getJourney(clinicId, p.journey_id)
+        : null;
+      return {
+        ...p,
+        patient_name: resolvePatientDisplayName(p.patient_id),
+        pay_url: payUrlFromToken(req, p.pay_token),
+        journey_stage: journey?.stage || null,
+        stage_label: journey ? stageLabel(journey.stage) : null,
+      };
+    });
+    return res.json({ success: true, payments });
   } catch (err) {
     console.error('[rcm] payments error:', err);
     return res.status(500).json({ success: false, error: err.message });
@@ -1125,10 +1348,57 @@ router.post('/remittance', (req, res) => {
     const amount = Number(req.body?.amount || 0);
     if (!(amount > 0)) return res.status(400).json({ success: false, error: 'amount must be > 0' });
     const id = `rem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    db.db.prepare(`INSERT INTO rcm_remittances (id, clinic_id, journey_id, payer_name, amount, detail_json) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(id, clinicId, req.body?.journey_id || null, req.body?.payer_name || 'Unknown payer', amount, JSON.stringify(req.body || {}));
-    db.db.prepare(`INSERT INTO rcm_ledger_entries (id, clinic_id, journey_id, direction, amount, category, note) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(`led_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, clinicId, req.body?.journey_id || null, 'incoming', amount, 'remittance', 'Payor remittance posted');
+    const claimId = req.body?.claim_id || null;
+    db.db
+      .prepare(
+        `INSERT INTO rcm_remittances (id, clinic_id, journey_id, payer_name, amount, detail_json) VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        clinicId,
+        req.body?.journey_id || null,
+        req.body?.payer_name || 'Unknown payer',
+        amount,
+        JSON.stringify(req.body || {})
+      );
+    db.db
+      .prepare(
+        `INSERT INTO rcm_ledger_entries (id, clinic_id, journey_id, direction, amount, category, note) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        `led_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        clinicId,
+        req.body?.journey_id || null,
+        'incoming',
+        amount,
+        'remittance',
+        'Payor remittance posted'
+      );
+    if (claimId) {
+      orchestrator.onRemittancePosted({
+        clinicId,
+        claimId,
+        amount,
+        payload: {
+          patient_responsibility: req.body?.patient_responsibility,
+          allowed_amount: req.body?.allowed_amount,
+          manual: true,
+        },
+      });
+    } else if (req.body?.journey_id) {
+      try {
+        orchestrator.advanceStage({
+          journeyId: req.body.journey_id,
+          clinicId,
+          stageTo: 'remittance_processing',
+          eventType: 'remittance_posted',
+          payload: { amount, manual: true },
+          options: { skipGates: true },
+        });
+      } catch (_) {
+        /* ignore */
+      }
+    }
     return res.json({ success: true, remittance_id: id });
   } catch (err) {
     console.error('[rcm] remittance error:', err);
@@ -1179,15 +1449,35 @@ router.get('/command-center', (req, res) => {
     ensureKellyRcmTables();
     const clinicId = requireClinicScope(req);
     if (!clinicId) return res.status(400).json({ success: false, error: 'clinic_id is required for tenant scoping' });
-    const stages = db.db.prepare(`SELECT stage, COUNT(*) AS count FROM rcm_journeys WHERE clinic_id = ? GROUP BY stage`).all(clinicId);
-    const summary = db.db.prepare(`
+    const stages = db.db
+      .prepare(`SELECT stage, COUNT(*) AS count FROM rcm_journeys WHERE clinic_id = ? GROUP BY stage`)
+      .all(clinicId)
+      .map((row) => ({
+        ...row,
+        stage_label: stageLabel(row.stage),
+      }));
+    const summary = db.db
+      .prepare(
+        `
       SELECT
         (SELECT COUNT(*) FROM rcm_journeys WHERE clinic_id = ?) AS journeys_total,
         (SELECT COUNT(*) FROM rcm_journeys WHERE clinic_id = ? AND status = 'open') AS journeys_open,
         (SELECT COALESCE(SUM(amount), 0) FROM rcm_payments WHERE clinic_id = ?) AS patient_payments_total,
         (SELECT COALESCE(SUM(amount), 0) FROM rcm_remittances WHERE clinic_id = ?) AS remittance_total
-    `).get(clinicId, clinicId, clinicId, clinicId);
-    return res.json({ success: true, clinic_id: clinicId, summary, stages });
+    `
+      )
+      .get(clinicId, clinicId, clinicId, clinicId);
+    const collection = db.db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM rcm_journeys WHERE clinic_id = ? AND status = 'open' AND stage = 'patient_collection'`
+      )
+      .get(clinicId);
+    return res.json({
+      success: true,
+      clinic_id: clinicId,
+      summary: { ...summary, collection_open: Number(collection?.c || 0) },
+      stages,
+    });
   } catch (err) {
     console.error('[rcm] command-center error:', err);
     return res.status(500).json({ success: false, error: err.message });

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FrontDesk Provider Portal - Sign In</title>
+    <title>Somo Provider - Sign In</title>
     <link rel="stylesheet" href="/assets/css/global.css" />
     <script src="/assets/js/config.js"></script>
     <style>
@@ -159,7 +159,7 @@
 <body>
     <div class="shell">
         <section class="panel hero">
-            <p class="muted">FrontDesk • Provider Operations</p>
+            <p class="muted">Somo • Provider Operations</p>
             <h1>Provider Portal</h1>
             <p>Sign in to your provider account. Use demo accounts below to try without signing up.</p>
             <div style="margin-top: 24px;">
@@ -209,25 +209,25 @@
 
             <div class="demo-section">
                 <h3>Demo login (no signup)</h3>
-                <button type="button" class="demo-btn" onclick="useDemoAccount('provider@doclittle.com','demo123')">
+                <button type="button" class="demo-btn" onclick="useDemoAccount('provider@demo.local','demo123')">
                     <span class="demo-btn-icon">Provider</span>
                     <span class="demo-btn-content">
                         <span class="demo-btn-title">Provider</span>
-                        <span class="demo-btn-email">provider@doclittle.com</span>
+                        <span class="demo-btn-email">provider@demo.local</span>
                     </span>
                 </button>
-                <button type="button" class="demo-btn" onclick="useDemoAccount('patient@doclittle.com','demo123')">
+                <button type="button" class="demo-btn" onclick="useDemoAccount('patient@Somo.com','demo123')">
                     <span class="demo-btn-icon">Patient</span>
                     <span class="demo-btn-content">
                         <span class="demo-btn-title">Patient</span>
-                        <span class="demo-btn-email">patient@doclittle.com</span>
+                        <span class="demo-btn-email">patient@Somo.com</span>
                     </span>
                 </button>
-                <button type="button" class="demo-btn" onclick="useDemoAccount('insurer@doclittle.com','demo123')">
+                <button type="button" class="demo-btn" onclick="useDemoAccount('insurer@Somo.com','demo123')">
                     <span class="demo-btn-icon">Insurer</span>
                     <span class="demo-btn-content">
                         <span class="demo-btn-title">Insurer</span>
-                        <span class="demo-btn-email">insurer@doclittle.com</span>
+                        <span class="demo-btn-email">insurer@Somo.com</span>
                     </span>
                 </button>
                 <p class="muted" style="font-size: 0.75rem; margin-top: 8px;">Password: demo123 (all accounts)</p>
@@ -259,10 +259,17 @@
             // Auto-detect based on hostname
             const hostname = window.location.hostname;
 
-            // Production domains - use api.doclittle.site
-            if (hostname === 'doclittle.site' || hostname === 'www.doclittle.site' ||
-                hostname.includes('doclittle.site') || hostname.includes('azurewebsites.net')) {
-                return 'https://api.doclittle.site';
+            const host = hostname.toLowerCase();
+            if (
+                host === 'myskinandcare.com' ||
+                host === 'www.myskinandcare.com' ||
+                host.endsWith('.myskinandcare.com') ||
+                host === 'skinandcare.com' ||
+                host === 'www.skinandcare.com' ||
+                host.endsWith('.skinandcare.com') ||
+                host.includes('azurewebsites.net')
+            ) {
+                return 'https://api.myskinandcare.com';
             }
 
             // Local development
@@ -270,8 +277,7 @@
                 return 'http://localhost:4000';
             }
 
-            // Default to production API
-            return 'https://api.doclittle.site';
+            return 'https://api.myskinandcare.com';
         }
 
         const API_BASE = getApiBase();
@@ -350,10 +356,10 @@
                     const providerHome = '/business/today.html';
                     if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
                         window.location.href = providerHome;
-                    } else if (subdomain && currentHostname.includes(`${subdomain}.doclittle.site`)) {
+                    } else if (subdomain && currentHostname.toLowerCase().includes(`${subdomain}.myskinandcare.com`)) {
                         window.location.href = providerHome;
                     } else if (subdomain) {
-                        const baseDomain = 'doclittle.site';
+                        const baseDomain = 'myskinandcare.com';
                         window.location.href = `https://${subdomain}.${baseDomain}/business/today.html`;
                     } else {
                         window.location.href = providerHome;

@@ -28,7 +28,7 @@ export function showToast(message, type = 'info') {
   ensureToastHost();
   const host = document.getElementById('patientToastHost');
   const el = document.createElement('div');
-  const bg = type === 'success' ? '#16a34a' : type === 'error' ? '#dc2626' : type === 'warning' ? '#f59e0b' : '#2563eb';
+  const bg = type === 'success' ? '#16a34a' : type === 'error' ? '#dc2626' : type === 'warning' ? '#f59e0b' : '#128a2e';
   el.style.background = bg;
   el.style.color = '#fff';
   el.style.padding = '12px 14px';
@@ -70,7 +70,7 @@ function ensureHelpModal() {
           <li>If you’re signed out, sign in again to refresh your session.</li>
         </ul>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <a href="appointments.html" style="padding:10px 12px;border-radius:12px;background:#1e40af;color:#fff;font-weight:600;text-decoration:none;min-height:44px;display:inline-flex;align-items:center;">Go to Appointments</a>
+          <a href="appointments.html" style="padding:10px 12px;border-radius:12px;background:#16a637;color:#fff;font-weight:600;text-decoration:none;min-height:44px;display:inline-flex;align-items:center;">Go to Appointments</a>
           <button id="patientHelpSignOutBtn" style="padding:10px 12px;border-radius:12px;border:1px solid #e5e7eb;background:#fff;font-weight:600;min-height:44px;cursor:pointer;">Sign out</button>
         </div>
       </div>

@@ -50,7 +50,7 @@ function envSet(name) {
 }
 
 function fileExists(rel) {
-  return fs.existsSync(path.join(MP, rel)) || fs.existsSync(path.join(WIP, rel));
+  return fs.existsSync(path.join(MP, rel));
 }
 
 function httpGet(urlPath) {
@@ -109,6 +109,7 @@ async function main() {
 
   report.env = {
     TRIAL_SIM_FLOW_ENABLED: envSet('TRIAL_SIM_FLOW_ENABLED'),
+    TRIAL_DEFAULT_AREA_CODE: envSet('TRIAL_DEFAULT_AREA_CODE'),
     TWILIO_VERIFY_SERVICE_SID: envSet('TWILIO_VERIFY_SERVICE_SID'),
     TWILIO_ACCOUNT_SID: envSet('TWILIO_ACCOUNT_SID'),
     TWILIO_AUTH_TOKEN: envSet('TWILIO_AUTH_TOKEN')
@@ -157,14 +158,17 @@ async function main() {
       report.verdict =
         'Code present but TRIAL_SIM_FLOW_ENABLED is off in .env — SIM phone step and startTrialTenant() will not run.';
     } else {
-      report.verdict = 'Code and flags look present; run full E2E with fresh signup cookie.';
+      report.verdict =
+        'Code and flags look present. Run: node scripts/trial-provision-smoke.cjs (requires server + TRIAL_SIM_FLOW_ENABLED=1).';
     }
   } else {
-    report.verdict = 'SIM trial pipeline files missing from wip tree — incomplete.';
+    report.verdict = 'SIM trial pipeline incomplete on current tree — merge feat/voice-billing-dodgecall-trial.';
   }
 
   if (report.runtime.verifyPhoneOnRunningServer?.status === 404) {
-    report.verdict += ' Running server returns 404 on verify-phone — wrong branch or old process.';
+    report.verdict += ' Running server returns 404 on verify-phone — restart server on current branch.';
+  } else if (report.runtime.verifyPhoneOnRunningServer?.status === 401) {
+    report.verdict += ' verify-phone route exists (401 without session is expected).';
   }
 
   agentLog('C', 'sandbox-trial-signup-report.cjs', 'verdict', { verdict: report.verdict });

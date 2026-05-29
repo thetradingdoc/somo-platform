@@ -1,5 +1,5 @@
 /**
- * Mounts the shared FrontDesk provider shell on legacy business pages.
+ * Mounts the shared Somo provider shell on legacy business pages.
  * Call mountProviderPage({ activeId, eyebrow, title }) on DOMContentLoaded.
  */
 (function () {

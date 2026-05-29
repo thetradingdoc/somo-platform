@@ -251,6 +251,20 @@ class InsuranceService {
         console.warn('⚠️  applyClaimAdjudicationOutcome tracking skipped:', e.message);
       }
     }
+    try {
+      const orchestrator = require('./rcm-journey-orchestrator');
+      const clinicId = claim.clinic_id || claim.clinicId;
+      if (clinicId && claim.id) {
+        orchestrator.onClaimAdjudication({
+          clinicId,
+          claimId: claim.id,
+          status: normalized,
+          payload: { source: 'insurance_service' },
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️  onClaimAdjudication bridge skipped:', e.message);
+    }
   }
 
   /**
@@ -310,14 +324,24 @@ class InsuranceService {
             usedHealthcareV3 = true;
             const parsed = stedi271Parser.parse271Response(v3.data);
             eligibilityResponse = this._eligibilityFromParsed271(parsed);
+            const aaa = stedi271Parser.extractAaaErrors(v3.data);
             if (!stedi271Parser.hasMeaningfulData(parsed)) {
               const errs = (v3.data.errors || [])
                 .map((e) => e.description || e.code)
                 .filter(Boolean);
-              if (errs.length) {
+              if (aaa.codes.length) {
+                eligibilityResponse.eligible = false;
+                eligibilityResponse.aaa_codes = aaa.codes;
+                eligibilityResponse.aaa_messages = aaa.messages;
+                eligibilityResponse.message =
+                  aaa.messages.join('; ') || `AAA ${aaa.codes.join(',')}`;
+              } else if (errs.length) {
                 eligibilityResponse.eligible = false;
                 eligibilityResponse.message = errs.join('; ');
               }
+            } else if (aaa.codes.length) {
+              eligibilityResponse.aaa_codes = aaa.codes;
+              eligibilityResponse.aaa_messages = aaa.messages;
             }
             console.log('✅ Stedi Healthcare eligibility v3 response');
             console.log('   Eligible:', eligibilityResponse.eligible, 'Copay:', eligibilityResponse.copay);
@@ -578,6 +602,28 @@ class InsuranceService {
       };
 
       db.createInsuranceClaim(claimRecord);
+
+      try {
+        const orchestrator = require('./rcm-journey-orchestrator');
+        const appointment = claimData.appointmentId ? await db.getAppointment(claimData.appointmentId) : null;
+        const clinicId = appointment?.clinic_id || claimData.clinicId || claimData.clinic_id;
+        if (clinicId) {
+          let journey =
+            orchestrator.findOpenJourneyForPatient(clinicId, claimData.patientId) ||
+            (appointment?.id
+              ? db.db
+                  .prepare(
+                    `SELECT * FROM rcm_journeys WHERE clinic_id = ? AND appointment_id = ? AND status = 'open' ORDER BY updated_at DESC LIMIT 1`
+                  )
+                  .get(String(clinicId), String(appointment.id))
+              : null);
+          if (journey) {
+            orchestrator.linkClaimToJourney(clinicId, journey.id, claimRecord.id);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️  linkClaimToJourney skipped:', e.message);
+      }
 
       // Create Stripe card on-demand if patient owes money (copay or patient responsibility)
       if (claimData.copayPaid > 0 || (claimData.totalAmount - claimData.copayPaid) > 0) {
@@ -942,11 +988,39 @@ class InsuranceService {
   // PRIVATE HELPER METHODS
   // ============================================
 
+  /**
+   * Map internal/demo payer aliases to Stedi tradingPartnerServiceId.
+   * In test mode, unknown aliases fall back to STEDI_TEST_PAYER_ID.
+   */
+  static resolveTradingPartnerServiceId(payerId) {
+    const raw = String(payerId || '').trim();
+    if (!raw) {
+      return process.env.STEDI_TEST_PAYER_ID || 'STEDI';
+    }
+    const upper = raw.toUpperCase();
+    const aliasMap = {
+      UHC: process.env.STEDI_TEST_PAYER_ID || 'STEDI',
+      BCBS: process.env.STEDI_TEST_PAYER_ID || 'STEDI',
+      AETNA: process.env.STEDI_TEST_PAYER_ID || '60054',
+      STEDI: 'STEDI',
+    };
+    if (aliasMap[upper]) return aliasMap[upper];
+    if (/^\d+$/.test(raw)) return raw;
+    if (this.isStediTestMode()) {
+      return process.env.STEDI_TEST_PAYER_ID || 'STEDI';
+    }
+    return raw;
+  }
+
   /** @private */
   static _formatDobForStedi(dob) {
-    if (!dob) return '19900101';
+    if (!dob) {
+      const testDob = process.env.STEDI_TEST_DOB;
+      if (testDob) return String(testDob).replace(/-/g, '').slice(0, 8);
+      return null;
+    }
     const s = String(dob).replace(/-/g, '');
-    return s.length === 8 ? s : '19900101';
+    return s.length === 8 ? s : null;
   }
 
   /** @private */
@@ -971,20 +1045,43 @@ class InsuranceService {
    * @private
    */
   static _buildHealthcareEligibilityJson(eligibilityData) {
-    const { firstName, lastName } = this._splitPatientName(eligibilityData.patientName);
-    const tradingPartnerServiceId =
-      eligibilityData.payerId || process.env.STEDI_TEST_PAYER_ID || 'STEDI';
+    const testFirst = process.env.STEDI_TEST_SUBSCRIBER_FIRST;
+    const testLast = process.env.STEDI_TEST_SUBSCRIBER_LAST;
+    const useTestIdentity =
+      this.isStediTestMode() &&
+      (!eligibilityData.patientName || !eligibilityData.dateOfBirth) &&
+      testFirst &&
+      testLast;
+
+    const patientName = useTestIdentity
+      ? `${testFirst} ${testLast}`
+      : eligibilityData.patientName;
+    const dateOfBirth = useTestIdentity
+      ? process.env.STEDI_TEST_DOB || eligibilityData.dateOfBirth
+      : eligibilityData.dateOfBirth;
+
+    const { firstName, lastName } = this._splitPatientName(patientName);
+    const tradingPartnerServiceId = this.resolveTradingPartnerServiceId(eligibilityData.payerId);
+    const memberId =
+      eligibilityData.memberId ||
+      process.env.STEDI_TEST_MEMBER_ID ||
+      '0000000001';
+    const dob = this._formatDobForStedi(dateOfBirth);
+    if (!dob) {
+      throw new Error('dateOfBirth is required for Stedi eligibility (use FHIR birthDate or STEDI_TEST_DOB)');
+    }
+
     const body = {
       tradingPartnerServiceId,
       provider: {
-        organizationName: process.env.STEDI_PROVIDER_ORG_NAME || 'Doclittle',
+        organizationName: process.env.STEDI_PROVIDER_ORG_NAME || 'Somo',
         npi: process.env.STEDI_TEST_PROVIDER_NPI || eligibilityData.providerNpi || '1999999984'
       },
       subscriber: {
-        memberId: eligibilityData.memberId,
+        memberId,
         firstName,
         lastName,
-        dateOfBirth: this._formatDobForStedi(eligibilityData.dateOfBirth)
+        dateOfBirth: dob
       },
       encounter: {
         serviceTypeCodes: [this._cptToServiceTypeCode(eligibilityData.serviceCode)]
@@ -1033,6 +1130,8 @@ class InsuranceService {
       planSummary: parsed.planSummary,
       priorAuthIndicator: parsed.priorAuthIndicator || null,
       priorAuthNotes: parsed.priorAuthNotes || [],
+      aaa_codes: parsed.aaaCodes || [],
+      aaa_messages: parsed.aaaMessages || [],
       message: parsed.message || (parsed.eligible ? `Eligible - Copay $${parsed.copay ?? 0}` : 'Not eligible')
     };
   }
@@ -1281,6 +1380,24 @@ class InsuranceService {
     updates.response_data = JSON.stringify(responseData);
 
     db.updateInsuranceClaim(claim.id, updates);
+    try {
+      const orchestrator = require('./rcm-journey-orchestrator');
+      const clinicId = claim.clinic_id || claim.clinicId;
+      if (clinicId) {
+        orchestrator.onRemittancePosted({
+          clinicId,
+          claimId: claim.id,
+          amount: paid || 0,
+          payload: {
+            patient_responsibility: remittanceSummary.patient_responsibility,
+            allowed_amount: remittanceSummary.allowed_amount,
+            adjustmentReason: remittanceSummary.adjustmentReason,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️  onRemittancePosted bridge skipped:', e.message);
+    }
     return { status, paidAmount: paid };
   }
 

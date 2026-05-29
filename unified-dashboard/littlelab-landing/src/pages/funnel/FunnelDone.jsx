@@ -18,7 +18,7 @@ export default function FunnelDone({ concernId, saved }) {
   const match = getMatchResult();
   const route = match?.route;
   const hasTemplate = saved && concernId && (route === 'program' || route === 'dual');
-  const concernLabel = concernId ? concernChipLabel(concernId) : 'Skin & Care';
+  const concernLabel = concernId ? concernChipLabel(concernId) : 'Somo';
 
   const todayHref = sessionId
     ? '/patients/patient-dashboard.html'
@@ -42,13 +42,13 @@ export default function FunnelDone({ concernId, saved }) {
           );
           recordFunnelPortalEvent(sessionId, 'auth_handoff_app_link_shown', meta);
         } else {
-          setHandoffNote('Open the Skin & Care app and sign in with the same email if prompted.');
+          setHandoffNote('Open the Somo app and sign in with the same email if prompted.');
           recordFunnelPortalEvent(sessionId, 'auth_handoff_app_link_failed', meta);
         }
       })
       .catch(() => {
         if (cancelled) return;
-        setHandoffNote('Open the Skin & Care app and sign in with the same email.');
+        setHandoffNote('Open the Somo app and sign in with the same email.');
         recordFunnelPortalEvent(sessionId, 'auth_handoff_app_link_failed', meta);
       });
     return () => {

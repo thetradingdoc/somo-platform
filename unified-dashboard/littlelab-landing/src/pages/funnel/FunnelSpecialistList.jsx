@@ -100,7 +100,7 @@ export default function FunnelSpecialistList({
 
       <p className="funnel-specialist-disclaimer">
         {data?.disclaimer ||
-          'Directory information only. Booking is not guaranteed on Skin & Care. Confirm availability with the practice.'}
+          'Directory information only. Booking is not guaranteed on Somo. Confirm availability with the practice.'}
       </p>
 
       <div className="funnel-card-actions funnel-card-actions--stacked">

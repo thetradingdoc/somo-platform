@@ -1,13 +1,13 @@
 {
-  "name": "Consult Patient Portal",
-  "short_name": "Consʌlt",
+  "name": "Somo Patient Portal",
+  "short_name": "Somo",
   "start_url": "/unified-dashboard/patients/patient-dashboard.html",
   "display": "standalone",
   "background_color": "#f7fafc",
-  "theme_color": "#1e40af",
+  "theme_color": "#16a637",
   "icons": [
     {
-      "src": "assets/images/favicon.png",
+      "src": "assets/brand/favicon-32x32.png",
       "sizes": "64x64",
       "type": "image/png"
     }

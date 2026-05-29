@@ -1525,7 +1525,7 @@
     }
 
     .cc-chip-btn--primary {
-      background: linear-gradient(180deg, #ffd07f 0%, #ffa51f 100%);
+      background: linear-gradient(180deg, #ffd07f 0%, #16a637 100%);
       border-color: #f2c46f;
       color: #4a2f00;
       box-shadow: 0 6px 14px rgba(233, 144, 13, 0.2);

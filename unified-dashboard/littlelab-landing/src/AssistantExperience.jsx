@@ -77,7 +77,7 @@ function useVisualViewportKeyboardClass() {
 }
 
 /**
- * Skin & Care assistant — voice + chat share session, 3D sphere, optional LiveKit (Try now room).
+ * Somo assistant — voice + chat share session, 3D sphere, optional LiveKit (Try now room).
  */
 export default function AssistantExperience({ onClose }) {
   const session = useAssistantSession();
@@ -173,8 +173,8 @@ export default function AssistantExperience({ onClose }) {
     const onRefresh = () => {
       void refreshResultSnapshot();
     };
-    window.addEventListener('littlelab-refresh-result-snapshot', onRefresh);
-    return () => window.removeEventListener('littlelab-refresh-result-snapshot', onRefresh);
+    window.addEventListener('Somo-refresh-result-snapshot', onRefresh);
+    return () => window.removeEventListener('Somo-refresh-result-snapshot', onRefresh);
   }, [refreshResultSnapshot]);
 
   /** Deep link / hash navigation to results must load `session_result_snapshot` (otherwise tiles stay empty). */
@@ -475,10 +475,10 @@ export default function AssistantExperience({ onClose }) {
 
   const ariaLabel =
     page === 'chat'
-      ? 'Skin and Care assistant — chat'
+      ? 'Somo assistant — chat'
       : page === 'results'
-        ? 'Skin and Care assistant — results'
-        : 'Skin and Care assistant — voice';
+        ? 'Somo assistant — results'
+        : 'Somo assistant — voice';
 
   /** Prefer server snapshot; fill hero image from last scan when API omitted `product.image_url`. */
   const activeSnapshot = useMemo(() => {

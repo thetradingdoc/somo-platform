@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FrontDesk Provider Portal - Patients</title>
+    <title>Somo Provider - Patients</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
@@ -13,9 +13,9 @@
     <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
-            --primary: #1e40af;
+            --primary: #16a637;
             --primary-dark: #1e3a8a;
-            --primary-light: #3b82f6;
+            --primary-light: #16a637;
         }
 
 
@@ -563,7 +563,7 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <div class="sidebar-subtitle sidebar-subtitle-portal">FrontDesk Provider Portal</div>
+                <div class="sidebar-subtitle sidebar-subtitle-portal">Somo Provider</div>
             </div>
 
             <nav class="sidebar-nav" id="sidebarNav">
@@ -945,7 +945,7 @@
             const safe = id.replace(/"/g, '\\"');
             const card = document.querySelector(`.customer-card[data-patient-id="${safe}"]`);
             if (!card) return;
-            card.style.outline = '2px solid #2563eb';
+            card.style.outline = '2px solid #128a2e';
             card.style.outlineOffset = '2px';
             card.scrollIntoView({ behavior: 'smooth', block: 'center' });
             setTimeout(() => {
@@ -1010,7 +1010,7 @@
                                 <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Diagnoses (ICD-10):</div>
                                 <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                                     ${allConditions.slice(0, 3).map(c => `
-                                        <span class="badge" style="background: #dbeafe; color: #1e40af; font-size: 10px; padding: 2px 6px; border-radius: 4px;">
+                                        <span class="badge" style="background: #dbeafe; color: #16a637; font-size: 10px; padding: 2px 6px; border-radius: 4px;">
                                             ${c.code}${c.is_primary ? ' ⭐' : ''}
                                         </span>
                                     `).join('')}
@@ -1100,7 +1100,7 @@
                     </div>
                     
                     ${eligibility && eligibility.plan_summary ? `
-                        <div style="margin-top: 12px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #3b82f6;">
+                        <div style="margin-top: 12px; padding: 8px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #16a637;">
                             <div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 500;">Plan Summary</div>
                             <div style="font-size: 12px; color: #1e293b;">${eligibility.plan_summary}</div>
                             ${eligibility.payer_name || eligibility.payer_id ? `<div style="font-size: 10px; color: #64748b; margin-top: 4px;">Insurance: ${eligibility.payer_name || eligibility.payer_id} · Member: ${eligibility.member_id || 'N/A'}</div>` : ''}

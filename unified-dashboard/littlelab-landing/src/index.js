@@ -424,7 +424,7 @@ function GetAppWaitlistOverlay({ open, onClose, apiBaseCandidates }) {
               Thanks, {name.trim().split(/\s+/)[0]}.
             </h2>
             <p className="get-app-sub">
-              We&apos;ll email <strong>{email}</strong> when the Skin &amp; Care app is ready to download.
+              We&apos;ll email <strong>{email}</strong> when the Somo app is ready to download.
             </p>
             <button type="button" className="get-app-submit" onClick={onClose}>
               Done
@@ -3032,7 +3032,7 @@ export function FindCareCoveragePage({ apiBaseCandidates, isLocalHost, localPati
       <footer className="navigator-footer">
         <a className="navigator-footer-brand" href="/">
           <img src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
-          <span>Skin &amp; Care</span>
+          <span>Somo</span>
         </a>
         <nav className="navigator-footer-links" aria-label="Footer navigation">
           <a href="/?view=results">Find plans</a>
@@ -3234,7 +3234,7 @@ export function Root() {
   const STATIC_CATALOG_FALLBACK = [
     {
       id: 'prod-vitamin-b3-serum-pore-sebum-control',
-      brand: 'Skin & Care',
+      brand: 'Somo',
       name: 'Vitamin B3 Serum | Pore & Sebum Control',
       price: 27.99,
       image_url: '/images/products/vitamin-b3-serum.png',
@@ -3248,7 +3248,7 @@ export function Root() {
     },
     {
       id: 'prod-retinol-peptide-night-serum',
-      brand: 'Skin & Care',
+      brand: 'Somo',
       name: 'Retinol Brightening Night Serum',
       price: 29.99,
       image_url: '/images/products/retinol-brightening-night-serum.png',
@@ -3262,7 +3262,7 @@ export function Root() {
     },
     {
       id: SNAIL_MUCIN_PRODUCT_ID,
-      brand: 'Skin & Care',
+      brand: 'Somo',
       name: SNAIL_MUCIN_TITLE,
       price: 29.99,
       image_url: '/images/products/dark-spot-repair-snail-mucin-serum.png',
@@ -3277,7 +3277,7 @@ export function Root() {
     },
     {
       id: VITAMIN_C_PRODUCT_ID,
-      brand: 'Skin & Care',
+      brand: 'Somo',
       name: 'Vitamin C Serum | Antioxidant Pro-Shield',
       price: 21.99,
       image_url: '/images/products/vitamin-c-serum.png',
@@ -3749,7 +3749,7 @@ export function Root() {
       <header className="top-nav">
         <a href="/" className="brand-mark">
           <img className="brand-mark-logo" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
-          <span>Skin &amp; Care</span>
+          <span>Somo</span>
         </a>
         <nav aria-label="Main navigation" className="nav-links">
           <a href="/">Find Care</a>
@@ -3839,7 +3839,7 @@ export function Root() {
               <button
                 type="button"
                 className="btn-cal btn-cal--get-app"
-                aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Skin and Care waitlist'}
+                aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Somo waitlist'}
                 onClick={() => {
                   handleOpenGetApp(null, 'hero');
                 }}
@@ -3860,7 +3860,7 @@ export function Root() {
             emitCheckoutFunnelEvent('landing_panda_fab', { source: 'spinning_sc_fab' });
             setShowAssistant(true);
           }}
-          aria-label="Open Skin and Care assistant"
+          aria-label="Open Somo assistant"
         >
           <span className="panda-fab__spin" aria-hidden="true">
             S<span className="panda-fab__amp">&amp;</span>C
@@ -3869,13 +3869,13 @@ export function Root() {
       ) : null}
 
       <div className="page page--below-fold">
-      <section className="scan-results" aria-label="Ask Skin and Care questions" id="scan-results">
+      <section className="scan-results" aria-label="Ask Somo questions" id="scan-results">
         <div className="scan-results-intro">
           <p className="scan-results-badge">
             <img className="scan-badge-icon" src="/images/branding/logo-panda.png" alt="" aria-hidden="true" />
             <span>SKIN &amp; CARE QUESTIONS</span>
           </p>
-          <h2 className="scan-results-title">Ask Skin &amp; Care Questions</h2>
+          <h2 className="scan-results-title">Ask Somo Questions</h2>
           <p className="scan-results-sub">
             Get clinically backed product guidance with clear answers on ingredients, routine fit, and daily skincare
             choices you can trust.
@@ -4284,7 +4284,7 @@ export function Root() {
               <button
                 type="button"
                 className="btn-cal btn-cal--get-app ba-reviews-get-app"
-                aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Skin and Care waitlist'}
+                aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Somo waitlist'}
                 onClick={() => {
                   handleOpenGetApp(null, 'reviews_section');
                 }}
@@ -4380,7 +4380,7 @@ export function Root() {
                     <button
                       type="button"
                       className="btn-cal btn-cal--get-app"
-                      aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Skin and Care waitlist'}
+                      aria-label={isLocalHost ? 'Get The App — open patient sign in' : 'Get The App — join the Somo waitlist'}
                       onClick={() => {
                         handleOpenGetApp(null, 'footer');
                       }}
@@ -4394,11 +4394,11 @@ export function Root() {
 
             <div className="site-footer-bottom">
               <div className="site-footer-brand">
-                <img src="/images/branding/logo-panda.png" alt="Skin &amp; Care logo" />
-                <span>Skin &amp; Care</span>
+                <img src="/images/branding/logo-panda.png" alt="Somo logo" />
+                <span>Somo</span>
               </div>
               <p className="site-footer-meta">
-                © {new Date().getFullYear()} Skin &amp; Care. All rights reserved. New York, New York USA.
+                © {new Date().getFullYear()} Somo. All rights reserved. New York, New York USA.
               </p>
             </div>
           </div>

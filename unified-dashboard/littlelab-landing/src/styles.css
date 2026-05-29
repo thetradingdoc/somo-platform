@@ -919,7 +919,7 @@ button.btn-ghost.btn-get-app {
   height: 20px;
   padding: 0 6px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ffd07f 0%, #ffa51f 100%);
+  background: linear-gradient(180deg, #ffd07f 0%, #16a637 100%);
   color: #4a2f00;
   border: 1px solid #f2c46f;
   box-shadow: 0 4px 10px rgba(233, 144, 13, 0.3);
@@ -1552,7 +1552,7 @@ button.btn-ghost.btn-get-app {
   justify-content: center;
   border-radius: 999px;
   border: 1px solid #ea920f;
-  background: linear-gradient(180deg, #ffbb49 0%, #ffa51f 58%, #e9900d 100%);
+  background: linear-gradient(180deg, #ffbb49 0%, #16a637 58%, #e9900d 100%);
   color: var(--brand-black);
   padding: 12px 24px;
   font-weight: 800;
@@ -2347,7 +2347,7 @@ button.btn-ghost.btn-get-app {
   }
 }
 
-/* Footer (Dermato-style, simple Skin & Care) */
+/* Footer (Dermato-style, simple Somo) */
 .site-footer {
   margin-top: 72px;
   width: 100vw;
@@ -3198,7 +3198,7 @@ button.btn-ghost.btn-get-app {
   height: 36px;
   border-radius: 999px;
   border: 1px solid #f2c46f;
-  background: linear-gradient(180deg, #ffd07f 0%, #ffa51f 100%);
+  background: linear-gradient(180deg, #ffd07f 0%, #16a637 100%);
   color: #4a2f00;
   display: inline-flex;
   align-items: center;
@@ -4503,8 +4503,8 @@ button.btn-ghost.btn-get-app {
   color: #6b7280;
 }
 .navigator-search-btn {
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid #128a2e;
+  background: #128a2e;
   color: #fff;
   border-radius: 999px;
   padding: 0 22px;
@@ -4579,9 +4579,9 @@ button.btn-ghost.btn-get-app {
   cursor: pointer;
 }
 .navigator-filter-btn.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   background: #e8f0ff;
-  color: #1e40af;
+  color: #16a637;
 }
 
 @media (max-width: 980px) {
@@ -4652,7 +4652,7 @@ button.btn-ghost.btn-get-app {
   line-height: 1;
 }
 .needs-picker-btn.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 .needs-picker-menu {
@@ -4684,7 +4684,7 @@ button.btn-ghost.btn-get-app {
 .needs-picker-item:hover,
 .needs-picker-item.is-active {
   background: #eef4ff;
-  color: #1e40af;
+  color: #16a637;
 }
 .navigator-controls {
   margin-top: 10px;
@@ -4817,7 +4817,7 @@ button.btn-ghost.btn-get-app {
   margin-bottom: 10px;
 }
 .navigator-doc-steps a {
-  color: #2563eb;
+  color: #128a2e;
   font-weight: 600;
 }
 .navigator-doc-back {
@@ -4825,7 +4825,7 @@ button.btn-ghost.btn-get-app {
 }
 .navigator-doc-back-link {
   font-weight: 600;
-  color: #2563eb;
+  color: #128a2e;
   text-decoration: none;
 }
 .navigator-doc-back-link:hover {
@@ -4930,7 +4930,7 @@ button.btn-ghost.btn-get-app {
   cursor: pointer;
 }
 .results-map-chip.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   background: #eef2ff;
   color: #1d4ed8;
 }
@@ -5217,7 +5217,7 @@ button.btn-ghost.btn-get-app {
   border-color: #93c5fd;
 }
 .payor-card.is-active {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #128a2e;
   outline-offset: 1px;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.16);
 }
@@ -5398,7 +5398,7 @@ button.payor-card-link {
   text-align: center;
 }
 button.payor-card-link:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid #128a2e;
   outline-offset: 2px;
 }
 .payor-card-content--back {
@@ -5548,8 +5548,8 @@ button.payor-card-link:focus-visible {
 .payor-card-content--back .payor-card-link {
   min-height: 40px;
   padding: 0 18px;
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: #128a2e;
+  background: #128a2e;
   color: #fff;
   border-radius: 8px;
   display: inline-flex;
@@ -5577,9 +5577,9 @@ button.payor-card-link:focus-visible {
   cursor: pointer;
 }
 .navigator-chip.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   background: #e8f0ff;
-  color: #1e40af;
+  color: #16a637;
 }
 .navigator-summary-row {
   margin-top: 10px;
@@ -5649,7 +5649,7 @@ button.payor-card-link:focus-visible {
 }
 .navigator-view-btn.is-active {
   background: #e8f0ff;
-  color: #1e40af;
+  color: #16a637;
 }
 .navigator-empty {
   margin-top: 12px;
@@ -5702,7 +5702,7 @@ button.payor-card-link:focus-visible {
   height: 28px;
   border-radius: 999px;
   border: 2px solid #fff;
-  background: #2563eb;
+  background: #128a2e;
   color: #fff;
   font-size: 0.75rem;
   font-weight: 800;
@@ -5829,7 +5829,7 @@ button.payor-card-link:focus-visible {
 }
 .filter-range-slider {
   width: 100%;
-  accent-color: #2563eb;
+  accent-color: #128a2e;
   cursor: pointer;
 }
 .filter-range-meta {
@@ -6010,9 +6010,9 @@ button.payor-card-link:focus-visible {
   transition: all 0.16s ease;
 }
 .plan-compare-btn.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   background: #e8f0ff;
-  color: #1e40af;
+  color: #16a637;
 }
 .plan-compare-btn:hover {
   background: #f8fafc;
@@ -6102,7 +6102,7 @@ button.payor-card-link:focus-visible {
 }
 
 .results-sort-btn.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   background: #e8f0ff;
   color: #1d4ed8;
 }
@@ -6922,7 +6922,7 @@ button.payor-card-link:focus-visible {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .navigator-plan-card.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.14);
 }
 .plan-top-row {
@@ -7037,7 +7037,7 @@ button.payor-card-link:focus-visible {
 }
 
 .text-size-btn.is-active {
-  border-color: #2563eb;
+  border-color: #128a2e;
   background: #e8f0ff;
   color: #1d4ed8;
 }

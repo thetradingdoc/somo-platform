@@ -294,7 +294,7 @@
 }
 
 .arp-tag-dot--blue {
-  background: #3b82f6;
+  background: #16a637;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
 }
 
@@ -336,7 +336,7 @@
 
 .arp-category-pill--supplement {
   background: #eef6ff;
-  color: #1e40af;
+  color: #16a637;
   border-color: #b5d4ff;
 }
 
@@ -1067,7 +1067,7 @@
   margin-top: 8px;
   border: none;
   background: transparent;
-  color: #3b82f6;
+  color: #16a637;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;

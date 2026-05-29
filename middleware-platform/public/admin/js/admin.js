@@ -285,7 +285,7 @@ function loadDashboardCharts(stats) {
             datasets: [{
                 label: 'Revenue',
                 data: [1200, 1900, 1500, 2100, 1800, 2200, 2000],
-                borderColor: '#2563eb',
+                borderColor: '#128a2e',
                 backgroundColor: 'rgba(37, 99, 235, 0.1)',
                 tension: 0.4
             }]
@@ -404,7 +404,7 @@ function loadPerformanceCharts(data = {}) {
             datasets: [{
                 label: 'Requests',
                 data: [1200, 800, 400, 150, 50],
-                backgroundColor: '#2563eb'
+                backgroundColor: '#128a2e'
             }]
         },
         options: {
@@ -521,7 +521,7 @@ function loadCostCharts(data) {
             datasets: [{
                 label: 'Infrastructure',
                 data: infraData.length > 0 ? infraData : [500, 450, 600],
-                backgroundColor: '#2563eb'
+                backgroundColor: '#128a2e'
             }, {
                 label: 'Twilio',
                 data: twilioData.length > 0 ? twilioData : [200, 180, 250],
@@ -601,7 +601,7 @@ function loadUsageCharts(data) {
             datasets: [{
                 label: 'API Requests',
                 data: Array(30).fill(0).map(() => Math.random() * 5000 + 2000),
-                borderColor: '#2563eb',
+                borderColor: '#128a2e',
                 tension: 0.4
             }]
         },

@@ -1,5 +1,7 @@
 # deployment — consolidated documentation
 
+> **Note:** Sections below that reference **doclittle.site**, Azure App Service `doclittle`, or IONOS DNS are **historical runbooks**. Current production UI/API routing for **Somo** is documented in [`EDGE_ROUTING_CONFIGS.md`](./EDGE_ROUTING_CONFIGS.md) and brand/host deferral in [`../Brand/INFRA_BRAND_DEFERRAL.md`](../Brand/INFRA_BRAND_DEFERRAL.md) (**myskinandcare.com** until somopay.ai).
+
 **Single file:** All former `docs/deployment/**/*.md` content is merged here. **Last updated:** 2026-05-27
 
 <a id="voice-current-architecture"></a>
@@ -2303,7 +2305,7 @@ find middleware-platform/backups/ -name "*.db" -mtime -1
 ## Step 1: Deploy Code (Includes Frontend + Backend)
 
 ```bash
-cd /path/to/doclittle-platform
+cd /path/to/somo
 chmod +x scripts/deploy-to-azure.sh
 ./scripts/deploy-to-azure.sh
 ```
@@ -2561,7 +2563,7 @@ az webapp log tail --name doclittle --resource-group doclittle
 ### Option 1: Azure (Current Production) ⚡
 
 ```bash
-cd /path/to/doclittle-platform
+cd /path/to/somo
 chmod +x scripts/deploy-to-azure.sh
 ./scripts/deploy-to-azure.sh
 ```
@@ -2661,7 +2663,7 @@ See detailed steps below.
 ### Step 1: Deploy Code
 
 ```bash
-cd /path/to/doclittle-platform
+cd /path/to/somo
 chmod +x scripts/deploy-to-azure.sh
 ./scripts/deploy-to-azure.sh
 ```
@@ -3470,7 +3472,7 @@ az webapp config appsettings set \
 
 **Quick deploy script:**
 ```bash
-cd /path/to/doclittle-platform
+cd /path/to/somo
 chmod +x scripts/deploy-to-azure.sh
 ./scripts/deploy-to-azure.sh
 ```

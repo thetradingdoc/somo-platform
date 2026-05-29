@@ -9,7 +9,7 @@ export default function RoutineLanding() {
   return (
     <div className="funnel-root funnel-root--fullscreen">
       <Helmet>
-        <title>Skin &amp; Care — Track your skincare routine</title>
+        <title>Somo — Track your skincare routine</title>
         <meta
           name="description"
           content="Guess your skin age or sign up to track your personalized skincare routine in the app."

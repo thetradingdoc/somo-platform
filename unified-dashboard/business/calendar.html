@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#1e40af">
-  <title>FrontDesk Provider Portal - Schedule</title>
+  <meta name="theme-color" content="#16a637">
+  <title>Somo Provider - Schedule</title>
 
   <!-- FullCalendar (reliable grid) -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" rel="stylesheet" />
@@ -20,9 +20,9 @@
   <style>
     /* Shared app layout (copied from patients/dashboard for left sidebar) */
     :root {
-      --primary: #1e40af;
+      --primary: #16a637;
       --primary-dark: #1e3a8a;
-      --primary-light: #3b82f6;
+      --primary-light: #16a637;
     }
 
     .layout {
@@ -279,9 +279,9 @@
     }
 
     :root {
-      --primary: #1e40af;
+      --primary: #16a637;
       --primary-dark: #1e3a8a;
-      --primary-light: #3b82f6;
+      --primary-light: #16a637;
       --bg: #f3f4f6;
       --muted: #6b7280;
       --card: #ffffff;
@@ -647,7 +647,7 @@
     <!-- Sidebar (same as other pages) -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-subtitle">FrontDesk Provider Portal</div>
+        <div class="sidebar-subtitle">Somo Provider</div>
       </div>
 
       <nav class="sidebar-nav" id="sidebarNav"></nav>
@@ -692,7 +692,7 @@
           </select>
           <input id="providerFilter" placeholder="Provider" class="input" />
           <button id="createApptBtn" class="btn btn-primary" style="background:#10b981;">+ Create Appointment</button>
-          <button id="setAvailabilityBtn" class="btn" style="background:#3b82f6;color:#fff;border:none;">Set Availability</button>
+          <button id="setAvailabilityBtn" class="btn" style="background:#16a637;color:#fff;border:none;">Set Availability</button>
           <button id="outOfOfficeBtn" class="btn" style="background:#6b7280;color:#fff;border:none;">Out of Office</button>
           <button id="refreshBtn" class="btn btn-primary">Refresh</button>
         </div>
@@ -702,7 +702,7 @@
         <button type="button" class="item legend-filter" data-status-key="scheduled"><span class="dot" style="background:#06b6d4"></span> Scheduled</button>
         <button type="button" class="item legend-filter" data-status-key="confirmed"><span class="dot" style="background:#10b981"></span> Confirmed</button>
         <button type="button" class="item legend-filter" data-status-key="cancelled"><span class="dot" style="background:#ef4444"></span> Cancelled</button>
-        <button type="button" class="item legend-filter" data-status-key="available"><span class="dot" style="background:#3b82f6"></span> Available</button>
+        <button type="button" class="item legend-filter" data-status-key="available"><span class="dot" style="background:#16a637"></span> Available</button>
         <button type="button" class="item legend-filter" data-status-key="out_of_office"><span class="dot" style="background:#6b7280"></span> Out of Office</button>
       </div>
 
@@ -747,8 +747,8 @@
         <div>
           <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Appointment Type</label>
           <select id="createApptType" class="select" style="width:100%;">
-            <option value="Mental Health Consultation">Mental Health Consultation</option>
-            <option value="Video Consultation">Video Consultation</option>
+            <option value="Mental Health Somoation">Mental Health Somoation</option>
+            <option value="Video Somoation">Video Somoation</option>
             <option value="Follow-up Session">Follow-up Session</option>
             <option value="Initial Assessment">Initial Assessment</option>
             <option value="Crisis Intervention">Crisis Intervention</option>
@@ -766,7 +766,7 @@
         </div>
         <div>
           <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Provider</label>
-          <input type="text" id="createProvider" class="input" style="width:100%;" placeholder="Consult Care Team" />
+          <input type="text" id="createProvider" class="input" style="width:100%;" placeholder="Somo Care Team" />
         </div>
         <div>
           <label style="display:block;font-weight:600;margin-bottom:4px;color:#374151;">Notes</label>
@@ -808,7 +808,7 @@
         <div id="avbError" style="color:#ef4444;font-size:14px;display:none;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
           <button type="button" onclick="closeAvailabilityModal()" class="btn" style="background:#e5e7eb;color:#374151;">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="avbSubmitBtn" style="background:#3b82f6;">Save Block</button>
+          <button type="submit" class="btn btn-primary" id="avbSubmitBtn" style="background:#16a637;">Save Block</button>
         </div>
       </form>
     </div>
@@ -837,7 +837,7 @@
         <input type="date" id="rsDate" class="input" />
         <input type="text" id="rsTime" placeholder="e.g., 3:00 PM" class="input" />
         <select id="rsType" class="select">
-          <option>Consultation</option>
+          <option>Somoation</option>
           <option>Crisis Intervention</option>
           <option>Follow-up Session</option>
           <option>Initial Assessment</option>
@@ -855,7 +855,7 @@
       <div id="slotsWrap" style="padding:8px 16px; display:none;"></div>
       <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; align-items:center; margin-top:12px; padding-top:12px; border-top:1px solid #e5e7eb;">
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button id="btnJoinVideo" class="btn" style="background:#1e40af;color:#fff;border:none;">Join Video</button>
+          <button id="btnJoinVideo" class="btn" style="background:#16a637;color:#fff;border:none;">Join Video</button>
           <button id="btnCopyVideoLink" class="btn" style="background:#64748b;color:#fff;border:none;">Copy Link</button>
           <button id="btnSendVideoLink" class="btn" style="background:#059669;color:#fff;border:none;">Send Link</button>
         </div>
@@ -991,8 +991,8 @@
         title: (b.title || (b.block_type === 'out_of_office' ? 'Out of Office' : 'Available')),
         start: b.start_datetime,
         end: b.end_datetime,
-        backgroundColor: b.block_type === 'out_of_office' ? '#6b7280' : '#3b82f6',
-        borderColor: b.block_type === 'out_of_office' ? '#4b5563' : '#2563eb',
+        backgroundColor: b.block_type === 'out_of_office' ? '#6b7280' : '#16a637',
+        borderColor: b.block_type === 'out_of_office' ? '#4b5563' : '#128a2e',
         textColor: '#ffffff',
         extendedProps: { isAvailabilityBlock: true, blockId: b.id, blockType: b.block_type, title: b.title }
       }));
@@ -1004,7 +1004,7 @@
       const submitBtn = document.getElementById('avbSubmitBtn');
       titleEl.textContent = blockType === 'out_of_office' ? 'Out of Office' : 'Set Availability';
       submitBtn.textContent = blockType === 'out_of_office' ? 'Add Out of Office' : 'Add Available';
-      submitBtn.style.background = blockType === 'out_of_office' ? '#6b7280' : '#3b82f6';
+      submitBtn.style.background = blockType === 'out_of_office' ? '#6b7280' : '#16a637';
       const today = new Date();
       const dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       document.getElementById('avbStartDate').value = dateStr;
@@ -1155,7 +1155,7 @@
         }
         return ({
           id: a.id,
-          title: `${patientLabel} • ${a.appointment_type || 'Consultation'} · ${provLabel}`,
+          title: `${patientLabel} • ${a.appointment_type || 'Somoation'} · ${provLabel}`,
           start: start || a.start_time || `${a.date}T${a.time}:00`,
           end: end,
           backgroundColor: statusColor(a.status),
@@ -1301,7 +1301,7 @@
             : start.toLocaleTimeString([], opts);
         }
         const dot = statusColor(a.status);
-        const title = ev.title || `${a.patient_name} • ${a.appointment_type || 'Consultation'}`;
+        const title = ev.title || `${a.patient_name} • ${a.appointment_type || 'Somoation'}`;
         const idAttr = escapeHtml(a.id);
         return `<button type="button" class="today-pinned-row" data-appt-id="${idAttr}">
       <span class="today-pinned-time">${escapeHtml(timeStr)}</span>
@@ -1546,7 +1546,7 @@
           ${d.ai_summary
             ? `<div style="margin-top:4px;font-size:12px;color:#334155;"><strong>AI:</strong> ${escapeHtml(d.ai_summary)}</div>`
             : `<div style="margin-top:4px;font-size:12px;color:#64748b;">No extracted text yet. Try Sync EHR or refresh later.</div>`}
-          ${d.detail_url ? `<div style="margin-top:6px;"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-size:12px;color:#2563eb;">View details</a></div>` : ''}
+          ${d.detail_url ? `<div style="margin-top:6px;"><a href="${escapeHtml(d.detail_url)}" target="_blank" rel="noopener" style="font-size:12px;color:#128a2e;">View details</a></div>` : ''}
         </div>
       `).join('') || '<div style="color:#6b7280;">No triage-linked documents.</div>';
 
@@ -1566,7 +1566,7 @@
           <div style="margin-top:6px;"><strong>Red flags:</strong> ${redFlagsHtml}</div>
           <div style="margin-top:6px;"><strong>Patient:</strong> ${escapeHtml(patientName)} · ${escapeHtml(patientPhone)} · ${escapeHtml(patientEmail)}</div>
           <div style="margin-top:6px;"><strong>FHIR Patient ID:</strong> ${escapeHtml(patientId || 'N/A')}</div>
-          <div style="margin-top:6px;"><a href="${profileHref}" target="_blank" rel="noopener" style="font-size:12px;color:#2563eb;">Open patient profile</a></div>
+          <div style="margin-top:6px;"><a href="${profileHref}" target="_blank" rel="noopener" style="font-size:12px;color:#128a2e;">Open patient profile</a></div>
           ${!phiAllowed ? '<div style="margin-top:4px;color:#92400e;font-size:12px;">PHI is masked by policy for this session.</div>' : ''}
         </div>
 
@@ -2069,7 +2069,7 @@
           appointment_type: document.getElementById('createApptType').value,
           date: document.getElementById('createApptDate').value,
           time: document.getElementById('createApptTime').value,
-          provider: document.getElementById('createProvider').value.trim() || 'Consult Care Team',
+          provider: document.getElementById('createProvider').value.trim() || 'Somo Care Team',
           notes: document.getElementById('createNotes').value.trim() || '',
           clinic_id: (typeof getClinicId === 'function' ? getClinicId() : 'clinic-default')
         };

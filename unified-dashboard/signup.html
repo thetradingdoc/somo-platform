@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FrontDesk Provider Portal - Create Account</title>
+  <title>Somo Provider - Create Account</title>
   <link rel="stylesheet" href="/assets/css/global.css" />
   <script src="/assets/data/provider-signup-data.js"></script>
   <script src="/assets/js/provider-session.js"></script>
@@ -184,7 +184,7 @@
 
     .toast.info {
       background: rgba(37, 99, 235, 0.15);
-      color: #2563eb;
+      color: #128a2e;
     }
 
     /* Loading spinner */
@@ -304,7 +304,7 @@
 <body>
   <div class="shell">
     <section class="panel hero">
-      <p class="muted" style="margin-bottom:8px;">FrontDesk • Provider Operations</p>
+      <p class="muted" style="margin-bottom:8px;">Somo • Provider Operations</p>
       <h1>Create your provider account</h1>
       <p style="font-size:1.1rem;line-height:1.6;margin-top:12px;">
         Set up your provider workspace in a few guided steps. No technical setup required.
@@ -907,7 +907,7 @@
 
         // If user scanned on landing pre-auth, claim that anonymous session now.
         try {
-          const landingSessionId = sessionStorage.getItem('littlelab_landing_assistant_sid') || '';
+          const landingSessionId = sessionStorage.getItem('Somo_landing_assistant_sid') || '';
           if (landingSessionId) {
             const claimRes = await fetch(`${SIGNUP_API_BASE}/api/customer/landing/claim-session`, {
               method: 'POST',
@@ -917,7 +917,7 @@
             });
             const claimData = await claimRes.json().catch(() => ({}));
             if (claimRes.ok && claimData.success) {
-              sessionStorage.removeItem('littlelab_landing_assistant_sid');
+              sessionStorage.removeItem('Somo_landing_assistant_sid');
               try {
                 const shelfRes = await fetch(`${SIGNUP_API_BASE}/api/customer/products?limit=3`, {
                   method: 'GET',
@@ -936,7 +936,7 @@
               } catch (_) {}
             } else if (claimRes.status === 400 || claimRes.status === 403 || claimRes.status === 404) {
               // Invalid/foreign/expired session ids should not be retried forever.
-              sessionStorage.removeItem('littlelab_landing_assistant_sid');
+              sessionStorage.removeItem('Somo_landing_assistant_sid');
             }
           }
         } catch (_) {
@@ -1115,15 +1115,23 @@
           })
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Verification failed');
+        if (!data.success) {
+          throw new Error(data.error || 'Verification failed');
+        }
+        const simTrial = data.trial_sim_flow === true;
+        const line = data.trial?.twilio_phone_number || data.customer?.twilio_phone_number;
+        if (simTrial && !line) {
+          throw new Error(
+            'We could not assign your dedicated clinic line yet. Please try again or contact support.'
+          );
+        }
         if (data.customer && typeof persistProviderCustomer === 'function') {
           persistProviderCustomer(data.customer);
         } else {
           await hydrateProviderSession(SIGNUP_API_BASE);
         }
-        const num = data.trial?.twilio_phone_number;
-        if (num) {
-          phoneTrialInfo.textContent = `Your line: ${num} — 60 free minutes, 7-day trial.`;
+        if (line) {
+          phoneTrialInfo.textContent = `Your line: ${line} — 60 free minutes, 7-day trial.`;
           phoneTrialInfo.classList.remove('hidden');
         }
         document.getElementById('phoneSuccess').textContent = 'Phone verified! Redirecting to terms...';

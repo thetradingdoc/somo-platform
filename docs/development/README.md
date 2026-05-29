@@ -375,12 +375,12 @@ Tasks to improve repo structure, hygiene, and maintainability based on branch an
 ## Code Structure Review
 
 
-This document outlines the code structure and organization of the **doclittle-platform** monorepo (consumer product: **Skin & Care**; legal entity where required: **Doctor Little LLC** — see [`docs/Brand/GUIDELINES.md`](../Brand/GUIDELINES.md)).
+This document outlines the code structure and organization of the **somo** monorepo (product: **Somo** — see [`docs/Brand/SOMO_GUIDELINES.md`](../Brand/SOMO_GUIDELINES.md)).
 
 ## 📁 Project Structure
 
 ```
-doclittle-platform/
+somo/
 ├── middleware-platform/          # Backend API service
 │   ├── server.js                  # Main Express server entry point
 │   ├── database.js                # Database schema and migrations

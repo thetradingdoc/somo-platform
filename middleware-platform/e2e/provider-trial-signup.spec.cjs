@@ -1,5 +1,11 @@
 'use strict';
 
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+if (!process.env.DB_PATH) {
+  process.env.DB_PATH = path.join(__dirname, '..', 'middleware-dev.db');
+}
+
 const { test, expect } = require('@playwright/test');
 const db = require('../database');
 
@@ -28,7 +34,9 @@ test.describe('Provider SIM trial signup (API)', () => {
   test('signup → email → phone (dev OTP) → session snapshot', async ({ playwright }) => {
     const ctx = await playwright.request.newContext({ baseURL: API_BASE });
     const email = uniqueEmail();
-    const phone = '+1555555' + String(Math.floor(Math.random() * 9000) + 1000);
+    const phone =
+      process.env.TRIAL_E2E_PHONE ||
+      `+1202${String(Math.floor(1000000 + Math.random() * 8999999))}`;
 
     const signup = await ctx.post('/api/signup', {
       data: {
@@ -84,16 +92,26 @@ test.describe('Provider SIM trial signup (API)', () => {
     const checkPhone = await ctx.post('/api/signup/verify-phone/check', {
       data: { phone_number: phone, code: '000000' }
     });
-    expect(checkPhone.ok()).toBeTruthy();
     const phoneBody = await checkPhone.json();
+    if (!checkPhone.ok()) {
+      test.info().annotations.push({
+        type: 'note',
+        description: `verify-phone/check ${checkPhone.status()}: ${phoneBody?.error || 'failed'}`
+      });
+    }
+    expect(checkPhone.ok()).toBeTruthy();
     expect(phoneBody.success).toBe(true);
     expect(phoneBody.phone_verified).toBe(true);
+    expect(phoneBody.trial_sim_flow).toBe(true);
 
     const customer = db.getCustomer(signupBody.customer_id);
     expect(customer.phone_verified).toBe(1);
-    if (customer.trial_status === 'active') {
-      expect(customer.trial_expires_at).toBeTruthy();
-    }
+    expect(customer.trial_status).toBe('active');
+    expect(customer.trial_expires_at).toBeTruthy();
+    expect(phoneBody.trial?.twilio_phone_number || customer.twilio_phone_number).toMatch(
+      /^\+1\d{10}$/
+    );
+    expect(customer.twilio_phone_sid).toBeTruthy();
 
     await ctx.dispose();
   });

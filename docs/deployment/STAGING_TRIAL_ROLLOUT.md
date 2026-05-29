@@ -11,6 +11,7 @@ Set on the Cloud Run / staging middleware service (not committed to git):
 ```bash
 TRIAL_SIM_FLOW_ENABLED=1
 TRIAL_SIM_LAUNCH_AT=2026-05-28T00:00:00Z
+TRIAL_DEFAULT_AREA_CODE=202
 TWILIO_VERIFY_SERVICE_SID=VA...
 TWILIO_ACCOUNT_SID=...
 TWILIO_AUTH_TOKEN=...
@@ -32,6 +33,7 @@ BASE_URL=https://api.myskinandcare.com
 
 - [ ] `GET /health` returns 200
 - [ ] `node scripts/sandbox-trial-signup-report.cjs` — verify-phone not 404, `TRIAL_SIM_FLOW_ENABLED` true
+- [ ] `node scripts/trial-provision-smoke.cjs` — creates customer with `twilio_phone_number` (costs one Twilio number). If Verify SMS 404s locally, set `TWILIO_VERIFY_DEV_MOCK=1` in `.env`, **restart the server**, then re-run smoke (OTP `000000`).
 - [ ] Full signup: `/signup?fresh=1` → email → phone OTP → terms → `settings.html?billing=trial`
 - [ ] DB: `trial_status=active`, `twilio_phone_number` set, `phone_verified=1`
 - [ ] Inbound call to provisioned number reaches Kelly (not trial-paused TwiML)

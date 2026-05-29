@@ -2574,6 +2574,7 @@ function isDodgecallApiPath(p) {
     p.startsWith('/verify-card') ||
     p.startsWith('/reset-password') ||
     p.startsWith('/patients') ||
+    p.startsWith('/business') ||
     p.startsWith('/admin') ||
     p.startsWith('/unified-dashboard') ||
     p.startsWith('/littlelab-landing')
@@ -2809,8 +2810,11 @@ function clearCustomerSessionCookie(res, req) {
   const isSecure =
     process.env.NODE_ENV === 'production' || req.secure || req.headers['x-forwarded-proto'] === 'https';
   const opts = { httpOnly: true, secure: isSecure, sameSite: 'lax', path: '/' };
-  if (process.env.NODE_ENV === 'production' || req.headers.host?.includes('doclittle.site')) {
-    opts.domain = '.doclittle.site';
+  const cookieHost = (req.headers.host || '').toLowerCase();
+  if (process.env.NODE_ENV === 'production') {
+    if (cookieHost.includes('myskinandcare.com')) opts.domain = '.myskinandcare.com';
+    else if (cookieHost.includes('skinandcare.com')) opts.domain = '.skinandcare.com';
+    else if (cookieHost.includes('doclittle.site')) opts.domain = '.doclittle.site';
   }
   res.clearCookie('customer_session', opts);
 }
@@ -3093,6 +3097,7 @@ const { registerPatientProfileRoutes } = require('./routes/patient-profile');
 const { registerPatientAuthRoutes } = require('./routes/patient-auth');
 const { registerPatientDocumentsRoutes } = require('./routes/patient-documents');
 const { registerPatientWalletRoutes } = require('./routes/patient-wallet');
+const { registerPatientRcmRoutes } = require('./routes/patient-rcm');
 const { registerPatientInsuranceRoutes } = require('./routes/patient-insurance');
 const { registerPriorAuthRoutes } = require('./routes/prior-auth');
 const { FALLBACK_CLINIC_ID, resolveClinicIdFromRequest } = require('./lib/resolve-clinic-id');
@@ -3290,6 +3295,10 @@ app.get('/terms', (req, res) => {
 
   // Serve unified terms of service (includes both SaaS and API pricing)
   res.sendFile(path.join(__dirname, 'public', 'signup', 'terms.html'));
+});
+
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'signup', 'privacy.html'));
 });
 
 // Register /profile route (Customer Profile)
@@ -8940,6 +8949,7 @@ registerPatientProfileRoutes(app, patientPortalDeps);
 registerPatientAuthRoutes(app, patientPortalDeps);
 registerPatientDocumentsRoutes(app, patientPortalDeps);
 registerPatientWalletRoutes(app, patientPortalDeps);
+registerPatientRcmRoutes(app, patientPortalDeps);
 registerPatientInsuranceRoutes(app, patientPortalDeps);
 registerPriorAuthRoutes(app, { apiLimiter, express, db });
 

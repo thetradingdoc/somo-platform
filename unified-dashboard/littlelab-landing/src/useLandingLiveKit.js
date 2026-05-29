@@ -277,7 +277,7 @@ export function useLandingLiveKit({
           apiBase,
           room: roomName,
           identity,
-          name: 'Skin & Care visitor',
+          name: 'Somo visitor',
           signal: ac.signal
         });
         if (ac.signal.aborted) return;

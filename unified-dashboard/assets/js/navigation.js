@@ -1,5 +1,5 @@
 /**
- * Legacy navigation for static sidebars (pre–FrontDesk shell).
+ * Legacy navigation for static sidebars (pre–Somo shell).
  * Provider pages use provider-shell.js + mountProviderPage() instead.
  * Renders navigation sidebar from TENANT_CONFIG.navItems (tenant-aware).
  */

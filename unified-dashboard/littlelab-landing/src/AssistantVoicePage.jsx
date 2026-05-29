@@ -81,7 +81,7 @@ export default function AssistantVoicePage({
             width={40}
             height={40}
           />
-          <span>Skin &amp; Care</span>
+          <span>Somo</span>
         </div>
         {inSessionStage ? (
           <button type="button" className="axv-icon-btn axv-header-chat" onClick={onOpenChat} aria-label="Open chat">

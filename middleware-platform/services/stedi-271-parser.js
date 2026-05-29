@@ -18,6 +18,8 @@ const DEFAULTS = {
   priorAuthIndicator: null, // 'Y' | 'N' | 'U' | null
   priorAuthNotes: [],
   message: null,
+  aaaCodes: [],
+  aaaMessages: [],
   rawParsed: null
 };
 
@@ -66,7 +68,59 @@ function parse271Response(stediResponse) {
     if (parsed.rawParsed !== null) return parsed;
   }
 
-  return { ...DEFAULTS, rawParsed: payload };
+  const aaa = extractAaaErrors(payload);
+  return {
+    ...DEFAULTS,
+    eligible: false,
+    message: aaa.messages[0] || 'Eligibility check failed',
+    aaaCodes: aaa.codes,
+    aaaMessages: aaa.messages,
+    rawParsed: payload,
+  };
+}
+
+/**
+ * Extract AAA reject codes from Stedi eligibility v3 payload.
+ * @param {object} payload
+ * @returns {{ codes: string[], messages: string[] }}
+ */
+function extractAaaErrors(payload) {
+  const codes = [];
+  const messages = [];
+  if (!payload || typeof payload !== 'object') return { codes, messages };
+
+  const push = (code, msg) => {
+    const c = code != null ? String(code).trim() : '';
+    const m = msg != null ? String(msg).trim() : '';
+    if (c && !codes.includes(c)) codes.push(c);
+    if (m && !messages.includes(m)) messages.push(m);
+  };
+
+  const errors = Array.isArray(payload.errors) ? payload.errors : [];
+  for (const e of errors) {
+    if (!e || typeof e !== 'object') continue;
+    push(e.code || e.rejectReasonCode, e.description || e.message || e.field);
+  }
+
+  const aaaList = payload.aaaErrors || payload.aaa_errors || payload.AAAErrors;
+  if (Array.isArray(aaaList)) {
+    for (const a of aaaList) {
+      if (!a || typeof a !== 'object') continue;
+      push(
+        a.code || a.rejectReasonCode || a.aaaCode,
+        a.description || a.message || a.rejectReason
+      );
+    }
+  }
+
+  const subscriber = payload.subscriber || payload.dependents?.[0];
+  if (subscriber?.aaaErrors && Array.isArray(subscriber.aaaErrors)) {
+    for (const a of subscriber.aaaErrors) {
+      push(a.code || a.rejectReasonCode, a.description || a.message);
+    }
+  }
+
+  return { codes, messages };
 }
 
 function hasDirectEligibilityFields(obj) {
@@ -193,6 +247,12 @@ function parseFromBenefitsInformation(payload) {
     allowedAmount > 0 ||
     copay > 0;
 
+  const aaa = extractAaaErrors(payload);
+  let message = eligible ? `Eligible - Copay $${copay}` : 'Benefits returned — review plan status';
+  if (!eligible && aaa.messages.length) {
+    message = aaa.messages.join('; ');
+  }
+
   return {
     eligible,
     copay,
@@ -206,8 +266,10 @@ function parseFromBenefitsInformation(payload) {
     planSummary: payload.planSummary || null,
     priorAuthIndicator: pa.indicator,
     priorAuthNotes: pa.notes,
-    message: eligible ? `Eligible - Copay $${copay}` : 'Benefits returned — review plan status',
-    rawParsed: payload
+    message,
+    aaaCodes: aaa.codes,
+    aaaMessages: aaa.messages,
+    rawParsed: payload,
   };
 }
 
@@ -258,5 +320,6 @@ function hasMeaningfulData(parsed) {
 
 module.exports = {
   parse271Response,
-  hasMeaningfulData
+  hasMeaningfulData,
+  extractAaaErrors,
 };

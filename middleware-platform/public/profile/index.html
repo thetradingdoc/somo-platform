@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile - DocLittle API</title>
+    <title>My Profile - Somo API</title>
     <style>
         * {
             margin: 0;
@@ -19,7 +19,7 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
             color: white;
             padding: 20px 0;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -154,8 +154,8 @@
         }
 
         .tab-button.active {
-            color: #1e40af;
-            border-bottom-color: #1e40af;
+            color: #16a637;
+            border-bottom-color: #16a637;
             background: white;
         }
 
@@ -229,7 +229,7 @@
 
         .badge-pending {
             background: #dbeafe;
-            color: #1e40af;
+            color: #16a637;
         }
 
         .credits-display {
@@ -243,7 +243,7 @@
         .credits-amount {
             font-size: 3rem;
             font-weight: 700;
-            color: #1e40af;
+            color: #16a637;
             margin: 10px 0;
         }
 
@@ -279,7 +279,7 @@
         .invoice-amount {
             font-size: 1.25rem;
             font-weight: 700;
-            color: #1e40af;
+            color: #16a637;
         }
 
         .invoice-details {
@@ -300,7 +300,7 @@
         }
 
         .btn-primary {
-            background: #1e40af;
+            background: #16a637;
             color: white;
         }
 
@@ -326,7 +326,7 @@
 
         .alert-info {
             background: #dbeafe;
-            color: #1e40af;
+            color: #16a637;
             border: 1px solid #93c5fd;
         }
 
@@ -347,7 +347,7 @@
         }
 
         .feature-checkbox-label:hover {
-            border-color: #1e40af;
+            border-color: #16a637;
             background: #f8fafc;
         }
 
@@ -447,8 +447,8 @@
 
             <div id="api-key-form">
                 <button id="create-api-key-btn"
-                    style="background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s;"
-                    onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
+                    style="background: #128a2e; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s;"
+                    onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#128a2e'">
                     Create API Key
                 </button>
                 <p style="margin-top: 12px; font-size: 0.9rem; color: #64748b;">
@@ -461,7 +461,7 @@
                     style="background: #1e293b; color: white; padding: 16px; border-radius: 6px; margin: 16px 0; font-family: monospace; word-break: break-all; position: relative;">
                     <span id="api-key-value"></span>
                     <button id="copy-api-key"
-                        style="position: absolute; top: 12px; right: 12px; background: #2563eb; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                        style="position: absolute; top: 12px; right: 12px; background: #128a2e; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                         Copy
                     </button>
                 </div>
@@ -497,7 +497,7 @@
                 <div
                     style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div>
-                        <div style="font-size: 2rem; font-weight: 700; color: #2563eb;"
+                        <div style="font-size: 2rem; font-weight: 700; color: #128a2e;"
                             id="credits-balance-value">Loading...</div>
                         <div style="font-size: 0.9rem; color: #64748b; margin-top: 4px;">minutes remaining</div>
                     </div>
@@ -516,7 +516,7 @@
                     <div
                         style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; padding: 12px;">
                         <div style="color: #64748b; font-size: 0.85rem;">Paid Voice Credits</div>
-                        <div style="font-weight: 600; color: #2563eb; margin-top: 4px;" id="paid-credits-value">
+                        <div style="font-weight: 600; color: #128a2e; margin-top: 4px;" id="paid-credits-value">
                             -</div>
                     </div>
                     <div
@@ -611,8 +611,8 @@
                     </label>
                 </div>
                 <button id="request-features-btn"
-                    style="background: #2563eb; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s;"
-                    onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
+                    style="background: #128a2e; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background 0.2s;"
+                    onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#128a2e'">
                     Request Features
                 </button>
             </div>
@@ -810,7 +810,7 @@
                     if (response.status === 404) {
                         container.innerHTML = `
                             <div class="alert alert-info">
-                                No payment method on file. <a href="/verify-card" style="color: #1e40af; font-weight: 600;">Add payment method</a>
+                                No payment method on file. <a href="/verify-card" style="color: #16a637; font-weight: 600;">Add payment method</a>
                             </div>
                         `;
                         return;
@@ -836,7 +836,7 @@
                 } else {
                     container.innerHTML = `
                         <div class="alert alert-info">
-                            No payment method on file. <a href="/verify-card" style="color: #1e40af; font-weight: 600;">Add payment method</a>
+                            No payment method on file. <a href="/verify-card" style="color: #16a637; font-weight: 600;">Add payment method</a>
                         </div>
                     `;
                 }
@@ -1095,13 +1095,13 @@
                     if (result.success && result.packages && result.packages.length > 0) {
                         const container = document.getElementById('packages-container');
                         container.innerHTML = result.packages.map(pkg => `
-                            <div style="background: white; border: ${pkg.popular ? '2px solid #2563eb' : '1px solid #e2e8f0'}; border-radius: 8px; padding: 20px; ${pkg.popular ? 'box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);' : ''}">
-                                ${pkg.popular ? '<div style="background: #2563eb; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-bottom: 12px;">POPULAR</div>' : ''}
+                            <div style="background: white; border: ${pkg.popular ? '2px solid #128a2e' : '1px solid #e2e8f0'}; border-radius: 8px; padding: 20px; ${pkg.popular ? 'box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);' : ''}">
+                                ${pkg.popular ? '<div style="background: #128a2e; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; display: inline-block; margin-bottom: 12px;">POPULAR</div>' : ''}
                                 <h4 style="margin: ${pkg.popular ? '8px' : '20px'} 0 8px 0; font-size: 1.25rem; font-weight: 700;">${pkg.name}</h4>
-                                <div style="font-size: 1.5rem; font-weight: 700; color: #1e40af; margin: 12px 0;">${pkg.minutes} min</div>
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #16a637; margin: 12px 0;">${pkg.minutes} min</div>
                                 <div style="font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-bottom: 16px;">$${pkg.price.toFixed(2)}</div>
                                 <button class="buy-package-btn" data-package-id="${pkg.id}"
-                                    style="width: 100%; background: ${pkg.popular ? '#2563eb' : '#f1f5f9'}; color: ${pkg.popular ? 'white' : '#1e293b'}; border: ${pkg.popular ? 'none' : '1px solid #e2e8f0'}; padding: 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                                    style="width: 100%; background: ${pkg.popular ? '#128a2e' : '#f1f5f9'}; color: ${pkg.popular ? 'white' : '#1e293b'}; border: ${pkg.popular ? 'none' : '1px solid #e2e8f0'}; padding: 12px; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
                                     Buy Now
                                 </button>
                             </div>

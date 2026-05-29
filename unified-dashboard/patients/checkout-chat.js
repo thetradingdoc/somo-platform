@@ -886,7 +886,7 @@
       /** Canonical copy: `../copy/checkout-kelly.json` — keep in sync if keys change. Use ASCII quotes only (no curly apostrophes) inside this script. */
       const DEFAULT_KELLY_COPY = {
         voiceNotes:
-          'Warm, confident, non-clinical — Skin & Care specialist voice, not a doctor. Short by default.',
+          'Warm, confident, non-clinical — Somo specialist voice, not a doctor. Short by default.',
         sysFirstTimeHtml:
           '<strong>Skin &amp; Care</strong> — your guide can answer questions about this product, ingredients, and your routine. Your total is always <strong>server-locked</strong> at checkout (no surprise prices). Start with chat below; when you are ready, use <em>Pay securely</em> in the thread, or the optional shortcut at the bottom.',
         sysReturningHtml:
@@ -918,7 +918,7 @@
         payHeroAria: 'Pay securely with Stripe',
         backToShop: 'Back to shop',
         chatEmptyHint:
-          'Ask your Skin & Care guide about this product, build your cart in chat, then checkout when you are ready.',
+          'Ask your Somo guide about this product, build your cart in chat, then checkout when you are ready.',
         chatEmptyTitleCheckout: 'Confirm product',
         chatEmptyBodyCheckout:
           'Does this look like the right product and quantity in your cart? Reply here to confirm, or tell me what you would like to change before we continue.',
@@ -934,7 +934,7 @@
         pickerLabel: 'Choose product',
         chipReadyCheckout: 'Ready to check out?',
         nudgeAfterTurns:
-          'Still browsing? Your Skin & Care total stays server-locked — tap Continue when you\'re ready.',
+          'Still browsing? Your Somo total stays server-locked — tap Continue when you\'re ready.',
         priceUpdating: 'Updating price…',
         typingIndicator: 'Your guide is preparing…',
         chipCheckoutCta: 'Continue',
@@ -945,7 +945,7 @@
         payRedirectNote:
           'Card entry happens here via Stripe. If you ever use an email-only backup link, check spam — links can expire (often within about a day).',
         exitCheckoutLabel: 'Exit checkout',
-        bridgeMessage: 'Taking you to your Skin & Care guide…',
+        bridgeMessage: 'Taking you to your Somo guide…',
         switchConfirmLead: 'Switch to ',
         skipSwitchConfirmLabel: 'Don\'t ask again this session',
         whyPriceSummary: 'Why this price?',
@@ -1000,7 +1000,7 @@
           }
           bodyEl.textContent =
             kellyCopy('chatEmptyHint') ||
-            'Ask your Skin & Care guide about this product, then checkout when you are ready.';
+            'Ask your Somo guide about this product, then checkout when you are ready.';
         }
         const composerEl = document.getElementById('composer');
         if (composerEl) {
@@ -2744,7 +2744,7 @@
               img.dataset.fallbackApplied = 'panda';
               img.src = pandaFallback;
               img.hidden = false;
-              img.alt = 'Skin and Care panda';
+              img.alt = 'Somo panda';
               return;
             }
             var rel = STRIP_IMAGE_FALLBACK_BY_ID[currentProductId];
@@ -2757,7 +2757,7 @@
             img.dataset.fallbackApplied = 'panda';
             img.src = pandaFallback;
             img.hidden = false;
-            img.alt = 'Skin and Care panda';
+            img.alt = 'Somo panda';
           };
           img.dataset.fallbackApplied = '';
           img.src = url;

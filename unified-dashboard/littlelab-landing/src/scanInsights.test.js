@@ -399,7 +399,7 @@ describe('buildPinnedContextText', () => {
     expect(text).toContain('Ingredients:');
     expect(text).toContain('Category Route: cosmetic');
     expect(text).toContain('Provenance: obf_index_cache');
-    expect(text).toContain('Skin & care:');
+    expect(text).toContain('Somo:');
     expect(text).not.toContain('Matched in:');
   });
 
@@ -454,7 +454,7 @@ describe('buildPinnedContextText', () => {
     const result = { ...scanResult, categoryRoute: 'food' };
     const text = buildPinnedContextText(result);
     expect(text).toContain('Diet context:');
-    expect(text).not.toContain('Skin & care:');
+    expect(text).not.toContain('Somo:');
   });
 });
 

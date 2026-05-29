@@ -8,7 +8,7 @@ export function Search({ query, setQuery, loading, error, empty }) {
   }, []);
 
   return (
-    <div className="search-wrapper" aria-label="Consult medical search">
+    <div className="search-wrapper" aria-label="Somo medical search">
       <div className="search-box" role="search">
         <svg
           className="search-icon"

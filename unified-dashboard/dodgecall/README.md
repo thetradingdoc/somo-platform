@@ -1,4 +1,4 @@
-# DodgeCall landing
+# Somo landing
 
 Marketing SPA served at **http://localhost:4000/** by middleware (build required).
 

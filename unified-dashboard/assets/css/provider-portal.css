@@ -1,4 +1,4 @@
-/* DocLittle Provider Portal — Front Desk design system */
+/* Somo Provider Portal — design system */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Martian+Mono:wght@400;500;600&display=swap');
 
 :root {
@@ -12,10 +12,10 @@
   --surface: #ffffff;
   --bg: #f4f7fa;
   --bg2: #eef2f7;
-  --blue: #1b5ee4;
-  --blue2: #2563eb;
-  --blue-soft: #eef3fe;
-  --blue-mid: #bfdbfe;
+  --blue: #16a637;
+  --blue2: #128a2e;
+  --blue-soft: #e8f7ed;
+  --blue-mid: #bbf7d0;
   --amber: #d97706;
   --amber2: #f59e0b;
   --amber-soft: #fffbeb;
@@ -32,10 +32,10 @@
   --violet: #7c3aed;
   --violet-soft: #f5f3ff;
   --sidebar-bg: #ffffff;
-  --sidebar-active: #eef4ff;
+  --sidebar-active: #e8f7ed;
   --sidebar-hover: #f8fafc;
   --sidebar-text: #475569;
-  --sidebar-text-active: #1e40af;
+  --sidebar-text-active: #16a637;
   --radius: 10px;
   --radius-sm: 6px;
   --radius-lg: 14px;
@@ -127,7 +127,7 @@ body.provider-portal.provider-portal--scroll .pp-app {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #1b5ee4 0%, #0d9488 100%);
+  background: linear-gradient(135deg, #16a637 0%, #0d9488 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -358,7 +358,7 @@ body.provider-portal.provider-portal--scroll .pp-app {
   height: 30px;
   border-radius: 7px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #1b5ee4, #0d9488);
+  background: linear-gradient(135deg, #16a637, #0d9488);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -706,7 +706,7 @@ body.provider-portal.provider-portal--scroll .pp-main {
   height: 34px;
   border-radius: 50%;
   background: #e0ecff;
-  color: #1e40af;
+  color: #16a637;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1056,7 +1056,7 @@ a:focus-visible,
   color: var(--muted);
 }
 
-.pp-pc-blue { border-top: 3px solid #2563eb; }
+.pp-pc-blue { border-top: 3px solid #16a637; }
 .pp-pc-green { border-top: 3px solid #16a34a; }
 .pp-pc-amber { border-top: 3px solid #d97706; }
 .pp-pc-red { border-top: 3px solid #dc2626; }

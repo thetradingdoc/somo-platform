@@ -1,4 +1,4 @@
-# Contributing to DocLittle
+# Contributing to Somo
 
 ## Branching and pull requests
 

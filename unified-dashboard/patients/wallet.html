@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#314DB6">
+    <meta name="theme-color" content="#16a637">
     <link rel="manifest" href="../manifest.webmanifest">
     <title>Wallet - Skin &amp; Care Patient Portal</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <script src="../assets/js/config.js" defer></script>
     <style>
         :root {
-            --primary: #314DB6;
+            --primary: #16a637;
             --primary-dark: #2a409a;
             --primary-light: #5b77de;
         }
@@ -182,7 +182,7 @@
         }
         .logout-btn:hover {
             border-color: #93c5fd;
-            color: #1e40af;
+            color: #16a637;
             background: #eff6ff;
         }
         .logout-btn svg {
@@ -355,7 +355,7 @@
         .wallet-hero-card {
             border-radius: 16px;
             overflow: hidden;
-            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            background: linear-gradient(135deg, #16a637 0%, #16a637 100%);
             color: #fff;
             box-shadow: 0 14px 30px rgba(30,64,175,0.28);
         }
@@ -502,7 +502,7 @@
                     <a class="btn btn-secondary" href="profile.html" style="white-space:nowrap;">Manage</a>
                 </div>
                 <div id="paymentMethodCard"
-                    style="margin-top:14px;border-radius:16px;padding:18px;background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;box-shadow:0 10px 25px rgba(30,64,175,0.25);">
+                    style="margin-top:14px;border-radius:16px;padding:18px;background:linear-gradient(135deg,#16a637 0%,#16a637 100%);color:#fff;box-shadow:0 10px 25px rgba(30,64,175,0.25);">
                     <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
                         <div style="font-weight:800;">My Payment Card</div>
                         <div style="opacity:0.85;">💳</div>
@@ -539,6 +539,19 @@
                 <div id="receiptsContainer" style="margin-top:12px;"></div>
             </div>
 
+            <div class="card" id="billsClaimsCard">
+                <div class="row" style="align-items:flex-start;">
+                    <div>
+                        <div class="card-title">Bills & claims</div>
+                        <div class="subtext">Provider billing and insurer claim status</div>
+                    </div>
+                    <button class="btn btn-secondary" type="button" onclick="loadBillsClaims()" style="white-space:nowrap;">Refresh</button>
+                </div>
+                <div id="billsClaimsContainer" style="margin-top:12px;">
+                    <div class="subtext">Sign in to see bill status.</div>
+                </div>
+            </div>
+
             <div class="card">
                 <div class="row" style="align-items:flex-start;">
                     <div>
@@ -564,12 +577,14 @@
         mountBottomTabs();
 
         window.loadReceipts = loadReceipts;
+        window.loadBillsClaims = loadBillsClaims;
 
         document.addEventListener('DOMContentLoaded', () => {
             hydrateUserHeader();
             loadReceipts();
             loadPaymentMethod();
             loadBalanceDue();
+            loadBillsClaims();
             try {
                 const userInfo = document.querySelector('.sidebar-footer .user-info');
                 if (userInfo) {
@@ -619,6 +634,59 @@
             if (Number.isNaN(n)) return `${amount} ${currency || ''}`.trim();
             const dollars = n >= 1000 ? (n / 100).toFixed(2) : n.toFixed(2);
             return `$${dollars} ${currency || 'USD'}`.trim();
+        }
+
+        function billStatusClass(chip) {
+            const c = String(chip || '').toLowerCase();
+            if (c === 'paid') return 'badge';
+            if (c === 'patient_due') return 'badge due';
+            if (c === 'denied') return 'badge';
+            return 'badge';
+        }
+
+        async function loadBillsClaims() {
+            const mount = document.getElementById('billsClaimsContainer');
+            if (!mount) return;
+            const sid = localStorage.getItem('patient_session_id') || '';
+            if (!sid) {
+                mount.innerHTML = '<div class="subtext">Sign in to see bill status.</div>';
+                return;
+            }
+            try {
+                const r = await fetch(`${API_BASE}/api/patient/rcm/bill-status`, {
+                    headers: { 'x-session-id': sid, 'ngrok-skip-browser-warning': 'true' }
+                });
+                const data = await r.json();
+                if (!r.ok || !data.success) {
+                    mount.innerHTML = `<div class="subtext">${(data.error || 'Unable to load bills').replace(/</g, '&lt;')}</div>`;
+                    return;
+                }
+                const bills = Array.isArray(data.bills) ? data.bills : [];
+                if (!bills.length) {
+                    mount.innerHTML = '<div class="subtext">No active bills or claims.</div>';
+                    return;
+                }
+                mount.innerHTML = bills.map((b) => {
+                    const amt = b.amount_due != null ? fmtMoney(b.amount_due, 'USD') : '—';
+                    const payBtn = b.pay_url
+                        ? `<a class="btn btn-primary" href="${b.pay_url}" style="padding:8px 10px;font-weight:800;">Pay</a>`
+                        : '';
+                    return `
+                      <div class="receipt-row" style="align-items:center;">
+                        <div style="min-width:0;">
+                          <div style="font-weight:900;">${(b.journey_stage_label || b.status_label || 'Bill').replace(/</g, '&lt;')}</div>
+                          <div class="receipt-meta">${(b.claim_status || b.journey_stage || '').replace(/</g, '&lt;')}</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                          <span class="${billStatusClass(b.status_chip)}">${(b.status_label || '').replace(/</g, '&lt;')}</span>
+                          <div style="font-weight:900;">${amt}</div>
+                          ${payBtn}
+                        </div>
+                      </div>`;
+                }).join('');
+            } catch (e) {
+                mount.innerHTML = `<div class="subtext">${String(e.message || e).replace(/</g, '&lt;')}</div>`;
+            }
         }
 
         async function loadBalanceDue() {

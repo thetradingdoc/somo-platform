@@ -34,7 +34,7 @@ export default function FunnelStepDots({ step }) {
     <div
       className="funnel-steps funnel-steps--chapters"
       role="progressbar"
-      aria-label="Skin & Care onboarding progress"
+      aria-label="Somo onboarding progress"
     >
       <div className="funnel-step-chapter-row">
         {CHAPTERS.map((chapter, ci) => {

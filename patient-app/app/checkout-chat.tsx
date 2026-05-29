@@ -84,7 +84,7 @@ function productImageUrl(p?: CatalogProduct | null, apiBase = API_BASE) {
 
 /**
  * Native checkout + Kelly chat: catalog switch, server quotes, SSE streaming,
- * in-thread Pay primary (Skin & Care tokens). Same APIs as web checkout-chat.html.
+ * in-thread Pay primary (Somo tokens). Same APIs as web checkout-chat.html.
  *
  * File map (search symbols): session/catalog state, fetchQuote, sendMessage (SSE + /turn fallback),
  * openPayModal / startStripeCheckout, emitCheckoutAnalytics, product picker Modal.

@@ -6,6 +6,15 @@ const {
   getTrialInactivityReleaseDays
 } = require('./plan-catalog');
 
+class TrialProvisionError extends Error {
+  constructor(message, code = 'twilio_provision_failed', details = {}) {
+    super(message);
+    this.name = 'TrialProvisionError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
 function isFlagEnabled() {
   const v = process.env.TRIAL_SIM_FLOW_ENABLED;
   return v === '1' || v === 'true';
@@ -60,6 +69,7 @@ function isTrialTimeExpired(customer) {
 
 function isTrialAccessAllowed(db, customer) {
   if (!customer || customer.trial_status !== 'active') return false;
+  if (!customer.twilio_phone_number) return false;
   if (isTrialTimeExpired(customer)) return false;
   if (getTrialMinutesRemaining(db, customer) <= 0) return false;
   return true;
@@ -71,7 +81,7 @@ function canStartTrial(db, customerId, phoneE164) {
   if (!isTrialSimEnabledForCustomer(customer)) {
     return { allowed: false, reason: 'trial_sim_disabled' };
   }
-  if (customer.trial_status === 'active') {
+  if (customer.trial_status === 'active' && customer.twilio_phone_number) {
     return { allowed: false, reason: 'trial_already_active' };
   }
   if (customer.subscription_status === 'active') {
@@ -87,11 +97,23 @@ function canStartTrial(db, customerId, phoneE164) {
 }
 
 function apiBaseUrl() {
-  return (
+  const strip = (u) => String(u || '').replace(/\/$/, '');
+  const isLocalHost = (u) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(strip(u));
+
+  let base = strip(
     process.env.API_BASE_URL ||
-    process.env.BASE_URL ||
-    (process.env.NODE_ENV === 'production' ? 'https://api.doclittle.site' : 'http://localhost:4000')
-  ).replace(/\/$/, '');
+      process.env.BASE_URL ||
+      (process.env.NODE_ENV === 'production' ? 'https://api.myskinandcare.com' : 'http://localhost:4000')
+  );
+
+  if (isLocalHost(base)) {
+    const ngrok = strip(process.env.NGROK_URL);
+    if (ngrok && /^https:\/\//i.test(ngrok)) {
+      base = ngrok;
+    }
+  }
+
+  return base;
 }
 
 function parseProvisionJson(customer) {
@@ -103,7 +125,81 @@ function parseProvisionJson(customer) {
 }
 
 /**
- * Idempotent: provision dedicated number + Retell + 60 trial minutes.
+ * Purchase dedicated inbound number before trial activates.
+ * @returns {{ phoneNumber: string, sid: string, searchStrategy?: string }}
+ */
+async function provisionDedicatedNumber(db, customerId, options = {}) {
+  const customer = db.getCustomer(customerId);
+  if (!customer) throw new Error('Customer not found');
+
+  if (customer.twilio_phone_number && customer.twilio_phone_sid) {
+    return {
+      phoneNumber: customer.twilio_phone_number,
+      sid: customer.twilio_phone_sid,
+      alreadyProvisioned: true
+    };
+  }
+
+  const TwilioPhoneService = require('./twilio-phone-service');
+  const twilio = new TwilioPhoneService();
+  if (!twilio.isAvailable()) {
+    throw new TrialProvisionError(
+      'Twilio is not configured. Cannot assign a dedicated clinic line.',
+      'twilio_not_configured'
+    );
+  }
+
+  const phoneE164 = options.phoneE164 || customer.phone_number;
+  const webhookUrl = `${apiBaseUrl()}/voice/incoming?customer_id=${customerId}`;
+
+  try {
+    const purchased = await twilio.provisionPhoneNumberForCustomer({
+      customerId,
+      phoneE164,
+      webhookUrl
+    });
+
+    db.updateCustomer(customerId, {
+      twilio_phone_number: purchased.phoneNumber,
+      twilio_phone_sid: purchased.sid
+    });
+
+    return {
+      phoneNumber: purchased.phoneNumber,
+      sid: purchased.sid,
+      searchStrategy: purchased.searchStrategy
+    };
+  } catch (e) {
+    let message = e.message || 'Failed to provision dedicated phone number';
+    if (/VoiceUrl is not valid|21402/i.test(message) && /localhost|127\.0\.0\.1/i.test(webhookUrl)) {
+      message +=
+        ' Set NGROK_URL (run ngrok http 4000) or API_BASE_URL to a public HTTPS URL, then restart the server.';
+    }
+    throw new TrialProvisionError(message, 'twilio_provision_failed', { cause: e.message });
+  }
+}
+
+function activateTrialRecord(db, customerId, options = {}) {
+  const now = new Date();
+  const expires = new Date(now.getTime() + getTrialDurationDays() * 24 * 60 * 60 * 1000);
+  const phone = options.phoneE164;
+
+  db.updateCustomer(customerId, {
+    trial_status: 'active',
+    trial_started_at: now.toISOString(),
+    trial_expires_at: expires.toISOString(),
+    trial_phone_verified_at: options.phoneVerifiedAt || now.toISOString(),
+    phone_verified: 1,
+    phone_verified_at: options.phoneVerifiedAt || now.toISOString(),
+    phone_number: phone,
+    trial_release_reason: null
+  });
+
+  return { now, expires };
+}
+
+/**
+ * Idempotent: provision dedicated number, then activate trial + credits + Retell.
  */
 async function startTrialTenant(db, customerId, options = {}) {
   const customer = db.getCustomer(customerId);
@@ -119,28 +215,34 @@ async function startTrialTenant(db, customerId, options = {}) {
         already_active: true,
         customer_id: customerId,
         twilio_phone_number: existing.twilio_phone_number,
-        trial_minutes_remaining: getTrialMinutesRemaining(db, existing)
+        trial_minutes_remaining: getTrialMinutesRemaining(db, existing),
+        provision: parseProvisionJson(existing)
       };
     }
     throw new Error(`Cannot start trial: ${gate.reason}`);
   }
 
-  const now = new Date();
-  const expires = new Date(now.getTime() + getTrialDurationDays() * 24 * 60 * 60 * 1000);
   const trialMinutes = getTrialMinutesAllocated();
+  let provision = parseProvisionJson(customer);
 
-  const provision = parseProvisionJson(customer);
+  const purchased = await provisionDedicatedNumber(db, customerId, {
+    phoneE164: phone
+  });
+  provision.twilio_provisioned = true;
+  if (purchased.searchStrategy) provision.twilio_search_strategy = purchased.searchStrategy;
 
-  if (customer.trial_status !== 'active') {
-    db.updateCustomer(customerId, {
-      trial_status: 'active',
-      trial_started_at: now.toISOString(),
-      trial_expires_at: expires.toISOString(),
-      trial_phone_verified_at: options.phoneVerifiedAt || now.toISOString(),
-      phone_verified: 1,
-      phone_verified_at: options.phoneVerifiedAt || now.toISOString(),
-      phone_number: phone || customer.phone_number,
-      trial_release_reason: null
+  if (!purchased.phoneNumber) {
+    throw new TrialProvisionError(
+      'Dedicated phone number is required to start your trial',
+      'twilio_provision_failed'
+    );
+  }
+
+  const afterNumber = db.getCustomer(customerId);
+  if (afterNumber.trial_status !== 'active') {
+    activateTrialRecord(db, customerId, {
+      phoneE164: phone || afterNumber.phone_number,
+      phoneVerifiedAt: options.phoneVerifiedAt
     });
   }
 
@@ -177,42 +279,6 @@ async function startTrialTenant(db, customerId, options = {}) {
     }
   }
 
-  let twilioPhone = refreshed.twilio_phone_number;
-  let twilioSid = refreshed.twilio_phone_sid;
-  if (!twilioPhone && !provision.twilio_failed_permanent) {
-    try {
-      const TwilioPhoneService = require('./twilio-phone-service');
-      const twilio = new TwilioPhoneService();
-      if (twilio.isAvailable()) {
-        const webhookUrl = `${apiBaseUrl()}/voice/incoming?customer_id=${customerId}`;
-        let areaCode = null;
-        const digitsOnly = String(refreshed.phone_number || '').replace(/\D/g, '');
-        if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
-          areaCode = digitsOnly.substring(1, 4);
-        } else if (digitsOnly.length === 10) {
-          areaCode = digitsOnly.substring(0, 3);
-        }
-        const purchased = await twilio.provisionPhoneNumberForCustomer({
-          customerId,
-          areaCode,
-          webhookUrl
-        });
-        twilioPhone = purchased.phoneNumber;
-        twilioSid = purchased.sid;
-        db.updateCustomer(customerId, {
-          twilio_phone_number: twilioPhone,
-          twilio_phone_sid: twilioSid
-        });
-        provision.twilio_provisioned = true;
-      } else {
-        provision.twilio_error = 'twilio_not_configured';
-      }
-    } catch (e) {
-      provision.twilio_error = e.message;
-      console.error('[TrialLifecycle] Twilio provision failed:', e.message);
-    }
-  }
-
   if (!provision.merchant_id && !refreshed.merchant_id) {
     provision.merchant_deferred = true;
   }
@@ -222,6 +288,13 @@ async function startTrialTenant(db, customerId, options = {}) {
   });
 
   const final = db.getCustomer(customerId);
+  if (!final.twilio_phone_number) {
+    throw new TrialProvisionError(
+      'Trial could not be started without a dedicated phone number',
+      'twilio_provision_failed'
+    );
+  }
+
   return {
     success: true,
     customer_id: customerId,
@@ -313,6 +386,7 @@ function isDodgecallSignup(customer) {
 }
 
 module.exports = {
+  TrialProvisionError,
   isFlagEnabled,
   isTrialSimEnabledForCustomer,
   getTrialMinutesAllocated,
@@ -321,6 +395,7 @@ module.exports = {
   isTrialTimeExpired,
   isTrialAccessAllowed,
   canStartTrial,
+  provisionDedicatedNumber,
   startTrialTenant,
   expireTrial,
   convertTrialToPaid,

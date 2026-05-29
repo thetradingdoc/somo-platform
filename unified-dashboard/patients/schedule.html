@@ -628,7 +628,7 @@
       box-shadow: var(--shadow-md);
     }
     .schedule-visit-card__hero {
-      background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%);
+      background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #128a2e 100%);
       color: #fff;
       padding: 18px 20px;
       display: flex;
@@ -1247,8 +1247,8 @@
               <div class="flex flex-col gap-1">
                 <label class="text-[11px] font-semibold text-sky-100 uppercase tracking-wide">Appointment type</label>
                 <select id="apptTypeInput" class="w-full sm:w-56 rounded-full border border-sky-500/40 bg-sky-900/60 px-3 py-1.5 text-xs text-sky-50 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400">
-                  <option value="General Consult">General Consult</option>
-                  <option value="Mental Health Consultation">Mental Health Consultation</option>
+                  <option value="General Somo">General Somo</option>
+                  <option value="Mental Health Somoation">Mental Health Somoation</option>
                   <option value="Telemedicine Visit">Telemedicine Visit</option>
                   <option value="Follow-up Visit">Follow-up Visit</option>
                 </select>
@@ -1264,7 +1264,7 @@
             <a id="asyncReviewLink" href="triage.html" class="inline-flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-400 text-sm font-semibold px-4 py-2">Start async review</a>
           </div>
           <div id="priceBox" class="mb-3 text-sm text-sky-100/90">
-            <div id="priceLine" style="font-weight:700;">Consultation — …</div>
+            <div id="priceLine" style="font-weight:700;">Somoation — …</div>
             <ul id="priceBullets" style="margin:6px 0 0 0; padding-left:18px; font-size:12px;">
               <li>Doctor consultation</li>
               <li>Written summary of your visit</li>
@@ -2046,7 +2046,7 @@
         if (!res.ok || !data.success) return;
         const priceLine = document.getElementById('priceLine');
         if (priceLine) {
-          const label = visitMode === 'async_review' ? 'Photo review' : 'Consultation';
+          const label = visitMode === 'async_review' ? 'Photo review' : 'Somoation';
           priceLine.textContent = `${label} — $${data.price_usd.toFixed(2)} ${data.currency}`;
         }
       } catch (_) {}

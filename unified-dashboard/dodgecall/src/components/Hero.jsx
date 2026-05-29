@@ -9,7 +9,10 @@ export default function Hero() {
   return (
     <header className="dc-hero">
       <nav className="dc-nav">
-        <a href="/" className="dc-logo">DodgeCall</a>
+        <a href="/" className="dc-logo">
+          <span className="dc-logo-s">S</span>
+          <span className="dc-logo-rest">omo</span>
+        </a>
         <div className="dc-nav-actions">
           <a href={signupUrl()} className="dc-link-muted">Sign up</a>
           <a href="#demo" className="dc-btn dc-btn-light dc-btn-sm" onClick={scrollToDemo}>
@@ -20,8 +23,12 @@ export default function Hero() {
 
       <div className="dc-hero-body">
         <div className="dc-hero-center">
-          <p className="dc-eyebrow">#1 AI voice agent platform for automating calls</p>
-          <h1>Meet your AI call center from the future.</h1>
+          <p className="dc-eyebrow">Somo — agentic front desk + revenue cycle</p>
+          <h1>Never answer business calls again.</h1>
+          <p className="dc-hero-sub">
+            Somo front desk handles inbound calls like a human receptionist. Somo pay runs eligibility,
+            claims, and patient collections — so your team stays off the phone.
+          </p>
         </div>
 
         <div className="dc-hero-bottom">
@@ -31,10 +38,6 @@ export default function Hero() {
               <span className="dc-rating-score">4.8</span>
               <span className="dc-rating-src">G2</span>
             </div>
-            <p>
-              Build, deploy, and manage next-generation AI voice agents that sound human,
-              execute tasks, and scale effortlessly.
-            </p>
           </div>
         </div>
       </div>

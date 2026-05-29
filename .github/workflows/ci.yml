@@ -36,6 +36,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: middleware-platform/package-lock.json
       
+      - name: Check Somo brand strings (UI)
+        run: node scripts/check-brand-strings.cjs
+
       - name: Install dependencies
         working-directory: ./middleware-platform
         run: npm ci

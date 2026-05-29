@@ -175,7 +175,7 @@ class EmailService {
 
       // Try SMTP
       const transporter = this.getTransporter();
-      const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'noreply@doclittle.health';
+      const from = process.env.SMTP_FROM || process.env.SMTP_USER || process.env.AZURE_EMAIL_SENDER || 'Somo <info@myskinandcare.com>';
 
       if (transporter) {
         const mailOptions = {
@@ -285,7 +285,7 @@ class EmailService {
                 <span class="label">Duration:</span> ${appointment.duration_minutes || 50} minutes
               </div>
               <div class="detail-row">
-                <span class="label">Provider:</span> ${appointment.provider || 'DocLittle Mental Health Team'}
+                <span class="label">Provider:</span> ${appointment.provider || 'Somo Mental Health Team'}
               </div>
               ${appointment.calendar_link ? `
               <div class="detail-row">
@@ -301,7 +301,7 @@ class EmailService {
             <p>If you need to reschedule or cancel, please contact us or use the link in your reminder email.</p>
             
             <p>We look forward to seeing you!</p>
-            <p>Best regards,<br>DocLittle Mental Health Team</p>
+            <p>Best regards,<br>Somo Mental Health Team</p>
           </div>
           <div class="footer">
             <p>This is an automated confirmation. Please do not reply to this email.</p>
@@ -380,7 +380,7 @@ class EmailService {
                 <span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}
               </div>
               <div class="detail-row">
-                <span class="label">Provider:</span> ${appointment.provider || 'DocLittle Mental Health Team'}
+                <span class="label">Provider:</span> ${appointment.provider || 'Somo Mental Health Team'}
               </div>
             </div>
 
@@ -391,7 +391,7 @@ class EmailService {
             </p>
             
             <p>We look forward to seeing you soon!</p>
-            <p>Best regards,<br>DocLittle Mental Health Team</p>
+            <p>Best regards,<br>Somo Mental Health Team</p>
           </div>
           <div class="footer">
             <p>Confirmation Number: ${appointment.id}</p>
@@ -455,10 +455,10 @@ class EmailService {
             ${uploadBlock}
             <div class="appointment-details">
               <div class="detail-row"><span class="label">Type:</span> ${appointment.appointment_type || 'Mental Health Consultation'}</div>
-              <div class="detail-row"><span class="label">Provider:</span> ${appointment.provider || 'DocLittle Mental Health Team'}</div>
+              <div class="detail-row"><span class="label">Provider:</span> ${appointment.provider || 'Somo Mental Health Team'}</div>
             </div>
             <p>You will receive another reminder 1 hour before your appointment.</p>
-            <p>Best regards,<br>DocLittle Mental Health Team</p>
+            <p>Best regards,<br>Somo Mental Health Team</p>
           </div>
           <div class="footer">
             <p>Confirmation: ${appointment.id}</p>
@@ -509,7 +509,7 @@ class EmailService {
             <p>This code will expire in 10 minutes.</p>
             <p>If you didn't request this code, please ignore this email.</p>
             
-            <p>Best regards,<br>DocLittle Security Team</p>
+            <p>Best regards,<br>Somo Security Team</p>
           </div>
           <div class="footer">
             <p>This is an automated email. Please do not reply.</p>
@@ -590,7 +590,7 @@ class EmailService {
     const aptDetails = (order?.appointment_date || order?.appointment_type || order?.appointment_time)
       ? `<div><strong>Appointment:</strong> ${order.appointment_type || 'Visit'}${order.appointment_date ? ` - ${order.appointment_date}${order.appointment_time ? ' at ' + order.appointment_time : ''}` : ''}</div>`
       : '';
-    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://api.doclittle.site';
+    const baseUrl = process.env.BASE_URL || process.env.API_BASE_URL || 'https://api.myskinandcare.com';
     const appointmentsUrl = baseUrl.replace(/\/$/, '') + '/patients/appointments.html';
 
     const html = `
@@ -630,7 +630,7 @@ class EmailService {
               <strong>Next steps:</strong> After payment, you can view your appointment at
               <a href="${appointmentsUrl}" style="color: #16a34a;">My Appointments</a>.
             </p>
-            <p>Thank you for choosing DocLittle.</p>
+            <p>Thank you for choosing Somo.</p>
           </div>
           <div class="footer">
             <p>This is a secure payment link. Do not share it with anyone.</p>
@@ -801,7 +801,7 @@ class EmailService {
         <div class="wrapper">
         <div class="container">
           <div class="header">
-            <h1 class="brand">DocLittle</h1>
+            <h1 class="brand">Somo</h1>
             <p class="header-subtitle">Payment receipt</p>
           </div>
           <div class="content">
@@ -870,7 +870,7 @@ class EmailService {
             <p>An escrow settlement has exceeded the timeout threshold and requires attention.</p>
             <p><strong>Claim ID:</strong> ${claimId}<br><strong>Provider amount:</strong> $${Number(amount).toFixed(2)}</p>
             <p>Please review and retry settlement via the admin recovery endpoint if needed.</p>
-            <p>DocLittle Finance Team</p>
+            <p>Somo Finance Team</p>
           </div>
         </div>
       </body>
@@ -939,7 +939,7 @@ class EmailService {
 
             <p>Please process this claim according to your standard procedures.</p>
             
-            <p>Best regards,<br>DocLittle Healthcare Platform</p>
+            <p>Best regards,<br>Somo Healthcare Platform</p>
           </div>
           <div class="footer">
             <p>This is an automated billing notification. Please do not reply to this email.</p>
@@ -1018,7 +1018,7 @@ class EmailService {
             
             <p>If you have any questions about this bill, please contact us.</p>
             
-            <p>Best regards,<br>DocLittle Billing Department</p>
+            <p>Best regards,<br>Somo Billing Department</p>
           </div>
           <div class="footer">
             <p>This is an automated billing statement. Please do not reply to this email.</p>
@@ -1180,7 +1180,7 @@ class EmailService {
             </div>
             <div class="content">
               <h2>Hi ${name || 'there'},</h2>
-              <p>Thank you for signing up for DocLittle API! Please use the verification code below to verify your email address:</p>
+              <p>Thank you for signing up for Somo API! Please use the verification code below to verify your email address:</p>
               
               <div class="code-box">
                 <div class="code">${code}</div>
@@ -1191,8 +1191,8 @@ class EmailService {
               <p>If you didn't request this code, please ignore this email or contact support if you have concerns.</p>
               
               <div class="footer">
-                <p>This is an automated message from DocLittle API.</p>
-                <p>Visit us at <a href="https://api.doclittle.site">api.doclittle.site</a></p>
+                <p>This is an automated message from Somo API.</p>
+                <p>Visit us at <a href="https://api.myskinandcare.com">api.myskinandcare.com</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
               </div>
             </div>
@@ -1204,7 +1204,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: email,
-      subject: 'DocLittle API - Verify Your Email',
+      subject: 'Somo API - Verify Your Email',
       html: html
     });
   }
@@ -1222,7 +1222,7 @@ class EmailService {
    * @param {string} promotion.end_date - End date (optional)
    * @param {string} merchantName - Merchant/business name
    */
-  static async sendPromotionalEmail(email, customerName, promotion, merchantName = 'DocLittle') {
+  static async sendPromotionalEmail(email, customerName, promotion, merchantName = 'Somo') {
     const discountText = promotion.discount_type === 'percentage'
       ? `${promotion.discount_value}% OFF`
       : `$${promotion.discount_value} OFF`;
@@ -1447,7 +1447,7 @@ class EmailService {
               ` : ''}
 
               <p style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.BASE_URL || 'https://api.doclittle.site'}/storefront" class="button">Shop Now</a>
+                <a href="${process.env.BASE_URL || 'https://api.myskinandcare.com'}/storefront" class="button">Shop Now</a>
               </p>
 
               <p>Call us or visit our store to take advantage of this special offer!</p>
@@ -1457,7 +1457,7 @@ class EmailService {
               
               <div class="footer">
                 <p>This is a promotional email from ${merchantName}.</p>
-                <p>Visit us at <a href="${process.env.BASE_URL || 'https://api.doclittle.site'}">${process.env.BASE_URL || 'api.doclittle.site'}</a></p>
+                <p>Visit us at <a href="${process.env.BASE_URL || 'https://api.myskinandcare.com'}">${process.env.BASE_URL || 'api.myskinandcare.com'}</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">You're receiving this because you're a customer. <a href="#" style="color: #94a3b8;">Unsubscribe</a></p>
               </div>
             </div>
@@ -1701,15 +1701,15 @@ class EmailService {
               <p>You can view your invoices and credits at any time in your account dashboard.</p>
               
               <div style="text-align: center;">
-                <a href="https://api.doclittle.site/docs" class="button">View Dashboard</a>
+                <a href="https://api.myskinandcare.com/docs" class="button">View Dashboard</a>
               </div>
               
-              <p>If you have any questions about this invoice, please contact our support team at support@doclittle.site.</p>
+              <p>If you have any questions about this invoice, please contact our support team at support@myskinandcare.com.</p>
               
               <div class="footer">
-                <p>This is an automated invoice from DocLittle API.</p>
-                <p>Visit us at <a href="https://api.doclittle.site">api.doclittle.site</a></p>
-                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email. For support, contact support@doclittle.site</p>
+                <p>This is an automated invoice from Somo API.</p>
+                <p>Visit us at <a href="https://api.myskinandcare.com">api.myskinandcare.com</a></p>
+                <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email. For support, contact support@myskinandcare.com</p>
               </div>
             </div>
           </div>
@@ -1720,7 +1720,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: email,
-      subject: `DocLittle API Invoice - $${invoice.total.toFixed(2)} Due (${invoice.invoice_number})`,
+      subject: `Somo API Invoice - $${invoice.total.toFixed(2)} Due (${invoice.invoice_number})`,
       html: html
     });
   }
@@ -1729,7 +1729,7 @@ class EmailService {
    * Send welcome email with subdomain and password
    */
   static async sendWelcomeEmail(customerEmail, customerName, subdomain, customerType, merchantId, password = null) {
-    const baseDomain = process.env.BASE_DOMAIN || 'doclittle.site';
+    const baseDomain = process.env.BASE_DOMAIN || 'myskinandcare.com';
     const baseUrl = process.env.BASE_URL || (process.env.NODE_ENV === 'production'
       ? `https://${baseDomain}`
       : 'http://localhost:4000');
@@ -1928,11 +1928,11 @@ class EmailService {
               <div class="logo-brand">
                 <span class="doc">Doc</span><span class="little">Little</span>.
               </div>
-              <h1>Welcome to DocLittle!</h1>
+              <h1>Welcome to Somo!</h1>
             </div>
             <div class="content">
               <h2>Hi ${customerName || 'there'},</h2>
-              <p>Thank you for signing up for DocLittle! Your account has been successfully created and is ready to use.</p>
+              <p>Thank you for signing up for Somo! Your account has been successfully created and is ready to use.</p>
               
               <div class="info-box">
                 <div class="info-row">
@@ -1980,11 +1980,11 @@ class EmailService {
               
               <p>If you have any questions or need help getting started, please don't hesitate to contact our support team.</p>
               
-              <p>Best regards,<br>The DocLittle Team</p>
+              <p>Best regards,<br>The Somo Team</p>
               
               <div class="footer">
-                <p>This is an automated welcome email from DocLittle.</p>
-                <p>Visit us at <a href="https://doclittle.site">doclittle.site</a></p>
+                <p>This is an automated welcome email from Somo.</p>
+                <p>Visit us at <a href="https://myskinandcare.com">myskinandcare.com</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
               </div>
             </div>
@@ -1996,7 +1996,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: customerEmail,
-      subject: `Welcome to DocLittle - Your Account is Ready!`,
+      subject: `Welcome to Somo - Your Account is Ready!`,
       html: html
     });
   }
@@ -2141,11 +2141,11 @@ class EmailService {
               
               <p>If you have any questions, please contact our support team.</p>
               
-              <p>Best regards,<br>The DocLittle Team</p>
+              <p>Best regards,<br>The Somo Team</p>
               
               <div class="footer">
-                <p>This is an automated email from DocLittle.</p>
-                <p>Visit us at <a href="https://doclittle.site">doclittle.site</a></p>
+                <p>This is an automated email from Somo.</p>
+                <p>Visit us at <a href="https://myskinandcare.com">myskinandcare.com</a></p>
                 <p style="margin-top: 20px; font-size: 12px; color: #94a3b8;">Please do not reply to this email.</p>
               </div>
             </div>
@@ -2157,7 +2157,7 @@ class EmailService {
 
     return await this.sendEmail({
       to: email,
-      subject: 'DocLittle - Reset Your Password',
+      subject: 'Somo - Reset Your Password',
       html: html
     });
   }
@@ -2317,7 +2317,7 @@ class EmailService {
             </div>
             
             <p style="margin-top: 24px;">
-              <a href="https://doclittle.site/admin" class="button">View in Admin Portal</a>
+              <a href="https://myskinandcare.com/admin" class="button">View in Admin Portal</a>
             </p>
             
             <p style="color: #64748b; font-size: 0.9rem; margin-top: 24px;">
@@ -2326,10 +2326,10 @@ class EmailService {
           </div>
           
           <div class="footer">
-            <p style="margin: 0;">This is an automated notification from DocLittle API</p>
+            <p style="margin: 0;">This is an automated notification from Somo API</p>
             <p style="margin: 8px 0 0 0; font-size: 0.85rem;">
-              <a href="https://api.doclittle.site" style="color: #2563eb;">API Documentation</a> | 
-              <a href="https://doclittle.site" style="color: #2563eb;">Website</a>
+              <a href="https://api.myskinandcare.com" style="color: #2563eb;">API Documentation</a> | 
+              <a href="https://myskinandcare.com" style="color: #2563eb;">Website</a>
             </p>
           </div>
         </div>
@@ -2337,7 +2337,7 @@ class EmailService {
       </html>
     `;
 
-    const adminEmail = process.env.ADMIN_EMAIL || 'richard@doclittle.site';
+    const adminEmail = process.env.ADMIN_EMAIL || 'richard@myskinandcare.com';
 
     return await this.sendEmail({
       to: adminEmail,
@@ -2350,10 +2350,10 @@ class EmailService {
    * Send low credit alert email
    */
   static async sendLowCreditAlert(customerEmail, customerName, creditBalance, subdomain = null) {
-    const baseDomain = process.env.BASE_DOMAIN || 'doclittle.site';
+    const baseDomain = process.env.BASE_DOMAIN || 'myskinandcare.com';
     const dashboardUrl = subdomain
       ? `https://${subdomain}.${baseDomain}/billing`
-      : `${process.env.BASE_URL || 'https://api.doclittle.site'}/billing`;
+      : `${process.env.BASE_URL || 'https://api.myskinandcare.com'}/billing`;
 
     const isCritical = creditBalance < 25;
     const alertLevel = isCritical ? 'Critical' : 'Low';
@@ -2468,15 +2468,15 @@ class EmailService {
 
               <p style="margin-top: 20px; color: #64748b; font-size: 14px;">
                 <strong>Need help?</strong><br>
-                Contact us at <a href="mailto:support@doclittle.site" style="color: #1e40af;">support@doclittle.site</a> 
+                Contact us at <a href="mailto:support@myskinandcare.com" style="color: #1e40af;">support@myskinandcare.com</a> 
                 or visit your dashboard to manage your account.
               </p>
             </div>
             <div class="footer">
-              <p>This is an automated alert from DocLittle.</p>
+              <p>This is an automated alert from Somo.</p>
               <p style="margin-top: 10px;">
                 <a href="${dashboardUrl}" style="color: #1e40af; text-decoration: none;">Manage Credits</a> | 
-                <a href="https://doclittle.site" style="color: #1e40af; text-decoration: none;">Visit Website</a>
+                <a href="https://myskinandcare.com" style="color: #1e40af; text-decoration: none;">Visit Website</a>
               </p>
             </div>
           </div>

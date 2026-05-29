@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FrontDesk Provider Portal - Settings</title>
+    <title>Somo Provider - Settings</title>
     <link rel="stylesheet" href="../assets/css/global.css">
     <link rel="stylesheet" href="../assets/css/provider-portal.css">
     <script src="../assets/js/config.js"></script>
@@ -13,9 +13,9 @@
     <script src="../assets/js/provider-layout.js"></script>
     <style>
         :root {
-            --primary: #1e40af;
+            --primary: #16a637;
             --primary-dark: #1e3a8a;
-            --primary-light: #3b82f6;
+            --primary-light: #16a637;
         }
 
 
@@ -285,7 +285,7 @@
 
         .readiness-badge.blocks {
             background: #dbeafe;
-            color: #1e40af;
+            color: #16a637;
         }
 
         .readiness-badge.unavailable {
@@ -599,7 +599,7 @@
                     <div class="service-icon" style="background: #dbeafe;">📄</div>
                     <div class="service-info">
                         <h4>Usage & Invoices</h4>
-                        <p class="service-status">View your Consult usage, credits, and invoices</p>
+                        <p class="service-status">View your Somo usage, credits, and invoices</p>
                     </div>
                     <a href="billing.html?section=invoices" class="btn btn-secondary btn-sm" style="text-decoration: none;">View</a>
                 </div>
@@ -2030,7 +2030,7 @@
                         </div>
                         <div style="display: flex; gap: 12px; justify-content: flex-end;">
                             <button type="button" onclick="closePasswordModal()" style="padding: 12px 24px; border: 2px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer; font-weight: 600; color: #4a5568;">Cancel</button>
-                            <button type="submit" id="passwordChangeBtn" style="padding: 12px 24px; background: #1e40af; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Change Password</button>
+                            <button type="submit" id="passwordChangeBtn" style="padding: 12px 24px; background: #16a637; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">Change Password</button>
                         </div>
                     </form>
                 </div>
@@ -2166,7 +2166,7 @@
                 const blob = await res.blob();
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
-                a.download = `doclittle-export-${Date.now()}.json`;
+                a.download = `Somo-export-${Date.now()}.json`;
                 a.click();
                 URL.revokeObjectURL(a.href);
                 alert('Data export downloaded.');
@@ -2366,8 +2366,8 @@
                 statusEl.style.border = '1px solid #f59e0b';
             } else {
                 statusEl.style.background = '#dbeafe';
-                statusEl.style.color = '#1e40af';
-                statusEl.style.border = '1px solid #3b82f6';
+                statusEl.style.color = '#16a637';
+                statusEl.style.border = '1px solid #16a637';
             }
 
             statusEl.textContent = message;

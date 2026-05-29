@@ -59,8 +59,11 @@ function getSessionCookieOptions(req, maxAge = 30 * 24 * 60 * 60 * 1000) {
   };
   
   // Set domain for cross-subdomain cookie sharing in production
-  if (process.env.NODE_ENV === 'production' || req.headers.host?.includes('doclittle.site')) {
-    options.domain = '.doclittle.site';
+  const cookieHost = (req.headers.host || '').toLowerCase();
+  if (process.env.NODE_ENV === 'production') {
+    if (cookieHost.includes('myskinandcare.com')) options.domain = '.myskinandcare.com';
+    else if (cookieHost.includes('skinandcare.com')) options.domain = '.skinandcare.com';
+    else if (cookieHost.includes('doclittle.site')) options.domain = '.doclittle.site';
   }
   
   return options;
@@ -631,6 +634,7 @@ router.post('/signup/verify-phone/check', rateLimiter, async (req, res) => {
 
     const { normalizePhone, checkPhoneVerification } = require('../services/twilio-verify-service');
     const {
+      TrialProvisionError,
       isTrialSimEnabledForCustomer,
       startTrialTenant
     } = require('../services/trial-lifecycle');
@@ -651,10 +655,30 @@ router.post('/signup/verify-phone/check', rateLimiter, async (req, res) => {
     let trial = null;
     const refreshed = db.getCustomer(customer.id);
     if (isTrialSimEnabledForCustomer(refreshed)) {
-      trial = await startTrialTenant(db, customer.id, {
-        phoneE164: e164,
-        phoneVerifiedAt: now
-      });
+      try {
+        trial = await startTrialTenant(db, customer.id, {
+          phoneE164: e164,
+          phoneVerifiedAt: now
+        });
+      } catch (err) {
+        if (err instanceof TrialProvisionError) {
+          return res.status(502).json({
+            success: false,
+            error: err.message,
+            code: err.code,
+            phone_verified: true
+          });
+        }
+        throw err;
+      }
+      if (!trial?.twilio_phone_number) {
+        return res.status(502).json({
+          success: false,
+          error: 'Dedicated clinic line could not be assigned. Please try again.',
+          code: 'twilio_provision_failed',
+          phone_verified: true
+        });
+      }
     }
 
     try {
@@ -668,12 +692,15 @@ router.post('/signup/verify-phone/check', rateLimiter, async (req, res) => {
     } catch (_) {}
 
     const afterTrial = db.getCustomer(customer.id);
+    const simTrialOn =
+      (afterTrial.customer_type || 'saas') === 'saas' && isTrialSimEnabledForCustomer(afterTrial);
     res.json({
       success: true,
       message: trial?.twilio_phone_number
         ? 'Phone verified. Your dedicated line is ready.'
         : 'Phone verified',
       phone_verified: true,
+      trial_sim_flow: simTrialOn,
       trial,
       customer: serializeSignupSessionCustomer(afterTrial),
       next_step: 'accept_terms',
@@ -858,7 +885,7 @@ router.post('/customers/forgot-password', rateLimiter, async (req, res) => {
       }
     }
 
-    const baseDomain = process.env.BASE_DOMAIN || 'doclittle.site';
+    const baseDomain = process.env.BASE_DOMAIN || 'myskinandcare.com';
     const resetUrl = subdomain
       ? `https://${subdomain}.${baseDomain}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
       : `${process.env.BASE_URL || 'http://localhost:4000'}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
@@ -1587,7 +1614,7 @@ router.post('/signup/accept-terms', rateLimiter, async (req, res) => {
         if (provisionGate.allowed && twilioPhoneService.isAvailable()) {
           // Build webhook URL with customer_id parameter
           const apiBaseUrl = process.env.API_BASE_URL || process.env.BASE_URL ||
-            (process.env.NODE_ENV === 'production' ? 'https://api.doclittle.site' : 'http://localhost:4000');
+            (process.env.NODE_ENV === 'production' ? 'https://api.myskinandcare.com' : 'http://localhost:4000');
           const webhookUrl = `${apiBaseUrl}/voice/incoming?customer_id=${customer.id}`;
 
           // Extract area code from customer's phone number if available

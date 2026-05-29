@@ -1,5 +1,5 @@
 {
-    "name": "middleware-platform",
+    "name": "somo-middleware",
     "version": "3.0.0",
     "description": "AI Commerce Middleware - Plaid for AI Agents (ACP + AP2 + Voice)",
     "main": "server.js",
@@ -35,6 +35,9 @@
         "billing:lifecycle-sweep": "node scripts/billing-lifecycle-sweep.cjs",
         "trial:expiry-sweep": "node scripts/trial-expiry-sweep.cjs --dry-run",
         "trial:expiry-sweep:apply": "node scripts/trial-expiry-sweep.cjs",
+        "trial:provision-smoke": "node scripts/trial-provision-smoke.cjs",
+        "trial:release-test-numbers": "node scripts/release-trial-test-numbers.cjs",
+        "test:e2e:trial": "playwright test --project provider-trial",
         "billing:voice-smoke": "node scripts/voice-billing-e2e-smoke.cjs",
         "billing:audit-numbers": "node scripts/audit-voice-twilio-numbers.cjs",
         "billing:setup-stripe-prices": "node scripts/setup-voice-stripe-test-prices.cjs",

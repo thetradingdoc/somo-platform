@@ -1,9 +1,11 @@
-# Skin & Care Platform — AI Voice Receptionist
-> Last reviewed: May 5, 2026
+# Somo Platform — AI Front Desk + RCM
+> Last reviewed: May 29, 2026
 
-**Version**: 3.0.0  
+**Version**: 3.1.0  
 **Status**: Production Ready  
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-05-29
+
+> **Repository:** `git clone https://github.com/richiejeremiah/somo-platform.git` (local folder name `somo` is fine). Production UI/API hosts remain **myskinandcare.com** until **somopay.ai** cutover — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
 > **Documentation**: Full docs live in [`docs/`](./docs/README.md) — that is the **source of truth** for all platform documentation.
 
@@ -15,7 +17,7 @@
 
 ## 📋 Overview
 
-Skin & Care is a comprehensive AI-powered voice receptionist platform for healthcare providers. The system handles appointment booking, patient management, payment processing, insurance verification, and appointment reminders through an intelligent voice agent integrated with Retell AI. (Clinical and billing operations may be provided by **Doctor Little LLC** where applicable.)
+**Somo** is an agentic AI front desk and revenue cycle platform for healthcare and business. Somo front desk handles inbound calls; Somo pay runs eligibility, claims, and patient collections. Production may still be served from **myskinandcare.com** until **somopay.ai** — see [`docs/Brand/INFRA_BRAND_DEFERRAL.md`](docs/Brand/INFRA_BRAND_DEFERRAL.md).
 
 ### Key Features
 
@@ -60,7 +62,7 @@ Skin & Care is a comprehensive AI-powered voice receptionist platform for health
 ### Project Structure
 
 ```
-doclittle-platform/
+somo/
 ├── middleware-platform/     # Backend API (Express, Stripe, Retell, voice LLM, FHIR, …)
 ├── unified-dashboard/       # Provider/patient HTML dashboards + static assets
 │   └── littlelab-landing/   # CRA marketing / Skin & Care landing (build → served as static)
@@ -88,7 +90,7 @@ doclittle-platform/
 1. **Clone the repository**
 ```bash
 git clone <repository-url>
-cd doclittle-platform
+cd somo
 ```
 
 2. **Install backend dependencies**

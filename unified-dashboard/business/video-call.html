@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FrontDesk Provider Portal - Video Call</title>
+  <title>Somo Provider - Video Call</title>
   <link rel="stylesheet" href="../assets/css/global.css">
   <link rel="stylesheet" href="../assets/css/provider-portal.css">
   <script src="../assets/js/config.js"></script>
@@ -11,7 +11,7 @@
   <script src="../assets/js/provider-shell.js"></script>
     <script src="../assets/js/provider-layout.js"></script>
   <style>
-  :root { --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6; }
+  :root { --primary: #16a637; --primary-dark: #1e3a8a; --primary-light: #16a637; }
   .layout { display: flex; min-height: 100vh; }
   .sidebar { width: 260px; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.05); position: fixed; height: 100vh; overflow-y: auto; }
     .sidebar-header { padding: 24px; border-bottom: 1px solid var(--gray-200, #e2e8f0); }
@@ -85,7 +85,7 @@
     cursor: pointer;
   }
   .workspace-chip.active {
-    border-color: #2563eb;
+    border-color: #128a2e;
     background: #dbeafe;
     color: #1d4ed8;
   }
@@ -209,7 +209,7 @@
   }
   .status-pill[data-status="listening"] { background: #166534; color: #dcfce7; }
   .status-pill[data-status="processing"] { background: #854d0e; color: #fef3c7; animation: pulse 1s infinite; }
-  .status-pill[data-status="codes_updated"] { background: #1e40af; color: #dbeafe; }
+  .status-pill[data-status="codes_updated"] { background: #16a637; color: #dbeafe; }
   .status-pill[data-status="idle"] { background: #374151; color: #9ca3af; }
   @keyframes pulse { 50% { opacity: 0.7; } }
   .risk-pill { padding: 2px 8px; border-radius: 999px; font-size: 9px; font-weight: 600; }
@@ -527,7 +527,7 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-subtitle sidebar-subtitle-portal">FrontDesk Provider Portal</div>
+        <div class="sidebar-subtitle sidebar-subtitle-portal">Somo Provider</div>
       </div>
       <nav class="sidebar-nav" id="sidebarNav"></nav>
       <div class="sidebar-footer">
@@ -606,7 +606,7 @@
           </div>
           <div class="assistant-overlay" id="assistantOverlay" style="display:none;">
             <div class="assistant-header">
-              <div class="assistant-title">Doctor Little Listening</div>
+              <div class="assistant-title">Somo Listening</div>
               <div class="assistant-badge" id="assistantStatusBadge">Idle</div>
             </div>
             <div class="assistant-section">
@@ -920,9 +920,9 @@
       if (exportBtn) exportBtn.addEventListener('click', transcriptExport);
       const translateToggle = document.getElementById('transcriptTranslateToggle');
       if (translateToggle) {
-        translateToggle.checked = localStorage.getItem('videoConsultTranslate') === 'true';
+        translateToggle.checked = localStorage.getItem('videoSomoTranslate') === 'true';
         translateToggle.addEventListener('change', async () => {
-          localStorage.setItem('videoConsultTranslate', translateToggle.checked);
+          localStorage.setItem('videoSomoTranslate', translateToggle.checked);
           renderTranscriptList();
           if (!currentRoomName) return;
           try {
@@ -1292,7 +1292,7 @@
       if (statusBadge) statusBadge.textContent = 'Listening';
 
       const sseUrl = `${API_BASE}/api/video-consult/sse/${encodeURIComponent(currentRoomName)}`;
-      const translateEnabled = localStorage.getItem('videoConsultTranslate') === 'true';
+      const translateEnabled = localStorage.getItem('videoSomoTranslate') === 'true';
       try {
         await fetch(`${API_BASE}/api/video-consult/rooms/${encodeURIComponent(currentRoomName)}/transcript-translation`, {
           method: 'POST',

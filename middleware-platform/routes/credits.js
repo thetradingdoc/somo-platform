@@ -197,7 +197,7 @@ router.post('/purchase', rateLimiter, async (req, res) => {
 
         // Determine success/cancel URLs based on environment
         const baseUrl = process.env.API_BASE_URL || process.env.BASE_URL ||
-            (process.env.NODE_ENV === 'production' ? 'https://api.doclittle.site' : `http://localhost:4000`);
+            (process.env.NODE_ENV === 'production' ? 'https://api.myskinandcare.com' : `http://localhost:4000`);
 
         const successUrl = `${baseUrl}/api/credits/purchase/success?session_id={CHECKOUT_SESSION_ID}`;
         const cancelUrl = `${baseUrl}/docs?purchase=cancelled`;
