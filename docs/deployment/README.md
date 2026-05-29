@@ -85,6 +85,16 @@ This eliminates manual setup for each new tenant!
 
 ## 🔧 How It Works
 
+### Provider SIM trial signup (canonical)
+
+For SaaS self-serve trial (email → phone OTP → dedicated Twilio number → 60 min / 7 days), see:
+
+- [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md)
+- [PROVIDER_TRIAL_SIM_ARCHITECTURE.md](./PROVIDER_TRIAL_SIM_ARCHITECTURE.md)
+- [STAGING_TRIAL_ROLLOUT.md](./STAGING_TRIAL_ROLLOUT.md) (staging env + smoke checklist)
+
+Legacy card-first signup remains when `TRIAL_SIM_FLOW_ENABLED` is off.
+
 ### Signup Flow Integration
 
 When a tenant completes signup in `server.js`:
