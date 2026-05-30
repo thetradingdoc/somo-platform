@@ -130,7 +130,11 @@ if (usePostgres) {
     console.log('🗄️  POSTGRES_URL detected – Postgres pool initialized');
   } catch (err) {
     console.error('❌ Failed to initialize Postgres pool:', err.message);
-    process.exit(1);
+    if (process.env.STAGING === '1' || process.env.SOMO_STAGING === '1') {
+      console.warn('⚠️  Staging: continuing SQLite-primary (Postgres mirror disabled until URL fixed)');
+    } else {
+      process.exit(1);
+    }
   }
 }
 
@@ -490,9 +494,9 @@ function _syncVoiceCallToPostgres(call) {
   return pgPool`
     INSERT INTO voice_call_log (
       id, customer_id, call_id, twilio_call_sid, call_duration_seconds, call_duration_minutes,
-      credits_deducted, function_calls_count, status, twilio_cost_usd, retell_cost_usd,
-      total_cost_usd, twilio_cost_calculated_usd, retell_cost_calculated_usd, cost_source,
-      cost_updated_at, created_at
+      credits_deducted, function_calls_count, status, outcome, caller_label, caller_phone,
+      twilio_cost_usd, retell_cost_usd, total_cost_usd, twilio_cost_calculated_usd,
+      retell_cost_calculated_usd, cost_source, cost_updated_at, created_at
     ) VALUES (
       ${call.id},
       ${call.customer_id || null},
@@ -503,6 +507,9 @@ function _syncVoiceCallToPostgres(call) {
       ${call.credits_deducted || 0},
       ${call.function_calls_count || 0},
       ${call.status || 'active'},
+      ${call.outcome || null},
+      ${call.caller_label || null},
+      ${call.caller_phone || null},
       ${call.twilio_cost_usd || null},
       ${call.retell_cost_usd || null},
       ${call.total_cost_usd || null},
@@ -521,6 +528,9 @@ function _syncVoiceCallToPostgres(call) {
       credits_deducted = EXCLUDED.credits_deducted,
       function_calls_count = EXCLUDED.function_calls_count,
       status = EXCLUDED.status,
+      outcome = COALESCE(EXCLUDED.outcome, voice_call_log.outcome),
+      caller_label = COALESCE(EXCLUDED.caller_label, voice_call_log.caller_label),
+      caller_phone = COALESCE(EXCLUDED.caller_phone, voice_call_log.caller_phone),
       twilio_cost_usd = EXCLUDED.twilio_cost_usd,
       retell_cost_usd = EXCLUDED.retell_cost_usd,
       total_cost_usd = EXCLUDED.total_cost_usd,
@@ -1987,7 +1997,8 @@ tablesToMigrate.forEach(tableName => {
   }
 });
 
-const DEFAULT_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || 'legacy-clinic';
+// Do not default new appointments/FHIR to legacy-clinic; set DEFAULT_CLINIC_ID in .env when needed.
+const DEFAULT_CLINIC_ID = process.env.DEFAULT_CLINIC_ID || process.env.PRIMARY_CLINIC_ID || null;
 
 try {
   const missingClinicRows = db.prepare(`
@@ -1996,7 +2007,7 @@ try {
     WHERE clinic_id IS NULL OR clinic_id = ''
   `).get();
 
-  if (missingClinicRows && missingClinicRows.count > 0) {
+  if (DEFAULT_CLINIC_ID && missingClinicRows && missingClinicRows.count > 0) {
     console.log(`📦 Backfilling clinic_id for ${missingClinicRows.count} legacy appointments...`);
     db.prepare(`
       UPDATE appointments
@@ -4760,6 +4771,38 @@ function migrateVoiceCallLogClinicId() {
   }
 }
 
+function migrateVoiceAgentUx() {
+  try {
+    const callCols = db.prepare('PRAGMA table_info(voice_call_log)').all();
+    if (!callCols.some((c) => c.name === 'outcome')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN outcome TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_voice_call_log_outcome ON voice_call_log(outcome)');
+      console.log('✅ Migration complete: voice_call_log.outcome added');
+    }
+    const customerCols = db.prepare('PRAGMA table_info(customers)').all().map((c) => c.name);
+    if (!customerCols.includes('voice_setup_completed_at')) {
+      db.prepare('ALTER TABLE customers ADD COLUMN voice_setup_completed_at DATETIME').run();
+      console.log('✅ Migration complete: customers.voice_setup_completed_at added');
+    }
+    const vasCols = db.prepare('PRAGMA table_info(voice_agent_settings)').all();
+    if (!vasCols.some((c) => c.name === 'customer_id')) {
+      db.exec('ALTER TABLE voice_agent_settings ADD COLUMN customer_id TEXT');
+      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_agent_settings_customer_id ON voice_agent_settings(customer_id) WHERE customer_id IS NOT NULL');
+      console.log('✅ Migration complete: voice_agent_settings.customer_id added');
+    }
+    if (!callCols.some((c) => c.name === 'caller_label')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN caller_label TEXT');
+      console.log('✅ Migration complete: voice_call_log.caller_label added');
+    }
+    if (!callCols.some((c) => c.name === 'caller_phone')) {
+      db.exec('ALTER TABLE voice_call_log ADD COLUMN caller_phone TEXT');
+      console.log('✅ Migration complete: voice_call_log.caller_phone added');
+    }
+  } catch (e) {
+    console.warn('⚠️  voice agent UX migration failed:', e.message);
+  }
+}
+
 // ============================================
 // MIGRATION: idempotency_keys table (Section 22 - prevent double-billing)
 // ============================================
@@ -5738,6 +5781,7 @@ runStartupMigrations(
     migrateDlqToolCallsTable,
     migrateFeatureFlagsTable,
     migrateVoiceCallLogClinicId,
+    migrateVoiceAgentUx,
     migrateClinicMonthlyLlmCostTable,
     migrateClinicsMonthlyCostCap,
     migrateLongTermMemoryTables,
@@ -6298,6 +6342,20 @@ function runMigrations() {
 }
 runMigrations();
 
+const { ensureBillingTables: runEnsureBillingTables } = require('./database/billing-tables');
+function ensureBillingTables() {
+  runEnsureBillingTables(db);
+}
+
+if (String(process.env.SQLITE_FOREIGN_KEYS || '').trim() === '1') {
+  try {
+    db.pragma('foreign_keys = ON');
+    console.log('SQLite foreign_keys=ON (SQLITE_FOREIGN_KEYS=1)');
+  } catch (e) {
+    console.warn('SQLite foreign_keys pragma failed:', e.message);
+  }
+}
+
 // Extra safeguard for BUG-011/015:
 // if rich-intake columns are missing (common when older environments skipped 011/015),
 // apply 011 first, then 015 as a final patch so triage->booking gates can persist/read
@@ -6427,6 +6485,8 @@ module.exports = {
 
   // Run versioned migrations (also runs automatically on require). Use for pre-deploy or CI.
   runMigrations,
+
+  ensureBillingTables,
 
   // ============================================
   // ADMIN SESSIONS (persistent admin auth)
@@ -8198,16 +8258,29 @@ module.exports = {
   // ============================================
   // PROMPT PROFILES & AUDIT
   // ============================================
-  getClinicPromptProfile: (clinicId) => {
+  getClinicPromptProfile: (clinicId, customerId = null) => {
     try {
-      const row = db.prepare(`
-        SELECT *
-        FROM prompt_profiles
-        WHERE clinic_id = ? AND status = 'active'
-        ORDER BY updated_at DESC
-        LIMIT 1
-      `).get(clinicId);
-      return row || null;
+      if (clinicId) {
+        const row = db.prepare(`
+          SELECT *
+          FROM prompt_profiles
+          WHERE clinic_id = ? AND status = 'active'
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `).get(clinicId);
+        if (row) return row;
+      }
+      if (customerId) {
+        const row = db.prepare(`
+          SELECT *
+          FROM prompt_profiles
+          WHERE customer_id = ? AND status = 'active'
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `).get(customerId);
+        return row || null;
+      }
+      return null;
     } catch (_) {
       return null;
     }
@@ -8238,13 +8311,14 @@ module.exports = {
     db.prepare(
       `
       INSERT INTO prompt_profiles (
-        id, clinic_id, name, specialty, system_prompt,
+        id, clinic_id, customer_id, name, specialty, system_prompt,
         allowed_tools, version, status, metadata,
         created_by, updated_by, created_at, updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(id) DO UPDATE SET
         clinic_id = excluded.clinic_id,
+        customer_id = excluded.customer_id,
         name = excluded.name,
         specialty = excluded.specialty,
         system_prompt = excluded.system_prompt,
@@ -8258,6 +8332,7 @@ module.exports = {
     ).run(
       id,
       profile.clinic_id || null,
+      profile.customer_id || null,
       profile.name,
       profile.specialty || null,
       profile.system_prompt,
@@ -9694,7 +9769,9 @@ module.exports = {
     return balance;
   },
 
-  // Voice Agent Settings
+  /** Synthetic merchant_id for trial providers without a merchants row */
+  customerVoiceSettingsMerchantKey: (customerId) => (customerId ? `cust:${customerId}` : null),
+
   getVoiceAgentSettings: (merchantId) => {
     if (!merchantId) return null;
     if (usePostgres && pgPool) {
@@ -9703,23 +9780,58 @@ module.exports = {
     return db.prepare('SELECT * FROM voice_agent_settings WHERE merchant_id = ?').get(merchantId);
   },
 
-  upsertVoiceAgentSettings: (merchantId, settings = {}) => {
-    if (!merchantId) throw new Error('merchantId is required');
+  getVoiceAgentSettingsByCustomer: (customerId) => {
+    if (!customerId) return null;
+    const custKey = module.exports.customerVoiceSettingsMerchantKey(customerId);
+    if (usePostgres && pgPool) {
+      return pgPool`
+        SELECT * FROM voice_agent_settings
+        WHERE customer_id = ${customerId} OR merchant_id = ${custKey}
+        LIMIT 1
+      `.then((res) => res[0] || null);
+    }
+    return db.prepare(`
+      SELECT * FROM voice_agent_settings
+      WHERE customer_id = ? OR merchant_id = ?
+      LIMIT 1
+    `).get(customerId, custKey);
+  },
+
+  getVoiceAgentSettingsForProvider: ({ merchantId, customerId } = {}) => {
+    if (merchantId) {
+      const row = module.exports.getVoiceAgentSettings(merchantId);
+      if (row) return row;
+    }
+    if (customerId) {
+      return module.exports.getVoiceAgentSettingsByCustomer(customerId);
+    }
+    return null;
+  },
+
+  upsertVoiceAgentSettings: (merchantId, settings = {}, customerId = null) => {
+    const resolvedMerchantId =
+      merchantId ||
+      (customerId ? module.exports.customerVoiceSettingsMerchantKey(customerId) : null);
+    if (!resolvedMerchantId) {
+      throw new Error('merchantId or customerId is required');
+    }
 
     const payload = {
       retell_agent_id: settings.retell_agent_id || null,
       enabled: settings.enabled !== undefined ? (settings.enabled ? 1 : 0) : 1,
       greeting: settings.greeting || null,
       after_hours_message: settings.after_hours_message || null,
-      business_hours: settings.business_hours ? JSON.stringify(settings.business_hours) : null
+      business_hours: settings.business_hours ? JSON.stringify(settings.business_hours) : null,
+      customer_id: customerId || settings.customer_id || null
     };
 
     if (usePostgres && pgPool) {
       return pgPool`
         INSERT INTO voice_agent_settings (
-          merchant_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
+          merchant_id, customer_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
         ) VALUES (
-          ${merchantId},
+          ${resolvedMerchantId},
+          ${payload.customer_id},
           ${payload.retell_agent_id},
           ${payload.enabled},
           ${payload.greeting},
@@ -9728,6 +9840,7 @@ module.exports = {
           NOW()
         )
         ON CONFLICT (merchant_id) DO UPDATE SET
+          customer_id = COALESCE(EXCLUDED.customer_id, voice_agent_settings.customer_id),
           retell_agent_id = EXCLUDED.retell_agent_id,
           enabled = EXCLUDED.enabled,
           greeting = EXCLUDED.greeting,
@@ -9739,9 +9852,10 @@ module.exports = {
 
     return db.prepare(`
       INSERT INTO voice_agent_settings (
-        merchant_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        merchant_id, customer_id, retell_agent_id, enabled, greeting, after_hours_message, business_hours, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(merchant_id) DO UPDATE SET
+        customer_id = COALESCE(excluded.customer_id, voice_agent_settings.customer_id),
         retell_agent_id = excluded.retell_agent_id,
         enabled = excluded.enabled,
         greeting = excluded.greeting,
@@ -9749,7 +9863,8 @@ module.exports = {
         business_hours = excluded.business_hours,
         updated_at = CURRENT_TIMESTAMP
     `).run(
-      merchantId,
+      resolvedMerchantId,
+      payload.customer_id,
       payload.retell_agent_id,
       payload.enabled,
       payload.greeting,
@@ -12831,19 +12946,12 @@ module.exports = {
       payment.notes || null
     );
 
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H3',location:'database.js:addInvoicePayment:afterInsert',message:'Inserted invoice payment row',data:{invoiceId:String(payment?.invoice_id||''),paymentId:String(paymentId||''),amount:Number(payment?.amount||0),method:String(payment?.payment_method||'')},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
-
     // Update invoice status if fully paid
     const invoice = this.getInvoice(payment.invoice_id);
     if (invoice) {
       const totalPaid = this.getInvoicePaymentsTotal(payment.invoice_id);
       if (totalPaid >= invoice.amount) {
         this.updateInvoice(payment.invoice_id, { status: 'paid', paid_at: new Date().toISOString() });
-        // #region agent log
-        fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H4',location:'database.js:addInvoicePayment:invoicePaid',message:'Invoice marked paid after payment',data:{invoiceId:String(payment?.invoice_id||''),invoiceAmount:Number(invoice?.amount||0),totalPaid:Number(totalPaid||0)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion agent log
       }
     }
 
@@ -14765,6 +14873,22 @@ module.exports = {
     return result;
   },
 
+  setVoiceCallOutcome(callId, outcome) {
+    if (!callId || !outcome) return { changes: 0 };
+    const cols = db.prepare('PRAGMA table_info(voice_call_log)').all();
+    if (!cols.some((c) => c.name === 'outcome')) return { changes: 0 };
+    const result = db.prepare(
+      'UPDATE voice_call_log SET outcome = ? WHERE call_id = ?'
+    ).run(String(outcome), callId);
+    if (pgPool && result.changes) {
+      const updatedCall = db.prepare('SELECT * FROM voice_call_log WHERE call_id = ? ORDER BY created_at DESC LIMIT 1').get(callId);
+      if (updatedCall) syncVoiceCallToPostgres(updatedCall);
+    }
+    return result;
+  },
+
+  syncVoiceCallToPostgres,
+
   // Get voice call costs by customer
   getVoiceCallCostsByCustomer(customerId, startDate = null, endDate = null) {
     let query = `
@@ -14841,30 +14965,46 @@ module.exports = {
     return {
       call_id: row.call_id,
       clinic_id: row.clinic_id,
+      customer_id: row.customer_id || null,
       current_stage: row.current_stage || 'INTAKE',
       state_data: row.state_data ? JSON.parse(row.state_data) : {},
       updated_at: row.updated_at
     };
   },
 
-  upsertCallState(callId, { clinic_id, current_stage, state_data }) {
+  upsertCallState(callId, { clinic_id, customer_id, current_stage, state_data }) {
     const id = require('crypto').randomBytes(16).toString('hex');
     const stateJson = state_data != null ? JSON.stringify(state_data) : null;
     const cid = clinic_id ?? null;
+    const custId = customer_id ?? null;
     const stage = current_stage ?? null;
-    db.prepare(`
-      INSERT INTO voice_call_states (id, call_id, clinic_id, current_stage, state_data, updated_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
-      ON CONFLICT(call_id) DO UPDATE SET
-        clinic_id = COALESCE(excluded.clinic_id, voice_call_states.clinic_id),
-        current_stage = COALESCE(excluded.current_stage, voice_call_states.current_stage),
-        state_data = COALESCE(excluded.state_data, voice_call_states.state_data),
-        updated_at = datetime('now')
-    `).run(id, callId, cid, stage, stateJson);
+    const hasCustomerCol = db.prepare(`PRAGMA table_info(voice_call_states)`).all().some((c) => c.name === 'customer_id');
+    if (hasCustomerCol) {
+      db.prepare(`
+        INSERT INTO voice_call_states (id, call_id, clinic_id, customer_id, current_stage, state_data, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(call_id) DO UPDATE SET
+          clinic_id = COALESCE(excluded.clinic_id, voice_call_states.clinic_id),
+          customer_id = COALESCE(excluded.customer_id, voice_call_states.customer_id),
+          current_stage = COALESCE(excluded.current_stage, voice_call_states.current_stage),
+          state_data = COALESCE(excluded.state_data, voice_call_states.state_data),
+          updated_at = datetime('now')
+      `).run(id, callId, cid, custId, stage, stateJson);
+    } else {
+      db.prepare(`
+        INSERT INTO voice_call_states (id, call_id, clinic_id, current_stage, state_data, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(call_id) DO UPDATE SET
+          clinic_id = COALESCE(excluded.clinic_id, voice_call_states.clinic_id),
+          current_stage = COALESCE(excluded.current_stage, voice_call_states.current_stage),
+          state_data = COALESCE(excluded.state_data, voice_call_states.state_data),
+          updated_at = datetime('now')
+      `).run(id, callId, cid, stage, stateJson);
+    }
     return this.getCallState(callId);
   },
 
-  appendConversationMemory(callId, clinic_id, role, content, extracted_entities) {
+  appendConversationMemory(callId, clinic_id, role, content, extracted_entities, customer_id = null) {
     let redactedContent = content;
     try {
       const piiRedactor = require('./utils/pii-redactor');
@@ -14877,10 +15017,36 @@ module.exports = {
       SELECT COALESCE(MAX(turn_number), 0) + 1 AS next FROM voice_conversation_memory WHERE call_id = ?
     `).get(callId).next;
     const entitiesJson = extracted_entities ? JSON.stringify(extracted_entities) : null;
-    db.prepare(`
-      INSERT INTO voice_conversation_memory (id, call_id, clinic_id, turn_number, role, content, extracted_entities)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, callId, clinic_id || null, turnNumber, role, redactedContent ?? content ?? null, entitiesJson);
+    const hasCustomerCol = db.prepare(`PRAGMA table_info(voice_conversation_memory)`).all().some((c) => c.name === 'customer_id');
+    if (hasCustomerCol) {
+      db.prepare(`
+        INSERT INTO voice_conversation_memory (id, call_id, clinic_id, customer_id, turn_number, role, content, extracted_entities)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, callId, clinic_id || null, customer_id || null, turnNumber, role, redactedContent ?? content ?? null, entitiesJson);
+    } else {
+      db.prepare(`
+        INSERT INTO voice_conversation_memory (id, call_id, clinic_id, turn_number, role, content, extracted_entities)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, callId, clinic_id || null, turnNumber, role, redactedContent ?? content ?? null, entitiesJson);
+    }
+  },
+
+  migrateVoiceAgentSettingsToMerchant(customerId, merchantId) {
+    if (!customerId || !merchantId) return false;
+    const custKey = module.exports.customerVoiceSettingsMerchantKey(customerId);
+    const from = module.exports.getVoiceAgentSettings(custKey);
+    if (!from) return false;
+    module.exports.upsertVoiceAgentSettings(merchantId, {
+      retell_agent_id: from.retell_agent_id,
+      enabled: from.enabled,
+      greeting: from.greeting,
+      after_hours_message: from.after_hours_message,
+      business_hours: from.business_hours
+    }, customerId);
+    try {
+      db.prepare(`DELETE FROM voice_agent_settings WHERE merchant_id = ?`).run(custKey);
+    } catch (_) {}
+    return true;
   },
 
   getConversationHistory(callId, limit = 50) {

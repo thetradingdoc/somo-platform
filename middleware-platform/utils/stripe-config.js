@@ -22,11 +22,14 @@ function getStripeSecretKey() {
   }
   
   const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  const allowTestInProd =
+    process.env.STAGING === '1' ||
+    process.env.SOMO_STAGING === '1' ||
+    process.env.ALLOW_STRIPE_TEST_IN_PRODUCTION === '1';
   const isLiveKey = key.startsWith('sk_live_');
   const isTestKey = key.startsWith('sk_test_');
-  
-  // Validation: Prevent using production keys in development
-  if (isProduction && isTestKey) {
+
+  if (isProduction && isTestKey && !allowTestInProd) {
     throw new Error(
       'SECURITY ERROR: Test Stripe key detected in production environment! ' +
       'Please use production keys (sk_live_...) in production.'
@@ -68,11 +71,14 @@ function getStripePublishableKey() {
   }
   
   const isProduction = process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod';
+  const allowTestInProd =
+    process.env.STAGING === '1' ||
+    process.env.SOMO_STAGING === '1' ||
+    process.env.ALLOW_STRIPE_TEST_IN_PRODUCTION === '1';
   const isLiveKey = key.startsWith('pk_live_');
   const isTestKey = key.startsWith('pk_test_');
-  
-  // Validation: Prevent using production keys in development
-  if (isProduction && isTestKey) {
+
+  if (isProduction && isTestKey && !allowTestInProd) {
     throw new Error(
       'SECURITY ERROR: Test Stripe publishable key detected in production environment! ' +
       'Please use production keys (pk_live_...) in production.'

@@ -18,6 +18,7 @@ e2e/
 __tests__/
 test-results/
 uploads/
+data/
 .DS_Store
 *.md
 !package.json

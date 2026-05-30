@@ -312,10 +312,6 @@ router.post('/:id/payments', authLimiter, async (req, res) => {
     const { id } = req.params;
     const { payment_date, amount, payment_method, reference_number, notes } = req.body;
 
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H1',location:'routes/invoices-clinic.js:POST_/api/invoices/:id/payments:entry',message:'Record invoice payment request',data:{invoiceId:String(id||''),amountType:typeof amount,amount:Number(amount||0),hasPaymentMethod:!!payment_method,hasReference:!!reference_number,hasNotes:!!notes},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
-
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
@@ -334,10 +330,6 @@ router.post('/:id/payments', authLimiter, async (req, res) => {
     // Check if payment exceeds balance
     const totalPaid = db.getInvoicePaymentsTotal(id);
     const balance = invoice.amount - totalPaid;
-
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H2',location:'routes/invoices-clinic.js:POST_/api/invoices/:id/payments:balance',message:'Invoice balance check before insert',data:{invoiceId:String(id||''),invoiceAmount:Number(invoice?.amount||0),totalPaid:Number(totalPaid||0),balance:Number(balance||0),incomingAmount:Number(amount||0)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
 
     if (amount > balance) {
       return res.status(400).json({
@@ -360,10 +352,6 @@ router.post('/:id/payments', authLimiter, async (req, res) => {
 
     // Get updated invoice summary
     const summary = InvoiceService.getInvoiceSummary(id);
-
-    // #region agent log
-    fetch('http://127.0.0.1:7543/ingest/a415f78f-06bc-471d-9251-324ff2e64d53',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4ae50e'},body:JSON.stringify({sessionId:'4ae50e',runId:'pre-fix',hypothesisId:'H3',location:'routes/invoices-clinic.js:POST_/api/invoices/:id/payments:success',message:'Recorded invoice payment success',data:{invoiceId:String(id||''),invoiceStatus:String(summary?.invoice?.status||''),totalPaid:Number(summary?.totals?.paid||summary?.totals?.total_paid||0),balance:Number(summary?.totals?.balance||0)},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion agent log
 
     res.json({
       success: true,

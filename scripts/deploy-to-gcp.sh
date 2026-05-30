@@ -46,7 +46,7 @@ DEPLOY_ARGS=(
   --cpu "${CLOUDRUN_CPU:-2}"
   --timeout "${CLOUDRUN_TIMEOUT:-300}"
   --env-vars-file "$ENV_FILE"
-  --startup-probe "httpGet.path=/health/live,initialDelaySeconds=10,timeoutSeconds=5,periodSeconds=10,failureThreshold=12"
+  --startup-probe "httpGet.path=/health/live,initialDelaySeconds=60,timeoutSeconds=10,periodSeconds=10,failureThreshold=60"
 )
 
 if [[ -n "${CLOUDSQL_CONNECTION_NAME:-}" ]]; then
@@ -57,7 +57,7 @@ if [[ -n "${GCS_DB_BUCKET:-}" ]]; then
   echo "    GCS_DB_BUCKET=$GCS_DB_BUCKET (set on service for cloudrun-db-sync)"
 fi
 
-gcloud "${DEPLOY_ARGS[@]}" --project "$PROJECT"
+gcloud "${DEPLOY_ARGS[@]}" --project "$PROJECT" --command="" --args=""
 
 echo "==> Done. Verify:"
 echo "    curl -sS ${CLOUDRUN_BASE_URL:-https://api.myskinandcare.com}/health/live"

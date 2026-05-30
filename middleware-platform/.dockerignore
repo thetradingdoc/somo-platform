@@ -11,5 +11,6 @@ cypress
 e2e
 __tests__
 test-results
+data
 *.md
 !README.md
