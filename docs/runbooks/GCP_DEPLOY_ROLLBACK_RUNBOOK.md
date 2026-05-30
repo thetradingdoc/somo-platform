@@ -15,8 +15,8 @@ Landing builds must set `REACT_APP_API_BASE=https://api.myskinandcare.com` befor
 
 ## CI vs live deploy
 
-- **CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs tests on push/PR. The **Deploy to Railway** job is a **placeholder** (prints success; Railway may auto-deploy on push).
-- **Operational source of truth:** your Cloud Run service + Firebase Hosting project + env vars in those consoles (and any Railway host if still in use for API).
+- **CI:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs tests on push/PR. **Staging deploy:** [`.github/workflows/deploy-staging.yml`](../../.github/workflows/deploy-staging.yml) (Cloud Run + Firebase). Railway is deprecated.
+- **Operational source of truth:** Cloud Run `myskin-middleware` + Firebase Hosting + GCP Secret Manager.
 
 See [deployment README § CI and deployment](../deployment/README.md#ci-and-deploy-source-of-truth).
 

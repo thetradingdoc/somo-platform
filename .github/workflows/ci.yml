@@ -47,6 +47,12 @@ jobs:
         if: matrix.node-version == '20.x'
         working-directory: ./unified-dashboard/somo-landing
         run: npm ci && npm run build
+
+      - name: Build and verify staging hosting bundle
+        if: matrix.node-version == '20.x'
+        run: |
+          node scripts/build-staging-hosting.cjs
+          node scripts/verify-staging-hosting.cjs
       
       - name: Run linter (if configured)
         working-directory: ./middleware-platform
@@ -284,15 +290,12 @@ jobs:
           timeout 10s node server.js || true
           echo "✅ Server can start (timeout expected)"
 
-  deploy:
-    name: Deploy to Railway
+  staging-smoke:
+    name: Staging routing smoke
     runs-on: ubuntu-latest
     needs: [test, security, build]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-    environment:
-      name: production
-      url: https://web-production-a783d.up.railway.app
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -308,13 +311,11 @@ jobs:
         working-directory: ./middleware-platform
         run: npm ci
 
-      - name: Production routing readiness smoke
+      - name: Production routing readiness smoke (Cloud Run)
         env:
           UI_BASE_URL: https://myskinandcare.com
-          MIDDLEWARE_API_BASE: ${{ vars.PROD_API_BASE || 'https://web-production-a783d.up.railway.app' }}
+          MIDDLEWARE_API_BASE: https://api.myskinandcare.com
         run: npm run verify:prod:routing-smoke --prefix middleware-platform
-      
-      - name: Deploy to Railway
-        run: |
-          echo "✅ All checks passed. Railway will auto-deploy on push to main/master"
-          echo "If using Railway CLI, add deployment step here"
+
+      - name: Staging HTTP bootstrap check
+        run: npm run gcp:bootstrap:check

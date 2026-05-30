@@ -10,11 +10,33 @@
 
 ## Manual follow-up
 
-1. **GitHub Actions** — Checked 2026-05-29: no repository secrets or variables on either `doclittle-platform` or `somo-platform` via `gh secret list`. Recreate any **environment** or **org-level** secrets manually if you use them.
-2. **Railway** — CLI requires `RAILWAY_TOKEN` (or interactive `railway login`). In [Railway Dashboard](https://railway.app) → your project → **Settings** → **Connect GitHub** → `richiejeremiah/somo-platform`, branch `main`. Confirm env vars use `api.myskinandcare.com` / `myskinandcare.com`. Production API is **Cloud Run** (`myskin-middleware`); Railway may be legacy/staging only.
-3. **Deploy API** — Done 2026-05-29: `gcloud run deploy myskin-middleware` from `middleware-platform/` → `https://api.myskinandcare.com/privacy` returns **200**.
-4. **Firebase Hosting** — Done 2026-05-29: `npm run deploy:landing-hosting` → `myskinandcare.com` serves Somo landing build.
-5. **Archive old repo** — After a green CI run on `somo-platform` `main`, archive `doclittle-platform` and run `git remote remove doclittle-old`.
+1. **GitHub Actions secrets** — configure on `richiejeremiah/somo-platform`:
+
+| Secret / variable | Purpose |
+|-------------------|---------|
+| `FIREBASE_TOKEN` | `firebase deploy` for `myskinandcare.com` hosting |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | WIF for deploy-staging workflow |
+| `GCP_SERVICE_ACCOUNT` | SA email with Cloud Run + Secret Manager access |
+| `CLOUDSQL_CONNECTION_NAME` (repo **variable**) | e.g. `doctor-little-c688d:us-central1:somo-staging-pg` |
+
+**GCP Secret Manager** (`somo-staging-*` prefix): seed via `./scripts/provision-staging-secrets.sh` from operator `.env`. Keys: `JWT_SECRET`, `TWILIO_*`, `RETELL_*`, `STRIPE_*`, `SOMO_OWNER_PASSWORD`, `POSTGRES_URL`. See `middleware-platform/.env.staging.example`.
+
+2. **GCP / Firebase access (Phase 0 checklist)**
+
+| Check | Command / URL |
+|-------|----------------|
+| GCP project | `gcloud config get-value project` → `doctor-little-c688d` |
+| API live | `curl -sS https://api.myskinandcare.com/health/live` |
+| UI live | `curl -sS -I https://myskinandcare.com` |
+| Bootstrap script | `npm run gcp:bootstrap:check` |
+
+3. **Railway** — **deprecated** for API. Production/staging API SSOT is Cloud Run `myskin-middleware`. Disconnect Railway GitHub auto-deploy if still linked.
+
+4. **Deploy API** — `./scripts/deploy-to-gcp.sh` or `.github/workflows/deploy-staging.yml` (manual dispatch).
+
+5. **Firebase Hosting** — `npm run deploy:staging-hosting` (full `hosting-dist` bundle).
+
+6. **Archive old repo** — After green CI on `somo-platform` `main`, archive `doclittle-platform`.
 
 ## Clone
 

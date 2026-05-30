@@ -1,0 +1,87 @@
+name: Deploy Staging (myskinandcare.com)
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_smoke:
+        description: Skip post-deploy smoke
+        required: false
+        default: 'false'
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - 'middleware-platform/**'
+      - 'unified-dashboard/**'
+      - 'scripts/**'
+      - '.github/workflows/deploy-staging.yml'
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT: doctor-little-c688d
+  GCP_REGION: us-central1
+  CLOUDRUN_SERVICE: myskin-middleware
+  UI_BASE_URL: https://myskinandcare.com
+  MIDDLEWARE_API_BASE: https://api.myskinandcare.com
+
+jobs:
+  deploy:
+    name: Cloud Run + Firebase + smoke
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+          cache-dependency-path: |
+            middleware-platform/package-lock.json
+            unified-dashboard/somo-landing/package-lock.json
+
+      - name: Install root + middleware deps
+        run: |
+          npm ci --prefix middleware-platform
+          npm ci --prefix unified-dashboard/somo-landing
+
+      - name: Build staging hosting bundle
+        run: |
+          node scripts/build-staging-hosting.cjs
+          node scripts/verify-staging-hosting.cjs
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Run (staging profile)
+        env:
+          CLOUDRUN_PROFILE: staging
+          USE_GCP_SECRETS: '1'
+          CLOUDSQL_CONNECTION_NAME: ${{ vars.CLOUDSQL_CONNECTION_NAME }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          chmod +x scripts/deploy-to-gcp.sh
+          ARTIFACT_IMAGE="gcr.io/${GCP_PROJECT}/${CLOUDRUN_SERVICE}:${GIT_SHA}" ./scripts/deploy-to-gcp.sh
+
+      - name: Deploy Firebase Hosting
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          npm ci
+          cd unified-dashboard && npx firebase-tools deploy --only hosting --token "$FIREBASE_TOKEN"
+
+      - name: Post-deploy smoke
+        if: ${{ github.event.inputs.skip_smoke != 'true' }}
+        run: npm run smoke:staging

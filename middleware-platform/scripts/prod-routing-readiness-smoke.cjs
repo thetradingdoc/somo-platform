@@ -82,19 +82,23 @@ async function main() {
     printCheck(false, 'API_BASE_HEALTH_JSON', String(e?.message || e));
   }
 
-  // API turn endpoint on API base
-  try {
-    const turn = await fetchText(`${API_BASE}/api/public/landing-assistant/turn`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ session_id: `prod_smoke_${Date.now()}`, message: 'hello' })
-    });
-    const ok = turn.status >= 200 && turn.status < 300 && !looksLikeHtml(turn.text, turn.contentType) && looksLikeJson(turn.text, turn.contentType);
-    checks.push(ok);
-    printCheck(ok, 'API_BASE_LANDING_TURN_JSON', `status=${turn.status} content-type=${turn.contentType || '(none)'}`);
-  } catch (e) {
-    checks.push(false);
-    printCheck(false, 'API_BASE_LANDING_TURN_JSON', String(e?.message || e));
+  // API turn endpoint on API base (optional — Somo landing is marketing-only)
+  if (process.env.SKIP_LANDING_TURN_SMOKE === '1') {
+    printCheck(true, 'API_BASE_LANDING_TURN_JSON', 'skipped (SKIP_LANDING_TURN_SMOKE=1)');
+  } else {
+    try {
+      const turn = await fetchText(`${API_BASE}/api/public/landing-assistant/turn`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session_id: `prod_smoke_${Date.now()}`, message: 'hello' })
+      });
+      const ok = turn.status >= 200 && turn.status < 300 && !looksLikeHtml(turn.text, turn.contentType) && looksLikeJson(turn.text, turn.contentType);
+      checks.push(ok);
+      printCheck(ok, 'API_BASE_LANDING_TURN_JSON', `status=${turn.status} content-type=${turn.contentType || '(none)'}`);
+    } catch (e) {
+      checks.push(false);
+      printCheck(false, 'API_BASE_LANDING_TURN_JSON', String(e?.message || e));
+    }
   }
 
   // Same-domain turn endpoint (requires edge proxy in front of static hosting)

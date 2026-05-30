@@ -1,6 +1,7 @@
 # Staging rollout — provider SIM trial
 
 **Last updated:** 2026-05-29  
+**Staging host:** [`STAGING_MYSKINANDCARE.md`](./STAGING_MYSKINANDCARE.md) — UI on `myskinandcare.com`, API on `api.myskinandcare.com`  
 **Flow:** [PROVIDER_SIGNUP_FLOW.md](./PROVIDER_SIGNUP_FLOW.md)  
 **Architecture:** [PROVIDER_TRIAL_SIM_ARCHITECTURE.md](./PROVIDER_TRIAL_SIM_ARCHITECTURE.md)
 
@@ -34,7 +35,7 @@ BASE_URL=https://api.myskinandcare.com
 - [ ] `GET /health` returns 200
 - [ ] `node scripts/sandbox-trial-signup-report.cjs` — verify-phone not 404, `TRIAL_SIM_FLOW_ENABLED` true
 - [ ] `node scripts/trial-provision-smoke.cjs` — creates customer with `twilio_phone_number` (costs one Twilio number). If Verify SMS 404s locally, set `TWILIO_VERIFY_DEV_MOCK=1` in `.env`, **restart the server**, then re-run smoke (OTP `000000`).
-- [ ] Full signup: `/signup?fresh=1` → email → phone OTP → terms → `settings.html?billing=trial`
+- [ ] Full signup: `https://myskinandcare.com/signup?fresh=1` (after `npm run deploy:staging-hosting`) → email → phone OTP → terms → trial activation
 - [ ] DB: `trial_status=active`, `twilio_phone_number` set, `phone_verified=1`
 - [ ] Inbound call to provisioned number reaches Kelly (not trial-paused TwiML)
 - [ ] Second signup with same phone → `phone_trial_in_use`
